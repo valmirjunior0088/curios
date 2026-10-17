@@ -10,7 +10,7 @@ use {
 
 /// Where a ticket stands once its witnesses have been put.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Standing {
+pub(crate) enum Standing {
     /// Fixed, and every witness is refused as it expects.
     Holds,
     /// Fixed, and a witness is not refused as it expects: the flaw is back, or what held it shut is gone.
@@ -23,7 +23,7 @@ pub enum Standing {
 
 impl Standing {
     /// Whether a run fails on this standing.
-    pub fn fails(&self) -> bool {
+    pub(crate) fn fails(&self) -> bool {
         matches!(self, Standing::Regressed(_) | Standing::Shut)
     }
 
@@ -59,30 +59,30 @@ pub(crate) fn standing(status: Status, witnesses: &[Witness], answers: &[Answer]
 
 /// One line of a report: a ticket, with what its witnesses answered and where it stands.
 #[derive(Debug)]
-pub struct Row {
-    pub part: &'static Part,
-    pub ticket: &'static Ticket,
-    pub answers: Vec<Answer>,
-    pub standing: Standing,
+pub(crate) struct Row {
+    part: &'static Part,
+    ticket: &'static Ticket,
+    answers: Vec<Answer>,
+    standing: Standing,
 }
 
 impl Row {
     /// Whether the kernel judged any witness of the ticket. A program the elaborator refuses while it is still building the module never reaches it, so a ticket holding only such programs says nothing of the trusted base.
-    pub fn reaches_kernel(&self) -> bool {
+    pub(crate) fn reaches_kernel(&self) -> bool {
         self.answers.iter().any(Answer::kernel_asked)
     }
 }
 
 /// Every ticket of a board with where it stands.
 #[derive(Debug)]
-pub struct Report {
+pub(crate) struct Report {
     board: &'static [&'static Part],
-    pub rows: Vec<Row>,
+    rows: Vec<Row>,
 }
 
 impl Report {
     /// Put every witness of every ticket on `board` to the checkers.
-    pub fn run(board: &'static [&'static Part]) -> Report {
+    pub(crate) fn run(board: &'static [&'static Part]) -> Report {
         let mut rows = Vec::new();
 
         for part in board {
@@ -108,7 +108,7 @@ impl Report {
     }
 
     /// Whether any ticket regressed or was closed without saying so.
-    pub fn fails(&self) -> bool {
+    pub(crate) fn fails(&self) -> bool {
         self.rows.iter().any(|row| row.standing.fails())
     }
 

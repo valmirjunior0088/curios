@@ -22,12 +22,12 @@ const SUBJECT: &str = "curios";
 
 /// What a contestant did, as the report reads it.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Figure {
+pub(crate) struct Figure {
     /// The median of the group medians.
-    pub middle: f64,
+    middle: f64,
     /// The least group median, and the greatest: between them is the span a difference must clear.
-    pub least: f64,
-    pub most: f64,
+    least: f64,
+    most: f64,
 }
 
 /// The middle of `samples`.
@@ -49,7 +49,7 @@ fn median(samples: &[f64]) -> Option<f64> {
 }
 
 /// What `groups` amount to: the median of each group's median, and the least and greatest of them.
-pub fn figure(groups: &[&[f64]]) -> Option<Figure> {
+pub(crate) fn figure(groups: &[&[f64]]) -> Option<Figure> {
     let middles = groups
         .iter()
         .filter_map(|group| median(group))
@@ -141,7 +141,7 @@ fn tabulated(headers: &[&str], rows: &[Vec<String>]) -> String {
 }
 
 /// One workload's table, over however its samples are held: the contestants fastest first, each with its span and how many times the control it is.
-pub fn table(title: &str, letter: &str, size: u64, rows: &[(&str, &[&[f64]])]) -> String {
+pub(crate) fn table(title: &str, letter: &str, size: u64, rows: &[(&str, &[&[f64]])]) -> String {
     let mut figures = rows
         .iter()
         .filter_map(|&(contestant, groups)| Some((contestant, figure(groups)?)))
@@ -233,7 +233,7 @@ fn weights(reading: &Reading) -> String {
 }
 
 /// The reading numbered `number`, in full: what it says of itself, then a table per workload it measured.
-pub fn one(number: usize, reading: &Reading) -> String {
+pub(crate) fn one(number: usize, reading: &Reading) -> String {
     let mut out = header(number, reading);
 
     for workload in WORKLOADS {
@@ -286,7 +286,7 @@ fn incomparable(before: &Reading, after: &Reading) -> Option<String> {
 }
 
 /// What changed between two readings, where anything can be said of it at all.
-pub fn compare(number: usize, before: &Reading, after: &Reading) -> String {
+pub(crate) fn compare(number: usize, before: &Reading, after: &Reading) -> String {
     let heading = format!("## Reading {:02} → {number:02}\n\n", number - 1);
 
     if let Some(why) = incomparable(before, after) {
@@ -389,7 +389,7 @@ fn reweighed(before: &Reading, after: &Reading) -> Vec<Vec<String>> {
 }
 
 /// Every reading so far: each in full, with what changed between consecutive ones.
-pub fn report(readings: &[&Reading]) -> String {
+pub(crate) fn report(readings: &[&Reading]) -> String {
     let Some((first, rest)) = readings.split_first() else {
         return "No reading recorded. `cargo xbench collect` takes the first.\n".to_string();
     };

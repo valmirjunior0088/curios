@@ -29,7 +29,7 @@ fn locked(told: &str, package: &str) -> Option<String> {
 }
 
 /// The version in what a tool reports of itself: the first word that reads like one, since each spells the rest of the line its own way.
-pub fn version(reported: &str) -> String {
+pub(crate) fn version(reported: &str) -> String {
     reported
         .split_whitespace()
         .map(|word| word.trim_matches(|character: char| matches!(character, ',' | '(' | ')' | ';')))
@@ -75,7 +75,7 @@ fn hold(program: &str, pinned: &str) -> Result<String, String> {
 /// Hold every tool a reading is taken with to its pin, and hand back the pins for the reading to record.
 ///
 /// This runs before anything is built, since building with the wrong compiler and timing it afterwards spends the run to produce the wrong artefact.
-pub fn held(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
+pub(crate) fn held(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
     let toolchain = fs::read_to_string(root.join("rust-toolchain.toml"))
         .map_err(|error| format!("rust-toolchain.toml cannot be read: {error}"))?;
     let rustc = channel(&toolchain).ok_or("rust-toolchain.toml pins no channel")?;

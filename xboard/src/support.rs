@@ -9,19 +9,19 @@
 //! - [`Probe`] puts one program that is on no ticket, and says what the checkers made of it.
 
 mod date;
-pub use date::*;
+pub(crate) use date::*;
 
 mod ticket;
-pub use ticket::*;
+pub(crate) use ticket::*;
 
 mod expect;
-pub use expect::*;
+pub(crate) use expect::*;
 
 mod put;
-pub use put::*;
+pub(crate) use put::*;
 
 mod report;
-pub use report::*;
+pub(crate) use report::*;
 
 mod probe;
-pub use probe::*;
+pub(crate) use probe::*;

@@ -17,17 +17,17 @@ use {
 };
 
 /// The name the compiler's own registry holds `/std/Bool/False` under: its type former's, and the key its registry entry stands at.
-pub fn false_name() -> Global {
+pub(crate) fn false_name() -> Global {
     Global::Authored(SYNTAX.proof.false_type.qualifier())
 }
 
 /// `/std/Bool/False` as an elaborated program mentions it, by [`false_name`]: what a module built by hand is put at, what its terms name `False` by, and the type the pipeline states for a program put as a proof.
-pub fn false_type() -> Term {
+pub(crate) fn false_type() -> Term {
     Term::free_var(&Free::from(&false_name()))
 }
 
 /// The item a module built by hand declares the nominal `name` by: the former `entry` spells ([`Definition::former`]), carrying it, a family's in a group of its own as the lowering writes one. An entry is carried by its former and by nothing else, so a witness that wants a declaration and no definition of its own is handed the one its entry spells.
-pub fn declared(name: Global, entry: Nominal) -> Item {
+pub(crate) fn declared(name: Global, entry: Nominal) -> Item {
     let grouped = matches!(entry, Nominal::Inductive(_));
     let island = name
         .qualifier()
@@ -43,7 +43,7 @@ pub fn declared(name: Global, entry: Nominal) -> Item {
 
 /// One of the two checkers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Checker {
+pub(crate) enum Checker {
     /// `curios-elab`, which builds the module. A program the grammar refuses is counted here: no module exists for the kernel either way.
     Elaborator,
     /// `curios-cert` and the layer it judges through: the trusted base.
@@ -61,7 +61,7 @@ impl fmt::Display for Checker {
 
 /// One refusal a witness met, as the checker that made it raised it.
 #[derive(Debug)]
-pub enum Refusal {
+pub(crate) enum Refusal {
     /// The program never reached the elaborator's judgment: its text did not parse or did not lower. Held as the compilation reports it, since what is raised there is a message.
     Text(String),
     /// The elaborator's error, with the diagnostic a compilation prints for it.
@@ -103,7 +103,7 @@ fn variant(error: &impl fmt::Debug) -> String {
 
 impl Refusal {
     /// The checker that made it.
-    pub fn by(&self) -> Checker {
+    pub(crate) fn by(&self) -> Checker {
         match self {
             Refusal::Text(_) | Refusal::Elaborator { .. } => Checker::Elaborator,
             Refusal::Unfinished(_) | Refusal::Kernel(_) => Checker::Kernel,
@@ -111,7 +111,7 @@ impl Refusal {
     }
 
     /// The checker and the errors it raised, by variant: what a report notes beside a witness, and what an expectation that names an error is written from.
-    pub fn named(&self) -> String {
+    pub(crate) fn named(&self) -> String {
         match self {
             Refusal::Text(_) => "text".to_string(),
             Refusal::Elaborator { error, .. } => {
@@ -144,7 +144,7 @@ impl fmt::Display for Refusal {
 
 /// What putting a witness to the checkers answered.
 #[derive(Debug)]
-pub enum Answer {
+pub(crate) enum Answer {
     /// Refused before a module existed for the kernel to judge: by the program's text, or by the elaborator while it was building one.
     Unbuilt(Refusal),
     /// Judged by the kernel, and for a program by the elaborator before it, with every refusal either made: none where the term was admitted at `False`.
@@ -153,7 +153,7 @@ pub enum Answer {
 
 impl Answer {
     /// Every refusal the witness met.
-    pub fn refusals(&self) -> &[Refusal] {
+    pub(crate) fn refusals(&self) -> &[Refusal] {
         match self {
             Answer::Unbuilt(refusal) => std::slice::from_ref(refusal),
             Answer::Judged(refusals) => refusals,
@@ -161,12 +161,12 @@ impl Answer {
     }
 
     /// Whether every checker accepted the term at `False`: a forgery.
-    pub fn admitted(&self) -> bool {
+    pub(crate) fn admitted(&self) -> bool {
         self.refusals().is_empty()
     }
 
     /// Whether the kernel judged the witness: always for a module, and for a program only where the elaborator built one to hand it.
-    pub fn kernel_asked(&self) -> bool {
+    pub(crate) fn kernel_asked(&self) -> bool {
         matches!(self, Answer::Judged(_))
     }
 }
@@ -226,7 +226,7 @@ fn put_module(module: Module, body: Term, type_: Term) -> Answer {
 
 impl Proof {
     /// Put the proof to the checkers at `False`.
-    pub fn answer(&self) -> Answer {
+    pub(crate) fn answer(&self) -> Answer {
         match self {
             Proof::Program(source) => put_program(source),
             Proof::Module(build) => {

@@ -14,21 +14,21 @@ const UNKNOWN: &str = "unknown";
 
 /// Where a reading was taken, as the reading records it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Platform {
+pub(crate) struct Platform {
     /// The machine itself. Differs between two readings, and they are of different machines.
-    pub machine: &'static str,
+    pub(crate) machine: &'static str,
     /// How it was arranged when the reading was taken. Differs, and the same machine was running under different rules.
-    pub state: &'static str,
+    pub(crate) state: &'static str,
     /// What was running on it. Recorded, never gated.
-    pub software: &'static str,
+    pub(crate) software: &'static str,
 }
 
 /// The same three lines as the host answers them, which is what `collect` captures and writes into the module it prints.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Captured {
-    pub machine: String,
-    pub state: String,
-    pub software: String,
+pub(crate) struct Captured {
+    pub(crate) machine: String,
+    pub(crate) state: String,
+    pub(crate) software: String,
 }
 
 /// The value `told` gives for `name`, where it is a file of `name: value` lines — `/proc/cpuinfo`, which states each field once per processor and identically.
@@ -79,7 +79,7 @@ fn told(path: &str) -> String {
 }
 
 /// What the host answers about itself, as a reading records it.
-pub fn capture() -> Captured {
+pub(crate) fn capture() -> Captured {
     let cpuinfo = fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
     let meminfo = fs::read_to_string("/proc/meminfo").unwrap_or_default();
     let cpus = thread::available_parallelism()

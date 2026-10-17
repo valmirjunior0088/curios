@@ -5,9 +5,8 @@
 #[cfg(test)]
 mod tests;
 
-// Re-exported publicly so `support`'s `pub` items count as reachable under `unreachable_pub`.
 mod support;
-pub use support::*;
+use support::*;
 
 mod admission;
 use admission::*;

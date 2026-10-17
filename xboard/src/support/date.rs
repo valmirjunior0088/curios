@@ -7,7 +7,7 @@ use std::fmt;
 
 /// A day of the calendar. Its fields are in the order that makes the derived ordering the calendar's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Date {
+pub(crate) struct Date {
     year: u16,
     month: u8,
     day: u8,
@@ -17,7 +17,7 @@ impl Date {
     /// The day `year`-`month`-`day`.
     ///
     /// A day the calendar does not have panics, and a ticket is a constant, so one written with such a day does not compile.
-    pub const fn new(year: u16, month: u8, day: u8) -> Date {
+    pub(crate) const fn new(year: u16, month: u8, day: u8) -> Date {
         let leap =
             year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
 

@@ -7,7 +7,7 @@ use {
 
 /// One checker's refusal, as a witness expects it. Written by [`refused!`](crate::refused), which keeps the pattern and its spelling one.
 #[derive(Debug, Clone, Copy)]
-pub enum Expected {
+pub(crate) enum Expected {
     /// The elaborator, by an error `is` recognises: every one where `pattern` is absent, which is how an open ticket expects a refusal no error names yet.
     Elaborator {
         pattern: Option<&'static str>,
@@ -117,7 +117,7 @@ fn said(refusal: &Refusal) -> String {
 
 impl Witness {
     /// What keeps `answer` from being the refusal the witness expects, or nothing.
-    pub fn unmet(&self, answer: &Answer) -> Option<String> {
+    pub(crate) fn unmet(&self, answer: &Answer) -> Option<String> {
         let refusals = answer.refusals();
         let [first, ..] = refusals else {
             return Some("admitted".to_string());

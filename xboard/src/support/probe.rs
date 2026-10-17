@@ -10,20 +10,20 @@ use {
 
 /// What the checkers said of a program put to them at `False` and filed nowhere: the question a hunt asks before there is a ticket to write. The program is put exactly as the board puts a program witness, so what a probe shows admitted is what a ticket filed from it shows admitted.
 #[derive(Debug)]
-pub struct Probe {
+pub(crate) struct Probe {
     answer: Answer,
 }
 
 impl Probe {
     /// Put the program `source` to both checkers, its final term as a proof of `False`.
-    pub fn put(source: &str) -> Probe {
+    pub(crate) fn put(source: &str) -> Probe {
         Probe {
             answer: put_program(source),
         }
     }
 
     /// Whether both checkers admitted the term at `False`: a flaw, and a ticket to file.
-    pub fn admitted(&self) -> bool {
+    pub(crate) fn admitted(&self) -> bool {
         self.answer.admitted()
     }
 

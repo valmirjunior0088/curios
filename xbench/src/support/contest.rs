@@ -19,24 +19,24 @@ use {
 
 /// One workload of the measurement corpus, `programs/<name>/`, which carries the same program in Curios and in Rust. What each computes is `programs/README.md`'s.
 #[derive(Debug)]
-pub struct Workload {
-    pub name: &'static str,
+pub(crate) struct Workload {
+    pub(crate) name: &'static str,
     /// How a table names it.
-    pub title: &'static str,
+    pub(crate) title: &'static str,
     /// The letter its size is reported under.
-    pub letter: &'static str,
+    pub(crate) letter: &'static str,
     /// The size it is timed at.
-    pub size: u64,
+    pub(crate) size: u64,
     /// The small size every contestant is first held to one answer at.
-    pub check: u64,
+    pub(crate) check: u64,
     /// What every contestant prints at `check`.
-    pub answer: &'static str,
+    pub(crate) answer: &'static str,
     /// What every contestant prints at `size`: the corpus's anchor.
-    pub anchor: &'static str,
+    pub(crate) anchor: &'static str,
 }
 
 /// The corpus's workloads, in the order their tables are printed.
-pub const WORKLOADS: &[Workload] = &[
+pub(crate) const WORKLOADS: &[Workload] = &[
     Workload {
         name: "lcg",
         title: "LCG",
@@ -95,16 +95,16 @@ pub const WORKLOADS: &[Workload] = &[
 
 /// One contestant: a compiler's build of a workload, run as its own process.
 #[derive(Debug)]
-pub struct Contestant {
-    pub name: &'static str,
+pub(crate) struct Contestant {
+    pub(crate) name: &'static str,
     /// How a table names it.
-    pub title: &'static str,
+    pub(crate) title: &'static str,
 }
 
 /// Curios, and the one anchor, compiled two ways.
 ///
 /// Rust native is the ceiling, and Rust native against Rust to WebAssembly is what WebAssembly itself costs, so what stands between Curios and `rust-wasm` is Curios's. On a workload that allocates, `rust-wasm` manages linear memory and is a *bound* rather than a peer: the gap holds Curios's codegen and the whole cost of delegating collection, and no contestant separates them.
-pub const CONTESTANTS: &[Contestant] = &[
+pub(crate) const CONTESTANTS: &[Contestant] = &[
     Contestant {
         name: "curios",
         title: "Curios",
@@ -449,7 +449,7 @@ fn recorded(number: usize, sitting: &Sitting) -> String {
 /// Build the contestants, hold them to the answers their workloads are known to have, time them, and print the reading as the module that records it.
 ///
 /// The reading is numbered after `taken`, the readings already filed, which the binary keeps. Standard output carries the module alone, so a redirect files the capture and nothing else; everything a person watches goes to standard error.
-pub fn collect(taken: usize) -> Result<(), String> {
+pub(crate) fn collect(taken: usize) -> Result<(), String> {
     let root = root();
 
     // Before anything is built: building with the wrong compiler and timing it afterwards spends the run to produce the wrong artefact.

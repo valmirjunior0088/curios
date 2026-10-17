@@ -6,14 +6,14 @@
 
 /// What one contestant's build of one workload weighs, in bytes.
 #[derive(Debug)]
-pub struct Built {
-    pub workload: &'static str,
-    pub contestant: &'static str,
-    pub bytes: u64,
+pub(crate) struct Built {
+    pub(crate) workload: &'static str,
+    pub(crate) contestant: &'static str,
+    pub(crate) bytes: u64,
 }
 
 /// A build's weight, written on one line where a reading records it.
-pub const fn weighed(workload: &'static str, contestant: &'static str, bytes: u64) -> Built {
+pub(crate) const fn weighed(workload: &'static str, contestant: &'static str, bytes: u64) -> Built {
     Built {
         workload,
         contestant,
