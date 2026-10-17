@@ -1071,7 +1071,7 @@ const UNREACHED: [&str; 11] = [
 
 /// The `let`s of the library that are refused as a report prints them, each named where its cause is filed.
 const REFUSED: [&str; 1] = [
-    // Its printed body holds a bound's proof elaboration infers under one order of its atoms and checks under another (`documentation/roadmap/arithmetic/100-an-atom-is-ranked-by-where-its-binder-stands.md`).
+    // Its printed body holds a bound's proof elaboration infers under one order of its atoms and checks under another (`documentation/roadmap/arithmetic/100-a-magnitude-is-oriented-over-the-classes.md`).
     "/std/Flt/of_decimal_in",
 ];
 
@@ -1080,7 +1080,7 @@ const UNPROVED: [&str; 0] = [];
 
 /// The `let`s of the library whose printed form or whose proof elaboration accepts and the kernel refuses, each named where its cause is filed.
 const UNCERTIFIED: [&str; 4] = [
-    // The kernel's conversion stops short of elaboration's between the body and its printed form (`documentation/roadmap/arithmetic/101-a-classing-reads-an-atom-as-its-reader-meets-it.md`).
+    // The kernel's conversion stops short of elaboration's between the body and its printed form (`documentation/roadmap/arithmetic/102-a-classing-reads-an-atom-as-its-reader-meets-it.md`).
     "/std/Flt/signals/scaled_prod_diff",
     "/std/Flt/signals/scaled_prod_sum",
     "/std/Flt/significant",
