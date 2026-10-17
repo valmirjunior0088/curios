@@ -15,5 +15,7 @@ test-support = []
 # The one SHA-256 authority among the product crates (`documentation/design/one-crate-is-the-authority-for-one-external-concern.md`): every content digest, store key and tree hash is spelled through `digest.rs`.
 [dependencies]
 curios-archive = { workspace = true }
+# The grapheme clusters and East Asian widths a report's caret is placed and sized by.
+curios-unicode = { workspace = true }
 stacker = { version = "0.1.25" }
 sha2 = "0.11.0"

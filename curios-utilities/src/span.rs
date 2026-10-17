@@ -1,10 +1,34 @@
-use std::{
-    fs,
-    hash::{Hash, Hasher},
-    io,
-    path::PathBuf,
-    sync::Arc,
+use {
+    curios_unicode::{
+        EastAsianWidth, GraphemeBreak, east_asian_width, grapheme_break, graphemes,
+        is_emoji_presentation,
+    },
+    std::{
+        fs,
+        hash::{Hash, Hasher},
+        io,
+        path::PathBuf,
+        sync::Arc,
+    },
 };
+
+/// The columns `cluster` takes on a terminal, which is what a caret under it is padded and drawn by: two where it holds a scalar East Asian Width calls wide or fullwidth, one that presents as an emoji, or the selector that asks for emoji presentation; none where it opens with a mark, a joiner or a control, which a terminal draws over its neighbour or not at all; one otherwise. A tab is the caller's, since it pads as a tab.
+fn columns(cluster: &str) -> usize {
+    let wide = cluster.chars().any(|scalar| {
+        matches!(
+            east_asian_width(scalar),
+            EastAsianWidth::W | EastAsianWidth::F
+        ) || is_emoji_presentation(scalar)
+            || scalar == '\u{FE0F}'
+    });
+    let opening = cluster.chars().next().map(grapheme_break);
+
+    match (wide, opening) {
+        (true, _) => 2,
+        (false, Some(GraphemeBreak::Extend | GraphemeBreak::Zwj | GraphemeBreak::Control)) => 0,
+        _ => 1,
+    }
+}
 
 /// One unit of input text — a file with its path, or pathless inline text — always handed out as `Arc<Source>` so every [`Span`] into it shares the one allocation instead of copying or re-reading the text, and so a span can cross a thread. Reference-counted rather than interned: a language server loads a new text on every edit, and a count is what frees the old one once nothing points into it.
 #[derive(Debug)]
@@ -100,7 +124,7 @@ impl Span {
         (line, column)
     }
 
-    /// Renders the span as a compiler diagnostic: a `--> path:line:column` header when the source is a file (omitted for inline sources), the 1-based-numbered source line containing the span's start, and a caret underline positioned and sized by Unicode scalar count, matching [`Span::line_column`]. The underline is clamped to that first line and is at least one `^` wide, so multi-line and empty spans still point somewhere visible.
+    /// Renders the span as a compiler diagnostic: a `--> path:line:column` header when the source is a file (omitted for inline sources), the column counted in scalars as [`Span::line_column`] counts it, the 1-based-numbered source line containing the span's start, and a caret underline placed and sized by the columns each grapheme cluster takes on a terminal, so it stands under a wide character as it stands under a narrow one. The underline is clamped to that first line and is at least one `^` wide, so multi-line and empty spans still point somewhere visible.
     pub fn render_snippet(&self) -> String {
         let source = &self.source.text;
         let start = self.start;
@@ -118,14 +142,18 @@ impl Span {
 
         let (number, column) = self.line_column();
 
-        let width = source[start..end.min(line_end)].chars().count();
+        let width: usize = graphemes(&source[start..end.min(line_end)])
+            .map(|cluster| match cluster {
+                "\t" => 1,
+                _ => columns(cluster),
+            })
+            .sum();
 
-        // One padding character per scalar, and a tab pads as a tab: the line above is printed verbatim, so padding a tab with a space would put the caret one column along where the text moves eight, and every tab-indented line would report a caret short of its span by the width of its indentation. A tab *inside* the span still takes one `^`, which is the same trade the scalar count already makes for a wide character.
-        let indent: String = source[line_start..start]
-            .chars()
-            .map(|char| match char {
-                '\t' => '\t',
-                _ => ' ',
+        // A cluster pads as the columns it takes, and a tab pads as a tab: the line above is printed verbatim, so padding a tab with a space would put the caret one column along where the text moves eight, and every tab-indented line would report a caret short of its span by the width of its indentation. A tab *inside* the span takes one `^`, since no column count is the tab's own.
+        let indent: String = graphemes(&source[line_start..start])
+            .map(|cluster| match cluster {
+                "\t" => "\t".to_string(),
+                _ => " ".repeat(columns(cluster)),
             })
             .collect();
 

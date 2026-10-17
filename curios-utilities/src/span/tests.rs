@@ -31,10 +31,10 @@ fn an_offset_is_found_by_the_line_and_column_it_is_named_by() {
 }
 
 #[test]
-fn caret_aligns_by_scalar_count_on_non_ascii_lines() {
+fn caret_aligns_by_columns_on_non_ascii_lines() {
     let source = Source::inline("sécond line\n");
 
-    // "line" starts at byte 8 but after seven scalars — seven spaces of padding, four carets.
+    // "line" starts at byte 8 but after seven columns — seven spaces of padding, four carets.
     let offset = source.text.find("line").unwrap();
     let span = Span::new(Arc::clone(&source), offset, offset + 4);
     assert_eq!(
@@ -42,10 +42,37 @@ fn caret_aligns_by_scalar_count_on_non_ascii_lines() {
         "    1 | sécond line\n      |        ^^^^"
     );
 
-    // A span covering the two-byte `é` is one scalar wide — one caret, one space of padding.
+    // A span covering the two-byte `é` is one column wide — one caret, one space of padding.
     let offset = source.text.find('é').unwrap();
     let span = Span::new(source, offset, offset + 'é'.len_utf8());
     assert_eq!(span.render_snippet(), "    1 | sécond line\n      |  ^");
+}
+
+// A wide character takes two columns on a terminal and a combining mark none, so the caret stands under what it underlines: after `日本 ` the padding is five spaces, an ideograph is two carets, and an `e` with its accent written as two scalars pads as the one column it is drawn in.
+#[test]
+fn caret_stands_under_wide_characters_and_combined_marks() {
+    let source = Source::inline("日本 = e\u{301}x\n");
+
+    let offset = source.text.find('=').unwrap();
+    let span = Span::new(Arc::clone(&source), offset, offset + 1);
+    assert_eq!(
+        span.render_snippet(),
+        "    1 | 日本 = e\u{301}x\n      |      ^"
+    );
+
+    let offset = source.text.find('本').unwrap();
+    let span = Span::new(Arc::clone(&source), offset, offset + '本'.len_utf8());
+    assert_eq!(
+        span.render_snippet(),
+        "    1 | 日本 = e\u{301}x\n      |   ^^"
+    );
+
+    let offset = source.text.find('x').unwrap();
+    let span = Span::new(source, offset, offset + 1);
+    assert_eq!(
+        span.render_snippet(),
+        "    1 | 日本 = e\u{301}x\n      |         ^"
+    );
 }
 
 #[test]

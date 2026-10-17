@@ -1,0 +1,18 @@
+[package]
+name = "curios-unicode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Unicode Character Database the toolchain pins: each scalar's properties, the extended grapheme clusters of text, and the same tables packed for /sys"
+
+[lints]
+workspace = true
+
+[features]
+# The conformance cases of `GraphemeBreakTest.txt`, for the tests of a crate that segments text by these tables in another language: `curios-std`'s, whose segmentation is Curios.
+test-support = []
+
+# The pinned files are fetched and checked as `curios-binaryen` fetches and checks its source.
+[build-dependencies]
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
+sha2 = "0.11.0"

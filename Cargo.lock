@@ -890,6 +890,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "curios-unicode"
+version = "0.16.8"
+dependencies = [
+ "sha2 0.11.0",
+ "ureq",
+]
+
+[[package]]
 name = "curios-unit"
 version = "0.16.8"
 dependencies = [
@@ -907,6 +915,7 @@ name = "curios-utilities"
 version = "0.16.8"
 dependencies = [
  "curios-archive",
+ "curios-unicode",
  "sha2 0.11.0",
  "stacker",
 ]
