@@ -8,7 +8,7 @@ The Curios erased IR: the flat, explicit, first-order stage between `curios-elab
 
 **Decision.** The Ersd optimizer runs exactly the transformations whose leverage is semantic — pruning, compile-time partial evaluation of closed terms and literal spines, reconstruction recovery, and the monoid worker/wrapper rebase — and nothing else. Folding, dead code, inlining, contification and specialization belong to `curios-cont`, after the lowering.
 
-**Rationale.** Ersd's leverage is what it still knows: hand Cont no work it can delete, run what compile time has decided, and re-base what would exhaust the runtime stack. A second local-rewrite engine would restate Cont's reductions over a second representation, and the two would drift.
+**Rationale.** Ersd's leverage is what it still knows: hand Cont no work it can delete, run what compile time has decided, and re-base a recursion around a monoid, which would take a frame an element, onto a loop. A second local-rewrite engine would restate Cont's reductions over a second representation, and the two would drift.
 
 ### Shapes stay distinct
 

@@ -2,7 +2,7 @@
 //!
 //! Every query matches the closed alphabets without a fallback arm, so a newly added operation cannot be silently misclassified — the compiler rejects the unhandled variant. Behavior reported here is *node-local*: it excludes the bodies of functions an `Apply` invokes, the callback an intrinsic runs, and the sub-blocks a match, switch, or fold evaluates; composing those to a fixed point is the effect summary's job ([`super::Summary`]), and this module supplies the leaves it joins.
 //!
-//! Arity is not restated here — it lives on the operation enums where the verifier already reads it. The fold half of the oracle — operation × constant operands → value, would-trap, or unknown — is [`Semantics::fold_operation`] and [`Semantics::fold_sequence`] below.
+//! Arity is not restated here — it lives on the operation enums where the verifier already reads it. The fold half of the oracle — operation × constant operands → value, would-trap, or unknown — is [`Semantics::fold_operation`] and [`Semantics::fold_sequence`] below, and the algebra an operation's combinations obey — which operation is a monoid, and its identity — is [`Semantics::monoid_identity`], what the rebase reassociates a recursion around.
 
 #[cfg(test)]
 mod tests;
@@ -692,6 +692,83 @@ impl Semantics {
             }))
         };
         fold_outcome(compute())
+    }
+}
+
+impl Semantics {
+    /// The identity of the monoid a scalar operation forms over its carrier, where it forms one: an associative operation closed over one carrier, with a value that leaves every other unchanged on either side. Every one commutes, which is what lets the rebase fold the addends on both sides of a recursion into one accumulator.
+    ///
+    /// `NatAnd`, `NatMin`, `IntMin` and `IntMax` are associative and have no identity on an unbounded carrier, and no float operation is associative under rounding. `IntAnd`'s identity is `-1`, since `Int`'s bitwise operations act on the infinite two's complement `curios-num` computes.
+    pub fn monoid_identity(operation: Operation) -> Option<Constant> {
+        match operation {
+            Operation::BoolAnd | Operation::BoolEql => Some(Constant::Bool(true)),
+            Operation::BoolOr | Operation::BoolXor | Operation::BoolNeq => {
+                Some(Constant::Bool(false))
+            }
+            Operation::NatAdd | Operation::NatOr | Operation::NatXor | Operation::NatMax => {
+                Some(Constant::Nat(Natural::zero()))
+            }
+            Operation::NatMul => Some(Constant::Nat(Natural::one())),
+            Operation::IntAdd | Operation::IntOr | Operation::IntXor => {
+                Some(Constant::Int(Integer::from(0u32)))
+            }
+            Operation::IntMul => Some(Constant::Int(Integer::from(1u32))),
+            Operation::IntAnd => Some(Constant::Int(Integer::from(-1i32))),
+            Operation::NatEql
+            | Operation::NatNeq
+            | Operation::NatSub
+            | Operation::NatLt
+            | Operation::NatDiv
+            | Operation::NatRem
+            | Operation::NatLe
+            | Operation::NatAnd
+            | Operation::NatMin
+            | Operation::NatShl
+            | Operation::NatPow
+            | Operation::NatShr
+            | Operation::ByteToNat
+            | Operation::NatToByte
+            | Operation::IntEql
+            | Operation::IntNeq
+            | Operation::IntSub
+            | Operation::IntDiv
+            | Operation::IntRem
+            | Operation::IntLt
+            | Operation::IntLe
+            | Operation::IntMin
+            | Operation::IntMax
+            | Operation::IntAbs
+            | Operation::IntSign
+            | Operation::IntShl
+            | Operation::IntShr
+            | Operation::FltAdd(_)
+            | Operation::FltSub(_)
+            | Operation::FltMul(_)
+            | Operation::FltDiv(_)
+            | Operation::FltFma(_)
+            | Operation::FltRem
+            | Operation::FltEql
+            | Operation::FltNeq
+            | Operation::FltLt
+            | Operation::FltLe
+            | Operation::FltMin
+            | Operation::FltMax
+            | Operation::FltCopysign
+            | Operation::FltNeg
+            | Operation::FltAbs
+            | Operation::FltSqrt(_)
+            | Operation::FltRoundIntegral(_)
+            | Operation::NatToInt
+            | Operation::NatToFlt(_)
+            | Operation::IntToNat
+            | Operation::IntToFlt(_)
+            | Operation::FltToNat
+            | Operation::FltToInt
+            | Operation::FltMantissa
+            | Operation::FltExponent
+            | Operation::FltToLeBytes
+            | Operation::FltOfLeBytes => None,
+        }
     }
 }
 

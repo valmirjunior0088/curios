@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_num::{Binary, Grain},
+    curios_num::{Binary, Grain, Integer, Natural},
 };
 
 #[test]
@@ -96,4 +96,170 @@ fn the_join_is_a_union() {
     let both = trap.join(host);
     assert!(both.observable.may_trap && both.observable.host_effect);
     assert!(LocalBehavior::unknown().is_observable());
+}
+
+/// Each listing is written once and read twice: as the list returned, and as the patterns of an exhaustive match every listed operation is put through, so an operation the alphabet gains fails to compile here until it is listed.
+macro_rules! listed {
+    ($($pattern:pat => $operation:expr),+ $(,)?) => {{
+        let covered = |operation: Operation| match operation {
+            $($pattern => ()),+
+        };
+        let every = vec![$($operation),+];
+        every.iter().copied().for_each(covered);
+        every
+    }};
+}
+
+/// Every scalar operation, one rounding direction standing for all of an operation that rounds: the oracle names none of them a monoid in any direction.
+fn every_operation() -> Vec<Operation> {
+    use {Operation::*, curios_num::Rounding::TiesToEven};
+    listed![
+        BoolAnd => BoolAnd,
+        BoolOr => BoolOr,
+        BoolXor => BoolXor,
+        BoolEql => BoolEql,
+        BoolNeq => BoolNeq,
+        NatEql => NatEql,
+        NatNeq => NatNeq,
+        NatAdd => NatAdd,
+        NatSub => NatSub,
+        NatMul => NatMul,
+        NatLt => NatLt,
+        NatDiv => NatDiv,
+        NatRem => NatRem,
+        NatLe => NatLe,
+        NatAnd => NatAnd,
+        NatOr => NatOr,
+        NatXor => NatXor,
+        NatMin => NatMin,
+        NatMax => NatMax,
+        NatShl => NatShl,
+        NatPow => NatPow,
+        NatShr => NatShr,
+        ByteToNat => ByteToNat,
+        NatToByte => NatToByte,
+        IntEql => IntEql,
+        IntNeq => IntNeq,
+        IntAdd => IntAdd,
+        IntSub => IntSub,
+        IntMul => IntMul,
+        IntDiv => IntDiv,
+        IntRem => IntRem,
+        IntLt => IntLt,
+        IntLe => IntLe,
+        IntAnd => IntAnd,
+        IntOr => IntOr,
+        IntXor => IntXor,
+        IntMin => IntMin,
+        IntMax => IntMax,
+        IntAbs => IntAbs,
+        IntSign => IntSign,
+        IntShl => IntShl,
+        IntShr => IntShr,
+        FltAdd(_) => FltAdd(TiesToEven),
+        FltSub(_) => FltSub(TiesToEven),
+        FltMul(_) => FltMul(TiesToEven),
+        FltDiv(_) => FltDiv(TiesToEven),
+        FltFma(_) => FltFma(TiesToEven),
+        FltRem => FltRem,
+        FltEql => FltEql,
+        FltNeq => FltNeq,
+        FltLt => FltLt,
+        FltLe => FltLe,
+        FltMin => FltMin,
+        FltMax => FltMax,
+        FltCopysign => FltCopysign,
+        FltNeg => FltNeg,
+        FltAbs => FltAbs,
+        FltSqrt(_) => FltSqrt(TiesToEven),
+        FltRoundIntegral(_) => FltRoundIntegral(TiesToEven),
+        NatToInt => NatToInt,
+        NatToFlt(_) => NatToFlt(TiesToEven),
+        IntToNat => IntToNat,
+        IntToFlt(_) => IntToFlt(TiesToEven),
+        FltToNat => FltToNat,
+        FltToInt => FltToInt,
+        FltMantissa => FltMantissa,
+        FltExponent => FltExponent,
+        FltToLeBytes => FltToLeBytes,
+        FltOfLeBytes => FltOfLeBytes,
+    ]
+}
+
+/// Values of the carrier `identity` is of, around the points where the carrier's representation changes: zero, the i31's edge, and past a machine word, on both signs where it has them.
+fn samples_beside(identity: &Constant) -> Vec<Constant> {
+    match identity {
+        Constant::Bool(_) => vec![Constant::Bool(false), Constant::Bool(true)],
+        Constant::Nat(_) => [0u128, 1, 2, 7, (1 << 30) - 1, 1 << 30, (1 << 64) + 3]
+            .into_iter()
+            .map(|value| Constant::Nat(Natural::from(value)))
+            .collect(),
+        Constant::Int(_) => [
+            -(1i128 << 64) - 3,
+            -(1 << 30) - 1,
+            -(1 << 30),
+            -7,
+            -1,
+            0,
+            1,
+            2,
+            (1 << 30) - 1,
+            (1 << 64) + 3,
+        ]
+        .into_iter()
+        .map(|value| Constant::Int(Integer::from(value)))
+        .collect(),
+        other => panic!("no samples of {other:?}'s carrier"),
+    }
+}
+
+/// Every operation the oracle names a monoid is one, by its own fold: its identity leaves every sample unchanged on both sides, every two samples commute, which is what lets the rebase fold the addends on both sides of a recursion into one accumulator, and every three associate.
+#[test]
+fn every_monoid_the_oracle_names_keeps_its_laws_under_its_fold() {
+    let mut carriers = Vec::new();
+    for operation in every_operation() {
+        let Some(identity) = Semantics::monoid_identity(operation) else {
+            continue;
+        };
+        carriers.push(std::mem::discriminant(&identity));
+        let fold = |left: &Constant, right: &Constant| match Semantics::fold_operation(
+            operation,
+            &[left.clone(), right.clone()],
+            1 << 12,
+        ) {
+            FoldOutcome::Value(value) => value,
+            other => panic!("{operation:?} does not fold {left:?} and {right:?}: {other:?}"),
+        };
+        let samples = samples_beside(&identity);
+        for a in &samples {
+            assert_eq!(
+                fold(&identity, a),
+                *a,
+                "{operation:?}'s identity on the left of {a:?}"
+            );
+            assert_eq!(
+                fold(a, &identity),
+                *a,
+                "{operation:?}'s identity on the right of {a:?}"
+            );
+            for b in &samples {
+                assert_eq!(fold(a, b), fold(b, a), "{operation:?} over {a:?} and {b:?}");
+                for c in &samples {
+                    assert_eq!(
+                        fold(&fold(a, b), c),
+                        fold(a, &fold(b, c)),
+                        "{operation:?} over {a:?}, {b:?} and {c:?}"
+                    );
+                }
+            }
+        }
+    }
+    // A carrier the oracle names no monoid of would let the laws hold of nothing.
+    for carrier in [
+        Constant::Bool(true),
+        Constant::Nat(Natural::zero()),
+        Constant::Int(Integer::from(0u32)),
+    ] {
+        assert!(carriers.contains(&std::mem::discriminant(&carrier)));
+    }
 }

@@ -1,6 +1,6 @@
-//! The monoid worker/wrapper: reassociate a monoid-deferred self-recursion into a tail-threaded accumulator.
+//! The monoid worker/wrapper: a recursion whose answer is its own call's answer combined under a monoid becomes a loop over an accumulator — tail recursion modulo a monoid context, as Leijen and Lorenzen derive it (*Tail Recursion Modulo Context*, POPL 2023, §4.4).
 //!
-//! A recursion whose result feeds a monoid combine (`count_w(t) + 1`, `chunk ++ rest(t)`) cannot be a tail call: the combine sits after the recursion, so the runtime grows a native frame per element and overflows on corpus-sized input. But `w(x, acc)` with the combine's addend moved into `acc` *is* a loop:
+//! A recursion whose result feeds a monoid combine (`count(t) + 1`, `x == y && eql(xs, ys)`) is no tail call: the combine runs after the recursion returns, so every level keeps a frame and pays a return. But `w(x, acc)`, with the combine's addend folded into `acc` ahead of the call, is a loop:
 //!
 //! ```text
 //!   rec f(x) = … f(t) ⊕ k …
@@ -8,101 +8,80 @@
 //!      rec w(x, acc) = … w(t, acc ⊕ k) …   (base arms return acc ⊕ v)
 //! ```
 //!
-//! This is a correctness transform, not an optimization — without it the deferred-context corpus overflows the native stack — and it is sound-but-incomplete: outside the recognized envelope it is a no-op, never a miscompile. The envelope, structural in ANF: a leaf tail block ends in exactly `[…, a = f(args), b = ⊕(a, k)]` returning `b` (the addend defined before the call, so moving only the *pure combine* across the recursion reorders nothing observable), a bare tail self-call, or a base; one uniform registered monoid, every row of which commutes, so the recursion may sit on either side of the combine.
+//! A cost transform, not a correctness one: a module runs on a stack of its own, which holds a recursion left as written at any depth a program meets ([`curios-runtime`'s README](../../../curios-runtime/README.md#a-module-runs-on-a-stack-of-its-own)), and what the rewrite removes is a frame and a return an element, and the stack the depth touches. It is sound-but-incomplete: outside the recognized envelope it is a no-op, never a miscompile.
 //!
-//! **The licence is associativity and an erasure-stable identity, because nothing here is partial.** The rewrite reverses the order the addends are combined in — the written recursion folds them innermost-out, `((v ⊕ kₙ) ⊕ …) ⊕ k₁`, and the worker threads them `k₁` first — so the *partial* results differ even though the total does not. A bounded carrier would need a third condition, monotone definedness, since a reversed order could refuse where the written one computes — a multiplication row would turn `((1 * 0) * 2¹⁶) * 2¹⁶` into a trap. `Nat` and `Int` are unbounded at run time ([Nat and Int are an i31 until they outgrow it](../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so every partial of every order is defined, and a reversed order costs at most the size of what its partials build.
+//! **The envelope, structural in ANF.** A leaf tail block ends in a self-call followed by a chain of combines of one monoid — each reading the answer of the one before it, the call's first, exactly once, every other operand a value from before the call — and returns the chain's last answer; or it ends in a bare tail self-call; or it is a base. Only the combines move across the call, so nothing observable is reordered: Koka's liberal context, whose operands after the hole are values. Every combine leaf shares one monoid, and every self-reference in the function's whole region stands on the spine.
+//!
+//! **Which operation is a monoid is the oracle's** ([`Semantics::monoid_identity`]), and every one commutes, so the addends of both sides of a recursion fold into one accumulator. The licence is associativity and an erasure-stable identity, because nothing here is partial. The rewrite reverses the order the addends are combined in — the written recursion folds them innermost-out, `((v ⊕ kₙ) ⊕ …) ⊕ k₁`, and the worker threads them `k₁` first — so the *partial* results differ even though the total does not. A bounded carrier would need a third condition, monotone definedness, since a reversed order could refuse where the written one computes — a multiplication would turn `((1 * 0) * 2¹⁶) * 2¹⁶` into a trap. `Nat` and `Int` are unbounded at run time ([Nat and Int are an i31 until they outgrow it](../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)) and the `Bool` operations total, so every partial of every order is defined, and a reversed order costs at most the size of what its partials build.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::{
-        Atom, Block, BlockId, Constant, Function, FunctionId, Module, Operation, Rhs, Statement,
-        StatementId, Terminator, control_blocks,
+        Atom, Block, BlockId, Constant, Function, FunctionId, Module, Operation, Rhs, Semantics,
+        Statement, StatementId, Terminator, control_blocks,
     },
-    curios_num::{Integer, Natural},
     std::collections::BTreeSet,
 };
 
-/// A monoid registered for accumulator reassociation, keyed in the erased operators.
-///
-/// Every row is an associative operation with an identity the erased stages agree on: addition and multiplication on both carriers, and `or`.
-///
-/// No `And` row: boolean and bitwise `and` share an erased operator with different identities, so no single seed is sound for both. No append rows: `BinAppend`/`ListAppend` append an *element* to a sequence — heterogeneous, so the accumulator rewrite's carriers do not line up.
-///
-/// **Every row commutes, and `recognize` relies on it**: the combine is accepted with the recursion on either side. A non-commutative row — an append over one carrier — would need the placement rule beside its registration: the recursion only on the right, the addend folded as `acc ⊕ k`.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Monoid {
-    NatAdd,
-    NatMul,
-    NatOr,
-    IntAdd,
-    IntMul,
-    IntOr,
+/// The monoid a recursion's combines share: a scalar operation the oracle names a monoid, with its identity.
+#[derive(Clone, PartialEq, Eq)]
+struct Row {
+    operation: Operation,
+    identity: Constant,
 }
 
-impl Monoid {
-    fn of_operation(operation: Operation) -> Option<Monoid> {
-        Some(match operation {
-            Operation::NatAdd => Monoid::NatAdd,
-            Operation::NatMul => Monoid::NatMul,
-            Operation::NatOr => Monoid::NatOr,
-            Operation::IntAdd => Monoid::IntAdd,
-            Operation::IntMul => Monoid::IntMul,
-            Operation::IntOr => Monoid::IntOr,
-            _ => return None,
+impl Row {
+    fn of_operation(operation: Operation) -> Option<Row> {
+        let identity = Semantics::monoid_identity(operation)?;
+        Some(Row {
+            operation,
+            identity,
         })
     }
 
-    /// The monoid a combine right-hand side performs: a direct operation, or a two-argument call that resolves through *forwarder* functions to one. The corpus combines through concept witnesses (`a + b` is `Add/add(a, b)`, a forwarder onto `Nat/add`, a forwarder onto the intrinsic), so the resolver is what makes the envelope reach idiomatic code at all; unfolding a pure forwarder chain preserves meaning exactly.
-    fn of_rhs(module: &Module, rhs: &Rhs) -> Option<(Monoid, Atom, Atom)> {
+    /// The monoid a right-hand side combines in, and its two operands: a direct operation, or a two-argument call that resolves through *forwarder* functions to one. The corpus combines through concept witnesses and `/sys` (`a + b` is `Add/add(a, b)`, a forwarder onto `Nat/add`, a forwarder onto the intrinsic; `a && b` is `/sys/Bool/and`), so the resolver is what makes the envelope reach idiomatic code at all; unfolding a pure forwarder chain preserves meaning exactly.
+    fn of_rhs(module: &Module, rhs: &Rhs) -> Option<(Row, [Atom; 2])> {
         match rhs {
             Rhs::Operation {
                 operation,
                 operands,
             } => {
-                let monoid = Self::of_operation(*operation)?;
-                Some((monoid, operands[0], operands[1]))
+                let row = Self::of_operation(*operation)?;
+                let [left, right] = operands.as_slice() else {
+                    return None;
+                };
+                Some((row, [*left, *right]))
             }
             Rhs::Apply {
                 callee: Atom::Function(callee),
                 arguments,
-            } if arguments.len() == 2 => {
-                let operation = resolve_forwarder(module, *callee, 8)?;
-                let monoid = Self::of_operation(operation)?;
-                Some((monoid, arguments[0], arguments[1]))
+            } => {
+                let [left, right] = arguments.as_slice() else {
+                    return None;
+                };
+                let row = Self::of_operation(resolve_forwarder(module, *callee, 8)?)?;
+                Some((row, [*left, *right]))
             }
             _ => None,
         }
     }
 
-    /// The identity element seeded into the accumulator.
-    fn identity(self) -> Constant {
-        match self {
-            Monoid::NatAdd | Monoid::NatOr => Constant::Nat(Natural::zero()),
-            Monoid::NatMul => Constant::Nat(Natural::from(1u32)),
-            Monoid::IntAdd | Monoid::IntOr => Constant::Int(Integer::from(0u32)),
-            Monoid::IntMul => Constant::Int(Integer::from(1u32)),
-        }
-    }
-
     /// `left ⊕ right`.
-    fn build(self, left: Atom, right: Atom) -> Rhs {
-        match self {
-            Monoid::NatAdd => operation(Operation::NatAdd, left, right),
-            Monoid::NatMul => operation(Operation::NatMul, left, right),
-            Monoid::NatOr => operation(Operation::NatOr, left, right),
-            Monoid::IntAdd => operation(Operation::IntAdd, left, right),
-            Monoid::IntMul => operation(Operation::IntMul, left, right),
-            Monoid::IntOr => operation(Operation::IntOr, left, right),
+    fn build(&self, left: Atom, right: Atom) -> Rhs {
+        Rhs::Operation {
+            operation: self.operation,
+            operands: vec![left, right],
         }
     }
-}
 
-fn operation(operation: Operation, left: Atom, right: Atom) -> Rhs {
-    Rhs::Operation {
-        operation,
-        operands: vec![left, right],
+    /// Whether `atom` is this monoid's identity, which a base arm's combine may drop.
+    fn is_identity(&self, module: &Module, atom: Atom) -> bool {
+        match atom {
+            Atom::Constant(constant) => module.constant(constant) == Some(&self.identity),
+            _ => false,
+        }
     }
 }
 
@@ -141,12 +120,11 @@ fn resolve_forwarder(module: &Module, function: FunctionId, budget: usize) -> Op
 
 /// How one leaf tail block ends.
 enum Leaf {
-    /// `a = f(args); b = ⊕(…a…); return b` — the addend on the other side.
+    /// `…, a = f(args), b₁ = ⊕(a, k₁), …, bₙ = ⊕(bₙ₋₁, kₙ); return bₙ` — a self-call closed by a chain of combines, whose addends are values from before the call.
     Combine {
         block: BlockId,
         call: StatementId,
-        combine: StatementId,
-        addend: Atom,
+        addends: Vec<Atom>,
     },
     /// `a = f(args); return a`.
     Bare { call: StatementId },
@@ -185,14 +163,14 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
     let debug_name = definition.debug_name.clone();
 
     // Recognize the tail spine.
-    let Some((monoid, leaves)) = recognize(module, function, body) else {
+    let Some((row, leaves)) = recognize(module, function, body) else {
         return;
     };
 
     // The wrapper keeps the function's identity: fresh parameters, a new body that seeds the worker with the monoid identity. The worker takes the original parameters plus the accumulator and the original body.
     let worker = module.reserve_function();
     let acc = module.add_value(Some("acc".into()));
-    let identity = module.intern_constant(monoid.identity());
+    let identity = module.intern_constant(row.identity.clone());
 
     let wrapper_params: Vec<_> = params
         .iter()
@@ -255,8 +233,7 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
             Leaf::Combine {
                 block,
                 call,
-                combine,
-                addend,
+                addends,
             } => {
                 let Some(Statement::Let {
                     result: call_result,
@@ -265,23 +242,28 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
                 else {
                     continue;
                 };
-                let Some(Statement::Let {
-                    result: combine_result,
-                    ..
-                }) = module.statement(combine).cloned()
+                let Some(position) = module
+                    .block(block)
+                    .and_then(|definition| definition.statements.iter().position(|&s| s == call))
                 else {
                     continue;
                 };
-                // The combine now runs first, folding the addend into the accumulator; the call becomes a tail call to the worker threading it, and the block returns the call's result.
-                module.set_statement(
-                    combine,
-                    Statement::Let {
-                        result: combine_result,
-                        rhs: monoid.build(acc_atom, addend),
-                    },
-                );
+                // The addends fold into the accumulator ahead of the call, which becomes a tail call to the worker threading it; the chain's own statements are left in no block, and the prune after the rebase drops them.
+                let mut statements = module
+                    .block(block)
+                    .map(|definition| definition.statements[..position].to_vec())
+                    .unwrap_or_default();
+                let mut partial = acc_atom;
+                for addend in addends {
+                    let folded = module.add_value(None);
+                    statements.push(module.add_statement(Statement::Let {
+                        result: folded,
+                        rhs: row.build(partial, addend),
+                    }));
+                    partial = Atom::Value(folded);
+                }
                 let mut arguments = arguments;
-                arguments.push(Atom::Value(combine_result));
+                arguments.push(partial);
                 module.set_statement(
                     call,
                     Statement::Let {
@@ -292,17 +274,9 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
                         },
                     },
                 );
-                let Some(definition) = module.block(block) else {
-                    continue;
-                };
-                let mut statements = definition.statements.clone();
-                // Swap the adjacent pair `[call, combine]` to `[combine, call]`.
-                if let Some(position) = statements.iter().position(|&s| s == call) {
-                    statements.swap(position, position + 1);
-                }
-                let terminator = Terminator::Return(Atom::Value(call_result));
+                statements.push(call);
                 module.set_block_statements(block, statements);
-                module.set_block_terminator(block, terminator);
+                module.set_block_terminator(block, Terminator::Return(Atom::Value(call_result)));
             }
             Leaf::Bare { call } => {
                 let Some(Statement::Let {
@@ -326,24 +300,31 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
                 );
             }
             Leaf::Base { block } => {
-                let Some((returned, mut statements)) =
+                let Some(returned) =
                     module
                         .block(block)
                         .and_then(|definition| match definition.terminator {
-                            Terminator::Return(returned) => {
-                                Some((returned, definition.statements.clone()))
-                            }
+                            Terminator::Return(returned) => Some(returned),
                             _ => None,
                         })
                 else {
                     continue;
                 };
+                if row.is_identity(module, returned) {
+                    module.set_block_terminator(block, Terminator::Return(acc_atom));
+                    continue;
+                }
+                let Some(mut statements) = module
+                    .block(block)
+                    .map(|definition| definition.statements.clone())
+                else {
+                    continue;
+                };
                 let combined = module.add_value(None);
-                let statement = module.add_statement(Statement::Let {
+                statements.push(module.add_statement(Statement::Let {
                     result: combined,
-                    rhs: monoid.build(acc_atom, returned),
-                });
-                statements.push(statement);
+                    rhs: row.build(acc_atom, returned),
+                }));
                 module.set_block_statements(block, statements);
                 module.set_block_terminator(block, Terminator::Return(Atom::Value(combined)));
             }
@@ -359,10 +340,10 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
     );
 }
 
-/// Recognize a function's tail spine: one uniform monoid, at least one combine, every self-call in the function's whole region accounted for on the spine, and the addend defined before the call (structurally: the call and combine are the block's last two statements).
-fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Monoid, Vec<Leaf>)> {
+/// Recognize a function's tail spine: one uniform monoid, at least one combine leaf, and every self-call in the function's whole region accounted for on the spine.
+fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Row, Vec<Leaf>)> {
     let mut leaves = Vec::new();
-    let mut monoid: Option<Monoid> = None;
+    let mut row: Option<Row> = None;
     let mut combines = 0usize;
     let mut spine_calls = 0usize;
 
@@ -386,7 +367,7 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Mo
 
         // A trailing dispatch whose result the block returns: its arms are tail positions.
         //
-        // **This list is a pattern, so nothing checks it is complete.** A dispatch form missing from it is not walked into, so the recursion under it keeps its deferred context, stays non-tail, and overflows the runtime stack at depth. `FoldSequence` is absent because its step is not a tail position — the accumulator is consumed after it. A new dispatch form belongs here unless it is a loop.
+        // **This list is a pattern, so nothing checks it is complete.** A dispatch form missing from it is not walked into, so the recursion under it keeps its deferred context, stays non-tail, and costs a frame an element where a loop costs none. `FoldSequence` is absent because its step is not a tail position — the accumulator is consumed after it. A new dispatch form belongs here unless it is a loop.
         if let Some((
             _,
             Statement::Let {
@@ -405,74 +386,116 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Mo
         }
 
         // Leaf: classify its ending.
-        let statements = &definition.statements;
-        let count = statements.len();
-
-        // `…, a = f(args), b = ⊕(a, k); return b`
-        if count >= 2
-            && let Some(Statement::Let {
-                result: combine_result,
-                rhs: combine_rhs,
-            }) = module.statement(statements[count - 1])
-            && returned == Atom::Value(*combine_result)
-            && let Some((found, left, right)) = Monoid::of_rhs(module, combine_rhs)
-            && let Some(Statement::Let {
-                result: call_result,
-                rhs: Rhs::Apply { callee, .. },
-            }) = module.statement(statements[count - 2])
-            && *callee == Atom::Function(function)
-        {
-            let call_atom = Atom::Value(*call_result);
-            let left_self = left == call_atom;
-            let right_self = right == call_atom;
-            if left_self ^ right_self {
-                match monoid {
-                    None => monoid = Some(found),
-                    Some(previous) if previous == found => {}
+        match ending(module, function, definition, returned) {
+            Ending::Combine {
+                call,
+                row: found,
+                addends,
+            } => {
+                match &row {
+                    None => row = Some(found),
+                    Some(previous) if *previous == found => {}
                     Some(_) => return None,
                 }
                 combines += 1;
                 spine_calls += 1;
                 leaves.push(Leaf::Combine {
                     block,
-                    call: statements[count - 2],
-                    combine: statements[count - 1],
-                    addend: if left_self { right } else { left },
+                    call,
+                    addends,
                 });
-                continue;
             }
+            Ending::Bare { call } => {
+                spine_calls += 1;
+                leaves.push(Leaf::Bare { call });
+            }
+            Ending::Base => leaves.push(Leaf::Base { block }),
         }
-
-        // `a = f(args); return a`
-        if count >= 1
-            && let Some(Statement::Let {
-                result,
-                rhs: Rhs::Apply { callee, .. },
-            }) = module.statement(statements[count - 1])
-            && returned == Atom::Value(*result)
-            && *callee == Atom::Function(function)
-        {
-            spine_calls += 1;
-            leaves.push(Leaf::Bare {
-                call: statements[count - 1],
-            });
-            continue;
-        }
-
-        leaves.push(Leaf::Base { block });
     }
 
     if combines == 0 {
         return None;
     }
-    let monoid = monoid?;
+    let row = row?;
 
     // Every self-reference in the function's whole region must be one of the spine calls: a self-call off the spine (or the function escaping as a value from its own body) declines the transform.
     if count_self_references(module, function) != spine_calls {
         return None;
     }
 
-    Some((monoid, leaves))
+    Some((row, leaves))
+}
+
+/// How a leaf block that returns `returned` ends.
+enum Ending {
+    Combine {
+        call: StatementId,
+        row: Row,
+        addends: Vec<Atom>,
+    },
+    Bare {
+        call: StatementId,
+    },
+    Base,
+}
+
+/// Read a leaf's ending: its last self-call, and every statement after it a combine of one monoid that reads the answer before it exactly once and nothing else the call or the chain computed. Anything else is a base, and a self-call it holds is then off the spine, which declines the whole function.
+fn ending(module: &Module, function: FunctionId, block: &Block, returned: Atom) -> Ending {
+    let is_self_call = |&statement: &StatementId| {
+        matches!(
+            module.statement(statement),
+            Some(Statement::Let {
+                rhs: Rhs::Apply {
+                    callee: Atom::Function(callee),
+                    ..
+                },
+                ..
+            }) if *callee == function
+        )
+    };
+    let Some(position) = block.statements.iter().rposition(is_self_call) else {
+        return Ending::Base;
+    };
+    let call = block.statements[position];
+    let Some(Statement::Let { result, .. }) = module.statement(call) else {
+        return Ending::Base;
+    };
+
+    // The answer each link of the chain reads, and every answer the call and the chain computed, none of which a link may read but the one it is handed.
+    let mut hole = Atom::Value(*result);
+    let mut computed = vec![hole];
+    let mut row: Option<Row> = None;
+    let mut addends = Vec::new();
+    for statement in &block.statements[position + 1..] {
+        let Some(Statement::Let { result, rhs }) = module.statement(*statement) else {
+            return Ending::Base;
+        };
+        let Some((found, [left, right])) = Row::of_rhs(module, rhs) else {
+            return Ending::Base;
+        };
+        if row.as_ref().is_some_and(|row| *row != found) {
+            return Ending::Base;
+        }
+        let addend = match (left == hole, right == hole) {
+            (true, false) => right,
+            (false, true) => left,
+            _ => return Ending::Base,
+        };
+        if computed.contains(&addend) {
+            return Ending::Base;
+        }
+        row = Some(found);
+        addends.push(addend);
+        hole = Atom::Value(*result);
+        computed.push(hole);
+    }
+    if returned != hole {
+        return Ending::Base;
+    }
+    match row {
+        Some(row) => Ending::Combine { call, row, addends },
+        None => Ending::Bare { call },
+    }
 }
 
 /// Count every reference to `function` inside its own region, including nested function bodies.

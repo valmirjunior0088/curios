@@ -1,6 +1,6 @@
 //! The Ersd transformations — the ones whose leverage is semantic, and nothing else.
 //!
-//! Pruning, the fold of suspension tests in a program that cannot suspend, compile-time partial evaluation with literal-spine specialization beside it, reconstruction recovery, and the monoid worker/wrapper rebase. General structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to Cont, which runs after the lowering; Ersd's leverage is what it still knows: don't hand Cont work it can delete (pruning), run what compile time has already decided (partial evaluation), and re-base what would exhaust the runtime stack (worker/wrapper).
+//! Pruning, the fold of suspension tests in a program that cannot suspend, compile-time partial evaluation with literal-spine specialization beside it, reconstruction recovery, and the monoid worker/wrapper rebase. General structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to Cont, which runs after the lowering; Ersd's leverage is what it still knows: don't hand Cont work it can delete (pruning), run what compile time has already decided (partial evaluation), and re-base a recursion around a monoid, which would take a frame an element, onto a loop (worker/wrapper).
 
 mod prune;
 use prune::*;
