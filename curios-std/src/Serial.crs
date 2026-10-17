@@ -1,5 +1,5 @@
-use /std/{Nat, Bool, List, Path, Try, Io, Handle};
-use /std/Handle/{let Handle};
+use /std/{Nat, Bool, List, Path, Try, Io};
+use /std/internal/{Handle, error};
 
 --- An open serial port.
 pub struct Serial: Type {
@@ -72,7 +72,7 @@ pub let open(s: Io/Scope, path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
         let port = Serial { reply.handle };
         let _ = Io/Scope/defer(s, (_) => close(port))!;
         Try/pure(port)
-    | false => Try/raise(Handle/error(reply.status))
+    | false => Try/raise(error(reply.status))
     end;
 
 --- Close `s` before its scope ends, as the scope does when it ends. What it accepted and has not sent is discarded, so the close never waits on the wire: `drain` first to send it.
@@ -89,10 +89,7 @@ foreign serial_drain(Handle) -> Nat;
 --- Wait until `s` has sent what it accepted, or can no longer send it. A device that never takes the output — hardware flow control with nothing asking for more — waits for good, so bound it with a timeout where that can happen; a cancelled drain leaves the output where it was.
 pub let drain(s: Serial) -> Try(Io, Io/Error, {}) =
     let status = serial_drain(s.0)!;
-    match status == /sys/status/ok
-    | true => Try/pure(())
-    | false => Try/raise(Handle/error(status))
-    end;
+    match status == /sys/status/ok | true => Try/pure(()) | false => Try/raise(error(status)) end;
 
 satisfy Io/Write(Serial) {
     write(s, b) = Io/write(s.0, b),
@@ -104,10 +101,7 @@ foreign serial_control(Handle, Nat, Bool) -> Nat;
 
 let control(s: Serial, op: Nat, on: Bool) -> Try(Io, Io/Error, {}) =
     let status = serial_control(s.0, op, on)!;
-    match status == /sys/status/ok
-    | true => Try/pure(())
-    | false => Try/raise(Handle/error(status))
-    end;
+    match status == /sys/status/ok | true => Try/pure(()) | false => Try/raise(error(status)) end;
 
 --- The Data Terminal Ready line at `on`. Lowering and raising it is how most boards are reset.
 pub let set_dtr(s: Serial, on: Bool) -> Try(Io, Io/Error, {}) =
@@ -129,5 +123,5 @@ pub let list() -> Try(Io, Io/Error, List(Path)) =
     let reply = serial_list()!;
     match reply.status == /sys/status/ok
     | true => Try/pure(List/map(reply.paths, Path/of_bytes))
-    | false => Try/raise(Handle/error(reply.status))
+    | false => Try/raise(error(reply.status))
     end;

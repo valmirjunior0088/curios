@@ -1,6 +1,7 @@
-use /std/{List, Option, Cell, Io, Handle};
+use /std/{List, Option, Cell, Io};
 use /std/Io/{Waiting};
-use /std/time/{Duration};
+use /std/internal/{Handle};
+use /std/time/{Duration, Instant};
 
 --- A wait on cells alone, which made nothing to release.
 pub let on_filled(cells: List(Cell({}))) -> Waiting =
@@ -20,22 +21,28 @@ pub let new(@A: Type, try: Io(Option(A)), wait: Io(Waiting)) -> Offer(A) =
 pub let map(@A: Type, @B: Type, o: Offer(A), f: (A) -> B) -> Offer(B) =
     new(Io/bind(o.try, (m) => Io/pure(Option/map(m, f))), o.wait);
 
---- An offer that yields once `d` has passed, on a timer of its own each time it is waited on.
+--- An offer that yields once `d` has passed, on a timer of its own for the time still left each time it is waited on.
 pub let after(d: Duration) -> Io(Offer({})) =
-    let start = Handle/monotonic()!;
-    let due = Duration/add(start, d);
+    let start = Instant/now()!;
+    let due = Instant/add(start, d);
     Io/pure(
         new(
             Io/bind(
-                Handle/monotonic(),
+                Instant/now(),
                 (t) =>
                     Io/pure(
-                        match Duration/before(t, due)
+                        match Instant/before(t, due)
                         | true => Option/none()
                         | false => Option/some(())
                         end)),
             Io/bind(
-                Handle/timer(due),
-                (timer) =>
-                    Io/pure(
-                        Waiting { on = [timer], filled = [], release = Handle/close(timer) }))));
+                Instant/now(),
+                (t) =>
+                    Io/bind(
+                        Io/timer(Instant/diff(due, t)),
+                        (timer) =>
+                            Io/pure(
+                                Waiting {
+                                    on = [timer],
+                                    filled = [],
+                                    release = Handle/close(timer) })))));

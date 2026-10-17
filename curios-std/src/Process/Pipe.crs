@@ -1,16 +1,15 @@
-use /std/{Io, Handle};
-use /std/Handle/{let Handle};
-use /std/Process/{Pipe};
+use /std/{Io, Process};
+use /std/internal/{Handle};
 
 --- Close this end.
-pub let close(p: Pipe) -> Io({}) =
+pub let close(p: Process/Pipe) -> Io({}) =
     Handle/close(p.0);
 
-satisfy Io/Read(Pipe) {
+satisfy Io/Read(Process/Pipe) {
     read(p, n, @positive) = Io/read(@Handle, p.0, n, @positive),
 }
 
-satisfy Io/Write(Pipe) {
+satisfy Io/Write(Process/Pipe) {
     write(p, b) = Io/write(p.0, b),
     flush(p) = Io/flush(p.0),
 }

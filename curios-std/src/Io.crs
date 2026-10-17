@@ -1,7 +1,7 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
-use /std/{Monad, Bytes, Nat, Bool, List, Option, Cell, Handle, Program, Try};
-use /std/Handle/{let Handle};
+use /std/{Monad, Bytes, Nat, Bool, List, Option, Cell, Program, Try};
+use /std/internal/{Handle};
 use /std/Bool/{Holds};
 use /std/time/{Duration};
 
@@ -56,10 +56,17 @@ satisfy Program(Io({})) {
 pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
     /sys/Io/suspend([], cells, pure(()), pure(()));
 
---- Until `d` has passed, on a timer of its own.
+--- A handle ready once so many seconds and nanoseconds have passed.
+foreign clock_timer(Nat, Nat) -> Handle;
+
+--- A handle ready once `d` has passed: what a description suspends on to wait that long. One of no time is ready at once.
+let timer(d: Duration) -> Io(Handle) =
+    clock_timer(Duration/secs(d), Duration/nanos(d));
+
+--- Until `d` has passed, on a timer of its own, closed whether the wait ends or is cancelled.
 pub let sleep(d: Duration) -> Io({}) =
-    let start = Handle/monotonic()!;
-    Handle/wait_minted(Handle/timer(Duration/add(start, d)));
+    let h = timer(d)!;
+    /sys/Io/suspend([h], [], Handle/close(h), Handle/close(h));
 
 -- A cell filled already: what a suspension that may go on at once waits on. Private to the subtree, which is where every such suspension is made.
 let ready() -> Io(Cell({})) =

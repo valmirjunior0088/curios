@@ -1,4 +1,4 @@
-use /std/{Bool, Io, Handle};
+use /std/{Bool, Io};
 use /std/time/{Duration};
 
 --- A reading of the monotonic clock.
@@ -6,10 +6,13 @@ pub struct Instant: Type {
     elapsed: Duration,
 }
 
+--- The monotonic clock: seconds since a fixed origin, and the nanoseconds within the second.
+foreign clock_mono() -> {secs: Nat, nanos: Nat};
+
 --- The clock now.
 pub let now() -> Io(Instant) =
-    let elapsed = Handle/monotonic()!;
-    Io/pure(Instant { elapsed = elapsed });
+    let r = clock_mono()!;
+    Io/pure(Instant { elapsed = Duration/of(r.secs, r.nanos) });
 
 --- The moment `d` after `t`.
 pub let add(t: Instant, d: Duration) -> Instant =

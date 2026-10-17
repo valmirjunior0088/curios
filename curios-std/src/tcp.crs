@@ -1,5 +1,5 @@
-use /std/{Try, Io, Handle};
-use /std/Handle/{let Handle};
+use /std/{Try, Io};
+use /std/internal/{Handle};
 
 --- A host and a port as the address the socket operations take.
 pub mod resolve;

@@ -196,7 +196,9 @@ test("compile hands back the program beside the foreign rows it reaches as plain
       ],
     },
   );
-  assert.ok(foreigns.some(({ name }) => name === "/std/Handle/handle_write"));
+  assert.ok(
+    foreigns.some(({ name }) => name === "/std/internal/Handle/handle_write"),
+  );
 });
 
 test("a row that does not return is described as one, and a hook that returns from it stops the program", async () => {

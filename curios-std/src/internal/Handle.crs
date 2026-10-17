@@ -2,8 +2,8 @@ pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr};
 use /std/{Bool, Byte, Bytes, Nat, List, Option, Result, Io, Try};
 use /std/Io/{Error};
-use /std/Bool/{True, Holds};
-use /std/time/{Duration};
+use /std/Bool/{Holds};
+use /std/internal/{error};
 
 --- Close this handle.
 foreign handle_close(Handle) -> {};
@@ -12,53 +12,6 @@ foreign handle_close(Handle) -> {};
 pub let close(h: Handle) -> Io({}) =
     handle_close(h);
 
-let errors: List({Nat, Error}) =
-    [
-        (/sys/status/not_found, Error/not_found()),
-        (/sys/status/permission_denied, Error/permission_denied()),
-        (/sys/status/exists, Error/already_exists()),
-        (/sys/status/refused, Error/connection_refused()),
-        (/sys/status/tls, Error/tls()),
-        (/sys/status/not_empty, Error/not_empty()),
-        (/sys/status/is_directory, Error/is_directory()),
-        (/sys/status/not_directory, Error/not_directory()),
-        (/sys/status/reset, Error/connection_reset()),
-        (/sys/status/broken_pipe, Error/broken_pipe())];
-
---- The failure `status` names: one of the named statuses, or `other` with the errno the host passed through.
-pub let error(status: Nat) -> Error =
-    List/fold(
-        errors,
-        Error/other(status - /sys/status/other_base),
-        (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end);
-
--- Every failure the wire names is a case here, but `would_block`, which every reading retries on and so never reaches a program: a status the wire's list gains is refused until `errors` names it.
-let _every_failure_the_wire_names_is_a_case: Holds(
-    List/all(/sys/status/failures, (status: Nat) =>
-        status == /sys/status/would_block
-            || match error(status) | other(_) => false | _ => true end)) =
-    True/qed();
-
---- Until the handle `mint` makes is ready, the handle closed whether the wait ends or is cancelled: every wait on a handle made for it alone, a timer or a watch, is this one.
-pub let wait_minted(mint: Io(Handle)) -> Io({}) =
-    let h = mint!;
-    /sys/Io/suspend([h], [], close(h), close(h));
-
---- The monotonic clock: seconds since a fixed origin, and the nanoseconds within the second.
-foreign clock_mono() -> {secs: Nat, nanos: Nat};
-
---- The monotonic clock's reading, the time since its fixed origin: what an `Instant` holds, and what a timer is set against.
-pub let monotonic() -> Io(Duration) =
-    let r = clock_mono()!;
-    Io/pure(Duration/of(r.secs, r.nanos));
-
---- A handle ready once the clock reaches so many seconds and nanoseconds.
-foreign clock_timer(Nat, Nat) -> Handle;
-
---- A handle ready once the monotonic clock reads `due`: what a description suspends on to sleep until then. One already passed is ready at once.
-pub let timer(due: Duration) -> Io(Handle) =
-    clock_timer(Duration/secs(due), Duration/nanos(due));
-
 --- What a wait asks to be woken for.
 pub mod Interest;
 pub use Interest/{let Interest};
@@ -66,12 +19,8 @@ pub use Interest/{let Interest};
 let flagged(report: Byte, flag: Byte) -> Bool =
     Byte/to_nat(report && flag) > 0;
 
---- A handle ready once the handle is ready to read where the first flag asks, to write where the second does, or has failed or hung up.
+--- A handle ready once the handle is ready to read where the first flag asks, to write where the second does, or has failed or hung up. Closing it leaves the handle it watches as it is.
 foreign handle_watch(Handle, Bool, Bool) -> Handle;
-
---- A handle ready once `h` is ready for what `interest` asks, or has failed or hung up: what a description suspends on to wait for `h`. Closing it leaves `h` as it is.
-pub let watch(h: Handle, interest: Interest) -> Io(Handle) =
-    handle_watch(h, interest.readable, interest.writable);
 
 --- A byte for each handle, in the list's order: `event/ready` where it is ready now.
 foreign handle_ready(List(Handle)) -> Bytes;
@@ -144,7 +93,8 @@ let finishing(h: Handle) -> Io(Result(Nat, {})) =
 
 --- Until `h` is ready for `interest`, or has failed or hung up: a suspension on a watch of it, closed whether the wait ends or is cancelled. Readiness is advisory, so what waits retries the operation it waited for, and waits again where it would still block.
 pub let wait(h: Handle, interest: Interest) -> Io({}) =
-    wait_minted(watch(h, interest));
+    let watch = handle_watch(h, interest.readable, interest.writable)!;
+    /sys/Io/suspend([watch], [], close(watch), close(watch));
 
 --- Up to `n` bytes, waiting while the host would block.
 let read_waiting(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Io(Result(Error, Io/Chunk)) =

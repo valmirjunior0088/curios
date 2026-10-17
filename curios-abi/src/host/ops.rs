@@ -10,7 +10,7 @@
 //!
 //! A row whose reply is a [`Later`] is answered later: the host's method hands back the reply's future, which the host files ([`HostOps::later`]) while the call suspends on it. It crosses as the reply inside does, since every row that returns carries the lane a call answered later travels in, so the table states only that the host's answer takes its time. `dns_lookup` and `serial_drain` are such rows, each a blocking wait run off the host's thread.
 //!
-//! **A row is a `foreign` declaration of the standard library.** `module` names the `/std` module that declares it, by the host's own method name, so `handle_read` in `Handle` is `/std/Handle/handle_read` ([`HostOp::declared`]): the name a program imports, and the name a host answers. It is a clause of the row rather than a lookup beside the table, so a new row cannot go without one, and `curios-prelude-archive`'s `the_library_declares_every_row_a_host_answers` holds the library's declarations to the table, by name and by signature, in both directions. No program names a row any other way: what a term carries is the declaration ([`ForeignFunction`](super::ForeignFunction)), as it carries a package's.
+//! **A row is a `foreign` declaration of the standard library.** `module` names the `/std` module that declares it, by the host's own method name, so `handle_read` in `internal/Handle` is `/std/internal/Handle/handle_read` ([`HostOp::declared`]): the name a program imports, and the name a host answers. It is a clause of the row rather than a lookup beside the table, so a new row cannot go without one, and `curios-prelude-archive`'s `the_library_declares_every_row_a_host_answers` holds the library's declarations to the table, by name and by signature, in both directions. No program names a row any other way: what a term carries is the declaration ([`ForeignFunction`](super::ForeignFunction)), as it carries a package's.
 
 use {
     super::{
@@ -30,16 +30,16 @@ macro_rules! for_each_host_op {
     ($callback:ident) => {
         $callback! {
             /// Read up to `n` bytes from `h`: a success with between one and `n` bytes, or with none and no I/O at all when `n` is `0`; the end of the stream once it has ended; or a failure. A handle a peer decides on — a socket, a pipe to a child, standard input — answers `WouldBlock` rather than waiting, and what reads it waits on a watch of it; a regular file is read synchronously, since the disk answers it. A TLS stream ends only where its peer sent the closure alert: one closed without it fails with `TlsError`, since what arrived cannot be told from a stream cut short. The native host reads at most 64 KiB in one call, whatever `n` asks. Reading `stdout` or `stderr` fails with `EBADF`, as reading any descriptor opened only to write does.
-            HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure> { module: Handle, yields: bytes }
+            HandleRead: fn handle_read(h: Handle, n: u64) -> Result<Option<Vec<u8>>, Failure> { module: internal/Handle, yields: bytes }
 
             /// Write `b` to `h` in one attempt, succeeding with how many bytes it accepted — between one and all of them, or `0` for an empty `b`, which checks the handle and writes nothing. The contract is every handle's, the standard streams included: a handle may take only a prefix, and the caller resends the tail. A handle that can accept nothing now answers `WouldBlock`; an interruption before any progress is retried rather than reported; and a descriptor that accepts nothing and reports no error fails with the errno-less `Other(0)`. The host holds nothing of what a write accepted except a TLS stream's records, which `handle_flush` drains. Writing `stdin` fails with `EBADF`.
-            HandleWrite: fn handle_write(h: Handle, b: Vec<u8>) -> Result<u64, Failure> { module: Handle, yields: written }
+            HandleWrite: fn handle_write(h: Handle, b: Vec<u8>) -> Result<u64, Failure> { module: internal/Handle, yields: written }
 
             /// Drain what the host still holds for `h`: a TLS stream's pending records, answering `WouldBlock` until `rustls` holds nothing — a watch of the handle for writing is ready meanwhile — and `Ok` at once for any other kind, whose accepted writes the host holds nothing of. It promises the host's own buffers are empty, not that a peer has received the bytes or a disk has stored them. `NotFound` for an unknown handle.
-            HandleFlush: fn handle_flush(h: Handle) -> Result<(), Failure> { module: Handle }
+            HandleFlush: fn handle_flush(h: Handle) -> Result<(), Failure> { module: internal/Handle }
 
             /// End `h`'s sending half and leave its receiving half as it is: the peer reads the end of the stream, and `h` still reads what the peer sends. A connected socket shuts down its write side. A TLS stream sends its closure alert first — queued once, answering `WouldBlock` until `rustls` holds none of it, a watch of the handle for writing ready meanwhile — and shuts the socket's write side down after. It is how a stream tells its peer it has finished before `handle_close`, which tells it nothing and resets a connection that holds unread bytes. `NotFound` for an unknown handle and for a kind with no sending half of its own to end: a standard stream, a file, a listener, a pipe to a child, a serial port.
-            HandleFinish: fn handle_finish(h: Handle) -> Result<(), Failure> { module: Handle }
+            HandleFinish: fn handle_finish(h: Handle) -> Result<(), Failure> { module: internal/Handle }
 
             /// Open the file at `path` in `mode`, succeeding with its handle. A regular file or a directory is read and written synchronously, since the disk answers it; anything else — a FIFO, a device — is opened without waiting for a peer and served as a stream is, a read or a write that cannot progress answering `WouldBlock`. A FIFO opened to read reads nothing, rather than its end, until a writer has opened it; one opened to write with no reader fails with `ENXIO` through the errno lane, as the system reports it.
             FileOpen: fn file_open(path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> { module: File, yields: handle }
@@ -72,22 +72,22 @@ macro_rules! for_each_host_op {
             TlsStartServer: fn tls_start_server(h: Handle, cfg: Handle) -> Result<(), Failure> { module: tcp/Listener }
 
             /// A handle that is ready once `h` is ready to read where `readable` asks, to write where `writable` asks, or has failed or hung up: what a description suspends on to wait for a stream. A watch of a handle that names nothing a wait can watch — closed, say — is ready at once, so its waiter wakes into the call that says why. Closing the watch leaves `h` as it is.
-            HandleWatch: fn handle_watch(h: Handle, readable: bool, writable: bool) -> Handle { module: Handle }
+            HandleWatch: fn handle_watch(h: Handle, readable: bool, writable: bool) -> Handle { module: internal/Handle }
 
             /// Whether each handle of `on` is ready now, without waiting: one byte for each, in the list's order, [`event::READY`](crate::event::READY) or nothing. A watch is ready as its handle is, a timer once its instant has passed, and any other handle at once, since nothing would hold a wait on it.
-            HandleReady: fn handle_ready(on: Vec<Handle>) -> Vec<u8> { module: Handle }
+            HandleReady: fn handle_ready(on: Vec<Handle>) -> Vec<u8> { module: internal/Handle }
 
             /// Close `h`. Closing an unknown handle is a no-op.
-            HandleClose: fn handle_close(h: Handle) -> () { module: Handle }
+            HandleClose: fn handle_close(h: Handle) -> () { module: internal/Handle }
 
             /// Read the wall clock. `(secs, nanos)`: seconds since the Unix epoch, and the nanoseconds within the second.
             ClockWall: fn clock_wall() -> Timestamp { module: time/Timestamp }
 
             /// Read the monotonic clock. `(secs, nanos)` elapsed since a fixed origin; only differences are meaningful.
-            ClockMono: fn clock_mono() -> Timestamp { module: Handle }
+            ClockMono: fn clock_mono() -> Timestamp { module: time/Instant }
 
-            /// A handle that is ready once the monotonic clock, as `clock_mono` reads it, reaches `secs` seconds and `nanos` nanoseconds: what a description suspends on to sleep. An instant already passed is ready at once, and nanoseconds past a second carry into the seconds.
-            ClockTimer: fn clock_timer(secs: u64, nanos: u64) -> Handle { module: Handle }
+            /// A handle that is ready once `secs` seconds and `nanos` nanoseconds have passed from the call, on the monotonic clock `clock_mono` reads: what a description suspends on to sleep. Nanoseconds past a second carry into the seconds, and a timer of no time is ready at once.
+            ClockTimer: fn clock_timer(secs: u64, nanos: u64) -> Handle { module: Io }
 
             /// Exactly `n` random bytes. A host that cannot find the memory or the entropy for them refuses the call, naming why, rather than answer fewer.
             RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> { module: rand }
@@ -245,7 +245,7 @@ impl HostOp {
         self.row().name
     }
 
-    /// The name the standard library declares the row by, which is the name a program imports it under: its module, then the host's own method name, so `handle_read` is one spelling in `/std/Handle` and in every host.
+    /// The name the standard library declares the row by, which is the name a program imports it under: its module, then the host's own method name, so `handle_read` is one spelling in `/std/internal/Handle` and in every host.
     pub fn declared(self) -> String {
         format!("/std/{}{}", self.row().module, self.name())
     }

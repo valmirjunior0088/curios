@@ -168,7 +168,7 @@ fn print_constant_args_collapses_at_ersd() {
     // "x = 42, s = hello\n", already formatted, as the operand of the host write itself, ahead of a first call's lane. `print` is an `Io`-returning wrapper and inlines away with the rest, so what survives is the write inside the description thunk it erases to. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
     assert!(
         ersd.contains(
-            "ffi//std/Handle/handle_write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\", "
+            "ffi//std/internal/Handle/handle_write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\", "
         ),
         "expected the folded write residual, got:\n{ersd}",
     );
@@ -203,7 +203,7 @@ fn constant_args_leave_no_formatter_in_cont() {
     );
 }
 
-/// The library's write is a loop that waits and resends, and the description a constant `print` holds of it is copied under the tight cap the closed evaluator keeps for descriptions. Past that cap the copy is declined, the `print` stays a call, and the collapses this module pins fail with it; this states the margin, so an edit to `/std/Handle`'s write that crosses the cap fails here by the cap's name.
+/// The library's write is a loop that waits and resends, and the description a constant `print` holds of it is copied under the tight cap the closed evaluator keeps for descriptions. Past that cap the copy is declined, the `print` stays a call, and the collapses this module pins fail with it; this states the margin, so an edit to `/std/internal/Handle`'s write that crosses the cap fails here by the cap's name.
 #[test]
 fn a_constant_prints_descriptions_are_copied_within_the_evaluators_cap() {
     let entrypoint = r#"/std/print("hello world")"#.parse::<Entrypoint>().expect("fixture parses");

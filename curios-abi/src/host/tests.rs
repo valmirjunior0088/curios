@@ -133,7 +133,10 @@ fn the_guest_shape_is_the_one_the_reply_states() {
 /// A row is declared in its module by its method's name, each segment of the module's path a segment of the name.
 #[test]
 fn a_row_is_declared_in_its_module_by_its_method() {
-    assert_eq!(HostOp::HandleRead.declared(), "/std/Handle/handle_read");
+    assert_eq!(
+        HostOp::HandleRead.declared(),
+        "/std/internal/Handle/handle_read"
+    );
     assert_eq!(HostOp::DnsLookup.declared(), "/std/tcp/resolve/dns_lookup");
 }
 

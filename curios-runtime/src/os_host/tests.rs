@@ -46,8 +46,7 @@ fn watched(host: &OsHost, handle: &Handle, readable: bool, writable: bool) -> bo
 /// Whether a watch of `handle`, asking to read or to write as said, is ready within five seconds: a program's wait, beside a timer so that a handle never readied fails its test rather than holding it.
 fn awaited(host: &OsHost, handle: &Handle, readable: bool, writable: bool) -> bool {
     let watch = host.handle_watch(handle.clone(), readable, writable);
-    let now = host.clock_mono();
-    let deadline = host.clock_timer(now.secs + 5, now.nanos);
+    let deadline = host.clock_timer(5, 0);
     host.wait(vec![watch.clone(), deadline.clone()]).unwrap();
     let ready = host.handle_ready(vec![watch.clone()]);
     host.handle_close(watch);
@@ -1093,15 +1092,11 @@ fn a_write_accepts_within_what_it_was_offered() {
     host.handle_close(file);
 }
 
-/// A look answers a byte for each handle, in their order: a timer past its instant is ready and one before it is not, and a handle that is neither a watch nor a timer, which nothing would hold, is ready at once.
+/// A look answers a byte for each handle, in their order: a timer of no time is ready and one an hour long is not, and a handle that is neither a watch nor a timer, which nothing would hold, is ready at once.
 #[test]
 fn a_look_answers_each_handle_in_its_order() {
     let host = OsHost::with_args(vec![]);
-    let now = host.clock_mono();
-    let (passed, later) = (
-        host.clock_timer(0, 0),
-        host.clock_timer(now.secs + 3_600, now.nanos),
-    );
+    let (passed, later) = (host.clock_timer(0, 0), host.clock_timer(3_600, 0));
 
     assert_eq!(
         host.handle_ready(vec![later.clone(), passed.clone(), Handle::Stderr]),

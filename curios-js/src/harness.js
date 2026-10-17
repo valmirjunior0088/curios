@@ -222,9 +222,10 @@ export async function run(config) {
         BigInt(Math.floor((millis % 1000) * 1_000_000)),
       ];
     },
-    // A timer at an instant of the clock `clock_mono` reads.
+    // A timer so long after it is minted, on the clock `clock_mono` reads.
     clock_timer: (secs, nanos) => {
-      const at = Number(secs) * 1000 + Number(nanos) / 1_000_000;
+      const at =
+        performance.now() + Number(secs) * 1000 + Number(nanos) / 1_000_000;
 
       return mint({ ready: () => performance.now() >= at, at });
     },

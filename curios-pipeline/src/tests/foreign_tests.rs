@@ -91,10 +91,9 @@ fn a_library_row_and_a_program_row_import_by_the_names_they_are_declared_under()
     let imports = module.imports();
 
     assert!(
-        imports
-            .iter()
-            .any(|(namespace, name, _)| namespace == "ffi" && name == "/std/Handle/handle_write"),
-        "expected an ffi./std/Handle/handle_write import, got {imports:?}"
+        imports.iter().any(|(namespace, name, _)| namespace == "ffi"
+            && name == "/std/internal/Handle/handle_write"),
+        "expected an ffi./std/internal/Handle/handle_write import, got {imports:?}"
     );
     assert!(
         imports

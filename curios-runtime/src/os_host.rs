@@ -108,7 +108,7 @@ enum OsResource {
         target: Handle,
         asked: PollFlags,
     },
-    /// A timer minted by `clock_timer`: the instant it is ready at, or none for an instant past what an `Instant` holds, which never comes.
+    /// A timer minted by `clock_timer`: the instant it is ready at, its interval counted from when it was minted, or none for an instant past what an `Instant` holds, which never comes.
     Timer(Option<Instant>),
 }
 
@@ -1084,7 +1084,7 @@ impl HostOps for OsHost {
     fn clock_timer(&self, secs: u64, nanos: u64) -> Handle {
         let at = Duration::from_secs(secs)
             .checked_add(Duration::from_nanos(nanos))
-            .and_then(|elapsed| self.start.checked_add(elapsed));
+            .and_then(|interval| Instant::now().checked_add(interval));
 
         self.mint(OsResource::Timer(at))
     }

@@ -472,7 +472,7 @@ enum MockResource {
         readable: bool,
         writable: bool,
     },
-    /// A timer minted by `clock_timer`, at its instant. Nothing but the program moves a script, so a wait that finds nothing ready sleeps until the soonest timer it holds out for, and every timer at or before that instant is due.
+    /// A timer minted by `clock_timer`, at its instant: its interval counted from how far the waits had slept when it was minted. Nothing but the program moves a script, so a wait that finds nothing ready sleeps until the soonest timer it holds out for, and every timer at or before that instant is due.
     Timer {
         at: (u64, u64),
     },
@@ -1195,7 +1195,15 @@ impl HostOps for MockHost {
     }
 
     fn clock_timer(&self, secs: u64, nanos: u64) -> Handle {
-        self.mint(MockResource::Timer { at: (secs, nanos) })
+        let (from_secs, from_nanos) = *self.slept_until.lock().unwrap();
+        let nanos = from_nanos + nanos % 1_000_000_000;
+        let secs = from_secs
+            .saturating_add(secs)
+            .saturating_add(nanos / 1_000_000_000);
+
+        self.mint(MockResource::Timer {
+            at: (secs, nanos % 1_000_000_000),
+        })
     }
 
     fn clock_mono(&self) -> Timestamp {

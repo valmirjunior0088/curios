@@ -1,6 +1,6 @@
-use /std/{Bytes, Str, Nat, Result, Try, Io, Handle};
+use /std/{Bytes, Str, Nat, Result, Try, Io};
 use /std/tcp/{resolve, Socket, release};
-use /std/Handle/{let Handle, Interest};
+use /std/internal/{Handle, error};
 
 --- A bound, listening socket.
 pub struct Listener: Type {
@@ -14,7 +14,7 @@ let listening(addr: Bytes) -> Try(Io, Io/Error, Listener) =
     let reply = socket_listen(addr)!;
     match reply.status == /sys/status/ok
     | true => Try/pure(Listener { reply.handle })
-    | false => Try/raise(Handle/error(reply.status))
+    | false => Try/raise(error(reply.status))
     end;
 
 --- A listener bound to `host` at `port` into `s`, which closes it when it ends, the address reusable so a restart does not wait out the previous socket.
@@ -34,9 +34,9 @@ let accepted(l: Listener) -> Io(Result(Io/Error, Handle)) =
         choose
         | reply.status == /sys/status/ok => Io/pure(Result/success(reply.handle))
         | reply.status == /sys/status/would_block =>
-            let _ = Handle/wait(l.0, Interest/readable)!;
+            let _ = Handle/wait(l.0, Handle/Interest/readable)!;
             go()
-        | _ => Io/pure(Result/failure(Handle/error(reply.status)))
+        | _ => Io/pure(Result/failure(error(reply.status)))
         end;
     go();
 
@@ -102,7 +102,7 @@ pub let serve_tls(
         let cfg =
             match reply.status == /sys/status/ok
             | true => Result/success(reply.handle)
-            | false => Result/failure(Handle/error(reply.status))
+            | false => Result/failure(error(reply.status))
             end!;
         let _ = Io/Scope/defer(s, (_) => Handle/close(cfg))!;
         let l = listen(s, host, port)!;

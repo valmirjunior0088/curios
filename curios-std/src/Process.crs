@@ -1,5 +1,5 @@
-use /std/{Bool, Byte, Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Handle};
-use /std/Handle/{let Handle, Interest};
+use /std/{Bool, Byte, Bytes, Nat, Str, List, Option, Result, Path, Try, Io};
+use /std/internal/{Handle, error};
 
 --- How a child's standard stream is wired: shared with this process, piped to the parent, or attached to the null device.
 pub induct Stdio: pub Type
@@ -95,7 +95,7 @@ pub let spawn(s: Io/Scope, cmd: Command) -> Try(Io, Io/Error, Process) =
     let spawned =
         match reply.status == /sys/status/ok
         | true => Result/success(reply)
-        | false => Result/failure(Handle/error(reply.status))
+        | false => Result/failure(error(reply.status))
         end!;
     let p =
         Process {
@@ -138,7 +138,7 @@ foreign proc_wait(Handle) -> {status: Nat, code: Nat, signal: Nat};
 
 --- How the child ended, waiting until it does. The pipes are closed with it, so read what it wrote before waiting for it.
 pub let wait(p: Process) -> Try(Io, Io/Error, Exit) =
-    let _ = Handle/wait(p.handle, Interest/readable)!;
+    let _ = Handle/wait(p.handle, Handle/Interest/readable)!;
     let reply = proc_wait(p.handle)!;
     let _ = close_pipes(p)!;
     match reply.status == /sys/status/ok
@@ -148,7 +148,7 @@ pub let wait(p: Process) -> Try(Io, Io/Error, Exit) =
             | true => Exit/exited(reply.code)
             | false => Exit/signaled(reply.signal)
             end)
-    | false => Try/raise(Handle/error(reply.status))
+    | false => Try/raise(error(reply.status))
     end;
 
 let drain(p: Option(Pipe)) -> Io(Result(Io/Error, Bytes)) =

@@ -92,7 +92,7 @@ code_sets! {
         ALREADY_EXISTS = 4 => exists, AlreadyExists;
         /// A `socket_connect` was actively refused — no listener at the target address.
         CONNECTION_REFUSED = 5 => refused, ConnectionRefused;
-        /// A non-blocking op could not make progress right now. Retriable by design: `/std/Handle` matches on it to wait on a watch of the handle and retry instead of surfacing a failure.
+        /// A non-blocking op could not make progress right now. Retriable by design: `/std/internal/Handle` matches on it to wait on a watch of the handle and retry instead of surfacing a failure.
         WOULD_BLOCK = 6 => would_block, WouldBlock;
         /// A TLS upgrade or server-config build failed. `rustls` errors carry no OS errno, so they collapse to this one named code instead of riding the errno passthrough.
         TLS_ERROR = 7 => tls, TlsError;

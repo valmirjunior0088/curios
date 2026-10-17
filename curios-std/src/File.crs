@@ -1,5 +1,5 @@
-use /std/{Bytes, Nat, Str, Path, Try, Io, Handle};
-use /std/Handle/{let Handle};
+use /std/{Bytes, Nat, Str, Path, Try, Io};
+use /std/internal/{Handle, error};
 
 --- An open file.
 pub struct File: Type {
@@ -35,7 +35,7 @@ pub let open(s: Io/Scope, path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
         let f = File { reply.handle };
         let _ = Io/Scope/defer(s, (_) => close(f))!;
         Try/pure(f)
-    | false => Try/raise(Handle/error(reply.status))
+    | false => Try/raise(error(reply.status))
     end;
 
 --- Close `f` before its scope ends. The scope's own close then finds nothing to close.
