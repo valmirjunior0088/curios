@@ -1,16 +1,16 @@
 //! The fold with the fixed prelude in front of it.
 //!
-//! **The half that knows no particular predecessors is [`compile_entrypoint`], and it stays that way.** It takes a [`Predecessors`] and cannot tell which unit is `/std`; nothing here changes that, and nothing there calls anything here. What this module adds is the *standard* predecessors — the ones every product puts in scope — so that the answer to "what does a Curios program get for free" is written once rather than by the native product, the browser product and this crate's own tests each. A product may still hand the fold any predecessors it likes.
+//! **The half that knows no particular predecessors is [`compile_entrypoint`](crate::compile_entrypoint), and it stays that way.** It takes a [`Predecessors`] and cannot tell which unit is `/std`; nothing here changes that, and nothing there calls anything here. What this module adds is the *standard* predecessors — the ones every product puts in scope — so that the answer to "what does a Curios program get for free" is written once rather than by the native product, the browser product and this crate's own tests each. A product may still hand the fold any predecessors it likes.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::{
-        Cache, Checked, CompileError, EntryTail, Examined, Progress, Refused, Stage, TestRecord,
-        Typechecked, check_entrypoint, compile_entrypoint, compile_unit_as_tests, compile_units,
-        declared_test_paths, examine_entrypoint, lower_subject, recheck, recheck_measured,
-        typecheck_entrypoint,
+        Cache, Checked, CompileError, EntryTail, Examined, Progress, ReadLowering, Refused, Stage,
+        TestRecord, Told, Typechecked, check_entrypoint_reading, compile_units_reading,
+        compile_with_tail, declared_test_paths, examine_entrypoint, lower_subject, recheck,
+        recheck_measured, typecheck_entrypoint,
     },
     curios_abi::ForeignStore,
     curios_document::Documentation,
@@ -45,6 +45,8 @@ pub struct Fold<'a> {
     budget: u64,
     units: &'a [RootSource],
     cache: Option<&'a dyn Cache>,
+    /// Told the subject's lowering — the last unit's, or the program's on top — as soon as it is made or restored. See [`Fold::reading`].
+    read: Option<ReadLowering<'a>>,
 }
 
 impl<'a> Fold<'a> {
@@ -54,6 +56,17 @@ impl<'a> Fold<'a> {
             budget,
             units,
             cache,
+            read: None,
+        }
+    }
+
+    /// This fold, telling `read` its subject's lowering as soon as it is made or restored, whatever the subject's compile goes on to conclude ([`ReadLowering`]): the last unit's where nothing is compiled on top of the units, and the program's where one is.
+    ///
+    /// **One fold answers both questions.** A question about what a file writes is answered from the lowering of the check that compiled it, so a check is one fold, and a subject that is refused answers as one that compiles.
+    pub fn reading(self, read: ReadLowering<'a>) -> Self {
+        Self {
+            read: Some(read),
+            ..self
         }
     }
 
@@ -69,19 +82,26 @@ impl<'a> Fold<'a> {
         O: FnMut(Stage<'_>),
         P: FnMut(Progress<'_>),
     {
+        let mut observe = observe;
+
         self.under_entry(progress, |predecessors| {
-            compile_entrypoint(
+            compile_with_tail(
                 self.budget,
                 predecessors,
                 &SYNTAX,
                 &UnitSource::entry(entrypoint, loader),
                 self.cache,
-                observe,
+                EntryTail::Program,
+                Told {
+                    observe: &mut observe,
+                    read: self.read,
+                },
             )
+            .map(|(module, foreigns, _records)| (module, foreigns))
         })
     }
 
-    /// [`Fold::compile`] with the entry compiled as a test program — the synthesized `Test/main([...])` tail over the registered tests `tail` selects, in place of the authored one; see [`compile_unit_as_tests`].
+    /// [`Fold::compile`] with the entry compiled as a test program — the synthesized `Test/main([...])` tail over the registered tests `tail` selects, in place of the authored one; see [`compile_unit_as_tests`](crate::compile_unit_as_tests).
     pub fn tests<O, P>(
         self,
         entrypoint: &curios_text::Entrypoint,
@@ -94,20 +114,25 @@ impl<'a> Fold<'a> {
         O: FnMut(Stage<'_>),
         P: FnMut(Progress<'_>),
     {
+        let mut observe = observe;
+
         self.under_entry(progress, |predecessors| {
-            compile_unit_as_tests(
+            compile_with_tail(
                 self.budget,
                 predecessors,
                 &SYNTAX,
                 &UnitSource::entry(entrypoint, loader),
                 self.cache,
                 tail,
-                observe,
+                Told {
+                    observe: &mut observe,
+                    read: self.read,
+                },
             )
         })
     }
 
-    /// [`Fold::compile`] stopped where the verdicts stop: `entrypoint` lowered, elaborated and judged on top of the fold — see [`check_entrypoint`]. The same fold, so a unit the store already holds is reused here exactly as a compile reuses it, and one that is not is compiled and judged in full: a question about the entry is answered against the dependencies it would actually be built on.
+    /// [`Fold::compile`] stopped where the verdicts stop: `entrypoint` lowered, elaborated and judged on top of the fold — see [`check_entrypoint`](crate::check_entrypoint). The same fold, so a unit the store already holds is reused here exactly as a compile reuses it, and one that is not is compiled and judged in full: a question about the entry is answered against the dependencies it would actually be built on.
     pub fn check<P>(
         self,
         entrypoint: &curios_text::Entrypoint,
@@ -119,13 +144,14 @@ impl<'a> Fold<'a> {
         P: FnMut(Progress<'_>),
     {
         self.under_entry(progress, |predecessors| {
-            check_entrypoint(
+            check_entrypoint_reading(
                 self.budget,
                 predecessors,
                 &SYNTAX,
                 &UnitSource::entry(entrypoint, loader),
                 self.cache,
                 tail,
+                self.read,
             )
         })
     }
@@ -205,7 +231,7 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.scoped_before(1, progress, |prelude, sources, produced, _| {
+        self.scoped_before(1, None, progress, |prelude, sources, produced, _| {
             let (source, offered) = sources
                 .last()
                 .ok_or_else(|| CompileError::failure("nothing to read: the scope holds no unit"))?;
@@ -273,7 +299,8 @@ impl<'a> Fold<'a> {
         P: FnMut(Progress<'_>),
         E: FnOnce(Predecessors<'_>) -> Result<T, CompileError>,
     {
-        self.scoped(progress, |prelude, _, produced, progress| {
+        // The subject is the program on top, whose step tells the reader itself: no unit beneath it is read.
+        self.scoped_before(0, None, progress, |prelude, _, produced, progress| {
             let predecessors = prelude
                 .iter()
                 .copied()
@@ -303,13 +330,14 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.scoped_before(0, progress, then)
+        self.scoped_before(0, self.read, progress, then)
     }
 
-    /// The standard predecessors, assembled once: the fixed prelude's roots, then the units compiled in order against them — what every method here compiles against — handed to `then` as the prelude, each unit's source as it is compiled, the units produced, and the progress reporter for whatever follows. The one spelling of them this type exists to write once; the methods differ only in what they do with it. The last `left` units are given their sources and not compiled, for a method that does something else with its subject.
+    /// The standard predecessors, assembled once: the fixed prelude's roots, then the units compiled in order against them — what every method here compiles against — handed to `then` as the prelude, each unit's source as it is compiled, the units produced, and the progress reporter for whatever follows. The one spelling of them this type exists to write once; the methods differ only in what they do with it. The last `left` units are given their sources and not compiled, for a method that does something else with its subject, and `read` is told the lowering of the last unit compiled.
     fn scoped_before<P, T>(
         self,
         left: usize,
+        read: Option<ReadLowering<'a>>,
         mut progress: P,
         then: impl FnOnce(
             &[&Unit],
@@ -325,6 +353,7 @@ impl<'a> Fold<'a> {
             budget,
             units,
             cache,
+            read: _,
         } = self;
 
         with_prelude(|prelude| {
@@ -349,13 +378,14 @@ impl<'a> Fold<'a> {
                     _ => (UnitSource::mounted(unit), None),
                 })
                 .collect::<Vec<_>>();
-            let produced = compile_units(
+            let produced = compile_units_reading(
                 budget,
                 Predecessors::over(&roots),
                 &SYNTAX,
                 &sources[..sources.len().saturating_sub(left)],
                 cache,
                 &mut progress,
+                read,
             )?;
 
             then(&roots, &sources, produced, &mut progress)

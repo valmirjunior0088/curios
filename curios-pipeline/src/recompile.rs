@@ -33,9 +33,31 @@ pub fn compile_unit_over(
     baseline: &Unit,
     moved: &[bool],
 ) -> Result<Unit, CompileError> {
+    compile_unit_over_told(
+        budget,
+        predecessors,
+        syntax,
+        source,
+        baseline,
+        moved,
+        &|_| {},
+    )
+}
+
+/// [`compile_unit_over`], `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude.
+pub(crate) fn compile_unit_over_told(
+    budget: u64,
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+    source: &UnitSource<'_>,
+    baseline: &Unit,
+    moved: &[bool],
+    told: &dyn Fn(&PreparedText),
+) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit_over");
     let lowered = into_core_unit_over(source, &predecessors.text(), syntax, baseline.text())
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
+    told(&lowered);
 
     compile_lowered_over(budget, predecessors, syntax, lowered, baseline, moved, None)
         .map(|(unit, _)| unit)

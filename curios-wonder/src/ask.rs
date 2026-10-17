@@ -7,7 +7,8 @@
 use {
     crate::{
         Declaration, Diagnosed, Diagnosis, Named, Origin, Reached, Refusal, STDIN_LABEL, Severity,
-        Subject, Uncosted, Written, cost, declared_tests, diagnosed, stage, unit_stage, written,
+        Subject, Uncosted, Written, checked, cost, declared_tests, diagnosed, stage, unit_stage,
+        written,
     },
     curios_cont::{Fate, Outcome},
     curios_core::Declared,
@@ -99,6 +100,11 @@ impl Asked {
     /// Every diagnostic, goal and lint the subject reports, with what it reached and why its store took nothing, where it could not.
     pub fn diagnosed(self, budget: u64, overlay: &Overlay) -> Diagnosed {
         diagnosed(budget, self.subject, overlay, self.store.as_ref())
+    }
+
+    /// [`Asked::diagnosed`], with what `file` writes read off the same fold's lowering of the subject ([`Diagnosed::written`]).
+    pub fn checked(self, budget: u64, overlay: &Overlay, file: &Path) -> Diagnosed {
+        checked(budget, self.subject, overlay, self.store.as_ref(), file)
     }
 
     /// The subject's rung `name`, handed to `shown` where the driver emits it, beside why its store took nothing, where it could not.

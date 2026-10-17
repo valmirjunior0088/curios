@@ -1,6 +1,6 @@
 use {
     super::{Job, Raised, SETTLE, SETTLE_SHARE, batch, named_at, offset_of, outline, position_of},
-    crate::{Origin, Subject, Written},
+    crate::{Diagnosed, Origin, Subject, Written},
     curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_text::Overlay,
     lsp_types::{DocumentSymbol, Position, SymbolKind},
@@ -85,9 +85,9 @@ fn a_warming_batch_waits_the_cap_until_a_document_joins_it() {
     assert_eq!(waits, [SETTLE, Duration::ZERO]);
 }
 
-/// What a check of `program` leaves for a place to be answered from, the program standing for a document.
-fn checked(program: &str) -> Vec<Written> {
-    crate::written(
+/// A check of `program`, the program standing for a document: what the server's check answers and leaves behind it.
+fn check(program: &str) -> Diagnosed {
+    crate::checked(
         DEFAULT_STEP_BUDGET,
         Subject::Entry {
             units: Vec::new(),
@@ -98,11 +98,15 @@ fn checked(program: &str) -> Vec<Written> {
             declares: None,
             unlinked: None,
         },
-        Path::new("<stdin>"),
         &Overlay::default(),
         None,
+        Path::new("<stdin>"),
     )
-    .expect("the program lowers")
+}
+
+/// What a check of `program` leaves for a place to be answered from.
+fn checked(program: &str) -> Vec<Written> {
+    check(program).written
 }
 
 /// The declaration named at the `nth` occurrence of `written` in `buffer`, by what a check of `program` left.
@@ -148,6 +152,19 @@ fn a_buffer_as_it_was_checked_answers_every_name() {
         Some("/three")
     );
     assert_eq!(named(CHECKED, CHECKED, "let", 0), None);
+}
+
+/// A program its elaboration refuses answers every place of it all the same, off the lowering its check made on the way: a file with one mistake still says where each of its names is declared.
+#[test]
+fn a_refused_program_answers_its_places_from_its_check() {
+    let refused = CHECKED.replace("let two: /std/Nat = one;", "let two: /std/Bool = one;");
+
+    assert!(
+        !check(&refused).diagnostics.is_empty(),
+        "the check refuses the program"
+    );
+    assert_eq!(named(&refused, &refused, "one", 1).as_deref(), Some("/one"));
+    assert_eq!(named(&refused, &refused, "two", 1).as_deref(), Some("/two"));
 }
 
 /// An edit inside one declaration leaves the others answering, the ones below it where they now stand, and the edited one answering nothing until it is checked again: its names are no longer where the check read them.

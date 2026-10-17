@@ -51,6 +51,7 @@ pub fn lint(
             diagnostics,
             reached: unit_reached,
             unfiled: refusal,
+            ..
         } = asked.diagnosed(budget, &overlay);
         reached.extend(unit_reached);
         // The first, since every subject of a package asks one store.

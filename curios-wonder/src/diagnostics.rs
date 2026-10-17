@@ -1,14 +1,20 @@
 //! The `diagnostics` query: every diagnostic and goal one compilation of a program reports.
 
 use {
-    crate::{Diagnosis, STDIN_MOUNT, Severity},
+    crate::{Diagnosis, Reading, STDIN_MOUNT, Severity, Written},
     curios_package::Unlinked,
     curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold},
-    curios_text::{Entrypoint, Form, Overlay, RootSource, UnitSource},
+    curios_text::{Entrypoint, Form, Overlay, PreparedText, RootSource, UnitSource},
     curios_unit::Unit,
     curios_utilities::{Qualifier, Report, Source, Span, is_identifier},
     curios_verdicts::Verdicts,
-    std::{collections::BTreeSet, fs, path::PathBuf, sync::Arc},
+    std::{
+        cell::RefCell,
+        collections::BTreeSet,
+        fs,
+        path::{Path, PathBuf},
+        sync::Arc,
+    },
 };
 
 /// What one compilation of a subject reports, and what it reached: every diagnostic, goal and lint, and the prefix of every mount some reference of the subject was *written* under — what `curios lint` reads a package's unused dependencies off.
@@ -17,6 +23,8 @@ pub struct Diagnosed {
     pub reached: BTreeSet<Qualifier>,
     /// Why the store took nothing of what this compilation would have filed, where it could not be written: the store's own first refusal, for a transport with somewhere to say it. No part of the answer, which is what it would have been.
     pub unfiled: Option<String>,
+    /// What the file a check was asked about writes, read off the subject's lowering in that check's own fold ([`checked`]): every text of the file the subject was lowered from, with the names each writes. Empty where no file was asked about, or the subject did not lower.
+    pub written: Vec<Written>,
 }
 
 /// What a question is about.
@@ -181,6 +189,28 @@ pub fn diagnosed(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
 ) -> Diagnosed {
+    diagnosed_reading(budget, subject, overlay, cache, None)
+}
+
+/// [`diagnosed`], with what `file` writes read off the subject's lowering in the same fold ([`Diagnosed::written`]): what an editor's check answers a place in the document from, the lowering being there whether or not the subject elaborates.
+pub fn checked(
+    budget: u64,
+    subject: Subject,
+    overlay: &Overlay,
+    cache: Option<&Verdicts>,
+    file: &Path,
+) -> Diagnosed {
+    diagnosed_reading(budget, subject, overlay, cache, Some(file))
+}
+
+/// [`diagnosed`], reading what `file` writes where there is one.
+fn diagnosed_reading(
+    budget: u64,
+    subject: Subject,
+    overlay: &Overlay,
+    cache: Option<&Verdicts>,
+    file: Option<&Path>,
+) -> Diagnosed {
     let store = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = store.as_ref().map(|store| store as &dyn Cache);
 
@@ -191,13 +221,30 @@ pub fn diagnosed(
             diagnostics: note.into_iter().chain([refusal]).collect(),
             reached: BTreeSet::new(),
             unfiled: None,
+            written: Vec::new(),
         };
     }
+
+    // The subject's lowering, as the fold makes or restores it, read for what `file` writes.
+    let reading = file.map(|file| Reading::of(file, overlay));
+    let written = RefCell::new(Vec::new());
+    let read = |scope: &[&Unit], text: &PreparedText, entry: Option<&curios_core::Entrypoint>| {
+        if let Some(reading) = &reading {
+            *written.borrow_mut() = reading.read(scope, text, entry);
+        }
+    };
+    let fold = |units| {
+        let fold = Fold::new(budget, units, through);
+        match reading {
+            Some(_) => fold.reading(&read),
+            None => fold,
+        }
+    };
 
     let mut diagnosed = match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = overlaid(units, overlay);
-            let found = Fold::new(budget, &units, through).units(
+            let found = fold(&units).units(
                 |_| {},
                 |_, produced| {
                     Ok(produced
@@ -219,21 +266,18 @@ pub fn diagnosed(
         } => match open(origin, declares, overlay) {
             Ok((entrypoint, loader)) => {
                 let units = overlaid(units, overlay);
-                let checked = Fold::new(budget, &units, through).check(
-                    &entrypoint,
-                    &loader,
-                    EntryTail::Program,
-                    |_| {},
-                );
+                let checked = fold(&units).check(&entrypoint, &loader, EntryTail::Program, |_| {});
                 answered(checked)
             }
             Err(refusal) => Diagnosed {
                 diagnostics: refusal,
                 reached: BTreeSet::new(),
                 unfiled: None,
+                written: Vec::new(),
             },
         },
     };
+    diagnosed.written = written.take();
 
     // First, because it says how everything after it was answered.
     if let Some(note) = note {
@@ -264,6 +308,7 @@ impl Diagnosed {
             diagnostics,
             reached,
             unfiled: None,
+            written: Vec::new(),
         }
     }
 
@@ -273,6 +318,7 @@ impl Diagnosed {
             diagnostics: of_error(error),
             reached: BTreeSet::new(),
             unfiled: None,
+            written: Vec::new(),
         }
     }
 }

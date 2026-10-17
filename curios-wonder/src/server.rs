@@ -16,7 +16,7 @@
 //!
 //! **A name's head and prose are parsed where they are asked for.** A hover reads the one declaration the name stands for, off the text a check left it written in (`Declaration::heading`): a parse of one declaration, on the protocol thread as formatting's parse of a document is, and of nothing where no hover is asked.
 //!
-//! **A place is answered from what the last check left, by the protocol thread.** Once a check has published, the analyst reads what each text of the document names — the `at` query's own engine, `written` — and leaves it where the protocol thread finds it ([`Answers`]): records, plain data, which is what lets them cross where a unit cannot. A request is answered from them and from the buffer as it is, with no parse and no wait. The buffer is held against the text that was checked by what the two share before their first difference and after their last ([`Standing`]): a declaration lying wholly in what they share stands where it stood, or moved by the difference in length, and one a difference reaches is the one being edited, which is answered after the next check. A document's first check is the one wait: before it nothing is held to answer from.
+//! **A place is answered from what the last check left, by the protocol thread.** The check reads what each text of the document names off the subject's lowering in its own fold, as the `at` query reads it (`checked`, `Fold::reading`), so a check is one fold and a refused subject answers as one that elaborates; once the check has published, the analyst leaves the records where the protocol thread finds them ([`Answers`]): plain data, which is what lets them cross where a unit cannot. A request is answered from them and from the buffer as it is, with no parse and no wait. The buffer is held against the text that was checked by what the two share before their first difference and after their last ([`Standing`]): a declaration lying wholly in what they share stands where it stood, or moved by the difference in length, and one a difference reaches is the one being edited, which is answered after the next check. A document's first check is the one wait: before it nothing is held to answer from.
 //!
 //! **UTF-16 exists only here.** The engine's coordinates are bytes; a `Position` is derived from the span's own text at the boundary, in both directions, and nothing below this file knows the protocol's unit.
 
@@ -652,17 +652,26 @@ impl Analyst {
         };
         let asked = Selection::of(spelling, self.manifest.as_deref(), directory, overlay)
             .and_then(Asked::every);
+        let budget = self.budget;
         let mut unfiled = None;
+        // What the document writes, read off the subject's lowering in this check's own fold: a file selects one subject, the unit that declares it or itself.
+        let mut written = None;
         let records = match asked {
             Ok(asked) => asked
                 .into_iter()
                 .flat_map(|asked| {
+                    let asked = asked.reusing(session);
                     let Diagnosed {
                         diagnostics,
                         unfiled: refusal,
+                        written: texts,
                         ..
-                    } = asked.reusing(session).diagnosed(self.budget, overlay);
+                    } = match raised {
+                        Raised::Warming => asked.diagnosed(budget, overlay),
+                        Raised::Opened | Raised::Edited => asked.checked(budget, overlay, document),
+                    };
                     unfiled = unfiled.take().or(refusal);
+                    written.get_or_insert(texts);
 
                     diagnostics
                 })
@@ -702,38 +711,16 @@ impl Analyst {
         }
         self.published.insert(document.to_path_buf(), placed);
 
-        // After the publish, so what a check says waits on nothing a request may ask later.
-        self.leave(document, overlay, session);
-
-        Ok(())
-    }
-
-    /// Leave what `document` names for the protocol thread to answer a place from — see [`Answers`]. A document whose subject has nothing to read leaves none, which answers every place of it with nothing.
-    fn leave(&self, document: &Path, overlay: &Overlay, session: &Session) {
-        let asked = Selection::of(
-            Spelling::File(document.to_path_buf()),
-            self.manifest.as_deref(),
-            document.parent().unwrap_or(document),
-            overlay,
-        )
-        .and_then(Asked::every);
-        // A file selects one subject: the unit that declares it, or itself.
-        let texts = asked
-            .ok()
-            .and_then(|asked| asked.into_iter().next())
-            .and_then(|asked| {
-                let (texts, _) = asked
-                    .reusing(session)
-                    .written(self.budget, overlay, document);
-
-                texts.ok()
-            })
-            .unwrap_or_default();
-
+        // Left for the protocol thread to answer a place from (see [`Answers`]), after the publish, so what a check says waits on nothing a request may ask later. A document whose subject has nothing to read leaves none, which answers every place of it with nothing.
         self.answers
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .insert(document.to_path_buf(), Arc::new(texts));
+            .insert(
+                document.to_path_buf(),
+                Arc::new(written.unwrap_or_default()),
+            );
+
+        Ok(())
     }
 
     /// Tell the client, once a session, that the store took nothing of what a check compiled, and why.

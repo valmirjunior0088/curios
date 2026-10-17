@@ -107,12 +107,7 @@ pub fn written(
 ) -> Result<Vec<Written>, Vec<Diagnosis>> {
     let store = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = store.as_ref().map(|store| store as &dyn Cache);
-    let reading = Reading {
-        file: identity(file),
-        overlay,
-        lying: RefCell::new(HashMap::new()),
-        standing: RefCell::new(BTreeMap::new()),
-    };
+    let reading = Reading::of(file, overlay);
 
     match subject.formed(overlay) {
         Subject::Unit { units } => {
@@ -142,7 +137,7 @@ pub fn written(
 }
 
 /// One question's reads of the disk, each asked once: which source is the file asked about, and which file still holds the text a unit the compiler was built with read.
-struct Reading<'a> {
+pub(crate) struct Reading<'a> {
     /// The file asked about, under the one spelling two paths to it share.
     file: PathBuf,
     overlay: &'a Overlay,
@@ -152,9 +147,19 @@ struct Reading<'a> {
     standing: RefCell<BTreeMap<PathBuf, bool>>,
 }
 
-impl Reading<'_> {
+impl<'a> Reading<'a> {
+    /// What reads the file at `file`, through `overlay`, as a question about what it writes.
+    pub(crate) fn of(file: &Path, overlay: &'a Overlay) -> Self {
+        Self {
+            file: identity(file),
+            overlay,
+            lying: RefCell::new(HashMap::new()),
+            standing: RefCell::new(BTreeMap::new()),
+        }
+    }
+
     /// What the file asked about writes in the subject `text` is the lowering of, compiled against `scope`, with the term its program closes with where it is one.
-    fn read(
+    pub(crate) fn read(
         &self,
         scope: &[&Unit],
         text: &PreparedText,

@@ -1,7 +1,7 @@
 //! The stage sequence itself: [`compile_entrypoint`] and the two halves it is assembled from — the type-checking prologue and the lowering back half — each observing every [`Stage`] it produces before moving past it.
 
 use {
-    super::{Stage, compile_lowered_over, compile_unit_over},
+    super::{Stage, compile_lowered_over, compile_unit_over_told},
     curios_abi::ForeignStore,
     curios_cert::{
         Globals, Kernel, Rechecked, Verdict, certify_module, certify_program,
@@ -723,6 +723,19 @@ pub fn check_entrypoint(
     cache: Option<&dyn Cache>,
     tail: EntryTail,
 ) -> Result<Checked, CompileError> {
+    check_entrypoint_reading(budget, predecessors, syntax, source, cache, tail, None)
+}
+
+/// [`check_entrypoint`], with `read` told the program's lowering as soon as it is made ([`ReadLowering`]).
+pub(crate) fn check_entrypoint_reading(
+    budget: u64,
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+    source: &UnitSource<'_>,
+    cache: Option<&dyn Cache>,
+    tail: EntryTail,
+    read: Option<ReadLowering<'_>>,
+) -> Result<Checked, CompileError> {
     let (entry, entered) = enter(
         budget,
         predecessors,
@@ -730,7 +743,10 @@ pub fn check_entrypoint(
         source,
         cache,
         tail,
-        &mut |_| {},
+        Told {
+            observe: &mut |_: Stage<'_>| {},
+            read,
+        },
     )?;
     let verdict = entered.and_then(|entered| {
         entered.erased(budget, predecessors, syntax)?;
@@ -843,11 +859,12 @@ fn enter<O>(
     source: &UnitSource<'_>,
     cache: Option<&dyn Cache>,
     tail: EntryTail,
-    observe: &mut O,
+    told: Told<'_, O>,
 ) -> Result<(Findings, Result<Entered, CompileError>), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
+    let Told { observe, read } = told;
     let entrypoint = source
         .entrypoint()
         .expect("a program is entered from the source that carries its entrypoint");
@@ -861,6 +878,9 @@ where
         hit.as_ref()
             .or(baseline.as_ref().map(|earlier| &earlier.unit)),
     )?;
+    if let Some(read) = read {
+        read(predecessors.units(), &lowered, Some(&written));
+    }
 
     let scheduled = tail.scheduled(lowered.core(), &predecessors.cores());
     let records = match scheduled.is_empty() {
@@ -1144,9 +1164,21 @@ pub fn compile_unit(
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
 ) -> Result<Unit, CompileError> {
+    compile_unit_told(budget, predecessors, syntax, source, &|_| {})
+}
+
+/// [`compile_unit`], `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude.
+pub(crate) fn compile_unit_told(
+    budget: u64,
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+    source: &UnitSource<'_>,
+    told: &dyn Fn(&PreparedText),
+) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit");
     let lowered = into_core_unit(source, &predecessors.text(), syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
+    told(&lowered);
 
     compile_lowered(budget, predecessors, syntax, lowered, None).map(|(unit, _)| unit)
 }
@@ -1278,7 +1310,7 @@ pub struct Earlier {
 
 /// Which units in scope a baseline was compiled after, as whoever offers it can say.
 ///
-/// What a baseline read of a unit it was compiled after stands, and what it read of any other is asked again, by each stage of its own record ([`compile_unit_over`]). So the answer decides how much is asked and nothing of what is concluded: an offer that names fewer units than it could asks more.
+/// What a baseline read of a unit it was compiled after stands, and what it read of any other is asked again, by each stage of its own record ([`compile_unit_over`](crate::compile_unit_over)). So the answer decides how much is asked and nothing of what is concluded: an offer that names fewer units than it could asks more.
 pub enum After {
     /// Every unit in scope: the baseline is an image of the unit as it stands among them.
     Scope,
@@ -1317,18 +1349,49 @@ pub fn compile_units<'a, P>(
     syntax: &SyntaxRegistry,
     sources: &[(UnitSource<'_>, Option<&Unit>)],
     cache: Option<&dyn Cache>,
+    progress: P,
+) -> Result<Vec<Unit>, CompileError>
+where
+    P: FnMut(Progress<'_>),
+{
+    compile_units_reading(budget, base, syntax, sources, cache, progress, None)
+}
+
+/// [`compile_units`], with `read` told the last unit's lowering as soon as it is made or restored ([`ReadLowering`]).
+pub(crate) fn compile_units_reading<'a, P>(
+    budget: u64,
+    base: Predecessors<'a>,
+    syntax: &SyntaxRegistry,
+    sources: &[(UnitSource<'_>, Option<&Unit>)],
+    cache: Option<&dyn Cache>,
     mut progress: P,
+    read: Option<ReadLowering<'_>>,
 ) -> Result<Vec<Unit>, CompileError>
 where
     P: FnMut(Progress<'_>),
 {
     let mut produced: Vec<Unit> = Vec::new();
 
-    for (source, offered) in sources {
+    for (index, (source, offered)) in sources.iter().enumerate() {
+        // The last unit is the fold's subject, and the one whose lowering a reader is told.
+        let read = read.filter(|_| index + 1 == sources.len());
+        let predecessors = base
+            .units()
+            .iter()
+            .copied()
+            .chain(produced.iter())
+            .collect::<Vec<_>>();
+        let told = |text: &PreparedText| {
+            if let Some(read) = read {
+                read(&predecessors, text, None);
+            }
+        };
+
         // Announced *after* the cache is consulted and *before* the work, so a reported operation is one that is actually about to happen and its timing starts where it does.
         let (hit, baseline) = held(source, *offered, cache);
         if let Some(unit) = hit {
             progress(Progress::Reused(&source.prefix()));
+            told(unit.text());
             answered(source, &unit)?;
             produced.push(unit);
             continue;
@@ -1340,18 +1403,11 @@ where
             None => Progress::Compiling(&prefix),
         });
 
-        let predecessors = base
-            .units()
-            .iter()
-            .copied()
-            .chain(produced.iter())
-            .collect::<Vec<_>>();
-
         let unit = match &baseline {
             Some(Earlier {
                 unit: baseline,
                 after,
-            }) => compile_unit_over(
+            }) => compile_unit_over_told(
                 budget,
                 Predecessors::over(&predecessors),
                 syntax,
@@ -1361,8 +1417,15 @@ where
                     .iter()
                     .map(|unit| after.moved(unit))
                     .collect::<Vec<_>>(),
+                &told,
             )?,
-            None => compile_unit(budget, Predecessors::over(&predecessors), syntax, source)?,
+            None => compile_unit_told(
+                budget,
+                Predecessors::over(&predecessors),
+                syntax,
+                source,
+                &told,
+            )?,
         };
         progress(Progress::Compiled);
 
@@ -1473,6 +1536,11 @@ fn answered(source: &UnitSource<'_>, unit: &Unit) -> Result<(), CompileError> {
     Ok(())
 }
 
+/// Told a subject's lowering as soon as it is made — or restored, where the store held the unit — beside the units it was lowered against and, for a program, the term it closes with: what a question about what the subject writes reads, whatever the rest of its compile goes on to conclude.
+///
+/// **What was produced, told once, for the subject alone.** Beside [`Progress`] and the [`Stage`] observer rather than inside either: the first reports what is happening and the second the rungs `wonder stage` prints, while this hands a reader the lowering a refused subject still has, so a question about what a file writes is answered from the check that compiled it.
+pub type ReadLowering<'a> = &'a dyn Fn(&[&Unit], &PreparedText, Option<&curios_core::Entrypoint>);
+
 /// What the fold is doing, for a caller that reports it.
 ///
 /// Sequential by construction — the fold compiles one unit at a time — so [`Progress::Reused`] and [`Progress::Compiled`] refer to whichever subject was announced last and need not name it again.
@@ -1507,6 +1575,8 @@ pub fn compile_entrypoint<O>(
 where
     O: FnMut(Stage<'_>),
 {
+    let mut observe = observe;
+
     compile_with_tail(
         budget,
         predecessors,
@@ -1514,7 +1584,10 @@ where
         source,
         cache,
         EntryTail::Program,
-        observe,
+        Told {
+            observe: &mut observe,
+            read: None,
+        },
     )
     .map(|(module, foreigns, _records)| (module, foreigns))
 }
@@ -1532,22 +1605,43 @@ pub fn compile_unit_as_tests<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    compile_with_tail(budget, predecessors, syntax, source, cache, tail, observe)
+    let mut observe = observe;
+
+    compile_with_tail(
+        budget,
+        predecessors,
+        syntax,
+        source,
+        cache,
+        tail,
+        Told {
+            observe: &mut observe,
+            read: None,
+        },
+    )
 }
 
-fn compile_with_tail<O>(
+/// What a caller is told of a program's compile as it goes: each rung it produced ([`Stage`]), and its lowering, as soon as it is made ([`ReadLowering`]).
+pub(crate) struct Told<'a, O> {
+    pub(crate) observe: &'a mut O,
+    pub(crate) read: Option<ReadLowering<'a>>,
+}
+
+/// The program `source` is, compiled through the full pipeline under `tail`, telling the caller what `told` asks for.
+pub(crate) fn compile_with_tail<O>(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
     cache: Option<&dyn Cache>,
     tail: EntryTail,
-    mut observe: O,
+    told: Told<'_, O>,
 ) -> Result<(curios_wasm::Module, ForeignStore, Vec<TestRecord>), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
     curios_profile::profile!("compile_entrypoint");
+    let Told { observe, read } = told;
     // Compiling reports no lint, so the findings go unread.
     let (_, entered) = enter(
         budget,
@@ -1556,13 +1650,16 @@ where
         source,
         cache,
         tail,
-        &mut observe,
+        Told {
+            observe: &mut *observe,
+            read,
+        },
     )?;
     let entered = entered?;
     let ersd_module = entered.erased(budget, predecessors, syntax)?;
 
     // What an embedder is handed is the rows the module imports, which the emitter knows as it writes them: a program asks for an implementation of what it reaches, so a row a dependency declares and nothing calls costs its consumers nothing — no module read, linked or carried in an executable.
-    let (module, reached) = lower_from_ersd(ersd_module, &mut observe);
+    let (module, reached) = lower_from_ersd(ersd_module, observe);
 
     Ok((module, reached, entered.records))
 }
