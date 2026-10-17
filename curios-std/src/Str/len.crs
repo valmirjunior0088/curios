@@ -1,0 +1,9 @@
+use /std/{Str, Nat, Eq};
+
+--- How many characters, not bytes.
+pub let len(s: Str) -> Nat =
+    Str/count_scalars(Str/Scan/lead(), s.bytes);
+
+--- The characters of a concatenation are those of its halves. Not a law of the bytes: it holds because a valid string reads the scan back to `lead` at its end, which is what `Valid` says and what the count restarts on.
+pub let concat(a: Str, b: Str) -> Eq()(len(Str/concat(a, b)), len(a) + len(b)) =
+    Str/count_concat(a.bytes, b.bytes, a.valid);

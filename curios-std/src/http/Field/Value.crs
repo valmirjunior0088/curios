@@ -58,7 +58,7 @@ pub struct Octet: pub Type {
 pub let cons(o: Octet, v: Value) -> Value =
     Value {
         bytes = x[o.byte, ..v.bytes],
-        @Bool/both(admits(o.byte), Bytes/all(v.bytes, admits), o.clean, v.clean) };
+        @Bool/and/both(admits(o.byte), Bytes/all(v.bytes, admits), o.clean, v.clean) };
 
 --- `a` then `b`: octets that may each stand in a value may stand in one together.
 pub let append(a: Value, b: Value) -> Value =
@@ -67,8 +67,8 @@ pub let append(a: Value, b: Value) -> Value =
     | x[h, ..t]; rest =>
         (clean) =>
             cons(
-                Octet { byte = h, @clean = Bool/first(admits(h), Bytes/all(t, admits), clean) },
-                rest(Bool/second(admits(h), Bytes/all(t, admits), clean)))
+                Octet { byte = h, @clean = Bool/and/first(admits(h), Bytes/all(t, admits), clean) },
+                rest(Bool/and/second(admits(h), Bytes/all(t, admits), clean)))
     end(a.clean);
 
 -- The ten decimal digits, each an octet a value may hold.

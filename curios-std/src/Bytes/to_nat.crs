@@ -1,0 +1,20 @@
+use /std/{Nat, Byte, Bytes};
+use /std/Bool/{True, Holds};
+
+--- The number a minimal encoding denotes, which is `of_nat`'s inverse.
+---
+--- One structural fold, because the least significant byte arrives first and carries a weight the fold already knows. Reading a big-endian run back would need the length before it could weigh its first byte.
+pub let to_nat(b: Bytes) -> Nat =
+    match b | x[] => 0 | x[h, .._]; ih => Byte/to_nat(h) + 256 * ih end;
+
+--- The number a run denotes is below `256` to the run's length.
+---
+--- What makes [`to_nat`] a bounded reading, so a fixed-width pattern has a fixed range: a float's eight bytes denote a number below `2^64`.
+pub let below(b: Bytes) -> Holds(to_nat(b) < Nat/pow(256, Bytes/len(b))) =
+    match b: (z) => Holds(to_nat(z) < Nat/pow(256, Bytes/len(z)))
+    | x[] => True/qed()
+    | x[h, ..t]; ih =>
+        let top: Holds(Byte/to_nat(h) <= 255) = True/qed();
+        let _ = ih;
+        True/proved()
+    end;

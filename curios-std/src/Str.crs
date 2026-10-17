@@ -417,15 +417,11 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
 pub let to_list(s: Str) -> List(Char) =
     fold(s, [], (c, acc) => [..acc, c]);
 
---- How many characters, not bytes.
-pub let len(s: Str) -> Nat =
-    count_scalars(Scan/lead(), s.bytes);
+--- How many characters, not bytes, with how a concatenation's count is its halves'.
+pub mod len;
+pub use len/{let len};
 
---- The characters of a concatenation are those of its halves. Not a law of the bytes: it holds because a valid string reads the scan back to `lead` at its end, which is what `Valid` says and what the count restarts on.
-pub let len_concat(a: Str, b: Str) -> Eq()(len(concat(a, b)), len(a) + len(b)) =
-    count_concat(a.bytes, b.bytes, a.valid);
-
---- `count_scalars` splits at the seam of a concatenation whose first half reads to the end, from whatever state the reading starts in — the strengthening `len_concat` needs to descend a byte, where the state has moved.
+--- `count_scalars` splits at the seam of a concatenation whose first half reads to the end, from whatever state the reading starts in — the strengthening `len/concat` needs to descend a byte, where the state has moved.
 let count_concat(
     a: Bytes,
     b: Bytes,

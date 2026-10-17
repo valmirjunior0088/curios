@@ -1,5 +1,5 @@
 pub use /sys/{Bool};
-pub use /sys/Bool/{and, or, xor, eql, Holds};
+pub use /sys/Bool/{or, xor, eql, Holds};
 use /std/{Str, Option, Eq, Show, Spell, Ordering, Ord};
 use /std/ops/{Eql, Or, And, Cmp};
 
@@ -10,6 +10,10 @@ pub use True/{let True};
 --- The empty proposition: what a decided bound reduces to when it fails.
 pub mod False;
 pub use False/{let False};
+
+--- Conjunction, with what a proof of one holds of its halves.
+pub mod and;
+pub use and/{let and};
 
 --- The other value.
 pub let not(b: Bool) -> Bool =
@@ -41,27 +45,6 @@ pub let eq_of_holds(b: Bool, h: Holds(b)) -> Eq()(b, true) =
 --- The equation as the decision, back: `True/qed()` carried along the equation read the other way.
 pub let holds_of_eq(b: Bool, p: Eq()(b, true)) -> Holds(b) =
     Eq/subst((x: Bool) => Holds(x), Eq/sym(p), True/qed());
-
---- Two decisions that hold, as one: `a && b` holds where `a` does and `b` does. By cases on `a`, since `&&` reduces at each.
-pub let both(a: Bool, b: Bool, p: Holds(a), q: Holds(b)) -> Holds(a && b) =
-    match a
-    | true => q
-    | false => match p end
-    end;
-
---- The first of two decisions that hold as one: `a` holds where `a && b` does. By cases on `a`, as [`both`] is.
-pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =
-    match a: (s) => (Holds(s && b)) -> Holds(s)
-    | true => (_) => True/qed()
-    | false => (h) => h
-    end(p);
-
---- The second of them: `b` holds where `a && b` does.
-pub let second(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(b) =
-    match a: (s) => (Holds(s && b)) -> Holds(b)
-    | true => (h) => h
-    | false => (h) => match h end
-    end(p);
 
 satisfy Eql(Bool) {
     eql = eql,

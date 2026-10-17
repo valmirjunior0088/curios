@@ -76,7 +76,7 @@ let halved(x: Nat, k: Nat, small: Holds(x < 256), place: Holds(k < 8)) -> Holds(
         8,
         halves(x),
         k,
-        Bool/first(
+        Bool/and/first(
             Nat/all_below(8, halves(x)),
             Nat/shr(x, 8) == 0,
             Nat/all_below/at(256, every, x, table, small)),
@@ -89,21 +89,21 @@ let split(
     small: Holds(x < 256),
     place: Holds(k < 8),
 ) -> Holds(Nat/shr(x, k) == 2 * Nat/shr(x, k + 1) + low(x, k)) =
-    Bool/first(
+    Bool/and/first(
         Nat/shr(x, k) == 2 * Nat/shr(x, k + 1) + low(x, k),
         low(x, k) <= 1,
         halved(x, k, small, place));
 
 -- A low bit is at most one.
 let single(x: Nat, k: Nat, small: Holds(x < 256), place: Holds(k < 8)) -> Holds(low(x, k) <= 1) =
-    Bool/second(
+    Bool/and/second(
         Nat/shr(x, k) == 2 * Nat/shr(x, k + 1) + low(x, k),
         low(x, k) <= 1,
         halved(x, k, small, place));
 
 -- A byte shifted eight places is nothing.
 let spent(x: Nat, small: Holds(x < 256)) -> Holds(Nat/shr(x, 8) == 0) =
-    Bool/second(
+    Bool/and/second(
         Nat/all_below(8, halves(x)),
         Nat/shr(x, 8) == 0,
         Nat/all_below/at(256, every, x, table, small));
