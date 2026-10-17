@@ -575,6 +575,8 @@ pub enum Subterm {
     Name(Name),
     /// A silent inference hole: a placeholder elaborated to a fresh metavariable whose solution zonk splices in without comment. Desugar-only — the parser mints [`Subterm::Goal`] for a written `?`; `Hole` stands in where a desugar omits a term (an unannotated local `let`'s type). Carries no payload — its span rides on the wrapping [`Term`].
     Hole,
+    /// A held place, `_` after a mark: a hidden argument, `@_` or `use _`, or a literal's hidden entry, left to the elaborator as one left out is. Only the argument and literal-entry grammars produce it, so a `_` read anywhere else is no term. Carries no payload — its span rides on the wrapping [`Term`].
+    Held,
     /// A written goal `?`: elaborated to a metavariable like [`Subterm::Hole`], but marked so zonk *reports* what elaboration determined for it (scope, type, and solution, if any) instead of splicing silently — writing `?` always fails compilation with that report. Minted only by the parser; carries no payload — its span rides on the wrapping [`Term`].
     Goal,
     /// The body of a derived witness, `satisfy C(T) { .. }`: lowered to the `Derive` elaboration transient, which the concept's derivation expands or refuses. Desugar-only — minted by the witness lowering, never parsed — so that the declaration's telescope wraps it exactly as it wraps a written body. Carries no payload; its span rides on the wrapping [`Term`].

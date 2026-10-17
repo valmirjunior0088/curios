@@ -2,8 +2,9 @@ use {
     super::{
         TUPLE_FIELD_TAKES_NO_MARK, members, parse_apply_argument, parse_bin_literal,
         parse_block_string_literal, parse_bool_intrinsic, parse_char_lit, parse_func_param,
-        parse_func_type_param, parse_identifier, parse_label, parse_list_literal, parse_literal,
-        parse_mark, parse_name, parse_number, parse_string_literal, refuse_dangling_dot,
+        parse_func_type_param, parse_held, parse_identifier, parse_label, parse_list_literal,
+        parse_literal, parse_mark, parse_name, parse_number, parse_string_literal,
+        refuse_dangling_dot,
     },
     crate::{
         FuncTypeParam, Label, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField,
@@ -205,8 +206,16 @@ pub(super) fn parse_struct_entry<'a>(state: ParserState<'a>) -> Parsed<'a, Struc
         .and_keep(parse_term)
         .map(StructLitEntry::Spread)
         .or(parse_mark.flat_map(|plicity| match plicity {
-            Plicity::Witness => parse_term.map(StructLitEntry::Use).boxed(),
-            Plicity::Implicit => parse_tuple_field.map(StructLitEntry::Implicit).boxed(),
+            Plicity::Witness => parse_held.or(parse_term).map(StructLitEntry::Use).boxed(),
+            Plicity::Implicit => parse_held
+                .map(|value| TupleField {
+                    label: None,
+                    func_params: None,
+                    value,
+                })
+                .or(parse_tuple_field)
+                .map(StructLitEntry::Implicit)
+                .boxed(),
             Plicity::Explicit => parse_tuple_field.map(StructLitEntry::Field).boxed(),
         }))
         .parse(state)

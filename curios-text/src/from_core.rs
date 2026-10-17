@@ -259,9 +259,9 @@ fn argument(plicity: Plicity, term: Term) -> Argument {
     Argument { term, plicity }
 }
 
-/// The wildcard that holds a hidden member's place: `use _`, `@_`.
+/// The form that holds a hidden member's place: `use _`, `@_`.
 fn placeholder() -> Term {
-    named("_")
+    Subterm::Held.into()
 }
 
 /// One node of the tree: every Core form as the surface writes it.

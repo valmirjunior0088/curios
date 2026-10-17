@@ -280,3 +280,48 @@ fn a_declarations_member_written_alone_is_reported_where_it_stands() {
         );
     }
 }
+
+/// Under a mark `_` holds a hidden member's place, as a call's argument and as a literal's entry, and it is read as that held place and as no name; written plain, or anywhere else a term is read, it is no term.
+#[test]
+fn a_held_place_is_written_under_a_mark_alone() {
+    let held = |term: &Term| matches!(term.as_subterm(), Subterm::Held);
+
+    let call = "f(@_, use _, x)".parse::<Term>().expect("a call parses");
+    let Subterm::Apply(apply) = call.as_subterm() else {
+        panic!("{call:?} is no call");
+    };
+    let marked = apply
+        .arguments
+        .iter()
+        .map(|argument| (argument.plicity, held(&argument.term)))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        marked,
+        [
+            (Plicity::Implicit, true),
+            (Plicity::Witness, true),
+            (Plicity::Explicit, false)
+        ]
+    );
+
+    let literal = "S { @_, use _, x = 1 }"
+        .parse::<Term>()
+        .expect("a literal parses");
+    let Subterm::StructLit(literal) = literal.as_subterm() else {
+        panic!("{literal:?} is no literal");
+    };
+    let entries = literal
+        .entries
+        .iter()
+        .map(|entry| match entry {
+            StructLitEntry::Implicit(field) => held(&field.value),
+            StructLitEntry::Use(term) => held(term),
+            _ => false,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(entries, [true, true, false]);
+
+    for refused in ["f(_, x)", "_", "(_)"] {
+        assert!(refused.parse::<Term>().is_err(), "{refused} parses");
+    }
+}

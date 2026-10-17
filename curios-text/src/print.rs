@@ -711,6 +711,7 @@ fn print_term_inner(term: Term, suffix: Printer) -> Printer {
         },
         // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
         Subterm::Hole | Subterm::Goal => pure("?"),
+        Subterm::Held => pure("_"),
         // Never parsed: the witness lowering mints it, and a `satisfy` prints its `;` from the declaration, not from here.
         Subterm::Derive => pure("derive"),
         Subterm::ProofLiteral(ProofLiteral::Char(character)) => print_char_literal(character),

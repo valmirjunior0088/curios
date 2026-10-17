@@ -44,6 +44,10 @@
           "named": true
         },
         {
+          "type": "held",
+          "named": true
+        },
+        {
           "type": "lambda",
           "named": true
         },
@@ -4812,6 +4816,10 @@
           "named": true
         },
         {
+          "type": "held",
+          "named": true
+        },
+        {
           "type": "lambda",
           "named": true
         },
@@ -5933,6 +5941,10 @@
   },
   {
     "type": "goal",
+    "named": true
+  },
+  {
+    "type": "held",
     "named": true
   },
   {

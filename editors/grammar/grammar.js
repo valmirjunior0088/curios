@@ -433,7 +433,15 @@ module.exports = grammar({
 
     arguments: ($) => seq("(", commaList($.argument), ")"),
 
-    argument: ($) => seq(optional(choice("@", "use")), $._term),
+    // Under a mark `_` holds the slot's place; a plain slot is always written.
+    argument: ($) =>
+      choice(
+        seq(choice("@", "use"), $.held),
+        seq(optional(choice("@", "use")), $._term),
+      ),
+
+    // A held place: `_` after a mark, a hidden member left to the elaborator.
+    held: (_) => "_",
 
     projection: ($) =>
       prec.left(
@@ -510,7 +518,8 @@ module.exports = grammar({
     struct_entry: ($) =>
       choice(
         $.spread,
-        seq("use", $._term),
+        seq("use", choice($.held, $._term)),
+        seq("@", $.held),
         seq(optional("@"), choice($.field_definition, $._term)),
       ),
 

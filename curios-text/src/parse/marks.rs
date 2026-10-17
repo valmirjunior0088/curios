@@ -149,14 +149,17 @@ pub(super) fn parse_place<'a>(start: Mark) -> impl Parser<'a, Read<()>> {
             .or(parse_identifier
                 .and_drop(member_ends)
                 .flat_map(move |_| refused(&named, USE_BINDS_NOTHING)))
+            // A type, or `_` and then a type, which no term is.
             .or(parse_term
+                .map(|_| ())
+                .or(parse_wildcard.map(|_| ()))
                 .and_drop(
                     parse_literal(":")
                         .and_keep(parse_term)
                         .map(|_| ())
                         .or(pure(())),
                 )
-                .flat_map(move |_| refused(&typed, BINDER_STATES_NO_USE_TYPE)))
+                .flat_map(move |()| refused(&typed, BINDER_STATES_NO_USE_TYPE)))
             .parse(state)
     }
 }

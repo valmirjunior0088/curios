@@ -535,8 +535,7 @@ Sized { ..base, @_, items = other }
             (path
               (identifier))))
         (struct_entry
-          (path
-            (identifier)))
+          (held))
         (struct_entry
           (field_definition
             (identifier)

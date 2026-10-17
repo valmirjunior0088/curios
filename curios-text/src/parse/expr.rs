@@ -8,7 +8,7 @@ use {
     },
     crate::{
         Apply, Argument, Field, FuncSugarParam, Infix, Label, Let, LetBinding, LetGroup,
-        LetSignature, Pattern, Proj, Subterm, Term, Tuple, declared, parse_identifier_raw,
+        LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, declared, parse_identifier_raw,
         parse_whitespace,
     },
     curios_parse::{
@@ -95,7 +95,11 @@ pub(super) fn parse_func_sugar_param<'a>(
                         type_,
                     })
                 })
-                .or(parse_term.flat_map(move |_| refused(&start, DEFINITION_NAMES_ITS_MEMBERS)))
+                // Its type alone, or its binder alone where that is `_`, which no type is.
+                .or(parse_term
+                    .map(|_| ())
+                    .or(parse_pattern.map(|_| ()))
+                    .flat_map(move |()| refused(&start, DEFINITION_NAMES_ITS_MEMBERS)))
                 .boxed(),
         })
         .parse(state)
@@ -233,12 +237,30 @@ pub(super) enum Suffix {
     Bang,
 }
 
-// A call-site argument under its mark: `use <term>` fills a witness slot, `@<term>` an implicit slot, a plain term an explicit slot. Neither mark can begin a plain-argument term.
+// A call-site argument under its mark: `use <term>` fills a witness slot, `@<term>` an implicit slot, a plain term an explicit slot. Neither mark can begin a plain-argument term. Under a mark `_` holds the slot's place; a plain slot is always written.
 pub(super) fn parse_apply_argument<'a>(state: ParserState<'a>) -> Parsed<'a, Argument> {
     parse_mark
-        .and(parse_term)
-        .map(|(plicity, term)| Argument { term, plicity })
+        .flat_map(|plicity| match plicity {
+            Plicity::Explicit => parse_term
+                .map(move |term| Argument { term, plicity })
+                .boxed(),
+            Plicity::Implicit | Plicity::Witness => parse_held
+                .or(parse_term)
+                .map(move |term| Argument { term, plicity })
+                .boxed(),
+        })
         .parse(state)
+}
+
+// A held place: a `_` that begins no longer name, read where a mark has opened a hidden member's place.
+pub(super) fn parse_held<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
+    spanned(parse_identifier_raw.flat_map(|word: &str| match word {
+        "_" => pure(()).boxed(),
+        _ => fail("a held place is `_`").boxed(),
+    }))
+    .map(|(span, ())| Term::from(Subterm::Held).with_span(span))
+    .and_drop(parse_whitespace)
+    .parse(state)
 }
 
 pub(super) fn parse_suffix<'a>(state: ParserState<'a>) -> Parsed<'a, Suffix> {
@@ -312,6 +334,16 @@ pub(super) fn trimmed(mut span: Span) -> Span {
     }
 }
 
+// A name read as a term: any but `_`, which holds a binder's place, and after a mark an argument's, and is no term.
+fn parse_term_name<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
+    parse_name
+        .flat_map(|name| match name.is_single() && name.head() == "_" {
+            true => fail("`_` is no term").boxed(),
+            false => pure(name).boxed(),
+        })
+        .parse(state)
+}
+
 pub(super) fn parse_goal<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     // `?` is not an identifier character, so a plain literal suffices — no token-aware matching needed. (`_` remains the match wildcard binder.) A written `?` is a *goal* — reported at zonk — never a silent `Subterm::Hole`, which only desugars mint.
     parse_literal("?")
@@ -340,7 +372,7 @@ pub(super) fn parse_atomic_term_inner<'a>(state: ParserState<'a>) -> Parsed<'a, 
                 .or(parse_empty_tuple)
                 .or(parse_tuple)
                 .or(parse_parens)
-                .or(parse_name.map(|n| Subterm::Name(n).into())),
+                .or(parse_term_name.map(|n| Subterm::Name(n).into())),
         )
         .and(many0(|| spanned(parse_suffix)))
         .map(|(head, suffixes): (Term, _)| apply_suffixes(head, suffixes)),

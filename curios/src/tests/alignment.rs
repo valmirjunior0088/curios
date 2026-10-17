@@ -50,11 +50,29 @@ fn a_hidden_argument_out_of_its_run_is_refused() {
     );
 }
 
-// A plain `_` holds no place: plain members are always written, so it is the name it spells.
+// A plain `_` holds no place: plain members are always written, and `_` is no term, so one written as a plain argument is refused as any text that is no term is, and looked up as no name.
 #[test]
 fn a_plain_argument_is_never_a_placeholder() {
     let message = error(&format!("{TWO}        print(two(_, true))\n"));
-    assert!(message.contains("`_` is not in scope"), "got: {message}");
+    assert!(
+        message.contains("obtained '_'") && !message.contains("not in scope"),
+        "got: {message}"
+    );
+}
+
+// `_` is no term where a term is read, a type's place included: refused by the parser as any text that is no term is, where it was looked up as a name and the report offered the nearest one in scope.
+#[test]
+fn a_held_place_is_read_where_a_mark_opens_one_alone() {
+    for source in [
+        "use /std/{Nat, print};\nlet one: _ = 1;\nprint(\"x\")\n",
+        "use /std/{Nat, print};\nlet f: Type = (@_, x: Nat) -> Nat;\nprint(\"x\")\n",
+    ] {
+        let message = error(source);
+        assert!(
+            message.contains("Expected '") && !message.contains("not in scope"),
+            "{source:?} reported {message}"
+        );
+    }
 }
 
 // A lambda's binders meet their slots by the same rule: a hidden binder written first binds the first slot of the run, whatever it is called, and a `use _` written where the run opens with `@` is refused rather than skipping to the witness slot.

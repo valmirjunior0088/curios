@@ -29,6 +29,7 @@
 (character) @string.special.symbol
 ; A goal is punctuation, not `punctuation.special`: the default themes paint the latter red, and a hole the author wrote on purpose is not an alarm.
 (goal) @punctuation
+(held) @punctuation
 
 ; Definitions.
 (let_member name: (identifier) @function)

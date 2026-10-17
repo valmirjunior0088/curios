@@ -8,8 +8,8 @@ use {
         parse_whitespace,
     },
     curios_parse::{
-        Parsed, Parser, ParserState, commit, fail, fail_from, look_ahead, many0, mark, not_ahead,
-        pure, sep_by0_trailing, spanned, take_exact,
+        Parsed, Parser, ParserState, commit, fail_from, look_ahead, many0, mark, not_ahead, pure,
+        sep_by0_trailing, spanned, take_exact,
     },
 };
 
@@ -112,16 +112,10 @@ pub(super) fn parse_bind_arm<'a>(state: ParserState<'a>) -> Parsed<'a, ChooseArm
         .parse(state)
 }
 
-// A choose condition arm `| cond => body`. The catch spans through `=>` so a condition term that merely *starts* like the default backtracks cleanly. A bare `_` parses as an ordinary `Name` term, so the choose's `| _ =>` default would otherwise be swallowed here; the `flat_map` guard rejects a lone `_` condition, letting `many0` stop and hand the default to `parse_choose_default`. A condition that merely *begins* with `_` (e.g. `_ready`) has a longer head and passes the guard, parsing as an ordinary condition.
+// A choose condition arm `| cond => body`. The catch spans through `=>` so a condition term that merely *starts* like the default backtracks cleanly. A bare `_` is no term, so the choose's `| _ =>` default reads as no condition arm and `many0` stops, handing it to `parse_choose_default`; a condition that merely *begins* with `_` (e.g. `_ready`) is a name, and an ordinary condition.
 pub(super) fn parse_cond_arm<'a>(state: ParserState<'a>) -> Parsed<'a, ChooseArm> {
     parse_literal("|")
         .and_keep(parse_term_before_arrow)
-        .flat_map(|cond| match cond.as_subterm() {
-            Subterm::Name(name) if name.is_single() && name.head() == "_" => {
-                fail("the `| _ =>` default is not a condition arm").boxed()
-            }
-            _ => pure(cond).boxed(),
-        })
         .and_drop(parse_literal("=>"))
         .and(parse_term)
         .map(|(condition, body)| ChooseArm {
