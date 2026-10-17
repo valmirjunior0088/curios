@@ -57,7 +57,11 @@ pub fn spell(
 
     let mut candidates = Vec::new();
     for (written, own) in reachable {
-        if own && written.path.is_within(island) && written.path != *island {
+        // A path the reader's own module re-exports a declaration at is bound from the `use` that makes it, as every `use` is: for a reader standing at a declaration, the imports in scope there give that name below the `use`, and nothing gives it above. The entrypoint's final term stands below every `use`.
+        let exported_here = owner.is_some()
+            && written.path.without_last() == *island
+            && curios_core::Global::Authored(written.path) != *global;
+        if own && !exported_here && written.path.is_within(island) && written.path != *island {
             candidates.push(written.path.segments()[island.segments().len()..].join("/"));
         }
         candidates.push(written.path.join());

@@ -212,6 +212,29 @@ fn library_modules() -> BTreeSet<String> {
     })
 }
 
+// A module's own re-export binds from the `use` that makes it, as every `use` does: a declaration standing above that `use` is given the re-exported name through the module it is declared in, and one standing below it the name the `use` brought.
+#[test]
+fn a_re_export_of_the_readers_own_module_is_spelled_bare_only_below_its_use() {
+    with_prelude(|prelude| {
+        let text = Predecessors::over(prelude).text();
+        let source = "mod M\n    pub mod Inner\n        pub let x: Type = Type;\n    end\n    let above: Type = Type;\n    pub use Inner/{x};\n    let below: Type = Type;\nend\n/std/print(\"\")\n";
+        let lowered =
+            into_core_with_prelude(&entrypoint_of(source), &RootSource::none(), &text, &SYNTAX)
+                .unwrap_or_else(|error| panic!("the program lowers: {}", error.format()));
+        let spellings = lowered.names.spellings(&text);
+        let island = Qualifier::from(["M"]);
+        let x = Global::Authored(Qualifier::from(["M", "Inner", "x"]));
+        let at = |label: &str| {
+            let owner = Global::Authored(island.with(label));
+
+            spell(&spellings, &island, Some(&owner), &x)
+        };
+
+        assert_eq!(at("above").as_deref(), Some("Inner/x"));
+        assert_eq!(at("below").as_deref(), Some("x"));
+    });
+}
+
 #[test]
 fn a_reader_with_no_import_is_given_paths_that_resolve() {
     let counted = held(&Reader::at_the_root(""), None);
