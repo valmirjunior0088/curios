@@ -2,7 +2,7 @@
 
 use {crate::tests::run_text, curios_runtime::OsHost, curios_utilities::test_support::Temporary};
 
-// A child's piped outputs are drained side by side: the pipe answers would-block until the child writes, the reader suspends on a watch, the host's wait wakes it, and both drains join before the child is reaped. `/bin/echo` and `/bin/cat` are present on both release targets; `cat` on the null device exits at once with nothing written.
+// A child's piped outputs are drained side by side, and its input written beside them: the pipe answers would-block until the child writes, the reader suspends on a watch, the host's wait wakes it, and everything joins before the child is reaped. `/bin/echo` and `/bin/cat` are present on both release targets; `cat` writes back what it was fed and exits at the end of its input, which only finishing the input gives it.
 #[test]
 fn run_drains_a_real_child_through_the_scheduler() {
     let root = Temporary::new("host", "os-report");
@@ -14,8 +14,8 @@ fn run_drains_a_real_child_through_the_scheduler() {
         use /std/{{Str, Bytes, Option, Result, Show, Try, Io, Path, File, Process}};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let program() -> Try(Io, Io/Error, {{}}) =
-            let e = Process/run(Process/Command/new("/bin/echo", ["hi"]))!;
-            let c = Process/run(Process/Command {{ ..Process/Command/new("/bin/cat", []), stdin = Process/Stdio/null() }})!;
+            let e = Process/run(Process/new("/bin/echo", ["hi"]), x[])!;
+            let c = Process/run(Process/new("/bin/cat", []), Str/to_bytes("fed"))!;
             let first = Str/flatten([text(e.stdout), ":", Show/show(e.exit)]);
             let second = Str/flatten([text(c.stdout), ":", Show/show(c.exit)]);
             File/write_all(Path/of_str("{path}"), Str/to_bytes(Str/flatten([first, "|", second])));
@@ -32,5 +32,5 @@ fn run_drains_a_real_child_through_the_scheduler() {
     run_text(&source, OsHost::with_args(vec![])).expect("expected result");
 
     let written = std::fs::read(&report).expect("the program wrote its report");
-    assert_eq!(written, b"hi\n:exited(0)|:exited(0)");
+    assert_eq!(written, b"hi\n:exited(0)|fed:exited(0)");
 }

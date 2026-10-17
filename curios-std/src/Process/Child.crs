@@ -1,0 +1,141 @@
+use /std/{Bool, Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Process};
+use /std/internal/{Handle, error};
+
+--- A running child, and whichever of its streams were piped.
+pub struct Child: Type {
+    handle: Handle,
+    stdin: Option(Process/Output),
+    stdout: Option(Process/Input),
+    stderr: Option(Process/Input),
+}
+
+let stdio_of(s: Process/Stdio) -> Nat =
+    match s
+    | inherit() => /sys/stdio_mode/inherit
+    | piped() => /sys/stdio_mode/pipe
+    | null() => /sys/stdio_mode/null
+    end;
+
+let env_entry(entry: {Str, Str}) -> Bytes =
+    x[..Str/to_bytes(entry.0), '=', ..Str/to_bytes(entry.1)];
+
+--- Whether `key` can name an environment variable: something, and no `=`, which would end the name early in the `NAME=VALUE` entry it crosses as.
+let names_a_variable(key: Str) -> Bool =
+    match Str/is_empty(key) | true => false | false => Bool/not(Str/contains(key, '=')) end;
+
+--- Nothing, or `EINVAL` for an entry whose key names no variable.
+let env_checked(env: List({Str, Str})) -> Result(Io/Error, {}) =
+    match List/all(env, (entry) => names_a_variable(entry.0))
+    | true => Result/success(())
+    | false => Result/failure(Io/Error/other(/sys/errno/inval))
+    end;
+
+--- Whether a stream wired as `s` was piped, which is when the host's answer for it names a pipe's end rather than nothing.
+let piped(s: Process/Stdio) -> Bool =
+    match s | piped() => true | _ => false end;
+
+--- Start a program from its arguments, a working directory, environment entries and a `/sys/stdio_mode` code for each standard stream: `ok` beside the child's handle and a handle for each stream, or the status of the failure.
+foreign proc_spawn(List(Bytes), Bytes, List(Bytes), Nat, Nat, Nat) -> {
+    status: Nat,
+    child: Handle,
+    stdin: Handle,
+    stdout: Handle,
+    stderr: Handle};
+
+--- Start `p` into `s`: when `s` ends the child is killed if it still runs, and its handle and pipes are closed, so no child outlives the scope it was started in. The child arrives with a pipe for each stream `p` piped, in the one call that starts it. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
+pub let spawn(s: Io/Scope, p: Process) -> Try(Io, Io/Error, Child) =
+    let _ = env_checked(p.env)!;
+    let reply =
+        proc_spawn(
+            [Str/to_bytes(p.program), ..List/map(p.args, Str/to_bytes)],
+            match p.cwd | some(dir) => Path/to_bytes(dir) | none() => x[] end,
+            List/map(p.env, env_entry),
+            stdio_of(p.stdin),
+            stdio_of(p.stdout),
+            stdio_of(p.stderr))!;
+    let spawned =
+        match reply.status == /sys/status/ok
+        | true => Result/success(reply)
+        | false => Result/failure(error(reply.status))
+        end!;
+    let c =
+        Child {
+            handle = spawned.child,
+            stdin =
+                match piped(p.stdin)
+                | true => Option/some(Process/Output { spawned.stdin })
+                | false => Option/none()
+                end,
+            stdout =
+                match piped(p.stdout)
+                | true => Option/some(Process/Input { spawned.stdout })
+                | false => Option/none()
+                end,
+            stderr =
+                match piped(p.stderr)
+                | true => Option/some(Process/Input { spawned.stderr })
+                | false => Option/none()
+                end };
+    let _ = Io/Scope/defer(s, (_) => release(c))!;
+    Try/pure(c);
+
+--- What this process writes the child's standard input through, when it was piped.
+pub let stdin(c: Child) -> Option(Process/Output) =
+    c.stdin;
+
+--- What this process reads the child's standard output through, when it was piped.
+pub let stdout(c: Child) -> Option(Process/Input) =
+    c.stdout;
+
+--- What this process reads the child's standard error through, when it was piped.
+pub let stderr(c: Child) -> Option(Process/Input) =
+    c.stderr;
+
+let close_input(i: Option(Process/Output)) -> Io({}) =
+    match i | some(i) => Handle/close(i.0) | none() => Io/pure(()) end;
+
+let close_output(o: Option(Process/Input)) -> Io({}) =
+    match o | some(o) => Handle/close(o.0) | none() => Io/pure(()) end;
+
+let close_pipes(c: Child) -> Io({}) =
+    let _ = close_input(c.stdin)!;
+    let _ = close_output(c.stdout)!;
+    close_output(c.stderr);
+
+--- End this child: `ok`, or the status of the failure.
+foreign proc_kill(Handle) -> Nat;
+
+--- The child ended if it still runs. A child the host could not signal is left as it is.
+let killed(c: Child) -> Io({}) =
+    let _ = proc_kill(c.handle)!;
+    Io/pure(());
+
+-- End the child if it still runs, then close its handle and its pipes. The kill is the last use of the handle, and the host reaps the process whether or not anything waits for it.
+let release(c: Child) -> Io({}) =
+    let _ = killed(c)!;
+    let _ = Handle/close(c.handle)!;
+    close_pipes(c);
+
+--- End the child if it still runs, and close its pipes.
+pub let kill(c: Child) -> Io({}) =
+    let _ = killed(c)!;
+    close_pipes(c);
+
+--- How this child ended: `ok` beside its exit code and the signal that ended it, or the status of the failure.
+foreign proc_wait(Handle) -> {status: Nat, code: Nat, signal: Nat};
+
+--- How the child ended, waiting until it does. A piped input is finished first, so a child reading to the end of its input is not left waiting on the parent that waits on it; the outputs are closed with the child, so read what it wrote before waiting for it.
+pub let wait(c: Child) -> Try(Io, Io/Error, Process/Exit) =
+    let _ = close_input(c.stdin)!;
+    let _ = Handle/wait(c.handle, Handle/Interest/readable)!;
+    let reply = proc_wait(c.handle)!;
+    let _ = close_pipes(c)!;
+    match reply.status == /sys/status/ok
+    | true =>
+        Try/pure(
+            match reply.signal == 0
+            | true => Process/Exit/exited(reply.code)
+            | false => Process/Exit/signaled(reply.signal)
+            end)
+    | false => Try/raise(error(reply.status))
+    end;

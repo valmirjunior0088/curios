@@ -276,12 +276,12 @@ fn spawned() -> (HostOp, Vec<RawValue>) {
 #[test]
 fn a_process_row_s_failure_is_the_error_it_names() {
     each_fails(vec![(
-        r#"let _ = Process/spawn(s, Process/Command/new("x", []))!; Try/pure(())"#,
+        r#"let _ = Process/Child/spawn(s, Process/new("x", []))!; Try/pure(())"#,
         vec![(HostOp::ProcSpawn, denied(vec![bytes(b""); 4]))],
     )]);
     each_fails(vec![(
-        r#"let c = Process/spawn(s, Process/Command/new("x", []))!;
-               let _ = Process/wait(c)!;
+        r#"let c = Process/Child/spawn(s, Process/new("x", []))!;
+               let _ = Process/Child/wait(c)!;
                Try/pure(())"#,
         vec![spawned(), (HostOp::ProcWait, denied(vec![nat(0), nat(0)]))],
     )]);
@@ -308,8 +308,8 @@ fn the_failures_std_absorbs_by_design_are_absorbed() {
     );
     assert_eq!(
         exit_code(
-            r#"let c = Process/spawn(s, Process/Command/new("x", []))!;
-               let _ = Process/kill(c)!;
+            r#"let c = Process/Child/spawn(s, Process/new("x", []))!;
+               let _ = Process/Child/kill(c)!;
                Try/pure(())"#,
             vec![spawned(), (HostOp::ProcKill, denied(vec![]))],
         ),

@@ -518,6 +518,22 @@ main()
   }
 });
 
+test("a program that finishes its standard output writes nothing more there, and a print after it ends the program saying why", async () => {
+  const { stdout, stderr, exitCode } = await execute(`
+use /std/{Try, Io, Process, print};
+let main() -> /std/Io({}) =
+    let _ = print("before")!;
+    let _ = Try/run(Io/finish(Process/stdout))!;
+    print("after");
+main()
+`);
+
+  assert.deepEqual(
+    [stdout, stderr, exitCode],
+    ["before", "standard output could not be written: not_found\n", 1],
+  );
+});
+
 test("a program suspended on a timer wakes into its rest, and the event loop runs while it sleeps", async () => {
   // Scheduled once the program has printed, so only a sleep that yields to the event loop lets it run before the program ends.
   let ticked = false;

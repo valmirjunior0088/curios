@@ -1,4 +1,4 @@
-//! The process surface through `/std/Process`: argv, environment and exit, and children started from a `Process/Command` and reaped.
+//! The process surface through `/std/Process`: argv, environment and exit, and children started from a `Process` and reaped as a `Process/Child`.
 
 use {
     crate::tests::{run, run_text, typecheck},
@@ -218,7 +218,7 @@ fn child_program(body: &str) -> String {
 fn run_captures_both_outputs_and_the_exit() {
     let source = child_program(
         r#"
-            let out = Process/run(Process/Command/new("greet", ["world"]))!;
+            let out = Process/run(Process/new("greet", ["world"]), x[])!;
             Try/pure(Str/flatten([text(out.stdout), "|", text(out.stderr), "|", Show/show(out.exit)]))
         "#,
     );
@@ -234,13 +234,13 @@ fn run_captures_both_outputs_and_the_exit() {
     );
 }
 
-// `status` wires every stream as the command says and reports how the child ended; a signal shows as `signaled`, and a program the host cannot find is `not_found` at its own `run`, as an unknown path is to `open`.
+// `status` wires every stream as the `Process` says and reports how the child ended; a signal shows as `signaled`, and a program the host cannot find is `not_found` at its own `run`, as an unknown path is to `open`.
 #[test]
 fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
     let source = child_program(
         r#"
-            let crashed = Process/status(Process/Command/new("crash", []))!;
-            let missing = Try/run(Process/status(Process/Command { ..Process/Command/new("missing", []), cwd = Option/some(Path/of_str("/tmp")) }))!;
+            let crashed = Process/status(Process/new("crash", []))!;
+            let missing = Try/run(Process/status(Process { ..Process/new("missing", []), cwd = Option/some(Path/of_str("/tmp")) }))!;
             let shown = match missing | success(e) => Show/show(e) | failure(e) => Show/show(e) end;
             Try/pure(Str/join(" ", [Show/show(crashed), shown]))
         "#,
@@ -265,7 +265,7 @@ fn a_cancelled_scope_kills_the_child_spawned_into_it() {
         r#"
             let body() -> Try(Io, Io/Error, {}) =
                 Try/scope((inner) =>
-                    let _ = Process/spawn(inner, Process/Command/new("sleepy", []))!;
+                    let _ = Process/Child/spawn(inner, Process/new("sleepy", []))!;
                     let _ = Io/sleep(/std/time/Duration/of(60, 0))!;
                     Try/pure(()));
             let ran = Io/timeout(/std/time/Duration/of(0, 0), Try/run(body()))!;
@@ -284,8 +284,8 @@ fn a_cancelled_scope_kills_the_child_spawned_into_it() {
 fn a_scope_releases_its_child_and_kills_nothing_that_has_ended() {
     let source = child_program(
         r#"
-            let child = Try/scope((inner) => Process/spawn(inner, Process/Command/new("done", [])))!;
-            let late = Try/run(Process/wait(child))!;
+            let child = Try/scope((inner) => Process/Child/spawn(inner, Process/new("done", [])))!;
+            let late = Try/run(Process/Child/wait(child))!;
             Try/pure(match late | success(e) => Show/show(e) | failure(e) => Show/show(e) end)
         "#,
     );
@@ -298,19 +298,19 @@ fn a_scope_releases_its_child_and_kills_nothing_that_has_ended() {
     assert!(io.kills().is_empty(), "an ended child is not signaled");
 }
 
-// A child's pipes are streams: `spawn` with piped output hands back a `Process/Pipe` that `Io/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
+// A child's pipes are streams: `spawn` with piped output hands back a `Process/Input` that `Io/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
 #[test]
 fn a_piped_output_is_read_through_the_stream_witness() {
     let source = child_program(
         r#"
-            let child = Process/spawn(scope, Process/Command { ..Process/Command/new("greet", []), stdout = Process/Stdio/piped() })!;
+            let child = Process/Child/spawn(scope, Process { ..Process/new("greet", []), stdout = Process/Stdio/piped() })!;
             let read =
-                match Process/piped_stdout(child)
+                match Process/Child/stdout(child)
                 | some(p) => /std/Io/read_all(p)
                 | none() => Try/pure(x[])
                 end;
             let bytes = read!;
-            let exit = Process/wait(child)!;
+            let exit = Process/Child/wait(child)!;
             Try/pure(Str/flatten([text(bytes), "|", Show/show(exit)]))
         "#,
     );
@@ -322,15 +322,15 @@ fn a_piped_output_is_read_through_the_stream_witness() {
     assert_eq!(io.output(), b"hello\n|exited(0)");
 }
 
-// A child holds a pipe for exactly the streams its command piped, whichever of the three they are: an inherited stream and a null one have none.
+// A child holds a pipe for exactly the streams its `Process` piped, whichever of the three they are: an inherited stream and a null one have none.
 #[test]
 fn a_child_holds_a_pipe_for_exactly_the_streams_it_piped() {
     let source = child_program(
         r#"
-            let held(p: Option(Process/Pipe)) -> Str = match p | some(_) => "pipe" | none() => "none" end;
-            let pipes(c: Process) -> Str = Str/join(" ", [held(Process/piped_stdin(c)), held(Process/piped_stdout(c)), held(Process/piped_stderr(c))]);
-            let c = Process/spawn(scope, Process/Command { ..Process/Command/new("greet", []), stdin = Process/Stdio/piped(), stdout = Process/Stdio/null() })!;
-            let d = Process/spawn(scope, Process/Command { ..Process/Command/new("greet", []), stdin = Process/Stdio/null(), stdout = Process/Stdio/piped(), stderr = Process/Stdio/piped() })!;
+            let held(@A: Type, p: Option(A)) -> Str = match p | some(_) => "pipe" | none() => "none" end;
+            let pipes(c: Process/Child) -> Str = Str/join(" ", [held(Process/Child/stdin(c)), held(Process/Child/stdout(c)), held(Process/Child/stderr(c))]);
+            let c = Process/Child/spawn(scope, Process { ..Process/new("greet", []), stdin = Process/Stdio/piped(), stdout = Process/Stdio/null() })!;
+            let d = Process/Child/spawn(scope, Process { ..Process/new("greet", []), stdin = Process/Stdio/null(), stdout = Process/Stdio/piped(), stderr = Process/Stdio/piped() })!;
             Try/pure(Str/join(" | ", [pipes(c), pipes(d)]))
         "#,
     );

@@ -1,5 +1,5 @@
-use /std/{Bool, Byte, Bytes, Nat, Str, List, Option, Result, Path, Try, Io};
-use /std/internal/{Handle, error};
+use /std/{Byte, Bytes, Str, List, Option, Result, Path, Try, Io};
+use /std/internal/{Handle};
 
 --- How a child's standard stream is wired: shared with this process, piped to the parent, or attached to the null device.
 pub induct Stdio: pub Type
@@ -15,162 +15,85 @@ end
 pub mod Exit;
 pub use Exit/{let Exit};
 
---- A program to run, and how to run it.
-pub mod Command;
-pub use Command/{let Command};
-
--- `Pipe` is declared here and not in its module, so that `spawn` builds it and nothing outside this subtree does.
---- One end of a pipe to a child, read and written as a stream.
-pub struct Pipe: Type {
-    Handle,
+--- A program to run, and how to run it: what a child is started from.
+pub struct Process: pub Type {
+    program: Str,
+    args: List(Str),
+    --- The working directory, or the parent's.
+    cwd: Option(Path),
+    --- Entries laid over the inherited environment.
+    env: List({Str, Str}),
+    stdin: Stdio,
+    stdout: Stdio,
+    stderr: Stdio,
 }
 
---- A pipe to one of a child's streams: reading it, writing it and closing it.
-pub mod Pipe;
+--- `program` with `args`, inheriting the working directory, the environment and every stream.
+pub let new(program: Str, args: List(Str)) -> Process =
+    Process {
+        program = program,
+        args = args,
+        cwd = Option/none(),
+        env = [],
+        stdin = Stdio/inherit(),
+        stdout = Stdio/inherit(),
+        stderr = Stdio/inherit() };
 
---- A running child, and whichever of its streams were piped.
-pub struct Process: Type {
-    handle: Handle,
-    stdin: Option(Pipe),
-    stdout: Option(Pipe),
-    stderr: Option(Pipe),
-}
+--- A child this process started: starting it, the pipes to its streams, waiting for it, and ending it.
+pub mod Child;
+pub use Child/{let Child};
 
---- The pipe to the child's standard input, when it was piped.
-pub let piped_stdin(p: Process) -> Option(Pipe) =
-    p.stdin;
+let drain(o: Option(Input)) -> Io(Result(Io/Error, Bytes)) =
+    match o | some(o) => Try/run(Io/read_all(o)) | none() => Io/pure(Result/success(x[])) end;
 
---- The pipe from the child's standard output, when it was piped.
-pub let piped_stdout(p: Process) -> Option(Pipe) =
-    p.stdout;
+let fed(i: Output, input: Bytes) -> Try(Io, Io/Error, {}) =
+    let _ = Io/write(i, input)!;
+    Io/finish(i);
 
---- The pipe from the child's standard error, when it was piped.
-pub let piped_stderr(p: Process) -> Option(Pipe) =
-    p.stderr;
-
-let stdio_of(s: Stdio) -> Nat =
-    match s
-    | inherit() => /sys/stdio_mode/inherit
-    | piped() => /sys/stdio_mode/pipe
-    | null() => /sys/stdio_mode/null
+-- A child that stops reading before its input is all written leaves the rest unread, which is its own to answer for: the broken pipe is no failure of the run.
+let feed(i: Option(Output), input: Bytes) -> Io(Result(Io/Error, {})) =
+    match i
+    | some(i) =>
+        Io/bind(
+            Try/run(fed(i, input)),
+            (r) => Io/pure(match r | failure(broken_pipe()) => Result/success(()) | _ => r end))
+    | none() => Io/pure(Result/success(()))
     end;
 
-let env_entry(entry: {Str, Str}) -> Bytes =
-    x[..Str/to_bytes(entry.0), '=', ..Str/to_bytes(entry.1)];
-
---- Whether `key` can name an environment variable: something, and no `=`, which would end the name early in the `NAME=VALUE` entry it crosses as.
-let names_a_variable(key: Str) -> Bool =
-    match Str/is_empty(key) | true => false | false => Bool/not(Str/contains(key, '=')) end;
-
---- Nothing, or `EINVAL` for an entry whose key names no variable.
-let env_checked(env: List({Str, Str})) -> Result(Io/Error, {}) =
-    match List/all(env, (entry) => names_a_variable(entry.0))
-    | true => Result/success(())
-    | false => Result/failure(Io/Error/other(/sys/errno/inval))
-    end;
-
---- The parent's end of a stream wired as `s`: the pipe the host answered where the stream was piped, and none where it was not, whose slot names nothing.
-let end_of(s: Stdio, handle: Handle) -> Option(Pipe) =
-    match s | piped() => Option/some(Pipe { handle }) | _ => Option/none() end;
-
---- Start a program from its arguments, a working directory, environment entries and a `/sys/stdio_mode` code for each standard stream: `ok` beside the child's handle and a handle for each stream, or the status of the failure.
-foreign proc_spawn(List(Bytes), Bytes, List(Bytes), Nat, Nat, Nat) -> {
-    status: Nat,
-    child: Handle,
-    stdin: Handle,
-    stdout: Handle,
-    stderr: Handle};
-
---- Start `cmd` into `s`: when `s` ends the child is killed if it still runs, and its handle and pipes are closed, so no child outlives the scope it was started in. The child arrives with a pipe for each stream `cmd` piped, in the one call that starts it. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
-pub let spawn(s: Io/Scope, cmd: Command) -> Try(Io, Io/Error, Process) =
-    let _ = env_checked(cmd.env)!;
-    let reply =
-        proc_spawn(
-            [Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)],
-            match cmd.cwd | some(p) => Path/to_bytes(p) | none() => x[] end,
-            List/map(cmd.env, env_entry),
-            stdio_of(cmd.stdin),
-            stdio_of(cmd.stdout),
-            stdio_of(cmd.stderr))!;
-    let spawned =
-        match reply.status == /sys/status/ok
-        | true => Result/success(reply)
-        | false => Result/failure(error(reply.status))
-        end!;
-    let p =
-        Process {
-            handle = spawned.child,
-            stdin = end_of(cmd.stdin, spawned.stdin),
-            stdout = end_of(cmd.stdout, spawned.stdout),
-            stderr = end_of(cmd.stderr, spawned.stderr) };
-    let _ = Io/Scope/defer(s, (_) => release(p))!;
-    Try/pure(p);
-
-let close_pipe(p: Option(Pipe)) -> Io({}) =
-    match p | some(p) => Pipe/close(p) | none() => Io/pure(()) end;
-
-let close_pipes(p: Process) -> Io({}) =
-    let _ = close_pipe(p.stdin)!;
-    let _ = close_pipe(p.stdout)!;
-    close_pipe(p.stderr);
-
---- End this child: `ok`, or the status of the failure.
-foreign proc_kill(Handle) -> Nat;
-
---- The child ended if it still runs. A child the host could not signal is left as it is.
-let killed(p: Process) -> Io({}) =
-    let _ = proc_kill(p.handle)!;
-    Io/pure(());
-
--- End the child if it still runs, then close its handle and its pipes. The kill is the last use of the handle, and the host reaps the process whether or not anything waits for it.
-let release(p: Process) -> Io({}) =
-    let _ = killed(p)!;
-    let _ = Handle/close(p.handle)!;
-    close_pipes(p);
-
---- End the child if it still runs, and close its pipes.
-pub let kill(p: Process) -> Io({}) =
-    let _ = killed(p)!;
-    close_pipes(p);
-
---- How this child ended: `ok` beside its exit code and the signal that ended it, or the status of the failure.
-foreign proc_wait(Handle) -> {status: Nat, code: Nat, signal: Nat};
-
---- How the child ended, waiting until it does. The pipes are closed with it, so read what it wrote before waiting for it.
-pub let wait(p: Process) -> Try(Io, Io/Error, Exit) =
-    let _ = Handle/wait(p.handle, Handle/Interest/readable)!;
-    let reply = proc_wait(p.handle)!;
-    let _ = close_pipes(p)!;
-    match reply.status == /sys/status/ok
-    | true =>
-        Try/pure(
-            match reply.signal == 0
-            | true => Exit/exited(reply.code)
-            | false => Exit/signaled(reply.signal)
-            end)
-    | false => Try/raise(error(reply.status))
-    end;
-
-let drain(p: Option(Pipe)) -> Io(Result(Io/Error, Bytes)) =
-    match p | some(p) => Try/run(Io/read_all(p)) | none() => Io/pure(Result/success(x[])) end;
-
-let capture(p: Process) -> Try(Io, Io/Error, {exit: Exit, stdout: Bytes, stderr: Bytes}) =
-    let (o, e) = Io/both(drain(p.stdout), drain(p.stderr))!;
+let exchange(
+    c: Child,
+    input: Bytes,
+) -> Try(Io, Io/Error, {exit: Exit, stdout: Bytes, stderr: Bytes}) =
+    let (fed, outputs) =
+        Io/both(
+            feed(Child/stdin(c), input),
+            Io/both(drain(Child/stdout(c)), drain(Child/stderr(c))))!;
+    let (o, e) = outputs;
+    let _ = fed!;
     let stdout = o!;
     let stderr = e!;
-    let exit = wait(p)!;
+    let exit = Child/wait(c)!;
     Try/pure((exit = exit, stdout = stdout, stderr = stderr));
 
---- `cmd` run to its end with both outputs captured, and how it ended.
-pub let run(cmd: Command) -> Try(Io, Io/Error, {exit: Exit, stdout: Bytes, stderr: Bytes}) =
+--- `p` run to its end with `input` written to its standard input, which then ends, and both outputs captured, and how it ended. The input is written while the outputs are read, so neither stalls the other.
+pub let run(
+    p: Process,
+    input: Bytes,
+) -> Try(Io, Io/Error, {exit: Exit, stdout: Bytes, stderr: Bytes}) =
     Try/scope((s) =>
         Try/bind(
-            spawn(s, Command { ..cmd, stdout = Stdio/piped(), stderr = Stdio/piped() }),
-            capture));
+            Child/spawn(
+                s,
+                Process {
+                    ..p,
+                    stdin = Stdio/piped(),
+                    stdout = Stdio/piped(),
+                    stderr = Stdio/piped() }),
+            (c) => exchange(c, input)));
 
---- `cmd` run with its streams as wired, and how it ended.
-pub let status(cmd: Command) -> Try(Io, Io/Error, Exit) =
-    Try/scope((s) => Try/bind(spawn(s, cmd), wait));
+--- `p` run with its streams as wired, and how it ended.
+pub let status(p: Process) -> Try(Io, Io/Error, Exit) =
+    Try/scope((s) => Try/bind(Child/spawn(s, p), Child/wait));
 
 --- The process's arguments.
 foreign proc_args() -> List(Bytes);
@@ -198,12 +121,12 @@ foreign proc_exit(Byte) -> Never;
 pub let exit(@A: Type, code: Byte) -> Io(A) =
     proc_exit(code);
 
---- An input stream of this process.
+--- A stream this process reads: its own standard input, or the output of a child it started, piped to it.
 pub struct Input: Type {
     Handle,
 }
 
---- An output stream of this process.
+--- A stream this process writes: its own standard output or error, or the input of a child it started, piped from it.
 pub struct Output: Type {
     Handle,
 }
@@ -227,4 +150,13 @@ satisfy Io/Read(Input) {
 satisfy Io/Write(Output) {
     write(o, b) = Io/write(o.0, b),
     flush(o) = Io/flush(o.0),
+}
+
+let ended(o: Output) -> Try(Io, Io/Error, {}) =
+    let _ = Handle/close(o.0)!;
+    Try/pure(());
+
+--- The reader at the other end reads the end of the stream: the stream is closed, which is the one way a pipe or a standard stream tells its reader it has ended. Writing it after answers `not_found`, as a closed handle does.
+satisfy Io/Finish(Output) {
+    finish(o) = ended(o),
 }

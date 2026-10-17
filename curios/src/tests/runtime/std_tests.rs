@@ -217,19 +217,31 @@ fn filling_one_cell_leaves_another_empty() {
     );
 }
 
-// A handle wrapper is built beneath the module that declares it and nowhere else, so a `Socket`, a `Pipe` or a `Process` a program holds came from a connection or a spawn: none is made of a file's handle or a terminal's, by its literal or by a builder its module publishes.
+// A handle wrapper is built beneath the module that declares it and nowhere else, so a `Socket`, a child or a stream a program holds came from a connection, a spawn or this process's own standard streams: none is made of a file's handle or a terminal's, by its literal or by a builder its module publishes. A process's `Input` and `Output` have no module of their own, and so nowhere to publish one.
 #[test]
 fn a_handle_wrapper_is_built_only_beneath_its_module() {
     let wrappers = [
-        ("use /std/tcp/{Socket};", "Socket", "Socket { h }"),
-        ("use /std/Process/{Pipe};", "Pipe", "Pipe { h }"),
+        ("use /std/tcp/{Socket};", "Socket", "Socket { h }", true),
+        (
+            "use /std/{Process};",
+            "Process/Input",
+            "Process/Input { h }",
+            false,
+        ),
+        (
+            "use /std/{Process};",
+            "Process/Output",
+            "Process/Output { h }",
+            false,
+        ),
         (
             "use /std/{Option, Process};",
-            "Process",
-            "Process { handle = h, stdin = Option/none(), stdout = Option/none(), stderr = Option/none() }",
+            "Process/Child",
+            "Process/Child { handle = h, stdin = Option/none(), stdout = Option/none(), stderr = Option/none() }",
+            true,
         ),
     ];
-    for (imports, wrapper, literal) in wrappers {
+    for (imports, wrapper, literal, published) in wrappers {
         let forged = |built: &str| {
             error(&format!(
                 "{imports}\nforeign token() -> Handle;\nlet forged() -> /std/Io({wrapper}) = /std/Io/bind(token(), (h) => /std/Io/pure({built}));\n/std/print(\"unreachable\")\n"
@@ -241,7 +253,9 @@ fn a_handle_wrapper_is_built_only_beneath_its_module() {
             written.contains("is private to its declaring module"),
             "{written}"
         );
-        let named = forged(&format!("{wrapper}/of_handle(h)"));
-        assert!(named.contains("has no `of_handle`"), "{named}");
+        if published {
+            let named = forged(&format!("{wrapper}/of_handle(h)"));
+            assert!(named.contains("has no `of_handle`"), "{named}");
+        }
     }
 }
