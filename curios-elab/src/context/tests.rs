@@ -1029,14 +1029,18 @@ fn a_sort_is_remembered_by_the_reduction_that_read_it() {
     assert!(context.cached_sort(&judged).is_some());
 }
 
-/// A rollback that withdrew level constraints clears the reducts where a judgment's reduction put a question to conversion inside the scope, and only there. A question is answered on the constraints that stand, so a reduct taken inside may rest on one the rollback withdraws; a scope that asked nothing leaves the reducts alone, no rule of reduction reading a level.
+/// A rollback that withdrew level constraints clears the reducts where a judgment's reduction put a question to conversion inside the scope, and only there. A question is answered on the constraints that stand, so a reduct taken inside may rest on one the rollback withdraws; a scope that asked nothing leaves the reducts alone, no rule of reduction reading a level. A reduct over a term that names no local is kept either way: reduction asks conversion nothing about one.
 ///
 /// Mutation-checked both ways: with the reducts kept whatever was asked, the second scope's reduct outlives its constraint, and with them cleared whatever was asked, the first scope loses a reduct it had no reason to.
 #[test]
 fn a_rollback_that_withdrew_a_level_constraint_clears_what_a_question_may_rest_on() {
     let mut context = context();
     let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
-    let sum = Term::intrinsic(Intrinsic::nat_add(literal(1), literal(2)));
+    let x = context.fresh(Some("x"));
+    context.assume(&x, &nat());
+    let sum = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), literal(2)));
+    let closed = Term::intrinsic(Intrinsic::nat_add(literal(1), literal(2)));
+    context.reduce(closed.clone(), &literal(3));
     let this = Level::meta(context.universes_mut().fresh(UniverseRole::Flexible, None));
     let that = Level::meta(context.universes_mut().fresh(UniverseRole::Flexible, None));
     let equate = |context: &mut Context| {
@@ -1050,14 +1054,14 @@ fn a_rollback_that_withdrew_a_level_constraint_clears_what_a_question_may_rest_o
             .expect("two fresh levels may be one");
     };
 
-    context.reduce(sum.clone(), &literal(3));
+    context.reduce(sum.clone(), &sum);
     let mark = context.solution_mark();
     equate(&mut context);
     context.rollback_solutions(mark);
     context.end_solutions(mark);
     assert_eq!(
         context.cached_reduced(&sum),
-        Some(literal(3)),
+        Some(sum.clone()),
         "no question was asked inside the scope"
     );
 
@@ -1067,4 +1071,5 @@ fn a_rollback_that_withdrew_a_level_constraint_clears_what_a_question_may_rest_o
     context.rollback_solutions(mark);
     context.end_solutions(mark);
     assert_eq!(context.cached_reduced(&sum), None);
+    assert_eq!(context.cached_reduced(&closed), Some(literal(3)));
 }

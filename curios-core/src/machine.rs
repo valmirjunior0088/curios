@@ -82,33 +82,91 @@ pub trait ClosedHost: Reducer {
 /// What closed runs have answered, by the closed term asked: the machine's memo, which its host keeps past the run that filled it.
 ///
 /// A closed term has one value at a demand under one definition store, whichever run finds it, so an entry answers every later run its host makes while that store stands. The second asking of a term a run evaluated on the way to something else — an equation's side, run to form the equation's type and asked again by conversion — is then a probe.
+///
+/// **An answer has one of two lives**, as a host's reducts do. One whose term and value are both [`lasting`] is the definition store's alone and stands for the declaration, whatever the host's scope does around it. Any other may rest on what a host rewrites in place, a level or a solution reached through a definition still being elaborated, and goes wherever the host's scoped answers go ([`ClosedMemo::clear_scoped`]).
 #[derive(Debug, Default)]
 pub struct ClosedMemo {
+    /// The answers that stand for the declaration.
+    lasting: Answers,
+    /// The answers that go with the host's scope.
+    scoped: Answers,
+}
+
+/// One life's answers, a table for each demand.
+#[derive(Debug, Default)]
+struct Answers {
     /// Values produced at the plain demand, keyed on the term as focused — intrinsic reducts among them, see [`Finish::Intrinsic`] for the chain it exists to keep linear. Each insertion is charged before it is made.
     values: HashMap<Term, Term>,
-    /// Values produced at the forced demand. Kept apart because a term's value differs by demand exactly where a recursive call is involved: forced, a call is the value its fold computes; plain, it is the folded call itself. A plain request reads [`ClosedMemo::values`] alone, and a forced one either table, since a weak-head value that is not a folded spelling is its own forced form and a folded one is never recorded.
+    /// Values produced at the forced demand. Kept apart because a term's value differs by demand exactly where a recursive call is involved: forced, a call is the value its fold computes; plain, it is the folded call itself. A plain request reads [`Answers::values`] alone, and a forced one either table, since a weak-head value that is not a folded spelling is its own forced form and a folded one is never recorded.
     forced: HashMap<Term, Term>,
+}
+
+impl Answers {
+    fn clear(&mut self) {
+        self.values.clear();
+        self.forced.clear();
+    }
+
+    fn retain_without(&mut self, name: &Free) {
+        self.values.retain(|_, value| !value.mentions_free(name));
+        self.forced.retain(|_, value| !value.mentions_free(name));
+    }
+
+    fn plain(&self, term: &Term) -> Option<&Term> {
+        self.values.get(term)
+    }
+
+    fn forced(&self, term: &Term) -> Option<&Term> {
+        self.forced.get(term)
+    }
 }
 
 impl ClosedMemo {
     /// Forget every answer.
     pub fn clear(&mut self) {
-        self.values.clear();
-        self.forced.clear();
+        self.lasting.clear();
+        self.scoped.clear();
+    }
+
+    /// Forget every answer that does not stand for the declaration.
+    pub fn clear_scoped(&mut self) {
+        self.scoped.clear();
     }
 
     /// Forget every answer that names `name`: a name defined since can only move a value that read its absence, and a value that did holds the name.
     pub fn retain_without(&mut self, name: &Free) {
-        self.values.retain(|_, value| !value.mentions_free(name));
-        self.forced.retain(|_, value| !value.mentions_free(name));
+        self.lasting.retain_without(name);
+        self.scoped.retain_without(name);
     }
 
     fn remembered(&self, term: &Term, demand: Demand) -> Option<&Term> {
+        let plain = || self.lasting.plain(term).or_else(|| self.scoped.plain(term));
         match demand {
-            Demand::Whnf => self.values.get(term),
-            Demand::Forced => self.forced.get(term).or_else(|| self.values.get(term)),
+            Demand::Whnf => plain(),
+            Demand::Forced => self
+                .lasting
+                .forced(term)
+                .or_else(|| self.scoped.forced(term))
+                .or_else(plain),
         }
     }
+
+    /// Remember `value` as what `key` evaluates to at `demand`, in the life the two give the answer.
+    fn remember(&mut self, key: Term, value: Term, demand: Demand) {
+        let answers = match lasting(&key) && lasting(&value) {
+            true => &mut self.lasting,
+            false => &mut self.scoped,
+        };
+        match demand {
+            Demand::Whnf => answers.values.insert(key, value),
+            Demand::Forced => answers.forced.insert(key, value),
+        };
+    }
+}
+
+/// Whether an answer about `term` can be the definition store's alone: it names no local, no metavariable and no universe metavariable. A host may rewrite a level or unwind a solution in place, and reads a local through its scope, so an answer naming none of them is one no change of scope reaches.
+pub fn lasting(term: &Term) -> bool {
+    !term.has_local_free() && !term.has_metavar() && !term.has_universe_meta()
 }
 
 /// Whether `term` is in the machine's domain: no local frees and no metavariables, read off the per-node cached bits in O(1). It is the whole gate, an arm's equations included: see the module documentation.
@@ -593,8 +651,7 @@ impl Machine {
                         let value = Term::from(Subterm::Func(func));
                         host.spend(Cost::buffer(2))?;
                         host.closed_memo()
-                            .values
-                            .insert(value.clone(), value.clone());
+                            .remember(value.clone(), value.clone(), Demand::Whnf);
                         Ok(Step::Value(value))
                     }
                 }
@@ -746,11 +803,7 @@ impl Machine {
                 if !folded {
                     // One entry of two `Term` handles, on the buffer row, charged before the write.
                     host.spend(Cost::buffer(2))?;
-                    let memo = host.closed_memo();
-                    match demand {
-                        Demand::Whnf => memo.values.insert(key, value.clone()),
-                        Demand::Forced => memo.forced.insert(key, value.clone()),
-                    };
+                    host.closed_memo().remember(key, value.clone(), demand);
                 }
 
                 Ok(Step::Value(value))
@@ -849,8 +902,8 @@ impl Machine {
                 // Two entries of two `Term` handles each, on the buffer row, charged before they are made. The self-entry is what makes a *rebuilt* neutral — a chain link — recognizable as already evaluated when it comes back around as somebody's operand.
                 host.spend(Cost::buffer(4))?;
                 let memo = host.closed_memo();
-                memo.values.insert(value.clone(), value.clone());
-                memo.values.insert(key, value.clone());
+                memo.remember(value.clone(), value.clone(), Demand::Whnf);
+                memo.remember(key, value.clone(), Demand::Whnf);
 
                 Ok(Step::Value(value))
             }
