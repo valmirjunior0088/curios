@@ -1,4 +1,4 @@
-//! The evaluation memos: what a term weak-head reduces to, the sort a type inhabits, the type inferred for a term, the type a term was checked at and whether two terms converted — each for the rest of the declaration where it is a function of the declaration alone, and otherwise for as long as what it read of the scope stands.
+//! The evaluation memos: what a term weak-head reduces to, what classifying a stuck operation found, the sort a type inhabits, the type inferred for a term, the type a term was checked at and whether two terms converted — each for the rest of the declaration where it is a function of the declaration alone, and otherwise for as long as what it read of the scope stands.
 //!
 //! This is not the kind of store the [`kernel`](super) module documentation warns about. A metavariable heap or a refinement layer *injects* answers a term alone could not produce; a memo replays the kernel's own pure function of `(term, definitions)`, computed once. Refusing even that multiplies the cost of a whole-prelude re-check, spent re-deriving the same prelude spines for every recursive group the totality gate walks; `curios-prelude-archive`'s `kernel_memo_parity` runs that walk both ways.
 //!
@@ -20,10 +20,10 @@
 
 use {
     super::{Prefix, Sort},
-    curios_analysis::Erased,
+    curios_analysis::{Classification, Erased},
     curios_core::{Bound, ClosedMemo, Term},
     curios_utilities::Keyed,
-    std::{collections::HashMap, hash::Hash, mem},
+    std::{collections::HashMap, hash::Hash, mem, rc::Rc},
 };
 
 /// How long a remembered answer stands.
@@ -113,6 +113,9 @@ pub(super) struct Memos {
     converted: [Lives<Compared, bool>; 2],
     /// What the closed machine's runs have answered ([`ClosedMemo`]): a closed term's value is a function of the definition store, as a local-free reduct is, and lives the declaration with them. With the memos off it lives one run ([`Memos::begin_closed_run`]), which the machine cannot do without: a fold over a neutral accumulator is linear by it.
     closed: ClosedMemo,
+    /// What classifying each stuck operation found (`curios_analysis::Classification`), by the operation as reduction left it, for the stuck fold above it to extend rather than walk the operation again. One no conversion class entered reads the operation alone — its walk reduces nothing and asks nothing — so it lives the declaration, local-bearing as the operation is; one the kernel's conversion classed rests on what that question read, the equations in force and the types the locals stand at, as a local-bearing reduct does, and lives as long as they ([`Memos::begin_equations`]). Only a judgment's reduction takes a stuck fold again, so there is no table for plain reduction.
+    classifications: HashMap<Term, Rc<Classification>>,
+    classified: HashMap<Term, Rc<Classification>>,
 }
 
 impl Memos {
@@ -129,7 +132,32 @@ impl Memos {
             checked: Lives::new(),
             converted: [Lives::new(), Lives::new()],
             closed: ClosedMemo::default(),
+            classifications: HashMap::new(),
+            classified: HashMap::new(),
         }
+    }
+
+    /// What classifying the stuck operation `term` found, where it is remembered.
+    pub(super) fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
+        if !self.enabled {
+            return None;
+        }
+        self.classifications
+            .get(term)
+            .or_else(|| self.classified.get(term))
+            .cloned()
+    }
+
+    /// Remember what classifying the stuck operation `term` found, for as long as what it read stands.
+    pub(super) fn store_classification(&mut self, term: Term, classification: Classification) {
+        if !self.enabled {
+            return;
+        }
+        let table = match classification.classed() {
+            true => &mut self.classified,
+            false => &mut self.classifications,
+        };
+        table.insert(term, Rc::new(classification));
     }
 
     /// The remembered weak-head reduct of `term` at the given entry point, as plain reduction took it where `plain` and as a judgment's did otherwise.
@@ -328,6 +356,7 @@ impl Memos {
         self.whnf.clear();
         self.forced.clear();
         self.closed.clear();
+        self.classifications.clear();
         for sorts in &mut self.sorts {
             sorts.begin_declaration();
         }
@@ -340,11 +369,12 @@ impl Memos {
         self.begin_equations();
     }
 
-    /// Discard what was read off the scope: the local-bearing reducts, and the scoped sorts, types, checks and verdicts. Called wherever the set of case equations in force changes and wherever a local is re-typed, by an arm or by the bracket that closes it: the two things besides the definition store that each is a function of.
+    /// Discard what was read off the scope: the local-bearing reducts, the classifications the kernel's conversion classed, and the scoped sorts, types, checks and verdicts. Called wherever the set of case equations in force changes and wherever a local is re-typed, by an arm or by the bracket that closes it: the two things besides the definition store that each is a function of.
     pub(super) fn begin_equations(&mut self) {
         for table in self.local.iter_mut().chain(&mut self.local_forced) {
             table.clear();
         }
+        self.classified.clear();
         for sorts in &mut self.sorts {
             sorts.begin_equations();
         }

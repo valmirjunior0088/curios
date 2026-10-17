@@ -51,7 +51,7 @@ pub(crate) use whnf::*;
 
 use {
     crate::{Baseline, entails, erased_half, instantiate_qualities},
-    curios_analysis::{DeclaredPart, Env, Erased, Judge, MemberLabel},
+    curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel},
     curios_core::{
         Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
         LevelHead, Lexicon, Module, Polarity, Probe, Quality, Reads, ReduceError, Reducer,
@@ -768,6 +768,16 @@ impl<'s> Kernel<'s> {
     pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, reduct: Term) {
         self.memos
             .store_whnf(term, forced, self.scope.plain(), reduct);
+    }
+
+    /// What classifying the stuck operation `term` found, where it is remembered ([`Memos::classification`]).
+    pub(crate) fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
+        self.memos.classification(term)
+    }
+
+    /// Remember what classifying the stuck operation `term` found, stored for nothing as a reduct is ([`Kernel::whnf_store`]).
+    pub(crate) fn keep_classification(&mut self, term: Term, classification: Classification) {
+        self.memos.store_classification(term, classification);
     }
 
     /// The heaviest declaration this kernel has walked — what it spent, and how deep it went.

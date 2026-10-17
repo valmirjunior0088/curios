@@ -8,6 +8,7 @@
 
 use {
     crate::Sort,
+    curios_analysis::Classification,
     curios_core::{
         Bound, ClosedMemo, Enter, Families, Free, Global, InductDecl, Level, LevelHead, Quality,
         QualityMetaId, Rec, RecGroup, StructDecl, Subterm, Term, UniverseError, UniverseMetaId,
@@ -69,6 +70,9 @@ pub(crate) struct Caches {
     reduction_erased: [HashMap<Term, Term>; 2],
     /// What the closed machine's runs have answered ([`ClosedMemo`]), one for each of the two reductions as the reducts have: discarded and kept wherever they are.
     closed: [ClosedMemo; 2],
+    /// What classifying each stuck operation found (`curios_analysis::Classification`), by the operation as reduction left it, for the stuck fold above it to extend rather than walk the operation again. One no conversion class entered reads the operation alone — its walk reduces nothing and asks nothing — so it stands for the declaration and goes with every table at [`Caches::begin_declaration`]; one the elaborator's conversion classed rests on what that question read, as a judgment's reduct does, and goes wherever the reducts go. Only a judgment's reduction takes a stuck fold again, so there is no table for plain reduction.
+    classifications: HashMap<Term, Rc<Classification>>,
+    classified: HashMap<Term, Rc<Classification>>,
     /// The sort of each type classified since the context was last written to — `Sort::of_in`'s own answer, remembered so that a type whose graph shares a field is classified once per node where the walk alone classifies it once per path.
     ///
     /// **Valid for a quiet stretch, and that is as long as it needs to be.** A sort is derived by reduction and reads more besides: the type a local is assumed at, what a metavariable is solved to and has for a type, a declaration's sort, the levels the universe solver holds. Each of those changes by a stamped write, by a frame's exit — which closes binders and stamps nothing — or where a reduct is cleared, so the table is emptied at the first probe after either stamp has moved, wherever a frame is left, and wherever the reducts are. One classification does none of the three: it opens its binders beside the context rather than in it, which is why `Sort::of_in` threads them, and it is the classification that is per path without the table.
@@ -215,7 +219,24 @@ impl Caches {
         self.reduction[plain].insert(term, reduct);
     }
 
-    /// Every reduct of both reductions, the second doors indexing them, the sorts read through them, and the scrutinees remembered as the kernel spells them.
+    /// What classifying the stuck operation `term` found, where it is remembered.
+    pub(crate) fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
+        self.classifications
+            .get(term)
+            .or_else(|| self.classified.get(term))
+            .cloned()
+    }
+
+    /// Remember what classifying the stuck operation `term` found, for as long as what it read stands: stored for nothing, as a reduct is.
+    pub(crate) fn classification_insert(&mut self, term: Term, classification: Classification) {
+        let table = match classification.classed() {
+            true => &mut self.classified,
+            false => &mut self.classifications,
+        };
+        table.insert(term, Rc::new(classification));
+    }
+
+    /// Every reduct of both reductions, the second doors indexing them, the classifications the elaborator's conversion classed, the sorts read through them, and the scrutinees remembered as the kernel spells them.
     fn clear_reductions(&mut self) {
         for table in self.reduction.iter_mut().chain(&mut self.reduction_erased) {
             table.clear();
@@ -223,6 +244,7 @@ impl Caches {
         for closed in &mut self.closed {
             closed.clear();
         }
+        self.classified.clear();
         self.clear_sorts();
         self.kernel_spellings.get_mut().clear();
     }
@@ -298,6 +320,7 @@ impl Caches {
         self.proofs.clear();
         self.instances.clear();
         self.opened.get_mut().clear();
+        self.classifications.clear();
         self.clear_reductions();
         self.clear_elaborations();
     }

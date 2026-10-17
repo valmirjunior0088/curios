@@ -18,8 +18,8 @@ use {
         Apply, Argument, Atom, Bang, Carrier, Cases, Exhaustion, Field, Free, Global, InductArm,
         InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic, Level, Many,
         Match, MatchResult, Matrix, Metavar, MetavarId, MetavarOrigin, Nat, Pattern, Polarity,
-        Proj, Rec, Row, Scope, Struct, StructEntry, StructType, Subterm, Telescope, Term, Three,
-        Totality, Transient, Tuple, Two, UniverseContext, Universes, Var, Variant,
+        Proj, Rec, Reducer, Row, Scope, Struct, StructEntry, StructType, Subterm, Telescope, Term,
+        Three, Totality, Transient, Tuple, Two, UniverseContext, Universes, Var, Variant,
     },
     curios_num::{Grain, Integer, Natural, Rounding},
     curios_utilities::{InfixOp, Plicity, Qualifier},
@@ -1903,4 +1903,41 @@ fn an_equation_hands_back_what_its_checker_is_to_ask() {
         answers(&mut kernel, &projected, &call(&f, &a, &b), &nat(0)),
         Ok(Answered::Silent)
     );
+}
+
+/// A long sum of stuck operations, its later summands each a commuted spelling of an earlier one, reduces to one reduct with the kernel's memos and without: what each stuck fold's classification files for the fold above it to extend is what a walk of the whole operation would take (`curios_analysis::Classification`).
+#[test]
+fn a_spine_of_stuck_folds_reduces_alike_with_its_classifications_kept_and_without() {
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let locals = (0..24)
+        .map(|at| Free::local(500 + at, Some("x")))
+        .collect::<Vec<_>>();
+    let and = |left: &Free, right: &Free| {
+        Term::intrinsic(Intrinsic::NatAnd(
+            Term::free_var(left),
+            Term::free_var(right),
+        ))
+    };
+    let summands = locals
+        .chunks(2)
+        .map(|pair| and(&pair[0], &pair[1]))
+        .chain(locals.chunks(2).rev().map(|pair| and(&pair[1], &pair[0])));
+    let sum = summands
+        .reduce(|left, right| Term::intrinsic(Intrinsic::nat_add(left, right)))
+        .expect("a summand");
+    let difference = Term::intrinsic(Intrinsic::nat_sub(Term::free_var(&locals[0]), sum.clone()));
+
+    let reduced = |mut kernel: Kernel, term: &Term| {
+        for local in &locals {
+            kernel.assume(local, &nat_type);
+        }
+        kernel.reduce_forced(term.clone())
+    };
+    for term in [sum, difference] {
+        assert_eq!(
+            reduced(Kernel::new(10_000_000, SYNTAX), &term),
+            reduced(Kernel::uncached(10_000_000, SYNTAX), &term),
+            "{term}"
+        );
+    }
 }

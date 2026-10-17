@@ -23,7 +23,7 @@ use {
     super::{Kernel, asked_classes, asked_within, stated_payload, unread_payload},
     crate::{
         accelerable, answers, answers_classed, atoms_within, instantiate_universes_scoped,
-        probe_spellings, reduce_closed, reduce_intrinsic, refold,
+        probe_spellings, read_operands, reduce_closed, reduce_intrinsic, refold,
     },
     curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS},
     curios_core::{
@@ -343,6 +343,8 @@ fn answered(
 /// **Reduction asks conversion here, and at a missed equation, and nowhere else.** A fold pairs atoms by identity, so two atoms that convert without being identical — a call under two proofs of its bound, two calls whose arguments commute a sum — left `f(a + b) == f(b + a)` stuck where conversion holds its sides one term, and conversion was no congruence under the fold. Each checker asks its own conversion, the elaborator's reducer at the same point.
 ///
 /// **Only of a term that names a local, and never by plain reduction.** A local-free term's reduct is remembered for the declaration and must be one function of the definition store whichever reduction takes it, so nothing is asked of it; and plain reduction asks nothing at all ([`Kernel::plainly`]), which is what answers a question and what a shared analysis reads by.
+///
+/// **What a stuck fold's walk found is kept for the fold above it.** A reduction folds a spine from its leaves, so each operand of a stuck operation was a stuck operation a moment before: its classification is looked up ([`Kernel::classification`]) and extended, and the operation's own is filed where its fold stands, so a long spine is classified once and not once for each level.
 fn refolded(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceError> {
     if kernel.plain() || !value.has_local_free() {
         return Ok(None);
@@ -350,7 +352,12 @@ fn refolded(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceErr
     let Subterm::Intrinsic(operation) = &**value else {
         return Ok(None);
     };
-    let mut within = atoms_within(kernel, operation, &[])?;
+    // What each operand's own stuck fold found, so the walk extends it rather than walking the operand again.
+    let kept = read_operands(operation)
+        .iter()
+        .map(|operand| kernel.classification(operand))
+        .collect::<Vec<_>>();
+    let mut within = atoms_within(kernel, operation, &kept)?;
     match within.classable() {
         true => {
             // What a stuck fold puts to conversion: the atoms it pairs, where some two may be one.
@@ -360,7 +367,12 @@ fn refolded(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceErr
         // Nothing is put to conversion, and the readers still class the operation's nodes.
         false => within.open(),
     }
-    let (folded, _) = refold(kernel, operation, within, &[])?;
+    let (folded, classification) = refold(kernel, operation, within, &kept)?;
+    if folded.is_none()
+        && let Some(classification) = classification
+    {
+        kernel.keep_classification(value.clone(), classification);
+    }
     Ok(folded)
 }
 

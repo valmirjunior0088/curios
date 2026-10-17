@@ -70,7 +70,7 @@ use {
         Published, Refusal, Sort, hold_at_one_instance, key_spelling, metavar_spines,
         read_by_value, shallow_scrutinee, zonk, zonk_solved_term_metas,
     },
-    curios_analysis::{Unfolding, records_case_equation},
+    curios_analysis::{Classification, Unfolding, records_case_equation},
     curios_core::{
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Definition, DefinitionKind,
         Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl,
@@ -783,6 +783,25 @@ impl<'s> Context<'s> {
             self.typing
                 .caches
                 .reduction_insert(term, result.clone(), self.typing.asking.plain());
+        }
+    }
+
+    /// What classifying the stuck operation `term` found, where it is remembered ([`Caches::classification`]).
+    pub(crate) fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
+        self.typing.caches.classification(term)
+    }
+
+    /// Remember what classifying the stuck operation `term` found, unless a question was declined for a commit since `declined` was read, where the classing began: a classification its conversion classed across a declined question is one a later solution can change, as a reduct taken across one is (`reduce`'s `remember`). One no question entered reads the operation alone and is kept.
+    pub(crate) fn keep_classification(
+        &mut self,
+        term: Term,
+        classification: Classification,
+        declined: u64,
+    ) {
+        if term.closed() && (!classification.classed() || self.declined() == declined) {
+            self.typing
+                .caches
+                .classification_insert(term, classification);
         }
     }
 
