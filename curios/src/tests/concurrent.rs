@@ -20,12 +20,12 @@ fn a_read_waits_and_resumes_across_a_chunk_boundary() {
         .build();
     run_text(
         r#"
-        use /std/{Str, Show, Try, Io};
+        use /std/{Str, Show, Try, Io, Process};
         use /std/tcp/{Socket};
         let program() -> Io({}) =
             let r = Try/run(Socket/call(Socket/connect("example.com", 80), Str/to_bytes("GET /\r\n\r\n")))!;
             match r
-            | success(response) => Io/bind(Try/run(Io/write(Io/stdout, response)), (_) => Io/pure(()))
+            | success(response) => Io/bind(Try/run(Io/write(Process/stdout, response)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program()
@@ -42,11 +42,11 @@ fn a_stream_read_sequences_into_a_write() {
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     run_text(
         r#"
-        use /std/{Io, Try};
+        use /std/{Io, Try, Process};
         let program() -> Io({}) =
-            let r = Try/run(Io/read(Io/stdin, 1024))!;
+            let r = Try/run(Io/read(Process/stdin, 1024))!;
             match r : (_) => Io({})
-            | success(bytes(bytes, @_)) => Io/bind(Try/run(Io/write(Io/stdout, bytes)), (_) => Io/pure(()))
+            | success(bytes(bytes, @_)) => Io/bind(Try/run(Io/write(Process/stdout, bytes)), (_) => Io/pure(()))
             | success(ended()) => Io/pure(())
             | failure(_) => Io/pure(())
             end;
@@ -159,12 +159,12 @@ fn constructing_a_read_performs_no_effect() {
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     run_text(
         r#"
-        use /std/{Str, Io, Try};
-        let discarded: Try(Io, Io/Error, Io/Chunk) = Io/read(Io/stdin, 100);
+        use /std/{Str, Io, Try, Process};
+        let discarded: Try(Io, Io/Error, Io/Chunk) = Io/read(Process/stdin, 100);
         let entry() -> /std/Io({}) =
-            let r = Try/run(Io/read(Io/stdin, 100))!;
+            let r = Try/run(Io/read(Process/stdin, 100))!;
             match r : (_) => /std/Io({})
-            | success(bytes(bytes, @_)) => Io/bind(Try/run(Io/write(Io/stdout, bytes)), (_) => Io/pure(()))
+            | success(bytes(bytes, @_)) => Io/bind(Try/run(Io/write(Process/stdout, bytes)), (_) => Io/pure(()))
             | success(ended()) => /std/print("<eof>")
             | failure(_) => /std/print("<err>")
             end;

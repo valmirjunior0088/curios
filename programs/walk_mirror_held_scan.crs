@@ -89,7 +89,7 @@ let total(n: Nat) -> Nat =
     iterate(n, text_of(n), 0);
 
 let entry() -> /std/Io({}) =
-    let arguments = /std/proc/args()!;
+    let arguments = /std/Process/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input: (_) => Io({})
     | some(bytes) =>

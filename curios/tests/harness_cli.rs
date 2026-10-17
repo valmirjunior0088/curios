@@ -50,10 +50,10 @@ test equality_fails =
     Test/equal(double(2), 5);
 
 test overflow_traps =
-    Test/perform(() => let v = /std/proc/env("CURIOS_UNSET_OVERFLOW")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)));
+    Test/perform(() => let v = /std/Process/env("CURIOS_UNSET_OVERFLOW")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)));
 
 test exits_seven =
-    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/assert(true)));
+    Test/perform(() => let _ = /std/Process/exit(@{}, 7)!; Io/pure(Test/assert(true)));
 
 test effect_passes =
     Test/perform(() => let s = Io/pure("x")!; Io/pure(Test/equal(s, "x")));
@@ -123,8 +123,8 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "/app/addition_passes: passed\n",
             "/app/equality_fails: failed\n  expected 5 but got 4\n    Test/equal(double(2), 5)\n",
             "/app/overflow_traps: trapped\n",
-            "    Test/perform(() => let v = /std/proc/env(\"CURIOS_UNSET_OVERFLOW\")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)))\n",
-            "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
+            "    Test/perform(() => let v = /std/Process/env(\"CURIOS_UNSET_OVERFLOW\")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)))\n",
+            "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/Process/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
             "/app/effect_passes: passed\n",
             "3 passed, 1 failed, 1 trapped, 1 exited\n",
         ],
@@ -161,13 +161,13 @@ fn a_test_that_exits_before_it_reports_is_exited_whatever_its_code() {
     write(
         &root,
         "lib.crs",
-        r#"use /std/{Test, proc};
+        r#"use /std/{Test, Process};
 
 test quits_early =
-    Test/perform(() => proc/exit(@Test({}), 0));
+    Test/perform(() => Process/exit(@Test({}), 0));
 
 test fails_quietly =
-    Test/perform(() => proc/exit(@Test({}), 1));
+    Test/perform(() => Process/exit(@Test({}), 1));
 "#,
     );
     write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
@@ -176,7 +176,7 @@ test fails_quietly =
 
     assert_eq!(
         stdout(&output),
-        "/app/quits_early: exited 0\n    Test/perform(() => proc/exit(@Test({}), 0))\n/app/fails_quietly: exited 1\n    Test/perform(() => proc/exit(@Test({}), 1))\n0 passed, 0 failed, 2 exited\n",
+        "/app/quits_early: exited 0\n    Test/perform(() => Process/exit(@Test({}), 0))\n/app/fails_quietly: exited 1\n    Test/perform(() => Process/exit(@Test({}), 1))\n0 passed, 0 failed, 2 exited\n",
         "stderr: {}",
         stderr(&output)
     );
@@ -304,14 +304,14 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
     );
 }
 
-/// `/std/proc/args` promises opaque byte strings, so an argument that is not UTF-8 reaches the program as its bytes rather than being refused at the command line; the program spells each argument in hex through `Show` on `Bytes`.
+/// `/std/Process/args` promises opaque byte strings, so an argument that is not UTF-8 reaches the program as its bytes rather than being refused at the command line; the program spells each argument in hex through `Show` on `Bytes`.
 #[test]
 fn run_forwards_an_argument_that_is_not_utf8_as_its_bytes() {
     let root = temporary("args");
     write(
         &root,
         "args.crs",
-        "use /std/{Str, Bytes, List, Show, Io, proc};\nlet main() -> Io({}) =\nlet args = proc/args()!;\nlet rest: List(Bytes) = match args | [] => [] | [first, ..tail] => tail end;\n/std/print(Str/join(\" \", List/map(rest, (a: Bytes) => Show/show(a))));\nmain()\n",
+        "use /std/{Str, Bytes, List, Show, Io, Process};\nlet main() -> Io({}) =\nlet args = Process/args()!;\nlet rest: List(Bytes) = match args | [] => [] | [first, ..tail] => tail end;\n/std/print(Str/join(\" \", List/map(rest, (a: Bytes) => Show/show(a))));\nmain()\n",
     );
     let output = Command::new(env!("CARGO_BIN_EXE_curios"))
         .current_dir(&root)

@@ -111,10 +111,10 @@ fn list_spread_operand_hoists_bangs() {
 fn bin_spread_concats_segments() {
     // `x[0x01, ..b, 0x04]` splices the bytes of `b` between the literal runs, and the glued suffix chain admits a call operand (`\..Bytes/slice(...)`).
     let source = r#"
-        use /std/{Nat, Bytes, Io, Try};
+        use /std/{Nat, Bytes, Io, Try, Process};
         let b : Bytes = x[0x02, 0x03];
         let entry() -> /std/Io({}) =
-            let _ = Try/run(Io/write(Io/stdout, x[0x01, ..b, 0x04, ..Bytes/slice(b, 1, 1)]))!;
+            let _ = Try/run(Io/write(Process/stdout, x[0x01, ..b, 0x04, ..Bytes/slice(b, 1, 1)]))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -124,11 +124,11 @@ fn bin_spread_concats_segments() {
 #[test]
 fn bin_spread_identity_and_multi() {
     let source = r#"
-        use /std/{Bytes, Io, Try};
+        use /std/{Bytes, Io, Try, Process};
         let b : Bytes = x[0x48, 0x65];
         let c : Bytes = x[..b];
         let entry() -> /std/Io({}) =
-            let _ = Try/run(Io/write(Io/stdout, x[..c, ..c]))!;
+            let _ = Try/run(Io/write(Process/stdout, x[..c, ..c]))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -155,10 +155,10 @@ fn bin_spread_operand_hoists_bangs() {
     // The `Bytes` sibling of `list_spread_operand_hoists_bangs`, through the dedicated `Intrinsic::Bytes` collect arm — the glued `!` binds to the operand.
     assert_eq!(
         run(r#"
-        use /std/{Bytes, Io, Try};
+        use /std/{Bytes, Io, Try, Process};
         let prog() -> Io({}) =
             let out : Bytes = x[0x3e, ..Io/pure(x[0x68, 0x69])!, 0x3c];
-            let wrote = Try/run(Io/write(Io/stdout, out))!;
+            let wrote = Try/run(Io/write(Process/stdout, out))!;
             Io/pure(());
         prog()
         "#),

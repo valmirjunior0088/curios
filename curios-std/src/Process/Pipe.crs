@@ -1,5 +1,5 @@
 use /std/{Io, Handle};
-use /std/Command/{Pipe};
+use /std/Process/{Pipe};
 
 --- Close this end.
 pub let close(p: Pipe) -> Io({}) =

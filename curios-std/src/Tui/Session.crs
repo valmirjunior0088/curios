@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Bool, List, Option, Result, Io, Try, Tty};
+use /std/{Nat, Bytes, Bool, List, Option, Result, Io, Try, Tty, Process};
 use /std/Io/{Reader};
 use /std/Io/Reader/{Step, Stop};
 use /std/time/{Duration};
@@ -13,13 +13,13 @@ struct Held: Type {
 --- A terminal taken: what it remembers between draws and reads.
 pub struct Session: Type {
     tty: Tty,
-    input: Reader(Io/Input),
+    input: Reader(Process/Input),
     previous: Option(Held),
     size: Tty/Size,
 }
 
 let enter: Try(Io, Io/Error, {}) =
-    Io/write(Io/stdout, x[
+    Io/write(Process/stdout, x[
         ..ansi/alternate_on,
         ..ansi/cursor_hide,
         ..ansi/paste_on,
@@ -29,7 +29,7 @@ let enter: Try(Io, Io/Error, {}) =
 let leave() -> Io({}) =
     let _ =
         Try/run(
-            Io/write(Io/stdout, x[
+            Io/write(Process/stdout, x[
                 ..ansi/kitty_pop,
                 ..ansi/paste_off,
                 ..ansi/cursor_show,
@@ -41,7 +41,7 @@ pub let with(@A: Type, body: (Session) -> Try(Io, Io/Error, A)) -> Try(Io, Io/Er
     let t = Tty/stdin;
     let entered() -> Try(Io, Io/Error, A) =
         let first = Tty/size(t)!;
-        let input = Reader/new(Io/stdin)!;
+        let input = Reader/new(Process/stdin)!;
         let s = Session { tty = t, input = input, previous = Option/none(), size = first };
         let _ = enter!;
         let outcome = Io/using((_) => leave(), Try/run(body(s)))!;
@@ -79,7 +79,7 @@ pub let draw(
             | false => Option/none()
             end
         end;
-    let _ = Try/run(Io/write(Io/stdout, render(before, frame, cursor)))!;
+    let _ = Try/run(Io/write(Process/stdout, render(before, frame, cursor)))!;
     Io/pure(Session { ..s, previous = Option/some(Held { w = w, h = h, frame = frame }) });
 
 -- One arrival of input and the events it completes, what it leaves undecoded staying held: the state is whether the arrival has come.

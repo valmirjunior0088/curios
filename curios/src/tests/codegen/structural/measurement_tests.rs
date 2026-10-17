@@ -122,7 +122,7 @@ fn closure_index_dispatch_measurements() {
 /// | mutual-recursion | 0 | 90 |
 /// | split-return | 1 | 91 |
 ///
-/// **The zeroes are not a null result, they are the wrong corpus for the question.** These fixtures take their runtime taint from `proc/args()!` and never read stdin, so none of them reaches the UTF-8 decode path where the protocol actually fires. What they do establish is that the pass is inert everywhere it has no candidate — which is most places.
+/// **The zeroes are not a null result, they are the wrong corpus for the question.** These fixtures take their runtime taint from `/std/Process/args()!` and never read stdin, so none of them reaches the UTF-8 decode path where the protocol actually fires. What they do establish is that the pass is inert everywhere it has no candidate — which is most places.
 ///
 /// The allocation counts are taken pre-Binaryen, so some of what the pass removes earlier, Binaryen may remove later; only a runtime figure accounts for that. Withholding the pass on `programs/parse_digits.crs`, as [`copy_growth_measurements`] says how, and nothing else, moves the native binary at N = 1 000 000 from 0.226 s [0.224–0.230] to 0.230 s [0.228–0.236] of wall time, and leaves its `user` time at 0.21 s at the clock's ten-millisecond grain, each the median and span of five runs, the two interleaved and printing the same answer, both binaries built by a release compiler, timed at `00627ea06`: the per-character loop is not allocation-bound on the tuple the protocol removes.
 #[test]

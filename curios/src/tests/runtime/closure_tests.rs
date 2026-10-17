@@ -130,7 +130,7 @@ fn folds_constant_arg_through_let_function() {
     let source = r#"
         use /std/{Nat};
         let f(x : Nat) -> Nat = Nat/add(x, 1);
-        /std/proc/exit(Nat/to_byte(f(3)))
+        /std/Process/exit(Nat/to_byte(f(3)))
         "#;
 
     let entrypoint = source.parse::<Entrypoint>().unwrap();
@@ -256,7 +256,7 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
     let (system, io) = MockHost::builder().args([b"program".as_slice()]).build();
     run_text(
         r#"
-        use /std/{Nat, Bool, Str, List, proc, Io};
+        use /std/{Nat, Bool, Str, List, Process, Io};
 
         induct Thing(E: Type): pub Type
         | nothing()
@@ -301,7 +301,7 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
                     end);
 
         let entry() -> /std/Io({}) =
-            let n = List/len(proc/args()!);
+            let n = List/len(Process/args()!);
             let d = drive(n + 6, [1, 3]);
             /std/print(Str/flatten([Nat/to_str(d.model), ":", Nat/to_str(List/len(d.pending))]));
         entry()
@@ -328,7 +328,7 @@ fn a_closure_whose_arity_a_value_decides_is_called_at_each() {
             | false => (g) => g(10, 20)
             end(f);
         let entry() -> /std/Io({}) =
-            let args = /std/proc/args()!;
+            let args = /std/Process/args()!;
             let b = List/len(args) == 0;
             /std/print(
                 Str/flatten(

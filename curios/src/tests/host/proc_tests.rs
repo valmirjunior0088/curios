@@ -1,4 +1,4 @@
-//! The process surface: argv, environment and exit through `/std/proc`, and children started through `/std/Command` and reaped through `/std/Command/Child`.
+//! The process surface through `/std/Process`: argv, environment and exit, and children started from a `Process/Command` and reaped.
 
 use {
     crate::tests::{run, run_text, typecheck},
@@ -15,7 +15,7 @@ fn args_indexes_the_argv_snapshot() {
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     run_text(r#"
 let entry() -> /std/Io({}) =
-    let _ = /std/Try/run(std/Io/write(std/Io/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/proc/args()!, 1), x[])))!;
+    let _ = /std/Try/run(std/Io/write(std/Process/stdout, /std/Option/unwrap_or(/std/List/try_get(/std/Process/args()!, 1), x[])))!;
     /std/Io/pure(());
 entry()
 "#,
@@ -33,8 +33,8 @@ fn env_found_unwraps_to_some() {
         r#"
         use /std/{Io, Try};
         let entry() -> /std/Io({}) =
-            match /std/proc/env("HOME")! : (_) => Io({})
-            | some(v) => let _ = Try/run(std/Io/write(std/Io/stdout, v))!; /std/Io/pure(())
+            match /std/Process/env("HOME")! : (_) => Io({})
+            | some(v) => let _ = Try/run(std/Io/write(std/Process/stdout, v))!; /std/Io/pure(())
             | none() => let _ = /std/print("missing")!; /std/Io/pure(())
             end;
         entry()
@@ -52,8 +52,8 @@ fn env_absent_is_none() {
         run(r#"
         use /std/{Io, Try};
         let entry() -> /std/Io({}) =
-            match /std/proc/env("NOPE")! : (_) => Io({})
-            | some(v) => let _ = Try/run(std/Io/write(std/Io/stdout, v))!; /std/Io/pure(())
+            match /std/Process/env("NOPE")! : (_) => Io({})
+            | some(v) => let _ = Try/run(std/Io/write(std/Process/stdout, v))!; /std/Io/pure(())
             | none() => let _ = /std/print("missing")!; /std/Io/pure(())
             end;
         entry()
@@ -67,7 +67,7 @@ fn exit_halts_with_code() {
     // exit traps: it surfaces its code *and* the trailing write never runs. The result type is supplied because the exit yields whatever its region wants, and a `_` nothing reads wants nothing in particular; the function's local binder may carry the same annotation.
     let entrypoint = r#"
         let entry() -> /std/Io({}) =
-            let _ = /std/proc/exit(@{}, 7)!;
+            let _ = /std/Process/exit(@{}, 7)!;
             let _ = /std/print("unreachable")!;
             /std/Io/pure(());
         entry()
@@ -94,7 +94,7 @@ fn exit_halts_with_code() {
 // An exit code is a `Byte`, so a code no parent would read whole is refused where it is written rather than at run time: POSIX keeps a status's low eight bits, and `256` would reach the parent as the `0` of a success.
 #[test]
 fn an_exit_code_past_a_byte_is_refused_before_it_runs() {
-    let refusal = typecheck("/std/proc/exit(256)").expect_err("256 is not a byte");
+    let refusal = typecheck("/std/Process/exit(256)").expect_err("256 is not a byte");
     assert!(
         refusal.contains("Byte literal 256 is out of range"),
         "refused, but not as a byte:\n{refusal}"
@@ -103,11 +103,11 @@ fn an_exit_code_past_a_byte_is_refused_before_it_runs() {
 
 #[test]
 fn exit_in_local_binding_halts() {
-    // A forced description bound to a name nothing reads still performs: `dead` is never mentioned again, and the program still exits 3 without reaching the write, so erasure must not collapse such a binding to the unit constant. `go` returns an `Io` for the force to have a region at all — an unforced `proc/exit(3)` would be an inert description, which is the whole point of the carrier.
+    // A forced description bound to a name nothing reads still performs: `dead` is never mentioned again, and the program still exits 3 without reaching the write, so erasure must not collapse such a binding to the unit constant. `go` returns an `Io` for the force to have a region at all — an unforced `/std/Process/exit(3)` would be an inert description, which is the whole point of the carrier.
     let entrypoint = r#"
         use /std/{Nat, Str, Io};
         let go(n : std/Nat) -> Io(std/Nat) =
-            let dead : {} = /std/proc/exit(3)!;
+            let dead : {} = /std/Process/exit(3)!;
             Io/pure(n);
         let entry() -> /std/Io({}) =
             let v = go(1)!;
@@ -141,7 +141,7 @@ fn an_exit_ends_a_region_of_any_type() {
         use /std/{Nat, Str, Io};
         let f(n : Nat) -> Io(Str) =
             match n
-            | 0 => /std/proc/exit(7)
+            | 0 => /std/Process/exit(7)
             | _ => Io/pure("ok")
             end;
         let entry() -> /std/Io({}) =
@@ -173,7 +173,7 @@ fn an_exit_ends_a_region_of_any_type() {
 fn an_exit_alone_in_the_tail_carries_its_code() {
     // A program needing no nominal rows emits no roster group, since Binaryen's reader refuses an empty recursion group.
     let entrypoint = r#"
-        /std/proc/exit(3)
+        /std/Process/exit(3)
         "#
     .parse::<Entrypoint>()
     .expect("failed to parse source");
@@ -198,8 +198,7 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
 fn child_program(body: &str) -> String {
     format!(
         r#"
-        use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Io, Path, Command}};
-        use /std/Command/{{Child}};
+        use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Io, Path, Process}};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let program() -> Try(Io, Io/Error, Str) =
             {body};
@@ -219,7 +218,7 @@ fn child_program(body: &str) -> String {
 fn run_captures_both_outputs_and_the_exit() {
     let source = child_program(
         r#"
-            let out = Command/run(Command/new("greet", ["world"]))!;
+            let out = Process/run(Process/Command/new("greet", ["world"]))!;
             Try/pure(Str/flatten([text(out.stdout), "|", text(out.stderr), "|", Show/show(out.exit)]))
         "#,
     );
@@ -240,8 +239,8 @@ fn run_captures_both_outputs_and_the_exit() {
 fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
     let source = child_program(
         r#"
-            let crashed = Command/status(Command/new("crash", []))!;
-            let missing = Try/run(Command/status(Command { ..Command/new("missing", []), cwd = Option/some(Path/of_str("/tmp")) }))!;
+            let crashed = Process/status(Process/Command/new("crash", []))!;
+            let missing = Try/run(Process/status(Process/Command { ..Process/Command/new("missing", []), cwd = Option/some(Path/of_str("/tmp")) }))!;
             let shown = match missing | success(e) => Show/show(e) | failure(e) => Show/show(e) end;
             Try/pure(Str/join(" ", [Show/show(crashed), shown]))
         "#,
@@ -259,14 +258,14 @@ fn status_reports_a_signal_and_an_unknown_program_is_not_found() {
     assert_eq!(io.output(), b"signaled(9) not_found");
 }
 
-// A child spawned inside `Child/with` is killed when the body around it is cancelled: a timeout drops the bracket while it waits on a sleep the child would outlast, and the mock records the program name when the kill does.
+// A child spawned inside `Process/with` is killed when the body around it is cancelled: a timeout drops the bracket while it waits on a sleep the child would outlast, and the mock records the program name when the kill does.
 #[test]
 fn a_cancelled_bracket_kills_the_child_it_spawned() {
     let source = child_program(
         r#"
             let body() -> Try(Io, Io/Error, {}) =
-                let child = Command/spawn(Command/new("sleepy", []))!;
-                Child/with(child, Io/sleep(/std/time/Duration/of(60, 0)));
+                let child = Process/spawn(Process/Command/new("sleepy", []))!;
+                Process/with(child, Io/sleep(/std/time/Duration/of(60, 0)));
             let ran = Io/timeout(/std/time/Duration/of(0, 0), Try/run(body()))!;
             Try/pure(match ran | none() => "cancelled" | some(_) => "finished" end)
         "#,
@@ -283,9 +282,9 @@ fn a_cancelled_bracket_kills_the_child_it_spawned() {
 fn a_bracket_releases_its_child_and_kills_nothing_that_has_ended() {
     let source = child_program(
         r#"
-            let child = Command/spawn(Command/new("done", []))!;
-            let _ = Child/with(child, Try/pure(()))!;
-            let late = Try/run(Child/wait(child))!;
+            let child = Process/spawn(Process/Command/new("done", []))!;
+            let _ = Process/with(child, Try/pure(()))!;
+            let late = Try/run(Process/wait(child))!;
             Try/pure(match late | success(e) => Show/show(e) | failure(e) => Show/show(e) end)
         "#,
     );
@@ -298,19 +297,19 @@ fn a_bracket_releases_its_child_and_kills_nothing_that_has_ended() {
     assert!(io.kills().is_empty(), "an ended child is not signaled");
 }
 
-// A child's pipes are streams: `spawn` with piped output hands back a `Command/Pipe` that `Io/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
+// A child's pipes are streams: `spawn` with piped output hands back a `Process/Pipe` that `Io/read_all` drains through the `Read` witness, and `wait` reaps the child afterwards.
 #[test]
 fn a_piped_output_is_read_through_the_stream_witness() {
     let source = child_program(
         r#"
-            let child = Command/spawn(Command { ..Command/new("greet", []), stdout = Command/Stdio/piped() })!;
+            let child = Process/spawn(Process/Command { ..Process/Command/new("greet", []), stdout = Process/Stdio/piped() })!;
             let read =
-                match Child/stdout(child)
+                match Process/piped_stdout(child)
                 | some(p) => /std/Io/read_all(p)
                 | none() => Try/pure(x[])
                 end;
             let bytes = read!;
-            let exit = Child/wait(child)!;
+            let exit = Process/wait(child)!;
             Try/pure(Str/flatten([text(bytes), "|", Show/show(exit)]))
         "#,
     );
@@ -327,10 +326,10 @@ fn a_piped_output_is_read_through_the_stream_witness() {
 fn a_child_holds_a_pipe_for_exactly_the_streams_it_piped() {
     let source = child_program(
         r#"
-            let held(p: Option(Command/Pipe)) -> Str = match p | some(_) => "pipe" | none() => "none" end;
-            let pipes(c: Child) -> Str = Str/join(" ", [held(Child/stdin(c)), held(Child/stdout(c)), held(Child/stderr(c))]);
-            let c = Command/spawn(Command { ..Command/new("greet", []), stdin = Command/Stdio/piped(), stdout = Command/Stdio/null() })!;
-            let d = Command/spawn(Command { ..Command/new("greet", []), stdin = Command/Stdio/null(), stdout = Command/Stdio/piped(), stderr = Command/Stdio/piped() })!;
+            let held(p: Option(Process/Pipe)) -> Str = match p | some(_) => "pipe" | none() => "none" end;
+            let pipes(c: Process) -> Str = Str/join(" ", [held(Process/piped_stdin(c)), held(Process/piped_stdout(c)), held(Process/piped_stderr(c))]);
+            let c = Process/spawn(Process/Command { ..Process/Command/new("greet", []), stdin = Process/Stdio/piped(), stdout = Process/Stdio/null() })!;
+            let d = Process/spawn(Process/Command { ..Process/Command/new("greet", []), stdin = Process/Stdio/null(), stdout = Process/Stdio/piped(), stderr = Process/Stdio/piped() })!;
             Try/pure(Str/join(" | ", [pipes(c), pipes(d)]))
         "#,
     );

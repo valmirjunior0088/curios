@@ -24,9 +24,9 @@ pub(super) fn table(rows: &[&str], taint: bool) -> String {
         .join("\n        ");
     format!(
         r#"
-        use /std/{{Nat, Int, Flt, Byte, Bytes, Str, Option, Io, Try}};
+        use /std/{{Nat, Int, Flt, Byte, Bytes, Str, Option, Io, Try, Process}};
         let entry() -> /std/Io({{}}) =
-        let bytes = match Try/run(Io/read(Io/stdin, 16))! : (_) => Bytes
+        let bytes = match Try/run(Io/read(Process/stdin, 16))! : (_) => Bytes
             | success(bytes(b, @_)) => b
             | success(ended()) => x[]
             | failure(_) => x[]

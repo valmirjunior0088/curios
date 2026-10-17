@@ -14,8 +14,7 @@ const DENIED: u8 = 3;
 
 /// What every fixture begins with: the imports, and `verdict`, which turns an outcome into the code the program exits with.
 const PRELUDE: &str = "
-use /std/{Byte, Io, Result, Try, Handle, File, Path, fs, Tty, Serial, Command, tcp};
-use /std/Command/{Stdio, Child};
+use /std/{Byte, Io, Result, Try, Handle, File, Path, fs, Tty, Serial, Process, tcp};
 let code(e: Io/Error) -> Byte = match e | permission_denied() => 3 | not_found() => 2 | _ => 1 end;
 let verdict(@A: Type, r: Result(Io/Error, A)) -> Byte = match r | success(_) => 0 | failure(e) => code(e) end;
 ";
@@ -30,7 +29,7 @@ let subject() -> Try(Io, Io/Error, {}) =
     SUBJECT;
 let main() -> Io({}) =
     let r = Try/run(subject())!;
-    /std/proc/exit(@{}, verdict(r));
+    Process/exit(@{}, verdict(r));
 main()
 ";
     let source = format!("{PRELUDE}{}", tail.replace("SUBJECT", subject));
@@ -74,16 +73,16 @@ fn each_fails(cases: Vec<(&str, Replies)>) {
 fn a_stream_row_s_failure_is_the_error_it_names() {
     each_fails(vec![
         (
-            "let _ = Io/read(Io/stdin, 8)!;
+            "let _ = Io/read(/std/Process/stdin, 8)!;
                  Try/pure(())",
             vec![(HostOp::HandleRead, denied(vec![bytes(b"")]))],
         ),
         (
-            "Io/write(Io/stdout, x[1])",
+            "Io/write(/std/Process/stdout, x[1])",
             vec![(HostOp::HandleWrite, denied(vec![nat(0)]))],
         ),
         (
-            "Io/flush(Io/stdout)",
+            "Io/flush(/std/Process/stdout)",
             vec![(HostOp::HandleFlush, denied(vec![]))],
         ),
     ]);
@@ -272,12 +271,12 @@ fn spawned() -> (HostOp, Vec<RawValue>) {
 #[test]
 fn a_process_row_s_failure_is_the_error_it_names() {
     each_fails(vec![(
-        r#"let _ = Command/spawn(Command/new("x", []))!; Try/pure(())"#,
+        r#"let _ = Process/spawn(Process/Command/new("x", []))!; Try/pure(())"#,
         vec![(HostOp::ProcSpawn, denied(vec![bytes(b""); 4]))],
     )]);
     each_fails(vec![(
-        r#"let c = Command/spawn(Command/new("x", []))!;
-               let _ = Child/wait(c)!;
+        r#"let c = Process/spawn(Process/Command/new("x", []))!;
+               let _ = Process/wait(c)!;
                Try/pure(())"#,
         vec![spawned(), (HostOp::ProcWait, denied(vec![nat(0), nat(0)]))],
     )]);
@@ -304,8 +303,8 @@ fn the_failures_std_absorbs_by_design_are_absorbed() {
     );
     assert_eq!(
         exit_code(
-            r#"let c = Command/spawn(Command/new("x", []))!;
-               let _ = Child/kill(c)!;
+            r#"let c = Process/spawn(Process/Command/new("x", []))!;
+               let _ = Process/kill(c)!;
                Try/pure(())"#,
             vec![spawned(), (HostOp::ProcKill, denied(vec![]))],
         ),
@@ -326,8 +325,8 @@ fn an_empty_variable_is_set_and_an_absent_one_is_not() {
             | none() => "unset"
             end;
         let main() -> /std/Io({}) =
-        let a = /std/proc/env("EMPTY")!;
-        let b = /std/proc/env("NOPE")!;
+        let a = /std/Process/env("EMPTY")!;
+        let b = /std/Process/env("NOPE")!;
         print(Str/flatten([said(a), " ", said(b)]));
         main()
         "#,
@@ -345,10 +344,10 @@ fn a_bytes_payload_arrives_whole() {
     let (host, io) = MockHost::builder().build();
     let compiled = compile(
         r#"
-        use /std/{Io, Path, Try, fs};
+        use /std/{Io, Path, Try, fs, Process};
         let main() -> Io({}) =
         let r = Try/run(fs/cwd())!;
-        match r | success(p) => Io/bind(Try/run(Io/write(Io/stdout, Path/to_bytes(p))), (_) => Io/pure(())) | failure(_) => Io/pure(()) end;
+        match r | success(p) => Io/bind(Try/run(Io/write(Process/stdout, Path/to_bytes(p))), (_) => Io/pure(())) | failure(_) => Io/pure(()) end;
         main()
         "#,
     )

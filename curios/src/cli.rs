@@ -65,7 +65,7 @@ pub(crate) enum Mode {
         #[arg(
             trailing_var_arg = true,
             value_name = "TARGET_OR_ARGS",
-            help = format!("{}. Following words are program arguments (read via /std/proc/args); begin with -- to omit TARGET", RUN.target_help())
+            help = format!("{}. Following words are program arguments (read via /std/Process/args); begin with -- to omit TARGET", RUN.target_help())
         )]
         args: Vec<OsString>,
     },

@@ -20,7 +20,7 @@ fn accumulation_loops_are_linear_by_construction() {
     // The design this follows from is `documentation/design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md`.
     assert_eq!(
         run(r#"
-        use /std/{Bytes, Nat, Str, Io, Try};
+        use /std/{Bytes, Nat, Str, Io, Try, Process};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
@@ -29,7 +29,7 @@ fn accumulation_loops_are_linear_by_construction() {
         let entry() -> /std/Io({}) =
             let built = go(25000, x[]);
             let head = Bytes/slice(built, 0, 10);
-            let _ = Try/run(Io/write(Io/stdout, head))!;
+            let _ = Try/run(Io/write(Process/stdout, head))!;
             let _ = /std/print(Nat/to_str(Bytes/len(built)))!;
             /std/Io/pure(());
         entry()
@@ -91,7 +91,7 @@ fn a_collapsed_wrapper_survives_storage_and_retrieval() {
         | only()
         end
         let entry() -> /std/Io({}) =
-            let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+            let standard_input = /std/Io/Reader/new(/std/Process/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
             match input : (_) => Io({})
             | some(bytes) =>
@@ -152,7 +152,7 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
             | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
             end;
         let entry() -> /std/Io({}) =
-            let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+            let standard_input = /std/Io/Reader/new(/std/Process/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
             match input : (_) => Io({})
             | some(bytes) =>
@@ -270,7 +270,7 @@ fn a_span_builds_its_answer_where_its_walk_stops() {
         use /std/{Str, Nat, Char, Option, Result, Io};
         use /std/Str/{At};
         let entry() -> /std/Io({}) =
-            let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+            let standard_input = /std/Io/Reader/new(/std/Process/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
             match input: (_) => Io({})
             | some(bytes) =>

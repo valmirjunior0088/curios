@@ -96,15 +96,15 @@ main()
 `;
 
 const KEEP = `
-use /std/{Io};
+use /std/{Io, Process};
 foreign keep(Bytes) -> Bytes;
 foreign poke() -> {};
 let main() -> /std/Try(Io, Io/Error, {}) =
     let b = x[0x61, 0x62, 0x63];
     let r = keep(b)!;
     let _ = poke()!;
-    let _ = Io/write(Io/stdout, b)!;
-    Io/write(Io/stdout, r);
+    let _ = Io/write(Process/stdout, b)!;
+    Io/write(Process/stdout, r);
 main()
 `;
 
@@ -468,7 +468,7 @@ test("a program that reads its arguments is refused by the row, which has none t
     `
 use /std/{List, Nat, print};
 let main() -> /std/Io({}) =
-    let args = /std/proc/args()!;
+    let args = /std/Process/args()!;
     print(Nat/to_str(List/len(args)));
 main()
 `,
@@ -516,7 +516,7 @@ test("an exit ends the run with its code", async () => {
     const outcome = await execute(`
 let main() -> /std/Io({}) =
     let _ = /std/print("bye")!;
-    /std/proc/exit(@{}, ${code});
+    /std/Process/exit(@{}, ${code});
 main()
 `);
 

@@ -17,7 +17,7 @@ let render(b: Bytes) -> Str = match Str/of_bytes(b)
     | failure(_) => Str/concat("bytes:", Nat/to_str(Bytes/to_nat(b)))
     end;
 let entry() -> /std/Io({}) =
-    let args = /std/proc/args()!;
+    let args = /std/Process/args()!;
     let tail = match args | [] => [] | [_, ..rest] => rest end;
     /std/print(Str/join("|", List/map(tail, render)));
 entry()

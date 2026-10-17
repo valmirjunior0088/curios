@@ -19,7 +19,7 @@ fn bundle() -> Result<Bundle, String> {
 }
 
 fn main() -> ExitCode {
-    // argv crosses to the guest via `/std/proc/args` as the bytes the OS handed over, argv[0] being this executable; `env::args` would panic on an argument that is not UTF-8, which the row promises to carry.
+    // argv crosses to the guest via `/std/Process/args` as the bytes the OS handed over, argv[0] being this executable; `env::args` would panic on an argument that is not UTF-8, which the row promises to carry.
     let args = env::args_os().map(OsString::into_encoded_bytes).collect();
 
     let launch = || {

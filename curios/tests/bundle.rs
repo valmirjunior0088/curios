@@ -141,7 +141,7 @@ fn calling_double(root: &Path, name: &str, rows: &[(&str, &str)]) -> std::path::
         .expect("write the library");
     fs::write(
         package.join("exe.crs"),
-        format!("let main() -> /std/Io({{}}) = let doubled = /{name}/double(3)!;\nlet _ = /std/proc/exit(@{{}}, /std/Nat/to_byte(doubled % 256))!;\n/std/Io/pure(());\nmain()\n"),
+        format!("let main() -> /std/Io({{}}) = let doubled = /{name}/double(3)!;\nlet _ = /std/Process/exit(@{{}}, /std/Nat/to_byte(doubled % 256))!;\n/std/Io/pure(());\nmain()\n"),
     )
     .expect("write the temp source");
 
@@ -348,7 +348,7 @@ fn printer(root: &Path) -> std::path::PathBuf {
         package.join("exe.crs"),
         r#"use /std/{List, print, print_err};
 let entry() -> /std/Io({}) =
-    let arguments = /std/proc/args()!;
+    let arguments = /std/Process/args()!;
     match List/try_get(arguments, 1)
     | some(_) =>
         let _ = print_err("written\n")!;
@@ -439,7 +439,7 @@ fn a_branch_ticks_while_another_reads_standard_input() {
     .expect("write the manifest");
     fs::write(
         package.join("exe.crs"),
-        r#"use /std/{Io, Nat, Str, Bytes, Try};
+        r#"use /std/{Io, Nat, Str, Bytes, Try, Process};
 use /std/time/{Duration};
 let ticks(n: Nat) -> Io({}) =
     match n
@@ -450,7 +450,7 @@ let ticks(n: Nat) -> Io({}) =
         ticks(m)
     end;
 let reading() -> Io({}) =
-    let read = Try/run(Io/read_all(Io/stdin))!;
+    let read = Try/run(Io/read_all(Process/stdin))!;
     match read
     | success(bytes) => /std/print(Str/concat("read ", Nat/to_str(Bytes/len(bytes))))
     | failure(_) => /std/print("failed")

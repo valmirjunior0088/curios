@@ -241,7 +241,7 @@ entry
 fn an_exit_seals_the_thunk_that_describes_it() {
     let mut context = context();
     let dead = context.fresh(Some("dead"));
-    // let dead = /std/proc/exit(3); 7 — the trailing computation is *not* dead, and that is the point. `exit` returns an `Io`, so binding it builds a description and performs nothing; the entry goes on to return 7. What the exit still does is seal the block it is written in — the thunk's, which ends on the halting terminator with no return after it.
+    // let dead = /std/Process/exit(3); 7 — the trailing computation is *not* dead, and that is the point. `exit` returns an `Io`, so binding it builds a description and performs nothing; the entry goes on to return 7. What the exit still does is seal the block it is written in — the thunk's, which ends on the halting terminator with no return after it.
     let body = Term::let_(
         &dead,
         Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit())),

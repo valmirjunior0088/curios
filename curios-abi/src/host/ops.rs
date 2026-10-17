@@ -93,13 +93,13 @@ macro_rules! for_each_host_op {
             RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> { module: rand }
 
             /// The process arguments, each an opaque byte string. A host that runs a program with no arguments it could call the program's refuses the call, naming why, rather than answer an empty list a program would read as a fact.
-            ProcArgs: fn proc_args() -> Result<Vec<Vec<u8>>, Refusal> { module: proc }
+            ProcArgs: fn proc_args() -> Result<Vec<Vec<u8>>, Refusal> { module: Process }
 
             /// Look up the environment variable `name`: its value, possibly empty, or its absence. A name that is empty or holds `=` or NUL names no variable, and is absent.
-            ProcEnv: fn proc_env(name: Vec<u8>) -> Option<Vec<u8>> { module: proc, yields: value }
+            ProcEnv: fn proc_env(name: Vec<u8>) -> Option<Vec<u8>> { module: Process, yields: value }
 
             /// End the instance with `code`, the status every host hands its parent whole. The call never returns: the native host carries the code out as its guest-exit trap and the browser as its exit signal, neither ending the embedding process, and a host that returns anyway is refused rather than resumed.
-            ProcExit: fn proc_exit(code: u8) -> Termination { module: proc }
+            ProcExit: fn proc_exit(code: u8) -> Termination { module: Process }
 
             /// Put terminal `h` in raw mode (`on`) — the descriptor's termios recorded on first use, then no canonical mode, no echo, no signal keys, no output post-processing, `VMIN` 1, `VTIME` 0 — or restore the record (`off`). The native host also restores every record when it is dropped, so a trap or an `exit` leaves the terminal usable. `ENOTTY` through the errno lane is how a program learns it has no terminal.
             TtyRaw: fn tty_raw(h: Handle, on: bool) -> Result<(), Failure> { module: Tty }
@@ -141,13 +141,13 @@ macro_rules! for_each_host_op {
             ProcCwd: fn proc_cwd() -> Result<Vec<u8>, Failure> { module: fs, yields: path }
 
             /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. A success is the child's handle, which becomes `READ`-ready when the child exits, which is when `proc_wait` answers, beside the parent's end of each stream the call piped: a non-blocking handle `handle_read`, `handle_write`, `handle_watch` and `handle_close` serve, and the empty token for a stream that was not piped. Closing the child leaves its streams filed. An empty `argv`, a NUL in any argument, the working directory or an environment entry, or an entry with no name before its `=` fails `EINVAL` without starting anything.
-            ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: StdioMode, stdout: StdioMode, stderr: StdioMode) -> Result<ChildHandles, Failure> { module: Command }
+            ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: StdioMode, stdout: StdioMode, stderr: StdioMode) -> Result<ChildHandles, Failure> { module: Process }
 
             /// How `child` ended, once its handle is readable: a success with `code` and `signal`, `signal` nonzero when a signal ended it and `code` the exit code otherwise. `WouldBlock` while it still runs. An answer consumes the handle, and so does an end the host could not observe, which fails with the errno that kept it from knowing.
-            ProcWait: fn proc_wait(child: Handle) -> Result<ChildExit, Failure> { module: Command/Child }
+            ProcWait: fn proc_wait(child: Handle) -> Result<ChildExit, Failure> { module: Process }
 
             /// Send `child` `SIGKILL` if it still runs; `proc_wait` then reports the signal. A child whose end is already recorded is not signaled and answers `Ok`, since the host may have reaped its pid and the system handed it on.
-            ProcKill: fn proc_kill(child: Handle) -> Result<(), Failure> { module: Command/Child }
+            ProcKill: fn proc_kill(child: Handle) -> Result<(), Failure> { module: Process }
         }
     };
 }

@@ -113,10 +113,10 @@ fn a_file_kind_no_code_names_fails_the_stat() {
 fn a_write_that_accepts_nothing_is_a_failure() {
     let code = answering(
         r#"
-        use /std/{Io, Handle, Try, proc};
+        use /std/{Io, Handle, Try, Process};
         let entry() -> /std/Io({}) =
             let r = Try/run(Io/write(@Handle, Handle/stdout, x[0x41]))!;
-            match r | success(_) => proc/exit(@{}, 0) | failure(_) => proc/exit(@{}, 7) end;
+            match r | success(_) => Process/exit(@{}, 0) | failure(_) => Process/exit(@{}, 7) end;
         entry()
         "#,
         MockHost::builder().build().0,
@@ -131,7 +131,7 @@ fn a_write_that_accepts_nothing_is_a_failure() {
 #[test]
 fn a_host_that_returns_from_exit_traps() {
     let error = answering(
-        "/std/proc/exit(@{}, 3)",
+        "/std/Process/exit(@{}, 3)",
         MockHost::builder().build().0,
         HostOp::ProcExit,
         vec![],

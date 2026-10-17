@@ -140,7 +140,7 @@ code_sets! {
         OTHER = 3 => other;
     }
 
-    /// How `proc_spawn` wires each of a child's standard streams, mirrored by `/sys/stdio_mode` and the guest's `/std/Command/Stdio`: the shape Lean's `Stdio`, Haskell's `StdStream`, Rust's `Stdio` and Zig's `StdIo` share.
+    /// How `proc_spawn` wires each of a child's standard streams, mirrored by `/sys/stdio_mode` and the guest's `/std/Process/Stdio`: the shape Lean's `Stdio`, Haskell's `StdStream`, Rust's `Stdio` and Zig's `StdIo` share.
     stdio_mode: u64 as Nat {
         /// The child shares the parent's stream.
         INHERIT = 0 => inherit;

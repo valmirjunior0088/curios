@@ -437,7 +437,7 @@ impl Run<'_> {
             .map_err(CompileError::failure)?;
 
         step(Heading::Testing, subject);
-        // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/proc/args` promises opaque byte strings.
+        // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/Process/args` promises opaque byte strings.
         let argv0 = entry.as_os_str().as_encoded_bytes().to_vec();
         let mut unit = Totals::default();
 

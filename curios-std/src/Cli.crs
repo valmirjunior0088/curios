@@ -1,4 +1,5 @@
-use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, print_err, proc};
+use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Io, print, print_err,
+    Process};
 use /std/Bool/{True, False};
 
 pub mod Grammar;
@@ -392,14 +393,14 @@ let decode(raw: List(Bytes)) -> Result(Nat, List(Str)) =
 
 let fail_with(text: Str) -> Io({}) =
     let _ = print_err(text)!;
-    proc/exit(2);
+    Process/exit(2);
 
 --- Report a construction failure on standard error and exit 1 before invocation processing.
 pub let specification_error(error: Error) -> Io({}) =
     let _ =
         print_err(
             Str/flatten(["error: invalid command specification: ", Error/to_str(error), "\n"]))!;
-    proc/exit(1);
+    Process/exit(1);
 
 let drive(within: List(Str), cli: Cli, argv: List(Str)) -> Io({}) =
     match cli.tree
@@ -421,7 +422,7 @@ let drive(within: List(Str), cli: Cli, argv: List(Str)) -> Io({}) =
 
 --- Decode UTF-8 and dispatch a certified command tree. Invocation errors exit 2; owned help/version succeed with 0.
 pub let main(cli: Cli) -> Io({}) =
-    let raw = proc/args()!;
+    let raw = Process/args()!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;
     match decode(dropped)
     | failure(at) =>

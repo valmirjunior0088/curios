@@ -134,7 +134,7 @@ pub use Parse/{let Parse};
 -- Host: what describes work the host does.
 --- A description of a computation that touches the host, never its result.
 ---
---- Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. A description that waits suspends, so it holds only the branch it runs in, and the host alone waits: `wait`, `sleep` and `yield` suspend, `using` brackets a resource so that a branch dropped while it waits releases it, `both`, `all`, `race` and `timeout` run descriptions side by side, and a `scope` runs the children its body spawns beside it, joined one by one or all at once. `Future`, `Signal` and `/std/Channel` are waited on through `select` over their offers. `Read` and `Write` are what a stream is read and written through — the concepts a file, a socket, a child's pipe and the standard streams satisfy — with `read_all` and `copy` written once over them; `Reader` is a stream with the bytes read ahead of what was asked of it, through which a line or any other piece is cut from them. `Error` is the failure every host operation reports and `Chunk` what one read answers with.
+--- Calling a host operation builds a description; only a program's tail performs one, and nothing takes an `Io(A)` to an `A`. A description that waits suspends, so it holds only the branch it runs in, and the host alone waits: `wait`, `sleep` and `yield` suspend, `using` brackets a resource so that a branch dropped while it waits releases it, `both`, `all`, `race` and `timeout` run descriptions side by side, and a `scope` runs the children its body spawns beside it, joined one by one or all at once. `Future`, `Signal` and `/std/Channel` are waited on through `select` over their offers. `Read` and `Write` are what a stream is read and written through — the concepts a file, a socket, a child's pipe and this process's standard streams satisfy — with `read_all` and `copy` written once over them; `Reader` is a stream with the bytes read ahead of what was asked of it, through which a line or any other piece is cut from them. `Error` is the failure every host operation reports and `Chunk` what one read answers with.
 pub mod Io;
 pub use Io/{let Io};
 
@@ -180,8 +180,11 @@ pub mod time;
 --- Randomness from the host, in `Io`.
 pub mod rand;
 
---- This process: its arguments, its environment, and its exit.
-pub mod proc;
+--- A child process run from a `Command`, and this process's own arguments, environment, exit and standard streams.
+---
+--- A child started inside a bracket is killed when the body ends, however it ends.
+pub mod Process;
+pub use Process/{let Process};
 
 --- The filesystem beyond a file's contents: what is at a path, a directory's entries, and making, moving and removing things.
 ---
@@ -193,12 +196,6 @@ pub mod fs;
 --- Every operation is `Io`, since the disk answers at once, and what can fail is `Try` over `Io`. A file is a stream like any other, and its bracket closes it however the body ends.
 pub mod File;
 pub use File/{let File};
-
---- A child process to run: the program, its arguments, and how its streams are wired.
----
---- A child started inside a bracket is killed when the body ends, however it ends.
-pub mod Command;
-pub use Command/{let Command};
 
 --- The terminal a handle is attached to: raw mode, its size, and the bracket a terminal session runs inside.
 pub mod Tty;
@@ -252,18 +249,18 @@ let answered(name: Str, r: Result(Io/Error, {})) -> Io({}) =
     | success(_) => Io/pure(())
     | failure(e) =>
         match e
-        | broken_pipe() => proc/exit(141)
+        | broken_pipe() => Process/exit(141)
         | _ =>
             let why = Str/flatten([name, " could not be written: ", Show/show(e), "\n"]);
-            let _ = Try/run(Io/write(Io/stderr, Str/to_bytes(why)))!;
-            proc/exit(1)
+            let _ = Try/run(Io/write(Process/stderr, Str/to_bytes(why)))!;
+            Process/exit(1)
         end
     end;
 
 --- `s` to standard output. A failed write ends the program: 141 where the reader has gone, 1 otherwise.
 pub let print(s: Str) -> Io({}) =
-    answered("standard output", Try/run(Io/write(Io/stdout, Str/to_bytes(s)))!);
+    answered("standard output", Try/run(Io/write(Process/stdout, Str/to_bytes(s)))!);
 
 --- `s` to standard error. A failed write ends the program as `print`'s does.
 pub let print_err(s: Str) -> Io({}) =
-    answered("standard error", Try/run(Io/write(Io/stderr, Str/to_bytes(s)))!);
+    answered("standard error", Try/run(Io/write(Process/stderr, Str/to_bytes(s)))!);

@@ -400,16 +400,16 @@ fn a_comparison_that_fails_at_the_drain_names_its_declaration_and_what_was_compa
 fn a_refusal_at_the_entrys_drain_is_reported_once() {
     let report = error(
         r#"
-        use /std/{proc};
+        use /std/{Process};
         let entry() -> /std/Io({}) =
-            let _ = proc/exit(1)!;
+            let _ = Process/exit(1)!;
             /std/print("unreachable");
         entry()
         "#,
     );
     assert!(
         report.contains("never solved: ")
-            && report.contains("the implicit argument 'A' of 'proc/exit'"),
+            && report.contains("the implicit argument 'A' of 'Process/exit'"),
         "{report}"
     );
     assert!(!report.contains("was not inferred"), "{report}");

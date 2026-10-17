@@ -234,7 +234,7 @@ fn dispatch() -> Result<(), Failure> {
             elaboration, args, ..
         } => {
             let program = contract.admit_program(target, manifest, None, &here()?)?;
-            // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by. Every argument crosses as the bytes the OS holds, since `/std/proc/args` promises opaque byte strings and a path or an argument need not be UTF-8.
+            // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by. Every argument crosses as the bytes the OS holds, since `/std/Process/args` promises opaque byte strings and a path or an argument need not be UTF-8.
             let entry = match program.entry() {
                 Entry::Stdin => Spelling::STDIN.as_bytes().to_vec(),
                 Entry::File(path) => path.as_os_str().as_encoded_bytes().to_vec(),

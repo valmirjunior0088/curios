@@ -10,12 +10,12 @@ use {
 
 /// One `call` to `example.com:80`, its reply written out or its failure printed by name.
 const CALL: &str = r#"
-    use /std/{Str, Show, Try, Io};
+    use /std/{Str, Show, Try, Io, Process};
     use /std/tcp/{Socket};
     let program() -> Io({}) =
         let r = Try/run(Socket/call(Socket/connect("example.com", 80), Str/to_bytes("GET /\r\n\r\n")))!;
         match r
-        | success(response) => Io/bind(Try/run(Io/write(Io/stdout, response)), (_) => Io/pure(()))
+        | success(response) => Io/bind(Try/run(Io/write(Process/stdout, response)), (_) => Io/pure(()))
         | failure(e) => /std/print(Show/show(e))
         end;
     program()
@@ -113,14 +113,14 @@ fn a_peer_that_resets_reads_as_connection_reset() {
 fn read_one_chunk(open: &str) -> String {
     format!(
         r#"
-        use /std/{{Str, Bytes, Show, Try, Io}};
+        use /std/{{Str, Bytes, Show, Try, Io, Process}};
         use /std/tcp/{{Socket}};
         let program() -> Io({{}}) =
             let r = Try/run(Socket/with({open}, (s) =>
                 let c = Io/read(s, 64)!;
                 Try/pure(match c | bytes(b, @_) => b | _ => x[] end)))!;
             match r
-            | success(bytes) => Io/bind(Try/run(Io/write(Io/stdout, bytes)), (_) => Io/pure(()))
+            | success(bytes) => Io/bind(Try/run(Io/write(Process/stdout, bytes)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program()
@@ -326,7 +326,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     let source = r#"
         foreign double(Nat) -> Nat;
         let entry() -> /std/Io({}) =
-            let _ = /std/proc/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
+            let _ = /std/Process/exit(@{}, /std/Nat/to_byte(double(21)! % 256))!;
             let _ = /std/print("unreachable")!;
             /std/Io/pure(());
         entry()
@@ -360,7 +360,7 @@ fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
         let entry() -> /std/Io({}) =
             let top = flip(0)!;
             let bottom = flip(255)!;
-            let _ = /std/proc/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
+            let _ = /std/Process/exit(@{}, match /std/Byte/to_nat(bottom) == 0 | true => top | false => 1 end)!;
             /std/Io/pure(());
         entry()
         "#
@@ -396,7 +396,7 @@ fn a_foreign_flt_crosses_raw_in_both_directions() {
         let entry() -> /std/Io({}) =
             let halved = halve(/std/Nat/to_flt(84))!;
             let matched = halved == /std/Nat/to_flt(42);
-            let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
+            let _ = /std/Process/exit(@{}, match matched | true => 7 | false => 1 end)!;
             /std/Io/pure(());
         entry()
         "#
@@ -430,7 +430,7 @@ fn a_foreign_flt_may_stand_before_another_result() {
         let entry() -> /std/Io({}) =
             let answered = probe(3)!;
             let matched = answered.value == /std/Nat/to_flt(6);
-            let _ = /std/proc/exit(@{}, match matched | true => /std/Nat/to_byte(answered.status % 256) | false => 1 end)!;
+            let _ = /std/Process/exit(@{}, match matched | true => /std/Nat/to_byte(answered.status % 256) | false => 1 end)!;
             /std/Io/pure(());
         entry()
         "#
@@ -511,7 +511,7 @@ fn a_list_of_bit_runs_crosses_in_both_directions() {
             let answered = echo([run, b[]])!;
             let first = match answered | [] => b[] | [head, .._] => head end;
             let matched = /std/Bits/eql(first, run);
-            let _ = /std/proc/exit(@{}, match matched | true => /std/Nat/to_byte((/std/List/len(answered) + 3) % 256) | false => 1 end)!;
+            let _ = /std/Process/exit(@{}, match matched | true => /std/Nat/to_byte((/std/List/len(answered) + 3) % 256) | false => 1 end)!;
             /std/Io/pure(());
         entry()
         "#
@@ -547,7 +547,7 @@ fn a_list_of_scalars_crosses_flat_in_both_directions() {
             let i = ints([-5, +7, -3000000000])!;
             let f = flags([true, false])!;
             let matched = n == [2, 12000000000000000000] && i == [+5, -7, +3000000000] && f == [false, true];
-            let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
+            let _ = /std/Process/exit(@{}, match matched | true => 7 | false => 1 end)!;
             /std/Io/pure(());
         entry()
         "#
@@ -597,7 +597,7 @@ fn an_option_crosses_both_ways() {
                 && Option/unwrap_or(c.text, x[]) == Str/to_bytes("HI")
                 && d.seen == false
                 && Option/is_none(d.text);
-            let _ = /std/proc/exit(@{}, match matched | true => 7 | false => 1 end)!;
+            let _ = /std/Process/exit(@{}, match matched | true => 7 | false => 1 end)!;
             /std/Io/pure(());
         entry()
         "#
@@ -631,7 +631,7 @@ fn a_list_element_past_the_wire_is_refused() {
         use /std/{Nat, Bytes, Option, Io};
         foreign nats(List(Nat)) -> List(Nat);
         let entry() -> /std/Io({}) =
-            let v = /std/proc/env("CURIOS_UNSET_LIST")!;
+            let v = /std/Process/env("CURIOS_UNSET_LIST")!;
             let _ = nats([1, Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[]))])!;
             /std/Io/pure(());
         entry()

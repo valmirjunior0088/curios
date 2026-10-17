@@ -160,7 +160,7 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
 #[test]
 fn a_convoy_in_a_hot_loop_allocates_no_closure() {
     const CONVOY: &str = r#"
-        use /std/{Nat, Bool, Eq, List, proc};
+        use /std/{Nat, Bool, Eq, List, Process};
         let step(x: Nat) -> Nat =
             match x % 2 == 0: (even) => (e: Eq()(x % 2 == 0, even)) -> Nat
             | true => (_) => x / 2
@@ -169,7 +169,7 @@ fn a_convoy_in_a_hot_loop_allocates_no_closure() {
         let loop(k: Nat, x: Nat) -> Nat =
             match k | 0 => x | kp + 1 => loop(kp, step(x) % 65537) end;
         let entry() -> /std/Io({}) =
-            let taint = List/len(proc/args()!);
+            let taint = List/len(Process/args()!);
             /std/print(Nat/to_str(loop(taint, 7)));
         entry()
         "#;

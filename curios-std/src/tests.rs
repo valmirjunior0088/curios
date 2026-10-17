@@ -63,7 +63,7 @@ fn a_test_that_exits_before_it_reports_fails_whatever_its_code() {
     unit.insert_root(
         "exits",
         RootKind::Ordinary,
-        "use /std/{Test, proc};\n\ntest quits_early =\n    Test/perform(() => proc/exit(@Test({}), 0));\n\ntest fails_quietly =\n    Test/perform(() => proc/exit(@Test({}), 1));\n"
+        "use /std/{Test, Process};\n\ntest quits_early =\n    Test/perform(() => Process/exit(@Test({}), 0));\n\ntest fails_quietly =\n    Test/perform(() => Process/exit(@Test({}), 1));\n"
             .parse()
             .expect("the unit parses"),
     );

@@ -53,7 +53,7 @@ let row(pair: Str) -> Str =
     ]);
 
 let entry() -> /std/Io({}) =
-    let standard_input = /std/Io/Reader/new(/std/Io/stdin)!;
+    let standard_input = /std/Io/Reader/new(/std/Process/stdin)!;
     let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
     match input: (_) => Io({})
     | some(bytes) =>

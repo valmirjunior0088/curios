@@ -1093,9 +1093,9 @@ fn step_specialization_extent() {
 #[test]
 fn surveys_the_fold_accumulator_region() {
     let source = r#"
-        use /std/{Nat, Str, Char, List, proc};
+        use /std/{Nat, Str, Char, List, Process};
         let entry() -> /std/Io({}) =
-            let taint = List/len(proc/args()!);
+            let taint = List/len(Process/args()!);
             let n : Nat = taint;
             let text : Str = Nat/to_str(n);
             /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))));
@@ -1282,7 +1282,7 @@ pub(in crate::tests) const TOML_DRIVER: &str = r#"
 use /std/{Str, Nat, Map, Toml, Option, Result, Io};
 
 let entry() -> /std/Io({}) =
-    let arguments = /std/proc/args()!;
+    let arguments = /std/Process/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input: (_) => Io({})
     | some(bytes) =>
@@ -1389,7 +1389,7 @@ fn death_birth_classifier_pins_the_canonical_pair() {
             | cons(v, tail) => total(tail, (acc + v) % 1000003)
             end;
         let entry() -> /std/Io({}) =
-            let arguments = /std/proc/args()!;
+            let arguments = /std/Process/args()!;
             let input = /std/List/try_get(arguments, 1);
             match input: (_) => Io({})
             | some(bytes) =>

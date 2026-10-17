@@ -98,28 +98,6 @@ pub induct Chunk: pub Type
 | ended()
 end
 
---- An input stream of this process.
-pub struct Input: Type {
-    Handle,
-}
-
---- An output stream of this process.
-pub struct Output: Type {
-    Handle,
-}
-
---- Standard input.
-pub let stdin: Input =
-    Input { Handle/stdin };
-
---- Standard output.
-pub let stdout: Output =
-    Output { Handle/stdout };
-
---- Standard error.
-pub let stderr: Output =
-    Output { Handle/stderr };
-
 --- What a stream is read through. A read asks for a positive count and answers a chunk of between one byte and that count or the end of the stream, or fails; a read the host cannot answer yet waits until it can, by suspending, so it holds only the branch that reads.
 ---
 --- The lower bound is the chunk's own, stated in its type, so a witness for a stream of its own proves every chunk it hands out holds a byte — `Nat/lt/try` decides it of a length the witness cannot see. The upper bound is the witness's promise, which the host's rows hold `Handle` to.
@@ -162,15 +140,6 @@ pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> T
         | ended() => Try/pure(())
         end;
     go();
-
-satisfy Read(Input) {
-    read(i, n, @positive) = Read/read(@Handle, i.0, n, @positive),
-}
-
-satisfy Write(Output) {
-    write(o, b) = Write/write(o.0, b),
-    flush(o) = Write/flush(o.0),
-}
 
 -- The first offer of `offers` to yield, trying each in its order.
 let attempt(@A: Type, offers: List(Offer(A))) -> Io(Option(A)) =

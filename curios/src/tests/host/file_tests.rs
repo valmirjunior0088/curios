@@ -8,10 +8,10 @@ use {
 #[test]
 fn read_all_reads_a_seeded_file() {
     let source = r#"
-        use /std/{File, Path, Try, Io};
+        use /std/{File, Path, Try, Io, Process};
         let entry() -> /std/Io({}) =
             match Try/run(File/read_all(Path/of_str("data.txt")))!
-            | success(contents) => Io/bind(Try/run(Io/write(Io/stdout, contents)), (_) => Io/pure(()))
+            | success(contents) => Io/bind(Try/run(Io/write(Process/stdout, contents)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
             end;
         entry()
@@ -99,13 +99,13 @@ fn file_with_write_mode_persists_through_close() {
 #[test]
 fn read_pulls_bytes_inside_the_bracket() {
     let source = r#"
-        use /std/{File, Path, Str, Bytes, Try, Io};
+        use /std/{File, Path, Str, Bytes, Try, Io, Process};
         let entry() -> /std/Io({}) =
             let bytes = Try/run(File/with(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
                 let c = Io/read(f, 1024)!;
                 Try/pure(match c | bytes(b, @_) => b | ended() => x[] end)))!;
             match bytes
-            | success(b) => Io/bind(Try/run(Io/write(Io/stdout, b)), (_) => Io/pure(()))
+            | success(b) => Io/bind(Try/run(Io/write(Process/stdout, b)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
             end;
         entry()
@@ -122,7 +122,7 @@ fn read_pulls_bytes_inside_the_bracket() {
 #[test]
 fn a_bracketed_file_reads_through_its_stream_witness_across_a_suspension() {
     let source = r#"
-        use /std/{File, Path, Str, Bytes, Try, Io};
+        use /std/{File, Path, Str, Bytes, Try, Io, Process};
         let program: Try(Io, Io/Error, Bytes) =
             File/with(Path/of_str("lines.txt"), File/Mode/read(), (f) =>
                 let _ = Io/yield()!;
@@ -131,7 +131,7 @@ fn a_bracketed_file_reads_through_its_stream_witness_across_a_suspension() {
         let main() -> Io({}) =
             let r = Try/run(program)!;
             match r
-            | success(b) => Io/bind(Try/run(Io/write(Io/stdout, b)), (_) => Io/pure(()))
+            | success(b) => Io/bind(Try/run(Io/write(Process/stdout, b)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
             end;
         main()

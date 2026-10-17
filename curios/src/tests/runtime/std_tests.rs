@@ -10,7 +10,7 @@ use {
 fn random_bin_returns_requested_length() {
     let output = run(r#"
 let entry() -> /std/Io({}) =
-    let _ = /std/Try/run(std/Io/write(std/Io/stdout, /std/rand/bytes(8)!))!;
+    let _ = /std/Try/run(std/Io/write(std/Process/stdout, /std/rand/bytes(8)!))!;
     /std/Io/pure(());
 entry()
 "#);
@@ -217,16 +217,16 @@ fn filling_one_cell_leaves_another_empty() {
     );
 }
 
-// A handle wrapper is built beneath the module that declares it and nowhere else, so a `Socket`, a `Pipe` or a `Child` a program holds came from a connection or a spawn: none is made of a file's handle or a terminal's, by its literal or by a builder its module publishes.
+// A handle wrapper is built beneath the module that declares it and nowhere else, so a `Socket`, a `Pipe` or a `Process` a program holds came from a connection or a spawn: none is made of a file's handle or a terminal's, by its literal or by a builder its module publishes.
 #[test]
 fn a_handle_wrapper_is_built_only_beneath_its_module() {
     let wrappers = [
         ("use /std/tcp/{Socket};", "Socket", "Socket { h }"),
-        ("use /std/Command/{Pipe};", "Pipe", "Pipe { h }"),
+        ("use /std/Process/{Pipe};", "Pipe", "Pipe { h }"),
         (
-            "use /std/{Option};\nuse /std/Command/{Child};",
-            "Child",
-            "Child { handle = h, stdin = Option/none(), stdout = Option/none(), stderr = Option/none() }",
+            "use /std/{Option, Process};",
+            "Process",
+            "Process { handle = h, stdin = Option/none(), stdout = Option/none(), stderr = Option/none() }",
         ),
     ];
     for (imports, wrapper, literal) in wrappers {

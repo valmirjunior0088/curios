@@ -31,9 +31,9 @@ fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
 #[test]
 fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
     let source = r#"
-        use /std/{Nat, List, Bits, Bool, Str, proc};
+        use /std/{Nat, List, Bits, Bool, Str, Process};
         let entry() -> /std/Io({}) =
-            let taint = List/len(proc/args()!);
+            let taint = List/len(Process/args()!);
             let t: Bool = taint == 0;
             let grown = b[t, 1];
             let widen(n: Nat, acc: Bits) -> Bits =
@@ -52,9 +52,9 @@ fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
 #[test]
 fn a_literal_depth_packed_recursion_compiles_within_the_default_budget() {
     let source = r#"
-        use /std/{Nat, List, Bits, Bool, Str, proc};
+        use /std/{Nat, List, Bits, Bool, Str, Process};
         let entry() -> /std/Io({}) =
-            let taint = List/len(proc/args()!);
+            let taint = List/len(Process/args()!);
             let t: Bool = taint == 0;
             let grown = b[t, 1];
             let widen(n: Nat, acc: Bits) -> Bits =
@@ -83,9 +83,9 @@ fn acceptance_is_upward_closed_in_the_budget() {
         (
             "a literal-depth packed recursion",
             r#"
-            use /std/{Nat, List, Bits, Bool, Str, proc};
+            use /std/{Nat, List, Bits, Bool, Str, Process};
             let entry() -> /std/Io({}) =
-                let taint = List/len(proc/args()!);
+                let taint = List/len(Process/args()!);
                 let t: Bool = taint == 0;
                 let grown = b[t, 1];
                 let widen(n: Nat, acc: Bits) -> Bits =

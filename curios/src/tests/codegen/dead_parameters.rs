@@ -24,14 +24,14 @@ fn answers(source: &str, expected: [&str; 4]) {
 fn recursive_arguments_keep_their_positions_and_effects() {
     answers(
         r#"
-        use /std/{Nat,List,proc,Io};
+        use /std/{Nat, List, Process, Io};
         let walk(n: Nat, a: Nat, unused: Nat, b: Nat) -> Nat =
             match n
             | 0 => a * 1000 + b
             | k + 1 => walk(k, b + 2, unused, a + 1)
             end;
         let entry() -> Io({}) =
-            let n = List/len(proc/args()!);
+            let n = List/len(Process/args()!);
             let _ = /std/print("before:")!;
             let first = walk(n, n + 3, (let _ = /std/print("argument:")!; n + 100), n + 5);
             let _ = Io/yield()!;
@@ -52,14 +52,14 @@ fn recursive_arguments_keep_their_positions_and_effects() {
 fn a_nested_capture_survives_cleanup_and_suspension() {
     answers(
         r#"
-        use /std/{Nat,List,proc,Io};
+        use /std/{Nat, List, Process, Io};
         let capture(n: Nat, unused: Nat, a: Nat, b: Nat) -> (Nat) -> Nat =
             match n
             | 0 => (x) => a * 10 + b + x
             | k + 1 => (x) => capture(k, unused, b + 2, a + 1)(x) + 1
             end;
         let entry() -> Io({}) =
-            let n = List/len(proc/args()!);
+            let n = List/len(Process/args()!);
             let f = capture(n, n + 100, n + 3, n + 5);
             let _ = /std/print("before:")!;
             let _ = Io/yield()!;

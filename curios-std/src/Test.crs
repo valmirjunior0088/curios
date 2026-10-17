@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Program, print,
-    proc};
+    Process};
 use /std/ops/{Eql};
 use /std/time/{Duration};
 
@@ -149,7 +149,7 @@ let report(name: Str, test: Test({})) -> Io(Bool) =
 satisfy Program(Test({})) {
     execute(test) =
         let held = report("program", test)!;
-        match held | true => Io/pure(()) | false => proc/exit(1) end,
+        match held | true => Io/pure(()) | false => Process/exit(1) end,
 }
 
 let parse_index(raw: Bytes) -> Option(Nat) =
@@ -166,7 +166,7 @@ let run_all(tests: List({Str, () -> Test({})})) -> Io(Bool) =
 
 --- Run the selected test, or every named test in order, and answer whether each one held.
 pub let main(tests: List({Str, () -> Test({})})) -> Io(Bool) =
-    let arguments = proc/args()!;
+    let arguments = Process/args()!;
     match List/try_get(arguments, 1)
     | some(raw) =>
         match parse_index(raw)

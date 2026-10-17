@@ -51,7 +51,7 @@ fn an_open_asks_the_host_for_the_configured_speed_and_frame() {
 #[test]
 fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
     let source = r#"
-        use /std/{Str, Bytes, Option, Show, Try, Io, Path, Serial};
+        use /std/{Str, Bytes, Option, Show, Try, Io, Path, Serial, Process};
         let exchange(s: Serial) -> Try(Io, Io/Error, Bytes) =
             let _ = Io/write(s, Str/to_bytes("AT\r\n"))!;
             let input = Io/Reader/new(s)!;
@@ -60,7 +60,7 @@ fn with_writes_a_command_and_reads_its_reply_line_across_arrivals() {
         let program() -> Io({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), exchange))!;
             match r
-            | success(line) => Io/bind(Try/run(Io/write(Io/stdout, line)), (_) => Io/pure(()))
+            | success(line) => Io/bind(Try/run(Io/write(Process/stdout, line)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program()
@@ -105,7 +105,7 @@ fn with_does_not_drain_after_a_body_that_fails() {
 #[test]
 fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
     let source = r#"
-        use /std/{Bytes, Option, Show, Try, Io, Path, Serial};
+        use /std/{Bytes, Option, Show, Try, Io, Path, Serial, Process};
         let reset(s: Serial) -> Try(Io, Io/Error, Bytes) =
             let _ = Serial/set_dtr(s, false)!;
             let _ = Serial/set_rts(s, true)!;
@@ -117,7 +117,7 @@ fn the_lines_are_driven_in_order_and_a_discard_drops_the_boot_banner() {
         let program() -> Io({}) =
             let r = Try/run(Serial/with(Path/of_str("/dev/ttyUSB0"), Serial/config(115200), reset))!;
             match r
-            | success(line) => Io/bind(Try/run(Io/write(Io/stdout, line)), (_) => Io/pure(()))
+            | success(line) => Io/bind(Try/run(Io/write(Process/stdout, line)), (_) => Io/pure(()))
             | failure(e) => /std/print(Show/show(e))
             end;
         program()

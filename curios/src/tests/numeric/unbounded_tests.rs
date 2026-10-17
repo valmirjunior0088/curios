@@ -223,11 +223,11 @@ fn folded_and_executed_nans_agree() {
 fn a_reassociated_product_agrees_with_the_written_one() {
     let program = |combine: &str| {
         format!(
-            "use /std/{{Nat, Bool, Fmt, List, proc}};\n\
+            "use /std/{{Nat, Bool, Fmt, List, Process}};\n\
              let k(n: Nat) -> Nat = match n == 1 | true => 0 | false => 65536 end;\n\
              let prod(n: Nat) -> Nat =\n\
              match n | 0 => 1 | p + 1; _ => {combine} end;\n\
-             let main() -> /std/Io({{}}) = Fmt/print(\"%\")(Nat/to_str(prod(List/len(proc/args()!))));\nmain()\n"
+             let main() -> /std/Io({{}}) = Fmt/print(\"%\")(Nat/to_str(prod(List/len(/std/Process/args()!))));\nmain()\n"
         )
     };
     let answer = |combine: &str| {
@@ -377,9 +377,9 @@ fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
     run_text(
         r#"
-        use /std/{Byte, Bytes, Nat, Str, Option, Io, Try};
+        use /std/{Byte, Bytes, Nat, Str, Option, Io, Try, Process};
         let entry() -> /std/Io({}) =
-            let bytes = match Try/run(Io/read(Io/stdin, 16))! : (_) => Bytes
+            let bytes = match Try/run(Io/read(Process/stdin, 16))! : (_) => Bytes
                 | success(bytes(b, @_)) => b
                 | success(ended()) => x[]
                 | failure(_) => x[]

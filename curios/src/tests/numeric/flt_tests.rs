@@ -33,7 +33,7 @@ fn codec_round_trips_on_runtime_values() {
 fn flt_to_le_bytes_prints_raw_bytes() {
     let source = r#"
         let entry() -> /std/Io({}) =
-            let _ = /std/Try/run(std/Io/write(std/Io/stdout, std/Flt/to_le_bytes(+1.5)))!;
+            let _ = /std/Try/run(std/Io/write(std/Process/stdout, std/Flt/to_le_bytes(+1.5)))!;
             /std/Io/pure(());
         entry()
         "#;
@@ -46,7 +46,7 @@ fn flt_of_le_bytes_roundtrips_raw_bytes() {
     // Full-pipeline inverse of `to_le_bytes`: assemble the float back from its eight little-endian bytes, then re-serialize. The program is closed, so this also exercises the type-level and optimizer folds of `of_le_bytes`.
     let source = r#"
         let entry() -> /std/Io({}) =
-            let _ = /std/Try/run(std/Io/write(std/Io/stdout, std/Flt/to_le_bytes(std/Flt/of_le_bytes(std/Flt/to_le_bytes(+1.5)))))!;
+            let _ = /std/Try/run(std/Io/write(std/Process/stdout, std/Flt/to_le_bytes(std/Flt/of_le_bytes(std/Flt/to_le_bytes(+1.5)))))!;
             /std/Io/pure(());
         entry()
         "#;

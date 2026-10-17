@@ -1,7 +1,7 @@
 //! Runtime-dependent consumers of the optimizer's five snapshot sweeps.
 
 pub(super) const JUMPS: &str = r#"
-use /std/{Nat, Bool, Option, List, proc};
+use /std/{Nat, Bool, Option, List, Process};
 let walk(n: Nat, acc: Nat) -> Nat =
     match n
     | 0 => acc
@@ -13,25 +13,25 @@ let walk(n: Nat, acc: Nat) -> Nat =
         walk(k, (x + y) % 65537)
     end;
 let entry() -> /std/Io({}) =
-    let n = List/len(proc/args()!);
+    let n = List/len(Process/args()!);
     /std/print(Nat/to_str(walk(n, 0)));
 entry()
 "#;
 
 pub(super) const WORKERS: &str = r#"
-use /std/{Nat, List, proc};
+use /std/{Nat, List, Process};
 let left(n: Nat, pair: {Nat, Nat}) -> Nat =
     match n | 0 => pair.0 + pair.1 | k + 1 => left(k, (pair.1, (pair.0 + pair.1) % 65537)) + 1 end;
 let right(n: Nat, pair: {Nat, Nat}) -> Nat =
     match n | 0 => pair.0 + pair.1 | k + 1 => right(k, ((pair.0 + pair.1) % 65537, pair.0)) + 2 end;
 let entry() -> /std/Io({}) =
-    let n = List/len(proc/args()!);
+    let n = List/len(Process/args()!);
     /std/print(Nat/to_str(left(n, (n, 1)) + right(n, (n, 2))));
 entry()
 "#;
 
 pub(super) const UNCURRY: &str = r#"
-use /std/{Nat, List, proc};
+use /std/{Nat, List, Process};
 let left(n: Nat) -> (Nat) -> Nat =
     match n
     | 0 => (s) => (s * 7 + 13) % 30011
@@ -51,13 +51,13 @@ let right(n: Nat) -> (Nat) -> Nat =
         right(k)(c)
     end;
 let entry() -> /std/Io({}) =
-    let n = List/len(proc/args()!);
+    let n = List/len(Process/args()!);
     /std/print(Nat/to_str(left(n)(1) + right(n)(2)));
 entry()
 "#;
 
 pub(super) const CALLS: &str = r#"
-use /std/{Nat, List, proc};
+use /std/{Nat, List, Process};
 induct Side: Type | left(Nat) | right(Nat) end
 let left(side: Side) -> Nat =
     let a = match side | left(x) => x | right(x) => x + 1 end;
@@ -76,7 +76,7 @@ let right(side: Side) -> Nat =
     let f = e * 17 % 65539;
     f * 19 % 65539;
 let entry() -> /std/Io({}) =
-    let n = List/len(proc/args()!);
+    let n = List/len(Process/args()!);
     let a = left(Side/left(n));
     let b = left(Side/right(n));
     let c = right(Side/left(n));
@@ -88,13 +88,13 @@ entry()
 "#;
 
 pub(super) const SCCS: &str = r#"
-use /std/{Nat, List, proc};
+use /std/{Nat, List, Process};
 let walk(op: (Nat) -> Nat, n: Nat, acc: Nat) -> Nat =
     match n | 0 => acc | k + 1 => op(walk(op, k, (acc + n) % 65537)) end;
 let up(n: Nat) -> Nat = (n + 1) % 65537;
 let down(n: Nat) -> Nat = (n * 3 + 2) % 65537;
 let entry() -> /std/Io({}) =
-    let n = List/len(proc/args()!);
+    let n = List/len(Process/args()!);
     /std/print(Nat/to_str(walk(up, n, 0) + walk(down, n, 1)));
 entry()
 "#;

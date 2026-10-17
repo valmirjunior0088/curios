@@ -200,10 +200,10 @@ fn a_goal_that_closes_a_program_is_asked_at_io() {
 #[test]
 fn a_program_reads_a_number_and_prints_its_double() {
     const DOUBLES: &str = r#"
-        use /std/{Nat, Str, Option, Io, Try, print};
+        use /std/{Nat, Str, Option, Io, Try, print, Process};
         use /std/Io/{Reader};
         let main() -> Try(Io, Io/Error, {}) =
-            let input = Reader/new(Io/stdin)!;
+            let input = Reader/new(Process/stdin)!;
             let line = Reader/line_text(input)!;
             match Option/bind(line, Nat/of_str)
             | some(n) => print(Nat/to_str(n * 2))

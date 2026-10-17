@@ -20,15 +20,15 @@ fn proof_bound_as_a_statement_does_not_run_its_certificate() {
 #[test]
 fn a_let_bound_proof_leaves_no_computation_behind() {
     let source = r#"
-        use /std/{Nat, List, Io, proc};
+        use /std/{Nat, List, Io, Process};
         use /std/Bool/{True};
         use /std/Nat/{le};
         use /std/Bool/{Holds};
         let use_it(a: Nat, b: Nat, _p: Holds(a <= b)) -> Nat = a + b;
-        Io/bind(proc/args(), (args) =>
+        Io/bind(Process/args(), (args) =>
             let n = List/len(args);
             let p = le/trans(@n, @n, @n + 1, le/refl(n), True/qed());
-            proc/exit(Nat/to_byte(use_it(n, n + 1, p) % 256)))
+            Process/exit(Nat/to_byte(use_it(n, n + 1, p) % 256)))
         "#;
     let optimized = cont_optm(source);
     assert!(
@@ -60,13 +60,13 @@ fn a_top_level_proof_does_not_run_before_the_program() {
 #[test]
 fn an_unused_total_value_leaves_no_computation_behind() {
     let source = r#"
-        use /std/{Nat, List, Io, proc};
+        use /std/{Nat, List, Io, Process};
         let count(a: Nat, b: Nat) -> Nat =
             match a | 0 => b | ap + 1 => count(ap, b + 1) end;
-        Io/bind(proc/args(), (args) =>
+        Io/bind(Process/args(), (args) =>
             let n = List/len(args);
             let _unused = count(n, n);
-            proc/exit(Nat/to_byte(n % 256)))
+            Process/exit(Nat/to_byte(n % 256)))
         "#;
     let optimized = cont_optm(source);
     assert!(
@@ -79,13 +79,13 @@ fn an_unused_total_value_leaves_no_computation_behind() {
 #[test]
 fn an_unused_partial_value_is_still_computed() {
     let source = r#"
-        use /std/{Nat, List, Io, proc};
+        use /std/{Nat, List, Io, Process};
         let count(a: Nat, b: Nat) -> Nat =
             match a | 0 => b | _ + 1 => count(a, b + 1) end;
-        Io/bind(proc/args(), (args) =>
+        Io/bind(Process/args(), (args) =>
             let n = List/len(args);
             let _unused = count(n, n);
-            proc/exit(Nat/to_byte(n % 256)))
+            Process/exit(Nat/to_byte(n % 256)))
         "#;
     let optimized = cont_optm(source);
     assert!(
@@ -151,7 +151,7 @@ fn an_unused_parser_built_through_a_witness_method_is_pruned() {
 #[test]
 fn a_recursion_on_a_bound_is_fused_with_its_step() {
     let source = r#"
-        use /std/{Nat, List, Io, proc};
+        use /std/{Nat, List, Io, Process};
         use /std/Bool/{True};
         let sum_to(n: Nat) -> Nat =
             Nat/descend(
@@ -159,7 +159,7 @@ fn a_recursion_on_a_bound_is_fused_with_its_step() {
                 (_) => Nat,
                 (k, ih) => match k | 0 => 0 | kp + 1 => k + ih(kp, True/qed()) end,
                 n);
-        Io/bind(proc/args(), (args) => proc/exit(Nat/to_byte(sum_to(List/len(args)) % 256)))
+        Io/bind(Process/args(), (args) => Process/exit(Nat/to_byte(sum_to(List/len(args)) % 256)))
         "#;
     let optimized = cont_optm(source);
     assert!(

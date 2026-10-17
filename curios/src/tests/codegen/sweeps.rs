@@ -53,7 +53,7 @@ fn recursive_callback_contexts_keep_their_distinct_operations() {
 fn a_returned_closure_and_aggregate_survive_a_suspension_between_calls() {
     answers(
         r#"
-        use /std/{Nat, List, proc, Io};
+        use /std/{Nat, List, Process, Io};
         induct Side: Type | left(Nat) | right(Nat) end
         let combine(n: Nat, pair: {Nat, Nat}) -> (Side) -> Nat =
             match n
@@ -61,7 +61,7 @@ fn a_returned_closure_and_aggregate_survive_a_suspension_between_calls() {
             | k + 1 => (side) => combine(k, (pair.1, pair.0 + 1))(side) + 1
             end;
         let entry() -> Io({}) =
-            let n = List/len(proc/args()!);
+            let n = List/len(Process/args()!);
             let f = combine(n, (n, 1));
             let _ = Io/yield()!;
             let side = match n % 2 | 0 => Side/left(n) | _ => Side/right(n) end;

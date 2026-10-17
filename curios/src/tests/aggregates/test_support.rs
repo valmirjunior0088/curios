@@ -49,7 +49,7 @@ pub(super) const LIST: Carrier = Carrier {
 /// Each read is of a run built for it, so the upward walk meets every node unread and the downward one does too: a read that flattened the run for the one would otherwise hide what the other answers.
 pub(super) fn reads_in_every_shape(carrier: &Carrier) -> String {
     r#"
-    use /std/{Nat, Byte, Bytes, Bits, Bool, List, Option, Str, Io, print, Try};
+    use /std/{Nat, Byte, Bytes, Bits, Bool, List, Option, Str, Io, print, Try, Process};
 
     let at(run: %RUN%, i: Nat) -> Nat =
         %AT%;
@@ -97,7 +97,7 @@ pub(super) fn reads_in_every_shape(carrier: &Carrier) -> String {
         end;
 
     let main() -> Io({}) =
-    let arrived = Try/run(Io/read(Io/stdin, 64))!;
+    let arrived = Try/run(Io/read(Process/stdin, 64))!;
     match arrived
     | success(bytes(l)) =>
         let leaf: %RUN% = %LEAF%;

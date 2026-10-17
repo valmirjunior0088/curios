@@ -55,7 +55,7 @@ fn dead_user_definition_is_still_typechecked() {
     // A user-authored top-level binding the body never references is still type-checked (every item is, before any reachability is considered), so its error is reported. (`write` returns a `Try` over `Io`, which `Bytes` mismatches.)
     let error = typecheck(
         r#"
-        let dead : /std/Bytes = /std/Io/write(/std/Io/stdout, /std/Str/to_bytes("x"));
+        let dead : /std/Bytes = /std/Io/write(/std/Process/stdout, /std/Str/to_bytes("x"));
         /std/print("ok")
         "#,
     )

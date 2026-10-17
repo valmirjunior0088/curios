@@ -12,7 +12,7 @@ use {
 #[test]
 fn a_runtime_dependent_tuple_width_is_split_into_fields() {
     let source = r#"
-        use /std/{Bool, Nat, List, proc};
+        use /std/{Bool, Nat, List, Process};
         let Shape(b: Bool) -> Type =
             match b | true => {Nat, Nat} | false => {Nat, Nat, Nat} end;
         let make(b: Bool, n: Nat) -> Shape(b) =
@@ -28,7 +28,7 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
                 loop(next, make(next, n + 1), n + 1, rest)
             end;
         let entry() -> /std/Io({}) =
-            let n = List/len(proc/args()!);
+            let n = List/len(Process/args()!);
             let b = Nat/eql(n, 1);
             /std/print(Nat/to_str(loop(b, make(b, n), n, n)));
         entry()

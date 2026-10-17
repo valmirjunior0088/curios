@@ -21,7 +21,7 @@ let total(n: Nat) -> Nat =
     State/run(run(n, 0), 1).0;
 
 let entry() -> /std/Io({}) =
-    let arguments = /std/proc/args()!;
+    let arguments = /std/Process/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input: (_) => Io({})
     | some(bytes) =>

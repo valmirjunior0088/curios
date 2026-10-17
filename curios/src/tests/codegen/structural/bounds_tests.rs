@@ -4,9 +4,9 @@ use super::{functions, wat};
 
 /// A program reading each carrier at a run-time value, so all three `$<carrier>/read` helpers are emitted. `try_get` is the spelling because it carries its own bound — the point here is what the helper emits, not how its caller discharged the proof.
 const READS_EVERY_CARRIER: &str = r#"
-    use /std/{Nat, Byte, Bytes, Bits, List, Option, Io, proc};
+    use /std/{Nat, Byte, Bytes, Bits, List, Option, Io, Process};
 
-    Io/bind(proc/args(), (args) =>
+    Io/bind(Process/args(), (args) =>
         let values = List/map(args, (a) => 1);
         let bytes = Bytes/join(x[], args);
         let bits = Bits/flatten(List/map(args, (a) => b[]));
@@ -17,7 +17,7 @@ const READS_EVERY_CARRIER: &str = r#"
             | true => 1
             | false => 0
             end;
-        proc/exit(Nat/to_byte((from_list + from_bytes + from_bits) % 256)))
+        Process/exit(Nat/to_byte((from_list + from_bytes + from_bits) % 256)))
     "#;
 
 /// Every carrier's read refuses a position past the value's own length, and the three agree.

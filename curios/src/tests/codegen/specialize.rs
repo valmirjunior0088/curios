@@ -10,7 +10,7 @@ use {
 fn distinct_families_with_matching_tags_and_widths_compile_and_run() {
     let compiled = compile(
         r#"
-        use /std/{Bool, Nat, List, proc};
+        use /std/{Bool, Nat, List, Process};
         induct Left: Type | wrap(Nat) | other(Nat) end
         induct Right: Type | wrap(Nat) | other(Nat) end
         let Shape(b: Bool) -> Type = match b | true => Left | false => Right end;
@@ -20,7 +20,7 @@ fn distinct_families_with_matching_tags_and_widths_compile_and_run() {
             | false => match x | wrap(n) => n | other(n) => n + 1 end
             end;
         let entry() -> /std/Io({}) =
-            let n = List/len(proc/args()!);
+            let n = List/len(Process/args()!);
             let a = read(true, Left/wrap(n));
             let b = read(false, Right/wrap(n + 1));
             /std/print(Nat/to_str(a + b));

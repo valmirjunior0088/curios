@@ -428,7 +428,7 @@ let work(mode: Str, n: Nat) -> Nat =
     end;
 
 let entry() -> /std/Io({}) =
-    let arguments = /std/proc/args()!;
+    let arguments = /std/Process/args()!;
     let mode = /std/List/try_get(arguments, 1);
     let size = /std/List/try_get(arguments, 2);
     let answer: Str =

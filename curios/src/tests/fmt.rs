@@ -20,10 +20,10 @@ fn names_parse_code(ersd: &str) -> bool {
 fn print_partial_evaluation_reduces_residual() {
     // End-to-end residue guard for the staging stack on `Fmt/print("% is %")(name)(30)` with a *runtime* first argument. The ersd `evaluate` pass folds the closed prefix — the format-string parse (Parse combinators and the segment UTF-8 revalidation included) runs at compile time and `Fmt/print(lit)` reifies as the curried hole-filling closure over a constant `Fmt` spine. What stays runtime is exactly the runtime work: specialized `go_with` over the spine, the runtime `Str` slot (`Str/trim` and stdin UTF-8 validation through `classify`, shown by `Show(Str)` identity), and the `Nat` slot (`Show(Nat)` = `Nat/to_str`'s digit producer). The single-entry `go_with` spine is then contified into the entry, so the boundary is pinned by the surviving `Nat/to_str` digit producer together with the absence of the generic `Fmt/print` driver and the compile-time `Parse` combinators.
     let source = r#"
-        use /std/{Str, Bytes, Fmt, Io, Try};
+        use /std/{Str, Bytes, Fmt, Io, Try, Process};
 
         let entry() -> /std/Io({}) =
-            match Try/run(Io/read(Io/stdin, 1024))! : (_) => /std/Io({})
+            match Try/run(Io/read(Process/stdin, 1024))! : (_) => /std/Io({})
             | success(bytes(bytes, @_)) =>
                 match Str/of_bytes(bytes) : (_) => /std/Io({})
                 | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
@@ -71,10 +71,10 @@ fn print_partial_evaluation_reduces_residual() {
 fn print_runtime_args_specializes_spine() {
     // The mixed case: a literal format string with runtime hole arguments. The ersd `evaluate` pass folds the parse to a constant `Fmt` spine, and `specialize` unrolls `go_with` over it — the ersd-optm module carries the minted spine items and neither the format-string parser nor the generic fold survives to codegen.
     let source = r#"
-        use /std/{Str, Bytes, Fmt, Io, Try};
+        use /std/{Str, Bytes, Fmt, Io, Try, Process};
 
         let entry() -> /std/Io({}) =
-            match Try/run(Io/read(Io/stdin, 1024))! : (_) => /std/Io({})
+            match Try/run(Io/read(Process/stdin, 1024))! : (_) => /std/Io({})
             | success(bytes(bytes, @_)) =>
                 match Str/of_bytes(bytes) : (_) => /std/Io({})
                 | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
@@ -248,9 +248,9 @@ fn a_format_past_the_evaluators_budget_still_prints() {
 #[test]
 fn runtime_args_leave_no_formatter_in_cont() {
     let source = r#"
-        use /std/{Fmt, Nat, List, proc};
+        use /std/{Fmt, Nat, List, Process};
         let entry() -> /std/Io({}) =
-            Fmt/print("count: %")(Nat/to_str(List/len(proc/args()!)));
+            Fmt/print("count: %")(Nat/to_str(List/len(Process/args()!)));
         entry()
         "#;
     assert_eq!(run(source), b"count: 0".to_vec());
@@ -268,10 +268,10 @@ fn runtime_args_leave_no_formatter_in_cont() {
 fn a_runtime_format_string_is_refused_by_its_written_type() {
     let refused = super::error(
         r#"
-        use /std/{Str, Fmt, Io, Try};
+        use /std/{Str, Fmt, Io, Try, Process};
 
         let entry() -> /std/Io({}) =
-            match Try/run(Io/read(Io/stdin, 1024))! : (_) => /std/Io({})
+            match Try/run(Io/read(Process/stdin, 1024))! : (_) => /std/Io({})
             | success(bytes(bytes, @_)) =>
                 match Str/of_bytes(bytes) : (_) => /std/Io({})
                 | success(s) => Fmt/print(s)(3)

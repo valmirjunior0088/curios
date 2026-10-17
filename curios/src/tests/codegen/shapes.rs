@@ -233,7 +233,7 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
     end;
 
 let entry() -> /std/Io({}) =
-    let arguments = /std/proc/args()!;
+    let arguments = /std/Process/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input: (_) => Io({})
     | some(bytes) =>
@@ -273,7 +273,7 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
     end;
 
 let entry() -> /std/Io({}) =
-    let arguments = /std/proc/args()!;
+    let arguments = /std/Process/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input: (_) => Io({})
     | some(bytes) =>
