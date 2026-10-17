@@ -1,28 +1,30 @@
 ---
-description: Hunt for a proof of False the checkers admit, file it on the soundness board as an open ticket, and land the fix as the next commit only when it is unambiguous
+description: Hunt for a proof of False the checkers admit, file it on the soundness board as an open ticket, and land its fix next where the fix follows; an attack that holds is left as a test, and what stops short of False as a finding
 argument-hint: "[part — formation, introduction, elimination, conversion, totality, admission — and optionally a rule in it]"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*)
 ---
 
-Find a closed term the checkers admit at `/std/Bool/False`.
+Find a proof of `False`: a closed term the checkers admit at `/std/Bool/False`.
 
-`$ARGUMENTS` names a part of the board, a file under `xboard/src/board/`, and may name a rule in it by the decision that designs it. With none given, choose a rule and say why. One invocation is one rule; iteration lives outside, under `/loop`, and the board as committed is what one run hands the next.
+`$ARGUMENTS` names a part of the board, a file under `xboard/src/board/`, and may name a rule in it by the decision that designs it. With none given, choose a rule and say why. One invocation is one rule; iteration lives outside, under `/loop`, and what one run hands the next is the tree as committed: the board, the findings files and the tests.
 
 ## Authority
 
-Invoking this command is standing authorization for exactly two kinds of commit: an open ticket with its witnesses, alone; and the fix of an open ticket, with the ticket turned to fixed. Commit on the branch checked out; never create, switch or rebase one. A ticket already open on the board is spent: it is a find waiting for its fix, not a target. Prefer stopping to guessing.
+Invoking this command is standing authorization for four kinds of commit: an open ticket with its witnesses, alone; the fix of an open ticket where the fix follows, with the ticket turned to fixed; the tests of the attacks that held; and what the run files short of `False` in the findings files, as prose. Commit on the branch checked out; never create, switch or rebase one. A ticket already open on the board is spent: it is a proof of `False` waiting for its fix, not a target. Prefer stopping to guessing.
 
-## What a find is
+## What a proof of `False` is
 
-A proof of `False`, and nothing else. It is shown by a witness, never by a story about a rule being wrong: a source program whose tail is the proof, or, where no program reaches the rule, a module built by hand with the term it closes with, put to the kernel. The witness supplies the term and the board states the type, so a false equation or a declaration wrongly admitted is driven all the way to `False` before it is a find. Both are written in the part's board file and put by `cargo xboard report`.
+A closed term the checkers admit at `/std/Bool/False`, and nothing else. It is shown by a witness, never by a story about a rule being wrong: a source program whose tail is the proof, or, where no program reaches the rule, a module built by hand with the term it closes with, put to the kernel. The witness supplies the term and the board states the type, so a false equation or a declaration wrongly admitted is driven all the way to `False` before it is a ticket. Both are written in the part's board file and put by `cargo xboard report`.
 
-What stops short of `False` is not a ticket: a term a checker admits that its rule should refuse, a program compiled to do what its source does not say, a refusal of something sound, an effect outside `Io` that proves nothing. Each goes where `.claude/rules/findings.md` says a find goes, and is proposed in the closing report with its text exactly as it would be written and why it belongs there; nobody here commits it.
+A run that finds none has not shown the rule sound: soundness is a claim about every closed term, and a hunt tries some. It has shown that its attacks failed, and it leaves them where every later change is held to them.
 
-A program the elaborator admits and the kernel refuses is refused: a compilation fails closed. The kernel is what is trusted, so a module it admits at `False` is a find whatever the elaborator makes of its source, and a sound program the elaborator refuses is a wrong refusal, which is `/hunt-findings`'s.
+What stops short of `False` is not a ticket: a term a checker admits that its rule should refuse, a program compiled to do what its source does not say, a refusal of something sound, an effect outside `Io` that proves nothing. Each goes where `.claude/rules/findings.md` says a finding goes: shown against its rule, it is a finding; seen and not driven to `False`, it is an entry marked uncertain, naming the `False` it might reach.
+
+A program the elaborator admits and the kernel refuses is refused: a compilation fails closed. The kernel is what is trusted, so a module it admits at `False` is a proof of `False` whatever the elaborator makes of its source; the elaborator admitting a program the kernel refuses is a term a checker admits that its rule should refuse, and a sound program the elaborator refuses is a wrong refusal, which is `/hunt-findings`'s.
 
 ## Read first
 
-`xboard/README.md` states what a part, a ticket and a witness are, and `documentation/design/soundness/the-soundness-board.md` the claim, the trusted base, and the boundaries no rule covers. The part's board file holds every flaw already found in it, each with its witnesses, and a rule's decision — under `documentation/design/soundness/` or `documentation/design/theory/`, or in its crate's README — states what the rule assumes. `curios-cert`'s README and `curios-analysis`'s crate documentation are the roster of what the kernel decides and what both checkers share. Read those there. This file restates none of them.
+`xboard/README.md` states what a part, a ticket and a witness are, and `documentation/design/soundness/the-soundness-board.md` the claim, the trusted base, and the boundaries no rule covers. The part's board file holds every proof of `False` already found in it, each with its witnesses, and a rule's decision — under `documentation/design/soundness/` or `documentation/design/theory/`, or in its crate's README — states what the rule assumes. `curios-cert`'s README and `curios-analysis`'s crate documentation are the roster of what the kernel decides and what both checkers share. Read those there. This file restates none of them.
 
 ## Probing
 
@@ -45,20 +47,26 @@ CRS
 
 It prints what each checker made of the program, and exits 0 where it was admitted, 1 where it was refused and 2 where it could not be put. What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects. A rule no program reaches has no probe: its witness is a module built by hand.
 
-## Recording
+## Attacking a rule
 
-A find is two commits, and the first is the find alone.
+What a rule's decision and the code's own documentation state it relies on are its premises, and a run attacks each with a probe. Its charter is spent once every premise has given a proof of `False` or held. Read each refusal as **A refusal met on the way** of `.claude/commands/hunt-findings.md` reads one: which checker made it, by which error, and whether it is the refusal of the rule attacked; a probe another rule refuses has not attacked this one yet.
+
+Each premise that held leaves a test: the attack that came nearest, in the crate it attacked and placed as `.claude/rules/rust.md` places one, expecting the refusal it met by that checker's error, so a change that reopens the route fails the suite. A run's tests land together, in one commit, under `cargo xtask workspace format`, `cargo xtask workspace lint` and the tests by name.
+
+## Recording a proof of `False`
+
+A proof of `False` is two commits, and the first is the ticket alone.
 
 **The open ticket.** File the ticket under its part with `Status::Open`, the day, and its witnesses: each expects a refusal the checkers do not yet make, by the checker that should make it, with the error left unnamed where it does not exist yet. `cargo xboard report` must then show the ticket `OPEN` and its witness admitted, which is the demonstration. Its check is `cargo xtask workspace format --check`, `cargo xtask workspace lint` and `cargo xboard report`. Commit it by itself, changing no checker.
 
-**The fix.** The next commit changes the checker and turns the ticket to `Status::Fixed`, naming in each witness the error that now refuses it. Before changing the checker, weigh what the rule's entry and the code's own documentation state it relies on three times over: a fix that closes this hole by breaking what the rule's argument rests on opens another. The board forces the two together: with the flaw closed and the ticket still open, the run fails. So the commit that closes a flaw is the one git blames for its status line, and nothing else records it. Its check is the open ticket's — `cargo xtask workspace format --check`, `cargo xtask workspace lint` and `cargo xboard report` — plus `cargo xtask workspace test <crate>` for every crate the fix changes, narrowed with `--filter` to the tests that reach the change when the crate is `curios`, and one judgment none of them can make: the diff is additive or corrective only — no deleted witness, loosened expectation or weakened assertion.
+**The fix.** The next commit changes the checker and turns the ticket to `Status::Fixed`, naming in each witness the error that now refuses it. It is this run's where it follows, as **What a run can judge** of `.claude/commands/fix-findings.md` has a fix follow, and the user's where it sets. Before changing the checker, weigh what the rule's entry and the code's own documentation state it relies on three times over: a fix that closes this hole by breaking what the rule's argument rests on opens another. The board forces the two together: with the proof refused and the ticket still open, the run fails. So the commit that refuses it is the one git blames for its status line, and nothing else records it. Its check is the open ticket's — `cargo xtask workspace format --check`, `cargo xtask workspace lint` and `cargo xboard report` — plus `cargo xtask workspace test`, the whole suite, since what the checkers decide reaches every stage after them, and one judgment none of them can make: the diff is additive or corrective only — no deleted witness, loosened expectation or weakened assertion.
 
-If the fix is not unambiguous, correct and targeted, yield: the open ticket is already committed and is the record. Say what the fix would need, and do not try a second approach or weaken the witness.
+Where the fix sets, or is not correct and targeted, yield: the open ticket is already committed and is the record of what stands. The fix it waits on is a specification, as [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states one for a proof of `False`; propose it in the close with its text exactly as it would be written, and do not try a second approach or weaken the witness.
 
 ## Under `/loop`
 
-On its own, a run hunts one rule and ends with its report. Under `/loop`, each next run takes a rule this loop has not attacked yet, and the loop ends when a `False` stays open because its fix waits on a decision only the user can make; when a run cannot go on, on a check it cannot make pass; and once every rule has been attacked in it.
+On its own, a run hunts one rule and ends with its report. Under `/loop`, each next run takes a rule this loop has not attacked yet, and the loop ends when a proof of `False` stays open because its fix sets; when a run cannot go on, on a check it cannot make pass; and once every rule has been attacked in it.
 
 ## Commits and report
 
-Commit as CLAUDE.md says: the open ticket's message names the flaw found, the fix's the rule now enforced. Close with five fields: part and rule attacked, technique, the ticket filed or the finding proposed, what was committed, what is on the tree uncommitted.
+Commit as CLAUDE.md says: the open ticket's message names the proof of `False` found, the fix's the rule now enforced. Close with any ticket filed, first; then the part and rule attacked; each premise attacked, by its probe and what refused it; what was committed; what waits on the user, each fix that sets with its alternatives and each specification with its text; and what is on the tree uncommitted.

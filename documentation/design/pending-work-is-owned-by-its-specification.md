@@ -1,6 +1,6 @@
 # Pending work is owned by its specification
 
-**Decision.** Pending work lives under [`roadmap/`](../roadmap/), with its status in the finding or specification that describes it. Implemented contracts live in the owning reference, rustdoc, crate `README.md` and tests; rationale and rejected alternatives live in a design decision or the owning crate's `README.md`. Neither pending work nor landed capabilities have a second inventory.
+**Decision.** Pending work lives under [`roadmap/`](../roadmap/), with its status in the finding or specification that describes it, save a proof of `False`, whose status is its ticket's on [the soundness board](soundness/the-soundness-board.md). Implemented contracts live in the owning reference, rustdoc, crate `README.md` and tests; rationale and rejected alternatives live in a design decision or the owning crate's `README.md`. Neither pending work nor landed capabilities have a second inventory.
 
 ## Filing and order
 
@@ -17,7 +17,9 @@ Within each hundred a lower number is taken first. A number is a place in that o
 
 A finding is a defect shown. Its entry in a findings file is a bullet led by the finding in bold and naming where, what is wrong, the fix, its check and its size in commits. A finding stays an entry while its fix can be taken now and lands in two commits at most, the second only where a first must land before it. A fix can be taken now where it is stated, or is a choice among stated fixes an answer on the spot settles, and where whoever takes it can produce all it waits on, such as a reading on a quiet machine or another entry landing first. Any other finding is a specification: one whose fix takes three commits or more states its stages, and one that waits on a consumer, on a measurement deciding whether it is worth doing, or on a design no one has drawn is filed not yet refined. A fix that in the making needs a third commit, or rests on a question an answer on the spot cannot settle, is undone and lifted into a specification, never stretched. The commit that fixes a finding deletes its entry.
 
-An entry marked uncertain holds a point seen but not yet shown, to be investigated before it becomes a finding or a specification: it names what was seen and by what, what is not yet known and what would settle it, and its size is unknown until then. Its investigation restates it as a finding, lifts it into a specification, or drops it where the code does not bear it out.
+An entry marked uncertain holds a point seen but not yet shown, to be investigated before it becomes a finding or a specification: it names what was seen and by what, what is not yet known and what would settle it, and its size is unknown until then. Its investigation restates it as a finding, lifts it into a specification, files it as a ticket where it builds a proof of `False`, or drops it where the code does not bear it out.
+
+A proof of `False` is no entry: whoever meets one files its ticket open at once, in a commit of its own, and fixes it in the change at hand only where that change refuses it. A fix of it past the line an entry's is held to is a specification of `soundness/` numbered from `100`, linking the ticket, and retired when the ticket turns fixed.
 
 A specification states what is missing or wrong today and where, its context from the code, its goal, decisions already settled and questions still open, stages each with its own check, its verification and its retirement. One not yet refined is marked **Not refined yet** and states what is known and what it waits on. A specification that waits for a consumer says so. A measurement it depends on states a protocol precise enough to rebuild its scripts; the scripts are not checked in.
 

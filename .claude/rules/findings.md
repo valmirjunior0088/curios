@@ -30,7 +30,7 @@ What is written down already is known: an entry in a findings file, a specificat
 
 A finding goes into its area's findings file as an entry or among its area's specifications, as [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) draws the line between the two and numbers a specification; what belongs to no area goes into the workspace's findings file, or loose in `documentation/roadmap/`. A point seen and not yet shown goes in as an entry marked uncertain, as the same decision states one.
 
-A closed term the checkers admit at `/std/Bool/False` is never set aside: it is an open ticket on the soundness board, filed as **The open ticket** of `.claude/commands/hunt-unsoundness.md` files one, in a commit of its own. A term admitted that should be refused, from which no `False` is built, is a finding, in soundness's findings file.
+A proof of `False`, a closed term the checkers admit at `/std/Bool/False`, is never set aside, whoever meets it: it is filed and fixed as [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states, its ticket written as **The open ticket** of `.claude/commands/hunt-unsoundness.md` writes one, and it leads the close of whatever run met it. A term admitted that should be refused, from which no `False` is built, is a finding like any other ([`xboard`'s README](../../xboard/README.md#a-ticket-is-a-proof-of-false-and-no-witness-states-the-type)); one seen that might reach `False` and not driven there is an entry marked uncertain, naming the `False` it might reach.
 
 ## One entry a cause
 
