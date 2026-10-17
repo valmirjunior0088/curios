@@ -237,6 +237,108 @@ pub(crate) fn analyze_calls(module: &Module) -> CallAnalysis {
     }
     analysis
 }
+
+/// The functions that hand their results back alike. A call whose return continuation is its function's own sentinel lowers to `return_call`, which requires the callee's results to match the caller's exactly, and agreement is symmetric: a function is decided together with everything it tail-calls and with everything that tail-calls it, however the edges point, so the classes are the undirected connected components of the tail-call graph.
+///
+/// **A class whose results something else fixes is fixed.** A member ending in a tail call through a closure returns at the closure type's one uniform result; one ending in a tail foreign call, cell or channel operation or call-shaped intrinsic falls through to the return with what that operation produces; the entry answers the host, and is pinned explicitly because, having no call sites of its own, it would otherwise inherit a class's decision through a tail call; and an escaping member is reached by its closure wrapper's tail call at the shared `clsr/{arity}` type. Nothing deciding a result may re-key such a class.
+pub(crate) struct TailClasses {
+    /// Each class's members in `FunctionId` order, the classes in the order their first member is met.
+    pub(crate) members: Vec<Vec<FunctionId>>,
+    /// The classes whose results something outside their own return edges fixes.
+    pub(crate) fixed: BTreeSet<usize>,
+}
+
+impl TailClasses {
+    /// The tail-call classes of `module`'s live functions, a class holding a member of `escaping` among the fixed.
+    pub(crate) fn of(module: &Module, escaping: &BTreeSet<FunctionId>) -> Self {
+        let mut tail_calls = BTreeMap::<FunctionId, BTreeSet<FunctionId>>::new();
+        let mut fixing = BTreeSet::<FunctionId>::new();
+
+        for owner in module.function_ids().collect::<Vec<_>>() {
+            let sentinel = module.function(owner).unwrap().return_cont;
+            tail_calls.entry(owner).or_default();
+            if module.entry() == Some(owner) || escaping.contains(&owner) {
+                fixing.insert(owner);
+            }
+
+            for node_id in function_nodes(module, owner) {
+                match module.node(node_id).unwrap() {
+                    Node::ApplyFun {
+                        callee: Callee::Known(callee),
+                        return_to,
+                        ..
+                    } if *return_to == sentinel => {
+                        tail_calls.entry(owner).or_default().insert(*callee);
+                        tail_calls.entry(*callee).or_default().insert(owner);
+                    }
+                    Node::ApplyFun {
+                        callee: Callee::Closure(_),
+                        return_to,
+                        ..
+                    }
+                    | Node::Foreign { return_to, .. }
+                    | Node::Cell { return_to, .. }
+                    | Node::Channel { return_to, .. }
+                    | Node::Intrinsic { return_to, .. }
+                        if *return_to == sentinel =>
+                    {
+                        fixing.insert(owner);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let members = components(&tail_calls);
+        let fixed = members
+            .iter()
+            .enumerate()
+            .filter(|(_, members)| members.iter().any(|member| fixing.contains(member)))
+            .map(|(class, _)| class)
+            .collect();
+
+        Self { members, fixed }
+    }
+}
+
+/// The connected components of an undirected graph given as its adjacency, each listed in `FunctionId` order.
+fn components(edges: &BTreeMap<FunctionId, BTreeSet<FunctionId>>) -> Vec<Vec<FunctionId>> {
+    let mut seen = BTreeSet::new();
+    let mut output = Vec::new();
+
+    for &root in edges.keys() {
+        if !seen.insert(root) {
+            continue;
+        }
+        let mut members = vec![root];
+        let mut work = vec![root];
+        while let Some(function) = work.pop() {
+            for &next in edges.get(&function).into_iter().flatten() {
+                if seen.insert(next) {
+                    members.push(next);
+                    work.push(next);
+                }
+            }
+        }
+        members.sort();
+        output.push(members);
+    }
+    output
+}
+
+/// The edges of `node` that transfer to `sentinel` — a function's returns, whether it jumps to one or switches into several.
+pub(crate) fn return_edges(node: &Node, sentinel: ContinuationId) -> Vec<&Edge> {
+    let edges: Vec<&Edge> = match node {
+        Node::ApplyCont(edge) => vec![edge],
+        Node::Switch { cases, default, .. } => cases.values().chain(default.as_ref()).collect(),
+        _ => vec![],
+    };
+    edges
+        .into_iter()
+        .filter(|edge| edge.target == sentinel)
+        .collect()
+}
+
 /// What transfers into each continuation: the known function whose call resumes there, or `None` for an entry that is anything else — a call through a closure, an operation delivering its result, a jump.
 ///
 /// Read by every pass that changes what a continuation's parameter holds, because the change is right only where it is right for every entry. `split_returns` widens a resume to several results only when each entry is a call it rewrites, and `uncurry_returns` has a resume expect an applied answer rather than a closure on the same condition. Judging a resume by the one call being rewritten would miss the joins a `match` lowers to — one parser called, another jumped in as a closure — rewriting them for the call and feeding the jumped closure to code reading an answer.

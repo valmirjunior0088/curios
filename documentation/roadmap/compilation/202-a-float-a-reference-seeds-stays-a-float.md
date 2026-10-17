@@ -39,11 +39,10 @@ Binaryen's Heap2Local replaces an allocation only where nothing else is stored t
 
 ## Stages
 
-1. **The tail-call classes, shared.** The return protocol's components and the tail positions that fix a class's results become one analysis the protocol and the representation read. No module changes.
-2. **Known calls.** Decisions 1 and 3. Check: a loop seeded by a known function's float parameter, one seeded by a call's result, and the two-structure step loop hold no `struct.new $flt`.
-3. **Captures.** Decision 2. Check: a float defined in a function and captured by an escaping closure seeds a loop in each, and neither loop holds a `struct.new $flt`; a captured counter in integer arithmetic answers as before.
-4. **Stated carriers.** Decision 4, with no reader yet. Check: erasure states a `Flt` parameter, a `Bool` parameter, a call's result and an `Option(Flt)` payload, and no value of a computed type, of a type variable, or an operation's result.
-5. **Stated carriers feed registers.** Decision 5. Check: a loop in an escaping function seeded by its parameter, and one seeded by a closure call's result, hold no `struct.new $flt`.
+1. **Known calls.** Decisions 1 and 3, reading the tail-call classes `curios-cont`'s `TailClasses` draws for the return protocol. Check: a loop seeded by a known function's float parameter, one seeded by a call's result, and the two-structure step loop hold no `struct.new $flt`.
+2. **Captures.** Decision 2. Check: a float defined in a function and captured by an escaping closure seeds a loop in each, and neither loop holds a `struct.new $flt`; a captured counter in integer arithmetic answers as before.
+3. **Stated carriers.** Decision 4, with no reader yet. Check: erasure states a `Flt` parameter, a `Bool` parameter, a call's result and an `Option(Flt)` payload, and no value of a computed type, of a type variable, or an operation's result.
+4. **Stated carriers feed registers.** Decision 5. Check: a loop in an escaping function seeded by its parameter, and one seeded by a closure call's result, hold no `struct.new $flt`.
 
 ## Verification
 

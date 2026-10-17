@@ -8,9 +8,7 @@
 //!
 //! **The shape a resume rebuilds in is part of the decision, not something the rewrite reads off the callee.** A class's return edges agree on one construction vocabulary — a row, or a structural tuple — and the reads below every resume are in that vocabulary, so the rebuild must be too. Recovering it per *function*, from that function's own return edges, would fail a member that returns only by tail-calling a class-mate, which has none: its callers would rebuild a `Tuple` for a class that hands back a row, and the first `RowGet` below would cast the wrong final type. What prevents it is the decision's return type being complete: `ReturnProtocol::Fields` carries the [`ReturnShape`] alongside the width, both joined over the class, and a class whose edges disagree is declined — the direction that only ever costs an allocation. [`Module::verify`] holds the same line from below, refusing a read whose operand was minted in the other vocabulary.
 //!
-//! **Tail calls make the decision an equivalence class rather than a per-function one.** A call whose return continuation is its function's return sentinel lowers to `return_call`, which requires the callee's results to match the caller's exactly. Agreement is symmetric, so the classes are the *undirected* connected components of the tail-call graph: a function is decided together with everything it tail-calls and with everything that tail-calls it, however the edges point.
-//!
-//! **Four tail positions fix a function's results to something already settled**, and pin their whole component to the tuple: a tail call through a closure, which returns at the closure type's single result; a tail foreign call, a tail cell operation, and a tail `ListMap`, each of which falls through to the return with the results that operation produces. The module entry is pinned for the same kind of reason — the host calls it and is not rewritten with the module — and pinning it explicitly is load-bearing rather than belt-and-braces, because having no call sites of its own would otherwise leave it to inherit a component's decision through a tail call.
+//! **Tail calls make the decision a class's rather than a function's**, and a class whose results something else fixes keeps the tuple: the classes, and the tail positions, the entry and the escaping members that fix one, are [`TailClasses`]'s, which the representation analysis reads too.
 //!
 //! **Every return edge must carry a construction the rewrite can read fields off.** A returned value that is merely some other value — `/std/Str/fold` returns a projection of its accumulator — has no statically known field count, so delivering *n* slots from it would mean projecting indices that need not exist at runtime. This is the condition that keeps a generic combinator out, and it is why a component containing one cannot be split however uniform its callers look.
 //!
@@ -23,8 +21,8 @@
 use {
     crate::{
         Atom, Callee, ContinuationId, Demand, Edge, FunctionId, Lattice, Module, Node, RowId,
-        ValueExpr, ValueId, analyze_calls, continuation_entries, demand_of, demands,
-        function_nodes,
+        TailClasses, ValueExpr, ValueId, analyze_calls, continuation_entries, demand_of, demands,
+        function_nodes, return_edges,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -48,9 +46,9 @@ pub(crate) enum ReturnShape {
 /// What every live function's return protocol may be, total over the module's functions.
 pub(crate) fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnProtocol> {
     let calls = analyze_calls(module);
+    let classes = TailClasses::of(module, &calls.escaping);
     let demands = demands(module);
     let constructions = constructions(module);
-    let mut tail_calls = BTreeMap::<FunctionId, BTreeSet<FunctionId>>::new();
     let mut pinned = BTreeSet::<FunctionId>::new();
     let mut demanded = BTreeMap::<FunctionId, Demand>::new();
     let mut resumes = BTreeMap::<FunctionId, BTreeSet<ContinuationId>>::new();
@@ -58,10 +56,6 @@ pub(crate) fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnPr
 
     for owner in module.function_ids().collect::<Vec<_>>() {
         let sentinel = module.function(owner).unwrap().return_cont;
-        tail_calls.entry(owner).or_default();
-        if module.entry() == Some(owner) {
-            pinned.insert(owner);
-        }
 
         for node_id in function_nodes(module, owner) {
             let node = module.node(node_id).unwrap();
@@ -76,52 +70,30 @@ pub(crate) fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnPr
                 }
             }
 
-            match node {
-                Node::ApplyFun {
-                    callee: Callee::Known(callee),
-                    return_to,
-                    ..
-                } if *return_to == sentinel => {
-                    tail_calls.entry(owner).or_default().insert(*callee);
-                    tail_calls.entry(*callee).or_default().insert(owner);
-                }
-                Node::ApplyFun {
-                    callee: Callee::Known(callee),
-                    return_to,
-                    ..
-                } => {
-                    let result = module.continuation(*return_to).unwrap().params.as_slice();
-                    // A resume carrying anything but the single value the tuple protocol delivers is a call this analysis cannot read, and reading it as a whole-value use is the direction that only ever excludes.
-                    let demand = match result {
-                        [result] => demand_of(&demands, *result),
-                        _ => Demand::Opaque,
-                    };
-                    demanded
-                        .entry(*callee)
-                        .or_insert_with(Demand::bottom)
-                        .join(demand);
-                    resumes.entry(*callee).or_default().insert(*return_to);
-                }
-                Node::ApplyFun {
-                    callee: Callee::Closure(_),
-                    return_to,
-                    ..
-                }
-                | Node::Foreign { return_to, .. }
-                | Node::Cell { return_to, .. }
-                | Node::Channel { return_to, .. }
-                | Node::Intrinsic { return_to, .. }
-                    if *return_to == sentinel =>
-                {
-                    pinned.insert(owner);
-                }
-                _ => {}
+            if let Node::ApplyFun {
+                callee: Callee::Known(callee),
+                return_to,
+                ..
+            } = node
+                && *return_to != sentinel
+            {
+                let result = module.continuation(*return_to).unwrap().params.as_slice();
+                // A resume carrying anything but the single value the tuple protocol delivers is a call this analysis cannot read, and reading it as a whole-value use is the direction that only ever excludes.
+                let demand = match result {
+                    [result] => demand_of(&demands, *result),
+                    _ => Demand::Opaque,
+                };
+                demanded
+                    .entry(*callee)
+                    .or_insert_with(Demand::bottom)
+                    .join(demand);
+                resumes.entry(*callee).or_default().insert(*return_to);
             }
         }
     }
 
     let mut protocols = BTreeMap::new();
-    for members in components(&tail_calls) {
+    for (index, members) in classes.members.into_iter().enumerate() {
         // The vocabulary is a fact of the *class*, exactly as the width is: a member that returns only by tail call carries no edge of its own, and its callers must still rebuild what the class actually hands back.
         let mut shape = None;
         let mut agreed = true;
@@ -142,9 +114,8 @@ pub(crate) fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnPr
             }
         }
         let class = members.iter().copied().collect::<BTreeSet<_>>();
-        let admissible = members
-            .iter()
-            .all(|function| !calls.escaping.contains(function) && !pinned.contains(function))
+        let admissible = !classes.fixed.contains(&index)
+            && members.iter().all(|function| !pinned.contains(function))
             && members
                 .iter()
                 .filter_map(|function| resumes.get(function))
@@ -291,19 +262,6 @@ fn return_edges_mut(node: &mut Node, sentinel: ContinuationId) -> Vec<&mut Edge>
         .collect()
 }
 
-/// The edges of `node` that transfer to `sentinel` — a function's returns, whether it jumps to one or switches into several.
-fn return_edges(node: &Node, sentinel: ContinuationId) -> Vec<&Edge> {
-    let edges: Vec<&Edge> = match node {
-        Node::ApplyCont(edge) => vec![edge],
-        Node::Switch { cases, default, .. } => cases.values().chain(default.as_ref()).collect(),
-        _ => vec![],
-    };
-    edges
-        .into_iter()
-        .filter(|edge| edge.target == sentinel)
-        .collect()
-}
-
 /// The fields of every aggregate built in the module, by the value the construction binds, with the row a variant construction belongs to. A variant is visible here for the same reason a tuple is — a return edge naming one is a class this rewrite can split — and the row rides along so the resume rebuilds in the vocabulary the reads below it use.
 fn constructions(module: &Module) -> BTreeMap<ValueId, (Vec<Atom>, Option<RowId>)> {
     let mut output = BTreeMap::new();
@@ -325,31 +283,6 @@ fn constructions(module: &Module) -> BTreeMap<ValueId, (Vec<Atom>, Option<RowId>
             }
             _ => {}
         }
-    }
-    output
-}
-
-/// The connected components of an undirected graph given as its adjacency, each listed in `FunctionId` order.
-fn components(edges: &BTreeMap<FunctionId, BTreeSet<FunctionId>>) -> Vec<Vec<FunctionId>> {
-    let mut seen = BTreeSet::new();
-    let mut output = Vec::new();
-
-    for &root in edges.keys() {
-        if !seen.insert(root) {
-            continue;
-        }
-        let mut members = vec![root];
-        let mut work = vec![root];
-        while let Some(function) = work.pop() {
-            for &next in edges.get(&function).into_iter().flatten() {
-                if seen.insert(next) {
-                    members.push(next);
-                    work.push(next);
-                }
-            }
-        }
-        members.sort();
-        output.push(members);
     }
     output
 }
