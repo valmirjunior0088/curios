@@ -78,11 +78,11 @@ let wanting_at_every_stop(
         List/range(0, whole),
         (k) => fed(piece, start, x[], [front(wire, k)]) == Fed/wanting());
 
-let head: (Nat, Bytes) -> Step(Nat, Refusal, Bytes) =
+let head: (read/Searched, Bytes) -> Step(read/Searched, Refusal, Bytes) =
     (searched, held) => read/head(Limits/server, true, searched, held);
 
-let chunked: (Bytes, Bytes) -> Step(Bytes, Refusal, Bytes) =
-    (content, held) => read/chunked(Limits/server, content, held);
+let chunked: (read/Decoded, Bytes) -> Step(read/Decoded, Refusal, Bytes) =
+    (decoded, held) => read/chunked(Limits/server, decoded, held);
 
 let stated(n: Nat) -> ({}, Bytes) -> Step({}, Refusal, Bytes) =
     (_, held) => read/length(Limits/server, n, held);
@@ -95,10 +95,10 @@ test a_head_reads_whole_at_every_cut =
         Test/assert(
             whole_at_every_cut(
                 head,
-                0,
+                read/unsearched,
                 wire,
                 Fed/whole(Str/to_bytes(lines), Str/to_bytes("the body")))),
-        Test/assert(wanting_at_every_stop(head, 0, wire, Bytes/len(wire) - 8))]);
+        Test/assert(wanting_at_every_stop(head, read/unsearched, wire, Bytes/len(wire) - 8))]);
 
 -- A body of a stated length is that many octets, wherever the bytes are cut, and wants more until it has them.
 test a_stated_length_reads_whole_at_every_cut =
@@ -122,34 +122,133 @@ test a_chunked_body_reads_whole_at_every_cut =
         Test/assert(
             whole_at_every_cut(
                 chunked,
-                x[],
+                read/undecoded,
                 wire,
                 Fed/whole(Str/to_bytes("Wikipedia in\r\n\r\nchunks."), Str/to_bytes("next")))),
-        Test/assert(wanting_at_every_stop(chunked, x[], wire, Bytes/len(wire) - 4)),
+        Test/assert(wanting_at_every_stop(chunked, read/undecoded, wire, Bytes/len(wire) - 4)),
         Test/equal(
-            fed(chunked, x[], x[], [Str/to_bytes("0\r\n"), Str/to_bytes("\r\n")]),
+            fed(chunked, read/undecoded, x[], [Str/to_bytes("0\r\n"), Str/to_bytes("\r\n")]),
             Fed/whole(x[], x[]))]);
 
-let framed(framing: Framing) -> (Bytes, Bytes) -> Step(Bytes, Refusal, Bytes) =
-    (content, held) => read/body(Limits/server, framing, content, held);
+-- Every octet of `b` an arrival of its own.
+let octets(b: Bytes) -> List(Bytes) =
+    Bytes/fold(b, [], (byte, acc) => [..acc, x[byte]]);
+
+-- A head and a chunked body read whole when every octet arrives alone, each look resuming where the last stopped: inside a line end, inside the empty line that ends a head, inside a size line, a chunk and a trailer section.
+test the_pieces_read_whole_an_octet_at_a_time =
+    let lines = "GET /x HTTP/1.1\r\nHost: h\r\nX-A: one";
+    let request = Str/to_bytes(Str/flatten(["\r\n", lines, "\r\n\r\nthe body"]));
+    let chunks =
+        "4\r\nWiki\r\n5;ext=1\r\npedia\r\nE\r\n in\r\n\r\nchunks.\r\n0\r\nExpires: never\r\n\r\nnext";
+    Test/all([
+        Test/equal(
+            fed(head, read/unsearched, x[], octets(request)),
+            Fed/whole(Str/to_bytes(lines), Str/to_bytes("the body"))),
+        Test/equal(
+            fed(chunked, read/undecoded, x[], octets(Str/to_bytes(chunks))),
+            Fed/whole(Str/to_bytes("Wikipedia in\r\n\r\nchunks."), Str/to_bytes("next")))]);
+
+-- Bounds small enough to reach: a start line of sixteen octets, a head of forty, a size line of four.
+let small: Limits =
+    Limits { line = 16, head = 40, content = 32, chunk_line = 4 };
+
+let small_head: (read/Searched, Bytes) -> Step(read/Searched, Refusal, Bytes) =
+    (searched, held) => read/head(small, true, searched, held);
+
+let small_chunked: (read/Decoded, Bytes) -> Step(read/Decoded, Refusal, Bytes) =
+    (decoded, held) => read/chunked(small, decoded, held);
+
+let bees(n: Nat) -> Str =
+    Str/flatten(List/replicate(n, "b"));
+
+-- A bound is met by what is known to be the start line's, the head's, the size line's or the trailer section's — never by the octets a line end begins with — so a piece at its bound reads whole at every cut, one octet past it is refused at every cut, and the empty lines a lenient head passes over count towards its bound.
+test a_bound_is_met_alike_at_every_cut =
+    let start = "GET /aaaaaa HTTP";
+    let head_of(field: Str) -> Bytes =
+        Str/to_bytes(Str/flatten([start, "\r\nX: ", field, "\r\n\r\nnext"]));
+    let trailers_of(field: Str) -> Bytes =
+        Str/to_bytes(Str/flatten(["0\r\nX: ", field, "\r\n\r\nnext"]));
+    let next = Str/to_bytes("next");
+    Test/all([
+        Test/assert(
+            whole_at_every_cut(
+                small_head,
+                read/unsearched,
+                Str/to_bytes(Str/concat(start, "\r\n\r\nnext")),
+                Fed/whole(Str/to_bytes(start), next))),
+        Test/assert(
+            whole_at_every_cut(
+                small_head,
+                read/unsearched,
+                Str/to_bytes("GET /aaaaaaa HTTP\r\n\r\nnext"),
+                Fed/refused(Refusal/line_too_long()))),
+        Test/assert(
+            whole_at_every_cut(
+                small_head,
+                read/unsearched,
+                head_of(bees(19)),
+                Fed/whole(Str/to_bytes(Str/flatten([start, "\r\nX: ", bees(19)])), next))),
+        Test/assert(
+            whole_at_every_cut(
+                small_head,
+                read/unsearched,
+                head_of(bees(20)),
+                Fed/refused(Refusal/head_too_large()))),
+        Test/assert(
+            whole_at_every_cut(
+                small_head,
+                read/unsearched,
+                x[..Str/to_bytes("\r\n"), ..head_of(bees(19))],
+                Fed/refused(Refusal/head_too_large()))),
+        Test/assert(
+            whole_at_every_cut(
+                small_chunked,
+                read/undecoded,
+                Str/to_bytes("0004\r\nabcd\r\n0\r\n\r\nnext"),
+                Fed/whole(Str/to_bytes("abcd"), next))),
+        Test/assert(
+            whole_at_every_cut(
+                small_chunked,
+                read/undecoded,
+                Str/to_bytes("00004\r\nabcd\r\n0\r\n\r\nnext"),
+                Fed/refused(Refusal/malformed("a chunk's size line is too long")))),
+        Test/assert(
+            whole_at_every_cut(
+                small_chunked,
+                read/undecoded,
+                trailers_of(bees(33)),
+                Fed/whole(x[], next))),
+        Test/assert(
+            whole_at_every_cut(
+                small_chunked,
+                read/undecoded,
+                trailers_of(bees(34)),
+                Fed/refused(Refusal/head_too_large())))]);
+
+let framed(framing: Framing) -> (read/Decoded, Bytes) -> Step(read/Decoded, Refusal, Bytes) =
+    (decoded, held) => read/body(Limits/server, framing, decoded, held);
 
 -- A body is read as its framing delimits it, wherever the bytes are cut: nothing where there is none, its octets where a length is stated, its chunks' content where it is chunked. One framed by the close wants more however much has arrived, since only its stream's end says it is whole.
 test a_body_reads_as_its_framing_delimits_it =
     let next = Str/to_bytes("next");
     Test/all([
-        Test/equal(fed(framed(Framing/none()), x[], next, []), Fed/whole(x[], next)),
+        Test/equal(fed(framed(Framing/none()), read/undecoded, next, []), Fed/whole(x[], next)),
         Test/assert(
             whole_at_every_cut(
                 framed(Framing/length(5)),
-                x[],
+                read/undecoded,
                 Str/to_bytes("hellonext"),
                 Fed/whole(Str/to_bytes("hello"), next))),
         Test/assert(
             whole_at_every_cut(
                 framed(Framing/chunked()),
-                x[],
+                read/undecoded,
                 Str/to_bytes("5\r\nhello\r\n0\r\n\r\nnext"),
                 Fed/whole(Str/to_bytes("hello"), next))),
         Test/equal(
-            fed(framed(Framing/close()), x[], x[], [Str/to_bytes("hel"), Str/to_bytes("lo")]),
+            fed(
+                framed(Framing/close()),
+                read/undecoded,
+                x[],
+                [Str/to_bytes("hel"), Str/to_bytes("lo")]),
             Fed/wanting())]);

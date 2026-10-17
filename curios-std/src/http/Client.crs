@@ -22,8 +22,8 @@ let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Io(Result(Error,
     let first =
         Reader/take(
             r,
-            (searched: Nat, bytes: Bytes) => read/head(limits, false, searched, bytes),
-            0)!;
+            (searched: read/Searched, bytes: Bytes) => read/head(limits, false, searched, bytes),
+            read/unsearched)!;
     match first
     | failure(stop) =>
         Io/pure(

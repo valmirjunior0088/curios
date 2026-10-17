@@ -13,20 +13,20 @@ pub let body(
     let read =
         Reader/take(
             r,
-            (content: Bytes, bytes: Bytes) => read/body(limits, framing, content, bytes),
-            x[])!;
+            (decoded: read/Decoded, bytes: Bytes) => read/body(limits, framing, decoded, bytes),
+            read/undecoded)!;
     match read
     | success(taken) => Io/pure(Result/success(taken))
     | failure(stop) =>
         match stop
         | refused(why) => Io/pure(Result/failure(Stop/refused(why)))
-        | failed(content, e) => Io/pure(Result/failure(Stop/failed(content, e)))
-        | ended(content) =>
+        | failed(decoded, e) => Io/pure(Result/failure(Stop/failed(decoded.content, e)))
+        | ended(decoded) =>
             let held = Reader/held(r)!;
             Io/pure(
                 match framing
                 | close() => Result/success(held)
-                | chunked() => Result/failure(Stop/ended(content))
+                | chunked() => Result/failure(Stop/ended(decoded.content))
                 | _ => Result/failure(Stop/ended(held))
                 end)
         end

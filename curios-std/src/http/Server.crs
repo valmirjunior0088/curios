@@ -77,7 +77,7 @@ let invite(limits: Limits, c: Socket, r: Reader(Socket), o: Opened) -> Io(Result
     | false => Io/pure(Result/success(()))
     | true =>
         let held = Reader/held(r)!;
-        match read/body(limits, o.framing, x[], held)
+        match read/body(limits, o.framing, read/undecoded, held)
         | more(_, _) => Try/run(Io/write(c, Str/to_bytes("HTTP/1.1 100 Continue\r\n\r\n")))
         | _ => Io/pure(Result/success(()))
         end
@@ -91,7 +91,10 @@ let request(
     r: Reader(Socket),
 ) -> Io(Result(Unread, Request)) =
     let first =
-        Reader/take(r, (searched: Nat, held: Bytes) => read/head(limits, true, searched, held), 0)!;
+        Reader/take(
+            r,
+            (searched: read/Searched, held: Bytes) => read/head(limits, true, searched, held),
+            read/unsearched)!;
     match first
     | failure(stop) =>
         match stop

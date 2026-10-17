@@ -194,7 +194,7 @@ pub let from_head(head: Head, body: Bytes) -> Result(Refusal, Response) =
 
 --- A whole reply read from `bytes`, as a client that sent a request of `method` reads it within `limits`: every 1xx reply ahead of the final one passed over (RFC 9110 §15.2), then the head, the framing its fields state, and the body that framing delimits — none in reply to `HEAD` or under a 1xx, 204 or 304 status, the chunks where it is chunked, `Content-Length` octets where the field is there, and everything the peer sent otherwise. A reply that has not all arrived is `incomplete`.
 pub let of_bytes(limits: Limits, method: Method, bytes: Bytes) -> Result(Refusal, Response) =
-    match read/head(limits, false, 0, bytes)
+    match read/head(limits, false, read/unsearched, bytes)
     | more(_, _) => Result/failure(Refusal/incomplete())
     | refused(why) => Result/failure(why)
     | took(lines, rest) =>

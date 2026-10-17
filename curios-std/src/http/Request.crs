@@ -240,7 +240,7 @@ pub let from_head(scheme: Scheme, head: Head, body: Bytes) -> Result(Refusal, Re
 
 --- A whole request read from `bytes`, as a server over a connection of `scheme` reads it within `limits`: the head, the framing its fields state, the body that framing delimits, and the URL its target and its `Host` address. What follows the request is not read. A request that has not all arrived is `incomplete`.
 pub let of_bytes(limits: Limits, scheme: Scheme, bytes: Bytes) -> Result(Refusal, Request) =
-    match read/head(limits, true, 0, bytes)
+    match read/head(limits, true, read/unsearched, bytes)
     | more(_, _) => Result/failure(Refusal/incomplete())
     | refused(why) => Result/failure(why)
     | took(lines, rest) =>
