@@ -51,6 +51,11 @@ pub trait Families {
     fn sets_curried_apart(&self) -> bool {
         true
     }
+
+    /// Whether the walk pairs two nodes' sorts as it pairs their levels, handing back the pairs they differ in ([`LevelDifferences::sorts`](crate::LevelDifferences::sorts)). A reading that does not keeps two nodes apart in a sort apart, which is what conversion asks, two instances apart in a sort being apart in more than a level; one that does is for a caller that carries one spelling to the other rather than identifying the two.
+    fn pairs_sorts(&self) -> bool {
+        false
+    }
 }
 
 impl Families for () {

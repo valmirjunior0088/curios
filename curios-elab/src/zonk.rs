@@ -14,7 +14,7 @@ use {
         RecItem, RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
         TupleType, UniverseContext, UniverseError, UniverseMetaId, Universes, Var, Variant, Visit,
         project_erased_universes, rewrite_universe_levels_scoped_shared,
-        rewrite_universe_qualities, shift_universe_params, universe_metas,
+        rewrite_universe_qualities, substitute_universe_metas_scoped, universe_metas,
     },
     curios_utilities::recurse,
     std::{
@@ -1590,18 +1590,11 @@ pub(crate) fn zonk_universe_levels_scoped<B: Bound>(
     // A sort's quality as far as it is solved, read with the levels: one walk where no quality was minted, which is every declaration that leaves no sort to inference.
     let qualities = solver.has_qualities().then(|| solver.quality_table(false));
     let solver = solver.clone();
-    let levelled = rewrite_universe_levels_scoped_shared(value, move |depth, level| {
-        let mut replacements = BTreeMap::new();
-        for meta in level.metas() {
-            if let Some(solution) = solver.solution(meta) {
-                let zonked = zonk_solution(&solver, solution, &mut BTreeSet::from([meta]))?;
-                replacements.insert(meta, shift_universe_params(&zonked, depth)?);
-            }
-        }
-        level.substitute(|head| match head {
-            LevelHead::Param(_) => None,
-            LevelHead::Meta(meta) => replacements.get(&meta).cloned(),
-        })
+    let levelled = substitute_universe_metas_scoped(value, move |meta| {
+        solver
+            .solution(meta)
+            .map(|solution| zonk_solution(&solver, solution, &mut BTreeSet::from([meta])))
+            .transpose()
     })?;
 
     match qualities {

@@ -10,7 +10,7 @@ use {
     curios_utilities::{Keyed, Symbol},
     std::{
         cell::RefCell,
-        collections::{BTreeSet, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         convert::Infallible,
         fmt,
         hash::Hash,
@@ -426,6 +426,25 @@ pub fn shift_universe_params(level: &Level, amount: usize) -> Result<Level, Univ
             .map(UniverseParam)
             .map(Level::param),
         LevelHead::Meta(_) => None,
+    })
+}
+
+/// Every universe metavariable of `value` that `answer` answers for, replaced by the answer shifted past the universe binders above the occurrence ([`shift_universe_params`]). An answer is stated at universe-binder depth zero, as a solution is, so a parameter in it names the same parameter wherever it lands. Once per node and depth; the first error is the result.
+pub fn substitute_universe_metas_scoped<B: Bound>(
+    value: &B,
+    mut answer: impl FnMut(UniverseMetaId) -> Result<Option<Level>, UniverseError> + 'static,
+) -> Result<B, UniverseError> {
+    rewrite_universe_levels_scoped_shared(value, move |depth, level| {
+        let mut replacements = BTreeMap::new();
+        for meta in level.metas() {
+            if let Some(found) = answer(meta)? {
+                replacements.insert(meta, shift_universe_params(&found, depth)?);
+            }
+        }
+        level.substitute(|head| match head {
+            LevelHead::Param(_) => None,
+            LevelHead::Meta(meta) => replacements.get(&meta).cloned(),
+        })
     })
 }
 
@@ -971,11 +990,12 @@ pub struct Visit<F> {
     memo: Memo,
 }
 
-/// What one node of [`Term::level_differences`]'s walk stood down: its children and its own levels, each with the universe-binder depth it sits at below the node, in traversal order.
+/// What one node of [`Term::level_differences`]'s walk stood down: its children and its own levels, each with the universe-binder depth it sits at below the node, and its own sorts where the walk stands them down too, in traversal order.
 #[derive(Default)]
 pub(crate) struct MaskedLevels {
     pub(crate) children: Vec<(usize, Term)>,
     pub(crate) levels: Vec<(usize, Level)>,
+    pub(crate) qualities: Vec<Quality>,
 }
 
 /// Whether a traversal remembers what it rebuilt, and under what key.
@@ -1061,10 +1081,13 @@ enum Mode {
     /// A level-level hook, visiting only nodes that carry universe data, and what the walk does with a quality beside it.
     RewritingLevels(LevelRewrite, Qualities),
     /// [`Mode::Masking`] that also stands every level of the node itself down to a sentinel, keeping what it removed: the children each with the universe-binder depth it sits at below the node, and the levels each with theirs. Every node is visited, a ground `Type 0` included — a comparison that aligns levels by position has to see the one that carries no universe data. This is one node of [`Term::level_differences`]'s walk over a pair.
+    ///
+    /// `qualities` is `Some` for a walk that stands the node's sorts down beside its levels, keeping them in traversal order, and `None` for one that leaves them in the masked node, where two nodes apart in a sort compare apart.
     MaskingLevels {
         placeholder: Term,
         children: Vec<(usize, Term)>,
         levels: Vec<(usize, Level)>,
+        qualities: Option<Vec<Quality>>,
     },
     /// Replace every level with the ground representative, visiting only nodes that carry universe data.
     ErasingUniverses,
@@ -1241,8 +1264,8 @@ where
         }
     }
 
-    /// Like [`masking`](Self::masking), additionally standing the node's own levels down — see [`Mode::MaskingLevels`] — for [`Visit::take_masked_levels`].
-    pub(crate) fn masking_levels(visit: F, placeholder: Term) -> Self {
+    /// Like [`masking`](Self::masking), additionally standing the node's own levels down — see [`Mode::MaskingLevels`] — and its sorts beside them where `sorts` asks, for [`Visit::take_masked_levels`].
+    pub(crate) fn masking_levels(visit: F, placeholder: Term, sorts: bool) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
@@ -1251,6 +1274,7 @@ where
                 placeholder,
                 children: Vec::new(),
                 levels: Vec::new(),
+                qualities: sorts.then(Vec::new),
             },
             // Masking never descends past one level, so there is nothing to revisit.
             memo: Memo::None,
@@ -1347,13 +1371,20 @@ where
         }
     }
 
-    /// A sort's quality through the walk's quality hook, where it has one; every other walk leaves a quality as it is, an erasing one included, since a quality is what the sort is and no payload of it.
+    /// A sort's quality through the walk's quality hook, where it has one, or stood down to a sentinel by a masking walk that keeps sorts ([`Mode::MaskingLevels`]); every other walk leaves a quality as it is, an erasing one included, since a quality is what the sort is and no payload of it.
     pub(crate) fn visit_quality(&mut self, quality: &Quality) -> Quality {
         match &mut self.mode {
             Mode::RewritingLevels(
                 _,
                 Qualities::Rewritten(rewrite) | Qualities::Stated(rewrite),
             ) => rewrite(quality),
+            Mode::MaskingLevels {
+                qualities: Some(qualities),
+                ..
+            } => {
+                qualities.push(*quality);
+                Quality::Type
+            }
             _ => *quality,
         }
     }
@@ -1418,10 +1449,14 @@ where
     pub(crate) fn take_masked_levels(&mut self) -> MaskedLevels {
         match &mut self.mode {
             Mode::MaskingLevels {
-                children, levels, ..
+                children,
+                levels,
+                qualities,
+                ..
             } => MaskedLevels {
                 children: mem::take(children),
                 levels: mem::take(levels),
+                qualities: qualities.as_mut().map(mem::take).unwrap_or_default(),
             },
             _ => MaskedLevels::default(),
         }

@@ -384,6 +384,25 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
                 .is_some_and(|found| found.compared.is_empty()),
         ),
         (
+            "level differences pairing sorts",
+            doubled(
+                Term::sort_at(Quality::Meta(QualityMetaId(0)), Level::meta(meta)),
+                60,
+            )
+            .level_differences(
+                &doubled(
+                    Term::sort_at(
+                        Quality::Meta(QualityMetaId(1)),
+                        Level::meta(UniverseMetaId(1)),
+                    ),
+                    60,
+                ),
+                |_| false,
+                &PairingSorts,
+            )
+            .is_some_and(|found| found.compared.len() == 1 && found.sorts.len() == 1),
+        ),
+        (
             "the truth table",
             decide_bool(&mut Folding, &formula(), &formula()).is_ok_and(|equal| equal),
         ),
@@ -395,6 +414,15 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
                         LevelHead::Meta(found) if found == meta => Some(Level::zero()),
                         _ => None,
                     })
+                })
+                .expect("substituting a ground level cannot overflow"),
+            ),
+        ),
+        (
+            "the universe metavariable substitution",
+            root_operands_shared(
+                &substitute_universe_metas_scoped(&term, move |found| {
+                    Ok((found == meta).then(Level::zero))
                 })
                 .expect("substituting a ground level cannot overflow"),
             ),

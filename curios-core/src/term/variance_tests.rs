@@ -59,6 +59,7 @@ fn found(
         compared,
         irrelevant,
         curried: Vec::new(),
+        sorts: Vec::new(),
     })
 }
 
@@ -200,6 +201,7 @@ fn a_definition_passed_bare_is_left_to_its_type() {
             compared: vec![pair(0, 2)],
             irrelevant: Vec::new(),
             curried: vec![pair(0, 1)],
+            sorts: Vec::new(),
         })
     );
 }
@@ -226,6 +228,7 @@ fn a_lambdas_binder_annotation_is_left_to_its_type() {
             compared: vec![pair(3, 4)],
             irrelevant: Vec::new(),
             curried: vec![pair(0, 1)],
+            sorts: Vec::new(),
         })
     );
     assert_eq!(

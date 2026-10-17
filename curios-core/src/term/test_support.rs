@@ -45,6 +45,31 @@ pub(super) fn distinct_nodes(term: &Term) -> usize {
 /// Deep enough that a walk recursing natively per link overflows a default stack, so a regression is a stack overflow rather than a slow test.
 pub(super) const DEEP: u32 = 100_000;
 
+/// A reading of no family that pairs sorts, as a caller carrying one spelling to another reads the walk.
+pub(super) struct PairingSorts;
+
+impl Families for PairingSorts {
+    fn induct(&self, _: &Global) -> Option<&InductDecl> {
+        None
+    }
+
+    fn struct_(&self, _: &Global) -> Option<&StructDecl> {
+        None
+    }
+
+    fn reads_formers(&self) -> bool {
+        false
+    }
+
+    fn sets_curried_apart(&self) -> bool {
+        false
+    }
+
+    fn pairs_sorts(&self) -> bool {
+        true
+    }
+}
+
 /// The families a test declares, as the level alignment reads a registry.
 #[derive(Default)]
 pub(super) struct Registry {

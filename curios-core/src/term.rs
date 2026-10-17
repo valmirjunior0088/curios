@@ -1469,8 +1469,8 @@ impl PartialEq for Term {
             if this.get_or_init_hash() != that.get_or_init_hash() {
                 return false;
             }
-            if Rc::strong_count(&this.inner) > 1
-                && Rc::strong_count(&that.inner) > 1
+            if held_twice(&this)
+                && held_twice(&that)
                 && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner)))
             {
                 continue;
@@ -1514,8 +1514,8 @@ impl Term {
             if Rc::ptr_eq(&this.inner, &that.inner) || is_wildcard(&this) || is_wildcard(&that) {
                 continue;
             }
-            if Rc::strong_count(&this.inner) > 1
-                && Rc::strong_count(&that.inner) > 1
+            if held_twice(&this)
+                && held_twice(&that)
                 && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner)))
             {
                 continue;
@@ -1544,17 +1544,24 @@ impl Term {
     /// **A level a family is irrelevant in is not a difference.** `families` is the caller's reading of the nominal families and of the definitions, and under it the pair at each position a vector calls irrelevant is set apart ([`LevelDifferences::irrelevant`]), at a nominal node, at a family's name or a definition applied in full, and at an `induct`'s former applied in full by its group's projection: two instances apart in such a level alone are one term, so there is nothing to identify. Under `()` nothing is set apart and no former is read as its node.
     ///
     /// **A function short of its application is neither.** Two instances of a former or of a definition that are not applied in full, apart in a level their vector calls irrelevant, two projections of one former that are not, and two lambdas apart in a binder's annotation, convert where they meet at their function type, eta applying both to the same binders before either is read, and are compared level by level at any other, which the walk cannot tell. Their pairs are set apart as curried ([`LevelDifferences::curried`]) for a caller that goes on to the type; a reading that asks for none of this ([`Families::sets_curried_apart`]) has them compared. A lambda is what a definition's bare instance unfolds to, so the two are read alike whichever of them a reduction left standing.
+    ///
+    /// **A sort is a difference only where the reading pairs it.** Two nodes apart in a sort are apart in more than a level, and the walk answers `None` for them, unless the reading pairs sorts ([`Families::pairs_sorts`]): then each node's sorts are stood down beside its levels, and the pairs two nodes differ in are handed back in [`LevelDifferences::sorts`], for a caller that carries one spelling to the other.
     pub fn level_differences(
         &self,
         other: &Term,
         mut is_wildcard: impl FnMut(&Term) -> bool,
         families: &impl Families,
     ) -> Option<LevelDifferences> {
-        let mut visit = Visit::masking_levels(|_, _| None, Term::prop());
+        let pairs_sorts = families.pairs_sorts();
+        let mut visit = Visit::masking_levels(|_, _| None, Term::prop(), pairs_sorts);
         let mut mask = |subterm: &Subterm| {
             let masked = subterm.traverse(&mut visit);
-            let MaskedLevels { children, levels } = visit.take_masked_levels();
-            (masked, children, levels)
+            let MaskedLevels {
+                children,
+                levels,
+                qualities,
+            } = visit.take_masked_levels();
+            (masked, children, levels, qualities)
         };
 
         let mut differences = LevelDifferences::default();
@@ -1566,8 +1573,8 @@ impl Term {
             if Rc::ptr_eq(&this.inner, &that.inner) || is_wildcard(&this) || is_wildcard(&that) {
                 continue;
             }
-            if Rc::strong_count(&this.inner) > 1
-                && Rc::strong_count(&that.inner) > 1
+            if held_twice(&this)
+                && held_twice(&that)
                 && !entered.insert((
                     Rc::as_ptr(&this.inner),
                     Rc::as_ptr(&that.inner),
@@ -1580,11 +1587,12 @@ impl Term {
 
             // Inside a curried former the two groups are aligned as written, and what they differ in is set apart whole.
             if curried {
-                let (this_masked, this_children, this_levels) = mask(this.look());
-                let (that_masked, that_children, that_levels) = mask(that.look());
+                let (this_masked, this_children, this_levels, this_qualities) = mask(this.look());
+                let (that_masked, that_children, that_levels, that_qualities) = mask(that.look());
                 if this_masked != that_masked
                     || this_children.len() != that_children.len()
                     || this_levels.len() != that_levels.len()
+                    || this_qualities.len() != that_qualities.len()
                 {
                     return None;
                 }
@@ -1597,6 +1605,12 @@ impl Term {
                             .push((depth + below, this_level, that_level));
                     }
                 }
+                differences.sorts.extend(
+                    this_qualities
+                        .into_iter()
+                        .zip(that_qualities)
+                        .filter(|(this, that)| this != that),
+                );
                 work.extend(
                     this_children
                         .into_iter()
@@ -1626,14 +1640,25 @@ impl Term {
             if let (Some(this_applied), Some(that_applied)) =
                 (Applied::of(&this, families), Applied::of(&that, families))
             {
-                // Two instances apart in a sort are apart in more than a level.
+                // Two instances apart in a sort are apart in more than a level, unless the reading pairs sorts.
+                let sorts_apart: Vec<(Quality, Quality)> = this_applied
+                    .universes
+                    .qualities
+                    .iter()
+                    .copied()
+                    .zip(that_applied.universes.qualities.iter().copied())
+                    .filter(|(this, that)| this != that)
+                    .collect();
                 if this_applied.name != that_applied.name
                     || this_applied.universes.levels.len() != that_applied.universes.levels.len()
-                    || this_applied.universes.qualities != that_applied.universes.qualities
+                    || this_applied.universes.qualities.len()
+                        != that_applied.universes.qualities.len()
+                    || (!pairs_sorts && !sorts_apart.is_empty())
                     || this_applied.arguments.len() != that_applied.arguments.len()
                 {
                     return None;
                 }
+                differences.sorts.extend(sorts_apart);
                 for (position, (this_level, that_level)) in this_applied
                     .universes
                     .levels
@@ -1660,14 +1685,21 @@ impl Term {
                 continue;
             }
 
-            let (this_masked, this_children, this_levels) = mask(this.look());
-            let (that_masked, that_children, that_levels) = mask(that.look());
+            let (this_masked, this_children, this_levels, this_qualities) = mask(this.look());
+            let (that_masked, that_children, that_levels, that_qualities) = mask(that.look());
             if this_masked != that_masked
                 || this_children.len() != that_children.len()
                 || this_levels.len() != that_levels.len()
+                || this_qualities.len() != that_qualities.len()
             {
                 return None;
             }
+            differences.sorts.extend(
+                this_qualities
+                    .into_iter()
+                    .zip(that_qualities)
+                    .filter(|(this, that)| this != that),
+            );
 
             // A nominal node's own levels are its `universes`, in order, so a position there is a universe parameter. So are an instance's of a name: one that reaches here is short of its full application, every one in full having been taken above.
             let family = this.look().nominal_name();
@@ -1818,7 +1850,7 @@ impl Term {
     }
 }
 
-/// The level pairs two terms that differ in nothing else differ in, each with its universe-binder depth, in traversal order: what [`Term::level_differences`] answers.
+/// The level pairs two terms that differ in nothing else differ in, each with its universe-binder depth, in traversal order, and the sort pairs where the reading pairs them: what [`Term::level_differences`] answers.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LevelDifferences {
     /// The pairs at positions whose levels are part of the term: two terms are one only where every one of these is one level.
@@ -1827,6 +1859,8 @@ pub struct LevelDifferences {
     pub irrelevant: Vec<(usize, Level, Level)>,
     /// The pairs at a former or a definition short of its full application that its vector calls irrelevant, every pair of two curried projections of one former, and every pair inside a lambda's binder annotation. Whether they are a difference follows the type the two terms meet at, a function type or any other, which the walk does not know.
     pub curried: Vec<(usize, Level, Level)>,
+    /// The sort pairs two nodes differ in, where the reading pairs sorts ([`Families::pairs_sorts`]); empty under every other reading, which finds two nodes apart in a sort apart.
+    pub sorts: Vec<(Quality, Quality)>,
 }
 
 /// A family's name or a definition applied in full, as conversion's raw spellings hold it: the name, the instance, and the arguments, a family's parameters then its indices.
@@ -1983,8 +2017,8 @@ impl Term {
         let mut entered: HashSet<(*const Node, *const Node)> = HashSet::new();
 
         while let Some((this, that)) = work.pop() {
-            if Rc::strong_count(&this.inner) > 1
-                && Rc::strong_count(&that.inner) > 1
+            if held_twice(&this)
+                && held_twice(&that)
                 && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner)))
             {
                 continue;
@@ -2035,6 +2069,11 @@ impl Term {
 
         true
     }
+}
+
+/// Whether a node a pair walk took off its work stack is held twice beside the walk's own clone of it — by two parents, or twice by one — which is the one way another path brings its pair round again, and so where the walk remembers the pair. A node one parent holds once counts two, that reference and the clone; a count of one more, from a table that keeps the node, only remembers a pair that comes round no more, which costs an insertion and changes no answer.
+fn held_twice(term: &Term) -> bool {
+    Rc::strong_count(&term.inner) > 2
 }
 
 /// Whether two nodes' children are the same allocations pair by pair: `Some(true)` when every child is, `Some(false)` when the counts differ — the nodes cannot be equal — and `None` when some pair is two allocations, which only a structural walk can settle.

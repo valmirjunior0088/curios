@@ -319,6 +319,111 @@ fn level_differences_count_a_ground_sort_as_a_position() {
     );
 }
 
+/// Two nodes apart in a sort are apart under a reading that does not pair sorts, and differ in a sort pair under one that does: a `Sort` at two open qualities, and an instance stating two.
+#[test]
+fn level_differences_pair_sorts_only_where_the_reading_pairs_them() {
+    let (u, v) = (
+        Level::meta(UniverseMetaId(0)),
+        Level::meta(UniverseMetaId(1)),
+    );
+    let (p, q) = (
+        Quality::Meta(QualityMetaId(0)),
+        Quality::Meta(QualityMetaId(1)),
+    );
+    let (this, that) = (Term::sort_at(p, u.clone()), Term::sort_at(q, v.clone()));
+
+    assert_eq!(this.level_differences(&that, |_| false, &()), None);
+    assert_eq!(
+        this.level_differences(&that, |_| false, &PairingSorts)
+            .map(|found| (found.compared, found.sorts)),
+        Some((vec![(0, u, v)], vec![(p, q)]))
+    );
+
+    let poly = Free::Global(nominal("poly"));
+    let instance = |quality| {
+        Term::instance_of(
+            &poly,
+            Universes {
+                levels: vec![Level::zero()],
+                qualities: vec![quality],
+            },
+        )
+    };
+    assert_eq!(
+        instance(p).level_differences(&instance(Quality::Prop), |_| false, &()),
+        None
+    );
+    assert_eq!(
+        instance(p)
+            .level_differences(&instance(Quality::Prop), |_| false, &PairingSorts)
+            .map(|found| found.sorts),
+        Some(vec![(p, Quality::Prop)])
+    );
+}
+
+/// A recursive group that binds its own universe parameter and the same group binding none erase alike and are apart under every reading: the walk reads a group's universe context in its node, where erasure drops it.
+#[test]
+fn level_differences_set_groups_apart_in_their_universe_context() {
+    let member = |term: Term| Scope::constant(Many(1), term);
+    let group = |parameter_count| {
+        Term::rec_proj(
+            RecGroup::new(vec![RecMemberScopes {
+                type_: member(Term::type_at(Level::param(UniverseParam(0)))),
+                body: member(Term::type_at(Level::param(UniverseParam(0)))),
+            }])
+            .with_universe_context(UniverseContext {
+                parameter_count,
+                quality_count: 0,
+                constraints: Vec::new(),
+            }),
+            0,
+        )
+    };
+    let (own, none) = (group(1), group(0));
+
+    assert_eq!(own.erased_universes(), none.erased_universes());
+    assert_eq!(own.level_differences(&none, |_| false, &()), None);
+    assert_eq!(own.level_differences(&none, |_| false, &PairingSorts), None);
+}
+
+/// A metavariable's answer is stated at universe-binder depth zero and lands shifted past the binders above each occurrence: `?0` answered by the declaration's first parameter is that parameter outside a group binding one of its own, and the parameter after the group's inside it.
+#[test]
+fn a_universe_metavariable_answer_is_shifted_past_the_binders_above_it() {
+    let meta = UniverseMetaId(0);
+    let member = |term: Term| Scope::constant(Many(1), term);
+    let at = |outside: Level, inside: Level| {
+        Term::tuple([
+            Term::type_at(outside),
+            Term::rec_proj(
+                RecGroup::new(vec![RecMemberScopes {
+                    type_: member(Term::type_at(inside.clone())),
+                    body: member(Term::type_at(inside)),
+                }])
+                .with_universe_context(UniverseContext {
+                    parameter_count: 1,
+                    quality_count: 0,
+                    constraints: Vec::new(),
+                }),
+                0,
+            ),
+        ])
+    };
+
+    let substituted =
+        substitute_universe_metas_scoped(&at(Level::meta(meta), Level::meta(meta)), move |found| {
+            Ok((found == meta).then(|| Level::param(UniverseParam(0))))
+        })
+        .expect("shifting a parameter by one cannot overflow");
+
+    assert_eq!(
+        substituted,
+        at(
+            Level::param(UniverseParam(0)),
+            Level::param(UniverseParam(1))
+        )
+    );
+}
+
 /// The walk costs the graph, not the tree it unfolds to. Each side pairs a shared node with itself sixty times over, so it has sixty-one nodes and two to the sixtieth paths — the shape a reduct takes when a position built a character at a time mentions the one before it more than once. A walk per path never answers; this one reports the single differing pair once.
 #[test]
 fn level_differences_walk_the_graph_not_the_tree() {
