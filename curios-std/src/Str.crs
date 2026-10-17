@@ -30,7 +30,7 @@ pub let classify(c: Byte) -> Class =
     end;
 
 --- Whether `c` continues a character: a byte in `0x80..=0xBF`, which no character begins with.
-pub let continues(c: Byte) -> Bool =
+let continues(c: Byte) -> Bool =
     Nat/in_range(Byte/to_nat(c), 0x80, 0xBF);
 
 --- How far through a character a walk over bytes has come.
