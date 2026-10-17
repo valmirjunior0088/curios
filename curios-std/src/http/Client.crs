@@ -72,7 +72,7 @@ let exchange(c: Client, request: Request) -> Try(Io, Error, Response) =
         | https() => Socket/connect_tls(u.host, u.port)
         end;
     let read =
-        Try/map_error(
+        Try/map_failure(
             Socket/with(open, (s) =>
                 let wrote = Socket/write(s, Request/render(request))!;
                 let r = Reader/new(s)!;

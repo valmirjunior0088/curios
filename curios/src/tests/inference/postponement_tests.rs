@@ -252,7 +252,7 @@ fn a_postponed_conversion_between_two_holes_names_only_what_never_solved() {
     let report = error(
         r#"
         use /std/{Nat, Eq, Result};
-        pub let probe(f: (Nat) -> Nat, x: Nat) -> Eq()(Result/map_success(Result/success(x), f), Result/success(f(x))) = Eq/refl();
+        pub let probe(f: (Nat) -> Nat, x: Nat) -> Eq()(Result/map(Result/success(x), f), Result/success(f(x))) = Eq/refl();
         /std/print("ok")
         "#,
     );

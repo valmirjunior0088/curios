@@ -603,7 +603,7 @@ fn program() -> String {
             match Toml/decode(input)
             | failure(_) => "reject"
             | success(root) =>
-                match Map/get(root, "f")
+                match Map/try_get(root, "f")
                 | some(v) =>
                     match v : (_) => Str
                     | flt(x) => hexs(Flt/to_le_bytes(x))

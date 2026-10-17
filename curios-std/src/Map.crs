@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Bytes, Str, List, Option, Eq, Hash, Show, Spell};
-use /std/Bool/{True};
+use /std/Bool/{True, Holds};
 use /std/ops/{Eql};
 
 --- How a key type encodes to the byte string that identifies it, in its own order: the concept, a witness for each key type the library has, and the laws every key has from it.
@@ -67,7 +67,7 @@ pub let len(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Nat =
     m.size;
 
 --- The value at `key`, or `none`.
-pub let get(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
+pub let try_get(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
     let k = Hash/hash(key);
     match m.root
     | none() => Option/none()
@@ -78,7 +78,14 @@ pub let get(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
 
 --- Whether `key` has an entry.
 pub let has(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Bool =
-    Option/is_some(get(m, key));
+    Option/is_some(try_get(m, key));
+
+--- The value at `key`, under the evidence that it has an entry.
+pub let get(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, @ok: Holds(has(m, key))) -> V =
+    match try_get(m, key)
+    | some(v) => v
+    | none() => match ok end
+    end;
 
 --- `m` with `key` at `v`, replacing an entry under the same key.
 pub let insert(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Map(K, V) =
@@ -151,7 +158,7 @@ pub let fold(
     end;
 
 --- The entries, in the order of their keys.
-pub let entries(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List({K, V}) =
+pub let to_list(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List({K, V}) =
     fold(m, [], (k, v, acc) => [..acc, (k, v)]);
 
 --- A map's keys, with the theorem that they are in their type's own order.
@@ -171,12 +178,12 @@ pub let values(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List(V) =
     fold(m, [], (_, v, acc) => [..acc, v]);
 
 --- The map of the pairs, a later pair replacing an earlier one under the same key.
-pub let of(@K: Type, use Key(K), @V: Type, l: List({K, V})) -> Map(K, V) =
+pub let of_list(@K: Type, use Key(K), @V: Type, l: List({K, V})) -> Map(K, V) =
     List/fold(l, empty(), ((k, v), acc) => insert(acc, k, v));
 
 --- The value at `key`, or `default`.
 pub let get_or(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, default: V) -> V =
-    Option/unwrap_or(get(m, key), default);
+    Option/unwrap_or(try_get(m, key), default);
 
 --- The entry at `key` rewritten by `f`, which sees the current value or `none` and answers the value to keep or `none` to remove.
 pub let update(
@@ -187,7 +194,7 @@ pub let update(
     key: K,
     f: (Option(V)) -> Option(V),
 ) -> Map(K, V) =
-    match f(get(m, key)) | some(v) => insert(m, key, v) | none() => remove(m, key) end;
+    match f(try_get(m, key)) | some(v) => insert(m, key, v) | none() => remove(m, key) end;
 
 --- `f` on every value. The keys and their dictionary stay, so the trie keeps its shape.
 pub let map(@K: Type, use Key(K), @V: Type, @W: Type, m: Map(K, V), f: (V) -> W) -> Map(K, W) =
@@ -237,8 +244,8 @@ let same_entries(
 
 --- Entry by entry.
 satisfy (@K: Type, use Key(K), @V: Type, use Eql(V)) => Eql(Map(K, V)) {
-    eql(a, b) = same_entries(entries(a), entries(b)),
-    neq(a, b) = Bool/not(same_entries(entries(a), entries(b))),
+    eql(a, b) = same_entries(to_list(a), to_list(b)),
+    neq(a, b) = Bool/not(same_entries(to_list(a), to_list(b))),
 }
 
 satisfy (@K: Type, use Key(K), @V: Type, use Show(K), use Show(V)) => Show(Map(K, V)) {
@@ -247,19 +254,19 @@ satisfy (@K: Type, use Key(K), @V: Type, use Show(K), use Show(V)) => Show(Map(K
             "{",
             Str/join(
                 ", ",
-                List/map(entries(m), ((k, v)) => Str/flatten([Show/show(k), ": ", Show/show(v)]))),
+                List/map(to_list(m), ((k, v)) => Str/flatten([Show/show(k), ": ", Show/show(v)]))),
             "}"]),
 }
 
---- As `Map/of` over the entries.
+--- As `Map/of_list` over the entries.
 satisfy (@K: Type, use Key(K), @V: Type, use Spell(K), use Spell(V)) => Spell(Map(K, V)) {
     spell(m) =
         Str/flatten([
-            "Map/of([",
+            "Map/of_list([",
             Str/join(
                 ", ",
                 List/map(
-                    entries(m),
+                    to_list(m),
                     ((k, v)) => Str/flatten(["(", Spell/spell(k), ", ", Spell/spell(v), ")"]))),
             "])"]),
 }

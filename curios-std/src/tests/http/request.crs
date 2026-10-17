@@ -9,7 +9,7 @@ let read(s: Str) -> Result(Refusal, Request) =
 
 -- What a request that reads is: its method, its URL, and its body as text.
 let seen(s: Str) -> Result(Refusal, {Method, Str, Option(Str)}) =
-    Result/map_success(
+    Result/map(
         read(s),
         (r) => (r.method, Url/to_str(r.url), Result/to_option(Str/of_bytes(r.body))));
 
@@ -146,7 +146,7 @@ test a_request_field_line_is_refused_or_read_as_it_is =
         answers("GET / HTTP/1.1\r\nHost: h\r\nX-A: one\u{0}two\r\n\r\n", 400),
         answers("GET / HTTP/1.1\r\nHost: h\r\nno colon here\r\n\r\n", 400),
         Test/equal(
-            Result/map_success(
+            Result/map(
                 Request/of_bytes(
                     Limits/server,
                     Scheme/http(),

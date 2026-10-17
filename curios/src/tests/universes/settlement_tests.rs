@@ -283,7 +283,7 @@ fn a_level_a_signature_holds_stays_its_callers_through_a_bound_from_the_body() {
                 Result/map_failure(w.read(s), (reason) => Str/concat("bad: ", reason));
             match xs
             | [] => Result/success([])
-            | [s, .._] => Result/map_success(read_with(v, s), (a) => [a])
+            | [s, .._] => Result/map(read_with(v, s), (a) => [a])
             end;
         let plain(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =
             List/traverse(xs, (s) => v.read(s));
@@ -495,7 +495,7 @@ fn a_declaration_under_a_key_and_an_order_over_one_carrier_is_judged_alike() {
     let source = r#"
         use /std/{Nat, List, Map, Ord};
         pub let both(@K: Type, use Map/Key(K), use Ord(K), keys: List(K)) -> List(K) =
-            let m: Map(K, Nat) = Map/of(List/map(keys, (k: K) => (k, 0)));
+            let m: Map(K, Nat) = Map/of_list(List/map(keys, (k: K) => (k, 0)));
             List/sort(Map/keys(m));
         /std/print("both")
         "#;

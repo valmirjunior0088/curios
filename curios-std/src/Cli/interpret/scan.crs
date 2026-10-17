@@ -26,7 +26,7 @@ let find(
     choose
     | name == "--help" || name == "-h" => Option/some(Claim/help())
     | name == "--version" && version => Option/some(Claim/version())
-    | _ => Option/map(Map/get(lookup, name), Claim/argument)
+    | _ => Option/map(Map/try_get(lookup, name), Claim/argument)
     end;
 
 let takes_value(@limit: Nat, claim: Claim(limit)) -> Bool =

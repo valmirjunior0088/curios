@@ -2,23 +2,29 @@
 use /std/{Str, Nat, Int, Bool, Byte, Bytes, Bits, List, Option, Eq, Hash, Ord, Ordering, Map, Set,
     Test};
 
-test get_on_empty_is_none =
+test a_key_an_empty_map_lacks_is_tried_as_none =
     let m: Map(Str, Str) = Map/empty();
-    Test/equal(Map/get(m, "missing"), Option/none());
+    Test/equal(Map/try_get(m, "missing"), Option/none());
+
+-- A read under a guard on `has` takes the evidence the guard gives and answers the value, with no `Option` to open.
+test get_reads_the_key_its_guard_found =
+    let m: Map(Str, Nat) = Map/of_list([("one", 1), ("two", 2)]);
+    let at(k: Str) -> Nat = match Map/has(m, k) | true => Map/get(m, k) | false => 0 end;
+    Test/equal([at("one"), at("two"), at("three")], [1, 2, 0]);
 
 -- "", "a", "ab", "abc" and "b" force the trie to branch on the presence-marker bits: a key that is a proper prefix of another differs from it only at a marker position, the case a plain per-byte comparison would miss.
 test roundtrips_prefix_related_keys =
     let m: Map(Str, Str) =
-        Map/of([("", "nil"), ("ab", "AB"), ("a", "A"), ("abc", "ABC"), ("b", "B")]);
-    let at(k: Str) -> Str = Option/unwrap_or(Map/get(m, k), "?");
+        Map/of_list([("", "nil"), ("ab", "AB"), ("a", "A"), ("abc", "ABC"), ("b", "B")]);
+    let at(k: Str) -> Str = Option/unwrap_or(Map/try_get(m, k), "?");
     Test/equal(
         Str/join(",", [at(""), at("a"), at("ab"), at("abc"), at("b"), at("c")]),
         "nil,A,AB,ABC,B,?");
 
 -- An integer below zero encodes as a complement, so a negative key, its negation and zero are three entries, and a key never inserted is absent.
 test integer_keys_keep_their_signs_apart =
-    let m: Map(Int, Str) = Map/of([(-2, "minus two"), (+0, "zero"), (+2, "two")]);
-    let at(k: Int) -> Str = Option/unwrap_or(Map/get(m, k), "?");
+    let m: Map(Int, Str) = Map/of_list([(-2, "minus two"), (+0, "zero"), (+2, "two")]);
+    let at(k: Int) -> Str = Option/unwrap_or(Map/try_get(m, k), "?");
     Test/equal(Str/join(",", [at(-2), at(+0), at(+2), at(-1)]), "minus two,zero,two,?");
 
 -- A digest's eight bytes at the empty run, whose three lanes each stand at their seed, at a short text and at eight bytes of ones. Pinned, and not stable: a digest may change between compiler versions, and this is where a change shows.
@@ -65,7 +71,7 @@ test natural_keys_enumerate_in_number_order =
             edge(6),
             edge(13),
             edge(14)];
-    Test/equal(Set/to_list(Set/of(keys)), List/sort(keys));
+    Test/equal(Set/to_list(Set/of_list(keys)), List/sort(keys));
 
 -- A smaller natural's encoding is before a larger one's, by the law beside the code.
 let _a_smaller_natural_encodes_before_a_larger(
@@ -108,7 +114,7 @@ test integer_keys_enumerate_in_number_order =
             edge(13),
             edge(14)];
     let keys: List(Int) = List/concat_map(naturals, (n) => [Nat/to_int(n), -1 - Nat/to_int(n)]);
-    Test/equal(Set/to_list(Set/of(keys)), List/sort(keys));
+    Test/equal(Set/to_list(Set/of_list(keys)), List/sort(keys));
 
 -- A smaller integer's encoding is before a larger one's, by the law beside the code.
 let _a_smaller_integer_encodes_before_a_larger(
@@ -143,7 +149,7 @@ let _a_sets_elements_are_in_their_order(
 
 -- The keys of the least and of the greatest entry of the map of `keys`.
 let ends(@K: Type, use Map/Key(K), keys: List(K)) -> List(Option(K)) =
-    let m: Map(K, Nat) = Map/of(List/map(keys, (k: K) => (k, 0)));
+    let m: Map(K, Nat) = Map/of_list(List/map(keys, (k: K) => (k, 0)));
     [Option/map(Map/least(m), ((k, _)) => k), Option/map(Map/greatest(m), ((k, _)) => k)];
 
 -- The first and the last of `keys` sorted.
@@ -185,26 +191,26 @@ let _no_key_is_past_a_maps_ends(
 -- Setting an existing key goes down the `replace` path: same size, new value, no duplicate leaf.
 test insert_replaces_without_growing =
     let m: Map(Str, Nat) = Map/insert(Map/insert(Map/empty(), "k", 1), "k", 2);
-    Test/equal(m, Map/of([("k", 2)]));
+    Test/equal(m, Map/of_list([("k", 2)]));
 
 -- Deleting a present key collapses its parent fork — the sibling is spliced up — deleting an absent key is the identity, and deleting the last key returns to the empty map.
 test remove_collapses_and_is_the_identity_on_an_absent_key =
-    let m: Map(Str, Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
+    let m: Map(Str, Nat) = Map/of_list([("a", 1), ("b", 2), ("c", 3)]);
     let d: Map(Str, Nat) = Map/remove(m, "b");
     Test/all([
-        Test/equal(d, Map/of([("a", 1), ("c", 3)])),
+        Test/equal(d, Map/of_list([("a", 1), ("c", 3)])),
         Test/equal(Map/remove(d, "b"), d),
         Test/equal(Map/remove(Map/remove(d, "a"), "c"), Map/empty())]);
 
 -- Iteration order is a property of the canonical shape, not of insertion order: the zero side of a fork holds the smaller keys, and the marker bits sort a prefix before its extensions.
 test iterates_in_lexicographic_key_order =
-    let m: Map(Str, Nat) = Map/of([("b", 0), ("abc", 0), ("", 0), ("a", 0), ("ab", 0)]);
+    let m: Map(Str, Nat) = Map/of_list([("b", 0), ("abc", 0), ("", 0), ("a", 0), ("ab", 0)]);
     Test/equal(Str/join(",", Map/keys(m)), ",a,ab,abc,b");
 
 -- Canonicity, observed through the API: the same entry set reached by two insertion histories — one of them through a later-deleted key — is the same map.
 test entries_agree_across_insertion_orders =
-    let m1: Map(Str, Nat) = Map/of([("x", 1), ("y", 2), ("z", 3)]);
-    let m2: Map(Str, Nat) = Map/remove(Map/of([("z", 3), ("w", 0), ("y", 2), ("x", 1)]), "w");
+    let m1: Map(Str, Nat) = Map/of_list([("x", 1), ("y", 2), ("z", 3)]);
+    let m2: Map(Str, Nat) = Map/remove(Map/of_list([("z", 3), ("w", 0), ("y", 2), ("x", 1)]), "w");
     Test/equal(m1, m2);
 
 -- 300 sequential keys rendered as decimal share long prefixes — "1" against "10" against "100" — exercising deep shared paths and the presence markers that separate a key from its own extensions; deleting the even half exercises collapse at scale. Keys are `Str` because the shared prefixes are what this exercises, and a decimal rendering is how you get them.
@@ -222,7 +228,7 @@ test holds_many_keys_with_shared_prefixes =
         end;
     let m: Map(Str, Str) = build(300, Map/empty());
     let d: Map(Str, Str) = drop_even(300, m);
-    let at(n: Nat) -> Str = Option/unwrap_or(Map/get(d, Nat/to_str(n)), "?");
+    let at(n: Nat) -> Str = Option/unwrap_or(Map/try_get(d, Nat/to_str(n)), "?");
     Test/equal(
         Str/join(",", [
             Nat/to_str(Map/len(m)),
@@ -236,37 +242,37 @@ test holds_many_keys_with_shared_prefixes =
 
 -- `update` is the one rewriting entry point: the function sees the current value or `none`, and answers the value to keep or `none` to remove. `map` and `filter` walk the entries, `union` is right-biased, and `get_or` reads with a default.
 test update_map_filter_union_and_get_or_rewrite_entries =
-    let m: Map(Str, Nat) = Map/of([("a", 1), ("b", 2), ("c", 3)]);
+    let m: Map(Str, Nat) = Map/of_list([("a", 1), ("b", 2), ("c", 3)]);
     Test/all([
         Test/equal(
             Map/update(m, "a", (o: Option(Nat)) => Option/map(o, (n: Nat) => n + 10)),
-            Map/of([("a", 11), ("b", 2), ("c", 3)])),
+            Map/of_list([("a", 11), ("b", 2), ("c", 3)])),
         Test/equal(
             Map/update(m, "b", (_o: Option(Nat)) => Option/none()),
-            Map/of([("a", 1), ("c", 3)])),
+            Map/of_list([("a", 1), ("c", 3)])),
         Test/equal(
             Map/update(m, "d", (_o: Option(Nat)) => Option/some(4)),
-            Map/of([("a", 1), ("b", 2), ("c", 3), ("d", 4)])),
-        Test/equal(Map/map(m, (n: Nat) => n * 2), Map/of([("a", 2), ("b", 4), ("c", 6)])),
+            Map/of_list([("a", 1), ("b", 2), ("c", 3), ("d", 4)])),
+        Test/equal(Map/map(m, (n: Nat) => n * 2), Map/of_list([("a", 2), ("b", 4), ("c", 6)])),
         Test/equal(
             Map/filter(m, (_k: Str, n: Nat) => Bool/not(Nat/is_even(n))),
-            Map/of([("a", 1), ("c", 3)])),
+            Map/of_list([("a", 1), ("c", 3)])),
         Test/equal(
-            Map/union(Map/of([("a", 1), ("x", 9)]), Map/of([("a", 100), ("y", 8)])),
-            Map/of([("a", 100), ("x", 9), ("y", 8)])),
+            Map/union(Map/of_list([("a", 1), ("x", 9)]), Map/of_list([("a", 100), ("y", 8)])),
+            Map/of_list([("a", 100), ("x", 9), ("y", 8)])),
         Test/equal(Map/get_or(m, "z", 0), 0),
         Test/equal(Map/get_or(m, "c", 0), 3)]);
 
 -- A `Set(K)` is a structure over `Map(K, {})`, whose leaves hold the keys themselves, so `to_list` hands the elements back typed — `List(Str)` here, joined without a decoder.
 test a_set_stores_its_keys_typed_and_unions =
-    let s = Set/of(["b", "a", "c", "a"]);
-    let u = Set/union(s, Set/insert(Set/of(["d"]), "a"));
+    let s = Set/of_list(["b", "a", "c", "a"]);
+    let u = Set/union(s, Set/insert(Set/of_list(["d"]), "a"));
     Test/all([
         Test/equal(Set/len(s), 3),
         Test/assert(Set/has(s, "a")),
         Test/assert(Bool/not(Set/has(s, "z"))),
         Test/equal(Set/to_list(Set/remove(s, "b")), ["a", "c"]),
-        Test/equal(u, Set/of(["a", "b", "c", "d"])),
+        Test/equal(u, Set/of_list(["a", "b", "c", "d"])),
         Test/equal(
-            Set/fold(Set/of(["x", "yy", "zzz"]), 0, (x: Str, acc: Nat) => Str/len(x) + acc),
+            Set/fold(Set/of_list(["x", "yy", "zzz"]), 0, (x: Str, acc: Nat) => Str/len(x) + acc),
             6)]);

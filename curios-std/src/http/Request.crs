@@ -209,7 +209,7 @@ satisfy Spell(Address) {
 pub let address_of(scheme: Scheme, head: Head) -> Result(Refusal, Address) =
     let host = host_of(head.headers)!;
     match head.target == "*"
-    | false => Result/map_success(resource_of(scheme, head, host), (url) => Address/resource(url))
+    | false => Result/map(resource_of(scheme, head, host), (url) => Address/resource(url))
     | true =>
         choose
         | head.method != Method/options() =>

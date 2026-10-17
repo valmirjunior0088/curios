@@ -66,7 +66,7 @@ let replace_at(
     [..List/slice(items, 0, index), value, ..List/drop(@Toml, items, index + 1, @ok)];
 
 let may_extend(side: Map(Bytes, Origin), kp: Bytes, act: Act) -> Result(Rule, {}) =
-    match Map/get(side, kp)
+    match Map/try_get(side, kp)
     | some(st) =>
         match act
         | act_value(_) =>
@@ -96,7 +96,7 @@ let walk_final(
     let kf = seg_key(pre, Seg/plain(name));
     match act
     | act_table() =>
-        match Map/get(m, name)
+        match Map/try_get(m, name)
         | none() =>
             Result/success((
                 Map/insert(m, name, Toml/table(Map/empty())),
@@ -105,7 +105,7 @@ let walk_final(
         | some(existing) =>
             match existing
             | table(_) =>
-                match Map/get(side, kf)
+                match Map/try_get(side, kf)
                 | some(implicit()) =>
                     Result/success((m, Map/insert(side, kf, Origin/header()), [Seg/plain(name)]))
                 | some(header()) => Result/failure(Rule/table_defined_twice())
@@ -117,7 +117,7 @@ let walk_final(
             end
         end
     | act_many() =>
-        match Map/get(m, name)
+        match Map/try_get(m, name)
         | none() =>
             Result/success((
                 Map/insert(m, name, Toml/arr([Toml/table(Map/empty())])),
@@ -126,7 +126,7 @@ let walk_final(
         | some(existing) =>
             match existing
             | arr(items) =>
-                match Map/get(side, kf)
+                match Map/try_get(side, kf)
                 | some(many()) =>
                     Result/success((
                         Map/insert(m, name, Toml/arr([..items, Toml/table(Map/empty())])),
@@ -139,7 +139,7 @@ let walk_final(
             end
         end
     | act_value(v) =>
-        match Map/get(m, name)
+        match Map/try_get(m, name)
         | none() =>
             let side2: Map(Bytes, Origin) =
                 match v | table(_) => Map/insert(side, kf, Origin/inline()) | _ => side end;
@@ -166,7 +166,7 @@ let walk(
             | true =>
                 match seg
                 | plain(name) =>
-                    match Map/get(m, name)
+                    match Map/try_get(m, name)
                     | some(existing) =>
                         match existing
                         | table(inner) =>
@@ -183,7 +183,7 @@ let walk(
                     | none() => Result/failure(Rule/invariant("scope is missing"))
                     end
                 | at(name, index) =>
-                    match Map/get(m, name)
+                    match Map/try_get(m, name)
                     | some(existing) =>
                         match existing
                         | arr(items) =>
@@ -220,7 +220,7 @@ let walk(
             | false =>
                 let name = seg_name(seg);
                 let kp = seg_key(pre, Seg/plain(name));
-                match Map/get(m, name)
+                match Map/try_get(m, name)
                 | none() =>
                     let created: Origin =
                         match act | act_value(_) => Origin/dotted() | _ => Origin/implicit() end;
@@ -249,7 +249,7 @@ let walk(
                         end
                     | arr(items) =>
                         let is_many: Bool =
-                            match Map/get(side, kp)
+                            match Map/try_get(side, kp)
                             | some(st) => match st | many() => true | _ => false end
                             | none() => false
                             end;

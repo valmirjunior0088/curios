@@ -81,7 +81,7 @@ pub let append(@T: Type, @n: Nat, @m: Nat, v: Vec(T, n), w: Vec(T, m)) -> Vec(T,
                 Eq/subst((y: Nat) => Eq()(n + y, n + m), Eq/sym(w.counted), Eq/refl())) };
 
 --- `f` on every element.
-pub let map(@A: Type, @B: Type, @n: Nat, f: (A) -> B, v: Vec(A, n)) -> Vec(B, n) =
+pub let map(@A: Type, @B: Type, @n: Nat, v: Vec(A, n), f: (A) -> B) -> Vec(B, n) =
     Vec { list = List/map(v.list, f), counted = v.counted };
 
 -- A run of one value is as long as the count it was built from, which the fold's own shape gives.

@@ -50,9 +50,9 @@ fn lists_options_and_results_order_through_ord() {
 fn maps_compare_and_show_by_their_entries() {
     let source = r#"
         use /std/{Str, Nat, Map, Show, Bool};
-        let a: Map(Str, Nat) = Map/of([("x", 1), ("y", 2)]);
-        let b: Map(Str, Nat) = Map/of([("y", 2), ("x", 1)]);
-        let c: Map(Str, Nat) = Map/of([("x", 1), ("y", 3)]);
+        let a: Map(Str, Nat) = Map/of_list([("x", 1), ("y", 2)]);
+        let b: Map(Str, Nat) = Map/of_list([("y", 2), ("x", 1)]);
+        let c: Map(Str, Nat) = Map/of_list([("x", 1), ("y", 3)]);
         /std/print(Str/join(" ", [Bool/to_str(a == b), Bool/to_str(a == c), Bool/to_str(a != c), Show/show(a)]))
         "#;
 

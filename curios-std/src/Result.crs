@@ -16,7 +16,7 @@ pub let rescue(@E: Type, @A: Type, r: Result(E, A), handler: (E) -> Result(E, A)
     match r | success(_) => r | failure(e) => handler(e) end;
 
 --- `f` on the value of a success.
-pub let map_success(@A: Type, @B: Type, @E: Type, r: Result(E, A), f: (A) -> B) -> Result(E, B) =
+pub let map(@A: Type, @B: Type, @E: Type, r: Result(E, A), f: (A) -> B) -> Result(E, B) =
     match r | success(a) => Result/success(f(a)) | failure(e) => Result/failure(e) end;
 
 --- `f` on the error of a failure.

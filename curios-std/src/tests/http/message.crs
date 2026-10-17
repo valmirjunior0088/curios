@@ -43,7 +43,7 @@ test a_request_is_written_and_reads_back =
             Option/some(
                 "GET /x?y=1 HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\nAccept: text/plain\r\n\r\n")),
         Test/equal(
-            Result/map_success(
+            Result/map(
                 Request/of_bytes(Limits/server, Scheme/http(), Request/render(r)),
                 (d) =>
                     (
@@ -118,7 +118,7 @@ test a_made_reply_reads_back =
     let r = Response/of_text(200, "hello");
     Test/all([
         Test/equal(
-            Result/map_success(
+            Result/map(
                 Response/of_bytes(Limits/client, Method/get(), Response/render(r)),
                 (d) =>
                     (

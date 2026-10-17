@@ -34,7 +34,7 @@ test long_and_short_aliases_find_the_same_leaf =
             Grammar/option(
                 Named { long = "port", short = Option/some('p'), help = "Port" },
                 Cli/nat));
-    match (Map/get(prepared.lookup, "--port"), Map/get(prepared.lookup, "-p"))
+    match (Map/try_get(prepared.lookup, "--port"), Map/try_get(prepared.lookup, "-p"))
     | (some(long), some(short)) => Test/equal(long.id.value, short.id.value)
     | _ => Test/fail("an alias disappeared")
     end;
@@ -53,7 +53,7 @@ test nested_choice_owners_have_distinct_node_identifiers =
             Grammar/choice(
                 Grammar/choice(Grammar/flag(names("a")), Grammar/flag(names("b"))),
                 Grammar/flag(names("c"))));
-    match Map/get(prepared.lookup, "--a")
+    match Map/try_get(prepared.lookup, "--a")
     | none() => Test/fail("the leaf disappeared")
     | some(entry) =>
         let ids = List/map(entry.owners, (owner) => owner.value);

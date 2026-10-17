@@ -219,7 +219,7 @@ let decode(
         single(names.name, reader, Multiplicity/reject(), occurrences(assigned.raw, start))
     | rest(names, reader) =>
         List/traverse(occurrences(assigned.raw, start), (value) => read(names.name, reader, value))
-    | map(inner, f) => Result/map_success(decode(inner, start + 1, assigned, @sound), f)
+    | map(inner, f) => Result/map(decode(inner, start + 1, assigned, @sound), f)
     | validate(inner, f) =>
         let value = decode(inner, start + 1, assigned, @sound)!;
         Result/map_failure(f(value), Failure/validation)
@@ -228,7 +228,7 @@ let decode(
         let second = decode(right, start + 1 + Prepared/size(left), assigned, @sound.1)!;
         Result/success((first, second))
     | choice(left, right) =>
-        match Map/get(assigned.choices, start)
+        match Map/try_get(assigned.choices, start)
         | some(true) => decode(left, start + 1, assigned, @sound.0)
         | some(false) => decode(right, start + 1 + Prepared/size(left), assigned, @sound.1)
         | none() => Result/failure(Failure/missing_alternative([..labels(left), ..labels(right)]))
@@ -236,7 +236,7 @@ let decode(
     | optional(inner) =>
         match occurred(assigned.raw, start)
         | false => Result/success(Option/none())
-        | true => Result/map_success(decode(inner, start + 1, assigned, @sound.0), Option/some)
+        | true => Result/map(decode(inner, start + 1, assigned, @sound.0), Option/some)
         end
     | default(inner, fallback) =>
         match occurred(assigned.raw, start)

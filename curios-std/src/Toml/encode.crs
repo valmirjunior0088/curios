@@ -114,9 +114,9 @@ let value_str(v: Toml) -> Str =
         let parts = List/fold(items, start, (item, parts) => [..parts, value_str(item)]);
         Str/flatten(["[", Str/join(", ", parts), "]"])
     | table(m) =>
-        match List/len(Map/entries(m)) == 0
+        match List/len(Map/to_list(m)) == 0
         | true => "{}"
-        | false => Str/flatten(["{ ", pairs_str(Map/entries(m)), " }"])
+        | false => Str/flatten(["{ ", pairs_str(Map/to_list(m)), " }"])
         end
     end
 and pairs_str(entries: List({Str, Toml})) -> Str =
@@ -127,7 +127,7 @@ and pairs_str(entries: List({Str, Toml})) -> Str =
     Str/join(", ", parts);
 
 let encode_table(prefix: List(Str), m: Map(Str, Toml)) -> Str =
-    let entries = Map/entries(m);
+    let entries = Map/to_list(m);
     let start: List(Str) = [];
     let value_lines =
         List/fold(entries, start, (entry, lines) =>

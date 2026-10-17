@@ -8,7 +8,7 @@ let read(method: Method, s: Str) -> Result(Refusal, Response) =
 
 -- What a reply to a `GET` that reads is: its code and its body as text.
 let seen(s: Str) -> Result(Refusal, {Nat, Option(Str)}) =
-    Result/map_success(
+    Result/map(
         read(Method/get(), s),
         (r) => (r.status.code, Result/to_option(Str/of_bytes(r.body))));
 
@@ -52,7 +52,7 @@ test a_reply_has_the_body_its_status_and_its_request_allow =
         is("HTTP/1.1 204 No Content\r\n\r\nextra", 204, ""),
         is("HTTP/1.1 304 Not Modified\r\nContent-Length: 5\r\n\r\nhello", 304, ""),
         Test/equal(
-            Result/map_success(
+            Result/map(
                 read(Method/head(), "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n"),
                 (r) => (r.status.code, Bytes/len(r.body))),
             Result/success((200, 0))),
@@ -114,14 +114,14 @@ test a_reply_head_is_read_as_its_grammar_spells_it =
         malformed("HTTP/1.1 200 OK\r\nX-A: one\ntwo\r\nContent-Length: 2\r\n\r\nhi"),
         malformed("HTTP/1.1 200 OK\r\nX-A: one\u{0}two\r\nContent-Length: 2\r\n\r\nhi"),
         Test/equal(
-            Result/map_success(
+            Result/map(
                 read(
                     Method/get(),
                     "HTTP/1.1 200 OK\r\nX-A: one\r\n two\r\n\tthree\r\nContent-Length: 2\r\n\r\nhi"),
                 (r) => (Response/header(r, "x-a"), Result/to_option(Str/of_bytes(r.body)))),
             Result/success((Option/some(Value/lit("one two three")), Option/some("hi")))),
         Test/equal(
-            Result/map_success(
+            Result/map(
                 Response/of_bytes(
                     Limits/client,
                     Method/get(),

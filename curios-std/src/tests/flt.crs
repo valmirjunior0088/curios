@@ -457,7 +457,7 @@ test a_nan_spells_its_pattern_and_toml_keeps_its_sign =
         Test/equal(Spell/spell(+nan.0), "+nan.0"),
         Test/equal(Spell/spell(-nan.0), "-nan.0"),
         Test/equal(
-            match Map/get(negative, "v")
+            match Map/try_get(negative, "v")
             | some(flt(f)) => Flt/is_sign_minus(f) && Flt/is_nan(f)
             | _ => false
             end,

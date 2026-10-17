@@ -45,7 +45,7 @@ pub let filled(c: Tile, w: Nat, h: Nat) -> Frame(w, h) =
 
 --- `a` then `b`, left to right. The heights agree in the type.
 pub let beside(@w1: Nat, @w2: Nat, @h: Nat, a: Frame(w1, h), b: Frame(w2, h)) -> Frame(w1 + w2, h) =
-    Vec/map((r) => Vec/append(r.0, r.1), Vec/zip(a, b));
+    Vec/map(Vec/zip(a, b), (r) => Vec/append(r.0, r.1));
 
 --- `a` then `b`, top to bottom. The widths agree in the type.
 pub let above(@w: Nat, @h1: Nat, @h2: Nat, a: Frame(w, h1), b: Frame(w, h2)) -> Frame(w, h1 + h2) =
@@ -60,7 +60,7 @@ pub let fit(@w0: Nat, @h0: Nat, frame: Frame(w0, h0), w: Nat, h: Nat) -> Frame(w
 
 --- `f` on every tile's style.
 pub let restyle(@w: Nat, @h: Nat, f: (Style) -> Style, frame: Frame(w, h)) -> Frame(w, h) =
-    Vec/map((row) => Vec/map((c) => Tile { ..c, style = f(c.style) }, row), frame);
+    Vec/map(frame, (row) => Vec/map(row, (c) => Tile { ..c, style = f(c.style) }));
 
 let tiles_of(style: Style, s: Str) -> List(Tile) =
     let empty: List(Tile) = [];
