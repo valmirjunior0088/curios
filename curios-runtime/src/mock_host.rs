@@ -280,6 +280,36 @@ struct Chunked {
     deaf: bool,
 }
 
+/// Where scripted standard input pauses: nothing more is ready there until a wait has slept past a timer, as a person who stops typing hands a program's timers their turn.
+#[derive(Default)]
+struct Pauses {
+    /// Each pause, as how many chunks are left when it is met, in order.
+    left: VecDeque<usize>,
+    /// The instant the waits had slept until where the front pause was met, so it ends once they sleep past it.
+    met_at: Option<(u64, u64)>,
+}
+
+impl Pauses {
+    /// Whether a pause holds back the next of `left` chunks, the waits having slept until `slept_until`.
+    fn holds(&mut self, left: usize, slept_until: (u64, u64)) -> bool {
+        if self.left.front() != Some(&left) {
+            return false;
+        }
+        match self.met_at {
+            None => {
+                self.met_at = Some(slept_until);
+                true
+            }
+            Some(at) if slept_until > at => {
+                self.left.pop_front();
+                self.met_at = None;
+                false
+            }
+            Some(_) => true,
+        }
+    }
+}
+
 /// What a scripted peer does once its chunks are spent.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Ending {
@@ -318,6 +348,11 @@ impl Chunked {
             ending: script.ending,
             deaf: script.deaf,
         }
+    }
+
+    /// How many chunks are still to be served, empty ones included.
+    fn left(&self) -> usize {
+        self.chunks.len()
     }
 
     /// Serve up to `count` bytes of the front chunk: once no chunk is left, what the script's ending says; `WouldBlock` while the next chunk is not yet due; and the chunk's tail otherwise, disarming the stream when the chunk is spent. An empty chunk is skipped rather than served as a zero-byte read.
@@ -447,6 +482,8 @@ enum MockResource {
 pub struct MockHost {
     /// Scripted stdin, served chunk by chunk as the terminal or the pipe behind it delivers: `handle_read(Handle::Stdin, …)` drains the front chunk, answers `Failure::WouldBlock` until a watch of it arms the next one, and reports the end of the stream once the script is spent. A script of lines is one chunk, armed from the start; a multi-chunk script is what puts a reader's wait-and-resume path over standard input under test, which a host that is always ready never could.
     input: Mutex<Chunked>,
+    /// Where scripted standard input pauses.
+    input_pauses: Mutex<Pauses>,
     /// Every byte written to stdout and stderr, concatenated in write order. Shared with [`MockIo::output`], which is what a fixture reads when it only cares that something was written.
     output: Arc<Mutex<Vec<u8>>>,
     /// The stderr half alone, written beside `output` rather than instead of it. Shared with [`MockIo::errors`]: a program that reports a failure on one stream and its result on the other is only pinned by a fixture that can tell them apart.
@@ -645,7 +682,17 @@ impl MockHost {
         match handle {
             // Standard input is armed like a scripted stream, so one look of a watch is one chunk of progress and a reader waiting on `WouldBlock` resumes into the next chunk.
             Handle::Stdin => {
-                self.input.lock().unwrap().arm();
+                let mut input = self.input.lock().unwrap();
+                let slept_until = *self.slept_until.lock().unwrap();
+                if self
+                    .input_pauses
+                    .lock()
+                    .unwrap()
+                    .holds(input.left(), slept_until)
+                {
+                    return false;
+                }
+                input.arm();
 
                 true
             }
@@ -1502,6 +1549,7 @@ impl MockIo {
 pub struct MockHostBuilder {
     input: Vec<u8>,
     input_chunks: Vec<Vec<u8>>,
+    input_pauses: Vec<usize>,
     files: HashMap<Vec<u8>, Vec<u8>>,
     endpoints: HashMap<Vec<u8>, Script>,
     inbound: VecDeque<Script>,
@@ -1609,6 +1657,13 @@ impl MockHostBuilder {
     /// Append the chunks standard input delivers, verbatim: nothing is terminated for you, and each chunk is served only once a watch has armed it, so a reader waits between them. This is how a raw-mode program's keystrokes are scripted — one chunk per burst, `x[0x1b, 0x5b, 0x41]` for an arrow key — and the only way a read of standard input that waits is put under test. Whatever [`stdin_lines`](Self::stdin_lines) wrote precedes these, as the one chunk it is.
     pub fn stdin_chunks<C: AsRef<[u8]>>(mut self, chunks: Vec<C>) -> Self {
         self.input_chunks.extend(chunk_list(chunks));
+
+        self
+    }
+
+    /// Pause standard input before the chunks appended after this: nothing more is ready until a wait has slept past a timer, so a program that waits on its input and a timer at once has the timer fire there, as it would where a person stops typing.
+    pub fn stdin_pause(mut self) -> Self {
+        self.input_pauses.push(self.input_chunks.len());
 
         self
     }
@@ -1859,6 +1914,14 @@ impl MockHostBuilder {
         };
 
         let host = MockHost {
+            input_pauses: Mutex::new(Pauses {
+                left: self
+                    .input_pauses
+                    .iter()
+                    .map(|before| self.input_chunks.len() - before)
+                    .collect(),
+                met_at: None,
+            }),
             input: Mutex::new(Chunked::new(stdin_script(self.input, self.input_chunks))),
             output,
             errors,

@@ -26,7 +26,7 @@ use {
 /// The instrument runs one warmup (sample 0) and five measured samples per workload, in order: `monad_suspend`, then `tui`. Each sample compiles the source afresh against the embedded prelude and executes it once with a fresh scripted host. There is no package-cache lookup. Rust compilation and prelude construction finish before the instrument starts and are excluded.
 ///
 /// - **`monad_suspend`:** the existing `programs/monad_suspend.crs` corpus program, with the argument `10000`, requiring stdout `30000\n` and no stderr. This measures a suspension's path through the driver every combinator is written over, one a step, not contention among branches.
-/// - **`tui`:** the existing bordered listing fixture in `curios/src/tests/tui.rs`, driven by 100 down/up pairs followed by `q`. The first down escape sequence arrives in two chunks; each remaining key has its own chunk. Terminal-size queries answer 12×5, 16×6, then 12×5 forever. Monotonic-clock queries advance by 1 ms, starting at zero, with 100,000 scripted readings. The mock host releases the next input chunk when polled and does not sleep in real time. Assertions require terminal entry and restoration, raw mode on then off, selection `one`, a titled border, exactly three screen clears (initial frame and two resizes), no stderr, and a successful exit.
+/// - **`tui`:** the existing bordered listing fixture in `curios/src/tests/tui.rs`, driven by 100 down/up pairs followed by `q`, the keys pausing twice between two whole keys so the session's size ticker runs once at each pause. The first down escape sequence arrives in two chunks; each remaining key has its own chunk. Terminal-size queries answer 12×5, 16×6, then 12×5 forever. Monotonic-clock queries advance by 1 ms, starting at zero, with 100,000 scripted readings. The mock host releases the next input chunk when polled and does not sleep in real time. Assertions require terminal entry and restoration, raw mode on then off, selection `one`, a titled border, exactly three screen clears (initial frame and two resizes), no stderr, and a successful exit.
 ///
 /// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `curios/.artifacts/coordination/`. Each stream has a folded `.tsv` beside it. The `coordination_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `coordination_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The `profile` feature installs `curios-profile`'s counting allocator, so each boundary row of a stream carries what the whole test process held and had taken there, and not what its span allocated alone.
 ///
@@ -34,24 +34,24 @@ use {
 ///
 /// ## What it last printed
 ///
-/// Timed, taken on top of `7ded6ac34`. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc2.1.fc44.x86_64`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration. Times are milliseconds; sample 0 is the warmup and is excluded from the medians.
+/// Timed, taken on top of `a439dba6a`. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration. Times are milliseconds; sample 0 is the warmup and is excluded from the medians.
 ///
 /// | Workload | Sample | Compile (ms) | Run (ms) | Output bytes |
 /// | --- | ---: | ---: | ---: | ---: |
-/// | `monad_async` | 0 (warmup) | 1395.798 | 1.679 | 6 |
-/// | `monad_async` | 1 | 1355.283 | 1.745 | 6 |
-/// | `monad_async` | 2 | 1353.717 | 1.784 | 6 |
-/// | `monad_async` | 3 | 1359.175 | 1.727 | 6 |
-/// | `monad_async` | 4 | 1366.402 | 1.496 | 6 |
-/// | `monad_async` | 5 | 1355.213 | 1.623 | 6 |
-/// | `tui` | 0 (warmup) | 4061.824 | 40.514 | 11368 |
-/// | `tui` | 1 | 3949.655 | 40.300 | 11368 |
-/// | `tui` | 2 | 3959.136 | 40.569 | 11368 |
-/// | `tui` | 3 | 3901.249 | 40.719 | 11368 |
-/// | `tui` | 4 | 3894.582 | 38.928 | 11368 |
-/// | `tui` | 5 | 3899.996 | 44.502 | 11368 |
+/// | `monad_suspend` | 0 (warmup) | 823.813 | 21.616 | 6 |
+/// | `monad_suspend` | 1 | 791.173 | 19.914 | 6 |
+/// | `monad_suspend` | 2 | 792.721 | 19.737 | 6 |
+/// | `monad_suspend` | 3 | 777.809 | 20.596 | 6 |
+/// | `monad_suspend` | 4 | 786.896 | 20.457 | 6 |
+/// | `monad_suspend` | 5 | 770.452 | 19.935 | 6 |
+/// | `tui` | 0 (warmup) | 5033.656 | 63.509 | 11368 |
+/// | `tui` | 1 | 5018.438 | 52.253 | 11368 |
+/// | `tui` | 2 | 4984.113 | 48.168 | 11368 |
+/// | `tui` | 3 | 5063.733 | 48.786 | 11368 |
+/// | `tui` | 4 | 5032.786 | 46.899 | 11368 |
+/// | `tui` | 5 | 4995.298 | 45.700 | 11368 |
 ///
-/// Compilation medians are **1355.283 ms** for `monad_async` and **3901.249 ms** for `tui`; execution medians are **1.727 ms** and **40.569 ms**. Tui's final execution sample is the slowest at 44.502 ms, and no cause is assigned from timings alone.
+/// Compilation medians are **786.896 ms** for `monad_suspend` and **5018.438 ms** for `tui`; execution medians are **19.935 ms** and **48.168 ms**.
 ///
 /// All twelve captures passed the behavior and closed-span assertions, terminal restoration and all three screen clears included.
 #[test]

@@ -97,6 +97,22 @@ fn a_program_runs_against_scripted_keystrokes_and_answers_its_model() {
     assert_eq!(io.raw_modes(), vec![true, false]);
 }
 
+// A pause in the keys hands the session's timers their turn: the size ticker runs once there and reads the terminal's new size, so the frame after it is drawn whole, a second clear, where keys that never pause leave the ticker unrun. A key follows the pause before `q`, since a burst that quits draws nothing.
+#[test]
+fn a_pause_in_the_keys_lets_the_size_ticker_read_a_resize() {
+    let (system, io) = MockHost::builder()
+        .tty_sizes([(12, 5), (16, 6)])
+        .stdin_chunks(vec![b"\x1b[B".to_vec()])
+        .stdin_pause()
+        .stdin_chunks(vec![b"\x1b[A".to_vec(), b"q".to_vec()])
+        .mono((0..1_000).map(|millis| (millis / 1_000, millis % 1_000 * 1_000_000)))
+        .build();
+    run_text(LISTING_PROGRAM, system).expect("expected result");
+    let output = String::from_utf8_lossy(&io.output()).into_owned();
+    assert!(output.ends_with("\x1b[?1049lone"), "{output:?}");
+    assert_eq!(output.matches("\x1b[2J").count(), 2, "{output:?}");
+}
+
 #[test]
 fn a_session_carries_incomplete_input_into_its_next_read() {
     let (host, io) = MockHost::builder()

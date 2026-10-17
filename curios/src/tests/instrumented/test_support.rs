@@ -4,16 +4,23 @@
 
 use curios_runtime::{MockHost, MockIo};
 
+// The keys pause twice between two whole keys, so the session's size ticker runs once at each and reads the two scripted resizes, 16×6 and then 12×5.
 pub(super) fn listing_host() -> (MockHost, MockIo) {
-    let mut keys = vec![b"\x1b[".to_vec(), b"B".to_vec(), b"\x1b[A".to_vec()];
-    for _ in 1..100 {
-        keys.extend([b"\x1b[B".to_vec(), b"\x1b[A".to_vec()]);
+    let pair = || vec![b"\x1b[B".to_vec(), b"\x1b[A".to_vec()];
+    let mut rest = Vec::new();
+    for _ in 3..100 {
+        rest.extend(pair());
     }
-    keys.push(b"q".to_vec());
+    rest.push(b"q".to_vec());
 
     MockHost::builder()
         .tty_sizes([(12, 5), (16, 6), (12, 5)])
-        .stdin_chunks(keys)
+        .stdin_chunks(vec![b"\x1b[".to_vec(), b"B".to_vec(), b"\x1b[A".to_vec()])
+        .stdin_pause()
+        .stdin_chunks(pair())
+        .stdin_pause()
+        .stdin_chunks(pair())
+        .stdin_chunks(rest)
         .mono((0..100_000).map(|millis| (millis / 1_000, millis % 1_000 * 1_000_000)))
         .build()
 }

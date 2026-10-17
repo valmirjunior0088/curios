@@ -58,7 +58,7 @@ fn assert_stream(io: &MockIo) {
 ///
 /// The instrument runs one warmup (sample 0) and five measured samples per workload, in order: `monad_io`, then `stream_copy`, then `tui`. Each sample compiles the source afresh against the embedded prelude and executes it once with a fresh scripted host. There is no package-cache lookup. Rust compilation and prelude construction finish before the instrument starts and are excluded.
 ///
-/// - **`monad_io`:** the existing `programs/monad_io.crs` corpus program, with stdin `10000\n`, requiring stdout `30000\n` and no stderr. It measures the `Io` carrier's per-`bind` cost, which every reading of a reply adds to, and reads its line a byte at a time.
+/// - **`monad_io`:** the existing `programs/monad_io.crs` corpus program, with the argument `10000`, requiring stdout `30000\n` and no stderr. It measures the `Io` carrier's per-`bind` cost, which every reading of a reply adds to.
 /// - **`stream_copy`:** 2,000 chunks of 256 bytes on standard input, copied to standard output through `Io/read` and `Io/write`, requiring the output to equal the input and no stderr. The scripted host answers `would_block` between chunks, so every chunk costs a read that blocks, a poll, a read that succeeds and a write.
 /// - **`tui`:** the bordered listing fixture `coordination.rs` measures beside this file, with the host and assertions the two share: reads, writes, polls and terminal-size queries through a whole session.
 ///
@@ -68,32 +68,32 @@ fn assert_stream(io: &MockIo) {
 ///
 /// ## Last reading
 ///
-/// Taken at `7f2ce2cfd`. Host: AMD Ryzen 7 5800X3D (8 cores), `x86_64-unknown-linux-gnu`, Linux `7.2.8`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration.
+/// Timed, taken on top of `a439dba6a`. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration.
 ///
 /// All times below are milliseconds. Sample 0 is the warmup and is excluded from the medians.
 ///
 /// | Workload | Sample | Compile | Run | Output bytes |
 /// | --- | ---: | ---: | ---: | ---: |
-/// | `monad_io` | 0 (warmup) | 774.568 | 0.678 | 6 |
-/// | `monad_io` | 1 | 739.563 | 0.487 | 6 |
-/// | `monad_io` | 2 | 741.815 | 0.543 | 6 |
-/// | `monad_io` | 3 | 732.098 | 0.543 | 6 |
-/// | `monad_io` | 4 | 740.488 | 0.575 | 6 |
-/// | `monad_io` | 5 | 735.256 | 0.582 | 6 |
-/// | `stream_copy` | 0 (warmup) | 229.056 | 9.442 | 512000 |
-/// | `stream_copy` | 1 | 235.066 | 9.552 | 512000 |
-/// | `stream_copy` | 2 | 232.696 | 9.285 | 512000 |
-/// | `stream_copy` | 3 | 231.756 | 9.094 | 512000 |
-/// | `stream_copy` | 4 | 231.513 | 9.118 | 512000 |
-/// | `stream_copy` | 5 | 230.088 | 9.264 | 512000 |
-/// | `tui` | 0 (warmup) | 4238.025 | 38.755 | 11368 |
-/// | `tui` | 1 | 4151.307 | 47.739 | 11368 |
-/// | `tui` | 2 | 4142.871 | 40.005 | 11368 |
-/// | `tui` | 3 | 4155.403 | 43.182 | 11368 |
-/// | `tui` | 4 | 4173.060 | 39.693 | 11368 |
-/// | `tui` | 5 | 4186.951 | 40.203 | 11368 |
+/// | `monad_io` | 0 (warmup) | 521.382 | 0.682 | 6 |
+/// | `monad_io` | 1 | 488.423 | 0.599 | 6 |
+/// | `monad_io` | 2 | 487.174 | 0.594 | 6 |
+/// | `monad_io` | 3 | 489.343 | 0.596 | 6 |
+/// | `monad_io` | 4 | 489.763 | 0.592 | 6 |
+/// | `monad_io` | 5 | 485.862 | 0.596 | 6 |
+/// | `stream_copy` | 0 (warmup) | 168.671 | 16.175 | 512000 |
+/// | `stream_copy` | 1 | 127.396 | 16.418 | 512000 |
+/// | `stream_copy` | 2 | 126.147 | 16.053 | 512000 |
+/// | `stream_copy` | 3 | 128.208 | 16.682 | 512000 |
+/// | `stream_copy` | 4 | 128.350 | 17.707 | 512000 |
+/// | `stream_copy` | 5 | 131.102 | 16.229 | 512000 |
+/// | `tui` | 0 (warmup) | 5071.385 | 46.844 | 11368 |
+/// | `tui` | 1 | 4976.005 | 50.437 | 11368 |
+/// | `tui` | 2 | 4995.716 | 45.913 | 11368 |
+/// | `tui` | 3 | 5000.773 | 56.292 | 11368 |
+/// | `tui` | 4 | 4993.267 | 53.516 | 11368 |
+/// | `tui` | 5 | 5020.888 | 46.392 | 11368 |
 ///
-/// Measured medians: `monad_io` compile **739.563 ms**, run **0.543 ms**; `stream_copy` compile **231.756 ms**, run **9.264 ms**; `tui` compile **4155.403 ms**, run **40.203 ms**. All eighteen samples passed their behavior and closed-span assertions; each workload produced the same output length in every sample.
+/// Measured medians: `monad_io` compile **488.423 ms**, run **0.596 ms**; `stream_copy` compile **128.208 ms**, run **16.418 ms**; `tui` compile **4995.716 ms**, run **50.437 ms**. All eighteen samples passed their behavior and closed-span assertions; each workload produced the same output length in every sample.
 #[test]
 #[ignore = "measurement, timed: captures compilation and execution costs"]
 fn host_boundary_measurements() {
@@ -118,7 +118,7 @@ fn host_boundary_measurements() {
     ] {
         for sample in 0..=5 {
             let (host, io) = match workload {
-                "monad_io" => MockHost::builder().stdin_lines(["10000"]).build(),
+                "monad_io" => MockHost::builder().args(["program", "10000"]).build(),
                 "stream_copy" => stream_host(),
                 _ => listing_host(),
             };
