@@ -37,13 +37,13 @@ pub(super) fn polymorphic() -> UniverseContext {
     }
 }
 
-/// What reducing `term` costs `kernel`, read off the remaining budget on either side.
+/// What reducing `term` costs `kernel`, read off what its declaration has consumed on either side.
 pub(super) fn spent(kernel: &mut Kernel, term: Term) -> u64 {
-    let (before, _) = kernel.consumption();
+    let before = kernel.consumed().units();
     kernel.reduce_forced(term).expect("reduces");
-    let (after, _) = kernel.consumption();
+    let after = kernel.consumed().units();
 
-    before - after
+    after - before
 }
 
 /// A closed arithmetic tree `links` deep. Local-free, so it is a term the `whnf`/`forced` tables may key on — and one the closed machine takes, at machine depth.

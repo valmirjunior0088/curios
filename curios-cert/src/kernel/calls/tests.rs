@@ -215,13 +215,13 @@ fn a_call_is_recorded_in_every_body_that_states_it() {
     ));
 }
 
-/// What inferring `term` costs `kernel`, read off the remaining budget on either side.
+/// What inferring `term` costs `kernel`, read off what its declaration has consumed on either side.
 fn spent_inferring(kernel: &mut Kernel, term: &Term) -> u64 {
-    let (before, _) = kernel.consumption();
+    let before = kernel.consumed().units();
     infer(kernel, term).expect("is typed");
-    let (after, _) = kernel.consumption();
+    let after = kernel.consumed().units();
 
-    before - after
+    after - before
 }
 
 /// A typing remembered on one side of what an arm establishes for the recorder does not answer on the other. A group typed inside a term closes under what the arms around it established, and the default arm of a `switch` rules zero out for its scrutinee while assuming no equation and opening no binder, so nothing else stands between a term typed outside it and the same term inside. Mutation-checked: without the clear where the arm's knowledge is entered the term is answered inside the bracket for nothing, and without the one where it is retracted, after it.

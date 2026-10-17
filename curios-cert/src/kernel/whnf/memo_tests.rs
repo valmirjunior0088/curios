@@ -141,13 +141,35 @@ fn cached_spend_never_exceeds_uncached() {
     assert!(with_memos < without, "{with_memos} against {without}");
 }
 
-/// What classifying `type_` costs `kernel`, read off the remaining budget on either side.
-fn spent_classifying(kernel: &mut Kernel, type_: &Term) -> u64 {
-    let (before, _) = kernel.consumption();
-    Sort::of(kernel, type_).expect("classifies");
-    let (after, _) = kernel.consumption();
+/// A remembered reduct's hit mints nothing, as it spends nothing. Each level here adds the level below to itself, over a lambda applied to a local, whose reduction opens a binder to eta-contract the lambda; counted per hit, that identity doubles with every level as a memo-free kernel's would, and forty levels are past any fixed identity space. A hit opens nothing, so the sum mints what reducing each of its nodes once does, read off the identities minted on either side.
+///
+/// Mutation-checked: with every hit adding what its computation minted to the counter, the identity minted after the sum is past the identity space.
+#[test]
+fn a_remembered_reducts_hit_mints_nothing() {
+    let n = binder(0, "n");
+    let y = binder(1, "y");
+    let added = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&y), Term::free_var(&n)));
+    let mut term = Term::apply(Term::func([(y, nat_type())], added), [Term::free_var(&n)]);
+    for _ in 0..40 {
+        term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
+    }
 
-    before - after
+    let mut kernel = kernel();
+    kernel.assume(&n, &nat_type());
+    let before = kernel.fresh(None).local_index().expect("a local");
+    kernel.reduce_forced(term).expect("reduces");
+    let after = kernel.fresh(None).local_index().expect("a local");
+    let minted = after - before - 1;
+    assert!(minted <= 40, "minted {minted}");
+}
+
+/// What classifying `type_` costs `kernel`, read off what its declaration has consumed on either side.
+fn spent_classifying(kernel: &mut Kernel, type_: &Term) -> u64 {
+    let before = kernel.consumed().units();
+    Sort::of(kernel, type_).expect("classifies");
+    let after = kernel.consumed().units();
+
+    after - before
 }
 
 /// A remembered sort lives as long as the budget does, as a reduct does: classified twice within one declaration a type pays once, and across a restore it pays again, so a sort one declaration filed never spares the next the reduction it rests on. Both lives are held to it — a closed type's, and that of a type naming a local.
@@ -182,13 +204,13 @@ fn restoring_the_budget_forgets_a_remembered_sort() {
 
 type Judge = fn(&mut Kernel, &Term);
 
-/// What `judge` costs `kernel` on `term`, read off the remaining budget on either side.
+/// What `judge` costs `kernel` on `term`, read off what its declaration has consumed on either side.
 fn spent_judging(kernel: &mut Kernel, judge: Judge, term: &Term) -> u64 {
-    let (before, _) = kernel.consumption();
+    let before = kernel.consumed().units();
     judge(kernel, term);
-    let (after, _) = kernel.consumption();
+    let after = kernel.consumed().units();
 
-    before - after
+    after - before
 }
 
 /// A remembered type and a remembered check live as long as the budget does too, under both lives.

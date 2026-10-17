@@ -85,17 +85,15 @@ impl Reducer for Kernel<'_> {
             let term = self.by_value(&term);
             return self.reading(|kernel| kernel.reduce_forced(term));
         }
-        if let Some(replayed) = self.whnf_hit(&term, true) {
-            return Ok(replayed);
+        if let Some(remembered) = self.whnf_hit(&term, true) {
+            return Ok(remembered);
         }
         // Past the memo, so the span times reductions the table did not answer: a hit costs a lookup, and a span per hit would cost the profile more rows than any other site and bill each its own row-writing.
         curios_profile::profile!("reduce_forced");
 
-        let before = self.consumption();
         let reduced = whnf(self, term.clone())?;
         let reduct = force(self, reduced)?;
-        let replay = self.replay_since(reduct.clone(), before);
-        self.whnf_store(term, true, replay);
+        self.whnf_store(term, true, reduct.clone());
 
         Ok(reduct)
     }
@@ -140,23 +138,20 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     // Probing only at the two `Reducer` methods would leave every internal call below — a scrutinee, an application's head, each turn of `force`'s loop, `expose_rec_tail`, `unfold_spelling` — re-deriving what the table already holds; the elaborator's reducer probes at its own entry and recurses through it, so probing here keeps the two strategies alike in reach as well as in rule. Reaching every level is safe because the table a term belongs to is decided inside [`Memos`](super::Memos), on the lookup as well as the store: a local-free term by the tables that live for the declaration, a local-bearing one by the tables that live only as long as the equations in force.
     //
     // **The memo is asked before the case equations below, and that order rests on the recording rule.** A term the declaration-lived tables answer is local-free, and no equation is recorded under a local-free spelling (`curios_analysis::records_case_equation`), so no entry there can stand in for an answer an equation in force would give; a local-bearing entry is cleared wherever the equations in force change. `a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_kernel_does` holds the first half, and fails once a local-free equation is recorded with this order kept; `a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under` holds the second.
-    if let Some(replayed) = kernel.whnf_hit(&term, false) {
-        return Ok(replayed);
+    if let Some(remembered) = kernel.whnf_hit(&term, false) {
+        return Ok(remembered);
     }
 
     // A closed term takes the machine: same rules, same counter, machine depth instead of one native frame per element. Stored under the same memo entry a strategy-derived reduct would be.
     if machine_admissible(kernel, &term) {
         let entry = term.clone();
-        let before = kernel.consumption();
         let value = closed_run(kernel, term, Demand::Whnf)?;
-        let replay = kernel.replay_since(value.clone(), before);
-        kernel.whnf_store(entry, false, replay);
+        kernel.whnf_store(entry, false, value.clone());
 
         return Ok(value);
     }
 
     let entry = term.clone();
-    let before = kernel.consumption();
     let mut term = term;
 
     loop {
@@ -239,8 +234,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                         Some(folded) => term = folded,
                         None => {
                             // Remembered under the term this level was *entered* with, not the one the loop finished on — the same key the probe above will present.
-                            let replay = kernel.replay_since(value.clone(), before);
-                            kernel.whnf_store(entry, false, replay);
+                            kernel.whnf_store(entry, false, value.clone());
 
                             return Ok(value);
                         }

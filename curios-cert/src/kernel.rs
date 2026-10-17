@@ -44,7 +44,7 @@ mod sort;
 pub use sort::*;
 
 mod spend;
-pub(crate) use spend::*;
+use spend::*;
 
 mod whnf;
 pub(crate) use whnf::*;
@@ -582,7 +582,7 @@ pub struct Kernel<'s> {
     scope: Scope,
     /// What a judgment may consume, and what it has.
     spend: Spend,
-    /// Remembered weak-head reducts, replayed rather than re-derived.
+    /// Remembered answers, handed back rather than re-derived.
     memos: Memos,
     /// The erased positions this walk recorded — an output, not an input.
     positions: Positions,
@@ -657,18 +657,16 @@ impl<'s> Kernel<'s> {
         }
     }
 
-    /// The remembered weak-head reduct of a local-free `term`, per entry point, replayed for nothing.
+    /// The remembered weak-head reduct of `term`, per entry point, handed back for nothing.
     ///
-    /// The one hit that cannot fail, because it spends no steps: the kernel did not perform this computation, and charging it what a memo-free evaluator would have spent would run a budget out on work nobody did. [`Spend::charge_nothing`] and [`Memos`] state the two halves of why that is safe.
-    pub(crate) fn whnf_hit(&mut self, term: &Term, forced: bool) -> Option<Term> {
-        let replay = self.memos.whnf(term, forced, self.scope.plain())?;
-
-        Some(self.spend.charge_nothing(replay))
+    /// The one hit that cannot fail, because it spends no steps and mints no identity: the kernel did not perform this computation, and charging it what a memo-free evaluator would have spent, in units or in identities, would run a judgment out on work nobody did. [`Spend`]'s module documentation and [`Memos`] state the two halves of why that is safe.
+    pub(crate) fn whnf_hit(&self, term: &Term, forced: bool) -> Option<Term> {
+        self.memos.whnf(term, forced, self.scope.plain())
     }
 
     /// The remembered type of `term`, with nothing spent and nothing minted.
     ///
-    /// **Nothing minted, unlike a reduct's hit.** A reduct's hit mints the identities its computation did, so that every later identity lands where a recomputation would have put it. For this table that recomputation is what it exists to avoid: it types a graph once per node where recomputing types it once per path, so the identities a recomputation would mint are counted over the tree, and on the graphs the table is for they outgrow the identity space — replayed, a `Str/split_once` claim stated in a type exhausts the 32-bit identity space. What the replay protected holds without it: the counter never falls, so every identity minted after a hit is above those the remembered inference opened, and it closed them before it returned. [`Spend`]'s module documentation states what is given up.
+    /// **Nothing minted**, as no hit mints: [`Spend`]'s module documentation states why, and what it gives up.
     ///
     /// **Read off the scope where it is.** A term naming a local is typed off the binders in scope, and a term typed while a case equation is in force is filed as one that may rest on it — the machine stands aside under an equation for that reason. Such a type is filed beside the binders it was inferred under and taken only while they stand, in a table cleared wherever an equation moves or a local is re-typed; [`Memos`] states the two lives.
     ///
@@ -739,7 +737,7 @@ impl<'s> Kernel<'s> {
         );
     }
 
-    /// The remembered sort of `type_`, with nothing spent and nothing minted, as a remembered type is handed back: a sort's hit replays nothing for [`Kernel::infer_hit`]'s reason. A local-free type's, read with no case equation in force, is the declaration's; one read off the scope, for a type naming a local or under an equation, is taken only while the binders it was read under stand.
+    /// The remembered sort of `type_`, with nothing spent and nothing minted, as every hit is. A local-free type's, read with no case equation in force, is the declaration's; one read off the scope, for a type naming a local or under an equation, is taken only while the binders it was read under stand.
     pub(crate) fn sort_hit(&self, type_: &Term) -> Option<Sort> {
         self.standing(
             self.memos
@@ -767,12 +765,12 @@ impl<'s> Kernel<'s> {
         );
     }
 
-    /// Remember a `term`'s weak-head reduct and the identities computing it minted.
+    /// Remember a `term`'s weak-head reduct.
     ///
     /// **Stored for nothing.** [`Memos::begin_declaration`] clears the table exactly where [`Spend::restore_budget`] fires, and every node it holds was built under that budget, which charges a construction what it builds — so the budget that built an entry is its bound. Charging it besides, against a compilation-wide allowance at the tree footprint of key and reduct, would bill entries that die with the declaration, and bill them by their trees where a reduct is a graph whose tree has `2^n` nodes.
-    pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, replay: Replay) {
+    pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, reduct: Term) {
         self.memos
-            .store_whnf(term, forced, self.scope.plain(), replay);
+            .store_whnf(term, forced, self.scope.plain(), reduct);
     }
 
     /// The heaviest declaration this kernel has walked — what it spent, and how deep it went.
@@ -797,14 +795,10 @@ impl<'s> Kernel<'s> {
         self.memos.end_closed_run(outer);
     }
 
-    /// See [`Spend::snapshot`].
-    pub(crate) fn consumption(&self) -> (u64, usize) {
-        self.spend.snapshot()
-    }
-
-    /// See [`Spend::replay_since`].
-    pub(crate) fn replay_since(&self, reduct: Term, before: (u64, usize)) -> Replay {
-        self.spend.replay_since(reduct, before)
+    /// What the declaration under judgment has consumed so far ([`Spend::consumed`]), which this crate's tests read between two judgments: the twin of the elaborator's `Context::consumed`.
+    #[cfg(test)]
+    pub(crate) fn consumed(&self) -> Consumption {
+        self.spend.consumed()
     }
 
     /// Assume `universes`' constraints for the item about to be checked, replacing the previous item's. Like [`Kernel::restore_budget`], this is a declaration-boundary reset.
@@ -993,7 +987,7 @@ impl<'s> Kernel<'s> {
     ///
     /// Locals are a stack, and closing them is `Kernel::scoped`'s job rather than the caller's — it is the only bracket there is, so a binder opened here is closed on every path out of the walk that opened it.
     ///
-    /// **Nothing the kernel mints afterwards can be `name`.** A local a caller hands in was minted by a counter the kernel never saw, so the kernel's own is raised past it here, where it enters the context, rather than to a floor the caller computes. A binder the kernel minted itself is already below its counter, so raising it for one changes nothing — and a remembered reduct's replay, which counts the kernel's own mints, is untouched. A local that is never assumed is refused before any judgment meets it (`curios_core::free_locals_outside`).
+    /// **Nothing the kernel mints afterwards can be `name`.** A local a caller hands in was minted by a counter the kernel never saw, so the kernel's own is raised past it here, where it enters the context, rather than to a floor the caller computes. A binder the kernel minted itself is already below its counter, so raising it for one changes nothing. A local that is never assumed is refused before any judgment meets it (`curios_core::free_locals_outside`).
     pub fn assume(&mut self, name: &Free, type_: &Term) {
         if let Some(index) = name.local_index() {
             self.spend.reserve(index);

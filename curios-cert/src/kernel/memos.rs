@@ -16,10 +16,10 @@
 //!
 //! **Every table lives exactly as long as a budget does.** [`Memos::begin_declaration`] clears them wherever `Spend::restore_budget` fires, and that alignment is what lets a hit on them be free. The paragraph above argues an entry's *content* is semantically determined — "the reduct is a function of the definition store alone" — but its *presence* is historical in any table that outlives the budget: a free hit on one would make what one declaration spends depend on which declarations were walked before it, which is the property the per-declaration budget exists to hold. Clearing removes the dependence rather than asking anyone to trust a cache policy, and it measured free on every probe. No table here outlives a declaration: a name-keyed table of definition unfolds that did, charging on a hit what its first computation spent, would count that computation's own free hits, so the declaration that unfolded a name first would decide what every later one is charged for it — and the closed machine reads a body directly, so it needs none. `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md` states the rule for both checkers.
 //!
-//! **A store cannot charge.** [`Memos`] hands back a [`Replay`] and nothing else; applying one to the entropy counter is [`Spend::charge_nothing`](super::Spend::charge_nothing)'s job. A component that could both remember and charge is one that could charge twice. The tables of sorts, of inferred types and of checks hand back the answer alone, because a hit on any of them has nothing to apply: it spends nothing and mints nothing, for the reason [`Kernel::infer_hit`](super::Kernel::infer_hit) gives.
+//! **A store cannot charge.** [`Memos`] hands back the answer it was given and nothing else, so every table's hit spends nothing and mints nothing, for the reasons the `spend` module gives: a component that could both remember and charge is one that could charge twice.
 
 use {
-    super::{Prefix, Replay, Sort},
+    super::{Prefix, Sort},
     curios_analysis::Erased,
     curios_core::{Bound, ClosedMemo, Term},
     curios_utilities::Keyed,
@@ -94,18 +94,18 @@ pub(super) struct Memos {
     /// Whether the memos are consulted at all. On by default; `Kernel::uncached` exists so a test can assert that switching them off changes no *semantic* verdict — the property that makes them an evaluation strategy rather than a store.
     enabled: bool,
     /// Weak-head reducts of local-free terms, per entry point: plain, and rec-forced. Free on a hit, and cleared at every declaration boundary — see the module documentation for why those two go together, and for why `whnf` reaches this at every level rather than only at the crate's edge.
-    whnf: HashMap<Term, Replay>,
-    forced: HashMap<Term, Replay>,
+    whnf: HashMap<Term, Term>,
+    forced: HashMap<Term, Term>,
     /// The same two tables for *local-bearing* terms, whose reducts are a function of the definition store **and the case equations in force**. The key cannot carry the second, so the tables live only as long as that set does: [`Memos::begin_equations`] clears them wherever an equation is assumed, retracted, withheld or restored, and [`Memos::begin_declaration`] with the rest. Within one such span a term's reduct is as fixed as a closed term's is within a declaration, and the web of definitions the index inversion forces at `Eq()(top(n), 0)` — each naming the one before it twice, a local in every one — would be re-derived `2^n` times without exactly this.
     ///
     /// **One pair for each of the two reductions**: the first for a judgment's, which may ask the kernel's conversion which terms are one, and the second for plain reduction, which asks nothing (`Kernel::plainly`). A local-bearing term's reduct under one is not its reduct under the other, and neither table may answer for the other. The reducts of local-free terms need no second table: nothing is asked of a term that names no local, so they are one function of the definition store under both.
-    local: [HashMap<Term, Replay>; 2],
-    local_forced: [HashMap<Term, Replay>; 2],
+    local: [HashMap<Term, Term>; 2],
+    local_forced: [HashMap<Term, Term>; 2],
     /// The sort of each type classified: [`Sort::of`]'s own answer. A type is a graph — a record of two fields at one type holds one node twice — and its sort asks each field's, so remembered by type a shared field is classified once where recomputing classifies it once per path. Free on a hit; a sort alone is kept, as a type alone is. One for each of the two reductions, as the local-bearing reducts have and in their order: a sort is read through reducts.
     sorts: [Lives<Term, Sort>; 2],
     /// Which erased half a position at each type belongs to — a type, a proof, or neither — which is its sort read once more: what `Kernel::record_checked` asks at every position it records, so that the question costs one answer per type and not one per position.
     halves: Lives<Term, Option<Erased>>,
-    /// The type inferred for each term: `infer`'s own answer, remembered as the reducts are. A reduct is a graph whose tree can be exponential in its depth, and so is a body whose `let`s the kernel substituted — every line a term over the function's parameters; typing walks what it meets, and remembered by term a subterm shared across that tree is typed once. Free on a hit. A type alone is kept, not a [`Replay`], because a hit replays nothing — see [`Kernel::infer_hit`](super::Kernel::infer_hit) for why, and for the terms it is refused. Beside it, whether the typing closed a group that does not descend, which a hit counts again: filed with the typing, it lives as long as the entry does.
+    /// The type inferred for each term: `infer`'s own answer, remembered as the reducts are. A reduct is a graph whose tree can be exponential in its depth, and so is a body whose `let`s the kernel substituted — every line a term over the function's parameters; typing walks what it meets, and remembered by term a subterm shared across that tree is typed once. Free on a hit, as every table's is — see [`Kernel::infer_hit`](super::Kernel::infer_hit) for the terms it is refused. Beside it, whether the typing closed a group that does not descend, which a hit counts again: filed with the typing, it lives as long as the entry does.
     types: Lives<Term, (Term, bool)>,
     /// Each term checked, beside the type it was checked at. The rules that introduce a function and a record, and the one that descends a `let`, check a term without inferring it, so a tuple whose two fields are one node is checked against its record once per path unless the check itself is remembered. Only that a term checked is kept, and whether its check closed a group that does not descend: a refusal ends its item's check.
     checked: Lives<Checked, bool>,
@@ -132,8 +132,8 @@ impl Memos {
         }
     }
 
-    /// The remembered weak-head reduct of `term` at the given entry point, as plain reduction took it where `plain` and as a judgment's did otherwise, still to be applied: its identities minted, and its steps deliberately not spent.
-    pub(super) fn whnf(&self, term: &Term, forced: bool, plain: bool) -> Option<Replay> {
+    /// The remembered weak-head reduct of `term` at the given entry point, as plain reduction took it where `plain` and as a judgment's did otherwise.
+    pub(super) fn whnf(&self, term: &Term, forced: bool, plain: bool) -> Option<Term> {
         if !self.enabled {
             return None;
         }
@@ -147,17 +147,17 @@ impl Memos {
         }
     }
 
-    /// Remember `term`'s weak-head reduct at the given entry point, for plain reduction where `plain` and for a judgment's otherwise, and its consumption.
-    pub(super) fn store_whnf(&mut self, term: Term, forced: bool, plain: bool, replay: Replay) {
+    /// Remember `term`'s weak-head reduct at the given entry point, for plain reduction where `plain` and for a judgment's otherwise.
+    pub(super) fn store_whnf(&mut self, term: Term, forced: bool, plain: bool, reduct: Term) {
         if !self.enabled {
             return;
         }
 
         match (term.has_local_free(), forced) {
-            (false, false) => self.whnf.insert(term, replay),
-            (false, true) => self.forced.insert(term, replay),
-            (true, false) => self.local[usize::from(plain)].insert(term, replay),
-            (true, true) => self.local_forced[usize::from(plain)].insert(term, replay),
+            (false, false) => self.whnf.insert(term, reduct),
+            (false, true) => self.forced.insert(term, reduct),
+            (true, false) => self.local[usize::from(plain)].insert(term, reduct),
+            (true, true) => self.local_forced[usize::from(plain)].insert(term, reduct),
         };
     }
 

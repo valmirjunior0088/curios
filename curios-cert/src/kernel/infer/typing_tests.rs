@@ -249,7 +249,7 @@ fn a_shared_closed_term_is_typed_once_per_node() {
     );
 }
 
-/// Nor does a hit replay the identities the inference it remembers minted. Each level here applies a lambda, whose binder typing opens, to a sum sharing the level below twice; replayed per hit, those identities double with every level as a memo-free kernel's would, and forty levels are past the identity space. A hit opens nothing, so the graph mints what typing each of its nodes once does.
+/// Nor does a hit replay the identities the inference it remembers minted. Each level here applies a lambda, whose binder typing opens, to a sum sharing the level below twice; replayed per hit, those identities double with every level as a memo-free kernel's would, and forty levels are past the identity space. A hit opens nothing, so the graph mints what typing each of its nodes once does, read off the identities minted on either side.
 #[test]
 fn a_shared_closed_term_mints_once_per_node() {
     let x = binder(0, "x");
@@ -263,10 +263,11 @@ fn a_shared_closed_term_mints_once_per_node() {
     }
 
     let mut kernel = kernel();
-    let (_, before) = kernel.consumption();
+    let before = kernel.fresh(None).local_index().expect("a local");
     assert_eq!(infer(&mut kernel, &term), Ok(nat_type()));
-    let (_, after) = kernel.consumption();
-    assert!(after - before <= 40, "minted {}", after - before);
+    let after = kernel.fresh(None).local_index().expect("a local");
+    let minted = after - before - 1;
+    assert!(minted <= 40, "minted {minted}");
 }
 
 /// A pair of the level below with itself, `depth` deep, over `base`, beside the record of its type over `base_type`.

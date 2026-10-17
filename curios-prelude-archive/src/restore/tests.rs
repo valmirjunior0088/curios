@@ -526,11 +526,10 @@ fn kernel_disagreements() {
 
 /// Memoization is an evaluation strategy exactly as long as switching it off changes no *semantic* verdict. This runs the whole-prelude walk both ways and requires the verdict lists identical.
 ///
-/// **The semantic half is what this is for, rather than what it happens to cover.** A term-keyed memo hit spends nothing, so an uncached walk spends at least as much as a cached one and the two may reach different *exhaustion* points; `curios-cert`'s `spend` module argues why that is the whole of what the design gives up. Comparing verdicts at one budget, over a corpus where nothing exhausts, is therefore exactly the surviving property — acceptance, and refusals that are not exhaustion, are budget-independent and must agree. Asserting equal exhaustion points would assert what the design gives up.
+/// **The semantic half is what this is for, rather than what it happens to cover.** A term-keyed memo hit spends nothing and mints nothing, so an uncached walk spends at least as much as a cached one, the two may reach different *exhaustion* points, and a binder opened after a hit takes another identity in each; `curios-cert`'s `spend` module argues why that is the whole of what the design gives up. Comparing verdicts at one budget, over a corpus where nothing exhausts, is therefore exactly the surviving property — acceptance, and refusals that are not exhaustion, are budget-independent and must agree. Asserting equal exhaustion points would assert what the design gives up.
 ///
-/// The prelude is the subject because the property needs a large body of real terms to mean anything, and this is the only one the workspace has.
+/// The prelude is the subject because the property needs a large body of real terms to mean anything, and this is the only one the workspace has. It runs with the suite, since the memo decision rests on it and nothing else holds it: walking the prelude twice takes one test thread what a part of the library's read-back does.
 #[test]
-#[ignore = "parity: runs the whole-prelude walk twice, the second time uncached"]
 fn kernel_memo_parity() {
     with_prelude(|prelude| {
         let mut certifications = Vec::new();
