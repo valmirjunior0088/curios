@@ -39,6 +39,9 @@ pub use totality::*;
 mod erased;
 pub use erased::*;
 
+#[cfg(test)]
+mod walk_tests;
+
 // A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: `curios_analysis::test_support::SYNTAX` says at its use site that the caller reached for scaffolding rather than product API. The path is the warning label.
 #[cfg(feature = "test-support")]
 pub mod test_support;
