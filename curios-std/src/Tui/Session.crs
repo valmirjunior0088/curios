@@ -2,7 +2,7 @@ use /std/{Nat, Bytes, Bool, List, Option, Result, Eq, Io, Try, Tty};
 use /std/Bool/{True};
 use /std/Io/{Reader};
 use /std/time/{Duration};
-use /std/Tui/{Frame, View, Event, input, render, ansi};
+use /std/Tui/{Frame, View, Input, Mode, render, ansi};
 
 struct Held: Type {
     w: Nat,
@@ -19,11 +19,19 @@ pub struct Session: Type {
 }
 
 let entering: Bytes =
-    x[..ansi/alternate_on, ..ansi/cursor_hide, ..ansi/paste_on, ..ansi/kitty_push];
+    x[
+        ..ansi/on(Mode/alternate_screen()),
+        ..ansi/cursor_hide,
+        ..ansi/on(Mode/bracketed_paste()),
+        ..ansi/keyboard_push];
 
 -- The modes `entering` sets, undone in reverse: the host writes these when the terminal is given back, however the program ends.
 let leaving: Bytes =
-    x[..ansi/kitty_pop, ..ansi/paste_off, ..ansi/cursor_show, ..ansi/alternate_off];
+    x[
+        ..ansi/keyboard_pop,
+        ..ansi/off(Mode/bracketed_paste()),
+        ..ansi/cursor_show,
+        ..ansi/off(Mode/alternate_screen())];
 
 --- The controlling terminal taken for the rest of `s`: raw mode, the alternate screen, the hidden cursor, bracketed paste and the kitty keyboard flag, each undone in reverse when `s` ends, however it ends.
 pub let enter(s: Io/Scope) -> Try(Io, Io/Error, Session) =
@@ -72,44 +80,44 @@ pub let draw(@w: Nat, @h: Nat, s: Session, v: View(w, h)) -> Io(Session) =
     let _ = Try/run(Io/write(s.tty, render(before, frame, View/cursor(v))))!;
     Io/pure(Session { ..s, previous = Option/some(Held { w = w, h = h, frame = frame }) });
 
--- One arrival of input and the events it completes, what it leaves undecoded staying held: the state is whether the arrival has come.
-let burst(@E: Type, arrived: Bool, held: Bytes) -> Reader/Step(Bool, {}, List(Event(E))) =
+-- One arrival of input and the inputs it completes, what it leaves undecoded staying held: the state is whether the arrival has come.
+let burst(arrived: Bool, held: Bytes) -> Reader/Step(Bool, {}, List(Input)) =
     match arrived
     | false => Reader/Step/more(true, held)
     | true =>
-        let decoded = input/decode(@E, held);
-        Reader/Step/took(decoded.events, decoded.rest)
+        let decoded = Input/decode(held);
+        Reader/Step/took(decoded.inputs, decoded.rest)
     end;
 
---- The next burst of input as events, waiting until one arrives; `none` once standard input has ended. A read that fails is raised, the one a burst opens with and the one it waits on for the rest of a key alike.
-pub let read(@E: Type, s: Session) -> Try(Io, Io/Error, Option(List(Event(E)))) =
+--- The next burst of input, waiting until one arrives; `none` once standard input has ended. A read that fails is raised, the one a burst opens with and the one it waits on for the rest of a key alike.
+pub let read(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
     -- A take of the reader is an `Io` action by its declaration, which is what a `Try` region embeds it by.
-    let arrival: Io(Result(Reader/Stop(Bool, {}), List(Event(E)))) =
-        Reader/take(s.input, (arrived: Bool, held: Bytes) => burst(@E, arrived, held), false);
+    let arrival: Io(Result(Reader/Stop(Bool, {}), List(Input))) =
+        Reader/take(s.input, burst, false);
     let got = arrival!;
     match got
     | failure(stop) =>
         match stop | failed(_, why) => Try/raise(why) | _ => Try/pure(Option/none()) end
-    | success(events) =>
+    | success(inputs) =>
         let rest = Reader/held(s.input)!;
-        match Bytes/len(rest) == 0: (_) => Try(Io, Io/Error, Option(List(Event(E))))
-        | true => Try/pure(Option/some(events))
+        match Bytes/len(rest) == 0: (_) => Try(Io, Io/Error, Option(List(Input)))
+        | true => Try/pure(Option/some(inputs))
         | false =>
             let more = Io/timeout(Duration/of_millis(30), arrival)!;
             match more
-            | some(success(settled)) => Try/pure(Option/some([..events, ..settled]))
+            | some(success(settled)) => Try/pure(Option/some([..inputs, ..settled]))
             | some(failure(failed(_, why))) => Try/raise(why)
             | _ =>
                 -- Nothing more came: what is held is read as it stands, and taken.
-                let flushing: Io(Result(Reader/Stop({}, {}), List(Event(E)))) =
+                let flushing: Io(Result(Reader/Stop({}, {}), List(Input))) =
                     Reader/take(
                         s.input,
-                        (_: {}, held: Bytes) => Reader/Step/took(input/flush(@E, held), x[]),
+                        (_: {}, held: Bytes) => Reader/Step/took(Input/flush(held).inputs, x[]),
                         ());
                 let flushed = flushing!;
                 Try/pure(
                     Option/some([
-                        ..events,
+                        ..inputs,
                         ..match flushed | success(last) => last | failure(_) => [] end]))
             end
         end

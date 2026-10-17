@@ -1,4 +1,4 @@
-use /std/{Nat, Str, Show};
+use /std/{Nat, Str, Show, Spell};
 use /std/ops/{Eql};
 
 --- The terminal's size in cells.
@@ -8,6 +8,10 @@ pub struct Size: pub Type {
 }
 
 satisfy Eql(Size) {
+    ..
+}
+
+satisfy Spell(Size) {
     ..
 }
 

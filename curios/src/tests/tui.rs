@@ -124,9 +124,9 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
         use /std/Tui/{Session};
         let program() -> Io({}) =
             let outcome = Try/run(Try/scope((scope) => Try/bind(Session/enter(scope), (s) =>
-                let first = Session/read(@Nat, s)!;
+                let first = Session/read(s)!;
                 let _ = print(match first | some(events) => Nat/to_str(List/len(events)) | none() => "eof" end)!;
-                let second = Session/read(@Nat, s)!;
+                let second = Session/read(s)!;
                 let _ = print(match second
                     | some(events) => match events
                         | [event, .._] => match event
@@ -137,7 +137,7 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
                         end
                     | none() => " early-eof "
                     end)!;
-                let third = Session/read(@Nat, s)!;
+                let third = Session/read(s)!;
                 let _ = print(match third | none() => "eof" | some(_) => "more" end)!;
                 Try/pure(()))))!;
             Io/pure(());
@@ -192,7 +192,7 @@ fn resize_events_update_the_drawing_session_before_rendering() {
         let app: Tui(Nat, Nat) = Tui {
             init = (0, Directive/none()),
             update(model, event) = match event
-                | resize(w, h) => match w == 8
+                | input(resize(size)) => match size.cols == 8
                     | true => (model + 1, Directive/quit())
                     | false => (model + 1, Directive/none())
                     end
@@ -314,7 +314,7 @@ pub(super) const LISTING_PROGRAM: &str = r#"
                 init = (Listing/new(["one", "two", "three"]), Directive/none()),
                 update(model, event) =
                     match event
-                    | key(k) =>
+                    | input(key(k)) =>
                         match k.code
                         | char(c) => match c == 'q' | true => (model, Directive/quit()) | false => (model, Directive/none()) end
                         | _ => (Listing/move(model, k.code), Directive/none())

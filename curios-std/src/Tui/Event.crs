@@ -1,15 +1,11 @@
-use /std/{Nat, Str, Spell};
+use /std/{Spell};
 use /std/ops/{Eql};
-use /std/Tui/{Key};
+use /std/Tui/{Input};
 
---- A key, the terminal's new size, a pasted text, or a value of the program's own `E`: the answer a `Directive/perform` came back with.
+--- What reaches a program's `update`: what its terminal sent, or a value of its own `E`, the answer a `Directive/perform` came back with.
 pub induct Event(E: Type): pub Type
---- A key was pressed.
-| key(Key)
---- The terminal is now this many columns by this many rows.
-| resize(cols: Nat, rows: Nat)
---- Text was pasted in one go.
-| paste(Str)
+--- What the terminal sent.
+| input(Input)
 --- What a `Directive/perform` came back with.
 | custom(E)
 end

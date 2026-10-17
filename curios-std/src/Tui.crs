@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, List, Io, Try, Tty, Channel};
+use /std/{Nat, Bool, List, Io, Try, Channel};
 use /std/time/{Duration};
 
 --- A terminal colour, in the four forms a terminal understands.
@@ -33,16 +33,25 @@ pub use View/{let View};
 pub mod Pane;
 pub use Pane/{let Pane};
 
---- A key as a program sees it: a code and three modifiers.
+--- A key as a program sees it: a code and the modifiers held with it.
 pub mod Key;
 pub use Key/{let Key};
+
+--- A terminal mode a session sets, by the number a terminal knows it by.
+pub mod Mode;
+pub use Mode/{let Mode};
+
+--- What a terminal sends its program, and the decoder that reads it from the terminal's bytes.
+pub mod Input;
+pub use Input/{let Input};
+
+--- What a terminal answers of itself, read from its input beside what it sends its program.
+pub mod Reply;
+pub use Reply/{let Reply};
 
 --- What reaches a program's `update`.
 pub mod Event;
 pub use Event/{let Event};
-
---- The bytes a terminal sends, read as the keys and pastes they encode.
-pub mod input;
 
 mod ansi;
 
@@ -128,14 +137,14 @@ let running(
         let _ = Channel/send(queue.0, Wake/failed(why))!;
         Io/pure(());
     let reader(session: Session) -> Io({}) =
-        let got = Try/run(Session/read(@E, session))!;
+        let got = Try/run(Session/read(session))!;
         match got
         | failure(why) => fail(why)
-        | success(input) =>
-            match input
+        | success(read) =>
+            match read
             | none() => Io/pure(())
-            | some(events) =>
-                let _ = List/each(events, push)!;
+            | some(inputs) =>
+                let _ = List/each(inputs, (i: Input) => push(Event/input(i)))!;
                 reader(session)
             end
         end;
@@ -149,7 +158,7 @@ let running(
             match sz == known
             | true => ticker(updated)
             | false =>
-                let _ = push(Event/resize(sz.cols, sz.rows))!;
+                let _ = push(Event/input(Input/resize(sz)))!;
                 ticker(updated)
             end
         end;
@@ -169,11 +178,7 @@ let running(
         | [] => Io/pure((session, m, false))
         | [e, ..more] =>
             let updated =
-                match e
-                | resize(cols, rows) =>
-                    Session/resized(session, Tty/Size { cols = cols, rows = rows })
-                | _ => session
-                end;
+                match e | input(resize(size)) => Session/resized(session, size) | _ => session end;
             let next = app.update(m, e);
             let stop = issue(next.1)!;
             match stop

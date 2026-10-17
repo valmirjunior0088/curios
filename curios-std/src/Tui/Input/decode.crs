@@ -1,0 +1,374 @@
+use /std/{Nat, Str, Char, Byte, Bytes, List, Option, Tty};
+use /std/Tui/{Key, Input, Reply, Mode};
+use /std/Bool/{Holds};
+
+let at(b: Bytes, i: Nat) -> Option(Nat) =
+    Option/map(Bytes/try_get(b, i), Byte/to_nat);
+
+-- `code` with the modifiers a modifier parameter `m` states: one more than their bits, Shift 1, Alt 2, Ctrl 4 and Super 8, the bits of Hyper, Meta and the lock keys left out.
+let modified(code: Key/Code, m: Nat) -> Key =
+    let bits = m - 1;
+    Key {
+        code = code,
+        shift = Nat/and(bits, 1) > 0,
+        alt = Nat/and(bits, 2) > 0,
+        ctrl = Nat/and(bits, 4) > 0,
+        super = Nat/and(bits, 8) > 0 };
+
+-- The character of a code below the surrogates, which every code this decoder builds one from is.
+let low(code: Nat, @below: Holds(code < 0xD800)) -> Char =
+    Char { code = code, @valid = Char/Valid/below_surrogates(code, below) };
+
+-- The key a control byte is. It is a byte's, which is what puts the letter or the sign it stands beside below the surrogates.
+let control(n: Nat, @byte: Holds(n <= 255)) -> Key =
+    choose
+    | n == 0x0D => Key/plain(Key/Code/enter())
+    | n == 0x09 => Key/plain(Key/Code/tab())
+    | n == 0x7F => Key/plain(Key/Code/backspace())
+    | n == 0x08 => Key/plain(Key/Code/backspace())
+    | n == 0x1B => Key/plain(Key/Code/escape())
+    | n == 0x00 => Key/with_ctrl(Key/Code/char(' '))
+    | n <= 0x1A => Key/with_ctrl(Key/Code/char(low(n + 0x60)))
+    | _ => Key/with_ctrl(Key/Code/char(low(n + 0x40)))
+    end;
+
+-- The key a `~` sequence names by its first parameter: the editing keys, and the function keys as VT220 numbers them.
+let tilde(n: Nat) -> Option(Key/Code) =
+    match n
+    | 1 => Option/some(Key/Code/home())
+    | 2 => Option/some(Key/Code/insert())
+    | 3 => Option/some(Key/Code/delete())
+    | 4 => Option/some(Key/Code/end_key())
+    | 5 => Option/some(Key/Code/page_up())
+    | 6 => Option/some(Key/Code/page_down())
+    | 7 => Option/some(Key/Code/home())
+    | 8 => Option/some(Key/Code/end_key())
+    | 11 => Option/some(Key/Code/f(1))
+    | 12 => Option/some(Key/Code/f(2))
+    | 13 => Option/some(Key/Code/f(3))
+    | 14 => Option/some(Key/Code/f(4))
+    | 15 => Option/some(Key/Code/f(5))
+    | 17 => Option/some(Key/Code/f(6))
+    | 18 => Option/some(Key/Code/f(7))
+    | 19 => Option/some(Key/Code/f(8))
+    | 20 => Option/some(Key/Code/f(9))
+    | 21 => Option/some(Key/Code/f(10))
+    | 23 => Option/some(Key/Code/f(11))
+    | 24 => Option/some(Key/Code/f(12))
+    | 25 => Option/some(Key/Code/f(13))
+    | 26 => Option/some(Key/Code/f(14))
+    | 28 => Option/some(Key/Code/f(15))
+    | 29 => Option/some(Key/Code/f(16))
+    | 31 => Option/some(Key/Code/f(17))
+    | 32 => Option/some(Key/Code/f(18))
+    | 33 => Option/some(Key/Code/f(19))
+    | 34 => Option/some(Key/Code/f(20))
+    | _ => Option/none()
+    end;
+
+-- The key a sequence names by its final byte: the cursor keys, and the first four function keys.
+let final_code(n: Nat) -> Option(Key/Code) =
+    match n
+    | 'A' => Option/some(Key/Code/up())
+    | 'B' => Option/some(Key/Code/down())
+    | 'C' => Option/some(Key/Code/right())
+    | 'D' => Option/some(Key/Code/left())
+    | 'H' => Option/some(Key/Code/home())
+    | 'F' => Option/some(Key/Code/end_key())
+    | 'P' => Option/some(Key/Code/f(1))
+    | 'Q' => Option/some(Key/Code/f(2))
+    | 'R' => Option/some(Key/Code/f(3))
+    | 'S' => Option/some(Key/Code/f(4))
+    | _ => Option/none()
+    end;
+
+-- The key the kitty keyboard protocol numbers `code`: a character by its scalar, the named keys by theirs, F13 to F35 and the keypad's keys by the private-use numbers the protocol gives them, a keypad key as the key it stands for. The protocol's other private-use keys — the media keys, the modifiers and the locks — are reported only where a session asks for every key, which none does.
+let kitty(code: Nat) -> Option(Key/Code) =
+    choose
+    | code == 13 => Option/some(Key/Code/enter())
+    | code == 27 => Option/some(Key/Code/escape())
+    | code == 9 => Option/some(Key/Code/tab())
+    | code == 127 => Option/some(Key/Code/backspace())
+    | code == 8 => Option/some(Key/Code/backspace())
+    | Nat/in_range(code, 57376, 57398) => Option/some(Key/Code/f(code - 57363))
+    | Nat/in_range(code, 57399, 57408) => Option/some(Key/Code/char(low(code - 57399 + '0')))
+    | code == 57409 => Option/some(Key/Code/char('.'))
+    | code == 57410 => Option/some(Key/Code/char('/'))
+    | code == 57411 => Option/some(Key/Code/char('*'))
+    | code == 57412 => Option/some(Key/Code/char('-'))
+    | code == 57413 => Option/some(Key/Code/char('+'))
+    | code == 57414 => Option/some(Key/Code/enter())
+    | code == 57415 => Option/some(Key/Code/char('='))
+    | code == 57417 => Option/some(Key/Code/left())
+    | code == 57418 => Option/some(Key/Code/right())
+    | code == 57419 => Option/some(Key/Code/up())
+    | code == 57420 => Option/some(Key/Code/down())
+    | code == 57421 => Option/some(Key/Code/page_up())
+    | code == 57422 => Option/some(Key/Code/page_down())
+    | code == 57423 => Option/some(Key/Code/home())
+    | code == 57424 => Option/some(Key/Code/end_key())
+    | code == 57425 => Option/some(Key/Code/insert())
+    | code == 57426 => Option/some(Key/Code/delete())
+    | Nat/in_range(code, 0xE000, 0xF8FF) => Option/none()
+    | _ => Option/map(Char/of_nat(code), Key/Code/char)
+    end;
+
+-- A control sequence as ECMA-48 frames it: its private marker, or 0; its parameters, each its sub-parameters; its last intermediate byte, or 0; its final byte; and where it ends.
+struct Sequence: Type {
+    private: Nat,
+    params: List(List(Option(Nat))),
+    intermediate: Nat,
+    final: Nat,
+    next: Nat,
+}
+
+--- The control sequence whose parameter bytes begin at `i`, or `none` where the chunk ends first. A private marker — `<`, `=`, `>` or `?` — is read where it opens the parameters. Parameters are `;` apart and their sub-parameters `:` apart, read as ECMA-48 reads them: digits accumulate from zero, an empty one is `none`, its default being each control function's to state, and an empty last one is left out. A byte no sequence holds ends it unread, its final 0, and is read again on its own.
+let sequence(b: Bytes, i: Nat) -> Option(Sequence) =
+    let marker = Option/unwrap_or(Option/filter(at(b, i), (n) => Nat/in_range(n, 0x3C, 0x3F)), 0);
+    let start = match marker == 0 | true => i | false => i + 1 end;
+    let go(
+        j: Nat,
+        current: Option(Nat),
+        subs: List(Option(Nat)),
+        params: List(List(Option(Nat))),
+        intermediate: Nat,
+    ) -> Option(Sequence) =
+        match at(b, j)
+        | none() => Option/none()
+        | some(n) =>
+            choose
+            | Nat/in_range(n, '0', '9') =>
+                go(
+                    j + 1,
+                    Option/some(Option/unwrap_or(current, 0) * 10 + (n - '0')),
+                    subs,
+                    params,
+                    intermediate)
+            | n == ':' => go(j + 1, Option/none(), [current, ..subs], params, intermediate)
+            | n == ';' =>
+                go(
+                    j + 1,
+                    Option/none(),
+                    [],
+                    [List/reverse([current, ..subs]), ..params],
+                    intermediate)
+            | Nat/in_range(n, 0x3C, 0x3F) => go(j + 1, current, subs, params, intermediate)
+            | Nat/in_range(n, 0x20, 0x2F) => go(j + 1, current, subs, params, n)
+            | Nat/in_range(n, 0x40, 0x7E) =>
+                let last: List(List(Option(Nat))) =
+                    match current
+                    | some(_) => [List/reverse([current, ..subs])]
+                    | none() => match subs | [] => [] | _ => [List/reverse([current, ..subs])] end
+                    end;
+                Option/some(
+                    Sequence {
+                        private = marker,
+                        params = List/reverse([..last, ..params]),
+                        intermediate = intermediate,
+                        final = n,
+                        next = j + 1 })
+            | _ =>
+                Option/some(
+                    Sequence {
+                        private = marker,
+                        params = [],
+                        intermediate = 0,
+                        final = 0,
+                        next = j })
+            end
+        end;
+    go(start, Option/none(), [], [], 0);
+
+-- The first sub-parameter of the parameter at `k`, or `none` where the parameter is empty or absent.
+let parameter(p: Sequence, k: Nat) -> Option(Nat) =
+    Option/flatten(Option/bind(List/try_get(p.params, k), (subs) => List/try_get(subs, 0)));
+
+induct Step: Type
+| input(Input, Nat)
+| reply(Reply, Nat)
+| skip(Nat)
+| cut()
+end
+
+let paste_end: Bytes =
+    x[0x1B, '[', '2', '0', '1', '~'];
+
+--- `bytes` as the inputs and the replies they encode, up to the first sequence the chunk ends inside; that tail is `rest`, for the next chunk to complete.
+pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest: Bytes} =
+    let key(k: Key, next: Nat) -> Step = Step/input(Input/key(k), next);
+    -- The character the byte at `i` begins and `more` bytes continue. The bytes are decided text as the bytes they are, so the text is known to hold them and has a first character.
+    let scalar(i: Nat, more: Nat) -> Step =
+        match Nat/le/try(i + (more + 1), Bytes/len(bytes))
+        | none() => Step/cut()
+        | some(within) =>
+            let piece = Bytes/slice(bytes, i, more + 1, @within);
+            match Str/Valid/try(Str/Scan/lead(), piece)
+            | none() => Step/skip(i + 1)
+            | some(valid) =>
+                let s = Str { bytes = piece, @valid = valid };
+                let first = Str/At/next(s, Str/At/start(s));
+                key(Key/plain(Key/Code/char(first.char)), i + (more + 1))
+            end
+        end;
+    let paste(start: Nat) -> Step =
+        -- Where the end marker begins, at or after `start`, with room for all six of its bytes: past the last place that has room, the chunk ends inside the paste.
+        let find(
+            j: Nat,
+            @onward: Holds(start <= j),
+        ) -> Option(
+            {at: Nat, onward: Holds(start <= at), room: Holds(at + 6 <= Bytes/len(bytes))}) =
+            match Nat/le/try(j + 6, Bytes/len(bytes))
+            | none() => Option/none()
+            | some(room) =>
+                match Bytes/slice(bytes, j, 6, @room) == paste_end
+                | true => Option/some((at = j, onward = onward, room = room))
+                | false => find(j + 1)
+                end
+            end;
+        match find(start, @Nat/le/refl(start))
+        | none() => Step/cut()
+        | some(marker) =>
+            let before = Bytes/slice(bytes, 0, marker.at);
+            match Str/of_bytes(Bytes/drop(before, start, @marker.onward))
+            | success(s) => Step/input(Input/paste(s), marker.at + 6)
+            | failure(_) => Step/skip(marker.at + 6)
+            end
+        end;
+    -- A sequence with the private marker `?`: the replies to what a session asks.
+    let replied(p: Sequence) -> Step =
+        choose
+        | p.intermediate == '$' && p.final == 'y' =>
+            match Option/bind(parameter(p, 0), Mode/of_number)
+            | none() => Step/skip(p.next)
+            | some(mode) =>
+                match parameter(p, 1)
+                | none() => Step/skip(p.next)
+                | some(state) => Step/reply(Reply/mode(mode, Nat/in_range(state, 1, 3)), p.next)
+                end
+            end
+        | p.intermediate == 0 && p.final == 'u' =>
+            Step/reply(Reply/keyboard(Option/unwrap_or(parameter(p, 0), 0)), p.next)
+        | p.intermediate == 0 && p.final == 'c' => Step/reply(Reply/attributes(), p.next)
+        | _ => Step/skip(p.next)
+        end;
+    -- A sequence with no private marker and no intermediate: a key, a paste's opener, a resize or a change of focus. An omitted modifier is 1, no modifiers; the key a `~` or a `u` names has no default, both being private finals.
+    let sent(p: Sequence) -> Step =
+        let m = Option/unwrap_or(parameter(p, 1), 1);
+        choose
+        | p.final == '~' =>
+            match parameter(p, 0)
+            | none() => Step/skip(p.next)
+            | some(n) =>
+                choose
+                | n == 200 => paste(p.next)
+                | some(code) = tilde(n) => key(modified(code, m), p.next)
+                | _ => Step/skip(p.next)
+                end
+            end
+        | p.final == 'u' =>
+            match Option/bind(parameter(p, 0), kitty)
+            | some(code) => key(modified(code, m), p.next)
+            | none() => Step/skip(p.next)
+            end
+        | p.final == 'Z' => key(Key { ..modified(Key/Code/tab(), m), shift = true }, p.next)
+        | p.final == 't' =>
+            match parameter(p, 0) == Option/some(48)
+            | false => Step/skip(p.next)
+            | true =>
+                match parameter(p, 1)
+                | none() => Step/skip(p.next)
+                | some(rows) =>
+                    match parameter(p, 2)
+                    | none() => Step/skip(p.next)
+                    | some(cols) =>
+                        Step/input(Input/resize(Tty/Size { cols = cols, rows = rows }), p.next)
+                    end
+                end
+            end
+        | p.final == 'I' => Step/input(Input/focus(true), p.next)
+        | p.final == 'O' => Step/input(Input/focus(false), p.next)
+        | some(code) = final_code(p.final) => key(modified(code, m), p.next)
+        | _ => Step/skip(p.next)
+        end;
+    let csi(j: Nat) -> Step =
+        match sequence(bytes, j)
+        | none() => Step/cut()
+        | some(p) =>
+            choose
+            | p.private == '?' => replied(p)
+            | p.private == 0 && p.intermediate == 0 => sent(p)
+            | _ => Step/skip(p.next)
+            end
+        end;
+    let ss3(j: Nat) -> Step =
+        match at(bytes, j)
+        | none() => Step/cut()
+        | some(n) =>
+            match final_code(n)
+            | some(code) => key(Key/plain(code), j + 1)
+            | none() => Step/skip(j + 1)
+            end
+        end;
+    let escape(i: Nat) -> Step =
+        match Bytes/try_get(bytes, i + 1)
+        | none() => Step/cut()
+        | some(byte) =>
+            let second = Byte/to_nat(byte);
+            choose
+            | second == '[' => csi(i + 2)
+            | second == 'O' => ss3(i + 2)
+            | second == 0x1B => key(Key/plain(Key/Code/escape()), i + 1)
+            | Nat/in_range(second, 0x20, 0x7E) =>
+                key(Key/with_alt(Key/Code/char(low(second))), i + 2)
+            | second < 0x20 || second == 0x7F => key(Key { ..control(second), alt = true }, i + 2)
+            | _ => key(Key/plain(Key/Code/escape()), i + 1)
+            end
+        end;
+    let go(
+        i: Nat,
+        inputs: List(Input),
+        replies: List(Reply),
+    ) -> {inputs: List(Input), replies: List(Reply), rest: Bytes} =
+        let read(rest: Bytes) -> {inputs: List(Input), replies: List(Reply), rest: Bytes} =
+            (inputs = List/reverse(inputs), replies = List/reverse(replies), rest = rest);
+        match Nat/lt/try(i, Bytes/len(bytes))
+        | none() => read(x[])
+        | some(inside) =>
+            let head = Bytes/get(bytes, i, @inside);
+            let n = Byte/to_nat(head);
+            let step =
+                choose
+                | n == 0x1B => escape(i)
+                | n < 0x20 || n == 0x7F => key(control(n), i + 1)
+                | _ =>
+                    match Str/classify(head)
+                    | ascii() => scalar(i, 0)
+                    | lead(more, _, _, _) => scalar(i, more)
+                    | bad() => Step/skip(i + 1)
+                    end
+                end;
+            match step
+            | cut() => read(Bytes/drop(bytes, i))
+            | input(one, next) => go(next, [one, ..inputs], replies)
+            | reply(one, next) => go(next, inputs, [one, ..replies])
+            | skip(next) => go(next, inputs, replies)
+            end
+        end;
+    go(0, [], []);
+
+--- `rest` once nothing more came: a leading Escape is the Escape key, and what follows it is read again on its own.
+pub let flush(rest: Bytes) -> {inputs: List(Input), replies: List(Reply)} =
+    match rest
+    | x[] => (inputs = [], replies = [])
+    | x[head, ..tail] =>
+        let first: List(Input) =
+            match Byte/to_nat(head) == 0x1B
+            | true => [Input/key(Key/plain(Key/Code/escape()))]
+            | false => []
+            end;
+        let read = decode(tail);
+        let after = flush(read.rest);
+        (
+            inputs = [..first, ..read.inputs, ..after.inputs],
+            replies = [..read.replies, ..after.replies])
+    end;

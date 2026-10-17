@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Byte, Str, Bytes, List, Vec, Option};
-use /std/Tui/{Style, Glyph, Tile, Frame, View, ansi};
+use /std/Tui/{Style, Glyph, Tile, Frame, View, Mode, ansi};
 
 struct Pen: Type {
     out: Bytes,
@@ -64,7 +64,7 @@ pub let render(
         end;
     let start =
         Pen {
-            out = x[..ansi/sync_begin, ..ansi/cursor_hide, ..clear],
+            out = x[..ansi/on(Mode/synchronized_output()), ..ansi/cursor_hide, ..clear],
             style = Option/none(),
             at = Option/none() };
     let painted =
@@ -77,4 +77,4 @@ pub let render(
         | some(c) => x[..ansi/move_to(c.x, c.y), ..ansi/cursor_show]
         | none() => x[]
         end;
-    x[..painted.out, ..ansi/reset, ..place, ..ansi/sync_end];
+    x[..painted.out, ..ansi/reset, ..place, ..ansi/off(Mode/synchronized_output())];

@@ -27,7 +27,7 @@ pub let handle(i: Field, k: Key) -> Field =
     let after = Str/after(i.text, i.cursor);
     match k.code
     | char(c) =>
-        match k.ctrl || k.alt
+        match k.ctrl || k.alt || k.super
         | true => i
         | false => joined(Str/concat(before, Str/of_char(c)), after)
         end

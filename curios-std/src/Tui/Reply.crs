@@ -1,0 +1,23 @@
+use /std/{Nat, Bool, Spell};
+use /std/ops/{Eql};
+use /std/Tui/{Mode};
+
+--- What a terminal answers of itself in its input: a reply to a query a session sent it.
+pub induct Reply: pub Type
+--- Whether the terminal supports `mode`, as a DEC private mode report states it: it knows the mode, and does not hold it reset for good.
+| mode(mode: Mode, supported: Bool)
+--- The progressive enhancements of the kitty keyboard protocol in force, as their flags: the terminal speaks the protocol.
+| keyboard(flags: Nat)
+--- The terminal's primary device attributes, which every terminal answers: asked last, every answer to what was asked before it has arrived by then.
+| attributes()
+end
+
+pub use Reply/*;
+
+satisfy Eql(Reply) {
+    ..
+}
+
+satisfy Spell(Reply) {
+    ..
+}

@@ -1,0 +1,29 @@
+use /std/{Bool, Str, Spell, Tty};
+use /std/ops/{Eql};
+use /std/Tui/{Key};
+
+--- The bytes a terminal sends, read as the inputs and the replies they encode.
+mod decode;
+pub use decode/{let decode, let flush};
+
+--- What a terminal sends its program: a key, a paste, its new size, or whether it has the focus.
+pub induct Input: pub Type
+--- A key was pressed.
+| key(Key)
+--- Text was pasted in one go.
+| paste(Str)
+--- The terminal is now this size.
+| resize(Tty/Size)
+--- The terminal gained the focus, or lost it.
+| focus(Bool)
+end
+
+pub use Input/*;
+
+satisfy Eql(Input) {
+    ..
+}
+
+satisfy Spell(Input) {
+    ..
+}

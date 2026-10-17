@@ -1,0 +1,51 @@
+use /std/{Nat, Option, Spell};
+use /std/ops/{Eql};
+
+--- A terminal mode a session sets, named by the DEC private mode number a terminal knows it by.
+pub induct Mode: pub Type
+--- The alternate screen, behind which the terminal keeps its own (1049).
+| alternate_screen()
+--- Bracketed paste: a paste arrives between two markers, and none of it is read as keys (2004).
+| bracketed_paste()
+--- Focus events: the terminal reports when it gains and loses focus (1004).
+| focus_events()
+--- Synchronized output: the terminal shows a frame once it is whole (2026).
+| synchronized_output()
+--- Grapheme clusters: the terminal moves its cursor past a cluster as one (2027).
+| grapheme_clusters()
+--- In-band resize: the terminal reports its new size in its input (2048).
+| in_band_resize()
+end
+
+pub use Mode/*;
+
+satisfy Eql(Mode) {
+    ..
+}
+
+satisfy Spell(Mode) {
+    ..
+}
+
+--- The DEC private mode number of `m`.
+pub let number(m: Mode) -> Nat =
+    match m
+    | alternate_screen() => 1049
+    | bracketed_paste() => 2004
+    | focus_events() => 1004
+    | synchronized_output() => 2026
+    | grapheme_clusters() => 2027
+    | in_band_resize() => 2048
+    end;
+
+--- The mode numbered `n`, or `none` for a number that names none of them.
+pub let of_number(n: Nat) -> Option(Mode) =
+    match n
+    | 1049 => Option/some(Mode/alternate_screen())
+    | 2004 => Option/some(Mode/bracketed_paste())
+    | 1004 => Option/some(Mode/focus_events())
+    | 2026 => Option/some(Mode/synchronized_output())
+    | 2027 => Option/some(Mode/grapheme_clusters())
+    | 2048 => Option/some(Mode/in_band_resize())
+    | _ => Option/none()
+    end;

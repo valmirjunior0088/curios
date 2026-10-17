@@ -1,0 +1,35 @@
+use /std/{Nat, Char, Spell};
+use /std/ops/{Eql};
+use /std/Bool/{Holds};
+
+--- A character, or a named key, as the kitty keyboard protocol names them. The End key is `end_key`, since `end` is a reserved word.
+pub induct Code: pub Type
+--- A character key.
+| char(Char)
+| enter()
+| escape()
+| backspace()
+| tab()
+| delete()
+| insert()
+| up()
+| down()
+| left()
+| right()
+| home()
+| end_key()
+| page_up()
+| page_down()
+--- A function key, by its number: F1 to F35, the keys the protocol names.
+| f(n: Nat, @from: Holds(1 <= n), @to: Holds(n <= 35))
+end
+
+pub use Code/*;
+
+satisfy Eql(Code) {
+    ..
+}
+
+satisfy Spell(Code) {
+    ..
+}

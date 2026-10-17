@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Str, Bytes, List, Byte};
-use /std/Tui/{Color, Style};
+use /std/Tui/{Color, Style, Mode};
 
 --- `ESC [` and `body`.
 pub let csi(body: Str) -> Bytes =
@@ -13,13 +13,17 @@ pub let move_to(x: Nat, y: Nat) -> Bytes =
 pub let clear: Bytes =
     csi("2J");
 
---- Begin synchronized output.
-pub let sync_begin: Bytes =
-    csi("?2026h");
+-- `m`'s number between `?` and `final`, as a DEC private mode's sequences are written.
+let private(m: Mode, final: Str) -> Bytes =
+    csi(Str/flatten(["?", Nat/to_str(Mode/number(m)), final]));
 
---- End synchronized output.
-pub let sync_end: Bytes =
-    csi("?2026l");
+--- Set `m`.
+pub let on(m: Mode) -> Bytes =
+    private(m, "h");
+
+--- Reset `m`.
+pub let off(m: Mode) -> Bytes =
+    private(m, "l");
 
 --- Show the cursor.
 pub let cursor_show: Bytes =
@@ -29,28 +33,12 @@ pub let cursor_show: Bytes =
 pub let cursor_hide: Bytes =
     csi("?25l");
 
---- Switch to the alternate screen.
-pub let alternate_on: Bytes =
-    csi("?1049h");
-
---- Switch back from the alternate screen.
-pub let alternate_off: Bytes =
-    csi("?1049l");
-
---- Ask for bracketed paste.
-pub let paste_on: Bytes =
-    csi("?2004h");
-
---- Stop bracketed paste.
-pub let paste_off: Bytes =
-    csi("?2004l");
-
---- Ask for the kitty keyboard protocol.
-pub let kitty_push: Bytes =
+--- Push the kitty keyboard protocol's enhancements, disambiguated keys alone: a key the legacy encoding cannot tell from another is sent in the protocol's form, and text stays text.
+pub let keyboard_push: Bytes =
     csi(">1u");
 
---- Give the kitty keyboard protocol back.
-pub let kitty_pop: Bytes =
+--- Pop the enhancements `keyboard_push` pushed.
+pub let keyboard_pop: Bytes =
     csi("<u");
 
 --- Every attribute off.
