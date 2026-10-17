@@ -9,6 +9,7 @@
 use {
     super::{compile, run},
     curios_runtime::{Compiled, ForeignBindings, MockHost},
+    curios_utilities::fill,
     std::sync::OnceLock,
 };
 
@@ -556,11 +557,11 @@ fn program() -> String {
         .map(|(index, expr)| format!("| {index} => /std/print({expr})"))
         .collect::<Vec<_>>()
         .join("\n        ");
-    format!(
+    fill!(
         r##"
-        use /std/{{Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt, Bool, rand, Io, Try, Process}};
-        use /std/Toml/{{flt}};
-        let entry() -> /std/Io({{}}) =
+        use /std/{Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt, Bool, rand, Io, Try, Process};
+        use /std/Toml/{flt};
+        let entry() -> /std/Io({}) =
         let taint = Bytes/len(rand/bytes(0)!);
         let opaque_n(n : Nat) -> Nat = (taint + 1) * n;
         let run_of(ch : Str, k : Nat) -> Str =
@@ -619,11 +620,12 @@ fn program() -> String {
             end;
         let row = Option/unwrap_or(Nat/of_str(Str/trim(Result/unwrap_or(Str/of_bytes(line), ""))), 999);
         match row
-        {arms}
+        ${arms}
         | _ => /std/print("no such row")
         end;
         entry()
-        "##
+        "##,
+        arms
     )
 }
 

@@ -4,7 +4,7 @@
 //!
 //! A runaway that answers inside a stated budget is a fixture here; `runaway_measurements`, among the instrumented tests, counts what every one costs at a budget and at twice it.
 
-use super::typecheck_within;
+use {super::typecheck_within, curios_utilities::fill};
 
 /// What a runaway's claim makes a checker do.
 #[derive(Clone, Copy)]
@@ -122,8 +122,12 @@ pub(super) fn runaway(shape: Runaway) -> String {
         ),
     };
 
-    format!(
-        "use /std/{{{imports}}};\n\n{definitions}\n\n{claim} = Eq/refl();\n\n{reader}Io/pure(())\n"
+    fill!(
+        "use /std/{${imports}};\n\n${definitions}\n\n${claim} = Eq/refl();\n\n${reader}Io/pure(())\n",
+        imports,
+        definitions,
+        claim,
+        reader
     )
 }
 

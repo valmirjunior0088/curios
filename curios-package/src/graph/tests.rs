@@ -1,4 +1,9 @@
-use {super::*, crate::TreeHash, curios_utilities::test_support::Temporary, std::fs};
+use {
+    super::*,
+    crate::TreeHash,
+    curios_utilities::{fill, test_support::Temporary},
+    std::fs,
+};
 
 /// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
 fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
@@ -197,8 +202,10 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
     fs::rename(&delivered, &placed).unwrap();
 
     let row = |rev: &str, hash: &TreeHash| {
-        format!(
-            "http = {{ source = \"git\", url = \"https://example/http\", rev = \"{rev}\", hash = \"{hash}\" }}"
+        fill!(
+            "http = { source = \"git\", url = \"https://example/http\", rev = \"${rev}\", hash = \"${hash}\" }",
+            rev,
+            hash
         )
     };
     let member = |name: &str, dependency: String| {
@@ -282,8 +289,10 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
     let absent = TreeHash::parse(&format!("c1:{}", "e".repeat(64))).unwrap();
 
     let row = |rev: &str, hash: &TreeHash| {
-        format!(
-            "http = {{ source = \"git\", url = \"https://example/http\", rev = \"{rev}\", hash = \"{hash}\" }}"
+        fill!(
+            "http = { source = \"git\", url = \"https://example/http\", rev = \"${rev}\", hash = \"${hash}\" }",
+            rev,
+            hash
         )
     };
     fs::write(
@@ -442,16 +451,12 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
 
         fs::write(
             root.join(pinned).join("curios.toml"),
-            format!(
-                "compiler = \"0.0.0\"\nname = \"{pinned}\"\n\n[dependencies]\nhttp = {{ source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"{hash}\" }}\n"
-            ),
+            fill!("compiler = \"0.0.0\"\nname = \"${pinned}\"\n\n[dependencies]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"${hash}\" }\n", pinned, hash),
         )
         .unwrap();
         fs::write(
             root.join(live).join("curios.toml"),
-            format!(
-                "compiler = \"0.0.0\"\nname = \"{live}\"\n\n[dependencies]\nhttp = {{ source = \"path\", path = \"../http\" }}\n"
-            ),
+            fill!("compiler = \"0.0.0\"\nname = \"${live}\"\n\n[dependencies]\nhttp = { source = \"path\", path = \"../http\" }\n", live),
         )
         .unwrap();
 
@@ -595,8 +600,9 @@ fn a_marker_in_an_ungoverned_package_is_refused_for_the_missing_governance() {
                 ("base/lib.crs", ""),
                 (
                     "app/curios.toml",
-                    &format!(
-                        "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = {{ source = \"{marker}\" }}\n"
+                    &fill!(
+                        "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"${marker}\" }\n",
+                        marker
                     ),
                 ),
                 ("app/lib.crs", ""),
@@ -655,9 +661,9 @@ fn an_unmaterialized_fetchable_row_names_curate() {
         &[
             (
                 "curios.toml",
-                &format!(
-                    "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nhttp = {{ source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:{}\" }}\n",
-                    "a".repeat(64)
+                &fill!(
+                    "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:${hash}\" }\n",
+                    hash = "a".repeat(64)
                 ),
             ),
             ("lib.crs", ""),

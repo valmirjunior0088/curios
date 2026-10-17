@@ -1,6 +1,6 @@
 //! The `Flt` decimal codec, whose renderer and parser compute over unbounded `Nat` and whose expectations come from Rust's own `{:+}` and `str::parse::<f64>`. That oracle is why these two stay here; the arithmetic under them is the corpus's `/data/big_num`.
 
-use super::run;
+use {super::run, curios_utilities::fill};
 
 #[test]
 fn flt_to_str_matches_rust_shortest_format() {
@@ -38,11 +38,12 @@ fn flt_to_str_matches_rust_shortest_format() {
         .map(|(expr, _)| format!("Flt/to_str({expr})"))
         .collect::<Vec<_>>()
         .join(", ");
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Str, Flt, List}};
-        /std/print(Str/join("|", [{array}]))
-        "#
+        use /std/{Str, Flt, List};
+        /std/print(Str/join("|", [${array}]))
+        "#,
+        array
     );
     // Rust spells every NaN `NaN`, sign and payload dropped, where `to_str` writes the pattern so it reads back — so the oracle holds the numbers, and `0 / 0`, the default NaN, is spelled as the model writes it.
     let expected = cases
@@ -95,11 +96,12 @@ fn flt_of_str_matches_rust_parse() {
         .map(|text| format!("Flt/to_str(Option/unwrap_or(Flt/of_str(\"{text}\"), +nan.0))"))
         .collect::<Vec<_>>()
         .join(", ");
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Str, Flt, List, Option}};
-        /std/print(Str/join("|", [{array}]))
-        "#
+        use /std/{Str, Flt, List, Option};
+        /std/print(Str/join("|", [${array}]))
+        "#,
+        array
     );
     let expected = cases
         .iter()

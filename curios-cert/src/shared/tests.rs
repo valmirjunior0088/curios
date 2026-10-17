@@ -1,8 +1,11 @@
 //! The roster's one rule: no other module of this crate imports a shared function for itself.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
+use {
+    curios_utilities::fill,
+    std::{
+        fs,
+        path::{Path, PathBuf},
+    },
 };
 
 /// The crates whose functions the roster names.
@@ -58,7 +61,7 @@ fn functions(items: &str, found: &mut Vec<String>) {
         }
         functions(&listed[start..], found);
     } else if let Some((_, nested)) = items.split_once("::{") {
-        functions(&format!("{{{nested}"), found);
+        functions(&fill!("{${nested}", nested), found);
     } else if let Some(path) = items.split(" as ").next()
         && !path
             .split("::")

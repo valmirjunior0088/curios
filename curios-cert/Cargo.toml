@@ -20,6 +20,8 @@ curios-algebra = { workspace = true }
 curios-analysis = { workspace = true, features = ["test-support"] }
 # `declaring`, by which a fixture's module declares the entries it names: each carried by the definition of its name, or by the former it spells.
 curios-core = { workspace = true, features = ["test-support"] }
+# `fill!`, by which a fixture splices a value into text whose own braces stay single. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
+curios-utilities = { workspace = true, features = ["test-support"] }
 
 [dependencies]
 curios-archive = { workspace = true }

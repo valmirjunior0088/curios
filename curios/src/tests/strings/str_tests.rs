@@ -1,6 +1,9 @@
 //! What a `Str` literal costs to compile and how one reads in a report. The `Str` surface itself — indexing, slicing and trimming at codepoint boundaries — is the corpus's `/strings/str`.
 
-use crate::tests::{run, typecheck};
+use {
+    crate::tests::{run, typecheck},
+    curios_utilities::fill,
+};
 
 #[test]
 fn literal_prints_its_bytes() {
@@ -17,12 +20,13 @@ fn literal_prints_its_bytes() {
 #[test]
 fn long_str_literal_compiles_on_the_default_test_stack() {
     let literal = "0123456789".repeat(50); // 500 bytes: an order of magnitude past the old cliff
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Str}};
-        let s : Str = "{literal}";
+        use /std/{Str};
+        let s : Str = "${literal}";
         /std/print(s)
-        "#
+        "#,
+        literal
     );
     assert_eq!(run(&source), literal.as_bytes());
 }
@@ -51,12 +55,13 @@ fn a_string_literal_spells_as_itself_in_a_report() {
 #[test]
 fn a_long_literal_is_elided_in_a_report() {
     let literal = "0123456789".repeat(10);
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Str, Eq}};
-        let same: Eq()("{literal}", "x") = Eq/refl();
+        use /std/{Str, Eq};
+        let same: Eq()("${literal}", "x") = Eq/refl();
         /std/print("unreachable")
-        "#
+        "#,
+        literal
     );
     let refused = crate::tests::error(&source);
 

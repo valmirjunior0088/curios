@@ -7,6 +7,7 @@ use {
     crate::tests::{compile, run, run_text, typecheck, typecheck_within},
     curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_runtime::MockHost,
+    curios_utilities::fill,
 };
 
 #[test]
@@ -222,12 +223,13 @@ fn folded_and_executed_nans_agree() {
 #[test]
 fn a_reassociated_product_agrees_with_the_written_one() {
     let program = |combine: &str| {
-        format!(
-            "use /std/{{Nat, Bool, Fmt, List, Process}};\n\
+        fill!(
+            "use /std/{Nat, Bool, Fmt, List, Process};\n\
              let k(n: Nat) -> Nat = match n == 1 | true => 0 | false => 65536 end;\n\
              let prod(n: Nat) -> Nat =\n\
-             match n | 0 => 1 | p + 1; _ => {combine} end;\n\
-             let main() -> /std/Io({{}}) = Fmt/print(\"%\")(Nat/to_str(prod(List/len(/std/Process/args()!))));\nmain()\n"
+             match n | 0 => 1 | p + 1; _ => ${combine} end;\n\
+             let main() -> /std/Io({}) = Fmt/print(\"%\")(Nat/to_str(prod(List/len(/std/Process/args()!))));\nmain()\n",
+            combine
         )
     };
     let answer = |combine: &str| {

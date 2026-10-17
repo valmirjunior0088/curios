@@ -3,6 +3,7 @@
 use {
     curios_abi::{ENTRY, HostOp, PANIC},
     curios_runtime::test_support::{GuestInstance, GuestValue},
+    curios_utilities::fill,
     curios_wasm::{CompType, Export, SubType, TypeName},
 };
 
@@ -211,7 +212,7 @@ fn harness_implements_every_host_op() {
     }
 
     assert!(
-        source.contains(&format!("sys: {{ {PANIC} }}")),
+        source.contains(&fill!("sys: { ${PANIC} }", PANIC)),
         "harness.js does not define the `sys` import `{PANIC}`"
     );
 

@@ -6,6 +6,7 @@ use {
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
     curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::fill,
     curios_wasm::to_bytes,
     std::collections::BTreeSet,
 };
@@ -181,8 +182,10 @@ fn run_both(fixture: &Fixture, cases: &[(&[&str], &str)]) {
 
 #[test]
 fn exact_products_recur_as_loops_before_downstream_optimization() {
-    let fixture = compile(&format!(
-        "{HEADER}{EXACT} let main() -> Io({{}}) = let n = 100000 + List/len(/std/Process/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.0 + r.1)); main()"
+    let fixture = compile(&fill!(
+        "${HEADER}${EXACT} let main() -> Io({}) = let n = 100000 + List/len(/std/Process/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.0 + r.1)); main()",
+        HEADER,
+        EXACT
     ));
     tail_erased(&fixture);
     loop_cont(&fixture);
@@ -191,8 +194,10 @@ fn exact_products_recur_as_loops_before_downstream_optimization() {
 
 #[test]
 fn retained_proof_slots_do_not_cost_a_frame_per_step() {
-    let fixture = compile(&format!(
-        "{HEADER}{PROOF} let main() -> Io({{}}) = let n = 100000 + List/len(/std/Process/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.at)); main()"
+    let fixture = compile(&fill!(
+        "${HEADER}${PROOF} let main() -> Io({}) = let n = 100000 + List/len(/std/Process/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.at)); main()",
+        HEADER,
+        PROOF
     ));
     tail_erased(&fixture);
     loop_cont(&fixture);
@@ -201,16 +206,18 @@ fn retained_proof_slots_do_not_cost_a_frame_per_step() {
 
 #[test]
 fn nested_proof_reconstruction_preserves_both_constructor_outcomes() {
-    let fixture = compile(&format!(
-        r#"{HEADER}{OPTIONAL}
-        let main() -> Io({{}}) =
+    let fixture = compile(&fill!(
+        r#"${HEADER}${OPTIONAL}
+        let main() -> Io({}) =
         let n = 100000 + List/len(/std/Process/args()!);
         match walk(n, 7)
         | some(hit) => let _ = /std/print(Nat/to_str(hit.at))!; let _ = /std/print("/")!; /std/print(Nat/to_str(hit.seen))
         | none() => /std/print("none")
         end;
         main()
-        "#
+        "#,
+        HEADER,
+        OPTIONAL
     ));
     tail_erased(&fixture);
     loop_cont(&fixture);
@@ -219,9 +226,9 @@ fn nested_proof_reconstruction_preserves_both_constructor_outcomes() {
 
 #[test]
 fn an_escaping_walk_with_multiple_callers_keeps_a_tail_recursive_function() {
-    let fixture = compile(&format!(
-        r#"{HEADER}{PROOF}
-        let main() -> Io({{}}) =
+    let fixture = compile(&fill!(
+        r#"${HEADER}${PROOF}
+        let main() -> Io({}) =
         let holder = Cell/new()!;
         let _ = Cell/fill(holder, walk)!;
         let indirect = Option/unwrap_or(Cell/poll(holder)!, walk);
@@ -231,7 +238,9 @@ fn an_escaping_walk_with_multiple_callers_keeps_a_tail_recursive_function() {
         let c = indirect(n + 2, 19);
         /std/print(Nat/to_str(a.at + b.at + c.at));
         main()
-        "#
+        "#,
+        HEADER,
+        PROOF
     ));
     tail_erased(&fixture);
     let module = &fixture.cont;
@@ -274,18 +283,19 @@ fn an_escaping_walk_with_multiple_callers_keeps_a_tail_recursive_function() {
 
 #[test]
 fn overwriting_an_ordinary_numeric_field_changes_the_answer() {
-    let fixture = compile(&format!(
-        r#"{HEADER}
-        let walk(n: Nat) -> {{at: Nat, real: Nat}} = match n
+    let fixture = compile(&fill!(
+        r#"${HEADER}
+        let walk(n: Nat) -> {at: Nat, real: Nat} = match n
             | 0 => (at = 7, real = 9)
             | k + 1 => let r = walk(k); (at = r.at, real = 0)
             end;
-        let entry() -> /std/Io({{}}) =
+        let entry() -> /std/Io({}) =
             let n = List/len(/std/Process/args()!);
             let r = walk(n);
             /std/print(Nat/to_str(r.real));
         entry()
-        "#
+        "#,
+        HEADER
     ));
     run_both(
         &fixture,

@@ -5,6 +5,7 @@ use {
     curios_core::Zonked,
     curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::fill,
 };
 
 // The List witness: bind is concat-map.
@@ -27,17 +28,19 @@ fn an_action_is_embedded_wherever_its_monads_witnesses_are_written() {
     let witnesses = r#"satisfy Monad(Box) { pure(@_, a) = Box { value = a }, bind(@_, @_, m, f) = f(m.value) }
         satisfy Lift(Box, Io) { lift(@_, m) = Io/pure(m.value) }"#;
     let program = |first: &str, second: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Nat, Io, Monad}};
-            use /std/Monad/{{Lift}};
-            pub struct Box(A: Type): pub Type {{ value: A }}
-            let boxed(n: Nat) -> Box(Nat) = Box {{ value = n }};
-            {first}
-            {second}
-            let main() -> Io({{}}) = let n = run(3)!; /std/print(Nat/to_str(n));
+            use /std/{Nat, Io, Monad};
+            use /std/Monad/{Lift};
+            pub struct Box(A: Type): pub Type { value: A }
+            let boxed(n: Nat) -> Box(Nat) = Box { value = n };
+            ${first}
+            ${second}
+            let main() -> Io({}) = let n = run(3)!; /std/print(Nat/to_str(n));
             main()
-            "#
+            "#,
+            first,
+            second
         )
     };
 
@@ -243,14 +246,19 @@ impl Region {
             ..
         } = self;
 
-        format!(
+        fill!(
             r#"
-            use /std/{{{uses}}};
-            let small(n: Nat) -> {small} = {pure}(n);
-            let large(n: Nat) -> {large} = {pure}(Nat);
-            {declarations}
+            use /std/{${uses}};
+            let small(n: Nat) -> ${small} = ${pure}(n);
+            let large(n: Nat) -> ${large} = ${pure}(Nat);
+            ${declarations}
             /std/print("bound")
-            "#
+            "#,
+            uses,
+            small,
+            pure,
+            large,
+            declarations
         )
     }
 
@@ -422,13 +430,14 @@ fn a_region_bound_by_a_written_bind_below_its_action_sits_beside_one_at_its_own_
 #[test]
 fn a_transformers_own_bind_takes_a_larger_region_over_a_bare_base_monad() {
     let over = |base: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Str, Nat, Io, Option, Try}};
-            let small(n: Nat) -> Try({base}, Str, Nat) = Try/pure(n);
-            pub let big(n: Nat) -> Try({base}, Str, Type) = Try/bind(small(n), (_) => Try/pure(Nat));
+            use /std/{Str, Nat, Io, Option, Try};
+            let small(n: Nat) -> Try(${base}, Str, Nat) = Try/pure(n);
+            pub let big(n: Nat) -> Try(${base}, Str, Type) = Try/bind(small(n), (_) => Try/pure(Nat));
             /std/print("bound")
-            "#
+            "#,
+            base
         )
     };
 

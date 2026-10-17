@@ -1,6 +1,6 @@
 //! What a name that resolves to nothing is told: one refusal, of the declaration that wrote it, with the nearest name where it was looked up and the ways to reach one elsewhere.
 
-use super::test_support::*;
+use {super::test_support::*, curios_utilities::fill};
 
 fn refused(source: &str) -> String {
     compile(source).map(|_| ()).unwrap_err()
@@ -95,14 +95,15 @@ fn a_misspelled_module_is_offered_the_one_it_is_near_wherever_it_is_looked_up() 
             "`Nta` is not in scope\n  did you mean `Nat`?",
         ),
     ] {
-        let error = refused(&format!(
+        let error = refused(&fill!(
             r#"
-            use /std/{{Nat}};
+            use /std/{Nat};
 
-            let p(a: Nat) -> Nat = {path};
+            let p(a: Nat) -> Nat = ${path};
 
             /std/print("x")
-            "#
+            "#,
+            path
         ));
         assert!(error.contains(said), "{path}: {error}");
     }

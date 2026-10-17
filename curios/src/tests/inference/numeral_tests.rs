@@ -2,27 +2,31 @@
 //!
 //! A numeral is a choice among the carriers it realizes at, and its default is taken only where nothing its term reads can still say otherwise: a later argument, an element, an arm or the expectation pins it as an earlier one does, and where none does, the numerals that wait on one type take one default together. Each program here is written in both orders and run, so the kernel has judged what the elaborator admitted.
 
-use crate::tests::{error, run};
+use {
+    crate::tests::{error, run},
+    curios_utilities::fill,
+};
 
 /// `body` over the declarations these programs share, its last line the text printed.
 fn program(body: &str) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Nat, Int, Byte, Bool, Flt, Char, Option, List, Eq, Str, Show, print}};
+        use /std/{Nat, Int, Byte, Bool, Flt, Char, Option, List, Eq, Str, Show, print};
         let id(@A: Type, a: A) -> A = a;
         let first(@A: Type, x: A, pin: A) -> A = x;
         let second(@A: Type, pin: A, x: A) -> A = x;
         let pick(@A: Type, x: Option(A), pin: Option(A)) -> Option(A) = x;
         let shown(o: Option(Byte)) -> Str = match o | some(v) => Show/show(v) | none() => "none" end;
-        struct Pair(T: Type): pub Type {{ a: T, z: T }}
+        struct Pair(T: Type): pub Type { a: T, z: T }
         let b: Byte = 7;
         let i: Int = -2;
         let c: Bool = true;
         let ob: Option(Byte) = Option/some(b);
         let xs: List(Int) = [i];
         let and(s: Str, t: Str) -> Str = Str/concat(s, Str/concat(" ", t));
-        {body}
-        "#
+        ${body}
+        "#,
+        body
     )
 }
 

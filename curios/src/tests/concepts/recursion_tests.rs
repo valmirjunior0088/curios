@@ -4,7 +4,10 @@
 //!
 //! A cycle between *two* witnesses has no such binding unless the source declares it: one witness naming a later one is ordinary and works, because a declaration elaborates after what it reads, wherever each is written; two naming each other are declared as one `satisfy … and …` group, whose members register before any body elaborates and are bound in one another, and an undeclared pair is refused here, in the language's own terms, rather than reaching the kernel as an unbound internal name.
 
-use crate::tests::{core_elab, error, run};
+use {
+    crate::tests::{core_elab, error, run},
+    curios_utilities::fill,
+};
 
 // A method stated by another of its witness's methods reads that method, not the witness: `neq` reads `eql`, which names nothing of the witness, so the body recurses nowhere and the witness is an ordinary definition — where a group of one is a knot forced at every `!=`.
 #[test]
@@ -167,14 +170,16 @@ fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_
     let describe = "let describe(b: Box) -> Str = Show/show(b);";
     let witness = r#"satisfy Show(Box) { show(b) = match b.value | 0 => "empty" | _ => describe(Box { value = 0 }) end }"#;
     let program = |first: &str, second: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Nat, Show, Str}};
-            pub struct Box: pub Type {{ value: Nat }}
-            {first}
-            {second}
-            /std/print(describe(Box {{ value = 3 }}))
-            "#
+            use /std/{Nat, Show, Str};
+            pub struct Box: pub Type { value: Nat }
+            ${first}
+            ${second}
+            /std/print(describe(Box { value = 3 }))
+            "#,
+            first,
+            second
         )
     };
 

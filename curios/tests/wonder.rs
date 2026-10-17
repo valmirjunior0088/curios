@@ -4,7 +4,7 @@
 
 use {
     curios_std::std_directory,
-    curios_utilities::test_support::Temporary,
+    curios_utilities::{fill, test_support::Temporary},
     curios_wonder::SETTLE,
     std::{
         fs,
@@ -457,8 +457,11 @@ impl Editor {
     /// The answer to `method` asked of `params`, asked again while it is nothing: what a document's check leaves for a place to be answered from is left once its diagnostics are published, so a request sent on the publish may find nothing held yet.
     fn asked(&mut self, method: &str, params: &str) -> String {
         for id in 100..300 {
-            self.send(&format!(
-                r#"{{"jsonrpc":"2.0","id":{id},"method":"{method}","params":{params}}}"#
+            self.send(&fill!(
+                r#"{"jsonrpc":"2.0","id":${id},"method":"${method}","params":${params}}"#,
+                id,
+                method,
+                params
             ));
             let answer = self.response(id);
             if !answer.contains(r#""result":null"#) && !answer.contains(r#""result":[]"#) {
@@ -498,9 +501,7 @@ fn the_server_publishes_from_the_buffer_and_clears() {
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
 
     // What the editor holds, not what the disk does: the file on disk compiles, the buffer has a goal.
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}"#, uri));
     let published = editor.receive();
     assert!(
         published.contains("textDocument/publishDiagnostics"),
@@ -516,9 +517,7 @@ fn the_server_publishes_from_the_buffer_and_clears() {
         "{published}"
     );
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"/std/print(\"\")\n"}}]}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"/std/print(\"\")\n"}]}}"#, uri));
     let cleared = editor.receive();
     assert!(cleared.contains(r#""diagnostics":[]"#), "{cleared}");
 
@@ -544,20 +543,14 @@ fn a_save_of_text_already_checked_publishes_nothing() {
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}"#, uri));
     let opened = editor.receive();
     assert!(opened.contains(r#""severity":3"#), "{opened}");
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didSave","params":{{"textDocument":{{"uri":"{uri}"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didSave","params":{"textDocument":{"uri":"${uri}"}}}"#, uri));
     thread::sleep(QUIET);
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"/std/print(\"\")\n"}}]}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"/std/print(\"\")\n"}]}}"#, uri));
     let published = editor.receive();
     assert!(published.contains(r#""diagnostics":[]"#), "{published}");
 
@@ -577,8 +570,9 @@ fn a_reopened_document_is_published_again() {
     let path = root.join("scratch.crs");
     write(&root, "scratch.crs", "/std/print(\"\")\n");
     let uri = format!("file://{}", path.display());
-    let opening = format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}}}}"#
+    let opening = fill!(
+        r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}"#,
+        uri
     );
 
     let mut editor = Editor::launch(&root);
@@ -589,18 +583,14 @@ fn a_reopened_document_is_published_again() {
     editor.send(&opening);
     assert!(editor.receive().contains(r#""severity":3"#));
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didClose","params":{{"textDocument":{{"uri":"{uri}"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didClose","params":{"textDocument":{"uri":"${uri}"}}}"#, uri));
     thread::sleep(QUIET);
 
     editor.send(&opening);
     thread::sleep(QUIET);
 
     // An edit behind the reopen, so a reopen that was wrongly skipped is this edit's answer arriving first rather than silence — a test whose failure is nothing published is one that hangs instead of failing.
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"let mm : /std/Nat = ?;\n/std/print(\"\")\n"}}]}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"let mm : /std/Nat = ?;\n/std/print(\"\")\n"}]}}"#, uri));
 
     let republished = editor.receive();
     assert!(
@@ -642,16 +632,12 @@ fn a_warming_check_never_publishes() {
     let folder = format!("file://{}", root.display());
 
     let mut editor = Editor::launch(&root);
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"capabilities":{{}},"workspaceFolders":[{{"uri":"{folder}","name":"app"}}]}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{},"workspaceFolders":[{"uri":"${folder}","name":"app"}]}}"#, folder));
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
     thread::sleep(QUIET);
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"/std/print(\"\")\n"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"/std/print(\"\")\n"}}}"#, uri));
 
     let published = editor.receive();
     assert!(published.contains("scratch.crs"), "{published}");
@@ -679,9 +665,7 @@ fn a_lint_is_published_as_a_warning() {
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"use /std/{{Bool}};\n/std/print(\"\")\n"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"use /std/{Bool};\n/std/print(\"\")\n"}}}"#, uri));
     let published = editor.receive();
     assert!(
         published.contains(r#""message":"unused import `Bool`; delete it""#),
@@ -726,15 +710,11 @@ fn a_warm_store_does_not_answer_for_the_buffer() {
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = 1;\n"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = 1;\n"}}}"#, uri));
     let published = editor.receive();
     assert!(published.contains("type mismatch"), "{published}");
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"pub let word : /std/Str = \"placed\";\n"}}]}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"pub let word : /std/Str = \"placed\";\n"}]}}"#, uri));
     let cleared = editor.receive();
     assert!(cleared.contains(r#""diagnostics":[]"#), "{cleared}");
 
@@ -757,9 +737,7 @@ fn a_header_that_does_not_parse_is_located_without_a_snippet() {
     editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"pub mod util;\na\n"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub mod util;\na\n"}}}"#, uri));
 
     let published = editor.receive();
     assert!(
@@ -801,14 +779,10 @@ fn formatting_answers_with_the_canonical_text() {
             .contains(r#""documentFormattingProvider":true"#)
     );
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"let   x : /std/Nat =   1;\n/std/print(\"\")\n"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"let   x : /std/Nat =   1;\n/std/print(\"\")\n"}}}"#, uri));
     editor.receive();
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/formatting","params":{{"textDocument":{{"uri":"{uri}"}},"options":{{"tabSize":4,"insertSpaces":true}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","id":2,"method":"textDocument/formatting","params":{"textDocument":{"uri":"${uri}"},"options":{"tabSize":4,"insertSpaces":true}}}"#, uri));
     let formatted = editor.receive();
     assert!(
         formatted.contains(r#""newText":"let x: /std/Nat =\n    1;\n\n/std/print(\"\")\n""#),
@@ -846,14 +820,15 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
         "{capabilities}"
     );
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"{text}"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"${text}"}}}"#, uri, text));
 
     // `one`, used on the second line: declared on the first, in this document.
     let own = editor.asked(
         "textDocument/definition",
-        &format!(r#"{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":1,"character":21}}}}"#),
+        &fill!(
+            r#"{"textDocument":{"uri":"${uri}"},"position":{"line":1,"character":21}}"#,
+            uri
+        ),
     );
     assert!(own.contains(&format!(r#""uri":"{uri}""#)), "{own}");
     assert!(
@@ -866,7 +841,10 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
     // `/app/util/word`, on the first line: declared in the library's module.
     let library = editor.asked(
         "textDocument/definition",
-        &format!(r#"{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":0,"character":30}}}}"#),
+        &fill!(
+            r#"{"textDocument":{"uri":"${uri}"},"position":{"line":0,"character":30}}"#,
+            uri
+        ),
     );
     assert!(
         library.contains(&format!(
@@ -885,7 +863,10 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
     // What each names, as its declaration states it: the head as source, then the prose above it where there is any.
     let stated = editor.asked(
         "textDocument/hover",
-        &format!(r#"{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":1,"character":21}}}}"#),
+        &fill!(
+            r#"{"textDocument":{"uri":"${uri}"},"position":{"line":1,"character":21}}"#,
+            uri
+        ),
     );
     assert!(
         stated.contains(r#""value":"```curios\nlet one: /std/Str\n```""#),
@@ -895,7 +876,7 @@ fn the_server_answers_where_a_name_is_declared_and_what_a_document_declares() {
 
     let outline = editor.asked(
         "textDocument/documentSymbol",
-        &format!(r#"{{"textDocument":{{"uri":"{uri}"}}}}"#),
+        &fill!(r#"{"textDocument":{"uri":"${uri}"}}"#, uri),
     );
     assert!(
         outline.contains(r#""name":"one""#) && outline.contains(r#""name":"two""#),
@@ -920,22 +901,19 @@ fn a_place_is_answered_while_a_check_is_running() {
     editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"{opened}"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"${opened}"}}}"#, uri, opened));
     // Asked until the open's check has left something, which also reads past its publish.
     editor.asked(
         "textDocument/definition",
-        &format!(r#"{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":1,"character":21}}}}"#),
+        &fill!(
+            r#"{"textDocument":{"uri":"${uri}"},"position":{"line":1,"character":21}}"#,
+            uri
+        ),
     );
 
     // The edit starts a check, two lines above what is asked about; the request follows it immediately.
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"{edited}"}}]}}}}"#
-    ));
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":3,"character":21}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"${edited}"}]}}"#, uri, edited));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":"${uri}"},"position":{"line":3,"character":21}}}"#, uri));
 
     let first = editor.receive();
     let second = editor.receive();
@@ -973,12 +951,8 @@ fn formatting_is_answered_while_a_check_is_running() {
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
 
     // The edit starts a check; the request follows it immediately.
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"let   m : /std/Nat = ?;\n/std/print(\"\")\n"}}}}}}"#
-    ));
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/formatting","params":{{"textDocument":{{"uri":"{uri}"}},"options":{{"tabSize":4,"insertSpaces":true}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"let   m : /std/Nat = ?;\n/std/print(\"\")\n"}}}"#, uri));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","id":2,"method":"textDocument/formatting","params":{"textDocument":{"uri":"${uri}"},"options":{"tabSize":4,"insertSpaces":true}}}"#, uri));
 
     let first = editor.receive();
     let second = editor.receive();
@@ -1055,18 +1029,14 @@ fn the_server_logs_once_that_the_store_takes_nothing() {
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}"#, uri));
     let logged = editor.receive();
     assert!(logged.contains("window/logMessage"), "{logged}");
     assert!(logged.contains("Skipped storing"), "{logged}");
     let published = editor.receive();
     assert!(published.contains(r#""diagnostics":[]"#), "{published}");
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"pub let word : /std/Str = \"placed again\";\n"}}]}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"pub let word : /std/Str = \"placed again\";\n"}]}}"#, uri));
     let again = editor.receive();
     assert!(
         again.contains("textDocument/publishDiagnostics"),
@@ -1103,9 +1073,7 @@ fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}"#, uri));
     let published = editor.receive();
     assert!(published.contains(r#""diagnostics":[]"#), "{published}");
     let filed = slots(&root);
@@ -1115,9 +1083,7 @@ fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
         "the library, compiled whole from the text on disk"
     );
 
-    editor.send(&format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"pub let word : /std/Str = \"typed\";\n"}}]}}}}"#
-    ));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"pub let word : /std/Str = \"typed\";\n"}]}}"#, uri));
     let republished = editor.receive();
     assert!(republished.contains(r#""diagnostics":[]"#), "{republished}");
     assert!(slots(&root) == filed, "a keystroke moved the store");

@@ -8,6 +8,7 @@ use {
     super::core_elab,
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::fill,
     std::fmt::Write,
 };
 
@@ -188,7 +189,7 @@ pub(super) fn tower(shape: Shape, lines: usize) -> String {
         Shape::Aliases => {
             source.push_str("use /std/{Nat};\n\n");
             chain(&mut source, "", "T", lines, "Nat", |t| {
-                format!("{{{t}, {t}}}")
+                fill!("{${t}, ${t}}", t)
             });
             let _ = writeln!(source, "\nlet keep(x: T{lines}) -> T{lines} = x;");
         }
@@ -251,7 +252,7 @@ fn chain(
 /// A tower of values as the body of `tower`: its lines from the function's `Nat`, and in a member's body from the predecessor the successor arm binds, where the member calls itself.
 fn function(source: &mut String, stands: Stands, lines: usize, body: &Body) {
     let last = format!("x{lines}");
-    let _ = writeln!(source, "use /std/{{{}}};\n", body.imports);
+    source.push_str(&fill!("use /std/{${imports}};\n\n", imports = body.imports));
     let _ = writeln!(source, "let tower({}) -> Nat =", body.parameters);
 
     match stands {

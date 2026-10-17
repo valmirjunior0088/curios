@@ -6,6 +6,7 @@ use {
     },
     crate::tests::{error, run, typecheck, typecheck_within},
     curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_utilities::fill,
 };
 
 /// A signature that instantiates `/std/List/zip` twice: the declared result type spells the global at the levels of `A` and `B`, while `zip_len`'s instantiated result — captured into `Eq/trans`'s solved middle term — carries an inlined copy of the same group at the levels of `a`'s and `b`'s `List` types, related to the former only by cumulativity. `same` is an identity whose universe instance is what pulls the two spellings apart.
@@ -67,16 +68,17 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
 #[test]
 fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
     for payload in ["Eq()(a, a)", "same2()(a, a)", "Eq(@Wit)(a, a)"] {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Eq}};
+            use /std/{Eq};
             pub let same2(@A : Type) -> (x : A, y : A) -> Prop = (x, y) => Eq(@A)(x, y);
             induct Wit : pub Type
             | base()
-            | tied(a : Wit, p : {payload})
+            | tied(a : Wit, p : ${payload})
             end
             /std/print("declared")
-            "#
+            "#,
+            payload
         );
         assert_eq!(run(&source), b"declared", "{payload}");
     }
@@ -100,15 +102,17 @@ fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_l
 #[test]
 fn a_family_whose_payload_resolves_through_a_later_witness_reads_its_final_telescopes() {
     let program = |family: &str, carrier: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Nat, Str}};
-            pub concept Sized(T: Type): pub Type {{ Carrier: Type }}
-            {family}
-            pub struct Later: pub Type {{ inner: Holder(Str) }}
-            satisfy Sized(Nat) {{ Carrier = {carrier} }}
+            use /std/{Nat, Str};
+            pub concept Sized(T: Type): pub Type { Carrier: Type }
+            ${family}
+            pub struct Later: pub Type { inner: Holder(Str) }
+            satisfy Sized(Nat) { Carrier = ${carrier} }
             /std/print("settled")
-            "#
+            "#,
+            family,
+            carrier
         )
     };
     let induct = "pub induct Holder(A: Type): pub Type | hold(a: A, held: Sized/Carrier(@Nat)) end";
@@ -139,14 +143,18 @@ fn a_family_whose_payload_resolves_through_a_later_witness_reads_its_final_teles
 #[test]
 fn a_bare_former_passed_as_a_family_takes_an_instance_at_each_payload() {
     let through = |declarations: &str, family: &str, small: &str, large: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Nat, Io, List}};
-            {declarations}
+            use /std/{Nat, Io, List};
+            ${declarations}
             let through(F: (Type) -> Type, x: F(Nat), y: F(Type)) -> Nat = 0;
-            let probe(n: Nat) -> Nat = through({family}, {small}, {large});
+            let probe(n: Nat) -> Nat = through(${family}, ${small}, ${large});
             /std/print("held")
-            "#
+            "#,
+            declarations,
+            family,
+            small,
+            large
         )
     };
     let io = "let small(n: Nat) -> Io(Nat) = Io/pure(n);";
@@ -170,15 +178,16 @@ fn a_bare_former_passed_as_a_family_takes_an_instance_at_each_payload() {
 #[test]
 fn an_ordinary_function_passed_bare_takes_an_instance_at_each_argument() {
     let through = |function: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Nat, Eq}};
+            use /std/{Nat, Eq};
             let const_nat(A: Type, x: A) -> Nat = 0;
             let witness() -> Eq()(const_nat(Nat, 0), const_nat(Nat, 0)) = Eq/refl();
             let through(G: (A: Type, x: A) -> Nat, p: Eq()(G(Nat, 0), G(Nat, 0)), q: Eq()(G(Type, Nat), G(Type, Nat))) -> Nat = 0;
-            let probe() -> Nat = through({function}, witness(), Eq/refl());
+            let probe() -> Nat = through(${function}, witness(), Eq/refl());
             /std/print("held")
-            "#
+            "#,
+            function
         )
     };
 
@@ -256,9 +265,9 @@ fn a_definition_whose_levels_outrun_the_budget_is_refused_where_it_is_declared()
 #[test]
 fn a_case_equation_read_at_another_instance_holds_the_two_to_one() {
     let program = |inhabitant: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Nat, Bool, Eq}};
+            use /std/{Nat, Bool, Eq};
             let U: Type = Type;
             let even_at(A: Type, n: Nat) -> Bool =
                 match n
@@ -268,11 +277,12 @@ fn a_case_equation_read_at_another_instance_holds_the_two_to_one() {
             let needs(T: Type, inhabitant: T, n: Nat, proof: Eq()(even_at(T, n), true)) -> Nat = n;
             pub let apart(n: Nat) -> Nat =
                 match even_at(U, n)
-                | true => needs(U, {inhabitant}, n, Eq/refl())
+                | true => needs(U, ${inhabitant}, n, Eq/refl())
                 | false => 0
                 end;
             /std/print(Nat/to_str(apart(4)))
-            "#
+            "#,
+            inhabitant
         )
     };
 

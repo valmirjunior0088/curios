@@ -4,9 +4,12 @@
 //!
 //! **Each row's control is its first column.** A pair conversion does not equate outside every arm is no respelling, and a cell over it would be refused for that and say nothing of the position; so each row states the equation at the top of an item, and it is held.
 
-use super::{
-    laws::{Binder, orders},
-    typecheck,
+use {
+    super::{
+        laws::{Binder, orders},
+        typecheck,
+    },
+    curios_utilities::fill,
 };
 
 const IMPORTS: &str = "use /std/{Nat, Int, Bool, List, Eq, Io}; use /std/Bool/{Holds, True};";
@@ -246,9 +249,7 @@ impl Guard {
                     Arm::Term => in_true(format!(
                         "let _: Eq()(match {respelled} | true => 0 | false => 1 end, 0) = Eq/refl();"
                     )),
-                    Arm::Type => in_true(format!(
-                        "let _: (match {respelled} | true => {{}} | false => Nat end) = ();"
-                    )),
+                    Arm::Type => in_true(fill!("let _: (match ${respelled} | true => {} | false => Nat end) = ();", respelled)),
                     Arm::Dual => {
                         let dual = self.dual?;
                         (

@@ -1,6 +1,6 @@
 //! UTF-8 validity, decoding, and the automaton that certifies a slice.
 
-use crate::tests::run;
+use {crate::tests::run, curios_utilities::fill};
 
 #[test]
 fn slice_proof_aligns_with_byte_walk() {
@@ -670,13 +670,14 @@ fn of_bytes_stops_where_rust_says_valid_text_ends() {
         })
         .collect::<Vec<_>>()
         .join(", ");
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Str, Nat, Bytes, List}};
+        use /std/{Str, Nat, Bytes, List};
         let stops(bytes : Bytes) -> Str =
             match Str/of_bytes(bytes) | success(_) => "text" | failure(at) => Nat/to_str(at) end;
-        /std/print(Str/join(",", List/map([{literals}], stops)))
-        "#
+        /std/print(Str/join(",", List/map([${literals}], stops)))
+        "#,
+        literals
     );
 
     let expected = cases

@@ -5,7 +5,7 @@ use {
     curios_pipeline::compile_with_prelude,
     curios_runtime::{Bits, ForeignBindings, MockHost, SocketEvent, Termination},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::test_support::Temporary,
+    curios_utilities::{fill, test_support::Temporary},
 };
 
 /// One `call` to `example.com:80`, its reply written out or its failure printed by name.
@@ -59,16 +59,17 @@ fn https_perform_reaches_a_public_host_over_the_real_host() {
     std::fs::create_dir_all(&root).expect("a directory of its own");
     let report = root.join("report");
     let path = report.to_str().expect("a UTF-8 temporary path");
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Str, Nat, Result, Try, Io, Path, File, http}};
-        let program() -> Io({{}}) =
+        use /std/{Str, Nat, Result, Try, Io, Path, File, http};
+        let program() -> Io({}) =
             let r = Try/run(http/perform(http/get(http/Url/lit("https://example.com/"))))!;
             let line = match r | success(resp) => Nat/to_str(resp.status.code) | failure(_) => "failed" end;
-            let _ = Try/run(File/write_all(Path/of_str("{path}"), Str/to_bytes(line)))!;
+            let _ = Try/run(File/write_all(Path/of_str("${path}"), Str/to_bytes(line)))!;
             Io/pure(());
         program()
-        "#
+        "#,
+        path
     );
 
     run_text(&source, curios_runtime::OsHost::with_args(vec![])).expect("expected result");
@@ -111,13 +112,13 @@ fn a_peer_that_resets_reads_as_connection_reset() {
 
 /// A scope over the socket `open` connects into it, the body reading one chunk off it and answering it.
 fn read_one_chunk(open: &str) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Str, Bytes, Show, Try, Io, Process}};
-        use /std/tcp/{{Socket}};
-        let program() -> Io({{}}) =
+        use /std/{Str, Bytes, Show, Try, Io, Process};
+        use /std/tcp/{Socket};
+        let program() -> Io({}) =
             let r = Try/run(Try/scope((scope) =>
-                let s = {open}!;
+                let s = ${open}!;
                 let c = Io/read(s, 64)!;
                 Try/pure(match c | bytes(b, @_) => b | _ => x[] end)))!;
             match r
@@ -125,7 +126,8 @@ fn read_one_chunk(open: &str) -> String {
             | failure(e) => /std/print(Show/show(e))
             end;
         program()
-        "#
+        "#,
+        open
     )
 }
 
@@ -155,26 +157,28 @@ fn connect_tls_upgrades_and_reads() {
 
 /// A server over `serve`, the handler echoing each request under `prefix`, with `listener` the `serve` or `serve_tls` call to make.
 fn echo_server(listener: &str, prefix: &str) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Str, Bytes, Show, Try, Io}};
-        use /std/tcp/{{Listener, Socket}};
-        let handler(c: Socket) -> Io({{}}) =
+        use /std/{Str, Bytes, Show, Try, Io};
+        use /std/tcp/{Listener, Socket};
+        let handler(c: Socket) -> Io({}) =
             let r = Try/run(Io/read(c, 64))!;
             match r
             | success(bytes(bytes, @_)) =>
-                let _ = Try/run(Io/write(c, x[..Str/to_bytes("{prefix}"), ..bytes]))!;
+                let _ = Try/run(Io/write(c, x[..Str/to_bytes("${prefix}"), ..bytes]))!;
                 Io/pure(())
             | _ => Io/pure(())
             end;
-        let program() -> Io({{}}) =
-            let r = Try/run({listener})!;
+        let program() -> Io({}) =
+            let r = Try/run(${listener})!;
             match r
             | success(_) => Io/pure(())
             | failure(e) => /std/print(Show/show(e))
             end;
         program()
-        "#
+        "#,
+        prefix,
+        listener
     )
 }
 

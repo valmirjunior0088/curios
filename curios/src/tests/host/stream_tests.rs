@@ -3,6 +3,7 @@
 use {
     crate::tests::{run, run_text, typecheck},
     curios_runtime::MockHost,
+    curios_utilities::fill,
 };
 
 #[test]
@@ -121,39 +122,40 @@ fn read_all_surfaces_a_read_failure_instead_of_a_partial_prefix() {
 #[test]
 fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     let stream = |answer: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Nat, Bytes, Str, List, Result, Cell, Try, Io, print}};
-            struct Pieces: Type {{ List({{Cell({{}}), Bytes}}) }}
-            let next(ps: List({{Cell({{}}), Bytes}})) -> Try(Io, Io/Error, Io/Chunk) =
+            use /std/{Nat, Bytes, Str, List, Result, Cell, Try, Io, print};
+            struct Pieces: Type { List({Cell({}), Bytes}) }
+            let next(ps: List({Cell({}), Bytes})) -> Try(Io, Io/Error, Io/Chunk) =
                 match ps
                 | [] => Try/pure(Io/Chunk/ended())
                 | [p, ..more] =>
                     let fresh = Cell/fill(p.0, ())!;
                     match fresh
                     | false => next(more)
-                    | true => {answer}
+                    | true => ${answer}
                     end
                 end;
-            satisfy Io/Read(Pieces) {{
+            satisfy Io/Read(Pieces) {
                 read(s, n) = next(s.0),
-            }}
-            let piece(b: Bytes) -> Io({{Cell({{}}), Bytes}}) =
-                let c = Cell/new(@{{}})!;
+            }
+            let piece(b: Bytes) -> Io({Cell({}), Bytes}) =
+                let c = Cell/new(@{})!;
                 Io/pure((c, b));
-            let entry() -> /std/Io({{}}) =
+            let entry() -> /std/Io({}) =
                 let a = piece(x[])!;
                 let b = piece(Str/to_bytes("a"))!;
                 let c = piece(x[])!;
                 let d = piece(Str/to_bytes("\n"))!;
-                let input = Io/Reader/new(Pieces {{ [a, b, c, d] }})!;
+                let input = Io/Reader/new(Pieces { [a, b, c, d] })!;
                 let r = Try/run(Io/Reader/until(input, '\n'))!;
                 match r
                 | success(found) => print(Result/unwrap_or(Str/of_bytes(found.bytes), "?"))
                 | failure(_) => print("error")
                 end;
             entry()
-            "#
+            "#,
+            answer
         )
     };
 

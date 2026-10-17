@@ -1,6 +1,6 @@
 //! Positions in text: where a character may begin, and the text on either side of one — held to Rust's own reading of the same UTF-8.
 
-use crate::tests::run;
+use {crate::tests::run, curios_utilities::fill};
 
 /// Texts covering every width of character, the empty text, and a text beginning and ending on multi-byte characters.
 const TEXTS: [&str; 5] = ["héllo", "日本語", "a𝄞b", "", "𝄞é"];
@@ -10,7 +10,7 @@ fn literal(text: &str) -> String {
     text.chars()
         .map(|c| match c.is_ascii() {
             true => c.to_string(),
-            false => format!("\\u{{{:x}}}", c as u32),
+            false => fill!("\\u{${code}}", code = format!("{:x}", c as u32)),
         })
         .collect()
 }
@@ -19,18 +19,18 @@ fn literal(text: &str) -> String {
 #[test]
 fn a_position_is_where_rust_places_a_char_boundary() {
     for text in TEXTS {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Str, Nat, List, Option}};
+            use /std/{Str, Nat, List, Option};
 
-            let text: Str = "{}";
+            let text: Str = "${text}";
             let bit(k: Nat) -> Str =
                 match Str/At/try_of_offset(text, k) | some(_) => "1" | none() => "0" end;
 
-            /std/print(Str/flatten(List/map(List/range(0, {}), bit)))
+            /std/print(Str/flatten(List/map(List/range(0, ${end}), bit)))
             "#,
-            literal(text),
-            text.len() + 2,
+            text = literal(text),
+            end = text.len() + 2
         );
         let expected = (0..text.len() + 2)
             .map(|k| match k <= text.len() && text.is_char_boundary(k) {
@@ -51,21 +51,21 @@ fn a_position_is_where_rust_places_a_char_boundary() {
 #[test]
 fn text_divides_at_a_position_as_rust_splits_it() {
     for text in TEXTS {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Str, Nat, List, Option}};
+            use /std/{Str, Nat, List, Option};
 
-            let text: Str = "{}";
+            let text: Str = "${text}";
             let cut(k: Nat) -> Str =
                 match Str/At/try_of_offset(text, k)
                 | some(at) => Str/flatten([Str/before(text, at), "|", Str/after(text, at), ";"])
                 | none() => ""
                 end;
 
-            /std/print(Str/flatten(List/map(List/range(0, {}), cut)))
+            /std/print(Str/flatten(List/map(List/range(0, ${end}), cut)))
             "#,
-            literal(text),
-            text.len() + 1,
+            text = literal(text),
+            end = text.len() + 1
         );
         let expected = (0..=text.len())
             .filter(|&k| text.is_char_boundary(k))
@@ -87,11 +87,11 @@ fn text_divides_at_a_position_as_rust_splits_it() {
 #[test]
 fn stepping_reads_each_character_where_rust_does() {
     for text in TEXTS {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Str, Nat, Option, Char}};
+            use /std/{Str, Nat, Option, Char};
 
-            let text: Str = "{}";
+            let text: Str = "${text}";
             let mark(at: Str/At(text), char: Char) -> Str =
                 Str/flatten([Nat/to_str(Str/At/to_offset(at)), ":", Str/of_char(char), " "]);
             let forward(at: Str/At(text)) -> Str =
@@ -107,7 +107,7 @@ fn stepping_reads_each_character_where_rust_does() {
 
             /std/print(Str/concat(forward(Str/At/start(text)), backward(Str/At/finish(text))))
             "#,
-            literal(text),
+            text = literal(text)
         );
         let marks = |indices: &mut dyn Iterator<Item = (usize, char)>| {
             indices
@@ -133,13 +133,13 @@ fn stepping_reads_each_character_where_rust_does() {
 #[test]
 fn text_between_two_positions_is_rusts_slice() {
     for text in TEXTS {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Str, Nat, List, Option}};
+            use /std/{Str, Nat, List, Option};
 
-            let text: Str = "{}";
+            let text: Str = "${text}";
             let positions: List(Str/At(text)) =
-                List/filter_map(List/range(0, {}), (k) => Str/At/try_of_offset(text, k));
+                List/filter_map(List/range(0, ${end}), (k) => Str/At/try_of_offset(text, k));
             let cut(from: Str/At(text), to: Str/At(text)) -> Str =
                 match from <= to
                 | true => Str/concat(Str/between(text, from, to), ";")
@@ -148,8 +148,8 @@ fn text_between_two_positions_is_rusts_slice() {
 
             /std/print(Str/flatten(List/map(positions, (from) => Str/flatten(List/map(positions, (to) => cut(from, to))))))
             "#,
-            literal(text),
-            text.len() + 1,
+            text = literal(text),
+            end = text.len() + 1
         );
         let boundaries = (0..=text.len())
             .filter(|&k| text.is_char_boundary(k))
@@ -180,11 +180,11 @@ fn a_position_keeps_its_place_across_a_concatenation() {
         .map(|text| format!("\"{}\"", literal(text)))
         .collect::<Vec<_>>()
         .join(", ");
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Str, Nat, List, Option, Bytes}};
+        use /std/{Str, Nat, List, Option, Bytes};
 
-        let texts: List(Str) = [{texts}];
+        let texts: List(Str) = [${texts}];
         let offsets(s: Str) -> List(Nat) = List/range(0, Bytes/len(s.bytes) + 1);
         let pair(left: Str, right: Str) -> Str =
             let whole = Str/concat(left, right);
@@ -202,6 +202,7 @@ fn a_position_keeps_its_place_across_a_concatenation() {
 
         /std/print(Str/flatten(List/map(texts, (left) => Str/flatten(List/map(texts, (right) => pair(left, right))))))
         "#,
+        texts
     );
     let expected = TEXTS
         .iter()

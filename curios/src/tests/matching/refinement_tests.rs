@@ -3,6 +3,7 @@
 use {
     crate::tests::{core_elab, error, run, run_text},
     curios_runtime::MockHost,
+    curios_utilities::fill,
 };
 
 // A refinement key is stored at the arm and probed wherever the scrutinee is mentioned again, so the two spellings have to compare equal. A scrutinee carrying an *inferred* metavariable is the hard case: `Pred/test(t, b)` elaborates to `(?w).0(t, b)`, and a second occurrence mints its own `?w'`, so two terms solved to the same witness would key differently and the arm would silently refine nothing. Solved metavariables are materialized into the key, which is what makes the two spellings one.
@@ -623,13 +624,13 @@ fn a_guard_over_a_local_definition_answers_a_term_over_its_value() {
         "let n = m + 0; match Nat/in_range(n, 240, 244)",
         "match Nat/in_range(m, 240, 244)",
     ] {
-        let source = format!(
+        let source = fill!(
             r#"
-        use /std/{{Nat, Str}};
-        use /std/Bool/{{Holds, True}};
+        use /std/{Nat, Str};
+        use /std/Bool/{Holds, True};
 
         let ranged(m : Nat) -> Str =
-            {guard}
+            ${guard}
             | true =>
                 let _ : Holds(240 <= m) = Nat/le/of_in_range(m, 240, 244, True/qed()).low;
                 "inside"
@@ -637,7 +638,8 @@ fn a_guard_over_a_local_definition_answers_a_term_over_its_value() {
             end;
 
         /std/print(ranged(242))
-        "#
+        "#,
+            guard
         );
 
         assert_eq!(run(&source), b"inside", "{guard}");

@@ -2,7 +2,7 @@
 //!
 //! Each row names the rule that must do the rejecting rather than asserting a bare failure, which would pass on a typo in the fixture — worth the words wherever a future relaxation of `occurrences` could plausibly start admitting the shape.
 
-use {super::test_support::*, crate::tests::typecheck_within};
+use {super::test_support::*, crate::tests::typecheck_within, curios_utilities::fill};
 
 // A declaration reaching itself through a *type-former parameter* is refused, and this pins that it is refused rather than assumed.
 //
@@ -298,8 +298,9 @@ fn a_family_read_under_a_short_budget_is_never_refused_as_not_positive() {
     let aliases = (1..=12)
         .map(|k| format!("let W{k}(A: Type) -> Type = W{}(W{}(A));\n", k - 1, k - 1))
         .collect::<String>();
-    let source = format!(
-        "struct Box(A: Type): pub Type {{ held: A }}\nlet W0(A: Type) -> Type = A;\n{aliases}induct Wrap(A: Type): Type | wrap(Box(W12(A))) end\ninduct Outer: Type | leaf() | node(Wrap(Outer)) end\n/std/print(\"ok\")\n"
+    let source = fill!(
+        "struct Box(A: Type): pub Type { held: A }\nlet W0(A: Type) -> Type = A;\n${aliases}induct Wrap(A: Type): Type | wrap(Box(W12(A))) end\ninduct Outer: Type | leaf() | node(Wrap(Outer)) end\n/std/print(\"ok\")\n",
+        aliases
     );
 
     let mut short = 0;

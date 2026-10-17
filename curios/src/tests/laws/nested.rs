@@ -4,6 +4,7 @@
 
 use {
     crate::tests::typecheck,
+    curios_utilities::fill,
     std::{fmt::Write, time::Instant},
 };
 
@@ -16,8 +17,11 @@ fn nested(depth: usize) -> String {
         left = format!("Nat/and({left}, Nat/or(x{level}, y{level}))");
         right = format!("Nat/and(Nat/or(y{level}, x{level}), {right})");
     }
-    format!(
-        "use /std/{{Nat, Eq, Io}};\nlet nested({binders}) -> Eq()({left}, {right}) = Eq/refl();\nIo/pure(())"
+    fill!(
+        "use /std/{Nat, Eq, Io};\nlet nested(${binders}) -> Eq()(${left}, ${right}) = Eq/refl();\nIo/pure(())",
+        binders,
+        left,
+        right
     )
 }
 
@@ -36,8 +40,11 @@ fn summed(summands: usize) -> String {
         .map(|at| format!("Nat/and(y{at}, x{at})"))
         .collect::<Vec<_>>()
         .join(" + ");
-    format!(
-        "use /std/{{Nat, Eq, Io}};\nlet summed({binders}) -> Eq()({left}, {right}) = Eq/refl();\nIo/pure(())"
+    fill!(
+        "use /std/{Nat, Eq, Io};\nlet summed(${binders}) -> Eq()(${left}, ${right}) = Eq/refl();\nIo/pure(())",
+        binders,
+        left,
+        right
     )
 }
 
@@ -64,8 +71,11 @@ fn towers(depth: usize, step: fn(&str, &str) -> String) -> String {
         left = step(&left, &format!("y{level}"));
         right = step(&right, &format!("v{level}"));
     }
-    format!(
-        "use /std/{{Nat, Eq, Io}};\nlet towers({binders}) -> Eq()(match {left} <= {right} | true => 0 | false => 0 end, 0) = Eq/refl();\nIo/pure(())"
+    fill!(
+        "use /std/{Nat, Eq, Io};\nlet towers(${binders}) -> Eq()(match ${left} <= ${right} | true => 0 | false => 0 end, 0) = Eq/refl();\nIo/pure(())",
+        binders,
+        left,
+        right
     )
 }
 

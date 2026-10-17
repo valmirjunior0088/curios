@@ -3,12 +3,14 @@
 use {
     crate::tests::{compile, typecheck},
     curios_runtime::{Compiled, ForeignBindings, MockHost, MockHostBuilder, SocketEvent},
+    curios_utilities::fill,
 };
 
 /// A program that makes one message and performs nothing.
 fn making(message: &str) -> String {
-    format!(
-        "use /std/{{Str, http}};\nuse /std/http/{{Url, Request, Response}};\nlet _ = {message};\n/std/print(\"\")"
+    fill!(
+        "use /std/{Str, http};\nuse /std/http/{Url, Request, Response};\nlet _ = ${message};\n/std/print(\"\")",
+        message
     )
 }
 

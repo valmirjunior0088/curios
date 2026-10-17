@@ -6,6 +6,7 @@ use {
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_runtime::{ForeignBindings, HostOps, MockHost, OsHost, blocking},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::fill,
 };
 
 /// A program compiled, ready to run.
@@ -172,17 +173,18 @@ fn the_real_host_sleeps_a_suspension_on_a_timer_until_its_instant() {
     std::fs::create_dir_all(&root).expect("a directory of its own");
     let report = root.join("report");
     let path = report.to_str().expect("a UTF-8 temporary path");
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Io, Str, Path, File, Try}};
-        use /std/time/{{Instant, Duration}};
-        let main() -> Try(Io, Io/Error, {{}}) =
+        use /std/{Io, Str, Path, File, Try};
+        use /std/time/{Instant, Duration};
+        let main() -> Try(Io, Io/Error, {}) =
             let start = Instant/now()!;
             let _ = Io/sleep(Duration/of_millis(30))!;
             let slept = Duration/to_millis(Instant/diff(Instant/now()!, start));
-            File/write_all(Path/of_str("{path}"), Str/to_bytes(match slept >= 30 | true => "slept" | false => "early" end));
+            File/write_all(Path/of_str("${path}"), Str/to_bytes(match slept >= 30 | true => "slept" | false => "early" end));
         main()
-        "#
+        "#,
+        path
     );
 
     // A write that fails closes the program with status 1, reporting why on standard error.
@@ -206,19 +208,19 @@ fn the_real_host_runs_a_branch_while_another_waits_on_a_fifo() {
 
     let spelled =
         |path: &std::path::Path| path.to_str().expect("a UTF-8 temporary path").to_string();
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Io, Str, Path, File, Try}};
-        let main() -> Try(Io, Io/Error, {{}}) =
-            let (read, marked) = Io/both(Try/run(File/read_all(Path/of_str("{}"))), Try/run(File/write_all(Path/of_str("{}"), Str/to_bytes("ran"))))!;
+        use /std/{Io, Str, Path, File, Try};
+        let main() -> Try(Io, Io/Error, {}) =
+            let (read, marked) = Io/both(Try/run(File/read_all(Path/of_str("${fifo}"))), Try/run(File/write_all(Path/of_str("${marker}"), Str/to_bytes("ran"))))!;
             let _ = marked!;
             let bytes = read!;
-            File/write_all(Path/of_str("{}"), bytes);
+            File/write_all(Path/of_str("${report}"), bytes);
         main()
         "#,
-        spelled(&fifo),
-        spelled(&marker),
-        spelled(&report),
+        fifo = spelled(&fifo),
+        marker = spelled(&marker),
+        report = spelled(&report)
     );
     // Compiled before the writer starts its clock, so the deadline bounds the run alone.
     let program = compiled(&source);
@@ -339,18 +341,18 @@ fn the_real_host_runs_a_branch_while_another_waits_on_a_row_answered_later() {
 
     let spelled =
         |path: &std::path::Path| path.to_str().expect("a UTF-8 temporary path").to_string();
-    let program = compiled(&format!(
+    let program = compiled(&fill!(
         r#"
-        use /std/{{Io, Str, Path, File, Try, Nat}};
+        use /std/{Io, Str, Path, File, Try, Nat};
         foreign fetch(Nat) -> Nat;
-        let main() -> Try(Io, Io/Error, {{}}) =
-            let (n, marked) = Io/both(fetch(3), Try/run(File/write_all(Path/of_str("{}"), Str/to_bytes("ran"))))!;
+        let main() -> Try(Io, Io/Error, {}) =
+            let (n, marked) = Io/both(fetch(3), Try/run(File/write_all(Path/of_str("${marker}"), Str/to_bytes("ran"))))!;
             let _ = marked!;
-            File/write_all(Path/of_str("{}"), Str/to_bytes(Nat/to_str(n)));
+            File/write_all(Path/of_str("${report}"), Str/to_bytes(Nat/to_str(n)));
         main()
         "#,
-        spelled(&marker),
-        spelled(&report),
+        marker = spelled(&marker),
+        report = spelled(&report)
     ));
 
     let mut bindings = ForeignBindings::empty();

@@ -5,6 +5,7 @@ use {
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_runtime::{ForeignBindings, MockHost, MockHostBuilder},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::fill,
 };
 
 /// What a program came to under `host`: the status it ended with, everything it wrote, and the standard error half of that.
@@ -91,7 +92,7 @@ fn a_test_that_closes_a_program_is_reported_and_decides_its_status() {
             "program: failed\n  the condition was false\n",
         ),
     ] {
-        let source = format!("use /std/{{Nat, Test}};\nTest/assert({claim})\n");
+        let source = fill!("use /std/{Nat, Test};\nTest/assert(${claim})\n", claim);
         let (code, output, errors) = ended(&source, &[]);
 
         assert_eq!(code, status, "{claim}");
@@ -104,21 +105,22 @@ fn a_test_that_closes_a_program_is_reported_and_decides_its_status() {
 #[test]
 fn the_arms_of_a_match_that_closes_a_program_are_each_executed() {
     for (choice, status, written) in [(0, 0, "usage"), (1, 1, "not_found\n")] {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Nat, Str, Io, Try, File, Path, print}};
-            let read(name: Str) -> Try(Io, Io/Error, {{}}) =
+            use /std/{Nat, Str, Io, Try, File, Path, print};
+            let read(name: Str) -> Try(Io, Io/Error, {}) =
                 let _ = File/read_all(Path/of_str(name))!;
                 print("read");
-            let choice: Nat = {choice};
-            let named() -> Try(Io, Io/Error, {{}}) =
+            let choice: Nat = ${choice};
+            let named() -> Try(Io, Io/Error, {}) =
                 let name = Io/pure("notes.txt")!;
                 read(name);
             match choice
             | 0 => print("usage")
             | _ => named()
             end
-            "#
+            "#,
+            choice
         );
         let (code, output, _) = ended(&source, &[]);
 
@@ -151,7 +153,7 @@ fn a_step_that_may_fail_is_refused_in_an_io_function() {
 #[test]
 fn a_term_nothing_executes_is_refused_as_what_closes_the_program() {
     for (closing, type_) in [("7", "Nat"), ("() => print(\"x\")", "() -> Io({})")] {
-        let source = format!("use /std/{{Nat, Io, print}};\n{closing}\n");
+        let source = fill!("use /std/{Nat, Io, print};\n${closing}\n", closing);
         let error = typecheck(&source).expect_err("nothing executes it");
 
         assert!(

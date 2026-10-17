@@ -4,7 +4,7 @@ use {
     super::*,
     crate::{Governing, Manifest, Selection, Spelling, order},
     curios_text::Overlay,
-    curios_utilities::test_support::Temporary,
+    curios_utilities::{fill, test_support::Temporary},
     std::fs,
 };
 
@@ -159,9 +159,9 @@ fn dependencies_use_their_own_umbrella_and_never_the_consumers() {
     write(
         &root,
         "app/curios.toml",
-        &format!(
-            "name = \"app\"\ncompiler = \"{}\"\n[dependencies]\nbase = {{ source = \"path\", path = \"../vendor/base\" }}\n",
-            CompilerVersion::current()
+        &fill!(
+            "name = \"app\"\ncompiler = \"${compiler}\"\n[dependencies]\nbase = { source = \"path\", path = \"../vendor/base\" }\n",
+            compiler = CompilerVersion::current()
         ),
     );
     write(

@@ -8,7 +8,7 @@ use {
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, into_core_with_prelude, spell},
     curios_unit::Predecessors,
-    curios_utilities::Qualifier,
+    curios_utilities::{Qualifier, fill},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt::Write,
@@ -258,7 +258,7 @@ fn a_reader_importing_one_module_is_given_names_through_it() {
     let modules = library_modules();
     let mut through = 0;
     for module in &modules {
-        let reader = Reader::at_the_root(&format!("use /std/{{{module}}};"));
+        let reader = Reader::at_the_root(&fill!("use /std/{${module}};", module));
         let imported = Qualifier::from(["std", module.as_str()]);
 
         through += held(&reader, Some(&imported)).relative;

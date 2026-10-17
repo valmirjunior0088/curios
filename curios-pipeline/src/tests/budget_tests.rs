@@ -10,6 +10,7 @@ use {
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
+    curios_utilities::fill,
     std::fmt::Write,
 };
 
@@ -151,11 +152,10 @@ fn a_unit_takes_its_families_under_the_budget_one_of_them_takes() {
 fn a_program_is_taken_under_the_same_budget_whatever_its_scope_holds() {
     let mut library = String::from("use /std/{Show, Str};\n");
     for index in 1..=128 {
-        writeln!(
-            library,
-            "pub induct B{index}: pub Type\n| b{index}()\nend\nsatisfy Show(B{index}) {{\n    show(_) = \"b\",\n}}"
-        )
-        .unwrap();
+        library.push_str(&fill!(
+            "pub induct B${index}: pub Type\n| b${index}()\nend\nsatisfy Show(B${index}) {\n    show(_) = \"b\",\n}\n",
+            index
+        ));
     }
     let program = "/std/print(\"Hello, Curios!\\n\")\n";
 

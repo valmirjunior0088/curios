@@ -16,94 +16,101 @@ use {
         typecheck_with_prelude,
     },
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::fill,
     std::time::{Duration, Instant},
 };
 
 /// The bound read off an opaque parameter: reduction stops at `b`, the guard refines it once and generically, and nothing is evaluated. The control the other two arms are read against, and the workaround `tests::runtime`'s accumulation measurement relies on.
 fn bytes_opaque(n: usize) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Bytes, Nat, Str}};
+        use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let head_of(b : Bytes) -> Bytes =
             match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
-        let built = go({n}, x[]);
+        let built = go(${n}, x[]);
         let head = head_of(built);
         /std/print("ok")
-        "#
+        "#,
+        n
     )
 }
 
 /// Transitions without payload growth: the accumulator is *replaced* each step rather than extended, so the loop runs its full length against a bound that evaluates it, and the value it builds never exceeds ten bytes. What this arm still costs per transition is the floor any budget default has to respect.
 fn bytes_fixed(n: usize) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Bytes, Nat, Str}};
+        use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, Str/to_bytes("0123456789")) end;
-        let built = go({n}, x[]);
+        let built = go(${n}, x[]);
         let head = Bytes/slice(built, 0, 10);
         /std/print("ok")
-        "#
+        "#,
+        n
     )
 }
 
 /// Both: the same transitions as the arm above, over an accumulator that grows by ten bytes a step. Its excess over that arm is constructed payload and nothing else.
 fn bytes_growing(n: usize) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Bytes, Nat, Str}};
+        use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
-        let built = go({n}, x[]);
+        let built = go(${n}, x[]);
         let head = Bytes/slice(built, 0, 10);
         /std/print("ok")
-        "#
+        "#,
+        n
     )
 }
 
 /// [`bytes_opaque`] over the `List` carrier, whose fusion flattens element vectors where `Bin`'s copies packed bytes.
 fn list_opaque(n: usize) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{List, Nat, Str}};
+        use /std/{List, Nat, Str};
         let go(i : Nat, acc : List(Nat)) -> List(Nat) =
             match i | 0 => acc | k + 1; ih => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
         let head_of(a : List(Nat)) -> List(Nat) =
             match 10 <= List/len(a) | true => List/slice(a, 0, 10) | false => [] end;
-        let built = go({n}, []);
+        let built = go(${n}, []);
         let head = head_of(built);
         /std/print("ok")
-        "#
+        "#,
+        n
     )
 }
 
 /// [`bytes_fixed`] over the `List` carrier.
 fn list_fixed(n: usize) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{List, Nat, Str}};
+        use /std/{List, Nat, Str};
         let go(i : Nat, acc : List(Nat)) -> List(Nat) =
             match i | 0 => acc | k + 1; ih => go(k, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) end;
-        let built = go({n}, []);
+        let built = go(${n}, []);
         let head = List/slice(built, 0, 10);
         /std/print("ok")
-        "#
+        "#,
+        n
     )
 }
 
 /// [`bytes_growing`] over the `List` carrier.
 fn list_growing(n: usize) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{List, Nat, Str}};
+        use /std/{List, Nat, Str};
         let go(i : Nat, acc : List(Nat)) -> List(Nat) =
             match i | 0 => acc | k + 1; ih => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
-        let built = go({n}, []);
+        let built = go(${n}, []);
         let head = List/slice(built, 0, 10);
         /std/print("ok")
-        "#
+        "#,
+        n
     )
 }
 
@@ -346,13 +353,15 @@ fn str_literal(n: usize, uses: usize) -> String {
         .map(|index| format!("let use{index} = Str/to_bytes(s);\n"))
         .collect::<String>();
 
-    format!(
+    fill!(
         r#"
-        use /std/{{Str, Bytes}};
-        let s : Str = "{literal}";
-        {used}
+        use /std/{Str, Bytes};
+        let s : Str = "${literal}";
+        ${used}
         /std/print("ok")
-        "#
+        "#,
+        literal,
+        used
     )
 }
 
@@ -363,12 +372,13 @@ fn bytes_literal(n: usize) -> String {
         .collect::<Vec<_>>()
         .join(", ");
 
-    format!(
+    fill!(
         r#"
-        use /std/{{Bytes, Nat}};
-        let b : Bytes = x[{entries}];
+        use /std/{Bytes, Nat};
+        let b : Bytes = x[${entries}];
         /std/print(Nat/to_str(Bytes/len(b)))
-        "#
+        "#,
+        entries
     )
 }
 
@@ -419,8 +429,10 @@ fn a_literal_mentioned_in_several_types_is_folded_once() {
     let program = |uses: usize| {
         let types = vec![format!("Eq()(Str/len(\"{literal}\"), 300)"); uses].join(", ");
         let proofs = vec!["Eq/refl()"; uses].join(", ");
-        format!(
-            "use /std/{{Str, Eq, Nat}};\n\nlet q: {{{types}}} = ({proofs},);\n\n/std/print(\"ok\")\n"
+        fill!(
+            "use /std/{Str, Eq, Nat};\n\nlet q: {${types}} = (${proofs},);\n\n/std/print(\"ok\")\n",
+            types,
+            proofs
         )
     };
 
@@ -447,8 +459,11 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
     );
     let neighbour = format!("let _a: {first} = Eq/refl();\n\n");
     let program = |neighbours: &str| {
-        format!(
-            "use /std/{{Str, Eq}};\n\n{neighbours}let _b: {{{first}, {second}}} = (Eq/refl(), Eq/refl(),);\n\n/std/print(\"ok\")\n"
+        fill!(
+            "use /std/{Str, Eq};\n\n${neighbours}let _b: {${first}, ${second}} = (Eq/refl(), Eq/refl(),);\n\n/std/print(\"ok\")\n",
+            neighbours,
+            first,
+            second
         )
     };
     let (alone, after) = (program(""), program(&neighbour));
@@ -668,9 +683,9 @@ fn ascii_refinement(n: usize) -> String {
         .collect::<Vec<_>>()
         .join(", ");
 
-    format!(
+    fill!(
         r#"
-        use /std/{{Bytes, Byte, Nat, Bool, Eq}};
+        use /std/{Bytes, Byte, Nat, Bool, Eq};
         let all_ascii(b : Bytes) -> Bool =
             match b
             | x[] => true
@@ -680,9 +695,10 @@ fn ascii_refinement(n: usize) -> String {
                 | false => false
                 end
             end;
-        let ok : Eq()(all_ascii(x[{entries}]), true) = Eq/refl();
+        let ok : Eq()(all_ascii(x[${entries}]), true) = Eq/refl();
         /std/print("ok")
-        "#
+        "#,
+        entries
     )
 }
 
@@ -712,14 +728,15 @@ fn a_user_refinement_over_a_packed_carrier_takes_the_same_machine() {
 #[test]
 fn an_oversized_construction_is_refused_before_it_is_allocated() {
     let shift = |amount: u64| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Nat, Bytes, Str}};
-            let big : Nat = Nat/shl(1, {amount});
+            use /std/{Nat, Bytes, Str};
+            let big : Nat = Nat/shl(1, ${amount});
             let b : Bytes = Str/to_bytes("0123456789");
             let rest : Bytes = Bytes/drop(b, big);
             /std/print("ok")
-            "#
+            "#,
+            amount
         )
     };
 
@@ -760,29 +777,31 @@ fn a_growing_accumulation_is_bounded_by_what_it_has_already_built() {
 fn paired_fold(width: usize, paired: bool) -> String {
     let ones = vec!["1"; 32].join(", ");
     match paired {
-        true => format!(
+        true => fill!(
             r#"
-            use /std/{{Nat, Bool, Bits, Eq}};
+            use /std/{Nat, Bool, Bits, Eq};
             let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
                 match a
                 | true => match b | true => c | false => Bool/not(c) end
                 | false => match b | true => Bool/not(c) | false => c end
                 end;
-            let go(x: Bits, c: Bool) -> {{Bits, Bool}} =
+            let go(x: Bits, c: Bool) -> {Bits, Bool} =
                 match x
                 | b[] => (b[], c)
                 | b[h, ..t] =>
                     let (rest, out) = go(t, xor3(h, c, c));
                     (b[xor3(h, c, c), ..rest], out)
                 end;
-            let (bits, _) = go(Bits/slice(b[{ones}], 0, {width}), false);
-            let _counted: Eq()(Bits/len(bits), {width}) = Eq/refl();
+            let (bits, _) = go(Bits/slice(b[${ones}], 0, ${width}), false);
+            let _counted: Eq()(Bits/len(bits), ${width}) = Eq/refl();
             /std/print("")
-            "#
+            "#,
+            ones,
+            width
         ),
-        false => format!(
+        false => fill!(
             r#"
-            use /std/{{Nat, Bool, Bits, Eq}};
+            use /std/{Nat, Bool, Bits, Eq};
             let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
                 match a
                 | true => match b | true => c | false => Bool/not(c) end
@@ -793,9 +812,11 @@ fn paired_fold(width: usize, paired: bool) -> String {
                 | b[] => b[]
                 | b[h, ..t] => b[xor3(h, c, c), ..go(t, xor3(h, c, c))]
                 end;
-            let _counted: Eq()(Bits/len(go(Bits/slice(b[{ones}], 0, {width}), false)), {width}) = Eq/refl();
+            let _counted: Eq()(Bits/len(go(Bits/slice(b[${ones}], 0, ${width}), false)), ${width}) = Eq/refl();
             /std/print("")
-            "#
+            "#,
+            ones,
+            width
         ),
     }
 }
@@ -845,8 +866,10 @@ fn a_recursive_call_read_twice_is_evaluated_once() {
 fn a_packed_fold_costs_linearly_in_its_length() {
     let program = |bytes: usize| {
         let literal = "0123456789".repeat(bytes / 10);
-        format!(
-            "use /std/{{Str, Bytes, Nat, Eq}};\n\nlet counted: Eq()(Bytes/fold(Str/to_bytes(\"{literal}\"), 0, (_, n) => n + 1), {bytes}) = Eq/refl();\n\n/std/print(\"ok\")\n"
+        fill!(
+            "use /std/{Str, Bytes, Nat, Eq};\n\nlet counted: Eq()(Bytes/fold(Str/to_bytes(\"${literal}\"), 0, (_, n) => n + 1), ${bytes}) = Eq/refl();\n\n/std/print(\"ok\")\n",
+            literal,
+            bytes
         )
     };
 
@@ -867,8 +890,11 @@ fn a_bytes_walk_is_run_once_however_many_follow_it() {
     let program = |tokens: usize| {
         let literal = "ab,".repeat(tokens);
         let total = 2 * tokens;
-        format!(
-            "use /std/{{Parse, Result, Eq, Byte, Bytes, Str, Nat}};\n\nlet token() -> Parse(Bytes, Nat) =\n    let run = Parse/bytes/take_while((b) => Byte/to_nat(b) != ',')!;\n    let _ = Parse/bytes/expect(',')!;\n    Parse/pure(Bytes/len(run));\n\nlet tokens(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =\n    match count\n    | 0 => Parse/pure(acc)\n    | k + 1 =>\n        let n = token()!;\n        tokens(k, acc + n)\n    end;\n\nlet walked: Eq()(Parse/run(tokens({tokens}, 0), Str/to_bytes(\"{literal}\")), Result/success({total})) = Eq/refl();\n\n/std/print(\"ok\")\n"
+        fill!(
+            "use /std/{Parse, Result, Eq, Byte, Bytes, Str, Nat};\n\nlet token() -> Parse(Bytes, Nat) =\n    let run = Parse/bytes/take_while((b) => Byte/to_nat(b) != ',')!;\n    let _ = Parse/bytes/expect(',')!;\n    Parse/pure(Bytes/len(run));\n\nlet tokens(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =\n    match count\n    | 0 => Parse/pure(acc)\n    | k + 1 =>\n        let n = token()!;\n        tokens(k, acc + n)\n    end;\n\nlet walked: Eq()(Parse/run(tokens(${tokens}, 0), Str/to_bytes(\"${literal}\")), Result/success(${total})) = Eq/refl();\n\n/std/print(\"ok\")\n",
+            tokens,
+            literal,
+            total
         )
     };
 
@@ -892,14 +918,21 @@ fn parse_claim(letters: usize, claim: impl FnOnce(&str) -> String) -> String {
         "Parse/run(Parse/text/literal(\"{literal}\"), \"{literal}\")"
     ));
 
-    format!(
-        "use /std/{{Str, Parse, Result, Bool, Eq}};\nuse /std/Bool/{{Holds, True}};\n\nlet ok(r: Result(Parse/Error, {{}})) -> Bool =\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\n{claim}\n\n/std/print(\"ok\")\n"
+    fill!(
+        "use /std/{Str, Parse, Result, Bool, Eq};\nuse /std/Bool/{Holds, True};\n\nlet ok(r: Result(Parse/Error, {})) -> Bool =\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\n${claim}\n\n/std/print(\"ok\")\n",
+        claim
     )
 }
 
 /// A claim over a declaration bound to the parse: `prove` is the claim's own declaration, stated over `read`.
 fn over_read(prove: &str) -> impl FnOnce(&str) -> String {
-    move |parse| format!("let read: Result(Parse/Error, {{}}) = {parse};\n\n{prove}")
+    move |parse| {
+        fill!(
+            "let read: Result(Parse/Error, {}) = ${parse};\n\n${prove}",
+            parse,
+            prove
+        )
+    }
 }
 
 /// A closed claim costs the elaborator what it costs with nothing left to inference. Reduced as its solutions spell it, the claim holding a solved metavariable is one run of the closed machine, as the claim over `read` is; declined at the gate for the metavariable, it is taken apart by the recursive strategy, each closed piece a run of its own, at several times the cost and growing faster than the text.
@@ -990,8 +1023,10 @@ fn a_published_binder_states_whether_it_binds_a_proof() {
 ///
 /// `checked` is no recursive member's call: it eliminates the lemma, so taking it to a weak-head value runs the lemma's induction, `steps` deep, where a recursive call alone would stay folded.
 fn proof_argument_claim(steps: usize, proof: &str) -> String {
-    format!(
-        "use /std/{{Nat, Eq}};\n\nlet lemma(n: Nat) -> Eq()(n, n) =\n    match n\n    | 0 => Eq/refl()\n    | k + 1 => match lemma(k) | refl() => Eq/refl() end\n    end;\n\nlet checked(n: Nat) -> Eq()(n, n) =\n    match lemma(n) | refl() => Eq/refl() end;\n\nlet through(n: Nat, h: Eq()(n, n)) -> Nat = n;\n\nlet _claim: Eq()(through({steps}, {proof}), {steps}) = Eq/refl();\n\n/std/print(\"ok\")\n"
+    fill!(
+        "use /std/{Nat, Eq};\n\nlet lemma(n: Nat) -> Eq()(n, n) =\n    match n\n    | 0 => Eq/refl()\n    | k + 1 => match lemma(k) | refl() => Eq/refl() end\n    end;\n\nlet checked(n: Nat) -> Eq()(n, n) =\n    match lemma(n) | refl() => Eq/refl() end;\n\nlet through(n: Nat, h: Eq()(n, n)) -> Nat = n;\n\nlet _claim: Eq()(through(${steps}, ${proof}), ${steps}) = Eq/refl();\n\n/std/print(\"ok\")\n",
+        steps,
+        proof
     )
 }
 
@@ -1026,8 +1061,9 @@ fn url_literal(characters: usize) -> String {
     };
     assert_eq!(literal.len(), characters);
 
-    format!(
-        "use /std/http/{{Url}};\n\nlet home: Url =\n    Url/lit(\"{literal}\");\n\n/std/print(Url/to_str(home))\n"
+    fill!(
+        "use /std/http/{Url};\n\nlet home: Url =\n    Url/lit(\"${literal}\");\n\n/std/print(Url/to_str(home))\n",
+        literal
     )
 }
 
@@ -1058,8 +1094,11 @@ fn a_url_literal_read_as_text_costs_a_type_what_its_length_does() {
 
 /// A program whose claim is that `parser` reads `input`, stated over whether it succeeded and over a declaration bound to the read, so the claim holds nothing of what was read and no member left to inference.
 fn primitive_claim(carrier: &str, parser: &str, input: &str) -> String {
-    format!(
-        "use /std/{{Str, Bytes, Byte, Char, Nat, Parse, Result, Bool}};\nuse /std/Bool/{{Holds, True}};\n\nlet ok(@A: Type, r: Result(Parse/Error, A)) -> Bool =\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\nlet times(@I: Type, use Parse/Input(I), @A: Type, n: Nat, p: Parse(I, A)) -> Parse(I, {{}}) =\n    match n\n    | 0 => Parse/pure(())\n    | k + 1 =>\n        let _ = p!;\n        times(k, p)\n    end;\n\nlet reader() -> Parse({carrier}, {{}}) =\n    let _ = {parser}!;\n    Parse/pure(());\n\nlet read: Result(Parse/Error, {{}}) = Parse/run(reader(), {input});\n\nlet _claim: Holds(ok(read)) = True/qed();\n\n/std/print(\"ok\")\n"
+    fill!(
+        "use /std/{Str, Bytes, Byte, Char, Nat, Parse, Result, Bool};\nuse /std/Bool/{Holds, True};\n\nlet ok(@A: Type, r: Result(Parse/Error, A)) -> Bool =\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\nlet times(@I: Type, use Parse/Input(I), @A: Type, n: Nat, p: Parse(I, A)) -> Parse(I, {}) =\n    match n\n    | 0 => Parse/pure(())\n    | k + 1 =>\n        let _ = p!;\n        times(k, p)\n    end;\n\nlet reader() -> Parse(${carrier}, {}) =\n    let _ = ${parser}!;\n    Parse/pure(());\n\nlet read: Result(Parse/Error, {}) = Parse/run(reader(), ${input});\n\nlet _claim: Holds(ok(read)) = True/qed();\n\n/std/print(\"ok\")\n",
+        carrier,
+        parser,
+        input
     )
 }
 
@@ -1228,8 +1267,10 @@ fn type_level_claim_measurements() {
     for (label, left, right) in claims {
         cost_row(
             label,
-            &format!(
-                "use /std/{{Str, Option, Eq, Nat, Flt, List}};\n\nlet _claim: Eq()({left}, {right}) = Eq/refl();\n\n/std/print(\"ok\")\n"
+            &fill!(
+                "use /std/{Str, Option, Eq, Nat, Flt, List};\n\nlet _claim: Eq()(${left}, ${right}) = Eq/refl();\n\n/std/print(\"ok\")\n",
+                left,
+                right
             ),
         );
     }

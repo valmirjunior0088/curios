@@ -1,8 +1,12 @@
 //! A type a goal reports reads back: written where the goal stood, it compiles. That is the promise every reader-facing rendering makes — a report spells what its reader could have written at that position — and these are the programs that hold it to that, each written the first time a rendering broke it.
 
 use {
-    super::test_support::*, crate::*, curios_core::Global, curios_text::RootSource,
-    curios_utilities::Qualifier, std::fmt::Write,
+    super::test_support::*,
+    crate::*,
+    curios_core::Global,
+    curios_text::RootSource,
+    curios_utilities::{Qualifier, fill},
+    std::fmt::Write,
 };
 
 /// Compile `source`, whose every `?` a goal report determines, write each goal's reported solution over the goal's own span, and compile the result. An error names the program as rewritten, so a failure shows the spelling that did not read back.
@@ -194,15 +198,16 @@ fn a_table_witness_reads_back_past_a_binder_at_another_argument() {
 fn a_table_witness_reads_back_past_a_superclass_at_another_argument() {
     // `Ord(A)` reaches `Eql` through its edge, at `A`: no path in scope answers `Eql(Nat)`, and one at `A` itself is still the binder's own.
     for wrapped in ["Nat", "A"] {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Nat, Ord}};
-            use /std/ops/{{Eql}};
-            pub let Wrap(A: Type, use Eql(A)) -> Type = {{A}};
-            pub let v(@A: Type, use Ord(A), x: Wrap({wrapped})) -> Nat = 0;
+            use /std/{Nat, Ord};
+            use /std/ops/{Eql};
+            pub let Wrap(A: Type, use Eql(A)) -> Type = {A};
+            pub let v(@A: Type, use Ord(A), x: Wrap(${wrapped})) -> Nat = 0;
             pub let t: ? = v;
             /std/print("")
-        "#
+        "#,
+            wrapped
         );
 
         reads_back(&source).unwrap_or_else(|error| panic!("{wrapped}: {error}"));
@@ -213,14 +218,16 @@ fn a_table_witness_reads_back_past_a_superclass_at_another_argument() {
 fn a_table_witness_reads_back_past_a_binder_of_a_type_constructor() {
     // `Io` is a name `/sys` binds to its type former, and `M` a binder: a `Monad` of the one answers no goal at the other, whichever of the two the binder is of.
     for (binders, wrapped) in [("use Monad(M)", "Io"), ("use Monad(M), use Monad(Io)", "M")] {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Nat, Monad, Io}};
+            use /std/{Nat, Monad, Io};
             pub let Wrap(M: (Type) -> Type, use Monad(M)) -> Type = M(Nat);
-            pub let v(@M: (Type) -> Type, {binders}, x: Wrap({wrapped})) -> Nat = 0;
+            pub let v(@M: (Type) -> Type, ${binders}, x: Wrap(${wrapped})) -> Nat = 0;
             pub let t: ? = v;
             /std/print("")
-        "#
+        "#,
+            binders,
+            wrapped
         );
 
         reads_back(&source).unwrap_or_else(|error| panic!("{binders}, {wrapped}: {error}"));
@@ -277,18 +284,19 @@ fn a_binder_at_an_argument_that_computes_keeps_the_table_witness_written() {
 fn two_edges_of_one_binder_to_one_concept_are_told_by_what_each_reaches() {
     // `Both(A, B)` reaches `Show` twice, at `A` and at `B`: two paths of one length, of which the goal's is one.
     for wrapped in ["A", "B"] {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Nat, Show}};
-            pub concept Both(A: Type, B: Type): pub Type {{
+            use /std/{Nat, Show};
+            pub concept Both(A: Type, B: Type): pub Type {
                 use Show(A),
                 use Show(B),
-            }}
-            pub let Wrap(A: Type, use Show(A)) -> Type = {{A}};
-            pub let v(@A: Type, @B: Type, use Both(A, B), x: Wrap({wrapped})) -> Nat = 0;
+            }
+            pub let Wrap(A: Type, use Show(A)) -> Type = {A};
+            pub let v(@A: Type, @B: Type, use Both(A, B), x: Wrap(${wrapped})) -> Nat = 0;
             pub let t: ? = v;
             /std/print("")
-        "#
+        "#,
+            wrapped
         );
 
         reads_back(&source).unwrap_or_else(|error| panic!("{wrapped}: {error}"));

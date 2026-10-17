@@ -8,7 +8,7 @@ use {
     super::*,
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold},
     curios_text::{Entrypoint, Module},
-    curios_utilities::{RootKind, test_support::Temporary},
+    curios_utilities::{RootKind, fill, test_support::Temporary},
     curios_wasm::to_bytes,
     std::path::PathBuf,
 };
@@ -108,9 +108,11 @@ fn run(root: &Path) -> Invocation {
 fn declaring(root: &Path, name: &str, directory: &Path) -> String {
     let manifest = fs::read_to_string(root.join("curios.toml")).expect("a manifest to extend");
 
-    format!(
-        "{manifest}\n[dependencies]\n{name} = {{ source = \"path\", path = {:?} }}\n",
-        directory
+    fill!(
+        "${manifest}\n[dependencies]\n${name} = { source = \"path\", path = ${directory} }\n",
+        manifest,
+        name,
+        directory = format!("{directory:?}")
     )
 }
 

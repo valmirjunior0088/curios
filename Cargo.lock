@@ -739,6 +739,7 @@ dependencies = [
  "curios-pipeline",
  "curios-runtime",
  "curios-text",
+ "curios-utilities",
  "curios-wasm",
  "js-sys",
  "wasm-bindgen",

@@ -8,7 +8,7 @@ use {
     curios_package::{Governing, order},
     curios_pipeline::{Fold, Progress},
     curios_text::Entrypoint,
-    curios_utilities::{Qualifier, test_support::Temporary},
+    curios_utilities::{Qualifier, fill, test_support::Temporary},
     std::{cell::RefCell, collections::BTreeMap, path::Path},
 };
 
@@ -138,7 +138,10 @@ fn stage(from: &Path, into: &Path) {
 
 /// The dependency's library, saying `word`.
 fn library(word: &str) -> String {
-    format!("use /std/{{Str}};\n\npub let message: Str =\n    \"{word}\";\n")
+    fill!(
+        "use /std/{Str};\n\npub let message: Str =\n    \"${word}\";\n",
+        word
+    )
 }
 
 fn write(root: &Path, path: &str, contents: &str) {

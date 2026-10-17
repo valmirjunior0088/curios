@@ -8,6 +8,7 @@ use {
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::fill,
 };
 
 /// Run `source` expecting failure, as [`error`] does, with the wasm name section kept through Binaryen: what a trap's report names its frames by, and what a shipped build drops.
@@ -63,18 +64,20 @@ fn an_initializer_calling_a_function_that_reads_a_later_member_forces_it_first()
         ("size: Nat = base + 1", "table: Nat = build(Bytes/len(bs))"),
     ] {
         assert_eq!(
-            run(&format!(
+            run(&fill!(
                 r#"
-                use /std/{{Nat, Str, Bytes, Byte, Io, rand, print}};
-                let main() -> Io({{}}) =
+                use /std/{Nat, Str, Bytes, Byte, Io, rand, print};
+                let main() -> Io({}) =
                     let bs = rand/bytes(1)!;
                     let base: Nat = Bytes/len(bs) + 40
-                    and {first}
+                    and ${first}
                     and build(n: Nat) -> Nat = n + size
-                    and {second};
+                    and ${second};
                     print(Nat/to_str(table));
                 main()
-                "#
+                "#,
+                first,
+                second
             )),
             b"43"
         );
@@ -95,16 +98,18 @@ fn a_stepper_a_fold_applies_inside_an_initializer_forces_what_it_reads() {
         ),
     ] {
         assert_eq!(
-            run(&format!(
+            run(&fill!(
                 r#"
-                use /std/{{Nat, Str, Bytes, Byte, List, Io, rand, print}};
-                let main() -> Io({{}}) =
+                use /std/{Nat, Str, Bytes, Byte, List, Io, rand, print};
+                let main() -> Io({}) =
                     let bs = rand/bytes(1)!;
-                    let {first}
-                    and {second};
+                    let ${first}
+                    and ${second};
                     print(Nat/to_str(table));
                 main()
-                "#
+                "#,
+                first,
+                second
             )),
             b"42"
         );

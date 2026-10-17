@@ -1,6 +1,9 @@
 //! Sequencing inside type expressions follows ordinary monadic typing; purity and totality remain the checkers' obligations.
 
-use crate::tests::{run, typecheck};
+use {
+    crate::tests::{run, typecheck},
+    curios_utilities::fill,
+};
 
 #[test]
 fn a_function_computing_a_type_may_be_written_inside_its_annotation() {
@@ -9,8 +12,9 @@ fn a_function_computing_a_type_may_be_written_inside_its_annotation() {
         "let chosen: () -> Option(Type) = () => let T = Option/some(Nat)!; Option/some(T); Option/unwrap_or(chosen(), Nat)",
         "let chosen() -> Option(Type) = Monad/bind(Option/some(Nat), (T) => Option/some(T)); Option/unwrap_or(chosen(), Nat)",
     ] {
-        let source = format!(
-            "use /std/{{Nat, Option, Monad}};\nlet x: ({body}) = 7;\n/std/print(Nat/to_str(x))"
+        let source = fill!(
+            "use /std/{Nat, Option, Monad};\nlet x: (${body}) = 7;\n/std/print(Nat/to_str(x))",
+            body
         );
         assert_eq!(run(&source), b"7", "{body}");
     }
@@ -37,7 +41,7 @@ fn a_bang_in_an_annotation_keeps_the_annotations_expected_type() {
         "let x: Option/some(Nat)! = 7; Io/pure(())",
         "let main() -> Io({}) = let x: Option/some(Nat)! = 7; Io/pure(()); main()",
     ] {
-        let source = format!("use /std/{{Nat, Io, Option}};\n{body}");
+        let source = fill!("use /std/{Nat, Io, Option};\n${body}", body);
         let error = typecheck(&source).expect_err("an annotation keeps its type expectation");
         assert!(
             error.contains("the monad of this region was never determined"),

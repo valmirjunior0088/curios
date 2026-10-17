@@ -4,6 +4,7 @@ use {
     crate::tests::{run, run_entrypoint},
     curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::fill,
 };
 
 #[test]
@@ -114,17 +115,18 @@ fn region_mixes_action_types() {
 #[test]
 fn unused_bindings_do_not_change_where_nested_actions_sequence() {
     for prefix in ["", "let _ = 0;", "let _ = 0; let _ = 1;"] {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Io, Nat, print}};
-            let main() -> Io({{}}) =
+            use /std/{Io, Nat, print};
+            let main() -> Io({}) =
                 let task: Io(Nat) = (
-                    {prefix}
+                    ${prefix}
                     let _ = print("task")!;
                     Io/pure(7));
                 print("made");
             main()
-            "#
+            "#,
+            prefix
         );
         assert_eq!(run(&source), b"taskmade");
     }

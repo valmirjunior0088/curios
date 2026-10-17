@@ -4,6 +4,7 @@ use {
     crate::tests::{cont_optm, cont_optm_module, run, run_text},
     curios_cont::{Callee, Node, ValueExpr},
     curios_runtime::MockHost,
+    curios_utilities::fill,
     std::collections::BTreeSet,
 };
 
@@ -226,9 +227,9 @@ fn arena_pure_computation_hugs_a_host_effect() {
 #[test]
 fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
     let program = |depth: u32| {
-        format!(
+        fill!(
             r#"
-        use /std/{{Nat, Str, Bytes, Io}};
+        use /std/{Nat, Str, Bytes, Io};
         let count(b : Bytes) -> Nat =
             match b : (_) => Nat
             | x[] => 0
@@ -239,11 +240,12 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
             | 0 => acc
             | p + 1; ih => build(p, x[0x61, ..acc])
             end;
-        let entry() -> /std/Io({{}}) =
-            let _ = /std/print(Nat/to_str(count(build({depth}, x[]))))!;
+        let entry() -> /std/Io({}) =
+            let _ = /std/print(Nat/to_str(count(build(${depth}, x[]))))!;
             /std/Io/pure(());
         entry()
-        "#
+        "#,
+            depth
         )
     };
 

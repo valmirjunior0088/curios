@@ -1,6 +1,6 @@
 //! The size-change obligation: what licenses a decrease, and the type-level loops that are diagnosed rather than aborted.
 
-use {super::test_support::*, crate::tests::run};
+use {super::test_support::*, crate::tests::run, curios_utilities::fill};
 
 // The route no analysis of *value*-level partiality can see. The exploit has no value-level `rec`, no `exit`, and no negative occurrence in any declaration: a lambda, a constructor application, and one application. The knot is tied entirely by `rec Bad : Type`, which `check_positivity` never looks at, because a `rec` is neither an `induct` nor a `struct`.
 #[test]
@@ -254,11 +254,11 @@ fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
 
 #[test]
 fn a_partial_type_behind_a_projection_is_still_a_type() {
-    rejected(&format!(
+    rejected(&fill!(
         r#"
-        {SINK}
+        ${SINK}
 
-        let P : {{Type, /std/Nat}} = (Sink(P.0), 0);
+        let P : {Type, /std/Nat} = (Sink(P.0), 0);
 
         let delta(x : P.0) -> /std/Bool/False =
             match x
@@ -268,16 +268,17 @@ fn a_partial_type_behind_a_projection_is_still_a_type() {
         let boom : /std/Bool/False = delta(Sink/sink(delta));
 
         /std/print("unreachable")
-        "#
+        "#,
+        SINK
     ));
 }
 
 // Why (T) has to be the aggressive reading. Nothing here is a partial type former: `Shape` is structurally recursive and total, and `inf` is an ordinary partial *value* of an ordinary data type. The dangerous type exists only because a total function was applied to a bottom argument, so a rule that looks at what a type-level eliminator scrutinizes does not see it.
 #[test]
 fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
-    rejected(&format!(
+    rejected(&fill!(
         r#"
-        {SINK}
+        ${SINK}
 
         induct F : pub Type
         | stop()
@@ -286,7 +287,7 @@ fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
 
         let Shape(f : F) -> Type =
             match f
-            | stop() => {{}}
+            | stop() => {}
             | more(rest) => Sink(Shape(rest))
             end;
 
@@ -300,24 +301,26 @@ fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
         let boom : /std/Bool/False = delta(Sink/sink(delta));
 
         /std/print("unreachable")
-        "#
+        "#,
+        SINK
     ));
 }
 
 // The entrypoint's trailing expression is not a top-level item — lowering leaves it in `Module::body`. An obligation seeded only from `items` sees nothing here. The only items below are `Sink` and `consume`, and neither is partial; the offending `rec` lives entirely inside the final term.
 #[test]
 fn the_entrypoint_expression_is_not_a_blind_spot() {
-    rejected(&format!(
+    rejected(&fill!(
         r#"
-        {SINK}
+        ${SINK}
 
-        let consume(u : {{}}) -> {{}} = u;
+        let consume(u : {}) -> {} = u;
 
         consume(
-            let forge(x : (let Bad : Type = Sink(Bad); Bad)) -> {{}} = ();
+            let forge(x : (let Bad : Type = Sink(Bad); Bad)) -> {} = ();
             ()
         )
-        "#
+        "#,
+        SINK
     ));
 }
 
@@ -393,24 +396,27 @@ fn a_non_productive_type_level_loop_is_diagnosed_not_exhausted() {
 // Without the net, on the default main-thread stack, the productive field aborts the compiler outright with a stack overflow, and the non-productive one is refused with "reduction ran out of steps on: Shape(inf)", naming neither the definition at fault nor the reason — where the same `Shape(inf)` written as an `induct` payload, an `induct` parameter, a `struct` parameter, or a `concept` method type is diagnosed by name.
 #[test]
 fn a_productive_type_level_loop_in_a_struct_field_is_diagnosed_not_aborted() {
-    rejected_as_a_type(&format!(
-        "{PRODUCTIVE_SHAPE}\n struct Trap : pub Type {{ x : Shape(inf) }}\n\n ()"
+    rejected_as_a_type(&fill!(
+        "${PRODUCTIVE_SHAPE}\n struct Trap : pub Type { x : Shape(inf) }\n\n ()",
+        PRODUCTIVE_SHAPE
     ));
 }
 
 #[test]
 fn a_non_productive_type_level_loop_in_a_struct_field_is_diagnosed_too() {
-    rejected_as_a_type(&format!(
-        "{SHAPE}\n struct Trap : pub Type {{ x : Shape(inf) }}\n\n 0"
+    rejected_as_a_type(&fill!(
+        "${SHAPE}\n struct Trap : pub Type { x : Shape(inf) }\n\n 0",
+        SHAPE
     ));
 }
 
 // The control. `Shape` applied to a *total* value is an ordinary type-level application and must keep working in a field, so a net that refused every struct field — or every field whose type mentions a `rec` — would fail here rather than pass quietly. It runs, so the field type really did reduce to `Nat`.
 #[test]
 fn a_struct_field_over_a_total_application_still_compiles() {
-    let source = format!(
-        "{SHAPE}\n struct Holder : pub Type {{ x : Shape(F/more(F/stop())) }}\n \
-         let take(h : Holder) -> Nat = h.x;\n\n /std/print(Nat/to_str(take(Holder {{ x = 7 }})))"
+    let source = fill!(
+        "${SHAPE}\n struct Holder : pub Type { x : Shape(F/more(F/stop())) }\n \
+         let take(h : Holder) -> Nat = h.x;\n\n /std/print(Nat/to_str(take(Holder { x = 7 })))",
+        SHAPE
     );
     assert_eq!(run(&source), b"7");
 }

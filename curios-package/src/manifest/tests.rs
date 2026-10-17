@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, curios_utilities::fill};
 
 /// The manifest `source` states, or the panic of it having been refused.
 fn parse(source: &str) -> Manifest {
@@ -17,16 +17,16 @@ fn refuse(source: &str) -> String {
 /// The package mode, whole: one row of every source, two executables, and a default.
 #[test]
 fn a_package_parses() {
-    let Manifest::Package(package) = parse(&format!(
+    let Manifest::Package(package) = parse(&fill!(
         r#"
             name = "json"
             default = "serve"
 
             [dependencies]
-            base = {{ source = "member" }}
-            toml_parse = {{ source = "catalog" }}
-            http = {{ source = "git", url = "https://example/http", rev = "abc123", hash = "c1:{digest}" }}
-            tools = {{ source = "path", path = "../tools" }}
+            base = { source = "member" }
+            toml_parse = { source = "catalog" }
+            http = { source = "git", url = "https://example/http", rev = "abc123", hash = "c1:${digest}" }
+            tools = { source = "path", path = "../tools" }
 
             [[executables]]
             name = "serve"
@@ -90,13 +90,13 @@ fn a_name_alone_is_a_package() {
 
 #[test]
 fn an_umbrella_parses() {
-    let Manifest::Umbrella(umbrella) = parse(&format!(
+    let Manifest::Umbrella(umbrella) = parse(&fill!(
         r#"
             compiler = "0.0.0"
             members = ["json", "http_client", "tools/cli"]
 
             [catalog]
-            toml_parse = {{ source = "git", url = "https://example/toml", rev = "abc123", hash = "c1:{digest}" }}
+            toml_parse = { source = "git", url = "https://example/toml", rev = "abc123", hash = "c1:${digest}" }
         "#,
         digest = "b".repeat(64)
     )) else {
@@ -270,12 +270,12 @@ fn a_fetchable_column_that_would_read_as_an_option_is_refused() {
 /// A dash inside a `url` or a `rev` is ordinary, and only the leading one is refused: the rule is about what git's option parser reads, not about the character.
 #[test]
 fn a_dash_inside_a_fetchable_column_is_ordinary() {
-    let Manifest::Package(package) = parse(&format!(
+    let Manifest::Package(package) = parse(&fill!(
         r#"
             name = "json"
 
             [dependencies]
-            http = {{ source = "git", url = "https://example/a-b", rev = "release-1.2", hash = "c1:{digest}" }}
+            http = { source = "git", url = "https://example/a-b", rev = "release-1.2", hash = "c1:${digest}" }
         "#,
         digest = "a".repeat(64)
     )) else {

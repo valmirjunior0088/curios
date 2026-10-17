@@ -2,7 +2,10 @@
 //!
 //! Three rules meet here. A literal whose expectation never gains structure takes the non-dependent product where the term that awaits its type has read its parts, because by then nothing is left to send a dependent telescope. Two literals that wait on one type are one shape there, each filling what the other left open, whichever is read first. A literal whose expectation is merely *stuck* — a `rec` waiting on an index it has not been given — waits instead, since a solution is still coming. The refusals matter as much as the acceptances: a rigid non-tuple expectation and a rigidly stuck one both refuse at the literal.
 
-use crate::tests::{error, run};
+use {
+    crate::tests::{error, run},
+    curios_utilities::fill,
+};
 
 // A tuple argument that is the *only* thing determining a call's type variable, where the result type does not mention it — so the apply's turnaround pins nothing and the literal is left holding its own expectation. The call gives it its shape where it completes, rather than leaving it for the item's drain.
 #[test]
@@ -210,22 +213,23 @@ fn an_inferred_call_commits_to_the_product_as_a_bare_literal_does() {
 
 /// `body` over the declarations the programs below share, its last line the text printed. Each is written in both orders and run, so the kernel has judged what the elaborator admitted.
 fn program(body: &str) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Nat, Int, Byte, Bool, List, Str, Show, print}};
-        use /std/Bool/{{True, Holds}};
+        use /std/{Nat, Int, Byte, Bool, List, Str, Show, print};
+        use /std/Bool/{True, Holds};
         let id(@A: Type, a: A) -> A = a;
         let g(@A: Type, x: A, pin: A) -> Nat = 0;
         let first(@A: Type, x: A, pin: A) -> A = x;
         let second(@A: Type, pin: A, x: A) -> A = x;
-        struct Pair(T: Type): pub Type {{ a: T, z: T }}
+        struct Pair(T: Type): pub Type { a: T, z: T }
         let b: Byte = 7;
         let c: Bool = true;
         let p: Holds(true) = True/qed();
         let and(s: Str, t: Str) -> Str = Str/concat(s, Str/concat(" ", t));
-        let pair(q: {{Byte, Byte}}) -> Str = and(Show/show(q.0), Show/show(q.1));
-        {body}
-        "#
+        let pair(q: {Byte, Byte}) -> Str = and(Show/show(q.0), Show/show(q.1));
+        ${body}
+        "#,
+        body
     )
 }
 

@@ -3,7 +3,7 @@
 //! Those that exec what they produced run with the ordinary suite all the same: the compiler embeds its launcher, so the produced executable is self-contained, and a build of this crate already has the launcher it embeds.
 
 use {
-    curios_utilities::{digest, test_support::Temporary},
+    curios_utilities::{digest, fill, test_support::Temporary},
     curios_wasm::{
         AddressType, CompType, Export, Expr, Func, FuncName, FuncType, Instr, Limits, LocalName,
         MemName, MemType, Module, NumType, ResultType, SubType, TypeName, ValType, to_bytes,
@@ -141,7 +141,7 @@ fn calling_double(root: &Path, name: &str, rows: &[(&str, &str)]) -> std::path::
         .expect("write the library");
     fs::write(
         package.join("exe.crs"),
-        format!("let main() -> /std/Io({{}}) = let doubled = /{name}/double(3)!;\nlet _ = /std/Process/exit(@{{}}, /std/Nat/to_byte(doubled % 256))!;\n/std/Io/pure(());\nmain()\n"),
+        fill!("let main() -> /std/Io({}) = let doubled = /${name}/double(3)!;\nlet _ = /std/Process/exit(@{}, /std/Nat/to_byte(doubled % 256))!;\n/std/Io/pure(());\nmain()\n", name),
     )
     .expect("write the temp source");
 

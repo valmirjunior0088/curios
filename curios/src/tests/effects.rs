@@ -2,7 +2,10 @@
 //!
 //! What each vocabulary *is* stays with its own section below. What they share is the shape these tests pin: a region's monad is read from its expected type, never inferred from the action, and an embedding across monads exists only where a `/std/Monad/Lift` witness declares one.
 
-use super::{error, run, typecheck};
+use {
+    super::{error, run, typecheck},
+    curios_utilities::fill,
+};
 
 // === The `Io` vocabulary: constructing, sequencing, and forcing descriptions. ====
 
@@ -828,7 +831,10 @@ fn values_and_functions_report_the_same_invalid_sequencing_types() {
     ] {
         let function = binding.replacen(':', "() ->", 1);
         for declaration in [binding, &function] {
-            let source = format!("use /std/{{Nat, List, Cell, Io}};\n{declaration}\n()\n");
+            let source = fill!(
+                "use /std/{Nat, List, Cell, Io};\n${declaration}\n()\n",
+                declaration
+            );
             let error = typecheck(&source).expect_err("sequencing needs a suitable monad");
             assert!(error.contains(refusal), "{error}");
             assert!(error.contains(declaration), "{error}");

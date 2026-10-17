@@ -1,7 +1,10 @@
-//! What a test that touches the disk shares: a directory of its own that goes away with the test, however the test ends.
+//! What tests share: a directory of its own that goes away with the test, however the test ends, and a fixture's text with values spliced into it.
 
 #[cfg(test)]
 mod tests;
+
+mod fill;
+pub use fill::*;
 
 use std::{
     env, fs,

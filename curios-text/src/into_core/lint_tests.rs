@@ -1,6 +1,6 @@
 //! The lints the lowering decides: an import nothing resolved through, a binder nothing referenced, a declaration nothing reaches, and what counts as a use of each.
 
-use super::test_support::*;
+use {super::test_support::*, curios_utilities::fill};
 
 #[test]
 fn a_selector_nothing_resolved_through_is_reported_at_its_word() {
@@ -755,15 +755,15 @@ fn unused(src: &str) -> Vec<String> {
 
 /// A unit declaring the `Spell` vocabulary of the fixture registry, its renderers private, around `rows`.
 fn spelling(rows: &str) -> String {
-    format!(
+    fill!(
         r#"
         pub induct Colour : pub Type | red() end
-        {rows}
+        ${rows}
         pub mod std
             pub mod Spell
-                pub concept Spell(A : Type) : pub Type {{
+                pub concept Spell(A : Type) : pub Type {
                     spell(A) -> Type,
-                }}
+                }
                 let call : Type = Type;
                 let record : Type = Type;
             end
@@ -777,7 +777,8 @@ fn spelling(rows: &str) -> String {
             end
         end
         Type
-        "#
+        "#,
+        rows
     )
 }
 

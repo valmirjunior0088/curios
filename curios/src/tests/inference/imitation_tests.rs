@@ -2,22 +2,26 @@
 //!
 //! `M(A)` against `Two(Nat, Bool)` holds at `M := (x) => Two(Nat, x)`, the imitation, and at `(x) => Two(x, Bool)` as well: one function among several, so conversion leaves the pair parked, and the call takes the imitation only once it has read every argument, where nothing else stated the function and every such pair gives it the same. Each program that compiles is run, so the kernel has judged what the elaborator admitted.
 
-use crate::tests::{error, run};
+use {
+    crate::tests::{error, run},
+    curios_utilities::fill,
+};
 
 /// `body` over the declarations these programs share, its last line the text printed.
 fn program(body: &str) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Nat, Bool, Str, Option, Monad, print}};
-        struct Two(A: Type, B: Type): pub Type {{ a: A, b: B }}
-        struct Holder(M: (Type) -> Type): pub Type {{ n: Nat }}
-        let h: Holder((X: Type) => Two(X, Bool)) = Holder {{ n = 7 }};
-        let x: Two(Nat, Bool) = Two {{ a = 1, b = true }};
-        let y: Two(Nat, Nat) = Two {{ a = 1, b = 2 }};
-        let z: Two(Bool, Bool) = Two {{ a = true, b = true }};
+        use /std/{Nat, Bool, Str, Option, Monad, print};
+        struct Two(A: Type, B: Type): pub Type { a: A, b: B }
+        struct Holder(M: (Type) -> Type): pub Type { n: Nat }
+        let h: Holder((X: Type) => Two(X, Bool)) = Holder { n = 7 };
+        let x: Two(Nat, Bool) = Two { a = 1, b = true };
+        let y: Two(Nat, Nat) = Two { a = 1, b = 2 };
+        let z: Two(Bool, Bool) = Two { a = true, b = true };
         let and(s: Str, t: Str) -> Str = Str/concat(s, Str/concat(" ", t));
-        {body}
-        "#
+        ${body}
+        "#,
+        body
     )
 }
 

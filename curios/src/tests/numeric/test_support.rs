@@ -7,6 +7,7 @@
 use {
     crate::tests::compile,
     curios_runtime::{Compiled, ForeignBindings, MockHost},
+    curios_utilities::fill,
 };
 
 /// One program holding every row of a table, the row chosen by the host: its stdin line is two bytes, the first read as the runtime zero `n` (`'A' − 65`) with its `Int` twin `i`, which is what keeps every row out of the folder's reach, and the second naming the row. One compile therefore serves the whole table, and a run costs milliseconds — the reason this is a selector rather than one program per row. With `taint` false, `n` and `i` are literal zeros instead, so every row folds to a literal while the selection alone stays runtime, which is what "folded" asserts.
@@ -22,26 +23,28 @@ pub(super) fn table(rows: &[&str], taint: bool) -> String {
         .map(|(index, row)| format!("| {index} => /std/print({row})"))
         .collect::<Vec<_>>()
         .join("\n        ");
-    format!(
+    fill!(
         r#"
-        use /std/{{Nat, Int, Flt, Byte, Bytes, Str, Option, Io, Try, Process}};
-        let entry() -> /std/Io({{}}) =
+        use /std/{Nat, Int, Flt, Byte, Bytes, Str, Option, Io, Try, Process};
+        let entry() -> /std/Io({}) =
         let bytes = match Try/run(Io/read(Process/stdin, 16))! : (_) => Bytes
             | success(bytes(b, @_)) => b
             | success(ended()) => x[]
             | failure(_) => x[]
             end;
-        let n = {zero};
+        let n = ${zero};
         let i = Nat/to_int(n);
         let to_nat_or(x : Int, d : Nat) -> Nat =
             match x >= +0 | true => Int/to_nat(x) | false => d end;
         let row = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 1), 0)), 32);
         match row
-        {arms}
+        ${arms}
         | _ => /std/print("no such row")
         end;
         entry()
-        "#
+        "#,
+        zero,
+        arms
     )
 }
 

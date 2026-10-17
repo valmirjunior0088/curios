@@ -1,15 +1,15 @@
 //! What the kernel types of a type the elaborator derived by substitution: one typed where a reader wrote it is typed at every value put in a variable's place, an arm no reduction takes there being typed by no rule.
 
-use crate::tests::run;
+use {crate::tests::run, curios_utilities::fill};
 
 // An arm its scrutinee's indices rule out is not typed. `h`'s result matches on `t: Tag(n)`, and its `zero()` arm holds a proof that `n == 0`, typed under that case's `n := 0`. A `let` at `h(1, t)` is written at the result at `1`, where `Tag/zero()`'s target clashes with the index; at `0` the arm is the one taken and is typed.
 #[test]
 fn a_result_is_typed_at_an_index_that_rules_an_arm_of_it_out() {
     let at = |index: &str| {
-        format!(
+        fill!(
             r#"
-        use /std/{{Nat, Bool}};
-        use /std/Bool/{{True, Holds}};
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
         induct Tag: (Nat) -> Type
         | zero(): (0)
         | other(n: Nat): (n + 1)
@@ -20,11 +20,12 @@ fn a_result_is_typed_at_an_index_that_rules_an_arm_of_it_out() {
             | zero() => True/qed()
             | other(_) => True/qed()
             end;
-        let used(t: Tag({index})) -> Nat =
-            let x = h({index}, t);
+        let used(t: Tag(${index})) -> Nat =
+            let x = h(${index}, t);
             0;
         /std/print("held")
-        "#
+        "#,
+            index
         )
     };
 
@@ -97,9 +98,9 @@ fn an_arms_goal_is_typed_wherever_it_is_written() {
             end;
         /std/print("held")
         "#;
-    let again = format!(
-        r#"{BOUNDED}
-        use /std/{{Eq}};
+    let again = fill!(
+        r#"${BOUNDED}
+        use /std/{Eq};
         let h(c: Bool) -> Holds((match c | true => g(c, @True/qed()) | false => 0 end) <= 1) =
             match c
             | false => True/qed()
@@ -116,7 +117,8 @@ fn an_arms_goal_is_typed_wherever_it_is_written() {
             let same: Eq()(of(n), of(n)) = Eq/refl();
             Eq/refl();
         /std/print("held")
-        "#
+        "#,
+        BOUNDED
     );
 
     assert_eq!(run(&domain), b"held");

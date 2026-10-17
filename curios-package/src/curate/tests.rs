@@ -1,4 +1,7 @@
-use {super::*, curios_utilities::test_support::Temporary};
+use {
+    super::*,
+    curios_utilities::{fill, test_support::Temporary},
+};
 
 /// A tree of `(relative path, contents)` pairs, in a directory of its own that goes away with the test.
 fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
@@ -373,9 +376,11 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
     .expect("a bare clone on this machine");
 
     let pin = |remote: &Path| {
-        format!(
-            "shape = {{ source = \"git\", url = \"file://{}\", rev = \"{revision}\", hash = \"{expected}\" }}\n",
-            remote.display()
+        fill!(
+            "shape = { source = \"git\", url = \"file://${remote}\", rev = \"${revision}\", hash = \"${expected}\" }\n",
+            remote = remote.display(),
+            revision,
+            expected
         )
     };
     let root = tree(
@@ -383,9 +388,9 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
         &[
             (
                 "app/curios.toml",
-                &format!(
-                    "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\n{}mid = {{ source = \"path\", path = \"../mid\" }}\n",
-                    pin(&origin)
+                &fill!(
+                    "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\n${pin}mid = { source = \"path\", path = \"../mid\" }\n",
+                    pin = pin(&origin)
                 ),
             ),
             ("app/lib.crs", ""),

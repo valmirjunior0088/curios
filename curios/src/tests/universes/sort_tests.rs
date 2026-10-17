@@ -3,6 +3,7 @@
 use {
     super::test_support::sort_parameters,
     crate::tests::{error, run, typecheck},
+    curios_utilities::fill,
 };
 
 // One definition serves a number and a proof: each use states the sort it stands at, and the proof handed to it weighs nothing the number's use reads.
@@ -212,9 +213,9 @@ fn a_sort_two_terms_decide_apart_is_refused_as_decided_twice() {
             "Prop",
         ),
     ] {
-        let report = error(&format!(
+        let report = error(&fill!(
             r#"
-            use /std/{{Nat, Bool}};
+            use /std/{Nat, Bool};
             induct Two: pub Prop
             | a()
             | b()
@@ -224,9 +225,10 @@ fn a_sort_two_terms_decide_apart_is_refused_as_decided_twice() {
             let takes(@B: Type, b: B) -> Nat = 0;
             let proves(@P: Prop, p: P) -> Nat = 0;
             let after(@B: Sort, n: Nat, b: B) -> B = b;
-            {declaration}
+            ${declaration}
             /std/print("")
-            "#
+            "#,
+            declaration
         ));
 
         assert!(

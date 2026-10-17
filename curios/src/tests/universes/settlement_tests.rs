@@ -3,6 +3,7 @@
 use {
     super::test_support::{definition_variances, signatures, universe_parameters},
     crate::tests::{run, typecheck},
+    curios_utilities::fill,
 };
 
 // A universe parameter is minted only from a declaration's *interface* — its type and the registry signatures a use site instantiates. A level reachable only through the body is minimized to a constant instead (`UniverseSolver::finalize`'s `internal` set, which no occurrence could choose a value for). So `carrier`'s one parameter is the level its result holds, `Box`'s own, which the family is invariant in and a caller may need higher, and the `Type` it stores is no second one; `holder` takes that one beside the level of its `Type`-sorted parameter.
@@ -174,16 +175,19 @@ fn a_declarations_levels_do_not_follow_where_its_witnesses_are_written() {
         "/same",
     );
     let program = |first: &str, second: &str, use_: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Monad, Nat, Spell, Test}};
-            use /std/ops/{{Eql}};
-            pub struct Box(A: Type): pub Type {{ value: A }}
-            {first}
-            {second}
-            {use_}
+            use /std/{Monad, Nat, Spell, Test};
+            use /std/ops/{Eql};
+            pub struct Box(A: Type): pub Type { value: A }
+            ${first}
+            ${second}
+            ${use_}
             /std/print("settled")
-            "#
+            "#,
+            first,
+            second,
+            use_
         )
     };
 
@@ -312,16 +316,21 @@ fn a_result_at_a_compared_position_keeps_its_level() {
         ),
     ];
     let program = |declarations: &str, type_: &str, small: &str, big: &str, pick: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Bool, Nat, Str, List, Result}};
-            {declarations}
-            pub let small() -> {type_} = {small};
-            pub let big() -> {type_} = {big};
-            pub let takes(p: {type_}) -> Nat = 0;
-            {pick}
+            use /std/{Bool, Nat, Str, List, Result};
+            ${declarations}
+            pub let small() -> ${type_} = ${small};
+            pub let big() -> ${type_} = ${big};
+            pub let takes(p: ${type_}) -> Nat = 0;
+            ${pick}
             /std/print("settled")
-            "#
+            "#,
+            declarations,
+            type_,
+            small,
+            big,
+            pick
         )
     };
 
@@ -350,18 +359,19 @@ fn a_result_at_a_compared_position_keeps_its_level() {
 #[test]
 fn a_type_valued_definitions_body_level_is_its_callers() {
     let program = |use_: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Str, Nat, List, Result}};
-            pub struct Value: pub Type {{ A: Type, read: (Str) -> Result(Str, A) }}
-            pub let Holder(v: Value) -> Type = {{held: Value, tag: Nat}};
+            use /std/{Str, Nat, List, Result};
+            pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }
+            pub let Holder(v: Value) -> Type = {held: Value, tag: Nat};
             pub let hold(v: Value) -> Holder(v) = (held = v, tag = 0);
             pub let Types: Type = List(Type);
-            pub let Tower(n: Nat) -> Type = match n | 0 => Value | k + 1 => {{head: Value, rest: Tower(k)}} end;
+            pub let Tower(n: Nat) -> Type = match n | 0 => Value | k + 1 => {head: Value, rest: Tower(k)} end;
             pub let top(v: Value) -> Tower(0) = v;
-            {use_}
+            ${use_}
             /std/print("held")
-            "#
+            "#,
+            use_
         )
     };
 
@@ -389,15 +399,16 @@ fn a_type_valued_definitions_body_level_is_its_callers() {
 #[test]
 fn the_command_line_parser_takes_a_spec_at_any_universe_instance() {
     let program = |body: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Cli, Str, Nat, List, Result, Option, Map}};
-            use /std/Cli/{{Value, Field, reader, option, nat, parse, help}};
+            use /std/{Cli, Str, Nat, List, Result, Option, Map};
+            use /std/Cli/{Value, Field, reader, option, nat, parse, help};
             let large: Value = reader(@Type, "T", (_) => Result/success(Nat), (_) => "a type");
             let spec: List(Field) = [option("t", large, "a type")];
             let cli: Cli = Cli/declare(Cli/leaf("probe", "a probe", spec, Cli/positionals([])), Option/none());
-            {body}
-            "#
+            ${body}
+            "#,
+            body
         )
     };
 

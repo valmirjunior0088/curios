@@ -1,6 +1,9 @@
 //! A binder beside a concrete pattern: the cases a row is reached under, the value no arm matches, and the arm no value reaches.
 
-use crate::tests::{error, run};
+use {
+    crate::tests::{error, run},
+    curios_utilities::fill,
+};
 
 /// `function` put to `calls` over `z`, a `Nat` that is zero: the answers as one numeral, the first call's in the units, the second's in the tens. Once with `z` written `0`, which leaves every call for the compiler to fold, and once with a zero no fold reads, which leaves each to run.
 fn answers(function: &str, calls: &[&str]) -> [Vec<u8>; 2] {
@@ -12,9 +15,7 @@ fn answers(function: &str, calls: &[&str]) -> [Vec<u8>; 2] {
         .join(" + ");
 
     ["0", "Bytes/len(rand/bytes(0)!)"].map(|zero| {
-        run(&format!(
-            "use /std/{{Bool, Bytes, List, Nat, Option, rand}};\n{function}\nlet main() -> /std/Io({{}}) = let z = {zero};\n/std/print(Nat/to_str({answer}));\nmain()\n"
-        ))
+        run(&fill!("use /std/{Bool, Bytes, List, Nat, Option, rand};\n${function}\nlet main() -> /std/Io({}) = let z = ${zero};\n/std/print(Nat/to_str(${answer}));\nmain()\n", function, zero, answer))
     })
 }
 
@@ -212,8 +213,10 @@ fn a_value_no_arm_matches_is_reported_as_its_pattern() {
             "some(0)",
         ),
     ] {
-        let source = format!(
-            "use /std/{{Bool, Bytes, List, Nat, Option}};\nlet f({signature}) -> Nat =\n    {arms};\n/std/print(\"\")\n"
+        let source = fill!(
+            "use /std/{Bool, Bytes, List, Nat, Option};\nlet f(${signature}) -> Nat =\n    ${arms};\n/std/print(\"\")\n",
+            signature,
+            arms
         );
 
         let error = error(&source);
@@ -315,14 +318,15 @@ fn a_tuple_written_at_the_head_is_matched_value_by_value() {
 #[test]
 fn a_struct_pattern_names_its_structure_at_every_binder() {
     let program = |function: &str| {
-        format!(
+        fill!(
             r#"
-            use /std/{{Nat}};
-            struct A: Type {{ x: Nat }}
-            struct B: Type {{ x: Nat }}
-            {function}
-            /std/print(Nat/to_str(f(A {{ x = 3 }})))
-            "#
+            use /std/{Nat};
+            struct A: Type { x: Nat }
+            struct B: Type { x: Nat }
+            ${function}
+            /std/print(Nat/to_str(f(A { x = 3 })))
+            "#,
+            function
         )
     };
     // Each binder position, its head written `HEAD`, beside what the program prints under the structure's own name.

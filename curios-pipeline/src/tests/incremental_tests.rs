@@ -10,6 +10,7 @@ use {
     },
     curios_core::{Enter, Item, Variance},
     curios_unit::Unit,
+    curios_utilities::fill,
     std::fs,
 };
 
@@ -611,8 +612,9 @@ pub let boxed: Box(Nat) = make(1);
 
 pub let unrelated: Nat = 7;
 ";
-    let witnessed = format!(
-        "{base}\nsatisfy Monad(Box) {{ pure(@_, a) = Box {{ value = a }}, bind(@_, @_, m, f) = f(m.value) }}\n"
+    let witnessed = fill!(
+        "${base}\nsatisfy Monad(Box) { pure(@_, a) = Box { value = a }, bind(@_, @_, m, f) = f(m.value) }\n",
+        base
     );
     let baseline = unit_of(base);
 

@@ -3,13 +3,14 @@
 use {
     crate::tests::{compile, run_text},
     curios_runtime::{ForeignBindings, MockHost},
+    curios_utilities::fill,
 };
 
 /// Two lines, the bytes before a comma, two bytes, a line, what is left, and a line of a stream that has ended, read in that order through one reader and joined by bars, and then `tail`.
 fn reads(tail: &str) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Str, Bytes, Option, Result, Show, Try, Io, print, Process}};
+        use /std/{Str, Bytes, Option, Result, Show, Try, Io, print, Process};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let line(found: Option(Bytes)) -> Str =
             match found | some(b) => text(b) | none() => "<end>" end;
@@ -25,12 +26,13 @@ fn reads(tail: &str) -> String {
                 Str/join(
                     "|",
                     [line(a), line(b), text(c.bytes), text(d.bytes), line(e), text(f), line(g)]));
-        let said(outcome: Result(Io/Error, Str)) -> Io({{}}) =
+        let said(outcome: Result(Io/Error, Str)) -> Io({}) =
             match outcome | success(read) => print(read) | failure(why) => print(Show/show(why)) end;
-        let main() -> Io({{}}) =
-            {tail};
+        let main() -> Io({}) =
+            ${tail};
         main()
-        "#
+        "#,
+        tail
     )
 }
 
@@ -94,11 +96,11 @@ fn the_named_reads_answer_alike_over_every_cut_of_their_input() {
 /// A read a deadline abandons has put back what it took: the reader holds the bytes that had arrived, and the read after it answers the whole line. The clock climbs a second a reading, so the two-second deadline passes while the stream is quiet.
 #[test]
 fn a_line_a_deadline_abandons_is_read_whole_by_the_next_read() {
-    let source = format!(
-        r#"{WIRE}
-        let program() -> Io({{}}) =
+    let source = fill!(
+        r#"${WIRE}
+        let program() -> Io({}) =
             let ends = Channel/new(@Bytes, 4)!;
-            let input = Io/Reader/new(Wire {{ ends.1 }})!;
+            let input = Io/Reader/new(Wire { ends.1 })!;
             let _ = Channel/try_send(ends.0, Str/to_bytes("ab"))!;
             let hurried = Io/timeout(Duration/of_secs(2), Try/run(Io/Reader/line(input)))!;
             let _ = print(match hurried | some(read) => line(read) | none() => "<deadline>" end)!;
@@ -108,7 +110,8 @@ fn a_line_a_deadline_abandons_is_read_whole_by_the_next_read() {
             let patient = Try/run(Io/Reader/line(input))!;
             print(Str/concat("|", line(patient)));
         program()
-        "#
+        "#,
+        WIRE
     );
     let (system, io) = MockHost::builder()
         .mono((0..40u64).map(|second| (second, 0)))
@@ -147,14 +150,14 @@ fn a_refusal_past_the_bound_leaves_the_bytes_held() {
 /// Two branches that read one reader each get a whole line. Both have searched six bytes for a newline when one of them takes the arrival that holds it, cuts its line and leaves `b` and a newline held; the stream then ends, and the other is asked again of what is held now, from the start, where the search it had made would pass the newline by.
 #[test]
 fn two_branches_on_one_reader_each_get_a_whole_line() {
-    let source = format!(
-        r#"{WIRE}
-        let reading(input: Io/Reader(Wire)) -> Io({{}}) =
+    let source = fill!(
+        r#"${WIRE}
+        let reading(input: Io/Reader(Wire)) -> Io({}) =
             let read = Try/run(Io/Reader/line(input))!;
             print(Str/flatten(["<", line(read), ">"]));
-        let both_read(s: Io/Scope) -> Io({{}}) =
+        let both_read(s: Io/Scope) -> Io({}) =
             let ends = Channel/new(@Bytes, 4)!;
-            let input = Io/Reader/new(Wire {{ ends.1 }})!;
+            let input = Io/Reader/new(Wire { ends.1 })!;
             let _ = Channel/try_send(ends.0, Str/to_bytes("aaaaaa"))!;
             let first = Io/Scope/spawn(s, reading(input))!;
             let second = Io/Scope/spawn(s, reading(input))!;
@@ -164,7 +167,8 @@ fn two_branches_on_one_reader_each_get_a_whole_line() {
             let _ = Io/Scope/Task/join(first)!;
             Io/Scope/Task/join(second);
         Io/Scope/run(both_read)
-        "#
+        "#,
+        WIRE
     );
     let (system, io) = MockHost::builder().build();
 

@@ -3,13 +3,14 @@
 use {
     super::{compile, error},
     curios_runtime::{Compiled, ForeignBindings, MockHost},
+    curios_utilities::fill,
 };
 
 /// The declaration every refusal below is written against, beside the line `body` declares after it.
 fn against(body: &str) -> String {
-    error(&format!(
+    error(&fill!(
         r#"
-        use /std/{{Cli, Bool, Option, print}};
+        use /std/{Cli, Bool, Option, print};
 
         let deps: Cli =
             Cli/declare(
@@ -20,9 +21,10 @@ fn against(body: &str) -> String {
                     [Cli/leaf("add", "Add one", [Cli/default("port", Cli/nat, 8080, "Port")], Cli/positionals([]))]),
                 Option/none());
 
-        {body}
+        ${body}
         print("unreachable")
-        "#
+        "#,
+        body
     ))
 }
 

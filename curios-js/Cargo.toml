@@ -28,3 +28,5 @@ js-sys = { version = "0.3.103" }
 curios-runtime = { workspace = true, features = ["test-support"] }
 # What compiles the bridge module the suite drives by hand.
 curios-cranelift = { workspace = true }
+# `fill!`, by which a fixture splices a value into text whose own braces stay single.
+curios-utilities = { workspace = true, features = ["test-support"] }

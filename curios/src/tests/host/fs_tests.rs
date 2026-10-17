@@ -3,6 +3,7 @@
 use {
     crate::tests::run_text,
     curios_runtime::{MockHost, MockIo},
+    curios_utilities::fill,
 };
 
 /// A scripted tree: two files under `data`, one of them a level down, so `data` and `data/sub` exist without being named.
@@ -14,22 +15,23 @@ fn seeded() -> (MockHost, MockIo) {
 
 /// The `Str` a program's `Try` region computes, printed once at the tail; a failure that escapes the region prints as its name instead.
 fn program(body: &str) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Str, Bytes, Nat, Bool, List, Option, Result, Show, Try, Io, Path, File, fs}};
-        let show_unit(r: Result(Io/Error, {{}})) -> Str =
+        use /std/{Str, Bytes, Nat, Bool, List, Option, Result, Show, Try, Io, Path, File, fs};
+        let show_unit(r: Result(Io/Error, {})) -> Str =
             match r | success(_) => "ok" | failure(e) => Show/show(e) end;
         let text(b: Bytes) -> Str =
             Result/unwrap_or(Str/of_bytes(b), "?");
         let program() -> Try(Io, Io/Error, Str) =
-            {body};
-        let entry() -> /std/Io({{}}) =
+            ${body};
+        let entry() -> /std/Io({}) =
             match Try/run(program())!
             | failure(e) => /std/print(Show/show(e))
             | success(s) => /std/print(s)
             end;
         entry()
-        "#
+        "#,
+        body
     )
 }
 

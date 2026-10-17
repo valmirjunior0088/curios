@@ -3,7 +3,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    curios_utilities::test_support::Temporary,
+    curios_utilities::{fill, test_support::Temporary},
     std::{fs, path::Path},
 };
 
@@ -15,7 +15,10 @@ pub(super) fn mounted_project(name: &str) -> Temporary {
         let dependency = match declares.is_empty() {
             true => String::new(),
             false => {
-                format!("\n[dependencies]\n{declares} = {{ source = \"path\", path = \"../a\" }}\n")
+                fill!(
+                    "\n[dependencies]\n${declares} = { source = \"path\", path = \"../a\" }\n",
+                    declares
+                )
             }
         };
         write(
@@ -26,7 +29,10 @@ pub(super) fn mounted_project(name: &str) -> Temporary {
         write(
             &root,
             &format!("{directory}/lib.crs"),
-            &format!("use /std/{{Str}};\n\npub let said: Str =\n    \"{package}\";\n"),
+            &fill!(
+                "use /std/{Str};\n\npub let said: Str =\n    \"${package}\";\n",
+                package
+            ),
         );
     }
 

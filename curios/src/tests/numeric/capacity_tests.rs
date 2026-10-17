@@ -3,6 +3,7 @@
 use {
     super::test_support::{run_row, table},
     crate::tests::{compile, error},
+    curios_utilities::fill,
 };
 
 #[test]
@@ -30,18 +31,19 @@ fn a_requested_length_past_the_runtime_bound_refuses_before_allocating() {
 #[test]
 fn a_channel_capacity_past_the_runtime_bound_refuses_before_allocating() {
     for count in ["4294967296", "18446744073709551616"] {
-        let source = format!(
+        let source = fill!(
             r#"
-            use /std/{{Nat, Io, print, Channel}};
-            let entry() -> /std/Io({{}}) =
-                let c = Channel/new(@Nat, {count})!;
+            use /std/{Nat, Io, print, Channel};
+            let entry() -> /std/Io({}) =
+                let c = Channel/new(@Nat, ${count})!;
                 print(match Channel/try_send(c.0, 1)!
                     | taken() => "taken"
                     | full() => "full"
                     | closed() => "closed"
                     end);
             entry()
-        "#
+        "#,
+            count
         );
         let error = error(&source);
         assert!(

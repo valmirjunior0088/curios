@@ -1,6 +1,9 @@
 //! How written members meet the slots of the telescope they fill: one rule at a call, a lambda and a concept literal.
 
-use crate::tests::{error, run};
+use {
+    crate::tests::{error, run},
+    curios_utilities::fill,
+};
 
 const TWO: &str = r#"
         use /std/{Nat, Bool, Str, Show, print};
@@ -127,8 +130,9 @@ fn a_concept_literals_edges_are_written_from_the_first() {
         assert_eq!(run(&source), printed.as_bytes(), "{literal}");
     }
 
-    let late = error(&format!(
-        "{BOTH}        let b: Both(Nat) = Both {{ both = 0, use e9 }};\n        print(\"no\")\n"
+    let late = error(&fill!(
+        "${BOTH}        let b: Both(Nat) = Both { both = 0, use e9 };\n        print(\"no\")\n",
+        BOTH
     ));
     assert!(
         late.contains("this `use` member has no slot"),
@@ -145,8 +149,10 @@ fn after_a_spread_an_edge_is_copied_unless_written() {
         ("Both { ..base, use _, use F { f = 3 } }", "93"),
         ("Both { ..base, use E { e = 4 } }", "49"),
     ] {
-        let source = format!(
-            "{BOTH}        let base: Both(Nat) = Both {{ use e9, use f9, both = 0 }};\n        let b: Both(Nat) = {literal};\n        print(Nat/to_str(edges(use b)))\n"
+        let source = fill!(
+            "${BOTH}        let base: Both(Nat) = Both { use e9, use f9, both = 0 };\n        let b: Both(Nat) = ${literal};\n        print(Nat/to_str(edges(use b)))\n",
+            BOTH,
+            literal
         );
         assert_eq!(run(&source), printed.as_bytes(), "{literal}");
     }

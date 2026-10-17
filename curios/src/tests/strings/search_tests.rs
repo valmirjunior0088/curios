@@ -1,6 +1,6 @@
 //! Searching text and cutting it where a search lands: each walk held to Rust's reading of the same UTF-8.
 
-use crate::tests::run;
+use {crate::tests::run, curios_utilities::fill};
 
 /// Texts mixing every width of character, whitespace at either end, line endings of both kinds, and a needle repeated.
 const TEXTS: [&str; 7] = [
@@ -21,7 +21,7 @@ fn literal(text: &str) -> String {
     text.chars()
         .map(|c| match c.is_ascii() && !c.is_ascii_control() {
             true => c.to_string(),
-            false => format!("\\u{{{:x}}}", c as u32),
+            false => fill!("\\u{${code}}", code = format!("{:x}", c as u32)),
         })
         .collect()
 }
@@ -40,9 +40,9 @@ fn list(texts: &[&str]) -> String {
 /// Where a character, a character a predicate accepts, and a run of characters first occur, as the byte offset of the position each search answers: Rust's `str::find` over the same text, and nothing where Rust finds nothing.
 #[test]
 fn a_search_answers_where_rust_finds() {
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Str, Nat, List, Option, Char}};
+        use /std/{Str, Nat, List, Option, Char};
 
         let offset(@s: Str, found: Option(Str/At(s))) -> Str =
             match found | some(at) => Nat/to_str(Str/At/to_offset(at)) | none() => "-" end;
@@ -52,14 +52,14 @@ fn a_search_answers_where_rust_finds() {
                 ",",
                 offset(Str/find_index(text, (c) => Char/to_nat(c) > 0x7F)),
                 ",",
-                Str/join(",", List/map({needles}, (needle) => offset(Str/index_of_substr(text, needle)))),
+                Str/join(",", List/map(${needles}, (needle) => offset(Str/index_of_substr(text, needle)))),
                 ";",
             ]);
 
-        /std/print(Str/flatten(List/map({texts}, row)))
+        /std/print(Str/flatten(List/map(${texts}, row)))
         "#,
-        texts = list(&TEXTS),
         needles = list(&NEEDLES),
+        texts = list(&TEXTS)
     );
     let offset = |found: Option<usize>| match found {
         Some(k) => k.to_string(),
@@ -88,9 +88,9 @@ fn a_search_answers_where_rust_finds() {
 /// Text cut where its searches land reads as Rust's cuts of the same text: `split_once`, `split`, `strip_prefix`, `strip_suffix`, `trim_start`, `trim_end`, `trim`, `lines` and `replace`, each over every text and needle.
 #[test]
 fn text_cuts_where_rust_cuts_it() {
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Str, List, Option}};
+        use /std/{Str, List, Option};
 
         let piece(found: Option(Str)) -> Str =
             match found | some(s) => Str/concat(s, "|") | none() => "-|" end;
@@ -109,14 +109,14 @@ fn text_cuts_where_rust_cuts_it() {
             Str/flatten([
                 Str/trim_start(text), "|", Str/trim_end(text), "|", Str/trim(text), "|",
                 pieces(Str/lines(text)),
-                Str/flatten(List/map({needles}, (needle) => cuts(text, needle))),
+                Str/flatten(List/map(${needles}, (needle) => cuts(text, needle))),
                 "\n",
             ]);
 
-        /std/print(Str/flatten(List/map({texts}, row)))
+        /std/print(Str/flatten(List/map(${texts}, row)))
         "#,
-        texts = list(&TEXTS),
         needles = list(&NEEDLES),
+        texts = list(&TEXTS)
     );
     let piece = |found: Option<&str>| match found {
         Some(s) => format!("{s}|"),

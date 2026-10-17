@@ -1,6 +1,6 @@
 //! What a runtime diagnostic names: source binder names, shortened globals, and infix index arithmetic.
 
-use crate::tests::error;
+use {crate::tests::error, curios_utilities::fill};
 
 #[test]
 fn uses_source_binder_names() {
@@ -147,9 +147,9 @@ fn keeps_the_name_of_a_stalled_unfolding() {
 #[test]
 fn names_a_family_in_a_report_raised_on_a_reduct() {
     let report = |declaration: &str| {
-        error(&format!(
+        error(&fill!(
             r#"
-            use /std/{{Nat}};
+            use /std/{Nat};
             induct Sized(T: Type): (length: Nat) -> pub Type
             | empty(): (0)
             end
@@ -159,9 +159,10 @@ fn names_a_family_in_a_report_raised_on_a_reduct() {
             let Wrap(F: (Nat) -> Type) -> Type = (F(0)) -> Nat;
             pub let held: Holder(Sized(Nat)) = Holder/hold(Sized/empty());
             pub let wrapped: Wrap(Sized(Nat)) = (_s) => 0;
-            {declaration}
+            ${declaration}
             /std/print("unreachable")
-            "#
+            "#,
+            declaration
         ))
     };
 

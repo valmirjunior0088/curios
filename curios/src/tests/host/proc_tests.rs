@@ -6,6 +6,7 @@ use {
     curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::fill,
     std::num::NonZeroU32,
 };
 
@@ -196,20 +197,21 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
 
 /// A program computing one `Str` inside a `Try` region over `Io` with a scope `scope`, with the process names in scope; a failure that escapes the region prints as its name.
 fn child_program(body: &str) -> String {
-    format!(
+    fill!(
         r#"
-        use /std/{{Str, Bytes, Nat, Option, Result, Show, Try, Io, Path, Process}};
+        use /std/{Str, Bytes, Nat, Option, Result, Show, Try, Io, Path, Process};
         let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
         let program() -> Try(Io, Io/Error, Str) =
-            Try/scope((scope) => {body});
-        let main() -> Io({{}}) =
+            Try/scope((scope) => ${body});
+        let main() -> Io({}) =
             let r = Try/run(program())!;
             match r
             | failure(e) => /std/print(Show/show(e))
             | success(s) => /std/print(s)
             end;
         main()
-        "#
+        "#,
+        body
     )
 }
 

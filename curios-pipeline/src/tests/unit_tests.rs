@@ -6,7 +6,7 @@ use {
     curios_prelude::with_prelude,
     curios_text::{PreparedText, RootSource, spell},
     curios_unit::Unit,
-    curios_utilities::Qualifier,
+    curios_utilities::{Qualifier, fill},
     std::rc::Rc,
 };
 
@@ -112,8 +112,10 @@ fn the_orphan_rule_fires_across_units_and_not_across_modules() {
     );
 
     // The control. One unit owning all three is the sanctioned shape, and it must still compile — otherwise the refusal above would only show that the fixture is broken.
-    let together = format!(
-        "pub mod b\n{concept}\nend\npub mod c\n{type_}\nend\npub mod a\nsatisfy /one/b/Show(/one/c/Widget) {{\n    show = (w) => 0,\n}}\nend"
+    let together = fill!(
+        "pub mod b\n${concept}\nend\npub mod c\n${type_}\nend\npub mod a\nsatisfy /one/b/Show(/one/c/Widget) {\n    show = (w) => 0,\n}\nend",
+        concept,
+        type_
     );
     compile_with_units(&[("one", &together)], "/std/print(/std/Nat/to_str(0))")
         .expect("one unit may satisfy its own concept at its own type");

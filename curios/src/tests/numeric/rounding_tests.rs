@@ -3,6 +3,7 @@
 use {
     crate::tests::run,
     curios_num::{Floating, Integer, Natural, Rounding},
+    curios_utilities::fill,
 };
 
 /// The operand grid: both zeros and both infinities, the subnormal ends, the normal ends and the top power of two, odd and even significands and a value a step below one, halfway integers for the ties, a thirds and a tenth whose products and quotients are inexact, extremes whose products overflow and underflow, and two quiet NaNs with payloads of either sign.
@@ -103,18 +104,18 @@ fn every_direction_executes_as_the_model_rounds() {
     };
     let operands = OPERANDS.map(spell).join(",\n            ");
     let naturals = NATURALS.join(",\n            ");
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Nat, Int, Flt, Bytes, List, Io, Dyadic, Try, Process}};
-        use /std/Flt/{{Rounding, rounded}};
-        let entry() -> /std/Io({{}}) =
+        use /std/{Nat, Int, Flt, Bytes, List, Io, Dyadic, Try, Process};
+        use /std/Flt/{Rounding, rounded};
+        let entry() -> /std/Io({}) =
             let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
             let zero = Bytes/len(/std/rand/bytes(0)!);
             let operands = List/map([
-                {operands},
+                ${operands},
             ], (v) => v * one);
             let naturals: List(Nat) = List/map([
-                {naturals},
+                ${naturals},
             ], (n) => n + zero);
             let addends(a: Flt, b: Flt) -> List(Flt) = [+0.0, -0.0, +1.0, +1.0e-300, Flt/neg(a * b)];
             let direction(r: Rounding) -> List(Flt) =
@@ -141,7 +142,9 @@ fn every_direction_executes_as_the_model_rounds() {
             let _ = Try/run(Io/write(Process/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes))))!;
             Io/pure(());
         entry()
-        "#
+        "#,
+        operands,
+        naturals
     );
 
     let actual = run(&source);
@@ -196,18 +199,18 @@ const EXPONENTS: [i32; 11] = [
 fn the_exact_rounding_executes_as_the_model_rounds() {
     let magnitudes = MAGNITUDES.join(", ");
     let exponents = EXPONENTS.map(|e| format!("{e:+}")).join(", ");
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Nat, Int, Flt, Bytes, List, Io, Dyadic, Try, Process}};
-        use /std/Flt/{{Rounding, rounded}};
-        let entry() -> /std/Io({{}}) =
+        use /std/{Nat, Int, Flt, Bytes, List, Io, Dyadic, Try, Process};
+        use /std/Flt/{Rounding, rounded};
+        let entry() -> /std/Io({}) =
             let zero = Nat/to_int(Bytes/len(/std/rand/bytes(0)!));
-            let magnitudes: List(Int) = List/map([{magnitudes}], (m) => Nat/to_int(m) + zero);
-            let exponents: List(Int) = [{exponents}];
+            let magnitudes: List(Int) = List/map([${magnitudes}], (m) => Nat/to_int(m) + zero);
+            let exponents: List(Int) = [${exponents}];
             let direction(r: Rounding) -> List(Flt) =
                 List/concat_map(magnitudes, (m) => List/concat_map(exponents, (e) => [
-                    rounded/of_dyadic(r, Dyadic {{ mantissa = m, exponent = e }}),
-                    rounded/of_dyadic(r, Dyadic {{ mantissa = Int/sub(+0, m), exponent = e }}),
+                    rounded/of_dyadic(r, Dyadic { mantissa = m, exponent = e }),
+                    rounded/of_dyadic(r, Dyadic { mantissa = Int/sub(+0, m), exponent = e }),
                 ]));
             let results = List/concat_map([
                 Rounding/ties_to_even(),
@@ -219,7 +222,9 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
             let _ = Try/run(Io/write(Process/stdout, Bytes/join(x[], List/map(results, Flt/to_le_bytes))))!;
             Io/pure(());
         entry()
-        "#
+        "#,
+        magnitudes,
+        exponents
     );
 
     let mut expected = Vec::new();
@@ -403,18 +408,18 @@ fn every_exception_is_raised_as_ieee_defines_it() {
     };
     let operands = OPERANDS.map(spell).join(",\n            ");
     let scalings = SCALINGS.map(|n| format!("{n:+}")).join(", ");
-    let source = format!(
+    let source = fill!(
         r#"
-        use /std/{{Nat, Int, Flt, Bytes, Byte, List, Io, Bool, Try, Process}};
-        use /std/Flt/{{Rounding, Exceptions, signals}};
-        let entry() -> /std/Io({{}}) =
+        use /std/{Nat, Int, Flt, Bytes, Byte, List, Io, Bool, Try, Process};
+        use /std/Flt/{Rounding, Exceptions, signals};
+        let entry() -> /std/Io({}) =
             let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
             let tick = Nat/to_byte(Bytes/len(/std/rand/bytes(1)!) % 256);
             let signaling = Flt/of_le_bytes(x[tick, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F]);
             let operands = [..List/map([
-                {operands},
+                ${operands},
             ], (v) => v * one), signaling];
-            let scalings: List(Int) = [{scalings}];
+            let scalings: List(Int) = [${scalings}];
             let flag(set: Bool, weight: Nat) -> Nat = match set | true => weight | false => 0 end;
             let code(e: Exceptions) -> Byte =
                 Nat/to_byte((flag(e.invalid, 16) + flag(e.division_by_zero, 8) + flag(e.overflow, 4)
@@ -444,7 +449,9 @@ fn every_exception_is_raised_as_ieee_defines_it() {
             let _ = Try/run(Io/write(Process/stdout, Bytes/flatten(List/map(results, (e) => x[code(e)]))))!;
             Io/pure(());
         entry()
-        "#
+        "#,
+        operands,
+        scalings
     );
 
     let mut operands = OPERANDS.map(Floating::from_bits).to_vec();

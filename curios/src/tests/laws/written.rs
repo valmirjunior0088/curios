@@ -3,6 +3,7 @@
 use {
     super::{Binder, IMPORTS, closes, misplaced, misplaced_by_the_kernel, orders},
     crate::tests::typecheck,
+    curios_utilities::fill,
 };
 
 /// One carrier's rows: the binders every claim is stated under, the laws `Eq/refl()` closes, and the laws it refuses.
@@ -1623,8 +1624,9 @@ fn a_step_taken_through_an_annotation_is_one_the_kernel_takes_in_one() {
         },
     ];
     for binders in orders(&binders, ATOM_ORDERS) {
-        let source = format!(
-            "use /std/{{Nat, Vec, Io}}; use /std/Bool/{{Holds}};\npub let stepped({binders}) -> Vec(Nat, w(b, q2) * w(a, p2)) =\n    let through: Vec(Nat, w(a, p2) * w(b, q1)) = v;\n    through;\nIo/pure(())"
+        let source = fill!(
+            "use /std/{Nat, Vec, Io}; use /std/Bool/{Holds};\npub let stepped(${binders}) -> Vec(Nat, w(b, q2) * w(a, p2)) =\n    let through: Vec(Nat, w(a, p2) * w(b, q1)) = v;\n    through;\nIo/pure(())",
+            binders
         );
         if let Err(error) = typecheck(&source) {
             panic!("under `{binders}`: {error}");
@@ -1643,12 +1645,16 @@ fn a_fact_over_an_operation_is_one_over_its_other_spelling() {
     let held = "held: Holds(Nat/or(x, y) + Nat/xor(z, w) == 7)";
     let stepped = "Holds(Nat/xor(w, z) + Nat/or(y, x) == 7)";
     for binders in orders(&binders, ATOM_ORDERS) {
-        let source = format!(
-            "{IMPORTS} use /std/Bool/{{True}};\n\
-             let direct({binders}, {held}) -> {stepped} = held;\n\
-             let through({binders}, {held}) -> {stepped} =\n    let step: Holds(Nat/or(y, x) + Nat/xor(z, w) == 7) = held;\n    step;\n\
-             let armed({binders}) -> Nat =\n    match Nat/and(x, y) + n == 3\n    | true =>\n        let fact: Holds(n + Nat/and(y, x) == 3) = True/qed();\n        0\n    | false => 1\n    end;\n\
-             Io/pure(())"
+        let source = fill!(
+            "${IMPORTS} use /std/Bool/{True};\n\
+             let direct(${binders}, ${held}) -> ${stepped} = held;\n\
+             let through(${binders}, ${held}) -> ${stepped} =\n    let step: Holds(Nat/or(y, x) + Nat/xor(z, w) == 7) = held;\n    step;\n\
+             let armed(${binders}) -> Nat =\n    match Nat/and(x, y) + n == 3\n    | true =>\n        let fact: Holds(n + Nat/and(y, x) == 3) = True/qed();\n        0\n    | false => 1\n    end;\n\
+             Io/pure(())",
+            IMPORTS,
+            binders,
+            held,
+            stepped
         );
         if let Err(error) = typecheck(&source) {
             panic!("under `{binders}`: {error}");
@@ -1661,9 +1667,7 @@ fn implicit_under(operation: &str, result: &str, body: &str) -> Vec<String> {
     ["a: Nat, b: Nat", "b: Nat, a: Nat"]
         .iter()
         .map(|declared| {
-            format!(
-                "use /std/{{Nat, Vec, Io}};\npub let item({declared}, g: (@x: Nat, @y: Nat, v: Vec(Nat, x {operation} y)) -> Vec(Nat, x), w: Vec(Nat, a {operation} b)) -> {result} =\n    {body};\nIo/pure(())"
-            )
+            fill!("use /std/{Nat, Vec, Io};\npub let item(${declared}, g: (@x: Nat, @y: Nat, v: Vec(Nat, x ${operation} y)) -> Vec(Nat, x), w: Vec(Nat, a ${operation} b)) -> ${result} =\n    ${body};\nIo/pure(())", declared, operation, result, body)
         })
         .collect()
 }
@@ -1697,8 +1701,11 @@ fn an_implicit_with_one_solution_is_solved_through_a_commutative_operation() {
 
 /// A function whose one implicit stands under `pattern`, applied to a vector of `actual` elements where nothing but that equation says what the implicit is: no type is expected of the call, and the item's own result does not mention it. `body` is what follows the call's binding to `r`.
 fn linear_in(pattern: &str, actual: &str, body: &str) -> String {
-    format!(
-        "use /std/{{Nat, Vec, Io}};\npub let item(x: Nat, y: Nat, z: Nat, g: (@w: Nat, v: Vec(Nat, {pattern})) -> Vec(Nat, w), v: Vec(Nat, {actual})) -> {{}} =\n    let r = g(v);\n    {body};\nIo/pure(())"
+    fill!(
+        "use /std/{Nat, Vec, Io};\npub let item(x: Nat, y: Nat, z: Nat, g: (@w: Nat, v: Vec(Nat, ${pattern})) -> Vec(Nat, w), v: Vec(Nat, ${actual})) -> {} =\n    let r = g(v);\n    ${body};\nIo/pure(())",
+        pattern,
+        actual,
+        body
     )
 }
 
