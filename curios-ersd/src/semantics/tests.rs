@@ -100,8 +100,8 @@ fn the_join_is_a_union() {
 
 /// Each listing is written once and read twice: as the list returned, and as the patterns of an exhaustive match every listed operation is put through, so an operation the alphabet gains fails to compile here until it is listed.
 macro_rules! listed {
-    ($($pattern:pat => $operation:expr),+ $(,)?) => {{
-        let covered = |operation: Operation| match operation {
+    ($alphabet:ty; $($pattern:pat => $operation:expr),+ $(,)?) => {{
+        let covered = |operation: $alphabet| match operation {
             $($pattern => ()),+
         };
         let every = vec![$($operation),+];
@@ -114,6 +114,7 @@ macro_rules! listed {
 fn every_operation() -> Vec<Operation> {
     use {Operation::*, curios_num::Rounding::TiesToEven};
     listed![
+        Operation;
         BoolAnd => BoolAnd,
         BoolOr => BoolOr,
         BoolXor => BoolXor,
@@ -262,4 +263,137 @@ fn every_monoid_the_oracle_names_keeps_its_laws_under_its_fold() {
     ] {
         assert!(carriers.contains(&std::mem::discriminant(&carrier)));
     }
+}
+
+/// Every sequence operation, at both packed grains.
+fn every_sequence_operation() -> Vec<SequenceOp> {
+    use {
+        SequenceOp::*,
+        curios_num::Grain::{B, X},
+    };
+    listed![
+        SequenceOp;
+        BinLen(X) => BinLen(X),
+        BinLen(B) => BinLen(B),
+        BinEql(X) => BinEql(X),
+        BinEql(B) => BinEql(B),
+        BinGet(X) => BinGet(X),
+        BinGet(B) => BinGet(B),
+        BinSlice(X) => BinSlice(X),
+        BinSlice(B) => BinSlice(B),
+        BinAppend(X) => BinAppend(X),
+        BinAppend(B) => BinAppend(B),
+        BinConcat(X) => BinConcat(X),
+        BinConcat(B) => BinConcat(B),
+        BinReplicate(X) => BinReplicate(X),
+        BinReplicate(B) => BinReplicate(B),
+        BinReinterp(X) => BinReinterp(X),
+        BinReinterp(B) => BinReinterp(B),
+        BinAnd(X) => BinAnd(X),
+        BinAnd(B) => BinAnd(B),
+        BinOr(X) => BinOr(X),
+        BinOr(B) => BinOr(B),
+        BinXor(X) => BinXor(X),
+        BinXor(B) => BinXor(B),
+        ListBuild => ListBuild,
+        ListLen => ListLen,
+        ListGet => ListGet,
+        ListSlice => ListSlice,
+        ListAppend => ListAppend,
+        ListConcat => ListConcat,
+    ]
+}
+
+/// Runs of `grain` around the points where a packed run's representation changes: empty, within a byte, and across one.
+fn runs_of(grain: Grain) -> Vec<Constant> {
+    match grain {
+        Grain::X => [&[][..], &[0x00], &[0x61, 0x62], &[0xff, 0x00, 0x7f]]
+            .into_iter()
+            .map(|bytes| Constant::Bin(grain, Binary::from_bytes(bytes.to_vec())))
+            .collect(),
+        Grain::B => [
+            &[][..],
+            &[true],
+            &[false, true, true],
+            &[true, false, false, true, true, false, true, false, true],
+        ]
+        .into_iter()
+        .map(|bits| Constant::Bin(grain, Binary::from_bits(bits.iter().copied())))
+        .collect(),
+    }
+}
+
+/// The generators of `grain`, each with the one-element run that is it.
+fn generators_of(grain: Grain) -> Vec<(Constant, Constant)> {
+    match grain {
+        Grain::X => [0x00, 0x61, 0xff]
+            .into_iter()
+            .map(|byte| {
+                (
+                    Constant::Byte(byte),
+                    Constant::Bin(grain, Binary::from_bytes(vec![byte])),
+                )
+            })
+            .collect(),
+        Grain::B => [false, true]
+            .into_iter()
+            .map(|bit| {
+                (
+                    Constant::Bool(bit),
+                    Constant::Bin(grain, Binary::from_bits([bit])),
+                )
+            })
+            .collect(),
+    }
+}
+
+/// Every sequence operation the oracle names a part of a packed grain's free monoid is that part, by its own fold: the empty run leaves every sample unchanged on both sides of a concatenation, every three samples associate, and an append is the concatenation of its run and the run of its one generator. A list has no constant to fold; conversion decides its free monoid in both checkers ([The carriers' algebra stays in conversion](../../../documentation/design/arithmetic/the-carriers-algebra-stays-in-conversion.md)).
+#[test]
+fn every_free_monoid_part_the_oracle_names_keeps_its_laws_under_its_fold() {
+    let fold = |operation: SequenceOp, operands: &[Constant]| match Semantics::fold_sequence(
+        operation, operands,
+    ) {
+        FoldOutcome::Value(value) => value,
+        other => panic!("{operation:?} does not fold {operands:?}: {other:?}"),
+    };
+    let mut parts = Vec::new();
+    for operation in every_sequence_operation() {
+        let Some((SequenceGrain::Bin(grain), part)) = Semantics::free_monoid_part(operation) else {
+            continue;
+        };
+        parts.push(part);
+        let runs = runs_of(grain);
+        match part {
+            FreeMonoidPart::Product => {
+                let empty = Constant::Bin(grain, Binary::empty());
+                for a in &runs {
+                    assert_eq!(fold(operation, &[empty.clone(), a.clone()]), *a);
+                    assert_eq!(fold(operation, &[a.clone(), empty.clone()]), *a);
+                    for b in &runs {
+                        for c in &runs {
+                            let ab = fold(operation, &[a.clone(), b.clone()]);
+                            let bc = fold(operation, &[b.clone(), c.clone()]);
+                            assert_eq!(
+                                fold(operation, &[ab, c.clone()]),
+                                fold(operation, &[a.clone(), bc]),
+                                "{operation:?} over {a:?}, {b:?} and {c:?}"
+                            );
+                        }
+                    }
+                }
+            }
+            FreeMonoidPart::Append => {
+                for run in &runs {
+                    for (generator, single) in generators_of(grain) {
+                        assert_eq!(
+                            fold(operation, &[run.clone(), generator.clone()]),
+                            fold(SequenceOp::BinConcat(grain), &[run.clone(), single]),
+                            "{operation:?} of {generator:?} to {run:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    assert!(parts.contains(&FreeMonoidPart::Product) && parts.contains(&FreeMonoidPart::Append));
 }

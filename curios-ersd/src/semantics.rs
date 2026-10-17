@@ -2,15 +2,15 @@
 //!
 //! Every query matches the closed alphabets without a fallback arm, so a newly added operation cannot be silently misclassified — the compiler rejects the unhandled variant. Behavior reported here is *node-local*: it excludes the bodies of functions an `Apply` invokes, the callback an intrinsic runs, and the sub-blocks a match, switch, or fold evaluates; composing those to a fixed point is the effect summary's job ([`super::Summary`]), and this module supplies the leaves it joins.
 //!
-//! Arity is not restated here — it lives on the operation enums where the verifier already reads it. The fold half of the oracle — operation × constant operands → value, would-trap, or unknown — is [`Semantics::fold_operation`] and [`Semantics::fold_sequence`] below, and the algebra an operation's combinations obey — which operation is a monoid, and its identity — is [`Semantics::monoid_identity`], what the rebase reassociates a recursion around.
+//! Arity is not restated here — it lives on the operation enums where the verifier already reads it. The fold half of the oracle — operation × constant operands → value, would-trap, or unknown — is [`Semantics::fold_operation`] and [`Semantics::fold_sequence`] below, and the algebra an operation's combinations obey — which scalar operation is a monoid, and its identity, and which sequence operation is its grain's free monoid's product — is [`Semantics::monoid_identity`] and [`Semantics::free_monoid_part`], what the rebase reassociates a recursion around.
 
 #[cfg(test)]
 mod tests;
 
 use {
     super::{
-        CellOperation, ChannelOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp,
-        SuspensionOperation, Terminator,
+        CellOperation, ChannelOperation, Constant, Intrinsic, Operation, Rhs, SequenceGrain,
+        SequenceOp, SuspensionOperation, Terminator,
     },
     curios_num::{Binary, Floating, Grain, Integer, Natural, ScalarTrap},
 };
@@ -770,6 +770,42 @@ impl Semantics {
             | Operation::FltOfLeBytes => None,
         }
     }
+
+    /// The part a sequence operation plays in its grain's free monoid, where it plays one. That monoid's identity is the empty sequence, and it does not commute. A packed run's pointwise operations need their operands' lengths to agree, and a list built from elements is the generators themselves, no product of sequences.
+    pub fn free_monoid_part(operation: SequenceOp) -> Option<(SequenceGrain, FreeMonoidPart)> {
+        match operation {
+            SequenceOp::ListConcat => Some((SequenceGrain::List, FreeMonoidPart::Product)),
+            SequenceOp::ListAppend => Some((SequenceGrain::List, FreeMonoidPart::Append)),
+            SequenceOp::BinConcat(grain) => {
+                Some((SequenceGrain::Bin(grain), FreeMonoidPart::Product))
+            }
+            SequenceOp::BinAppend(grain) => {
+                Some((SequenceGrain::Bin(grain), FreeMonoidPart::Append))
+            }
+            SequenceOp::BinLen(_)
+            | SequenceOp::BinEql(_)
+            | SequenceOp::BinGet(_)
+            | SequenceOp::BinSlice(_)
+            | SequenceOp::BinReplicate(_)
+            | SequenceOp::BinReinterp(_)
+            | SequenceOp::BinAnd(_)
+            | SequenceOp::BinOr(_)
+            | SequenceOp::BinXor(_)
+            | SequenceOp::ListBuild
+            | SequenceOp::ListLen
+            | SequenceOp::ListGet
+            | SequenceOp::ListSlice => None,
+        }
+    }
+}
+
+/// The part a sequence operation plays in its grain's free monoid ([`Semantics::free_monoid_part`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FreeMonoidPart {
+    /// The product: its operands concatenated in order, any number of them.
+    Product,
+    /// The product of a sequence and one generator on its right: `(s, x)` is `s` followed by `x`.
+    Append,
 }
 
 fn fold_outcome(result: Option<Result<Constant, TrapKind>>) -> FoldOutcome {

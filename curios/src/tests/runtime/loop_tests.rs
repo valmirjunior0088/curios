@@ -334,17 +334,23 @@ fn a_span_builds_its_answer_where_its_walk_stops() {
     );
 }
 
-/// A recursion as deep as its data runs: a list built under a cons, which no rebase row makes a loop, and an `Io` walk that binds its tail, each a frame an element. `curios-runtime`'s README, "A module runs on a stack of its own", is the decision; under the engine's default stack each of these stopped near five thousand elements.
+/// A recursion as deep as its data runs: a chain built under a constructor, which no monoid closes, and an `Io` walk that binds its tail, each a frame an element. `curios-runtime`'s README, "A module runs on a stack of its own", is the decision.
 #[test]
 fn a_recursion_as_deep_as_its_data_runs() {
     assert_eq!(
         run(r#"
         use /std/{Nat, List, Str, Io};
+        induct Chain: Type
+        | stop()
+        | link(Chain)
+        end
+        let build(n: Nat) -> Chain =
+            match n | 0 => Chain/stop() | k + 1 => Chain/link(build(k)) end;
+        let length(c: Chain) -> Nat =
+            match c | stop() => 0 | link(rest) => length(rest) + 1 end;
         let entry() -> /std/Io({}) =
-            let numbers = List/range(0, 100000);
-            let pairs = List/zip(numbers, List/take(numbers, 100000));
-            let walked = List/traverse(numbers, (n: Nat) => Io/pure(n + 1))!;
-            let _ = /std/print(Nat/to_str(List/len(pairs)))!;
+            let walked = List/traverse(List/range(0, 100000), (n: Nat) => Io/pure(n + 1))!;
+            let _ = /std/print(Nat/to_str(length(build(100000))))!;
             let _ = /std/print(" ")!;
             let _ = /std/print(Nat/to_str(List/len(walked)))!;
             /std/Io/pure(());
@@ -354,16 +360,63 @@ fn a_recursion_as_deep_as_its_data_runs() {
     );
 }
 
-/// A recursion with no end still stops, on the engine's own trap, once the stack it was given is spent: the limit is a bound a program meets, never the thread's.
+/// A sequence built under its own recursion is a loop: the rebase threads what each step puts around the recursion's answer, `[h, ..take(t, k)]`'s `h` among them, through an accumulator, as it threads `count(t) + 1`'s `1`. A program's stack holds the depth either way, so each builder's worker is looked for by name in the optimized program, beside the answers at depth.
+#[test]
+fn a_sequence_built_under_its_recursion_is_a_loop() {
+    let source = r#"
+        use /std/{Nat, List, Str, Bytes, Io};
+        let twice(n: Nat) -> Str =
+            match n | 0 => "" | k + 1 => Str/concat("ab", twice(k)) end;
+        let entry() -> /std/Io({}) =
+            let numbers = List/range(0, 100000);
+            let pairs = List/zip(numbers, List/take(numbers, 100000));
+            let below = List/take_while(numbers, (n: Nat) => n < 100000);
+            let same = List/eql(numbers, below);
+            let bytes = Bytes/of_nat(List/len(pairs));
+            let _ = /std/print(Nat/to_str(List/len(pairs)))!;
+            let _ = /std/print(match same | true => " same " | false => " differ " end)!;
+            let _ = /std/print(Nat/to_str(Bytes/len(bytes)))!;
+            let _ = /std/print(" ")!;
+            let _ = /std/print(Nat/to_str(Bytes/len(Str/to_bytes(twice(100000)))))!;
+            /std/Io/pure(());
+        entry()
+        "#;
+    assert_eq!(run(source), b"100000 same 3 200000".to_vec());
+
+    let cont_optm = cont_optm(source);
+    for worker in [
+        "/std/List/take@w(",
+        "/std/List/take_while@w(",
+        "/std/List/zip@w(",
+        "$go@w(",
+        "/std/List/eql@w(",
+        "/std/Bytes/of_nat@w(",
+        "/twice@w(",
+    ] {
+        assert!(
+            cont_optm.contains(worker),
+            "{worker} must be its builder's worker, a loop over an accumulator:\n{}",
+            &cont_optm[..cont_optm.len().min(4000)]
+        );
+    }
+}
+
+/// A recursion with no end that keeps its frames still stops, on the engine's own trap, once the stack it was given is spent: the limit is a bound a program meets, never the thread's. The chain is built under a constructor, which no monoid closes, so the recursion keeps a frame a level.
 #[test]
 fn a_recursion_with_no_end_stops_on_the_stack_it_was_given() {
     let (system, _io) = MockHost::builder().build();
     let refusal = run_text(
         r#"
-        use /std/{Nat, List, Str, Io};
-        let forever(n : Nat) -> List(Nat) = [n, ..forever(n + 1)];
+        use /std/{Nat, Str, Io};
+        induct Chain: Type
+        | stop()
+        | link(Chain)
+        end
+        let forever(n: Nat) -> Chain = Chain/link(forever(n + 1));
+        let length(c: Chain) -> Nat =
+            match c | stop() => 0 | link(rest) => length(rest) + 1 end;
         let entry() -> /std/Io({}) =
-            let _ = /std/print(Nat/to_str(List/len(forever(0))))!;
+            let _ = /std/print(Nat/to_str(length(forever(0))))!;
             /std/Io/pure(());
         entry()
         "#,
