@@ -16,7 +16,7 @@ mod tests;
 use {
     super::{
         Atom, Callee, CellOp, ChannelOp, ContinuationId, Edge, FieldGroup, FunctionId, Intrinsic,
-        IntrinsicCall, Literal, Module, Node, NodeId, RowId, Slot, ValueExpr, ValueId,
+        IntrinsicCall, Literal, Module, Node, NodeId, Register, RowId, Slot, ValueExpr, ValueId,
     },
     curios_abi::Namespace,
     curios_num::{Grain, Rounding},
@@ -454,14 +454,20 @@ impl Printer<'_, '_, '_, '_> {
     // === Spellings ===========================================================
 
     /// A binder. A hintless value nothing reads is spelled `_`, which is what it is; a hinted one keeps its hint however dead it is.
+    /// A binding position, followed by the register its type names where it states one: `:flt`, or `:word`, as a literal's carrier is spelled.
     fn binder(&self, id: ValueId) -> String {
-        match self.module.value(id) {
-            Some(definition) => match &definition.debug_name {
-                Some(name) => format!("{id}${name}"),
-                None if self.uses.get(&id).copied().unwrap_or(0) == 0 => "_".into(),
-                None => format!("{id}"),
-            },
+        let Some(definition) = self.module.value(id) else {
+            return format!("{id}");
+        };
+        let spelled = match &definition.debug_name {
+            Some(name) => format!("{id}${name}"),
+            None if self.uses.get(&id).copied().unwrap_or(0) == 0 => "_".into(),
             None => format!("{id}"),
+        };
+        match definition.register {
+            Some(Register::Float) => format!("{spelled}:flt"),
+            Some(Register::Word) => format!("{spelled}:word"),
+            None => spelled,
         }
     }
 

@@ -450,7 +450,15 @@ impl Module {
     }
 
     pub fn add_value(&mut self, debug_name: Option<String>) -> ValueId {
-        self.values.mint(ValueDef { debug_name })
+        self.add_value_def(ValueDef {
+            debug_name,
+            register: None,
+        })
+    }
+
+    /// Mint a value from a whole definition: a copy of another value carries everything that value states, and the Ersd door states what erasure recorded.
+    pub fn add_value_def(&mut self, definition: ValueDef) -> ValueId {
+        self.values.mint(definition)
     }
 
     pub fn reserve_function(&mut self) -> FunctionId {

@@ -498,6 +498,71 @@ fn a_used_direct_self_knot_is_rejected() {
     );
 }
 
+/// An operation names its result's carrier, so a register stated on its result would state one fact twice, and could state it otherwise than the operation computes it.
+#[test]
+fn a_carrier_stated_on_an_operations_result_is_refused() {
+    let mut builder = ErsdBuilder::new();
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let sum = builder.let_value(
+        Some("sum".into()),
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![one, one],
+        },
+    );
+    builder.state(sum, RegisterShape::Flt);
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.set_entry(entry);
+    let fault = builder.module().structure_fault(Entry::Required);
+    assert!(
+        matches!(
+            fault,
+            Some(StructuralFault {
+                rule: StructuralRule::StatedCarrier,
+                ..
+            })
+        ),
+        "a carrier stated on an operation's result is refused: {fault:?}"
+    );
+}
+
+/// A field read names no carrier — a polymorphic slot hands back a reference — so the binding may state the one its type names.
+#[test]
+fn a_carrier_stated_on_a_field_read_verifies() {
+    let mut builder = ErsdBuilder::new();
+    let schema = builder.product(ProductSchema {
+        debug_name: Some("Pair".into()),
+        fields: vec![
+            Field::opaque(Some("a".into())),
+            Field::opaque(Some("b".into())),
+        ],
+        shared: false,
+    });
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let pair = builder.let_value(
+        Some("pair".into()),
+        Rhs::Product {
+            schema,
+            fields: vec![one, one],
+        },
+    );
+    let read = builder.let_value(
+        Some("read".into()),
+        Rhs::Project {
+            schema,
+            product: Atom::Value(pair),
+            field: 0,
+        },
+    );
+    builder.state(read, RegisterShape::Immediate);
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(read)));
+    builder.set_entry(entry);
+
+    assert!(builder.module().structure_fault(Entry::Required).is_none());
+}
+
 #[test]
 fn an_unbound_value_use_is_out_of_scope() {
     let mut builder = ErsdBuilder::new();

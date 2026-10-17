@@ -65,10 +65,11 @@ impl Lowering<'_> {
                     Step::Entries {
                         hint, right: type_, ..
                     } => {
-                        // Every binder is a parameter, a proof's and a type's among them: see the module documentation.
+                        // Every binder is a parameter, a proof's and a type's among them: see the module documentation. Each states the register its type names, read off the type the function is checked at, which is the one every argument it is handed has.
                         let label = hint.map(str::to_string);
                         let name = context.advance_assumed(&mut walk, &type_);
                         let param = self.builder.value(label);
+                        self.state(context, param, &type_)?;
                         self.environment
                             .bind(&name, curios_ersd::Atom::Value(param));
                         params.push(param);
@@ -136,7 +137,12 @@ impl Lowering<'_> {
             Err(diverged) => return Ok(diverged),
         };
 
-        Ok(self.bind(hint, curios_ersd::Rhs::Apply { callee, arguments }))
+        self.bind_stated(
+            context,
+            hint,
+            curios_ersd::Rhs::Apply { callee, arguments },
+            expected,
+        )
     }
 
     /// Erase a value held in a slot. A slot is there whatever it holds, but this instantiation can make what it holds a proof or a type, which carries no runtime content: proof irrelevance fills the slot with a content-free stand-in — the unit constant, or, for a *function* a callee may apply, a function of that type's arity returning it — rather than materializing a witness no runtime code reads.

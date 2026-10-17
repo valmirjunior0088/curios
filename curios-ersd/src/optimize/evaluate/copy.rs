@@ -5,7 +5,7 @@
 use {
     crate::{
         Atom, Block, BlockId, Function, FunctionId, Module, RecGroup, RecGroupId, RecValue, Remap,
-        Statement, StatementId, ValueId, control_blocks, lookup,
+        Statement, StatementId, ValueDef, ValueId, control_blocks, lookup,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -29,10 +29,12 @@ pub(super) fn deep_copy_function(
         .values
         .iter()
         .map(|&value| {
-            let hint = module
-                .value(value)
-                .and_then(|value| value.debug_name.clone());
-            (value, module.add_value(hint))
+            // A copy carries the definition whole, what its type states among it: the copy holds a subset of what the original held.
+            let definition = module.value(value).cloned().unwrap_or(ValueDef {
+                debug_name: None,
+                register: None,
+            });
+            (value, module.add_value_def(definition))
         })
         .collect();
     let block_ids: BTreeMap<BlockId, BlockId> = region

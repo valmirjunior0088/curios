@@ -42,6 +42,30 @@ entry =
     );
 }
 
+/// A register a binder states prints at the binder, spelled as a literal's carrier is: here a function's parameters, one a float and one a word.
+#[test]
+fn a_stated_register_prints_at_its_binder() {
+    let mut builder = ErsdBuilder::new();
+    let function = builder.reserve_function();
+    let x = builder.value(Some("x".into()));
+    let flag = builder.value(Some("flag".into()));
+    builder.state(x, RegisterShape::Flt);
+    builder.state(flag, RegisterShape::Immediate);
+    builder.open_block();
+    let body = builder.seal_block(Terminator::Return(Atom::Value(x)));
+    builder.define_function(function, Some("first".into()), vec![x, flag], body);
+    builder.open_block();
+    builder.let_functions(vec![function]);
+    let entry = builder.seal_block(Terminator::Return(Atom::Function(function)));
+    builder.set_entry(entry);
+    let printed = builder.finalize().expect("the module verifies").to_string();
+
+    assert!(
+        printed.contains("(~v0$x:flt, ~v1$flag:word)"),
+        "each parameter carries its register: {printed}"
+    );
+}
+
 #[test]
 fn a_recursive_module_prints_exactly() {
     let mut builder = ErsdBuilder::new();

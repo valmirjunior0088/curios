@@ -229,7 +229,7 @@ impl Module {
             if stub_values.contains(&id) || substitution.contains_key(&id) {
                 continue;
             }
-            values.insert(id, self.add_value(definition.debug_name.clone()));
+            values.insert(id, self.add_value_def(definition.clone()));
         }
         for (index, slot) in fragment.functions().iter().enumerate() {
             let id = FunctionId(index as u32);

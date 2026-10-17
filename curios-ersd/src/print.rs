@@ -17,7 +17,7 @@ use {
     super::{
         Analysis, Atom, BlockId, CellOperation, ChannelOperation, Constant, ConstructorId,
         FamilyId, Field, FieldShape, ForeignId, FunctionId, Intrinsic, Module, Operation,
-        ProductId, RecValue, Rhs, SequenceGrain, SequenceOp, Statement, StatementId,
+        ProductId, RecValue, RegisterShape, Rhs, SequenceGrain, SequenceOp, Statement, StatementId,
         SuspensionOperation, Terminator, ValueId,
     },
     curios_abi::Namespace,
@@ -641,15 +641,20 @@ impl Printer<'_, '_, '_, '_> {
 
     // === Spellings ===========================================================
 
-    /// A binding position. A value with a hint spells it; a hintless one nothing reads spells `_`, since that is what it is.
+    /// A binding position. A value with a hint spells it; a hintless one nothing reads spells `_`, since that is what it is. A register carrier the binder states follows it, spelled as a literal's carrier is: `:flt`, or `:word` for an immediate.
     fn binder(&self, id: ValueId) -> String {
-        match self.module.value(id) {
-            Some(definition) => match &definition.debug_name {
-                Some(name) => format!("{id}${name}"),
-                None if self.uses.value_uses(id) == 0 => "_".into(),
-                None => format!("{id}"),
-            },
+        let Some(definition) = self.module.value(id) else {
+            return format!("{id}");
+        };
+        let spelled = match &definition.debug_name {
+            Some(name) => format!("{id}${name}"),
+            None if self.uses.value_uses(id) == 0 => "_".into(),
             None => format!("{id}"),
+        };
+        match definition.register {
+            Some(RegisterShape::Flt) => format!("{spelled}:flt"),
+            Some(RegisterShape::Immediate) => format!("{spelled}:word"),
+            None => spelled,
         }
     }
 

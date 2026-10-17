@@ -3,7 +3,7 @@
 use {
     crate::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, Intrinsic, Literal, Module,
-        Node, NodeId, Row, Slot, ValueExpr,
+        Node, NodeId, Register, Row, Slot, ValueDef, ValueExpr,
         test_support::{halt, halt_zero},
     },
     curios_num::{Grain, Natural, Rounding},
@@ -102,6 +102,43 @@ entry ~f0$main() =
         halt ffi//exit(~v2$total);
     ~f1$helper(2) -> ~k2$join;
 "
+    );
+}
+
+/// A register a value's type names prints at its binder, spelled as a literal's carrier is.
+#[test]
+fn a_stated_register_prints_at_its_binder() {
+    let module = module_with(|module, ret| {
+        let join = module.reserve_continuation();
+        let total = module.add_value_def(ValueDef {
+            debug_name: Some("total".into()),
+            register: Some(Register::Float),
+        });
+        let exit = module.add_node(Node::ApplyCont(Edge {
+            target: ret,
+            args: vec![Atom::Value(total)],
+        }));
+        module.define_continuation(
+            join,
+            Continuation {
+                debug_name: Some("join".into()),
+                params: vec![total],
+                body: exit,
+            },
+        );
+        let enter = module.add_node(Node::ApplyCont(Edge {
+            target: join,
+            args: vec![Atom::Filler],
+        }));
+        module.add_node(Node::LetCont {
+            continuations: vec![join],
+            body: enter,
+        })
+    });
+
+    assert!(
+        module.to_string().contains("(~v0$total:flt)"),
+        "the parameter carries its register: {module}"
     );
 }
 

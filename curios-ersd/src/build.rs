@@ -11,8 +11,8 @@ use {
     super::{
         Block, BlockId, Constant, ConstantId, ConstructorId, FamilyId, Field, ForeignId, Function,
         FunctionId, Interface, Module, ProductId, ProductSchema, RecGroup, RecGroupId, RecValue,
-        Rhs, Statement, StatementId, StructuralFault, StructuralRule, Terminator, ValueId,
-        VerifyError,
+        RegisterShape, Rhs, Statement, StatementId, StructuralFault, StructuralRule, Terminator,
+        ValueId, VerifyError,
     },
     curios_abi::ForeignFunction,
     std::{collections::BTreeSet, sync::Arc},
@@ -54,6 +54,11 @@ impl ErsdBuilder {
     /// Mint a fresh value identity — a parameter, arm binder, or fold binder. Statement results are minted by the emission methods themselves.
     pub fn value(&mut self, debug_name: Option<String>) -> ValueId {
         self.module.add_value(debug_name)
+    }
+
+    /// State on `value` the register carrier its type names ([`RegisterShape`]). The verifier refuses one on a binding whose producer names its own carrier.
+    pub fn state(&mut self, value: ValueId, register: RegisterShape) {
+        self.module.state_register(value, register);
     }
 
     /// Mint a value another module binds — see [`Imports`](super::Imports). It is in scope from the first item on, and the order imports are minted in is the order linking resolves them by.

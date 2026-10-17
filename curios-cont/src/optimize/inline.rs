@@ -301,7 +301,7 @@ pub(crate) fn inline_call(
     }
     for old in owned {
         let definition = module.value(old).unwrap().clone();
-        let fresh = module.add_value(definition.debug_name);
+        let fresh = module.add_value_def(definition);
         values.insert(old, Atom::Value(fresh));
     }
     let mut functions: BTreeMap<FunctionId, FunctionId> = BTreeMap::new();
@@ -321,7 +321,7 @@ pub(crate) fn inline_call(
         continuations.insert(id, fresh);
         for &param in &continuation.params {
             let definition = module.value(param).unwrap().clone();
-            let fresh = module.add_value(definition.debug_name);
+            let fresh = module.add_value_def(definition);
             values.insert(param, Atom::Value(fresh));
         }
     }

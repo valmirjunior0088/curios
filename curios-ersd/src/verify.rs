@@ -147,6 +147,7 @@ pub(crate) enum StructuralRule {
     ValueOutOfScope,
     FunctionOutOfScope,
     ValueDefinedTwice,
+    StatedCarrier,
     FunctionBoundTwice,
     BrokenSchemaLink,
     UnsealedBlock,
@@ -417,6 +418,21 @@ impl<'m> Verifier<'m> {
         result: ValueId,
         rhs: Rhs,
     ) -> Result<(), StructuralFault> {
+        // A carrier is stated only where the producer names none; elsewhere it would state one fact twice, and could state it otherwise than the producer does.
+        if rhs.names_its_carrier()
+            && self
+                .module
+                .value(result)
+                .is_some_and(|definition| definition.register.is_some())
+        {
+            return Err(fault(
+                StructuralRule::StatedCarrier,
+                format!(
+                    "statement {id} states a register carrier on {}, whose producer names its own",
+                    spell_value(self.module, result)
+                ),
+            ));
+        }
         match rhs {
             Rhs::Alias(atom) => self.check_atom(id, atom)?,
             Rhs::Apply { callee, arguments } => {

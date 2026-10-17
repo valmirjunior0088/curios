@@ -542,6 +542,8 @@ impl Lowering<'_> {
                 let element_var = Term::free_var(&element_label);
                 let suffix_var = Term::free_var(&suffix_label);
                 context.assume(&element_label, &carrier.element_type());
+                // An element is a read no producer names the carrier of, so it states the register its element type names.
+                self.state(context, element, &carrier.element_type())?;
                 context.assume(&suffix_label, &head_type);
 
                 let cons_value = carrier.cons_value(&element_var, &suffix_var);
@@ -591,6 +593,8 @@ impl Lowering<'_> {
             let element_var = Term::free_var(&element_label);
             let suffix_var = Term::free_var(&suffix_label);
             context.assume(&element_label, &carrier.element_type());
+            // An element is a read no producer names the carrier of, so it states the register its element type names; the accumulator is a join its flows decide.
+            self.state(context, element, &carrier.element_type())?;
             context.assume(&suffix_label, &head_type);
             context.assume(&accumulator_label, &result.at(head, &[], &[], &suffix_var));
 
@@ -750,7 +754,8 @@ impl Lowering<'_> {
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
         let mut bindings = Vec::new();
-        for ((label, hint), &erased) in labels.iter().zip(hints).zip(mask) {
+        let mut kept = Vec::new();
+        for (((label, hint), var), &erased) in labels.iter().zip(hints).zip(&vars).zip(mask) {
             if erased {
                 let unit = self.unit();
                 self.environment.bind(label, unit);
@@ -759,12 +764,18 @@ impl Lowering<'_> {
                 self.environment
                     .bind(label, curios_ersd::Atom::Value(value));
                 bindings.push(value);
+                kept.push((var, value));
             }
         }
 
         self.builder.open_block();
         let outcome = context.with_frame(|context| {
             let expected = refine_arm(context, m, tag, &labels, &vars, telescope)?;
+            // A payload is a read no producer names the carrier of — a polymorphic slot hands back a reference — so each binder states the register its type names at this instantiation, which the arm's frame now assumes.
+            for (var, value) in &kept {
+                let type_ = self.type_of(context, var)?;
+                self.state(context, *value, &type_)?;
+            }
             let body = scope.open(&vars.iter().collect::<Vec<_>>());
             self.walk(context, &body, &expected, None)
         })?;

@@ -313,7 +313,7 @@ impl Module {
         let mut values = BTreeMap::new();
         for (index, slot) in self.values().iter().enumerate().skip(mark.values) {
             if let Some(definition) = slot {
-                let minted = module.add_value(definition.debug_name.clone());
+                let minted = module.add_value_def(definition.clone());
                 values.insert(ValueId(index as u32), minted);
             }
         }

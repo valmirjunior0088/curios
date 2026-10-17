@@ -109,6 +109,32 @@ pub enum Rhs {
     },
 }
 
+impl Rhs {
+    /// Whether this right-hand side names the carrier of what it produces: an operation and a sequence operation by what they compute, a list element excepted, and a construction and a cell, channel, host, call-shaped or suspension operation by the shape it hands back. A call's result, a field read, a list element, an alias and a join name none, so only the bound value's type can say it holds a register's population: a binding states a carrier ([`RegisterShape`](crate::RegisterShape)) only where this does not hold, and the verifier refuses one where it does.
+    pub fn names_its_carrier(&self) -> bool {
+        match self {
+            Self::Operation { .. }
+            | Self::Product { .. }
+            | Self::Construct { .. }
+            | Self::Cell { .. }
+            | Self::Channel { .. }
+            | Self::Foreign { .. }
+            | Self::Intrinsic { .. }
+            | Self::Suspension { .. } => true,
+            Self::Sequence { operation, .. } => *operation != SequenceOp::ListGet,
+            Self::Alias(_)
+            | Self::Apply { .. }
+            | Self::Project { .. }
+            | Self::MatchVariant { .. }
+            | Self::SwitchBool { .. }
+            | Self::SwitchNat { .. }
+            | Self::FoldNat { .. }
+            | Self::FoldSequence { .. }
+            | Self::UnconsSequence { .. } => false,
+        }
+    }
+}
+
 /// One arm of a [`Rhs::MatchVariant`]: the constructor it matches, the value binders receiving its payload (one per payload field, in order), and the block evaluated when it matches.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]

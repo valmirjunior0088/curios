@@ -167,3 +167,56 @@ fn operation_arities_are_exact() {
     assert_eq!(CellOperation::Fill.arity(), 2);
     assert_eq!(Intrinsic::ListMap.arity(), 2);
 }
+
+/// A rewrite that hands a stated binding a producer naming its own carrier drops the statement; one that hands it an alias keeps it.
+#[test]
+fn a_rewritten_binding_states_a_carrier_only_while_its_producer_names_none() {
+    let mut module = Module::new();
+    let one = Atom::Constant(module.intern_constant(Constant::Flt(Floating::from(1.0))));
+    let stated = |module: &mut Module| {
+        let result = module.add_value_def(ValueDef {
+            debug_name: None,
+            register: Some(RegisterShape::Flt),
+        });
+        let statement = module.add_statement(Statement::Let {
+            result,
+            rhs: Rhs::Apply {
+                callee: one,
+                arguments: Vec::new(),
+            },
+        });
+        (result, statement)
+    };
+
+    let (folded, statement) = stated(&mut module);
+    module.set_statement(
+        statement,
+        Statement::Let {
+            result: folded,
+            rhs: Rhs::Operation {
+                operation: Operation::FltAdd(Rounding::TiesToEven),
+                operands: vec![one, one],
+            },
+        },
+    );
+    let (aliased, statement) = stated(&mut module);
+    module.set_statement(
+        statement,
+        Statement::Let {
+            result: aliased,
+            rhs: Rhs::Alias(one),
+        },
+    );
+
+    let register = |value| {
+        module
+            .value(value)
+            .and_then(|definition| definition.register)
+    };
+    assert_eq!(
+        register(folded),
+        None,
+        "the operation names the carrier now"
+    );
+    assert_eq!(register(aliased), Some(RegisterShape::Flt));
+}

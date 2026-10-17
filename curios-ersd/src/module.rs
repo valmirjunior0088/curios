@@ -10,8 +10,9 @@ mod tests;
 use {
     super::{
         Atom, Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, Field,
-        ForeignId, Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId, Remap,
-        Rhs, Semantics, Statement, StatementId, Terminator, ValueId, VariantFamily, lookup,
+        ForeignId, Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId,
+        RegisterShape, Remap, Rhs, Semantics, Statement, StatementId, Terminator, ValueId,
+        VariantFamily, lookup,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Arena,
@@ -30,11 +31,13 @@ pub struct Compaction {
     pub functions: std::collections::BTreeMap<FunctionId, FunctionId>,
 }
 
-/// A value's definition record. Uses, shape, and freeness are derived by analysis; only the optional debug name is stored, and it never affects identity or behavior.
+/// A value's definition record. Uses and freeness are derived by analysis; what is stored is the optional debug name, which never affects identity or behavior, and the register carrier the value's type names where its producer names none, which nothing below erasure could derive.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct ValueDef {
     pub debug_name: Option<String>,
+    /// The register carrier the binder's type names, recorded by erasure where its producer names none ([`RegisterShape`]). `None` states nothing: a copy carries the definition whole, and a binder a pass mints states nothing.
+    pub register: Option<RegisterShape>,
 }
 
 /// What applying a function does that a caller in another module has to know, beyond how many arguments it takes, which its parameter list says: whether its body performs an effect an initializer may not, and which of its parameters it applies. Computed where the function is defined ([`Module::interface`]) and carried where it is imported, so a module is held to the recursion rules through a callee it does not hold.
@@ -316,7 +319,22 @@ impl Module {
     }
 
     pub(crate) fn add_value(&mut self, debug_name: Option<String>) -> ValueId {
-        self.values.mint(ValueDef { debug_name })
+        self.add_value_def(ValueDef {
+            debug_name,
+            register: None,
+        })
+    }
+
+    /// Mint a value from a whole definition: a copy of another value carries everything that value states.
+    pub(crate) fn add_value_def(&mut self, definition: ValueDef) -> ValueId {
+        self.values.mint(definition)
+    }
+
+    /// State on `value` the register carrier its type names.
+    pub(crate) fn state_register(&mut self, value: ValueId, register: RegisterShape) {
+        if let Some(definition) = self.values.get_mut(value) {
+            definition.register = Some(register);
+        }
     }
 
     /// Mint a value another module binds, in scope from this module's first item.
@@ -410,7 +428,15 @@ impl Module {
     }
 
     /// Rewrite one live statement in place — partial evaluation's install intrinsic (a folded call becomes an alias or a residual).
+    ///
+    /// A binding handed a producer that names its own carrier, as a folded call residualized to a host call, stops stating one: the binder's type still names it, but the producer now says it, and a carrier is stated only where no producer does.
     pub(crate) fn set_statement(&mut self, id: StatementId, statement: Statement) {
+        if let Statement::Let { result, rhs } = &statement
+            && rhs.names_its_carrier()
+            && let Some(definition) = self.values.get_mut(*result)
+        {
+            definition.register = None;
+        }
         self.statements.set(id, statement);
     }
 

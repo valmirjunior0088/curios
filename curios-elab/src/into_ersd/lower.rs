@@ -6,7 +6,7 @@ use {
     super::{
         Binding, Bound, Environment, ErasedBaseline, ErasedItem, ErasedOver, ErasedUnit, Erasures,
         Error, Export, Intrinsic, Let, Projected, Retyping, Subterm, Telescope, Term, emitted,
-        evaluate, intrinsic, link,
+        evaluate, intrinsic, link, register_shape,
     },
     crate::{
         Answered, Foreign, Question, Traces, validate_entry_universes, validate_universes,
@@ -239,6 +239,36 @@ impl<'s> Lowering<'s> {
         Outcome::Emitted(curios_ersd::Atom::Value(result))
     }
 
+    /// [`bind`](Self::bind) a right-hand side whose producer names no carrier, stating on the result the register carrier its type `type_` names.
+    pub(super) fn bind_stated(
+        &mut self,
+        context: &mut Retyping,
+        hint: Option<&str>,
+        rhs: curios_ersd::Rhs,
+        type_: &Term,
+    ) -> Result<Outcome, Error> {
+        debug_assert!(
+            !rhs.names_its_carrier(),
+            "a carrier is stated only where the producer names none"
+        );
+        let result = self.builder.let_value(hint.map(str::to_string), rhs);
+        self.state(context, result, type_)?;
+        Ok(Outcome::Emitted(curios_ersd::Atom::Value(result)))
+    }
+
+    /// State on `value`, a binder whose producer names no carrier, the register carrier its type `type_` names, where it names one.
+    pub(super) fn state(
+        &mut self,
+        context: &mut Retyping,
+        value: curios_ersd::ValueId,
+        type_: &Term,
+    ) -> Result<(), Error> {
+        if let Some(register) = register_shape(context, type_)? {
+            self.builder.state(value, register);
+        }
+        Ok(())
+    }
+
     /// The unit constant — the value of a retained-but-erased slot.
     pub(super) fn unit(&mut self) -> curios_ersd::Atom {
         curios_ersd::Atom::Constant(self.builder.constant(curios_ersd::Constant::Unit))
@@ -390,7 +420,7 @@ impl<'s> Lowering<'s> {
             Subterm::Variant(variant) => self.erase_variant(context, variant, hint),
             Subterm::Struct(value) => self.erase_struct(context, value, hint),
             Subterm::Tuple(tuple) => self.erase_tuple(context, tuple, expected, hint),
-            Subterm::Proj(proj) => self.erase_proj(context, proj, hint),
+            Subterm::Proj(proj) => self.erase_proj(context, proj, expected, hint),
             Subterm::Func(func) => self.erase_func(context, func, expected, hint),
             Subterm::Apply(apply) => self.erase_apply(context, apply, expected, hint),
             Subterm::Rec(rec) => self.erase_rec(context, rec, expected, hint),

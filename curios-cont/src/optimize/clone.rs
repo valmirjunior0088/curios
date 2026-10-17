@@ -317,7 +317,7 @@ pub(crate) fn copy_bodies(module: &mut Module, plan: CopyPlan) -> Copies {
     let mut values: BTreeMap<ValueId, ValueId> = BTreeMap::new();
     for old in owned {
         let definition = module.value(old).unwrap().clone();
-        let fresh = module.add_value(definition.debug_name);
+        let fresh = module.add_value_def(definition);
         values.insert(old, fresh);
     }
 

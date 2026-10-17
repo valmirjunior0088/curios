@@ -43,10 +43,20 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    /// Allocate the Cont value representing an arena value, carrying its source hint, and record the mapping — the single choke point for every binder that names a source value.
+    /// Allocate the Cont value representing an arena value, carrying its source hint and the register its type names, and record the mapping — the single choke point for every binder that names a source value.
     pub(super) fn bind_value(&mut self, arena: ValueId) -> curios_cont::ValueId {
-        let name = self.arena_value_name(arena);
-        let cont = self.module.add_value(name);
+        let register = self
+            .source
+            .value(arena)
+            .and_then(|value| value.register)
+            .map(|register| match register {
+                crate::RegisterShape::Immediate => curios_cont::Register::Word,
+                crate::RegisterShape::Flt => curios_cont::Register::Float,
+            });
+        let cont = self.module.add_value_def(curios_cont::ValueDef {
+            debug_name: self.arena_value_name(arena),
+            register,
+        });
         self.values.insert(arena, curios_cont::Atom::Value(cont));
         cont
     }

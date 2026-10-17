@@ -1,7 +1,7 @@
 //! What the graph is made of: the identities, the operands, and the nodes that bind a value or transfer control.
 
 use {
-    super::Intrinsic,
+    super::{Intrinsic, Repr},
     curios_abi::ForeignFunction,
     curios_num::{Binary, Floating, Grain, Integer, Natural},
     curios_utilities::id,
@@ -260,6 +260,25 @@ impl fmt::Display for Panic {
 #[derive(Debug, Clone)]
 pub struct ValueDef {
     pub debug_name: Option<String>,
+    /// The register the value's type names, stated by erasure where its producer names none and carried in by the door. `None` states nothing: a copy carries the definition whole, and a binder a pass mints states nothing.
+    pub register: Option<Register>,
+}
+
+/// The register a reference's type says it holds the population of: an i31 holding a word, or a `Flt` box holding a float. A value stating one may feed that register, unboxed once where it does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Register {
+    Word,
+    Float,
+}
+
+impl Register {
+    /// The carrier this register holds.
+    pub fn repr(self) -> Repr {
+        match self {
+            Self::Word => Repr::Nat,
+            Self::Float => Repr::Flt,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -346,7 +346,16 @@ pub(super) fn erase_intrinsic(
 
         Intrinsic::List { .. } => seq!(curios_ersd::SequenceOp::ListBuild),
         Intrinsic::ListLen { .. } => seq!(curios_ersd::SequenceOp::ListLen),
-        Intrinsic::ListGet { .. } => seq!(curios_ersd::SequenceOp::ListGet),
+        // A list's element is a read no producer names the carrier of, so it states the one its element type names.
+        Intrinsic::ListGet { element, .. } => {
+            let operands = computed(context, intrinsic);
+            let outcome =
+                lowering.sequence(context, curios_ersd::SequenceOp::ListGet, &operands, hint)?;
+            if let Outcome::Emitted(curios_ersd::Atom::Value(value)) = outcome {
+                lowering.state(context, value, element)?;
+            }
+            Ok(outcome)
+        }
         Intrinsic::ListSlice { .. } => seq!(curios_ersd::SequenceOp::ListSlice),
         Intrinsic::ListAppend { .. } => seq!(curios_ersd::SequenceOp::ListAppend),
         Intrinsic::ListConcat { .. } => seq!(curios_ersd::SequenceOp::ListConcat),

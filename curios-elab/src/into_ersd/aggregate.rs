@@ -335,6 +335,7 @@ impl Lowering<'_> {
         &mut self,
         context: &mut Retyping,
         proj: &Proj,
+        expected: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let Proj { head, field } = proj;
@@ -373,14 +374,16 @@ impl Lowering<'_> {
             None => self.walk(context, head, &head_type, hint),
             Some(schema) => {
                 let product = emitted!(self.walk(context, head, &head_type, None)?);
-                Ok(self.bind(
+                self.bind_stated(
+                    context,
                     hint,
                     curios_ersd::Rhs::Project {
                         schema,
                         product,
                         field: row.relevant_before(index),
                     },
-                ))
+                    expected,
+                )
             }
         }
     }

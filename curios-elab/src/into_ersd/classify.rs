@@ -1,4 +1,4 @@
-//! Sort-driven erasability classification, shared by every erasure walk: whether a type's values carry anything at runtime, and the view of a nominal declaration's payload that says which of its fields are stored ([`constructor_entries`]), with the carrier shape of each ([`field_shape`]): erasure is the last walk that still holds the Core field types, so the shape is recorded here and read by `curios-ersd`'s lowering when it decides a family's encoding.
+//! Sort-driven erasability classification, shared by every erasure walk: whether a type's values carry anything at runtime, and the view of a nominal declaration's payload that says which of its fields are stored ([`constructor_entries`]), with the carrier shape of each ([`field_shape`]), and the register carrier a binder's type names ([`register_shape`]): erasure is the last walk that still holds the Core types, so a shape is recorded here, a field's read by `curios-ersd`'s lowering when it decides a family's encoding and a binder's by `curios-cont`'s storage analysis when it decides what a reference may feed.
 //!
 //! **Only a declaration drops.** A structure's fields and a constructor's payload are classified once, against the declaration's own signature, and every construction and elimination reads that one row. A function type and an anonymous tuple type have no declaration: the type a value of one stands at differs from site to site by a substitution or a refinement, and a domain one site reads as a proof or a type another reads as a variable. So neither is classified for its shape at all — a function has a parameter for each binder and a tuple a field for each member — and what [`is_erasable`] decides of a slot is only what fills it.
 
@@ -51,6 +51,30 @@ pub(crate) fn field_shape(
     visited: &mut BTreeSet<Global>,
     type_: &Term,
 ) -> Result<curios_ersd::FieldShape, Error> {
+    shape_walk(Some(lowering), context, visited, type_)
+}
+
+/// The register carrier a value of `type_` is held in where a register holds it ([`curios_ersd::RegisterShape`]): read by the walk a field's shape is read by, so a value and a field of one type agree, with a product and a family answering nothing rather than registering their rows — a value is held as a reference whatever row it holds.
+pub(crate) fn register_shape(
+    context: &mut Retyping,
+    type_: &Term,
+) -> Result<Option<curios_ersd::RegisterShape>, Error> {
+    Ok(
+        match shape_walk(None, context, &mut BTreeSet::new(), type_)? {
+            curios_ersd::FieldShape::Immediate => Some(curios_ersd::RegisterShape::Immediate),
+            curios_ersd::FieldShape::Flt => Some(curios_ersd::RegisterShape::Flt),
+            _ => None,
+        },
+    )
+}
+
+/// The walk behind [`field_shape`] and [`register_shape`]. `rows` is the lowering a row's identity is registered in; without one, a product or a family answers `Opaque`, which is what a value needs and what keeps reading a value's type from registering a row the program never builds.
+fn shape_walk(
+    rows: Option<&mut Lowering<'_>>,
+    context: &mut Retyping,
+    visited: &mut BTreeSet<Global>,
+    type_: &Term,
+) -> Result<curios_ersd::FieldShape, Error> {
     match Term::unwrap_or_clone(context.reduce_with(type_)?) {
         Subterm::Intrinsic(Intrinsic::BoolType | Intrinsic::ByteType) => {
             Ok(curios_ersd::FieldShape::Immediate)
@@ -75,18 +99,18 @@ pub(crate) fn field_shape(
                 Chain::None => Ok(curios_ersd::FieldShape::Opaque),
                 // The cycle the family arm below cuts, cut here too: a struct naming itself elaborates, so chasing its one relevant field returns to this declaration and the chain never lands. Guarding only where the chain continues keeps `visited` the ancestor chain rather than a seen-set.
                 Chain::One(domain) => match visited.insert(struct_type.name) {
-                    true => field_shape(lowering, context, visited, &domain),
+                    true => shape_walk(rows, context, visited, &domain),
                     false => Ok(curios_ersd::FieldShape::Opaque),
                 },
                 // A struct that reaches itself is uninhabited but elaborates, so its own registration is still in flight here and there is no schema to name yet. Answering `Opaque` costs a shape no value will ever occupy.
-                Chain::Many => match lowering.in_flight(&struct_type.name) {
-                    true => Ok(curios_ersd::FieldShape::Opaque),
-                    false => Ok(lowering
+                Chain::Many => match rows {
+                    Some(lowering) if !lowering.in_flight(&struct_type.name) => Ok(lowering
                         .struct_row(context, &struct_type.name)?
                         .schema
                         .map_or(curios_ersd::FieldShape::Opaque, |schema| {
                             curios_ersd::FieldShape::Product(schema)
                         })),
+                    Some(_) | None => Ok(curios_ersd::FieldShape::Opaque),
                 },
             }
         }
@@ -95,7 +119,7 @@ pub(crate) fn field_shape(
             1 => {
                 let (_, domain) = telescope.cursor().entry().expect("a tuple of one field");
 
-                field_shape(lowering, context, visited, &domain)
+                shape_walk(rows, context, visited, &domain)
             }
             _ => Ok(curios_ersd::FieldShape::Opaque),
         },
@@ -106,9 +130,12 @@ pub(crate) fn field_shape(
             };
             let tags: Vec<_> = induct_decl.constructor_order().collect();
             let [tag] = tags.as_slice() else {
-                return Ok(curios_ersd::FieldShape::Family(
-                    lowering.family_identity(context, &induct_type.name)?,
-                ));
+                return match rows {
+                    Some(lowering) => Ok(curios_ersd::FieldShape::Family(
+                        lowering.family_identity(context, &induct_type.name)?,
+                    )),
+                    None => Ok(curios_ersd::FieldShape::Opaque),
+                };
             };
             if !visited.insert(induct_type.name) {
                 return Ok(curios_ersd::FieldShape::Opaque);
@@ -119,10 +146,13 @@ pub(crate) fn field_shape(
             match relevant_chain(context, telescope)? {
                 // No payload rides the interned `Nat` zero; one payload is the value itself; two or more are the family's own row, which the collapsed encoding lays out exactly as the equivalent struct.
                 Chain::None => Ok(curios_ersd::FieldShape::Immediate),
-                Chain::One(domain) => field_shape(lowering, context, visited, &domain),
-                Chain::Many => Ok(curios_ersd::FieldShape::Family(
-                    lowering.family_identity(context, &induct_type.name)?,
-                )),
+                Chain::One(domain) => shape_walk(rows, context, visited, &domain),
+                Chain::Many => match rows {
+                    Some(lowering) => Ok(curios_ersd::FieldShape::Family(
+                        lowering.family_identity(context, &induct_type.name)?,
+                    )),
+                    None => Ok(curios_ersd::FieldShape::Opaque),
+                },
             }
         }
         _ => Ok(curios_ersd::FieldShape::Opaque),
