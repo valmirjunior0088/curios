@@ -1,6 +1,6 @@
 # curios-utilities
 
-Foundational utilities shared across every pipeline stage: source spans and reports, the `Entropy`/`Mint` fresh-name supply, the `name!` and `id!` newtype macros, the typed identity-addressed `Arena`, the resolved-module-path `Qualifier`, the mount table, the SHA-256 content digest and the fingerprint that finishes into one, the shape of the compiler's emitted vocabulary, and the native-stack bracket every recursive walk over user data runs inside. The numeric vocabulary is `curios-num`'s, and the two combinator DSLs are `curios-parse` and `curios-print`; each module's contract belongs to the crate rustdoc.
+Foundational utilities shared across every pipeline stage: source spans and reports, the `Entropy`/`Mint` fresh-name supply, the `name!` and `id!` newtype macros, the typed identity-addressed `Arena`, the persistent maps a state extended a step at a time is kept in, the resolved-module-path `Qualifier`, the mount table, the SHA-256 content digest and the fingerprint that finishes into one, the shape of the compiler's emitted vocabulary, and the native-stack bracket every recursive walk over user data runs inside. The numeric vocabulary is `curios-num`'s, and the two combinator DSLs are `curios-parse` and `curios-print`; each module's contract belongs to the crate rustdoc.
 
 ## Design
 
