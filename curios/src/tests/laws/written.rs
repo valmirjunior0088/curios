@@ -324,7 +324,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Nat under / and %",
-        binders: "x: Nat, y: Nat, d: Nat, p: Holds(0 < d)",
+        binders: "x: Nat, y: Nat, d: Nat, p: Holds(0 < d), q: Holds(0 < d)",
         held: &[
             "Eq()((x * 2) / 2, x)",
             "Eq()((x * 2) % 2, 0)",
@@ -342,6 +342,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(x % 10 + 10 * (x / 10), x)",
             "Eq()((x / (y + 1)) * (y + 1) + x % (y + 1), x)",
             "Eq()(Nat/div(x, d, @p) * d + Nat/rem(x, d, @p), x)",
+            // A quotient and a remainder under two proofs of their divisor: one where their dividends and their divisors are, the proof each carries being of a proposition those two state.
+            "Eq()(Nat/div(x, d, @p) + Nat/rem(x, d, @q), Nat/rem(x, d, @p) + Nat/div(x, d, @q))",
             "Eq()(2 * ((x / 3) * 3) + y + 2 * (x % 3), 2 * x + y)",
             "Eq()(((x + 5) / 3) * 3 + (x + 5) % 3, x + 5)",
         ],

@@ -55,6 +55,30 @@ fn a_sum_of_operations_each_commuted_is_one_with_the_sum_written_backwards() {
     }
 }
 
+/// `L(0) = x0` and `L(k)` built from `L(k - 1)` by `step` at `yk`, beside its twin `R` over `u0` and `vk`, under a `match` on `L(depth) <= R(depth)` whose arms are both `0`, claimed `0` by `Eq/refl()`, which the stuck `match` refuses: every operation of the two towers is stuck beside every other of its kind.
+fn towers(depth: usize, step: fn(&str, &str) -> String) -> String {
+    let mut binders = String::from("x0: Nat, u0: Nat");
+    let (mut left, mut right) = (String::from("x0"), String::from("u0"));
+    for level in 1..=depth {
+        write!(binders, ", y{level}: Nat, v{level}: Nat").expect("a string takes every write");
+        left = step(&left, &format!("y{level}"));
+        right = step(&right, &format!("v{level}"));
+    }
+    format!(
+        "use /std/{{Nat, Eq, Io}};\nlet towers({binders}) -> Eq()(match {left} <= {right} | true => 0 | false => 0 end, 0) = Eq/refl();\nIo/pure(())"
+    )
+}
+
+/// Two towers of remainders: two remainders of one dividend by one divisor are one with no question put, so no two of them are put to conversion.
+fn remainders(depth: usize) -> String {
+    towers(depth, |inner, at| format!("{inner} % ({at} + 1)"))
+}
+
+/// The control: two towers of conjunctions, nodes their readers hold, at the same depths.
+fn conjunctions(depth: usize) -> String {
+    towers(depth, |inner, at| format!("Nat/and({inner}, {at})"))
+}
+
 /// One shape the measurement reads: its name, its program at a size, and the sizes it is read at.
 struct Shape {
     name: &'static str,
@@ -62,7 +86,7 @@ struct Shape {
     sizes: &'static [usize],
 }
 
-const SHAPES: [Shape; 2] = [
+const SHAPES: [Shape; 4] = [
     Shape {
         name: "nested",
         program: nested,
@@ -72,6 +96,16 @@ const SHAPES: [Shape; 2] = [
         name: "summed",
         program: summed,
         sizes: &[16, 64, 256],
+    },
+    Shape {
+        name: "remainders",
+        program: remainders,
+        sizes: &[12, 24],
+    },
+    Shape {
+        name: "conjunctions",
+        program: conjunctions,
+        sizes: &[12, 24],
     },
 ];
 
@@ -87,19 +121,23 @@ const SHAPES: [Shape; 2] = [
 ///
 /// # What it last printed
 ///
-/// Taken on top of `0db77a9a9` on `x86_64-unknown-linux-gnu`, on a machine under load. Every row is accepted.
+/// Taken on top of `f823cf562` on `x86_64-unknown-linux-gnu`, at a load average under two. The nested and summed rows are accepted, and both towers are refused, as their claim is.
 ///
 /// | shape | size | compile |
 /// | --- | --- | --- |
-/// | nested | 8 | 0.30 s [0.10–0.43] |
-/// | nested | 16 | 0.24 s [0.11–0.43] |
-/// | nested | 32 | 0.35 s [0.16–0.58] |
-/// | nested | 64 | 0.70 s [0.64–0.84] |
-/// | summed | 16 | 0.27 s [0.20–0.36] |
-/// | summed | 64 | 0.94 s [0.65–1.40] |
-/// | summed | 256 | 14.80 s [12.99–17.06] |
+/// | nested | 8 | 0.01 s [0.01–0.04] |
+/// | nested | 16 | 0.02 s [0.02–0.02] |
+/// | nested | 32 | 0.04 s [0.04–0.04] |
+/// | nested | 64 | 0.11 s [0.11–0.12] |
+/// | summed | 16 | 0.02 s [0.02–0.02] |
+/// | summed | 64 | 0.17 s [0.17–0.20] |
+/// | summed | 256 | 3.07 s [3.05–4.27] |
+/// | remainders | 12 | 0.10 s [0.10–0.11] |
+/// | remainders | 24 | 0.45 s [0.45–0.45] |
+/// | conjunctions | 12 | 0.03 s [0.03–0.03] |
+/// | conjunctions | 24 | 0.15 s [0.15–0.15] |
 ///
-/// **A nested term costs its depth and no doubling of it.** **A long sum's cost is mostly the reducers' own**: every stuck sum walks the sum beneath it, whether or not a summand is respelled, which `documentation/roadmap/arithmetic/200-a-stuck-fold-keeps-what-its-walk-found.md` holds with the readings of the same sum unrespelled.
+/// **A nested term costs its depth and no doubling of it.** **A long sum's cost is mostly the reducers' own**: every stuck sum walks the sum beneath it, whether or not a summand is respelled, which `documentation/roadmap/arithmetic/200-a-stuck-fold-keeps-what-its-walk-found.md` holds with the readings of the same sum unrespelled. **Two towers of remainders grow as two of conjunctions do**, by four and a half times from twelve to twenty-four against five: no remainder is put to a checker beside another.
 #[test]
 #[ignore = "measurement, timed: reports what a size costs rather than asserting"]
 fn nested_operation_measurements() {

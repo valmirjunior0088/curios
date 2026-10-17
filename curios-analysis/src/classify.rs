@@ -8,7 +8,7 @@
 //!
 //! **A node is read against the nodes that stand over its atoms, and no others.** Holding a node asks a reading against each earlier node of its operation, and a term holds many of one: a long sum of operations would be read pair by pair, at every fold above it. The readers that pair operands hold two operations one where their operands pair off, and the linear ones where their normal forms agree, each over one set of atoms, so the earlier nodes are kept by the atoms each stands over (`bucket`) and two nodes over two sets are told apart with nothing read. A cost filter failing toward refusal, as the one on two atoms' heads is.
 //!
-//! **A node the table leaves an operand out of is its checker's.** A quotient carries a proof its meaning does not read, and two quotients of one dividend by one divisor are one where their proofs convert, which only a checker says. Such a node is handed out as an atom once the operands its meaning reads are walked, and is spelled as its class's representative is, over that one's operands.
+//! **A node the table leaves an operand out of is one with another of its kind where the operands it reads are.** A quotient carries a proof its meaning does not read, and its value is a function of its dividend and its divisor: two quotients of one dividend by one divisor are one, whatever their proofs, with no checker asked. Such a node is handed out as an atom once the operands its meaning reads are walked, no checker is asked whether two of them convert, and a walk that spells it holds it to the first node of its kind spelled over the same operands ([`Classes`]'s `unread`).
 //!
 //! **A node is forced before it is read, as the truth table forces it.** A stuck connective keeps its right operand as written, and an operand written as a call — a negation, an operator still spelled through its witness — is an operation only once it is reduced, so each node is reduced as a [`Probe`] before the walk asks the table what it is. An atom is therefore handed out in weak-head form, which is what lets its head say whether it may be another's.
 //!
@@ -59,6 +59,8 @@ pub struct Classes {
     spelled: HashMap<Term, Term>,
     /// The atoms each spelled term met stands over, so a node's are its operands' joined and a term two nodes share is read once.
     over: HashMap<Term, Over>,
+    /// Each node the table leaves an operand out of, as first spelled, by its operation and the operands its meaning reads as they are spelled, universe instances erased: a later one over the same operands is spelled as it.
+    unread: HashMap<(Kind, Vec<Term>), Term>,
 }
 
 impl Classes {
@@ -285,12 +287,18 @@ fn may_be_one(this: &Term, that: &Term) -> bool {
                 && (this.head == that.head
                     || this.head.erased_universes() == that.head.erased_universes())
         }
+        // Two nodes the table leaves an operand out of are one where the operands they read are, which spelling them says with no question put ([`Walk::node`]).
         (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
-            mem::discriminant(this) == mem::discriminant(that)
+            mem::discriminant(this) == mem::discriminant(that) && !leaves_one_out(this)
         }
         (Subterm::Intrinsic(_), _) | (_, Subterm::Intrinsic(_)) => false,
         _ => true,
     }
+}
+
+/// Whether the table declares `intrinsic` an operation and leaves an operand of it out: a quotient's proof, which its meaning does not read.
+fn leaves_one_out(intrinsic: &Intrinsic) -> bool {
+    layer(intrinsic).is_some_and(|(_, read)| children(intrinsic).len() > read)
 }
 
 /// `term` forced as the walk forces every node: its weak-head form, or `term` itself where it has none at the type level.
@@ -521,7 +529,8 @@ impl<'r, 'c, R: Reducer> Walk<'r, 'c, R> {
     ) -> Result<(Term, Term), ReduceError> {
         let (key, spelled, whole) = self.operands(forced, intrinsic, read)?;
         if !whole {
-            // An operand its meaning does not read stands as written, and whether two of those convert is a checker's to say.
+            // An operand its meaning does not read stands as written, and the node is one with the first of its kind over operands spelled as its are: its value reads no other.
+            let spelled = self.unread(spelled, kind, read);
             return Ok(self.atom(key, spelled));
         }
         if matches!(self.reading, Reading::Collected(_)) {
@@ -532,6 +541,26 @@ impl<'r, 'c, R: Reducer> Walk<'r, 'c, R> {
             false => spelled,
         };
         Ok((key, spelled))
+    }
+
+    /// `node`, of `kind`, a node the table leaves an operand out of, spelled as the first of its kind whose first `read` operands are spelled as its are, and itself where there is none; as it is where the walk spells nothing.
+    fn unread(&mut self, node: Term, kind: Kind, read: usize) -> Term {
+        let Reading::Spelled(classes) = &mut self.reading else {
+            return node;
+        };
+        let Subterm::Intrinsic(intrinsic) = &*node else {
+            return node;
+        };
+        let operands = children(intrinsic)
+            .iter()
+            .take(read)
+            .map(Term::erased_universes)
+            .collect();
+        classes
+            .unread
+            .entry((kind, operands))
+            .or_insert(node)
+            .clone()
     }
 
     /// `node`, of `kind`, as the first node of its bucket the readers hold it one with, and itself where there is none.
