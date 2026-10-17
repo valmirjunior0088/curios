@@ -4,7 +4,9 @@ use {
     super::{granted, withheld},
     crate::{
         Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, compile_unit, compile_unit_over, recheck_over,
-        tests::test_support::{assert_stored_alike, compile_with_units, elaborated_above},
+        tests::test_support::{
+            assert_stored_alike, compile_with_units, elaborated_above, elaborated_wholesale,
+        },
     },
     curios_core::{
         Anchors, Certification, Definition, DefinitionKind, Global, Imports, Item, Module, Nominal,
@@ -266,6 +268,37 @@ fn std_identity_census() {
         assert!(
             first == second,
             "two floors elaborate two modules, differing in {differing:?}"
+        );
+    });
+}
+
+/// Whether the standard library elaborates to one module however long its tables keep an answer: its tree lowered once and elaborated with every table cleared at every boundary, and with each answer kept for as long as what it read stands, the two modules compared by value, and where they differ, the items that do. A measurement, since each elaboration is the whole library; counted, and it asserts, since a module that moves is an answer kept past something it read (`documentation/roadmap/theory/200-a-reduct-states-what-it-rests-on.md`).
+#[test]
+#[ignore = "measurement, counted: elaborates the standard library with every table cleared at every boundary and with each answer kept as long as what it read stands, and compares the two modules item by item"]
+fn std_memo_census() {
+    with_prelude(|prelude| {
+        let [sys, _] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
+        let source = std_from_its_tree();
+        let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+        let wholesale = elaborated_wholesale(&unit, Predecessors::over(&roots));
+        let kept = elaborated_above(&unit, Predecessors::over(&roots), 0);
+
+        let differing = wholesale
+            .items
+            .iter()
+            .zip(kept.items.iter())
+            .filter(|(one, other)| one != other)
+            .map(|(one, _)| one.describe())
+            .collect::<Vec<_>>();
+        println!("\n=== /std elaborated with its tables cleared and kept ===");
+        println!("  items       {}", wholesale.items.len());
+        println!("  differing   {differing:?}");
+        assert!(
+            wholesale == kept,
+            "keeping an answer moves the module, in {differing:?}"
         );
     });
 }

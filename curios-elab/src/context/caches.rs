@@ -107,11 +107,21 @@ pub(crate) struct Caches {
     kernel_spellings: RefCell<HashMap<Term, Term>>,
     /// Monotonic universe-solver writes are tracked separately. Elaboration entries may survive them only when their keys and results contain no transitively unresolved universe meta; reducts survive them outright, being parametric in levels (see `Context::cached_reduced`); rollback/finalization clears every cache at the non-monotonic boundaries.
     universe_mutation_stamp: Entropy,
+    /// Whether every boundary clears every table, as each did before an answer was kept for as long as what it read stands ([`Caches::wholesale`]).
+    wholesale: bool,
 }
 
 impl Caches {
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+
+    /// Caches under which every boundary clears every table: the protocol an answer kept for as long as what it read stands is held to, by comparing what a library elaborates to under each (`curios-pipeline`'s `std_memo_census`). An answer kept past a boundary that moves an elaborated term rests on something its life does not state.
+    pub(crate) fn wholesale() -> Self {
+        Self {
+            wholesale: true,
+            ..Self::default()
+        }
     }
 
     /// Record a write to a kernel store, poisoning any elaboration-cache insert whose computation spans it.
@@ -278,6 +288,20 @@ impl Caches {
 
     /// Every reduct and forced value of both reductions and both lives, the second doors indexing the reducts, the classifications the elaborator's conversion classed, the sorts read through them, and the scrutinees remembered as the kernel spells them.
     fn clear_reductions(&mut self) {
+        self.clear_lasting();
+        self.clear_scope();
+    }
+
+    /// What a boundary of the scope can reach: [`Caches::clear_scope`]. The lasting reducts stay, but under [`Caches::wholesale`].
+    fn clear_scoped_reductions(&mut self) {
+        if self.wholesale {
+            self.clear_lasting();
+        }
+        self.clear_scope();
+    }
+
+    /// The reducts and forced values that stand for the declaration, their second doors, and every closed run's answer.
+    fn clear_lasting(&mut self) {
         let tables = self
             .lasting
             .iter_mut()
@@ -289,11 +313,10 @@ impl Caches {
         for closed in &mut self.closed {
             closed.clear();
         }
-        self.clear_scoped_reductions();
     }
 
-    /// What a boundary of the scope can reach: the reducts and forced values that may read it, with their second doors and the closed runs' answers of that life, the classifications the elaborator's conversion classed, the sorts, and the scrutinees remembered as the kernel spells them. The lasting reducts stay.
-    fn clear_scoped_reductions(&mut self) {
+    /// The reducts and forced values that may read the scope, with the reducts' second doors and the closed runs' answers of that life, the classifications the elaborator's conversion classed, the sorts, and the scrutinees remembered as the kernel spells them.
+    fn clear_scope(&mut self) {
         let tables = self
             .reduction
             .iter_mut()
@@ -567,7 +590,15 @@ impl Caches {
                 self.reduction[1].clear();
                 self.reduction_erased[1].clear();
                 self.forced[1].clear();
-                self.closed[1].clear_scoped();
+                match self.wholesale {
+                    true => {
+                        self.lasting[1].clear();
+                        self.lasting_erased[1].clear();
+                        self.lasting_forced[1].clear();
+                        self.closed[1].clear();
+                    }
+                    false => self.closed[1].clear_scoped(),
+                }
                 self.sorts[1].clear();
                 self.same[1].clear();
                 // A scrutinee's spelling reads the refinements in the window, which this boundary moves.

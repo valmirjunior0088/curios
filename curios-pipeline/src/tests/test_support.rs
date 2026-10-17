@@ -228,6 +228,24 @@ pub(crate) fn elaborated_above(
     predecessors: Predecessors<'_>,
     floor: u64,
 ) -> Module {
+    elaborated(source, predecessors, floor, false)
+}
+
+/// `source` lowered once over `predecessors` and elaborated in a context whose caches clear every table at every boundary ([`curios_elab::Context::wholesale`]): the module keeping an answer for as long as what it read stands must not move.
+pub(crate) fn elaborated_wholesale(
+    source: &UnitSource<'_>,
+    predecessors: Predecessors<'_>,
+) -> Module {
+    elaborated(source, predecessors, 0, true)
+}
+
+/// [`elaborated_above`], in a context whose caches clear every table at every boundary where `wholesale`.
+fn elaborated(
+    source: &UnitSource<'_>,
+    predecessors: Predecessors<'_>,
+    floor: u64,
+    wholesale: bool,
+) -> Module {
     let lowered = curios_text::into_core_unit(source, &predecessors.text(), &SYNTAX)
         .expect("the unit lowers");
     let mut minted = lowered.minted().clone();
@@ -239,7 +257,10 @@ pub(crate) fn elaborated_above(
     let placed = predecessors.placed();
     let fixed = predecessors.fixed();
     let established = curios_elab::Established::placed(&placed).fixed(&fixed);
-    let mut context = curios_elab::Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
+    let mut context = match wholesale {
+        true => curios_elab::Context::wholesale(DEFAULT_STEP_BUDGET, SYNTAX),
+        false => curios_elab::Context::new(DEFAULT_STEP_BUDGET, SYNTAX),
+    };
     context.set_imports(lowered.imports().clone());
     curios_elab::elaborate_and_zonk_unit(&mut context, &established, lowered.core(), &minted)
         .map(|(module, _)| module)
