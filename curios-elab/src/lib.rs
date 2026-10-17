@@ -59,6 +59,9 @@ pub(crate) use resolve::*;
 mod suggest;
 pub(crate) use suggest::*;
 
+mod written;
+pub(crate) use written::*;
+
 mod entailment;
 pub use entailment::*;
 

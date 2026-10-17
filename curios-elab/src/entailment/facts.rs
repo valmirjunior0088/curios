@@ -67,6 +67,16 @@ impl Origin {
         }
     }
 
+    /// [`Origin::named`], to be written over.
+    pub(crate) fn named_mut(&mut self) -> Option<&mut Term> {
+        match self {
+            Origin::Hypothesis(name) | Origin::Field(name, _) | Origin::Guard(name, _) => {
+                Some(name)
+            }
+            Origin::Natural | Origin::Definition | Origin::Product(..) | Origin::Negated => None,
+        }
+    }
+
     /// Whether a report names the fact: one a reader can act on, which a natural's sign, an operation's definition and a product of two facts are not.
     pub(super) fn is_reported(&self) -> bool {
         !matches!(

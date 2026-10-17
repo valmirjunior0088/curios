@@ -5,7 +5,7 @@
 use {
     super::test_support::*,
     curios_core::{Global, Item, ReaderPosition, build_rename, display_names},
-    curios_elab::Reading,
+    curios_elab::{Established, Reading, test_support::written_for_reader},
     curios_prelude::with_prelude,
     curios_text::{SYNTAX, Translation},
     curios_unit::Predecessors,
@@ -13,12 +13,18 @@ use {
     std::rc::Rc,
 };
 
-/// The type and the body `name` elaborates to in `source`, compiled as the unit `/lib`, each as a reader standing in that declaration is shown it. A term the translation declines fails the test: what is held here is the translation, and the compiler's own print of a term is no reading of it.
+/// The type and the body `name` elaborates to in `source`, compiled as the unit `/lib`, each as a reader standing in that declaration is shown it: settled where the reader stands, as a report settles what it shows, and translated. A term the translation declines fails the test: what is held here is the translation, and the compiler's own print of a term is no reading of it.
 fn shown(source: &str, name: &str) -> (String, String) {
     let unit = unit_of(source);
 
     with_prelude(|prelude| {
         let predecessors = Predecessors::over(prelude);
+        let modules = predecessors
+            .cores()
+            .into_iter()
+            .chain([unit.core()])
+            .collect::<Vec<_>>();
+        let established = Established::over(&modules);
         let lexicons = predecessors.lexicons(&SYNTAX);
         let spellings = Rc::new(unit.text().spellings(&predecessors.text()));
         let reading = Reading {
@@ -39,6 +45,7 @@ fn shown(source: &str, name: &str) -> (String, String) {
             .unwrap_or_else(|| panic!("`{name}` is declared"));
 
         let print = |term: &curios_core::Term| {
+            let term = &written_for_reader(&established, SYNTAX, term);
             let spelling = reading.spelling().for_reader(ReaderPosition {
                 owner: Some(owner),
                 witnesses: Rc::default(),

@@ -60,6 +60,11 @@ impl Needs {
         mem::take(self.needed.get_mut())
     }
 
+    /// Put back what the attempt under way had needed, `needed` as [`Needs::take`] took it, dropping what was needed since: a judgment run beside the attempt reads nothing on its behalf.
+    pub(crate) fn put_back(&mut self, needed: BTreeSet<Global>) {
+        *self.needed.get_mut() = needed;
+    }
+
     /// Whether the attempt under way has read nothing unfinished so far.
     pub(crate) fn nothing(&self) -> bool {
         self.needed.borrow().is_empty()

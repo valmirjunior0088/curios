@@ -1342,7 +1342,11 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
         true => settle_published(context, &mut published, recorded)
             .map_err(|error| error.in_declaration(declared.iter().copied()))?
             .into_iter()
-            .map(|error| error.in_declaration(declared.iter().copied()))
+            .map(|error| {
+                error
+                    .settled(context)
+                    .in_declaration(declared.iter().copied())
+            })
             .collect(),
         false => Vec::new(),
     };
@@ -1629,7 +1633,7 @@ fn elaborate_module_suffix<'s>(
         false => match attempted(context) {
             Ok(entry) => entry,
             Err(error) => {
-                let error = error.shown(context);
+                let error = error.settled(context);
                 mark.undo(context, &[]);
                 survivors.refuse(entry_stamp, error);
                 None
@@ -1785,22 +1789,26 @@ fn finalize_and_check(
     validate_universes(&module)?;
     // The order the unit is stored in, given once: every walk after this one takes the items as they come.
     let module = module.ordered();
+    // A refusal of the entry's terms is settled for its reader here, the state it arose in still standing.
     let entry = entry
         .map(|entry| zonk_entry(context, &module, &entry))
-        .transpose()?;
+        .transpose()
+        .map_err(|error| error.settled(context))?;
     context.restore_budget();
 
     // Reported rather than raised. `curios-cert` decides these same two obligations independently, and a fixture this checker refuses must still be able to reach it — a short circuit here would return no module at all, leaving "would the kernel have caught it?" unobservable, which is exactly the quadrant the trusted base most needs to see. The public entry points raise the first verdict, so nothing on the compile path is weakened.
     //
     // The entry's alone: every item's were decided as it was published, and took the terms it recorded, so what is left recorded is the entry's. One cache across both, which are seeded from the same recorded entries.
     let mut zonked = Zonked::default();
+    let checked = [
+        check_type_totality(context, &nothing, entry.as_ref(), 0, &mut zonked),
+        check_proof_totality(context, 0, &mut zonked),
+    ];
     obligations.extend(
-        [
-            check_type_totality(context, &nothing, entry.as_ref(), 0, &mut zonked),
-            check_proof_totality(context, 0, &mut zonked),
-        ]
-        .into_iter()
-        .filter_map(Result::err),
+        checked
+            .into_iter()
+            .filter_map(Result::err)
+            .map(|error| error.settled(context)),
     );
 
     Ok(Finalized {

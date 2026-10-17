@@ -148,10 +148,11 @@ fn two_dictionaries_make_two_types() {
         print("no")
         "#;
 
+    // `one`'s dictionary is the one resolution puts back where the report is read, so it is left out; `other` is not, so it is written.
     let message = error(source);
     assert!(message.contains("type mismatch"), "got: {message}");
     assert!(
-        message.contains("inferred: Slot(Nat, use Key { (a, b) => a == b }, Str)"),
+        message.contains("inferred: Slot(Nat, Str)"),
         "got: {message}"
     );
     assert!(

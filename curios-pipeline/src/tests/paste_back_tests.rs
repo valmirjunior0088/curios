@@ -152,13 +152,15 @@ fn an_indexed_family_and_its_applications_read_back() {
     reads_back(source).unwrap();
 }
 
+// The programs below hold a dictionary in a structure declared under a premise, `Box`, whose dictionary conversion compares: a report that left out a witness resolution would not put back is a paste that is refused.
+
 #[test]
-fn a_type_alias_over_a_local_witness_reads_back() {
-    // `Wrap(A, use x)` under the binder `use Show(A)`: the argument is the binder resolution would find, so it is left out, and the binder, referenced nowhere else, prints unnamed.
+fn a_type_under_a_local_witness_reads_back() {
+    // `Box(A, use x)` under the binder `use Show(A)`: the argument is the binder resolution finds, so it is left out, and the binder, referenced nowhere else, prints unnamed.
     let source = r#"
         use /std/{Nat, Show};
-        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
-        pub let v(@A: Type, use Show(A), x: Wrap(A)) -> Nat = 0;
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let v(@A: Type, use Show(A), x: Box(A)) -> Nat = 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -167,12 +169,12 @@ fn a_type_alias_over_a_local_witness_reads_back() {
 }
 
 #[test]
-fn a_type_alias_over_a_global_witness_reads_back() {
+fn a_type_under_a_global_witness_reads_back() {
     // Nothing in scope reaches `Show`, so resolution goes to the table, and coherence makes its answer the witness the report would otherwise have named by its identity.
     let source = r#"
         use /std/{Nat, Show};
-        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
-        pub let u(x: Wrap(Nat)) -> Nat = 0;
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let u(x: Box(Nat)) -> Nat = 0;
         pub let t: ? = u;
         /std/print("")
     "#;
@@ -182,11 +184,11 @@ fn a_type_alias_over_a_global_witness_reads_back() {
 
 #[test]
 fn a_table_witness_reads_back_past_a_binder_at_another_argument() {
-    // `Wrap(Nat)` under `use Show(A)`: the binder is a `Show` of `A` and answers no goal at `Nat`, so resolution goes to the table, as it does where no binder stands.
+    // `Box(Nat)` under `use Show(A)`: the binder is a `Show` of `A` and answers no goal at `Nat`, so resolution goes to the table, as it does where no binder stands.
     let source = r#"
         use /std/{Nat, Show};
-        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
-        pub let v(@A: Type, use Show(A), x: Wrap(Nat)) -> Nat = 0;
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let v(@A: Type, use Show(A), x: Box(Nat)) -> Nat = 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -202,8 +204,8 @@ fn a_table_witness_reads_back_past_a_superclass_at_another_argument() {
             r#"
             use /std/{Nat, Ord};
             use /std/ops/{Eql};
-            pub let Wrap(A: Type, use Eql(A)) -> Type = {A};
-            pub let v(@A: Type, use Ord(A), x: Wrap(${wrapped})) -> Nat = 0;
+            pub struct Box(A: Type, use Eql(A)): pub Type { value: A }
+            pub let v(@A: Type, use Ord(A), x: Box(${wrapped})) -> Nat = 0;
             pub let t: ? = v;
             /std/print("")
         "#,
@@ -221,8 +223,8 @@ fn a_table_witness_reads_back_past_a_binder_of_a_type_constructor() {
         let source = fill!(
             r#"
             use /std/{Nat, Monad, Io};
-            pub let Wrap(M: (Type) -> Type, use Monad(M)) -> Type = M(Nat);
-            pub let v(@M: (Type) -> Type, ${binders}, x: Wrap(${wrapped})) -> Nat = 0;
+            pub struct Box(M: (Type) -> Type, use Monad(M)): pub Type { value: M(Nat) }
+            pub let v(@M: (Type) -> Type, ${binders}, x: Box(${wrapped})) -> Nat = 0;
             pub let t: ? = v;
             /std/print("")
         "#,
@@ -240,8 +242,8 @@ fn an_edge_at_a_type_constructor_is_passed_over_for_the_one_at_the_binder() {
     let source = r#"
         use /std/{Nat, Monad, Io};
         use /std/Monad/{Lift};
-        pub let Wrap(M: (Type) -> Type, use Monad(M)) -> Type = M(Nat);
-        pub let v(@M: (Type) -> Type, use Lift(Io, M), x: Wrap(M)) -> Nat = 0;
+        pub struct Box(M: (Type) -> Type, use Monad(M)): pub Type { value: M(Nat) }
+        pub let v(@M: (Type) -> Type, use Lift(Io, M), x: Box(M)) -> Nat = 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -255,8 +257,8 @@ fn a_binder_at_an_alias_of_a_type_is_read_by_what_the_alias_names() {
     let source = r#"
         use /std/{Nat, Str, Show};
         pub let Text: Type = Str;
-        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
-        pub let v(use Show(Text), x: Wrap(Nat)) -> Nat = 0;
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let v(use Show(Text), x: Box(Nat)) -> Nat = 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -265,19 +267,46 @@ fn a_binder_at_an_alias_of_a_type_is_read_by_what_the_alias_names() {
 }
 
 #[test]
-fn a_binder_at_an_argument_that_computes_keeps_the_table_witness_written() {
-    // `Same(A)` is `A` once it is reduced, which the translation does not do: whether the binder answers the goal at `Nat` is not known to it, so the witness is written, and the report says a term is shown as the compiler holds it.
+fn a_binder_at_an_argument_that_computes_is_passed_over() {
+    // `Same(A)` is `A` once it is reduced, which resolution does where the goal stands: the binder is a `Show` of `A` and answers no goal at `Nat`, so the table's witness is left out.
     let source = r#"
         use /std/{Nat, Show};
         pub let Same(A: Type) -> Type = A;
-        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
-        pub let v(@A: Type, use Show(Same(A)), x: Wrap(Nat)) -> Nat = 0;
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let v(@A: Type, use Show(Same(A)), x: Box(Nat)) -> Nat = 0;
         pub let t: ? = v;
         /std/print("")
     "#;
 
-    let rewritten = pasted(source).unwrap();
-    assert!(rewritten.contains("witness@"), "{rewritten}");
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_binder_at_another_application_of_one_former_is_passed_over() {
+    // `Show(Option(A))` and the goal `Show(Option(Nat))` are one former at arguments conversion tells apart, so resolution goes to the table.
+    let source = r#"
+        use /std/{Nat, Show, Option};
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let v(@A: Type, use Show(Option(A)), x: Box(Option(Nat))) -> Nat = 0;
+        pub let t: ? = v;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
+}
+
+#[test]
+fn a_binder_through_an_alias_of_a_concept_is_the_one_resolution_finds() {
+    // `MyShow(Nat)` reduces to `Show(Nat)`, so the binder answers the goal at `Nat`, and the literal's dictionary, which is that binder, is left out.
+    let source = r#"
+        use /std/{Nat, Show};
+        pub let MyShow(A: Type) -> Type = Show(A);
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let w(use MyShow(Nat)) -> Nat = let y: ? = Box { value = 0 }; 0;
+        /std/print("")
+    "#;
+
+    reads_back(source).unwrap();
 }
 
 #[test]
@@ -291,8 +320,8 @@ fn two_edges_of_one_binder_to_one_concept_are_told_by_what_each_reaches() {
                 use Show(A),
                 use Show(B),
             }
-            pub let Wrap(A: Type, use Show(A)) -> Type = {A};
-            pub let v(@A: Type, @B: Type, use Both(A, B), x: Wrap(${wrapped})) -> Nat = 0;
+            pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+            pub let v(@A: Type, @B: Type, use Both(A, B), x: Box(${wrapped})) -> Nat = 0;
             pub let t: ? = v;
             /std/print("")
         "#,
@@ -305,14 +334,14 @@ fn two_edges_of_one_binder_to_one_concept_are_told_by_what_each_reaches() {
 
 #[test]
 fn an_edge_of_the_programs_own_concept_reads_back() {
-    // `One` is declared by the program the report is of, whose lexicon is read off the module as it was lowered: the elaborator has recorded no edge there yet, and the edge is read off the field that declares it.
+    // `One` is declared by the program the report is of, and resolution reaches `Show(A)` through its edge where the goal stands.
     let source = r#"
         use /std/{Nat, Show};
         pub concept One(A: Type): pub Type {
             use Show(A),
         }
-        pub let Wrap(A: Type, use Show(A)) -> Type = {A};
-        pub let v(@A: Type, use One(A), x: Wrap(A)) -> Nat = 0;
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let v(@A: Type, use One(A), x: Box(A)) -> Nat = 0;
         pub let t: ? = v;
         /std/print("")
     "#;

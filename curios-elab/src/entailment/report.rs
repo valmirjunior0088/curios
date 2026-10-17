@@ -66,6 +66,25 @@ impl Refusal {
             .chain(values.iter().map(|(atom, _)| atom))
     }
 
+    /// [`Refusal::terms`], each to be written over.
+    pub(crate) fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+        let Self {
+            considered,
+            unread,
+            conclusion,
+            ..
+        } = self;
+        let values: &mut [(Term, String)] = match conclusion {
+            Conclusion::Counterexample(assignment) => assignment.as_mut_slice(),
+            _ => &mut [],
+        };
+        considered
+            .iter_mut()
+            .chain(unread)
+            .flat_map(|(from, statement)| from.named_mut().into_iter().chain([statement]))
+            .chain(values.iter_mut().map(|(atom, _)| atom))
+    }
+
     /// The refusal with its counterexample's atoms written through `spelled`, each reduct as the operand stated beside it.
     pub(super) fn respelled(self, spelled: &[(Term, Term)]) -> Self {
         self.rewritten(|atom| respelled(spelled, atom))

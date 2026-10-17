@@ -63,8 +63,8 @@ mod tests;
 
 use {
     super::{
-        DeadArm, Error, Occurrence, Provenance, RegionOwner, UniverseMark, UniverseSolver,
-        UniverseStateToken, Witness, zonk_universe_levels_scoped,
+        DeadArm, Error, Occurrence, Provenance, ReaderScope, RegionOwner, UniverseMark,
+        UniverseSolver, UniverseStateToken, Witness, zonk_universe_levels_scoped,
     },
     crate::{
         Published, Refusal, Sort, hold_at_one_instance, key_spelling, metavar_spines,
@@ -2212,6 +2212,13 @@ impl<'s> Context<'s> {
         self.fresh_metavar_with(result, extent, MetavarOrigin::Witness(origin))
     }
 
+    /// An open witness slot as a report's term holds one: what elaboration mints for a `use` argument a program leaves out, minted for a report's printer alone. No metavariable is born for it, so nothing but a printer reads it.
+    pub(crate) fn open_witness_slot(&mut self, origin: WitnessOrigin) -> Term {
+        let id = self.underway.attempt.solutions.mint();
+
+        Term::metavar_birthed(id, MetavarOrigin::Witness(origin), Vec::new())
+    }
+
     /// Mint a silent hole — the stand-in type a written goal in synthesis position gets, so the goal survives to zonk's report instead of dying with `CannotInfer` (`elaborate_metavar`).
     pub(crate) fn fresh_hole_metavar(&mut self, result: Term, extent: Option<Extent>) -> Term {
         self.fresh_hole(result, extent).1
@@ -3131,5 +3138,36 @@ impl<'s> Context<'s> {
         self.underway.attempt.solutions.leave_oracle(enclosing);
 
         result
+    }
+
+    /// Run `question`, what a report asks of a term it shows, as an oracle ([`Context::with_oracle`]), with every solution it lands rolled back: the answer is all it leaves.
+    pub(crate) fn asking<R>(&mut self, question: impl FnOnce(&mut Self) -> R) -> R {
+        self.with_oracle(|context| {
+            let mark = context.solution_mark();
+            let answered = question(context);
+            context.rollback_solutions(mark);
+            context.end_solutions(mark);
+
+            answered
+        })
+    }
+
+    /// Run `work`, a report's own judgment of the terms it shows, leaving the attempt under way as it found it: what `work` needs of a declaration that has not finished does not void the attempt, and what it asks of the declarations around it is no part of the attempt's trace. The budget is restored for it, as for a declaration's.
+    pub(crate) fn reporting<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
+        let needed = self.underway.needs.take();
+        let traced = self.typing.traced.set_aside();
+        self.restore_budget();
+        let result = work(self);
+        self.underway.needs.put_back(needed);
+        self.typing.traced.put_back(traced);
+
+        result
+    }
+
+    /// Where a report about the judgment under way stands: the witness binders in scope, and the frames standing, which its terms are settled on ([`Error::settled`]).
+    pub(crate) fn reader_scope(&mut self) -> ReaderScope {
+        let witnesses = self.witness_scope().cloned().collect::<Vec<_>>();
+
+        ReaderScope::held(witnesses, self.hold_frames())
     }
 }

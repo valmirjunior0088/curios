@@ -137,7 +137,7 @@ fn held_beside(context: &Context, beside: Option<Beside>) -> Option<Beside> {
 }
 
 impl Error {
-    /// This error with every report it holds built, each standing on the frames it was raised on: what a refusal reports, made where the refusal stands and before what its attempt wrote is undone.
+    /// This error with every report it holds built, each standing on the frames it was raised on: the reports a refusal shows, made where the refusal stands and before what its attempt wrote is undone, and settled for their reader after ([`Error::settled`]).
     pub(crate) fn shown(self, context: &mut Context) -> Self {
         match self {
             Self::Pending(pending) => {
@@ -158,8 +158,8 @@ impl Error {
                 dead,
                 error: Box::new(error.shown(context)),
             },
-            Self::InScope { witnesses, error } => Self::InScope {
-                witnesses,
+            Self::InScope { scope, error } => Self::InScope {
+                scope,
                 error: Box::new(error.shown(context)),
             },
             Self::RejectedCandidate {
@@ -206,7 +206,7 @@ fn held(context: &Context, term: &Term) -> Term {
 
 /// Best-effort display form for a report: `term` as reading the context gives it ([`held`]), deep-[`normalize`]d so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery, and its recursive names given back again for whatever normalization exposed. A normalization that exhausts its budget falls back to the held form.
 ///
-/// Normalization is the whole story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator; the printer spells it, against the witness binders the report carries (axis (h)).
+/// Normalization is the whole story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator; the report writes it as the operator where its refusal is settled ([`written`](fn@crate::written)), resolution answering there with that binder.
 pub(crate) fn resolved_for_display(reporting: &mut Reporting, term: &Term) -> Term {
     let held = held(reporting, term);
     let resolved = normalize(reporting, held.clone()).unwrap_or(held);

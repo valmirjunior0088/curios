@@ -293,6 +293,11 @@ impl HeldFrames {
         &self.0
     }
 
+    /// Whether no frame is held: what waits where no local frame stood.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Whether a frame held registers a refinement of any kind: the residual-constraint report notes it, and the caches are told of a judgment that stands on one.
     pub(crate) fn refined(&self) -> bool {
         self.0.iter().any(|frame| frame.refined())

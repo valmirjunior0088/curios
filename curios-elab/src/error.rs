@@ -5,7 +5,7 @@ use display::*;
 mod tests;
 
 use {
-    super::{Erased, ErasedNames, Pending, Refusal},
+    super::{Context, Erased, ErasedNames, HeldFrames, Pending, Refusal, written},
     curios_analysis::DeclaredPart,
     curios_core::{
         Anchors, Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Extent, Free, Global,
@@ -36,6 +36,36 @@ impl DeadArm {
             Self::Guard { guard, case } | Self::EnclosingGuard { guard, case } => [guard, case],
             Self::Indices { case, scrutinee } => [case, scrutinee],
         }
+    }
+
+    /// [`DeadArm::terms`], to be written over.
+    fn terms_mut(&mut self) -> [&mut Term; 2] {
+        match self {
+            Self::Guard { guard, case } | Self::EnclosingGuard { guard, case } => [guard, case],
+            Self::Indices { case, scrutinee } => [case, scrutinee],
+        }
+    }
+}
+
+/// Where the reader of an error stands ([`Error::InScope`]): the witness binders in scope where it arose, outermost first, and, until the error is settled where it is final (`Error::settled`), the frames it arose in, which settling stands on. A settled error lets its frames go, so no state of the elaboration outlives the refusal.
+#[derive(Debug, Clone)]
+pub struct ReaderScope {
+    witnesses: Rc<[(Free, Term)]>,
+    frames: Option<HeldFrames>,
+}
+
+impl ReaderScope {
+    /// The scope of a judgment standing in `frames`, `witnesses` its witness binders.
+    pub(crate) fn held(witnesses: Vec<(Free, Term)>, frames: HeldFrames) -> Self {
+        Self {
+            witnesses: Rc::from(witnesses),
+            frames: Some(frames),
+        }
+    }
+
+    /// Whether this scope says nothing a report's reader would not know at the top of their declaration.
+    fn is_empty(&self) -> bool {
+        self.witnesses.is_empty() && self.frames.as_ref().is_none_or(HeldFrames::is_empty)
     }
 }
 
@@ -210,6 +240,172 @@ pub enum Declined {
     Unpaired,
     /// Two `Bool` terms whose atoms pass the truth table's cap.
     PastCap,
+}
+
+/// Every term an error's message prints, handed to `$visit` in order, a nested error's through `$recurse` and a reason's or a refusal's through `$terms`: the one list both readings of an error's terms expand, so the terms a report renames by and the terms it settles are one set.
+macro_rules! shown_terms {
+    ($error:expr, $visit:ident, $recurse:ident, $terms:ident) => {
+        match $error {
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InScope { error, .. } => error.$recurse($visit),
+            Self::InUnreachableArm { dead, error } => {
+                for term in dead.$terms() {
+                    $visit(term);
+                }
+                error.$recurse($visit);
+            }
+            Self::Batch(errors) => {
+                for error in errors {
+                    error.$recurse($visit);
+                }
+            }
+            Self::ReduceExhausted { term, .. } | Self::UnboundVariable { term, .. } => $visit(term),
+            Self::ConvertExhausted { this, that, .. }
+            | Self::PostponedConversion { this, that, .. } => {
+                $visit(this);
+                $visit(that);
+            }
+            Self::TypeMismatch {
+                inferred, expected, ..
+            } => {
+                $visit(inferred);
+                $visit(expected);
+            }
+            Self::StrandedSequencing { sequenced, region } => {
+                if let Some(sequenced) = sequenced {
+                    $visit(sequenced);
+                }
+                $visit(region);
+            }
+            Self::UnembeddedAction { action, expected } => {
+                $visit(action);
+                $visit(expected);
+            }
+            Self::NotAFunction { head_type, reduced } => {
+                $visit(head_type);
+                $visit(reduced);
+            }
+            Self::NotATuple { head_type }
+            | Self::NotNatType { head_type }
+            | Self::NotBoolType { head_type }
+            | Self::NotListType { head_type }
+            | Self::NotBinType { head_type, .. }
+            | Self::NotAInductType { head_type, .. } => $visit(head_type),
+            Self::NotAFunctionType { expected, .. }
+            | Self::NotATupleType { expected, .. }
+            | Self::PostponedCheck { expected } => $visit(expected),
+            Self::NotAStructType { found }
+            | Self::SpreadBaseTypeMismatch { found, .. }
+            | Self::WitnessNotAConcept { found, .. }
+            | Self::UseParameterNotAConcept { found, .. }
+            | Self::ImplicitConceptMemberUnfillable { found } => $visit(found),
+            Self::MatrixStructHead { scrutinee, .. } => $visit(scrutinee),
+            Self::InformativePropStruct { field_type, .. } => $visit(field_type),
+            Self::NotStrictlyPositive { site_type, .. } => $visit(site_type),
+            Self::OperatorUndefined { type_, .. } => $visit(type_),
+            Self::ImplicitAtOtherSort { given, .. } => $visit(given),
+            Self::UninferredImplicit {
+                bound,
+                reduct,
+                refusal,
+                ..
+            } => {
+                $visit(bound);
+                if let Some(reduct) = reduct {
+                    $visit(reduct);
+                }
+                if let Some(refusal) = refusal {
+                    for term in refusal.$terms() {
+                        $visit(term);
+                    }
+                }
+            }
+            Self::Underivable { key, .. } => $visit(key),
+            Self::AmbiguousSpines { one, another, .. } => {
+                $visit(one);
+                $visit(another);
+            }
+            Self::RejectedCandidate {
+                candidate, error, ..
+            } => {
+                $visit(candidate);
+                error.$recurse($visit);
+            }
+            Self::NoWitness { goal, need, .. } => {
+                $visit(goal);
+                match need {
+                    Some(Need::Embedding(EmbeddingDiagnosis { source, target, .. })) => {
+                        $visit(source);
+                        $visit(target);
+                    }
+                    Some(Need::Closing(type_)) => $visit(type_),
+                    Some(Need::Joining(_)) | None => {}
+                }
+            }
+            Self::Goal {
+                scope,
+                goal,
+                solution,
+            } => {
+                for (name, type_) in scope {
+                    $visit(name);
+                    $visit(type_);
+                }
+                $visit(goal);
+                if let Some(solution) = solution {
+                    $visit(solution);
+                }
+            }
+            Self::Goals(reports) => {
+                for report in reports {
+                    let GoalReport {
+                        scope,
+                        goal,
+                        solution,
+                        candidates,
+                        refusal,
+                        ..
+                    } = report;
+                    for (name, type_) in scope {
+                        $visit(name);
+                        $visit(type_);
+                    }
+                    $visit(goal);
+                    if let Some(solution) = solution {
+                        $visit(solution);
+                    }
+                    for candidate in candidates {
+                        $visit(candidate);
+                    }
+                    if let Some(refusal) = refusal {
+                        for term in refusal.$terms() {
+                            $visit(term);
+                        }
+                    }
+                }
+            }
+            Self::AmbiguousWitness {
+                goal,
+                first,
+                second,
+            } => {
+                $visit(goal);
+                $visit(first);
+                $visit(second);
+            }
+            Self::InvalidWitnessHead { head, .. } => $visit(head),
+            Self::DeclarationCycle { members } => {
+                for member in members {
+                    if let CycleMember::Witness { type_, .. } = member {
+                        $visit(type_);
+                    }
+                }
+            }
+            Self::NonRegularWitnessPremise { premise, .. } => $visit(premise),
+            _ => {}
+        }
+    };
 }
 
 /// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's extent as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
@@ -760,9 +956,9 @@ pub enum Error {
         dead: Box<DeadArm>,
         error: Box<Error>,
     },
-    /// The witness binders in scope where `error` arose, outermost first: the reader position its terms are spelled for, so a `use` argument resolution would restore reads as left out (the printer's axis (h)). A sibling of [`Error::Located`], attached by the same drivers.
+    /// Where `error` arose, as its reader stands there ([`ReaderScope`]): the position its terms are settled for and spelled for. A sibling of [`Error::Located`], attached by the same drivers.
     InScope {
-        witnesses: Rc<[(Free, Term)]>,
+        scope: ReaderScope,
         error: Box<Error>,
     },
     /// Several refusals reported together, in the order their items were elaborated: what a module holding more than one refused item raises, so one run reports every failure rather than the first. Never empty and never nested — `Error::batch` flattens, and a batch of one is that member — and never wrapped, since each member carries its own location and declaration.
@@ -963,8 +1159,8 @@ impl Error {
                 extent,
                 error: Box::new(error.at_argument(site)),
             },
-            Self::InScope { witnesses, error } => Self::InScope {
-                witnesses,
+            Self::InScope { scope, error } => Self::InScope {
+                scope,
                 error: Box::new(error.at_argument(site)),
             },
             error => error,
@@ -1622,40 +1818,82 @@ impl Error {
         }
     }
 
-    /// Record the witness binders in scope where this error arose. Innermost wins, as for [`Error::at`], and the record goes under a location rather than over it, so the two wrappers stamped together as an error unwinds each stay single. An empty scope records nothing.
-    pub(crate) fn in_scope(self, witnesses: &[(Free, Term)]) -> Self {
-        if witnesses.is_empty() {
+    /// Record where this error arose, as its reader stands there. Innermost wins, as for [`Error::at`], and the record goes under a location rather than over it, so the two wrappers stamped together as an error unwinds each stay single. A scope that says nothing records nothing.
+    pub(crate) fn in_scope(self, scope: ReaderScope) -> Self {
+        if scope.is_empty() {
             return self;
         }
         match self {
             Self::InScope { .. } | Self::Batch(_) => self,
             Self::Located { extent, error } => Self::Located {
                 extent,
-                error: Box::new(error.in_scope(witnesses)),
+                error: Box::new(error.in_scope(scope)),
             },
             error => Self::InScope {
-                witnesses: Rc::from(witnesses),
+                scope,
                 error: Box::new(error),
             },
         }
     }
 
-    /// The innermost witness scope recorded on this error, looking through every wrapper — the reader position its report is spelled for.
-    fn witness_scope(&self) -> Rc<[(Free, Term)]> {
+    /// The innermost scope recorded on this error, looking through every wrapper — where its reader stands.
+    fn reader_scope(&self) -> Option<&ReaderScope> {
         match self {
-            Self::InScope { witnesses, error } => {
-                let inner = error.witness_scope();
-                if inner.is_empty() {
-                    Rc::clone(witnesses)
-                } else {
-                    inner
-                }
+            Self::InScope { scope, error } => error.reader_scope().or(Some(scope)),
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InUnreachableArm { error, .. } => error.reader_scope(),
+            _ => None,
+        }
+    }
+
+    /// The witness binders in scope where this error's reader stands: the reader position its report is spelled for.
+    fn witness_scope(&self) -> Rc<[(Free, Term)]> {
+        self.reader_scope()
+            .map(|scope| Rc::clone(&scope.witnesses))
+            .unwrap_or_default()
+    }
+
+    /// Let go of the frames every scope recorded on this error holds.
+    fn let_go_of_frames(&mut self) {
+        match self {
+            Self::InScope { scope, error } => {
+                scope.frames = None;
+                error.let_go_of_frames();
             }
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. } => error.witness_scope(),
-            _ => Rc::default(),
+            | Self::InUnreachableArm { error, .. }
+            | Self::RejectedCandidate { error, .. } => error.let_go_of_frames(),
+            Self::Batch(errors) => errors.iter_mut().for_each(Self::let_go_of_frames),
+            _ => {}
         }
+    }
+
+    /// This error as it is reported: its reports built ([`Error::shown`]), then every term it shows written as a program writes it where its reader stands ([`written`](fn@crate::written)), standing on the frames it arose in, and those frames let go. What a refusal is made into where it is final, before the context it arose in is undone; written after it is built, since what a pending report shows is only a term once it is. A batch is settled member by member, each where its own reader stands.
+    pub(crate) fn settled(self, context: &mut Context) -> Self {
+        if let Self::Batch(errors) = self {
+            return Self::Batch(
+                errors
+                    .into_iter()
+                    .map(|error| error.settled(context))
+                    .collect(),
+            );
+        }
+
+        let mut error = self.shown(context);
+        let frames = error
+            .reader_scope()
+            .and_then(|scope| scope.frames.clone())
+            .unwrap_or_default();
+        context.reporting(|context| {
+            context.standing_on(&frames, |context| {
+                error.visit_terms_mut(&mut |term| *term = written(context, term));
+            });
+        });
+        error.let_go_of_frames();
+
+        error
     }
 
     /// The collision-aware rename map axis (a) needs: one map over every name this error's terms mention, so `inferred` and `expected` agree on what each name means. Globals are reserved under the spelling `spelling` displays them by, which stands where this error's reader does.
@@ -1887,148 +2125,19 @@ impl Error {
         }
     }
 
-    /// The terms this error embeds in its message, gathered so [`format`] can pretty-print their names consistently. Recurses through the `Located` wrapper; variants carrying no term contribute nothing.
+    /// The terms this error embeds in its message, gathered so [`format`] can pretty-print their names consistently.
     fn collect_terms<'a>(&'a self, out: &mut Vec<&'a Term>) {
-        match self {
-            Self::Located { error, .. }
-            | Self::InDeclaration { error, .. }
-            | Self::InScope { error, .. } => error.collect_terms(out),
-            Self::InUnreachableArm { dead, error } => {
-                out.extend(dead.terms());
-                error.collect_terms(out);
-            }
-            Self::Batch(errors) => {
-                for error in errors {
-                    error.collect_terms(out);
-                }
-            }
-            Self::ReduceExhausted { term, .. } => out.push(term),
-            Self::ConvertExhausted { this, that, .. } => {
-                out.push(this);
-                out.push(that);
-            }
-            Self::TypeMismatch {
-                inferred, expected, ..
-            } => {
-                out.push(inferred);
-                out.push(expected);
-            }
-            Self::StrandedSequencing { sequenced, region } => {
-                out.extend(sequenced.as_deref());
-                out.push(region);
-            }
-            Self::UnembeddedAction { action, expected } => {
-                out.push(action);
-                out.push(expected);
-            }
-            Self::NotAFunction { head_type, reduced } => {
-                out.push(head_type);
-                out.push(reduced);
-            }
-            Self::NotATuple { head_type }
-            | Self::NotNatType { head_type }
-            | Self::NotBoolType { head_type }
-            | Self::NotListType { head_type }
-            | Self::NotBinType { head_type, .. }
-            | Self::NotAInductType { head_type, .. } => out.push(head_type),
-            Self::NotAFunctionType { expected, .. } | Self::NotATupleType { expected, .. } => {
-                out.push(expected)
-            }
-            Self::NotAStructType { found } => out.push(found),
-            Self::MatrixStructHead { scrutinee, .. } => out.push(scrutinee),
-            Self::InformativePropStruct { field_type, .. } => out.push(field_type),
-            Self::NotStrictlyPositive { site_type, .. } => out.push(site_type),
-            Self::OperatorUndefined { type_, .. } => out.push(type_),
-            Self::ImplicitAtOtherSort { given, .. } => out.push(given),
-            Self::UninferredImplicit {
-                bound,
-                reduct,
-                refusal,
-                ..
-            } => {
-                out.push(bound);
-                if let Some(reduct) = reduct {
-                    out.push(reduct);
-                }
-                if let Some(refusal) = refusal {
-                    out.extend(refusal.terms());
-                }
-            }
-            Self::SpreadBaseTypeMismatch { found, .. } => out.push(found),
-            Self::UnboundVariable { term, .. } => out.push(term),
-            Self::Underivable { key, .. } => out.push(key),
-            Self::PostponedCheck { expected } => out.push(expected),
-            Self::PostponedConversion { this, that, .. } => {
-                out.push(this);
-                out.push(that);
-            }
-            Self::AmbiguousSpines { one, another, .. } => {
-                out.push(one);
-                out.push(another);
-            }
-            Self::RejectedCandidate {
-                candidate, error, ..
-            } => {
-                out.push(candidate);
-                error.collect_terms(out);
-            }
-            Self::NoWitness { goal, need, .. } => {
-                out.push(goal);
-                match need {
-                    Some(Need::Embedding(diagnosis)) => {
-                        out.push(&diagnosis.source);
-                        out.push(&diagnosis.target);
-                    }
-                    Some(Need::Closing(type_)) => out.push(type_),
-                    Some(Need::Joining(_)) | None => {}
-                }
-            }
-            Self::Goal {
-                scope,
-                goal,
-                solution,
-            } => {
-                for (name, type_) in scope {
-                    out.push(name);
-                    out.push(type_);
-                }
-                out.push(goal);
-                out.extend(solution.as_deref());
-            }
-            Self::Goals(reports) => {
-                for report in reports {
-                    for (name, type_) in &report.scope {
-                        out.push(name);
-                        out.push(type_);
-                    }
-                    out.push(&report.goal);
-                    out.extend(report.solution.as_ref());
-                    out.extend(&report.candidates);
-                    out.extend(report.refusal.iter().flat_map(Refusal::terms));
-                }
-            }
-            Self::AmbiguousWitness {
-                goal,
-                first,
-                second,
-            } => {
-                out.push(goal);
-                out.push(first);
-                out.push(second);
-            }
-            Self::InvalidWitnessHead { head, .. } => out.push(head),
-            Self::DeclarationCycle { members } => {
-                out.extend(members.iter().filter_map(|member| match member {
-                    CycleMember::Witness { type_, .. } => Some(&**type_),
-                    CycleMember::Named(_) => None,
-                }));
-            }
-            Self::WitnessNotAConcept { found, .. }
-            | Self::UseParameterNotAConcept { found, .. }
-            | Self::ImplicitConceptMemberUnfillable { found } => out.push(found),
-            Self::NonRegularWitnessPremise { premise, .. } => out.push(premise),
-            _ => {}
-        }
+        self.visit_terms(&mut |term| out.push(term));
+    }
+
+    /// Hand `visit` every term this error's message prints, in order, through every wrapper; a variant carrying no term hands it none.
+    fn visit_terms<'a>(&'a self, visit: &mut dyn FnMut(&'a Term)) {
+        shown_terms!(self, visit, visit_terms, terms);
+    }
+
+    /// [`Error::visit_terms`], each term to be written over: the same list, read the other way.
+    fn visit_terms_mut(&mut self, visit: &mut dyn FnMut(&mut Term)) {
+        shown_terms!(self, visit, visit_terms_mut, terms_mut);
     }
 }
 

@@ -128,6 +128,21 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
             )
             .is_ok_and(|sort| sort == Sort::type_at(Level::zero())),
         ),
+        // A report writes what it shows as a program writes it, entering every binder a type opens; a term with no witness in it comes back as it was.
+        (
+            "the written form",
+            root_operands_shared(&written(&mut context, &solved)),
+        ),
+        (
+            "the written form of a type",
+            matches!(
+                &*written(
+                    &mut context,
+                    &doubled_record(Term::intrinsic(Intrinsic::NatType)),
+                ),
+                Subterm::TupleType(_),
+            ),
+        ),
     ];
 
     for (walk, answered) in rows {

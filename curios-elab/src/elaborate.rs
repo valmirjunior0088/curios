@@ -16,6 +16,7 @@ use binding::*;
 pub(crate) use binding::{embeds, is_monad, monad_shape, numeral_default, region_flex};
 
 mod metavar;
+pub(crate) use metavar::trivially_inhabited;
 use metavar::*;
 
 mod intrinsic;
@@ -76,11 +77,8 @@ pub(crate) fn elaborate(
         });
 
         // `Error::at` is first-wins, so stamping as the recursion unwinds reports the deepest node that failed.
-        let (rebuilt, type_) = result.map_err(|error| {
-            error
-                .at_opt(term.extent())
-                .in_scope(&context.witness_scope().cloned().collect::<Vec<_>>())
-        })?;
+        let (rebuilt, type_) =
+            result.map_err(|error| error.at_opt(term.extent()).in_scope(context.reader_scope()))?;
 
         let rebuilt = match term.extent() {
             Some(extent) => rebuilt.with_extent(extent),
@@ -117,13 +115,8 @@ pub(crate) fn elaborate_func_settle(
     term: &Term,
 ) -> Result<(Term, Term), Error> {
     let (rebuilt, type_) =
-        elaborate_func_infer(context, &func.telescope, &func.plicities(), Some(term)).map_err(
-            |error| {
-                error
-                    .at_opt(term.extent())
-                    .in_scope(&context.witness_scope().cloned().collect::<Vec<_>>())
-            },
-        )?;
+        elaborate_func_infer(context, &func.telescope, &func.plicities(), Some(term))
+            .map_err(|error| error.at_opt(term.extent()).in_scope(context.reader_scope()))?;
     let rebuilt = match term.extent() {
         Some(extent) => rebuilt.with_extent(extent),
         None => rebuilt,

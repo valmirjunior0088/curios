@@ -12,7 +12,7 @@ use {
     },
     curios_elab::{
         Context, ErasedUnit, Error, Established, Reading, Recompile, Recompiled, Traces,
-        elaborate_and_zonk_unit_over,
+        elaborate_and_zonk_unit_over, test_support::written_for_reader,
     },
     curios_ersd::FieldShape,
     curios_prelude::with_prelude,
@@ -1226,8 +1226,10 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                 )
             })
         };
-        // A term as a report raised in `owner` prints it, read back as the tree it parses to: `None` where the translation declines it.
+        // A term as a report raised in `owner` prints it, settled where its reader stands and read back as the tree it parses to: `None` where the translation declines it.
+        let established = Established::over(&[sys.core(), std.core()]);
         let written = |term: &Term, owner: Global| {
+            let term = &written_for_reader(&established, SYNTAX, term);
             let spelling = unplaced.clone().for_reader(ReaderPosition {
                 owner: Some(owner),
                 witnesses: Rc::default(),

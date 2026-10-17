@@ -3,8 +3,8 @@ mod tests;
 
 use {
     super::{
-        Context, Error, GoalReport, Suggestions, UniverseSolver, callee, contract_redexes,
-        refold_recs, suggest_candidates, universe_context_validate,
+        Context, Error, GoalReport, ReaderScope, Suggestions, UniverseSolver, callee,
+        contract_redexes, refold_recs, suggest_candidates, universe_context_validate, written,
     },
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
@@ -941,13 +941,13 @@ pub(crate) fn goal_sites(
     goals.take()
 }
 
-/// Report the goals met at `sites` ([`goal_sites`]) as display-ready reports, in the state they were written in — the only one that knows them — each with the candidates that fit it, drawn from `written`, the unit's items as they elaborated, and a program's entry.
+/// Report the goals met at `sites` ([`goal_sites`]) as display-ready reports, in the state they were written in — the only one that knows them — each with the candidates that fit it, drawn from `items`, the unit's items as they elaborated, and a program's entry.
 ///
-/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_candidates`]), displayed through the same pipeline.
+/// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; each is then written as a program writes it where the goal stands ([`written`](fn@crate::written)), standing on the frames the goal was born under, and its universe instances are erased ([`project_erased_universes`]), so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_candidates`]), displayed through the same pipeline.
 pub(crate) fn report_goals(
     context: &mut Context,
     sites: &[GoalSite],
-    written: &[Item],
+    items: &[Item],
     entry: Option<&Entrypoint>,
 ) -> Vec<GoalReport> {
     // Suggestions run first, on the mutable context — each attempt sandboxed and rolled back — before the display phase borrows it immutably. Solved goals get none: a suggestion beside a `? =` answer is noise. `restore_budget` puts the attempts on the same footing as the finalization passes.
@@ -976,54 +976,94 @@ pub(crate) fn report_goals(
             &telescope,
             &refinements,
             &result,
-            written,
+            items,
             entry,
             owner.as_ref(),
         ));
     }
 
-    // Materialize committed substitutions tolerantly and erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved). A lambda applied where it stands is contracted, since a solution is a reduct and may hold one no reader could write back (`contract_redexes`). How a witness reads is the printer's, against the witness binders the goal was written under (axis (h)).
-    let context = &*context;
-    let display = |term: &Term| {
-        contract_redexes(&refold_recs(
-            context,
-            &project_erased_universes(&settle_qualities(
-                context,
-                &zonk_solved_term_metas(context, term),
-            )),
-        ))
+    // Materialize committed substitutions tolerantly, then write each term as a program writes it where the goal stands, standing on the frames it was born under — a `use` argument resolution puts back there left out, a method called as a program calls it — and erase universe instances (the surface language cannot even spell `.{…}`, so a report never shows one — solved or unsolved). A lambda applied where it stands is contracted, since a solution is a reduct and may hold one no reader could write back (`contract_redexes`).
+    let solved = |context: &Context, term: &Term| {
+        settle_qualities(context, &zonk_solved_term_metas(context, term))
     };
-    sites
-        .iter()
-        .zip(all_candidates)
-        .map(|((id, extent, owner), suggestions)| {
-            // Every goal occurrence in the elaborated module was rebuilt by `elaborate_metavar`, which births on first sight in either mode — so the entry exists.
-            let entry = context
-                .metavar_entry(*id)
-                .expect("a collected goal has a birth entry");
-            GoalReport {
-                extent: *extent,
-                owner: *owner,
-                witnesses: entry.frames.witnesses().cloned().collect(),
-                scope: entry
-                    .telescope
-                    .iter()
-                    .map(|(name, type_)| (Term::free_var(name), display(type_)))
-                    .collect(),
-                goal: display(&entry.result),
-                solution: context.metavar_solution(*id).map(display),
-                // The drain's surrendered conversions this goal holds up, already in display form; the batch's own pipeline re-runs over them harmlessly.
-                obligations: context
-                    .goal_obligations()
-                    .iter()
-                    .filter(|obligation| obligation.goals.contains(id))
-                    .map(|obligation| (display(&obligation.this), display(&obligation.that)))
-                    .collect(),
-                candidates: suggestions.candidates.iter().map(display).collect(),
-                refusal: suggestions.refusal,
-            }
-        })
-        .collect()
+    let shown = |context: &Context, term: &Term| {
+        contract_redexes(&refold_recs(context, &project_erased_universes(term)))
+    };
+    let mut reports = Vec::with_capacity(sites.len());
+    for ((id, extent, owner), suggestions) in sites.iter().zip(all_candidates) {
+        // Every goal occurrence in the elaborated module was rebuilt by `elaborate_metavar`, which births on first sight in either mode — so the entry exists.
+        let entry = context
+            .metavar_entry(*id)
+            .expect("a collected goal has a birth entry");
+        let frames = entry.frames.clone();
+        let witnesses = entry.frames.witnesses().cloned().collect();
+        let mut scope = entry
+            .telescope
+            .iter()
+            .map(|(name, type_)| (Term::free_var(name), solved(context, type_)))
+            .collect::<Vec<_>>();
+        let mut goal = solved(context, &entry.result);
+        let mut solution = context
+            .metavar_solution(*id)
+            .map(|solution| solved(context, solution));
+        // The drain's surrendered conversions this goal holds up, already in display form; the batch's own pipeline re-runs over them harmlessly.
+        let mut obligations = context
+            .goal_obligations()
+            .iter()
+            .filter(|obligation| obligation.goals.contains(id))
+            .map(|obligation| {
+                (
+                    solved(context, &obligation.this),
+                    solved(context, &obligation.that),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut candidates = suggestions
+            .candidates
+            .iter()
+            .map(|candidate| solved(context, candidate))
+            .collect::<Vec<_>>();
+        let mut refusal = suggestions.refusal;
+
+        context.reporting(|context| {
+            context.standing_on(&frames, |context| {
+                let terms = scope
+                    .iter_mut()
+                    .map(|(_, type_)| type_)
+                    .chain([&mut goal])
+                    .chain(solution.as_mut())
+                    .chain(obligations.iter_mut().flat_map(|(this, that)| [this, that]))
+                    .chain(candidates.iter_mut())
+                    .chain(refusal.iter_mut().flat_map(|refusal| refusal.terms_mut()));
+                for term in terms {
+                    *term = written(context, term);
+                }
+            });
+        });
+
+        reports.push(GoalReport {
+            extent: *extent,
+            owner: *owner,
+            witnesses,
+            scope: scope
+                .iter()
+                .map(|(name, type_)| (name.clone(), shown(context, type_)))
+                .collect(),
+            goal: shown(context, &goal),
+            solution: solution.map(|solution| shown(context, &solution)),
+            obligations: obligations
+                .iter()
+                .map(|(this, that)| (shown(context, this), shown(context, that)))
+                .collect(),
+            candidates: candidates
+                .iter()
+                .map(|candidate| shown(context, candidate))
+                .collect(),
+            refusal,
+        });
+    }
+
+    reports
 }
 
 /// The report a written goal `?` errors out with: the local scope frozen at its birth, the goal's type, and the solution elaboration committed (if any) — each zonked for *display*, keeping the raw spelling where unsolved holes survive (the same tolerance the no-witness report uses).
@@ -1044,7 +1084,10 @@ fn goal_report(context: &Zonk, id: MetavarId) -> Error {
             display(&entry.result),
             context.metavar_solution(id).map(display),
         )
-        .in_scope(&entry.frames.witnesses().cloned().collect::<Vec<_>>()),
+        .in_scope(ReaderScope::held(
+            entry.frames.witnesses().cloned().collect(),
+            entry.frames.clone(),
+        )),
         // A goal elaboration never reached was never birthed, so there is no scope or type to report — unreachable in practice, since every kept item elaborates.
         None => Error::CannotInfer,
     }
@@ -1128,11 +1171,13 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                             Some(dead) => unsolved.in_dead_arm(dead),
                             None => unsolved,
                         };
-                        unsolved.in_scope(
-                            &entry
-                                .map(|entry| entry.frames.witnesses().cloned().collect::<Vec<_>>())
-                                .unwrap_or_default(),
-                        )
+                        match entry {
+                            Some(entry) => unsolved.in_scope(ReaderScope::held(
+                                entry.frames.witnesses().cloned().collect(),
+                                entry.frames.clone(),
+                            )),
+                            None => unsolved,
+                        }
                     }
                     MetavarOrigin::Witness(origin) => {
                         // The birth record's `result` is the goal type; display it through whatever solutions landed, keeping the raw spelling if holes survive.

@@ -10,7 +10,8 @@ use {
         Lowering, Many, Match, Nat, Outcome, Retyping, Scope, Subterm, Telescope, Term, Three, Two,
         demanded_type, emitted, is_erasable, narrow_case_key,
     },
-    curios_analysis::{Invert, case_target_indices, pinned_by_targets},
+    crate::InductCase,
+    curios_analysis::{case_target_indices, pinned_by_targets},
     curios_core::{Free, MatchResult, Universes},
     curios_num::{Binary, Grain, Natural},
 };
@@ -837,7 +838,7 @@ impl Lowering<'_> {
     }
 }
 
-/// Assume the payload binders at their instantiated types, refine the scrutinee to `tag(vars)` and the index equations to their most-general solution, and return the arm body's expected type. Typing-only: it touches the context and emits nothing.
+/// Enter the arm of `tag` as it was elaborated ([`Retyping::enter_induct_case`]) and return the arm body's expected type. Typing-only: it touches the context and emits nothing.
 fn refine_arm(
     context: &mut Retyping,
     m: &InductMatch<'_>,
@@ -846,35 +847,14 @@ fn refine_arm(
     vars: &[Term],
     telescope: Telescope<Vec<Term>>,
 ) -> Result<Term, Error> {
-    let mut cursor = telescope.cursor();
-    for (label, var) in labels.iter().zip(vars) {
-        let (_, type_) = cursor
-            .entry()
-            .expect("erase: constructor arity checked by elaborate");
-        context.assume(label, &type_);
-        cursor.advance(var.clone());
-    }
-
-    let target_indices = cursor
-        .body()
-        .expect("erase: constructor arity checked by elaborate");
-
-    let constructor_value = Term::variant_at(
-        *m.name,
-        m.universes.clone(),
-        m.params.to_vec(),
-        tag.clone(),
-        vars.to_vec(),
-    );
-    context.refine_head(m.head, &constructor_value)?;
-    // The index equations by the function elaboration and the kernel solve them with, both directions.
-    if let Invert::Solved(solutions) =
-        context.solve_indices(m.actual_indices, &target_indices, labels)?
-    {
-        for (name, solution) in solutions {
-            context.refine(&name, &solution);
-        }
-    }
+    let family = InductCase {
+        name: m.name,
+        universes: m.universes,
+        params: m.params,
+        actual_indices: m.actual_indices,
+    };
+    let (target_indices, constructor_value) =
+        context.enter_induct_case(m.head, family, tag, (labels, vars), telescope)?;
 
     Ok(m.result.at(
         m.head,

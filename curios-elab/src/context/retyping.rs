@@ -8,11 +8,13 @@
 
 use {
     super::{Answered, Context, InScope, Question},
-    crate::{Binders, Error, is_erasable_in, reduce_with, refine_head, sort_term, synth_neutral},
-    curios_analysis::{Invert, solve_indices},
+    crate::{
+        Binders, Error, InductCase, enter_induct_case, is_erasable_in, reduce_with, refine_head,
+        sort_term, synth_neutral,
+    },
     curios_core::{
-        Advance, Cost, DefinitionKind, Free, Global, InductDecl, ReduceError, StructDecl, Term,
-        Trace, UniverseContext, UniverseError, Universes,
+        Advance, Atom, Cost, DefinitionKind, Free, Global, InductDecl, ReduceError, StructDecl,
+        Telescope, Term, Trace, UniverseContext, UniverseError, Universes,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -150,11 +152,6 @@ impl<'s> Retyping<'s> {
         self.context.definition_body(name)
     }
 
-    /// [`Context::refine`].
-    pub(crate) fn refine(&mut self, name: &Free, term: &Term) {
-        self.context.refine(name, term);
-    }
-
     /// [`Context::induct_decl`].
     pub(crate) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         self.context.induct_decl(name)
@@ -214,13 +211,15 @@ impl<'s> Retyping<'s> {
         refine_head(&mut self.context, head, value)
     }
 
-    /// Solve a match's index equations for an arm's `binders` ([`solve_indices`]), the one place a reader puts a question to conversion: two forcings of one binder are compared by `Judge::convert_at`.
-    pub(crate) fn solve_indices(
+    /// Enter an inductive arm as it was elaborated ([`enter_induct_case`]), the one place a reader puts a question to conversion: solving the arm's index equations compares two forcings of one binder by `Judge::convert_at`.
+    pub(crate) fn enter_induct_case(
         &mut self,
-        actuals: &[Term],
-        targets: &[Term],
-        binders: &[Free],
-    ) -> Result<Invert, Error> {
-        solve_indices(&mut self.context, actuals, targets, binders)
+        head: &Term,
+        family: InductCase<'_>,
+        tag: &Atom,
+        binders: (&[Free], &[Term]),
+        telescope: Telescope<Vec<Term>>,
+    ) -> Result<(Vec<Term>, Term), Error> {
+        enter_induct_case(&mut self.context, head, family, tag, binders, telescope)
     }
 }

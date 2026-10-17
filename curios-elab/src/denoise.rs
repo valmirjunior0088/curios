@@ -2,7 +2,7 @@
 //!
 //! A mismatch report normalizes both sides so the disagreement is visible, and normalizing `double(p + 1)` unfolds the global through its structural group, which carries no name: the report would then spell `rec #0: (n: Nat) -> Nat = n => …; #0(p) + 2` where the author wrote `double`. [`refold_recs`] recognizes a `Rec` node whose group is one the context defined and spells its tail with each member as the definition it is: `double(p) + 2`. An instance reduction opened is named at the levels it was opened at, as a committed term names it, so two calls apart in a level alone are two spellings where a report shows universes; any other group is compared projected, so an instance of a universe-polymorphic group is the group it instantiates, and its members are named at no instance. This lives here rather than in the printer because the group to recognize is the *elaborated* one, which only the context holds; the lowered module the formatter has is a different structure, and on an error path there is no elaborated module at all.
 //!
-//! A witness is not folded here. How one reads — left out where resolution would restore it, a method projected off it spelled as its call or operator — depends on the witness binders in scope at each node, which only the printer's walk sees; that is axis (h) of `curios-core`'s printer.
+//! A witness is not folded here. How one reads — left out where resolution would restore it, a method projected off it spelled as its call or operator — is what resolution answers where the report's reader stands, under the binders and arms between, so it is settled where a report is made, standing there ([`written`](fn@crate::written)).
 
 #[cfg(test)]
 mod tests;

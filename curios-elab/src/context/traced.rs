@@ -184,4 +184,24 @@ impl Traced {
         self.seen.get_mut().clear();
         mem::take(self.trace.get_mut())
     }
+
+    /// The trace so far, set aside whole for [`Traced::put_back`]: a judgment run beside the one traced asks nothing on its behalf.
+    pub(crate) fn set_aside(&mut self) -> AsideTrace {
+        AsideTrace {
+            seen: mem::take(self.seen.get_mut()),
+            trace: mem::take(self.trace.get_mut()),
+        }
+    }
+
+    /// Put back the trace `aside` holds, dropping what was asked since it was set aside.
+    pub(crate) fn put_back(&mut self, aside: AsideTrace) {
+        *self.seen.get_mut() = aside.seen;
+        *self.trace.get_mut() = aside.trace;
+    }
+}
+
+/// A trace set aside ([`Traced::set_aside`]).
+pub(crate) struct AsideTrace {
+    seen: HashSet<Once>,
+    trace: Trace<Question, Answered>,
 }

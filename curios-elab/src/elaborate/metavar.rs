@@ -195,7 +195,7 @@ pub(super) fn insert_implicits_on_check(
 /// Answers the reduct beside the inhabitant, since the caller that mints a hole for an undischarged bound records what the bound came to — `False` — for the report that hole becomes.
 ///
 /// **A search beside it, not in it.** Where this answers nothing, [`crate::entail`] may still prove the bound from the facts in scope — a separate, fallible step with its own contract, after which this remains a unique answer or none.
-pub(super) fn trivially_inhabited(
+pub(crate) fn trivially_inhabited(
     context: &mut Context,
     type_: &Term,
 ) -> Result<(Term, Option<Term>), Error> {

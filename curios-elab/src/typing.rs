@@ -12,13 +12,13 @@ use {
         synth_neutral, terms_differ, zonk_solved_term_metas,
     },
     curios_analysis::{
-        RESOLVED_SPELLING_LAYERS, Unfolding, another_case, records_case_equation,
-        scrutinee_solution,
+        Invert, RESOLVED_SPELLING_LAYERS, Unfolding, another_case, records_case_equation,
+        scrutinee_solution, solve_indices,
     },
     curios_core::{
-        Advance, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin, Many, Metavar,
-        MetavarId, MetavarOrigin, Produced, Proj, Quality, ReduceError, Scope, Subterm, Telescope,
-        Term, Transient, Universes, Visit,
+        Advance, Atom, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin, Many,
+        Metavar, MetavarId, MetavarOrigin, Produced, Proj, Quality, ReduceError, Scope, Subterm,
+        Telescope, Term, Transient, Universes, Visit,
     },
     std::{
         cell::RefCell,
@@ -1343,6 +1343,54 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
     }
 
     Ok(())
+}
+
+/// The family a match's scrutinee is a value of, as an inductive arm is entered at ([`enter_induct_case`]): its name, its instance, its parameters and its actual indices.
+pub(crate) struct InductCase<'a> {
+    pub(crate) name: &'a Global,
+    pub(crate) universes: &'a Universes,
+    pub(crate) params: &'a [Term],
+    pub(crate) actual_indices: &'a [Term],
+}
+
+/// Enter the arm of the constructor `tag` of a match on `head`, a value of `family`, as it was elaborated: each payload binder of `labels`, standing as `vars`, assumed at the constructor's signature `telescope`, the scrutinee refined to the value the case constructs, and the index equations to their most-general solution, as elaboration and the kernel solve them, both directions. Hands back the case's target indices and the value it constructs. Typing-only: it touches the context and builds nothing.
+pub(crate) fn enter_induct_case(
+    context: &mut Context,
+    head: &Term,
+    family: InductCase<'_>,
+    tag: &Atom,
+    (labels, vars): (&[Free], &[Term]),
+    telescope: Telescope<Vec<Term>>,
+) -> Result<(Vec<Term>, Term), Error> {
+    let mut cursor = telescope.cursor();
+    for (label, var) in labels.iter().zip(vars) {
+        let (_, type_) = cursor
+            .entry()
+            .expect("a constructor's arity is checked where its match elaborates");
+        context.assume(label, &type_);
+        cursor.advance(var.clone());
+    }
+    let targets = cursor
+        .body()
+        .expect("a constructor's arity is checked where its match elaborates");
+
+    let value = Term::variant_at(
+        *family.name,
+        family.universes.clone(),
+        family.params.to_vec(),
+        tag.clone(),
+        vars.to_vec(),
+    );
+    refine_head(context, head, &value)?;
+    if let Invert::Solved(solutions) =
+        solve_indices(context, family.actual_indices, &targets, labels)?
+    {
+        for (name, solution) in solutions {
+            context.refine(&name, &solution);
+        }
+    }
+
+    Ok((targets, value))
 }
 
 /// Why the arm at `value` of a match on `head` is never taken, where a guard says so: its own, which is always another case ([`unreachable_arm`]), or that of an arm around it, which the arm's case contradicts ([`contradicted_guard`]). Asked where an error leaves the arm, and of each arm around a bound given up under one.

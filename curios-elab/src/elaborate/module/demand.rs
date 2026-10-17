@@ -637,10 +637,10 @@ impl<'a> Demand<'a> {
                         outcomes.push(Outcome::Held(elaborated, sites));
                     }
                     Err(error) => {
-                        // A refusal that stands is reported, so its report is built here, before what its attempt wrote is undone; a void attempt's is thrown away unbuilt.
+                        // A refusal that stands is reported, so its report is built and settled for its reader here, before what its attempt wrote is undone; a void attempt's is thrown away unbuilt.
                         let error = match context.needs_nothing() {
                             true => {
-                                let error = error.shown(context);
+                                let error = error.settled(context);
                                 member.undo(context, &item.declared_names());
                                 poison.declare(item);
                                 error
