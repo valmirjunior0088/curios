@@ -3,9 +3,9 @@ use {
     crate::{
         BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, Occurrence,
         ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, check, check_is_sort,
-        check_rec_totality, convert, display_mismatch, elaborate, expect, metavar_origins,
-        metavar_spines, premise_label, read_by_value, reduce_with, resolve_witness_goal,
-        resolve_witness_goal_or, stuck_on_metavar, written_monad, zonk_solved_term_metas,
+        check_rec_totality, convert, elaborate, expect, metavar_origins, metavar_spines, mismatch,
+        premise_label, read_by_value, reduce_with, resolve_witness_goal, resolve_witness_goal_or,
+        stuck_on_metavar, written_monad, zonk_solved_term_metas,
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
@@ -376,7 +376,7 @@ pub(super) fn elaborate_num_lit(
                 } else {
                     default_type
                 };
-                return Err(display_mismatch(context, term, &inferred, expected));
+                return Err(mismatch(context, term, &inferred, expected, None));
             }
         },
         NumLit::Character(character) => {

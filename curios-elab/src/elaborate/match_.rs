@@ -6,7 +6,7 @@ use {
     super::{Context, Error, Misaligned, Mode, align, check, elaborate, expect, stands_at},
     crate::{
         BinderSite, MotiveShape, check_motive, dead_guard, decided_sort_of, hold_prop, is_prop,
-        probe_open_sort, quality_of, reduce_with, refine_head, resolved_for_display,
+        pending, probe_open_sort, quality_of, reduce_with, refine_head, resolved_for_display,
         same_uncommitted, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
@@ -55,10 +55,7 @@ impl Scrutinee {
 
         match carrier {
             true => Ok((head, type_)),
-            false => Err(refused_scrutinee(
-                eliminator,
-                resolved_for_display(context, &type_),
-            )),
+            false => Err(refused_scrutinee(context, eliminator, &type_)),
         }
     }
 }
@@ -77,15 +74,18 @@ pub(super) enum Eliminator {
     },
 }
 
-/// The refusal `eliminator` gives a scrutinee of `type_`, which is the type in its display form: an eliminator holds the reduct, which spells a recursive name as its group.
-fn refused_scrutinee(eliminator: Eliminator, type_: Term) -> Error {
-    match eliminator {
-        Eliminator::Bool => Error::not_bool_type(type_),
-        Eliminator::Nat => Error::not_nat_type(type_),
-        Eliminator::List => Error::not_list_type(type_),
-        Eliminator::Bin(grain) => Error::not_bin_type(grain, type_),
-        Eliminator::Nominal { vacuous } => Error::not_a_induct_type(type_, vacuous),
-    }
+/// The refusal `eliminator` gives a scrutinee of `type_`, which shows the type in its display form: an eliminator holds the reduct, which spells a recursive name as its group.
+fn refused_scrutinee(context: &mut Context, eliminator: Eliminator, type_: &Term) -> Error {
+    pending(context, [type_], move |reporting, [type_]| {
+        let type_ = resolved_for_display(reporting, &type_);
+        match eliminator {
+            Eliminator::Bool => Error::not_bool_type(type_),
+            Eliminator::Nat => Error::not_nat_type(type_),
+            Eliminator::List => Error::not_list_type(type_),
+            Eliminator::Bin(grain) => Error::not_bin_type(grain, type_),
+            Eliminator::Nominal { vacuous } => Error::not_a_induct_type(type_, vacuous),
+        }
+    })
 }
 
 /// When a match is elaborated in checking mode, solve its motive against the expected type *before* the arms are checked. An omitted motive is a constant scope wrapping a fresh metavar (`Term::match_motive_written`), so `motive.open` is that bare metavar and this pins it to `expected` up front — checking-only arms (tuples, constructors) then see a concrete target instead of an unsolved hole, and a result mentioning an enclosing type variable is taken straight from `expected` rather than inverted out of an arm. For an explicit motive it is the same consistency check that the `Check` turnaround would otherwise run post-hoc on the match's type (`elaborate_subterm`), only earlier.
@@ -385,10 +385,7 @@ impl SequenceSplit {
                 let element = match &*head_type {
                     Subterm::Intrinsic(Intrinsic::ListType(element)) => element.clone(),
                     _ => {
-                        return Err(refused_scrutinee(
-                            Eliminator::List,
-                            resolved_for_display(context, &head_type),
-                        ));
+                        return Err(refused_scrutinee(context, Eliminator::List, &head_type));
                     }
                 };
 
@@ -1025,8 +1022,9 @@ impl NominalSplit {
             }) => (*name, universes.clone(), params.clone(), indices.clone()),
             _ => {
                 return Err(refused_scrutinee(
+                    context,
                     Eliminator::Nominal { vacuous },
-                    resolved_for_display(context, &head_type),
+                    &head_type,
                 ));
             }
         };

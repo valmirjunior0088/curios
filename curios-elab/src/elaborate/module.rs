@@ -1629,6 +1629,7 @@ fn elaborate_module_suffix<'s>(
         false => match attempted(context) {
             Ok(entry) => entry,
             Err(error) => {
+                let error = error.shown(context);
                 mark.undo(context, &[]);
                 survivors.refuse(entry_stamp, error);
                 None

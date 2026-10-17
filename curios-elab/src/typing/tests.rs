@@ -57,36 +57,12 @@ fn doubled_around_a_hole() -> Term {
     term
 }
 
-/// Whether both operands of a sum at the root are one node — what a walk that kept the graph hands back.
-fn root_operands_shared(term: &Term) -> bool {
-    let Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) = &**term else {
-        panic!("the walk changed the root: {term}");
-    };
-    std::ptr::eq::<Subterm>(&**left, &**right)
-}
-
 /// Reading a candidate's metavariables for a blocked solve costs the candidate's graph, not its tree.
 #[test]
 fn metavariable_origins_are_read_once_per_node() {
     let origins = metavar_origins(&[&doubled_around_a_hole()]);
 
     assert_eq!(origins.keys().copied().collect::<Vec<_>>(), [MetavarId(0)]);
-}
-
-/// Blanking a stranded region's metavariables for its report costs the type's graph, not its tree, and keeps the graph.
-#[test]
-fn a_required_region_type_blanks_once_per_node() {
-    let mut context = Context::new(100_000, SYNTAX);
-    // The type's own hole is the first the context mints, so the one hole that stands for it afterwards is another.
-    let written = context.mint_metavar();
-
-    let blanked = super::required_region_type(&mut context, &doubled_around_a_hole())
-        .expect("the monad is not itself a hole");
-
-    let holes = blanked.metavars();
-    assert_eq!(holes.len(), 1);
-    assert!(!holes.contains(&written));
-    assert!(root_operands_shared(&blanked));
 }
 
 /// The predicate deciding what a `Prop` may carry is written twice, and this is where the two are put to each other.

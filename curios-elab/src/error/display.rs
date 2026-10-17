@@ -1759,6 +1759,9 @@ impl fmt::Display for Displayed<'_> {
             Error::Unfinished => {
                 write!(f, "a declaration that has not elaborated was read")
             }
+            Error::Pending(_) => {
+                write!(f, "a refusal whose report was not built")
+            }
             // `render_body` intercepts both wrappers before a real spelling ever reaches this match, but these arms must not rely on that: interpolating `{error}` would route through `Display for Error`, silently resetting a nested term's spelling to core's default. Recurse with the spelling in hand instead.
             Error::InDeclaration { names, error } => {
                 writeln!(f, "while elaborating {}:", declared(names, spelling))?;

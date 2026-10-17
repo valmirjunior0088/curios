@@ -3,22 +3,22 @@ mod tests;
 
 use {
     super::{
-        AwaitId, Beside, Binders, Choice, Context, DeadArm, Error, HeldConversion, HeldFrames,
-        Mode, Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem,
-        Rejected, Sort, Spines, Watched, answer_witness, answers_differ, callee, convert,
-        diagnose_need, diagnose_shape, elaborate, elaborate_func_settle, embeds, hold_spines,
-        is_monad, monad_shape, normalize, numeral_default, probe_open_sort, problem_outcome,
-        reduce_forced, refold_recs, region_flex, retry_discharge, retry_witness, settle_qualities,
-        shallow_scrutinee, subsume_outcome, synth_neutral, zonk_solved_term_metas,
+        AwaitId, Binders, Choice, Context, DeadArm, Error, HeldConversion, HeldFrames, Mode,
+        Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem, Sort,
+        Spines, Watched, answer_witness, answers_differ, callee, convert, elaborate,
+        elaborate_func_settle, hold_spines, mismatch, no_witness_error, numeral_default,
+        obligation_shown, pending, probe_open_sort, problem_outcome, reduce_forced, region_flex,
+        resolved_for_display, retry_discharge, retry_witness, shallow_scrutinee, subsume_outcome,
+        synth_neutral, terms_differ, zonk_solved_term_metas,
     },
     curios_analysis::{
         RESOLVED_SPELLING_LAYERS, Unfolding, another_case, records_case_equation,
         scrutinee_solution,
     },
     curios_core::{
-        Advance, Apply, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
-        Intrinsic, Many, Metavar, MetavarId, MetavarOrigin, Produced, Proj, Quality, ReduceError,
-        Scope, Subterm, Telescope, Term, Transient, Universes, Visit,
+        Advance, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin, Many, Metavar,
+        MetavarId, MetavarOrigin, Produced, Proj, Quality, ReduceError, Scope, Subterm, Telescope,
+        Term, Transient, Universes, Visit,
     },
     std::{
         cell::RefCell,
@@ -232,106 +232,14 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
             },
         )),
         // The reduct is not what is reported: it spells a recursive name as its group, which the display form gives back its name. Located here, at the term written where a type is wanted: the refusal is raised once its elaboration has returned, so no frame of that term is left to place it.
-        _ => Err(Error::type_mismatch(
-            resolved_for_display(context, &inferred),
-            Term::type_ground(),
-        )
+        _ => Err(pending(context, [&inferred], |reporting, [inferred]| {
+            Error::type_mismatch(
+                resolved_for_display(reporting, &inferred),
+                Term::type_ground(),
+            )
+        })
         .at_opt(term.extent())),
     }
-}
-
-/// Best-effort display form for a mismatch report: substitute the solutions that have landed, so the message names the actual disagreement rather than the metavariables it arrived wrapped in, then deep-[`normalize`] the result so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery. Materialization is tolerant: a metavariable still open spells `?` while every solved one beside it shows its value — the strict `zonk` would refuse the whole term on the first open hole, so one unsolved `f` would render `?(?)` where `?(double(p))` is known. Universe levels come through verbatim and the report's spelling erases them. A normalization that exhausts its budget falls back to the merely-materialized form.
-///
-/// Normalization is the whole story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator; the printer spells it, against the witness binders the report carries (axis (h)).
-pub(crate) fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
-    let term = &numerals_at_their_default(context, term);
-    // Refolded on both sides of normalization. Before: a committed solution spells a stuck recursive call as its canonical neutral, the `Rec` node itself, and `normalize` keeps a name only where the *written* head is one (`stalled_unfolding`) — so the node is first given back its name, which the stall rule then holds. After: whatever normalization exposed elsewhere.
-    let zonked = refold_recs(
-        context,
-        &settle_qualities(context, &zonk_solved_term_metas(context, term)),
-    );
-    let resolved = normalize(context, zonked.clone()).unwrap_or(zonked);
-    refold_recs(context, &resolved)
-}
-
-/// `term` with each metavariable parked numerals wait on shown as the default they would take together. A report can be made before their term completes — a turnaround that fails while a numeral still waits — and would show `Option(?)` for `Option/some(1)`, whose type every reader knows. A side that is such a metavariable itself is left as it stands: the report is then about what that metavariable may be, which the default does not answer.
-fn numerals_at_their_default(context: &mut Context, term: &Term) -> Term {
-    if !term.has_metavar() || matches!(&**term, Subterm::Metavar(_)) {
-        return term.clone();
-    }
-    let waiting = context.waiting_numerals();
-    if waiting.is_empty() {
-        return term.clone();
-    }
-
-    let zonked = zonk_solved_term_metas(context, term);
-    let defaults = waiting
-        .iter()
-        .map(|(id, literals)| (*id, numeral_default(context, literals)))
-        .collect::<BTreeMap<_, _>>();
-    let mut visit = Visit::rewriting_shared(
-        |_, _| None,
-        Box::new(move |_, term: &Term| match &**term {
-            Subterm::Metavar(metavar) => defaults.get(&metavar.id).cloned(),
-            _ => None,
-        }),
-    );
-
-    zonked.traverse(&mut visit)
-}
-
-/// A `type_mismatch` error naming both sides in their best-effort display form (see [`resolved_for_display`]) — unless `term`, the node the conversion was about, is the `/std/Monad/bind` application a postfix `!` desugars to and the region it hoisted to has nothing to sequence in.
-///
-/// `bind` produces `M(B)`, so the generic report names a type the author never wrote, mentions neither the `!` nor the region that rejected it, and leaks the still-unsolved `B`. The specialized report names the monad the region would have to be and the type it actually has.
-pub(crate) fn display_mismatch(
-    context: &mut Context,
-    term: &Term,
-    this: &Term,
-    that: &Term,
-) -> Error {
-    if let Some(report) = sort_decided_twice(context, this, that) {
-        return report;
-    }
-
-    let this = resolved_for_display(context, this);
-    let that = resolved_for_display(context, that);
-
-    if is_sequencing(context, term) && wraps_a_result(&this) && !wraps_a_result(&that) {
-        return Error::stranded_sequencing(required_region_type(context, &this), that);
-    }
-    if let Some(report) = unembedded_action(context, &this, &that) {
-        return report;
-    }
-    if let Some(report) = implicit_at_other_sort(context, &this, &that) {
-        return report;
-    }
-
-    Error::type_mismatch(this, that)
-}
-
-/// The specialized report for two sorts apart where one is a `Sort` the declaration wrote and an earlier term decided: the reader wrote neither sort, and what refuses this term is the other's decision. Read off the sides as conversion held them: the display form settles each quality to the sort it was solved to, and a written `Sort` is told from that sort nowhere after.
-fn sort_decided_twice(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
-    let inferred = reduce_forced(context, this.clone()).ok()?;
-    let expected = reduce_forced(context, that.clone()).ok()?;
-    let (Subterm::Sort(inferred, _), Subterm::Sort(expected, _)) = (&*inferred, &*expected) else {
-        return None;
-    };
-    let universes = context.universes();
-
-    // The side that is the written `Sort` states what the earlier term decided, and the other what this one needs of it.
-    [(*inferred, *expected), (*expected, *inferred)]
-        .into_iter()
-        .find_map(|(needed, written)| {
-            let other = universes.written_decision(written)?;
-            match universes.quality(needed) {
-                needed @ (Quality::Prop | Quality::Type)
-                    if needed != universes.quality(written) =>
-                {
-                    Some(Error::sort_decided_twice(needed.is_prop(), other))
-                }
-                _ => None,
-            }
-        })
 }
 
 /// Where a term of the declaration decided the sort `type_` stands at, that sort being a `Sort` the declaration wrote ([`UniverseSolver::written_decision`](crate::UniverseSolver::written_decision)): the term, where its check was recorded. `None` where `type_` stands at no such sort. A refusal that follows from the decision asks before it names a sort its reader did not write.
@@ -345,106 +253,6 @@ pub(crate) fn decided_sort_of(context: &mut Context, type_: &Term) -> Option<Opt
         Subterm::Sort(quality, _) => context.universes().written_decision(*quality),
         _ => None,
     }
-}
-
-/// The specialized report for an argument handed where an implicit argument declared at the other sort is still open: `this` is the one candidate the argument offers the implicit `that` stands for, a proposition where the implicit is declared at `Type` and a type where it is declared at `Prop`, and neither sort admits what stands at the other, so the implicit stays unsolved and the generic report names it `?`.
-///
-/// Where `this` stands at a `Sort` the declaration wrote, an earlier term decided the sort it is at, and the report is that the two terms decide it apart.
-fn implicit_at_other_sort(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
-    let Subterm::Metavar(Metavar {
-        id,
-        origin: MetavarOrigin::Implicit(ImplicitOrigin { func, binder }),
-        ..
-    }) = &**that
-    else {
-        return None;
-    };
-    if context.metavar_solution(*id).is_some() {
-        return None;
-    }
-    let declared = context.metavar_entry(*id)?.result.clone();
-    let declared = reduce_forced(context, declared).ok()?;
-    let Subterm::Sort(declared, _) = &*declared else {
-        return None;
-    };
-    let declared = context.universes().quality(*declared);
-
-    // A type still stuck on a metavariable is read as a type's where nothing states its sort, which says nothing of what it comes to.
-    let given = reduce_forced(context, this.clone()).ok()?;
-    if stuck_on_metavar(context, &given) {
-        return None;
-    }
-    let proposition = match (quality_of(context, this).ok()?, declared) {
-        (Quality::Prop, Quality::Type) => true,
-        (Quality::Type, Quality::Prop) => false,
-        _ => return None,
-    };
-    if let Some(other) = decided_sort_of(context, this) {
-        return Some(Error::sort_decided_twice(!proposition, other));
-    }
-
-    Some(Error::implicit_at_other_sort(
-        callee(context, func),
-        binder.clone(),
-        this.clone(),
-        proposition,
-    ))
-}
-
-/// The specialized report for a mismatch between two monad applications that differ in their head or a context argument: an action of one monad where another is expected. The `!` and tail oracles embed such an action through the declared `Lift` witness when its monad can be read from its head's declaration, so this is the case they could not read — a projection, a computed head — or a position they never look at, and the explicit `lift` spelling is the remedy the report names. `None` for every other mismatch, which keeps the generic report — and for one whose shapes cannot be read, exhaustion included, since the refusal this decorates is already the verdict.
-fn unembedded_action(context: &mut Context, this: &Term, that: &Term) -> Option<Error> {
-    let this_whnf = reduce_forced(context, this.clone()).ok()?;
-    let that_whnf = reduce_forced(context, that.clone()).ok()?;
-    let action = monad_shape(context, &this_whnf).ok().flatten()?;
-    let expected = monad_shape(context, &that_whnf).ok().flatten()?;
-    let differ = embeds(&expected, &action)
-        && is_monad(context, &action.head)
-        && is_monad(context, &expected.head);
-
-    differ.then(|| Error::unembedded_action(this.clone(), that.clone()))
-}
-
-/// Whether `term` is a `/std/Monad/bind` application — what every `!` lowers to, and the only shape whose result type is an `M(B)` a stranded sequencing can clash on.
-fn is_sequencing(context: &Context, term: &Term) -> bool {
-    let Subterm::Apply(Apply { head, .. }) = &**term else {
-        return false;
-    };
-
-    head.head_name() == Some(&Free::global(context.syntax().monad.bind.qualifier()))
-}
-
-/// Whether `type_` stands over a result: a former applied to at least one argument, which is the shape `M(B)` always has.
-///
-/// Read on the expected side, this is what separates a stranded `!` from an ordinary mismatch inside a real region — `Io(Str)` against `Io(Nat)` disagrees about the result, while `Io(?)` against `Nat` is a region that cannot sequence at all. `Io` is named among the intrinsics because it is the one monad whose former is an intrinsic node rather than an application or a parameterized nominal type.
-fn wraps_a_result(type_: &Term) -> bool {
-    match &**type_ {
-        Subterm::Apply(_) | Subterm::Intrinsic(Intrinsic::IoType(_)) => true,
-        Subterm::InductType(induct) => !induct.params.is_empty(),
-        Subterm::StructType(struct_) => !struct_.params.is_empty(),
-        _ => false,
-    }
-}
-
-/// What a stranded-sequencing report names as the region's required type: the sequenced `M(B)` with every metavariable it still carries blanked to one goal nothing solves, rendered `?`. The report wants `M(B)` for its `M` alone — `B` is what the continuation would have produced, and a region that cannot sequence never determines it.
-///
-/// `None` when `M` is itself one of those holes: nothing pinned the monad, so the whole spelling would be placeholders and the report says "a monad" instead.
-fn required_region_type(context: &mut Context, sequenced: &Term) -> Option<Term> {
-    if let Subterm::Apply(Apply { head, .. }) = &**sequenced
-        && matches!(&**head, Subterm::Metavar(_))
-    {
-        return None;
-    }
-
-    let hole = Term::hole(context.mint_metavar());
-    // Memoized on node identity: every metavariable blanks to the one hole, so a node's answer is the node's alone.
-    let mut visit = Visit::rewriting_shared(
-        |_, _| None,
-        Box::new(move |_, term: &Term| {
-            matches!(&**term, Subterm::Metavar(_)).then(|| hole.clone())
-        }),
-    );
-
-    Some(sequenced.traverse(&mut visit))
 }
 
 /// Hold `term`, of type `inferred`, to the type `expected`: the subsumption relation `A ≤ B`, as `curios_cert`'s `subsumes` decides it — `Type u ≤ Type v` and `Prop u ≤ Prop v` under the level algebra, `Π(x:A).B ≤ Π(x:A').B'` when `A ≡ A'` and `B ≤ B'`, and conversion otherwise. See `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`.
@@ -467,14 +275,11 @@ pub(crate) fn expect(
 
     match outcome {
         Outcome::Converts => context.retry_parked(),
-        Outcome::Mismatch(beside) => {
-            let report = display_mismatch(context, term, inferred, expected);
-            Err(said_beside(context, report, beside))
-        }
+        Outcome::Mismatch(beside) => Err(mismatch(context, term, inferred, expected, beside)),
         // Undecided: blocked on unsolved metavariables. Park the goals to be retried when a watched metavariable is solved and succeed provisionally — unless this is inside an oracle, where provisional success may not leak into the answer: the turnaround fails there, and the oracle records that it would have parked.
         Outcome::Blocked(goals) => {
             if !context.may_park() {
-                return Err(display_mismatch(context, term, inferred, expected));
+                return Err(mismatch(context, term, inferred, expected, None));
             }
 
             for goal in goals {
@@ -952,17 +757,20 @@ impl Context<'_> {
 
                 Ok::<_, Error>(Some(match &metavar.origin {
                     MetavarOrigin::Implicit(ImplicitOrigin { func, binder }) => {
-                        let given = resolved_for_display(context, &product);
-                        Error::implicit_at_other_sort(
-                            callee(context, func),
-                            binder.clone(),
-                            given,
-                            true,
-                        )
+                        let callee = callee(context, func);
+                        let binder = binder.clone();
+                        pending(context, [&product], move |reporting, [product]| {
+                            Error::implicit_at_other_sort(
+                                callee,
+                                binder,
+                                resolved_for_display(reporting, &product),
+                                true,
+                            )
+                        })
                     }
                     _ => {
                         let sort = sort_term(context, &product)?;
-                        display_mismatch(context, &shaped.written, &sort, &declared)
+                        mismatch(context, &shaped.written, &sort, &declared, None)
                     }
                 }))
             })?;
@@ -1052,8 +860,7 @@ impl Context<'_> {
                     if let ParkedWork::Conversion(goal) = &work
                         && let Some(goals) = blocked_on_written_goals(self, &watching, goal)
                     {
-                        let this = resolved_for_display(self, &goal.this);
-                        let that = resolved_for_display(self, &goal.that);
+                        let (this, that) = obligation_shown(self, &goal.this, &goal.that);
                         self.note_goal_obligation(goals, this, that);
                         continue;
                     }
@@ -1071,22 +878,13 @@ impl Context<'_> {
                                 .witness_hole(&goal.this)
                                 .or_else(|| self.witness_hole(&goal.that))
                             {
-                                Some((origin, witness_goal)) => {
-                                    let need = diagnose_need(
-                                        self,
-                                        &witness_goal,
-                                        parked_origin.extent().as_ref(),
-                                    );
-                                    let shape = diagnose_shape(self, &witness_goal);
-                                    Error::no_witness(
-                                        resolved_for_display(self, &witness_goal),
-                                        callee(self, &origin.func),
-                                        origin.binder,
-                                        need,
-                                        shape,
-                                    )
-                                    .at_opt(parked_origin.extent())
-                                }
+                                Some((origin, witness_goal)) => no_witness_error(
+                                    self,
+                                    &witness_goal,
+                                    &origin,
+                                    parked_origin.extent().as_ref(),
+                                )
+                                .at_opt(parked_origin.extent()),
                                 // A watched blocker that is itself blocked names a goal that merely waited. Follow the chain to what nothing was ever going to solve and report *that* instead.
                                 None if let Some(error) =
                                     root_blocker_error(self, &watching, parked_origin.extent()) =>
@@ -1097,11 +895,18 @@ impl Context<'_> {
                                 None => {
                                     let blockers =
                                         watched_blockers(self, &watching, &goal.this, &goal.that);
-                                    Error::postponed_conversion(
-                                        resolved_for_display(self, &goal.this),
-                                        resolved_for_display(self, &goal.that),
-                                        blockers,
-                                        frames.refined(),
+                                    let refined = frames.refined();
+                                    pending(
+                                        self,
+                                        [&goal.this, &goal.that],
+                                        move |reporting, [this, that]| {
+                                            Error::postponed_conversion(
+                                                resolved_for_display(reporting, &this),
+                                                resolved_for_display(reporting, &that),
+                                                blockers,
+                                                refined,
+                                            )
+                                        },
                                     )
                                     .at_opt(parked_origin.extent())
                                 }
@@ -1112,23 +917,20 @@ impl Context<'_> {
                             Subterm::Transient(Transient::Bang(_)) => {
                                 Error::bang_region_undetermined().at_opt(parked_origin.extent())
                             }
-                            _ => Error::postponed_check(resolved_for_display(self, &expected))
-                                .at_opt(parked_origin.extent()),
+                            _ => pending(self, [&expected], |reporting, [expected]| {
+                                Error::postponed_check(resolved_for_display(reporting, &expected))
+                            })
+                            .at_opt(parked_origin.extent()),
                         },
                         ParkedWork::Witness {
                             goal, provenance, ..
-                        } => {
-                            let need = diagnose_need(self, &goal, parked_origin.extent().as_ref());
-                            let shape = diagnose_shape(self, &goal);
-                            Error::no_witness(
-                                resolved_for_display(self, &goal),
-                                callee(self, &provenance.func),
-                                provenance.binder,
-                                need,
-                                shape,
-                            )
-                            .at_opt(parked_origin.extent())
-                        }
+                        } => no_witness_error(
+                            self,
+                            &goal,
+                            &provenance,
+                            parked_origin.extent().as_ref(),
+                        )
+                        .at_opt(parked_origin.extent()),
                         // A bound that never came to truth is its hole's to report: zonk names the binder and the bound, which is the report such a hole gets whether or not it was ever parked.
                         ParkedWork::Discharge { .. } => continue,
                     });
@@ -1235,7 +1037,7 @@ fn watched_blockers(
 }
 
 /// A metavariable by what it is, read off the provenance an occurrence of it carries: what a report names it by. One no occurrence names is an inferred hole.
-fn watched(context: &Context, id: MetavarId, origin: Option<&MetavarOrigin>) -> Watched {
+pub(crate) fn watched(context: &Context, id: MetavarId, origin: Option<&MetavarOrigin>) -> Watched {
     match origin {
         Some(MetavarOrigin::Implicit(origin)) => Watched::Slot {
             callee: callee(context, &origin.func),
@@ -1254,30 +1056,6 @@ fn watched(context: &Context, id: MetavarId, origin: Option<&MetavarOrigin>) -> 
         }
         Some(MetavarOrigin::Hole) | None => Watched::Described("an inferred hole".to_string()),
     }
-}
-
-/// `report`, a mismatch's, with what conversion said beside the mismatch. The plain report of two sides notes what was left uncompared, and gives way to a rejected candidate's, its two sides not having been found apart. Any other report says what it says already: one that names the cause, an implicit handed a term of another sort among them, is not replaced by the check that refused the same thing.
-fn said_beside(context: &mut Context, report: Error, beside: Option<Beside>) -> Error {
-    match (report, beside) {
-        (Error::TypeMismatch { .. }, Some(Beside::Rejected(rejected))) => {
-            rejected_candidate(context, *rejected)
-        }
-        (report, beside) => report.declined(beside.and_then(Beside::declined)),
-    }
-}
-
-/// The report of a candidate conversion found for a metavariable and saw refused where the metavariable was born ([`Rejected`]): the metavariable by what it is, the candidate as a report shows a term, and the check's refusal. It stands in place of the mismatch of the pair conversion was comparing, which was not found apart.
-fn rejected_candidate(context: &mut Context, rejected: Rejected) -> Error {
-    let Rejected {
-        metavar,
-        candidate,
-        error,
-    } = rejected;
-    Error::rejected_candidate(
-        watched(context, metavar.id, Some(&metavar.origin)),
-        resolved_for_display(context, &candidate),
-        error,
-    )
 }
 
 /// A metavariable's insertion provenance and the extent of the occurrence it was read off — what a report names a blocker by.
@@ -1427,23 +1205,17 @@ fn retry_work(
         Ok(
             match problem_outcome(context, goal.clone(), origin.extent())? {
                 Outcome::Converts => Retry::Converts,
-                // Built here, standing on the problem's frames, rather than at the report below: `display_mismatch` reads the sides through whatever solutions have landed, so they name the actual disagreement rather than the metavariables it arrived wrapped in (see `resolved_for_display`). A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
+                // Held here, standing on the problem's frames: the sides are read through whatever solutions have landed, so the report names the actual disagreement rather than the metavariables it arrived wrapped in, and it is built standing on these frames where it is reported. A stranded `!` reaches its report through this arm — the region's own type only settles after the sequencing has parked — so the origin is what decides which message it gets.
                 // What was compared is read off the type the problem is posed at: at a sort the two are types, one inferred and one expected, and anywhere else they are terms a type states at one position. A residual of the carriers' algebra is posed at `Type` for want of the type it stands at, and is told from two types by what it is: a value an intrinsic builds is no type.
-                Outcome::Mismatch(beside) => {
-                    let report = match &*goal.type_ {
-                        Subterm::Sort(..)
-                            if !(intrinsic_value(context, &goal.this)
-                                || intrinsic_value(context, &goal.that)) =>
-                        {
-                            display_mismatch(context, &origin, &goal.this, &goal.that)
-                        }
-                        _ => Error::terms_differ(
-                            resolved_for_display(context, &goal.this),
-                            resolved_for_display(context, &goal.that),
-                        ),
-                    };
-                    Retry::Mismatch(said_beside(context, report, beside))
-                }
+                Outcome::Mismatch(beside) => Retry::Mismatch(match &*goal.type_ {
+                    Subterm::Sort(..)
+                        if !(intrinsic_value(context, &goal.this)
+                            || intrinsic_value(context, &goal.that)) =>
+                    {
+                        mismatch(context, &origin, &goal.this, &goal.that, beside)
+                    }
+                    _ => terms_differ(context, &goal.this, &goal.that, beside),
+                }),
                 Outcome::Blocked(goals) => Retry::Blocked(goals),
             },
         )
@@ -1935,15 +1707,18 @@ fn root_blocker_error(
         return None;
     }
 
+    let callee = callee(context, &origin.func);
     Some(
-        Error::uninferred_implicit(
-            callee(context, &origin.func),
-            origin.binder,
-            resolved_for_display(context, &bound),
-            true,
-            reduct,
-            refusal,
-        )
+        pending(context, [&bound], move |reporting, [bound]| {
+            Error::uninferred_implicit(
+                callee,
+                origin.binder,
+                resolved_for_display(reporting, &bound),
+                true,
+                reduct,
+                refusal,
+            )
+        })
         // The blocker's own occurrence rides inside a candidate the reducer built, which need not have kept an extent; the waiting goal's origin is then the nearest honest place to point.
         .at_opt(extent.or(fallback)),
     )

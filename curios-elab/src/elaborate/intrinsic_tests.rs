@@ -48,7 +48,8 @@ fn a_channel_allocation_checks_its_positive_capacity_evidence() {
         allocation(1usize, nat(1usize)),
     ] {
         let error = elaborate(&mut context, &invalid, Mode::Infer)
-            .expect_err("raw node must carry the right evidence");
+            .expect_err("raw node must carry the right evidence")
+            .shown(&mut context);
         assert!(format!("{error:?}").contains("Mismatch"), "{error:?}");
     }
 }

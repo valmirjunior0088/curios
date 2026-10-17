@@ -5,7 +5,7 @@ use display::*;
 mod tests;
 
 use {
-    super::{Erased, ErasedNames, Refusal},
+    super::{Erased, ErasedNames, Pending, Refusal},
     curios_analysis::DeclaredPart,
     curios_core::{
         Anchors, Atom, CalleeId, DefinitionKind, DisplayNames, Exhaustion, Extent, Free, Global,
@@ -742,6 +742,8 @@ pub enum Error {
     Poisoned,
     /// A read of a declaration that has not elaborated. Never reported: the attempt that met it is void and is made again once the declaration has, and this exists only to cut the attempt short — what voids it is the need the read recorded (`Context::need`), whatever becomes of this.
     Unfinished,
+    /// A report its raise held and did not build. Never reported: where a refusal stands, `Error::shown` builds it into the report it stands for, and one thrown away with the attempt that raised it is never built.
+    Pending(Box<Pending>),
     Located {
         extent: Extent,
         error: Box<Error>,

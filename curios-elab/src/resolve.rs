@@ -14,8 +14,8 @@
 use {
     super::{
         Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Joining, Need, Occurrence, Outcome,
-        ParkedWork, Runner, ShapeDiagnosis, Witness, attempt_discharge, convert_outcome,
-        reduce_with, resolved_for_display,
+        ParkedWork, Reporting, Runner, ShapeDiagnosis, Witness, attempt_discharge, convert_outcome,
+        pending, reduce_with, resolved_for_display,
     },
     crate::{SlotPositions, is_prop, premise_label, stuck_on_metavar},
     curios_core::{
@@ -37,11 +37,6 @@ enum Resolution {
     Poisoned,
     /// Definitely unresolvable: rigid non-keyable head, or a table hit whose remaining parameters do not unify. The caller reports `NoWitness`.
     NoMatch,
-}
-
-/// Best-effort display form of a goal for diagnostics — the renderer every mismatch report uses (`resolved_for_display`), so a goal is spelled as the rest of the reports spell a type. A bare strict zonk would render a nominal type through its recursive-group projection — `no witness of Spell(rec #0: Type = Opaque; #0) found` — because a zonked solution spells a stuck recursive call as the `Rec` node itself until the refold gives it back its name.
-fn display_goal(context: &mut Context, goal: &Term) -> Term {
-    resolved_for_display(context, goal)
 }
 
 /// Read an insertion provenance back into who it names ([`Callee`]). The discrimination is the [`CalleeId`]'s own, so this is a total match rather than a parse: an operator carries its [`InfixOp`](curios_utilities::InfixOp), and a witness carries the identity the coherence table is keyed by, which the report renames to a concept and key. Error-path only: the witness lookup scans the table.
@@ -76,25 +71,32 @@ pub(crate) fn callee(context: &Context, func: &CalleeId) -> Callee {
     }
 }
 
-fn no_witness_error(
+/// The report that no witness answers `goal`, the goal of the slot `provenance` names, inserted at `site`: what the witness was needed for and what its shape missed are read off the goal where the report is made.
+pub(crate) fn no_witness_error(
     context: &mut Context,
     goal: &Term,
     provenance: &WitnessOrigin,
     site: Option<&Extent>,
 ) -> Error {
-    let need = diagnose_need(context, goal, site);
-    let shape = diagnose_shape(context, goal);
-    Error::no_witness(
-        display_goal(context, goal),
-        callee(context, &provenance.func),
-        provenance.binder.clone(),
-        need,
-        shape,
-    )
+    let callee = callee(context, &provenance.func);
+    let binder = provenance.binder.clone();
+    let site = site.copied();
+
+    pending(context, [goal], move |reporting, [goal]| {
+        let need = diagnose_need(reporting, &goal, site.as_ref());
+        let shape = diagnose_shape(reporting, &goal);
+        Error::no_witness(
+            resolved_for_display(reporting, &goal),
+            callee,
+            binder,
+            need,
+            shape,
+        )
+    })
 }
 
 /// When `goal` keys on a *labeled* tuple shape and the same key with every label dropped does have a witness, the shape-specific diagnosis its missing-witness report carries: the two keys, so the reader meets the rule — labels are part of a tuple type's identity — rather than a bare miss. That is the surprise keying on an anonymous shape has; every other way to miss the table is a miss for the ordinary reason. Error-path only; a diagnosis that cannot be computed is simply absent.
-pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<ShapeDiagnosis>> {
+fn diagnose_shape(context: &mut Reporting, goal: &Term) -> Option<Box<ShapeDiagnosis>> {
     let goal = reduce_with(context, goal).ok()?;
     let (concept_name, _, params) = as_concept_app(context, &goal)?;
 
@@ -129,11 +131,7 @@ pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<S
 }
 
 /// What the missing witness of `goal` was needed for, where its concept is one the compiler resolves for a form of its own ([`Need`]): an embedding, or what closes a program. `site` is where the goal was inserted, which an embedding's report reads what was written from.
-pub(crate) fn diagnose_need(
-    context: &mut Context,
-    goal: &Term,
-    site: Option<&Extent>,
-) -> Option<Need> {
+fn diagnose_need(context: &mut Reporting, goal: &Term, site: Option<&Extent>) -> Option<Need> {
     diagnose_embedding(context, goal, site)
         .map(Need::Embedding)
         .or_else(|| diagnose_closing(context, goal).map(Need::Closing))
@@ -146,7 +144,7 @@ fn global(name: SyntaxName) -> Term {
 }
 
 /// When `goal` is the registry's `Add` at `/std/Str`, the two functions that join text, for the report to name: `+` is no operator of text.
-fn diagnose_joining(context: &mut Context, goal: &Term) -> Option<Box<Joining>> {
+fn diagnose_joining(context: &mut Reporting, goal: &Term) -> Option<Box<Joining>> {
     let goal = reduce_with(context, goal).ok()?;
     let (concept_name, _, params) = as_concept_app(context, &goal)?;
     let syntax = context.syntax();
@@ -171,7 +169,7 @@ fn diagnose_joining(context: &mut Context, goal: &Term) -> Option<Box<Joining>> 
 }
 
 /// When `goal` is an application of the registry's `Program` concept, the type it was asked at, in display form: the type of a term that closes a program, which no witness executes.
-fn diagnose_closing(context: &mut Context, goal: &Term) -> Option<Box<Term>> {
+fn diagnose_closing(context: &mut Reporting, goal: &Term) -> Option<Box<Term>> {
     let goal = reduce_with(context, goal).ok()?;
     let (concept_name, _, params) = as_concept_app(context, &goal)?;
     let Global::Authored(concept_path) = &concept_name else {
@@ -184,12 +182,12 @@ fn diagnose_closing(context: &mut Context, goal: &Term) -> Option<Box<Term>> {
         return None;
     };
 
-    Some(Box::new(display_goal(context, closing)))
+    Some(Box::new(resolved_for_display(context, closing)))
 }
 
 /// When `goal` is an application of the registry's `Lift` concept, the embedding-specific diagnosis its missing-witness report carries: the two monads in display form, whether the source is a monad at all, and any chain of declared edges between the pair — each fact the report needs to steer the fix (declare the edge, fix the action, or spell the composite) without the reader reconstructing the table. Where the goal came from an auto-lift at `site`, the monads are the ones it named as written ([`EmbeddingSite`](crate::EmbeddingSite)), and so is the goal the report leads with. Error-path only; a diagnosis that cannot be computed is simply absent.
 fn diagnose_embedding(
-    context: &mut Context,
+    context: &mut Reporting,
     goal: &Term,
     site: Option<&Extent>,
 ) -> Option<EmbeddingDiagnosis> {
@@ -229,12 +227,12 @@ fn diagnose_embedding(
         .and_then(|site| declared_result(context, &site.action))
         .and_then(|result| written_monad(&result));
     let source = match written_source {
-        Some(source) => display_goal(context, &source),
-        None => display_goal(context, &source_whnf),
+        Some(source) => resolved_for_display(context, &source),
+        None => resolved_for_display(context, &source_whnf),
     };
     let target = match &written {
-        Some(site) => display_goal(context, &site.region),
-        None => display_goal(context, &target_whnf),
+        Some(site) => resolved_for_display(context, &site.region),
+        None => resolved_for_display(context, &target_whnf),
     };
     let owner = written.as_ref().map(|site| site.owner);
     let written_goal = written.and_then(|_| match &*goal {
@@ -547,11 +545,10 @@ fn resolve_witness(context: &mut Context, goal: &Term, origin: &Term) -> Result<
                 }
             }
             _ => {
-                return Err(Error::ambiguous_witness(
-                    display_goal(context, &goal_whnf),
-                    matched[0].0.clone(),
-                    matched[1].0.clone(),
-                ));
+                let (one, another) = (matched[0].0.clone(), matched[1].0.clone());
+                return Err(pending(context, [&goal_whnf], move |reporting, [goal]| {
+                    Error::ambiguous_witness(resolved_for_display(reporting, &goal), one, another)
+                }));
             }
         }
 
@@ -694,9 +691,9 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
                 params,
             }) = &*reduced
             else {
-                return Err(Error::not_a_tuple(resolved_for_display(
-                    context, &head_type,
-                )));
+                return Err(pending(context, [&head_type], |reporting, [head_type]| {
+                    Error::not_a_tuple(resolved_for_display(reporting, &head_type))
+                }));
             };
             let struct_decl = context
                 .struct_decl(name)

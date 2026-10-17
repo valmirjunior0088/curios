@@ -637,10 +637,16 @@ impl<'a> Demand<'a> {
                         outcomes.push(Outcome::Held(elaborated, sites));
                     }
                     Err(error) => {
-                        if context.needs_nothing() {
-                            member.undo(context, &item.declared_names());
-                            poison.declare(item);
-                        }
+                        // A refusal that stands is reported, so its report is built here, before what its attempt wrote is undone; a void attempt's is thrown away unbuilt.
+                        let error = match context.needs_nothing() {
+                            true => {
+                                let error = error.shown(context);
+                                member.undo(context, &item.declared_names());
+                                poison.declare(item);
+                                error
+                            }
+                            false => error,
+                        };
                         outcomes.push(Outcome::Refused(error));
                     }
                 }

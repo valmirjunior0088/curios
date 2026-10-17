@@ -15,7 +15,7 @@ use {
         BoolSplit, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit, SwitchSplit,
         check, elaborate, expect, holds_goal, payload_fills,
     },
-    crate::{Context, Error, HeldFrames, reduce_with, resolved_for_display},
+    crate::{Context, Error, HeldFrames, pending, reduce_with, resolved_for_display},
     curios_core::{
         Atom, Bind, Free, InductArm, Many, Matrix, Pattern, Row, Scope, StructType, Subterm,
         Telescope, Term, Tuple,
@@ -1877,10 +1877,15 @@ fn held_to_structure(
     let type_ = reduce_with(context, &type_)?;
     match &*type_ {
         Subterm::StructType(StructType { name, .. }) if name == structure => Ok(()),
-        _ => Err(Error::MatrixStructHead {
-            head: head.to_string(),
-            scrutinee: Box::new(resolved_for_display(context, &type_)),
-        }),
+        _ => {
+            let head = head.to_string();
+            Err(pending(context, [&type_], move |reporting, [type_]| {
+                Error::MatrixStructHead {
+                    head,
+                    scrutinee: Box::new(resolved_for_display(reporting, &type_)),
+                }
+            }))
+        }
     }
 }
 

@@ -47,6 +47,9 @@ pub(crate) use denoise::*;
 mod error;
 pub use error::*;
 
+mod report;
+pub use report::*;
+
 mod typing;
 pub(crate) use typing::*;
 
