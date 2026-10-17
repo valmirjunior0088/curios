@@ -976,6 +976,30 @@ fn a_counterexample_spells_an_atom_as_the_bound_states_it() {
     }
 }
 
+/// An atom inside an operation is named as the operand it was written as, through an operator written by its concept and through a local definition standing for one: `width(s)`, where the view read the fold its body unfolds to.
+#[test]
+fn a_counterexample_spells_an_operand_of_an_operation_as_written() {
+    let width =
+        "let width(s: Str) -> Nat = List/fold(Str/to_list(s), 0, (_: Char, n: Nat) => n + 1);";
+    for bound in [
+        "let row(s: Str, t: Str, w: Nat) -> Holds(width(s) - width(t) < w) = True/proved();",
+        "let row(s: Str, t: Str, w: Nat) -> {} = let x = width(s) - width(t); let _: Holds(x < w) = True/proved(); ();",
+        "let row(s: Str, t: Str, w: Nat) -> Holds(Nat/min(width(s), width(t)) < w) = True/proved();",
+        "let row(s: Str, w: Nat) -> Holds(width(s) / 2 < w) = True/proved();",
+    ] {
+        let refused = typecheck(&format!("{HEADER}\n{width}\n{bound}\nIo/pure(())"))
+            .expect_err("the control is refused");
+        let failing = refused
+            .lines()
+            .find(|line| line.contains("it fails at"))
+            .unwrap_or_default();
+        assert!(
+            failing.contains("width(s) = ") && !refused.contains("List/fold"),
+            "{bound:?} reported {refused}"
+        );
+    }
+}
+
 #[test]
 fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     let refusal = |declared: &str, binders: &str, body: &str| {

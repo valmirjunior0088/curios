@@ -28,7 +28,7 @@ use {
         same_uncommitted, zonk_solved_term_metas,
     },
     curios_algebra::{Carrier, Lattice, LinearForm, Monomial, Operation},
-    curios_analysis::{Classes, RESOLVED_SPELLING_LAYERS, atoms_in, classed_in},
+    curios_analysis::{Classes, RESOLVED_SPELLING_LAYERS, atoms_in, classed_in, is_node},
     curios_core::{
         Aligned, Apply, Cases, Extremum, Free, Global, InductType, Intrinsic, LinearViews, Match,
         Nat, Probe, StructType, Subterm, Term, TupleType,
@@ -169,6 +169,15 @@ impl Facts {
     /// `term` with every reduct an operand was read through written as the operand was stated: what the facts invent over atoms — a natural's sign, a quotient's bounds, a subtraction's cases — is built from the atoms' reducts, and is written over the spellings in scope. An outer reduct is replaced before one inside it.
     pub(super) fn respell(&self, term: &Term) -> Term {
         respelled(&self.spelled, term)
+    }
+
+    /// The operands written beneath the operands as stated, each beside its reduct ([`name`]): what a report names an atom by where no operand as stated spells it. Asked once the search is over and only for a report, since what it reduces changes how a search reads what it has yet to: the head of a recursive call, opened, leaves the call read as its unfolding from then on.
+    pub(super) fn beneath(&self, context: &mut Context) -> Result<Vec<(Term, Term)>, Error> {
+        let mut named = Vec::new();
+        for (_, stated) in &self.spelled {
+            name(context, stated, &mut named)?;
+        }
+        Ok(named)
     }
 
     /// Whether `form` holds a remainder the facts were lifted over: a goal that does is not met by their sum, which is over the dividend, and is proved by refuting its negation, lifted as they were.
@@ -1600,6 +1609,36 @@ fn spell(
     Ok(())
 }
 
+/// What each leaf of `stated` stands for as written ([`beneath`]), its own leaves recorded in `named` as [`spell`] records them, so a report names an atom inside a leaf's reduct by the operand its author wrote and not by the body that operand unfolds to. A proof names what the statements in scope state and nothing beneath it: those operands are stated by the definition or the operator a leaf stands for, so they are names for a report alone.
+fn name(context: &mut Context, stated: &Term, named: &mut Vec<(Term, Term)>) -> Result<(), Error> {
+    if let Subterm::Intrinsic(intrinsic) = &**stated {
+        for operand in intrinsic.operands() {
+            name(context, operand, named)?;
+        }
+        return Ok(());
+    }
+    match beneath(context, stated)? {
+        Some(written) => {
+            spell(context, &written, named)?;
+            name(context, &written, named)
+        }
+        None => Ok(()),
+    }
+}
+
+/// What the leaf `stated` stands for as written: a local definition's value, or the layer of the view a call opens to by its heads alone — as an operator written through its concept opens to the operation its witness resolves, `width(s) - width(t)` to the subtraction of `width(s)` and `width(t)`. `None` where it stands for neither, as a call whose body the view reads as an atom does.
+fn beneath(context: &mut Context, stated: &Term) -> Result<Option<Term>, Error> {
+    if let Subterm::Var(var) = &**stated
+        && let Some(name) = var.as_free()
+    {
+        return Ok(context.var_reduct(name).cloned());
+    }
+    open_until(context, stated, |term| match &**term {
+        Subterm::Intrinsic(intrinsic) if is_node(intrinsic) => Some(term.clone()),
+        _ => None,
+    })
+}
+
 /// The spellings of the comparison `bound` states, opened as a stated bound is: each operand's reduct beside the operand. What a report writes a counterexample's atoms by where the search read the bound by its reduct alone.
 pub(super) fn stated_spellings(
     context: &mut Context,
@@ -1614,6 +1653,9 @@ pub(super) fn stated_spellings(
     {
         spell(context, &left, &mut spelled)?;
         spell(context, &right, &mut spelled)?;
+        // A name beneath an operand is the report's alone, and a reading that runs out leaves the operands as stated.
+        let _ =
+            name(context, &left, &mut spelled).and_then(|()| name(context, &right, &mut spelled));
     }
     Ok(spelled)
 }

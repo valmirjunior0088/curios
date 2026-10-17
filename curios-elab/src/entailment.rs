@@ -242,14 +242,15 @@ fn linear(
     };
     // What the cap is set against: the rows one bound's search derived, products and cases included.
     curios_profile::sample!("entailment::derived", DERIVED_ROWS - budget);
-    let refused = |views: &LinearViews, outcome: SearchOutcome| -> Result<Entailed, Error> {
-        Ok(Entailed::Refused(Refusal::of(
-            &facts, views, outcome, absurd,
-        )))
+    // A counterexample's atoms named as the operands as stated name them, and then as the operands written beneath those do, which are asked only now the search is over; a reading of them that runs out leaves the report as the search made it.
+    let refused = |context: &mut Context, views: &LinearViews, outcome: SearchOutcome| {
+        let refusal = Refusal::of(&facts, views, outcome, absurd);
+        let beneath = facts.beneath(context).unwrap_or_default();
+        Ok::<_, Error>(Entailed::Refused(refusal.respelled(&beneath)))
     };
     let certificate = match searched {
         Ok(certificate) => certificate,
-        Err(outcome) => return refused(&views, outcome),
+        Err(outcome) => return refused(context, &views, outcome),
     };
     let written = write(context, &facts, target.as_ref(), &negated, &certificate);
     let candidate = match written {
@@ -258,7 +259,7 @@ fn linear(
             context,
             &zonk_solved_term_metas(context, &facts.respell(&candidate)),
         ),
-        Written::Unwritten => return refused(&views, SearchOutcome::Unwritten),
+        Written::Unwritten => return refused(context, &views, SearchOutcome::Unwritten),
     };
     // What a written proof costs its checkers grows with its size: the nodes of each proof, as written and before either checks it.
     curios_profile::sample!("entailment::written", {
@@ -276,7 +277,7 @@ fn linear(
     match check(context, &candidate, bound)? {
         Some(proof) => Ok(Entailed::Proved(proof)),
         // A certificate whose proof does not check is the procedure's mistake, surfaced as the refusal it has to be and named as what it is.
-        None => refused(&views, SearchOutcome::Rejected),
+        None => refused(context, &views, SearchOutcome::Rejected),
     }
 }
 

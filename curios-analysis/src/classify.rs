@@ -877,6 +877,11 @@ fn layer(intrinsic: &Intrinsic) -> Option<(Kind, usize)> {
     }
 }
 
+/// Whether the walk reads into `intrinsic` as a layer: an operation the table declares, at a carrier whose values hold no type. A term built of none of them is an atom to it.
+pub fn is_node(intrinsic: &Intrinsic) -> bool {
+    layer(intrinsic).is_some()
+}
+
 /// Whether the walk reads into `term` and hands it out to no one: an operation the table declares over every operand it has. One the table leaves an operand out of is handed out whole once its operands are walked, as an opaque atom is.
 fn read_into(term: &Term) -> bool {
     match &**term {
