@@ -771,6 +771,7 @@ name = "curios-parse"
 version = "0.16.8"
 dependencies = [
  "curios-profile",
+ "curios-unicode",
  "curios-utilities",
 ]
 
@@ -869,6 +870,7 @@ dependencies = [
  "curios-pipeline",
  "curios-runtime",
  "curios-text",
+ "curios-unicode",
  "curios-utilities",
  "curios-wonder",
 ]
@@ -886,6 +888,7 @@ dependencies = [
  "curios-parse",
  "curios-print",
  "curios-profile",
+ "curios-unicode",
  "curios-utilities",
 ]
 

@@ -2,8 +2,9 @@
 
 use {
     crate::{
-        EAST_ASIAN_WIDTH, EAST_ASIAN_WIDTH_MISSING, EMOJI_PRESENTATION, EXTENDED_PICTOGRAPHIC,
-        GRAPHEME_BREAK, GRAPHEME_BREAK_MISSING, INDIC_CONJUNCT_BREAK, INDIC_CONJUNCT_BREAK_MISSING,
+        DEFAULT_IGNORABLE, EAST_ASIAN_WIDTH, EAST_ASIAN_WIDTH_MISSING, EMOJI_PRESENTATION,
+        EXTENDED_PICTOGRAPHIC, GRAPHEME_BREAK, GRAPHEME_BREAK_MISSING, INDIC_CONJUNCT_BREAK,
+        INDIC_CONJUNCT_BREAK_MISSING,
     },
     std::cmp::Ordering,
 };
@@ -153,4 +154,9 @@ pub fn is_extended_pictographic(scalar: char) -> bool {
 /// Whether `scalar` presents as an emoji by default (`Emoji_Presentation`).
 pub fn is_emoji_presentation(scalar: char) -> bool {
     held(EMOJI_PRESENTATION, scalar)
+}
+
+/// Whether `scalar` is `Default_Ignorable_Code_Point`: one the database says a renderer shows nothing of where it does not support it — a zero-width space or joiner, a direction mark or override, a variation selector, a Hangul filler, a tag.
+pub fn is_default_ignorable(scalar: char) -> bool {
+    held(DEFAULT_IGNORABLE, scalar)
 }

@@ -1,5 +1,6 @@
 use {
     super::{Mark, Parsed, Parser, ParserError, ParserState},
+    curios_unicode::is_default_ignorable,
     std::borrow::Cow,
 };
 
@@ -85,20 +86,9 @@ pub fn is_blank(char: char) -> bool {
     matches!(char, ' ' | '\t' | '\n' | '\r')
 }
 
-/// Whether `char` prints as nothing, or as a blank the grammar does not take: white space other than a blank, a control character, or a format character — a zero-width space, a byte-order mark, a soft hyphen, a direction mark.
+/// Whether `char` prints as nothing, or as a blank the grammar does not take: white space other than a blank, a control character, or one the Unicode Character Database calls default-ignorable — a zero-width space or joiner, a byte-order mark, a soft hyphen, a direction mark or override, a variation selector, a Hangul filler, a tag.
 pub fn unseen(char: char) -> bool {
-    !is_blank(char)
-        && (char.is_whitespace()
-            || char.is_control()
-            || matches!(
-                char,
-                '\u{00AD}'
-                    | '\u{200B}'..='\u{200F}'
-                    | '\u{202A}'..='\u{202E}'
-                    | '\u{2060}'..='\u{2064}'
-                    | '\u{2066}'..='\u{2069}'
-                    | '\u{FEFF}'
-            ))
+    !is_blank(char) && (char.is_whitespace() || char.is_control() || is_default_ignorable(char))
 }
 
 /// `text` as a report quotes it: a character its reader could not see is spelled by its code point, `U+200B`.

@@ -55,6 +55,7 @@ fn every_table_s_runs_ascend_apart() {
     ));
     assert!(ascend_apart(EXTENDED_PICTOGRAPHIC.iter().copied()));
     assert!(ascend_apart(EMOJI_PRESENTATION.iter().copied()));
+    assert!(ascend_apart(DEFAULT_IGNORABLE.iter().copied()));
 }
 
 /// What the database says of a few scalars, one from each kind of answer.
@@ -82,6 +83,10 @@ fn a_scalar_s_properties_are_the_database_s() {
     assert!(is_emoji_presentation('\u{1F680}'));
     assert!(!is_emoji_presentation('\u{2600}'));
     assert!(is_extended_pictographic('\u{2600}'));
+    assert!(is_default_ignorable('\u{200D}'));
+    assert!(is_default_ignorable('\u{3164}'));
+    assert!(is_default_ignorable('\u{E0041}'));
+    assert!(!is_default_ignorable('a'));
     assert!(!is_extended_pictographic('a'));
 }
 

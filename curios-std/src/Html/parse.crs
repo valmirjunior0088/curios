@@ -33,7 +33,7 @@ let named_reference(body: Str) -> Option(Str) =
     | body == "gt" => Option/some(">")
     | body == "quot" => Option/some("\"")
     | body == "apos" => Option/some("'")
-    | body == "nbsp" => Option/some(" ")
+    | body == "nbsp" => Option/some("\u{A0}")
     | _ => Option/none()
     end;
 

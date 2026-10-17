@@ -272,7 +272,7 @@ fn binary_table(out: &mut String, constant: &str, property: &str, each: &[usize]
     out.push_str("];\n\n");
 }
 
-/// Every scalar's place in a binary property of `emoji-data.txt`, which names the scalars that have it and states no `@missing` line: `1` where a scalar has it.
+/// Every scalar's place in a binary property, of a file that names the scalars that have it and states no `@missing` line for it: `1` where a scalar has it.
 fn binary(text: &str, property: &str) -> Vec<usize> {
     let mut each = vec![0; SCALARS];
 
@@ -359,6 +359,12 @@ fn main() {
         "EMOJI_PRESENTATION",
         "Emoji_Presentation",
         &binary(&emoji, "Emoji_Presentation"),
+    );
+    binary_table(
+        &mut out,
+        "DEFAULT_IGNORABLE",
+        "Default_Ignorable_Code_Point",
+        &binary(&derived, "Default_Ignorable_Code_Point"),
     );
 
     out.push_str(
