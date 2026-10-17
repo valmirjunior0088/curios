@@ -2,14 +2,14 @@
 
 use crate::tests::typecheck;
 
-/// The declarations every claim below is stated over: `close` called through two definitions, and through one over an operand that converts with its binder without being it.
+/// The declarations every claim below is stated over: `File/close` called through two definitions, and through one over an operand that converts with its binder without being it.
 const CALLS: &str = r#"
-    use /std/{Eq, Handle, Io};
-    use /std/Handle/{close};
-    let id(h: Handle) -> Handle = h;
-    let one(h: Handle) -> Io({}) = close(h);
-    let two(h: Handle) -> Io({}) = close(h);
-    let through(h: Handle) -> Io({}) = close(id(h));
+    use /std/{Eq, Io, File};
+    use /std/File/{close};
+    let id(f: File) -> File = f;
+    let one(f: File) -> Io({}) = close(f);
+    let two(f: File) -> Io({}) = close(f);
+    let through(f: File) -> Io({}) = close(id(f));
 "#;
 
 /// Two definitions that unfold to one host call are one, as posed, applied and under a binder, and so is one whose operand converts with the other's: the kernel held two calls one only where nothing had unfolded either side.
@@ -17,8 +17,8 @@ const CALLS: &str = r#"
 fn two_calls_of_one_row_over_operands_that_convert_are_one() {
     for claim in [
         "let same: Eq()(one, two) = Eq/refl();",
-        "let same(h: Handle) -> Eq()(one(h), two(h)) = Eq/refl();",
-        "let same: Eq()((h: Handle) => close(h), (h: Handle) => close(h)) = Eq/refl();",
+        "let same(f: File) -> Eq()(one(f), two(f)) = Eq/refl();",
+        "let same: Eq()((f: File) => close(f), (f: File) => close(f)) = Eq/refl();",
         "let same: Eq()(one, through) = Eq/refl();",
     ] {
         let source = format!("{CALLS}\n{claim}\n/std/print(\"ok\")");

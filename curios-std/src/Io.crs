@@ -1,12 +1,21 @@
 pub use /sys/{Io};
 pub use /sys/Io/{pure, bind};
 use /std/{Monad, Bytes, Nat, Bool, List, Option, Cell, Handle, Channel, Program, Try};
+use /std/Handle/{let Handle};
 use /std/Bool/{Holds};
-use /std/time/{Duration, Instant};
+use /std/time/{Duration};
 
 --- The failure every host operation reports.
 pub mod Error;
 pub use Error/{let Error};
+
+-- `Waiting` is declared here and not in `Offer`, so that `select` reads it and an offer builds it, and nothing outside `Io` does: the handles it names are the library's.
+--- What an offer waits on while it declines: handles a host makes ready and cells the program fills, and what releases the handles the wait made for itself, whether the wait ends or is cancelled. A program's offer waits on cells, through `Offer/on_filled`.
+pub struct Waiting: Type {
+    on: List(Handle),
+    filled: List(Cell({})),
+    release: Io({}),
+}
 
 --- What a selection is written against: a non-committing attempt at a value and what to wait on while it declines.
 pub mod Offer;
@@ -39,23 +48,14 @@ satisfy Program(Io({})) {
     execute(program) = program,
 }
 
---- Until a handle of `on` is ready: a suspension that cancels nothing and goes on with nothing. On no handle, only what advances it can end it: at the top of a program, a deadlock the host reports.
-pub let wait(on: List(Handle)) -> Io({}) =
-    /sys/Io/suspend(on, [], pure(()), pure(()));
-
---- Until a cell of `cells` is filled: a suspension that cancels nothing and goes on with nothing. Only the program fills a cell, so what waits on cells alone at the top of a program is a deadlock the host reports.
+--- Until a cell of `cells` is filled: a suspension that cancels nothing and goes on with nothing. Only the program fills a cell, so what waits on cells alone at the top of a program is a deadlock the host reports, and so is a wait on none.
 pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
     /sys/Io/suspend([], cells, pure(()), pure(()));
 
---- Until the handle `mint` makes is ready, the handle closed whether the wait ends or is cancelled: every wait on a handle made for it alone, a timer or a watch, is this one.
-pub let wait_minted(mint: Io(Handle)) -> Io({}) =
-    let h = mint!;
-    /sys/Io/suspend([h], [], Handle/close(h), Handle/close(h));
-
 --- Until `d` has passed, on a timer of its own.
 pub let sleep(d: Duration) -> Io({}) =
-    let start = Instant/now()!;
-    wait_minted(Instant/timer(Instant/add(start, d)));
+    let start = Handle/monotonic()!;
+    Handle/wait_minted(Handle/timer(Duration/add(start, d)));
 
 -- A cell filled already: what a suspension that may go on at once waits on. Private to the subtree, which is where every such suspension is made.
 let ready() -> Io(Cell({})) =
@@ -151,7 +151,7 @@ let attempt(@A: Type, offers: List(Offer(A))) -> Io(Option(A)) =
     end;
 
 -- What every offer of `offers` waits on, in their order.
-let waits(@A: Type, offers: List(Offer(A))) -> Io(List(Offer/Waiting)) =
+let waits(@A: Type, offers: List(Offer(A))) -> Io(List(Waiting)) =
     match offers
     | [] => pure([])
     | [o, ..more] =>
@@ -161,7 +161,7 @@ let waits(@A: Type, offers: List(Offer(A))) -> Io(List(Offer/Waiting)) =
     end;
 
 -- Every release of `ws`, in their order.
-let released(ws: List(Offer/Waiting)) -> Io({}) =
+let released(ws: List(Waiting)) -> Io({}) =
     match ws | [] => pure(()) | [w, ..more] => bind(w.release, (_) => released(more)) end;
 
 --- The value of the first offer to yield one, waiting on what all of them wait on while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing. Which offer answered is the value's to say, through `Offer/map`.
@@ -175,34 +175,11 @@ pub let select(@A: Type, offers: List(Offer(A))) -> Io(A) =
         let ws = waits(offers)!;
         let release = released(ws);
         /sys/Io/suspend(
-            List/flatten(List/map(ws, (w: Offer/Waiting) => w.on)),
-            List/flatten(List/map(ws, (w: Offer/Waiting) => w.filled)),
+            List/flatten(List/map(ws, (w: Waiting) => w.on)),
+            List/flatten(List/map(ws, (w: Waiting) => w.filled)),
             release,
             bind(release, (_) => select(offers)))
     end;
-
---- An offer that yields once `d` has passed, on a timer of its own each time it is waited on.
-pub let after(d: Duration) -> Io(Offer({})) =
-    let start = Instant/now()!;
-    let due = Instant/add(start, d);
-    pure(
-        Offer/new(
-            bind(
-                Instant/now(),
-                (t) =>
-                    pure(
-                        match Instant/before(t, due)
-                        | true => Option/none()
-                        | false => Option/some(())
-                        end)),
-            bind(
-                Instant/timer(due),
-                (timer) =>
-                    pure(
-                        Offer/Waiting {
-                            on = [timer],
-                            filled = [],
-                            release = Handle/close(timer) }))));
 
 -- Descriptions run side by side under one: each runs until it suspends, and the one that holds them waits on what all of them wait on. A branch no longer needed — a loser, a timed-out action, a child of a scope whose body has answered — is cancelled where it waits.
 -- A branch the driver holds: one still to start, or one suspended on what its suspension named, with what cancels it and the rest of it. A branch that ran to its end is dropped, its answer in whatever it wrote to.

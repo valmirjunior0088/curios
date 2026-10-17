@@ -1,4 +1,5 @@
 use /std/{Bytes, Nat, Str, Path, Try, Io, Handle};
+use /std/Handle/{let Handle};
 
 --- An open file.
 pub struct File: Type {
@@ -31,7 +32,7 @@ pub let open(path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
     let reply = file_open(Path/to_bytes(path), of_mode(mode))!;
     match reply.status == /sys/status/ok
     | true => Try/pure(File { reply.handle })
-    | false => Try/raise(Io/Error/of(reply.status))
+    | false => Try/raise(Handle/error(reply.status))
     end;
 
 --- Close `f`.

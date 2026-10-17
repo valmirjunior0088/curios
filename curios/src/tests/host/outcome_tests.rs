@@ -14,7 +14,7 @@ const DENIED: u8 = 3;
 
 /// What every fixture begins with: the imports, and `verdict`, which turns an outcome into the code the program exits with.
 const PRELUDE: &str = "
-use /std/{Byte, Io, Result, Try, Handle, File, Path, fs, Tty, Serial, Process, tcp};
+use /std/{Byte, Io, Result, Try, File, Path, fs, Tty, Serial, Process, tcp};
 let code(e: Io/Error) -> Byte = match e | permission_denied() => 3 | not_found() => 2 | _ => 1 end;
 let verdict(@A: Type, r: Result(Io/Error, A)) -> Byte = match r | success(_) => 0 | failure(e) => code(e) end;
 ";
@@ -242,8 +242,13 @@ fn a_network_row_s_failure_is_the_error_it_names() {
             vec![(HostOp::TlsServerConfig, denied(vec![bytes(b"")]))],
         ),
         (
-            "Handle/finish(Handle/stdout)",
-            vec![(HostOp::HandleFinish, denied(vec![]))],
+            r#"let s = tcp/Socket/connect("h", 80)!; tcp/Socket/finish(s)"#,
+            vec![
+                looked_up(),
+                opened(),
+                (HostOp::SocketConnect, ok(vec![])),
+                (HostOp::HandleFinish, denied(vec![])),
+            ],
         ),
     ]);
 }

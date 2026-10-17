@@ -229,7 +229,6 @@ fn every_intrinsic_carrier_reaches_a_page_through_its_std_module() {
         ("/std/Int", "Int"),
         ("/std/Flt", "Flt"),
         ("/std/Bool", "Bool"),
-        ("/std/Handle", "Handle"),
         ("/std/List", "List"),
         ("/std/Cell", "Cell"),
         ("/std/Channel", "Channel"),

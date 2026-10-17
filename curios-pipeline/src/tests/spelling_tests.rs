@@ -195,6 +195,12 @@ fn library_modules() -> BTreeSet<String> {
                     .units
                     .iter()
                     .flat_map(|unit| unit.paths.values().flatten())
+                    .filter(|written| {
+                        written
+                            .audience
+                            .iter()
+                            .any(|root| root.segments().is_empty())
+                    })
                     .map(|written| written.path)
                     .collect::<Vec<_>>()
             })

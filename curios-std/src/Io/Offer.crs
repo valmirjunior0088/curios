@@ -1,11 +1,6 @@
 use /std/{List, Option, Cell, Io, Handle};
-
---- What an offer waits on while it declines: handles a host makes ready and cells the program fills, and what releases the handles the wait made for itself, whether the wait ends or is cancelled.
-pub struct Waiting: pub Type {
-    on: List(Handle),
-    filled: List(Cell({})),
-    release: Io({}),
-}
+use /std/Io/{Waiting};
+use /std/time/{Duration};
 
 --- A wait on cells alone, which made nothing to release.
 pub let on_filled(cells: List(Cell({}))) -> Waiting =
@@ -24,3 +19,23 @@ pub let new(@A: Type, try: Io(Option(A)), wait: Io(Waiting)) -> Offer(A) =
 --- `f` applied to whatever the offer answers with.
 pub let map(@A: Type, @B: Type, o: Offer(A), f: (A) -> B) -> Offer(B) =
     new(Io/bind(o.try, (m) => Io/pure(Option/map(m, f))), o.wait);
+
+--- An offer that yields once `d` has passed, on a timer of its own each time it is waited on.
+pub let after(d: Duration) -> Io(Offer({})) =
+    let start = Handle/monotonic()!;
+    let due = Duration/add(start, d);
+    Io/pure(
+        new(
+            Io/bind(
+                Handle/monotonic(),
+                (t) =>
+                    Io/pure(
+                        match Duration/before(t, due)
+                        | true => Option/none()
+                        | false => Option/some(())
+                        end)),
+            Io/bind(
+                Handle/timer(due),
+                (timer) =>
+                    Io/pure(
+                        Waiting { on = [timer], filled = [], release = Handle/close(timer) }))));

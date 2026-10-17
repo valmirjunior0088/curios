@@ -1,5 +1,4 @@
-use /std/{Nat, Str, List, Show};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Str, Show};
 
 --- Why a host operation failed: a named status, or `other` with the errno it carries.
 pub induct Error: pub Type
@@ -33,19 +32,6 @@ end
 
 pub use Error/*;
 
-let errors: List({Nat, Error}) =
-    [
-        (/sys/status/not_found, Error/not_found()),
-        (/sys/status/permission_denied, Error/permission_denied()),
-        (/sys/status/exists, Error/already_exists()),
-        (/sys/status/refused, Error/connection_refused()),
-        (/sys/status/tls, Error/tls()),
-        (/sys/status/not_empty, Error/not_empty()),
-        (/sys/status/is_directory, Error/is_directory()),
-        (/sys/status/not_directory, Error/not_directory()),
-        (/sys/status/reset, Error/connection_reset()),
-        (/sys/status/broken_pipe, Error/broken_pipe())];
-
 satisfy Show(Error) {
     show(e) =
         match e
@@ -64,17 +50,3 @@ satisfy Show(Error) {
         | other(n) => Str/flatten(["other(", Nat/to_str(n), ")"])
         end,
 }
-
---- The failure `status` names: one of the named statuses, or `other` with the errno the host passed through.
-pub let of(status: Nat) -> Error =
-    List/fold(
-        errors,
-        Error/other(status - /sys/status/other_base),
-        (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end);
-
--- Every failure the wire names is a case here, but `would_block`, which every reading retries on and so never reaches a program: a status the wire's list gains is refused until `errors` names it.
-let _every_failure_the_wire_names_is_a_case: Holds(
-    List/all(/sys/status/failures, (status: Nat) =>
-        status == /sys/status/would_block
-            || match of(status) | other(_) => false | _ => true end)) =
-    True/qed();

@@ -232,7 +232,7 @@ fn a_handle_wrapper_is_built_only_beneath_its_module() {
     for (imports, wrapper, literal) in wrappers {
         let forged = |built: &str| {
             error(&format!(
-                "use /std/{{Handle}};\n{imports}\nlet forged(h: Handle) -> {wrapper} = {built};\n/std/print(\"unreachable\")\n"
+                "{imports}\nforeign token() -> Handle;\nlet forged() -> /std/Io({wrapper}) = /std/Io/bind(token(), (h) => /std/Io/pure({built}));\n/std/print(\"unreachable\")\n"
             ))
         };
 

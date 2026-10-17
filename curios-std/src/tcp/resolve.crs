@@ -1,4 +1,4 @@
-use /std/{Str, Nat, Bytes, Try, Io};
+use /std/{Str, Nat, Bytes, Try, Io, Handle};
 
 --- Look this host and port up: `ok` beside every address found, or the status of the failure. The host answers it later, so the call suspends while the lookup runs.
 foreign dns_lookup(Bytes, Nat) -> {status: Nat, addresses: List(Bytes)};
@@ -9,5 +9,5 @@ pub let resolve(host: Str, port: Nat) -> Try(Io, Io/Error, Bytes) =
     match reply.status == /sys/status/ok
     | true =>
         match reply.addresses | [a, .._] => Try/pure(a) | [] => Try/raise(Io/Error/not_found()) end
-    | false => Try/raise(Io/Error/of(reply.status))
+    | false => Try/raise(Handle/error(reply.status))
     end;

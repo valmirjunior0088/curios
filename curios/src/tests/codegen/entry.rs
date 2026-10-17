@@ -18,7 +18,7 @@ fn residual_entry_capability_selects_the_abi_and_preserves_execution() {
             b"".as_slice(),
         ),
         (
-            "/std/Io/wait([])",
+            "/std/Io/wait_filled([])",
             true,
             1,
             curios_abi::DEADLOCK.as_bytes(),

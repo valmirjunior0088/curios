@@ -1,5 +1,6 @@
 use /std/{Nat, Bool, Str, Try, Io, Handle, Show};
 use /std/ops/{Eql};
+use /std/Handle/{let Handle};
 
 --- A terminal this process holds a handle on.
 pub struct Tty: Type {
@@ -32,7 +33,7 @@ pub let raw(t: Tty, on: Bool) -> Try(Io, Io/Error, {}) =
     let status = tty_raw(t.0, on)!;
     match status == /sys/status/ok
     | true => Try/pure(())
-    | false => Try/raise(Io/Error/of(status))
+    | false => Try/raise(Handle/error(status))
     end;
 
 --- This terminal's dimensions: `ok` beside its columns and its rows, or the status of the failure.
@@ -43,7 +44,7 @@ pub let size(t: Tty) -> Try(Io, Io/Error, Size) =
     let reply = tty_size(t.0)!;
     match reply.status == /sys/status/ok
     | true => Try/pure(Size { cols = reply.cols, rows = reply.rows })
-    | false => Try/raise(Io/Error/of(reply.status))
+    | false => Try/raise(Handle/error(reply.status))
     end;
 
 let restore(t: Tty) -> Io({}) =

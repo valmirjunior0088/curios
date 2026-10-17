@@ -1,5 +1,5 @@
 use /std/{Bool, Byte, Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Handle};
-use /std/Handle/{Interest};
+use /std/Handle/{let Handle, Interest};
 
 --- How a child's standard stream is wired: shared with this process, piped to the parent, or attached to the null device.
 pub induct Stdio: pub Type
@@ -95,7 +95,7 @@ pub let spawn(cmd: Command) -> Try(Io, Io/Error, Process) =
     let spawned =
         match reply.status == /sys/status/ok
         | true => Result/success(reply)
-        | false => Result/failure(Io/Error/of(reply.status))
+        | false => Result/failure(Handle/error(reply.status))
         end!;
     Try/pure(
         Process {
@@ -140,7 +140,7 @@ pub let wait(p: Process) -> Try(Io, Io/Error, Exit) =
             | true => Exit/exited(reply.code)
             | false => Exit/signaled(reply.signal)
             end)
-    | false => Try/raise(Io/Error/of(reply.status))
+    | false => Try/raise(Handle/error(reply.status))
     end;
 
 -- End the child if it still runs, then close its handle and its pipes. The kill is the last use of the handle, and the host reaps the process whether or not anything waits for it.

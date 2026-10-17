@@ -65,10 +65,9 @@ fn a_suspension_passed_out_through_binds_resumes_into_their_continuations_in_ord
     let (code, output, _) = ended(
         r#"
         use /std/{Io, Nat};
-        use /std/time/{Instant};
+        use /std/time/{Duration};
         let entry() -> /std/Io({}) =
-            let due = Instant/timer(Instant/now()!)!;
-            let suspended = Io/bind(Io/wait([due]), (_) => Io/pure(1));
+            let suspended = Io/bind(Io/sleep(Duration/zero), (_) => Io/pure(1));
             let x = Io/bind(Io/bind(suspended, (a) => Io/pure(a + 1)), (b) => Io/pure(b * 10))!;
             /std/print(Nat/to_str(x));
         entry()
@@ -130,11 +129,10 @@ fn a_cancel_that_suspends_part_way_runs_to_its_end() {
     let (code, output, _) = ended(
         r#"
         use /std/{Io};
-        use /std/time/{Instant};
+        use /std/time/{Duration};
         let entry() -> /std/Io({}) =
-            let due = Instant/timer(Instant/now()!)!;
-            let release(_: Io/Ended) -> Io({}) = Io/bind(Io/wait([due]), (_) => /std/print("abandoned|"));
-            let _ = Io/using(release, Io/bind(Io/wait([]), (_) => /std/print("resumed|")))!;
+            let release(_: Io/Ended) -> Io({}) = Io/bind(Io/sleep(Duration/zero), (_) => /std/print("abandoned|"));
+            let _ = Io/using(release, Io/bind(Io/wait_filled([]), (_) => /std/print("resumed|")))!;
             /std/print("after|");
         entry()
         "#,
@@ -153,7 +151,7 @@ fn a_program_suspended_on_no_handle_runs_its_cancel_and_ends_reporting_the_deadl
         r#"
         use /std/{Io};
         let entry() -> /std/Io({}) =
-            let _ = Io/using((_) => /std/print("abandoned|"), Io/bind(Io/wait([]), (_) => /std/print("resumed|")))!;
+            let _ = Io/using((_) => /std/print("abandoned|"), Io/bind(Io/wait_filled([]), (_) => /std/print("resumed|")))!;
             /std/print("after|");
         entry()
         "#,
@@ -263,19 +261,18 @@ fn the_real_host_runs_a_branch_while_another_waits_on_a_fifo() {
 fn what_a_suspension_holds_survives_the_collections_between_its_turns() {
     let (code, output, _) = ended(
         r#"
-        use /std/{Io, Handle, Nat, List};
-        use /std/time/{Instant};
-        let turn(due: Handle, n: Nat, held: List(Nat)) -> Io(Nat) =
+        use /std/{Io, Nat, List};
+        use /std/time/{Duration};
+        let turn(n: Nat, held: List(Nat)) -> Io(Nat) =
             match n: (_) => Io(Nat)
             | 0 => Io/pure(List/len(held))
             | m + 1 =>
                 let garbage = List/range(0, 2000);
-                let _ = Io/bind(Io/wait([due]), (_) => Io/pure(List/len(garbage)))!;
-                turn(due, m, [n, ..held])
+                let _ = Io/bind(Io/sleep(Duration/zero), (_) => Io/pure(List/len(garbage)))!;
+                turn(m, [n, ..held])
             end;
         let entry() -> /std/Io({}) =
-            let due = Instant/timer(Instant/now()!)!;
-            let counted = turn(due, 3000, [])!;
+            let counted = turn(3000, [])!;
             /std/print(Nat/to_str(counted));
         entry()
         "#,

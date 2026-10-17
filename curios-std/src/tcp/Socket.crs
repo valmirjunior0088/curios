@@ -1,6 +1,6 @@
 use /std/{Bytes, Str, Nat, Bool, Try, Io, Handle};
 use /std/tcp/{resolve, Socket};
-use /std/Handle/{Interest};
+use /std/Handle/{let Handle, Interest};
 
 satisfy Io/Read(Socket) {
     read(c, n, @positive) = Io/read(@Handle, c.0, n, @positive),
@@ -30,7 +30,7 @@ let opened(addr: Bytes) -> Try(Io, Io/Error, Handle) =
     let reply = socket_open(addr)!;
     match reply.status == /sys/status/ok
     | true => Try/pure(reply.handle)
-    | false => Try/raise(Io/Error/of(reply.status))
+    | false => Try/raise(Handle/error(reply.status))
     end;
 
 --- Start connecting this socket to this address: `ok`, or the status of the failure.
@@ -44,7 +44,7 @@ let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
     | status == /sys/status/would_block => Try/pure((h, true))
     | _ =>
         let _ = Handle/close(h)!;
-        Try/raise(Io/Error/of(status))
+        Try/raise(Handle/error(status))
     end;
 
 --- How a connect under way ended: `ok`, or the status of the failure.
@@ -59,7 +59,7 @@ let settle(h: Handle, pending: Bool) -> Try(Io, Io/Error, {}) =
         choose
         | status == /sys/status/ok => Try/pure(())
         | status == /sys/status/would_block => settle(h, true)
-        | _ => Try/raise(Io/Error/of(status))
+        | _ => Try/raise(Handle/error(status))
         end
     end;
 
@@ -72,7 +72,7 @@ let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
         let status = tls_start(h, Str/to_bytes(host))!;
         match status == /sys/status/ok
         | true => Try/pure(())
-        | false => Try/raise(Io/Error/of(status))
+        | false => Try/raise(Handle/error(status))
         end
     | false => Try/pure(())
     end;

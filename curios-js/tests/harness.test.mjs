@@ -72,8 +72,9 @@ main()
 `;
 
 const TAKE = `
+foreign token() -> Handle;
 foreign take(Nat, Int, Bool, Byte, Flt, Bytes, Bits, List(Nat), List(Int), List(Bool), List(Bytes), List(Handle)) -> {};
-take(18446744073709551615, -5, true, 200, 1.5, x[1, 2], b[1, 0, 1], [1, 2], [-1, 3], [true, false], [x[7], x[]], [/std/Handle/stdout])
+/std/Io/bind(token(), (h) => take(18446744073709551615, -5, true, 200, 1.5, x[1, 2], b[1, 0, 1], [1, 2], [-1, 3], [true, false], [x[7], x[]], [h]))
 `;
 
 const LISTS = `
@@ -114,7 +115,7 @@ abort(3)
 `;
 
 const WRITE = `
-use /std/{Handle, Io, Show, Try, print};
+use /std/{Io, Show, Try, print};
 foreign token() -> Handle;
 let main() -> /std/Io({}) =
     let h = token()!;
@@ -127,30 +128,21 @@ main()
 `;
 
 const DIRECTION = `
-use /std/{Handle, Io, Show, Str, Try, Result, print};
+use /std/{Io, Show, Str, Try, Result, print};
+foreign input() -> Handle;
+foreign output() -> Handle;
 foreign token() -> Handle;
 let main() -> /std/Io({}) =
     let said(r: Result(Io/Error, Io/Chunk)) -> Str =
         match r | success(bytes(_, @_)) => "chunk" | success(ended()) => "eof" | failure(e) => Show/show(e) end;
-    let w = Try/run(Io/write(Handle/stdin, x[1]))!;
-    let out = Try/run(Io/read(Handle/stdout, 4))!;
-    let rest = Try/run(Io/read(Handle/stdin, 4))!;
+    let stdin = input()!;
+    let stdout = output()!;
+    let w = Try/run(Io/write(stdin, x[1]))!;
+    let out = Try/run(Io/read(stdout, 4))!;
+    let rest = Try/run(Io/read(stdin, 4))!;
     let h = token()!;
     let unknown = Try/run(Io/read(h, 4))!;
     print(Str/join(" ", [match w | success(_) => "wrote" | failure(f) => Show/show(f) end, said(out), said(rest), said(unknown)]));
-main()
-`;
-
-const WATCH = `
-use /std/{Handle, print};
-use /std/Handle/{Interest};
-foreign token() -> Handle;
-let main() -> /std/Io({}) =
-    let h = token()!;
-    let _ = Handle/wait(h, Interest/readable)!;
-    let _ = Handle/wait(Handle/stdout, Interest/writable)!;
-    let _ = Handle/wait(Handle/stdin, Interest/readable)!;
-    print("ready");
 main()
 `;
 
@@ -167,7 +159,7 @@ test("entry exports select the direct or turn protocol for the program they run"
   for (const [source, turns, status, output] of [
     ["/std/Io/pure(())", false, 0, ""],
     ['/std/print("hello")', true, 0, "hello"],
-    ["/std/Io/wait([])", true, 1, ""],
+    ["/std/Io/wait_filled([])", true, 1, ""],
   ]) {
     const compiled = compile(source);
     const module = await WebAssembly.compile(compiled.program);
@@ -328,6 +320,7 @@ test("a hook is handed each operand as the JavaScript value its type names, then
 
   const { trap } = await execute(TAKE, {
     foreign: {
+      "/token": () => Uint8Array.of(1),
       "/take": (...operands) => {
         handed = operands;
       },
@@ -437,18 +430,14 @@ test("a handle is its token's exact bytes: the empty, a padded and a long token 
 
 test("a stream used against its direction fails with EBADF, and a handle this host never minted is not found", async () => {
   const { stdout } = await execute(DIRECTION, {
-    foreign: { "/token": () => new Uint8Array() },
+    foreign: {
+      "/input": () => Uint8Array.of(0),
+      "/output": () => Uint8Array.of(1),
+      "/token": () => new Uint8Array(),
+    },
   });
 
   assert.equal(stdout, "other(9) other(9) eof not_found");
-});
-
-test("a wait on a handle answers at once, on a handle this host never minted as on the streams", async () => {
-  const { stdout } = await execute(WATCH, {
-    foreign: { "/token": () => Uint8Array.of(9) },
-  });
-
-  assert.equal(stdout, "ready");
 });
 
 test("listing a directory is denied rather than refused", async () => {
@@ -558,7 +547,7 @@ test("a program suspended on no handle runs its cancel, reports the deadlock and
   const { exitCode, stdout, stderr } = await execute(`
 use /std/{Io, print};
 let main() -> /std/Io({}) =
-    let _ = Io/using((_) => print("abandoned"), Io/bind(Io/wait([]), (_) => print("resumed")))!;
+    let _ = Io/using((_) => print("abandoned"), Io/bind(Io/wait_filled([]), (_) => print("resumed")))!;
     print("after");
 main()
 `);
@@ -688,7 +677,7 @@ let release(_: Io/Ended) -> Io({}) =
     let _ = Io/sleep(Duration/of_millis(10))!;
     print("closed");
 let main() -> Io({}) =
-    let _ = Io/using(release, Io/bind(Io/wait([]), (_) => print("resumed")))!;
+    let _ = Io/using(release, Io/bind(Io/wait_filled([]), (_) => print("resumed")))!;
     print("after");
 main()
 `,

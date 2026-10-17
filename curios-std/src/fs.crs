@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, List, Option, Path, Try, Io, Show};
+use /std/{Nat, Bool, List, Option, Path, Try, Io, Show, Handle};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
 
@@ -64,7 +64,7 @@ pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
                     mtime = Timestamp/of_unix(reply.mtime_secs, reply.mtime_nanos) })
         | none() => Try/raise(Io/Error/other(0))
         end
-    | false => Try/raise(Io/Error/of(reply.status))
+    | false => Try/raise(Handle/error(reply.status))
     end;
 
 let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =
@@ -95,7 +95,7 @@ pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
     let reply = dir_list(Path/to_bytes(path))!;
     match reply.status == /sys/status/ok
     | true => Try/pure(List/map(reply.names, Path/of_bytes))
-    | false => Try/raise(Io/Error/of(reply.status))
+    | false => Try/raise(Handle/error(reply.status))
     end;
 
 --- Create the directory at this path: `ok`, or the status of the failure.
@@ -106,7 +106,7 @@ pub let create_dir(path: Path) -> Try(Io, Io/Error, {}) =
     let status = dir_create(Path/to_bytes(path))!;
     match status == /sys/status/ok
     | true => Try/pure(())
-    | false => Try/raise(Io/Error/of(status))
+    | false => Try/raise(Handle/error(status))
     end;
 
 --- Remove the directory at this path: `ok`, or the status of the failure.
@@ -117,7 +117,7 @@ pub let remove_dir(path: Path) -> Try(Io, Io/Error, {}) =
     let status = dir_remove(Path/to_bytes(path))!;
     match status == /sys/status/ok
     | true => Try/pure(())
-    | false => Try/raise(Io/Error/of(status))
+    | false => Try/raise(Handle/error(status))
     end;
 
 --- Remove the file at this path: `ok`, or the status of the failure.
@@ -128,7 +128,7 @@ pub let remove_file(path: Path) -> Try(Io, Io/Error, {}) =
     let status = file_remove(Path/to_bytes(path))!;
     match status == /sys/status/ok
     | true => Try/pure(())
-    | false => Try/raise(Io/Error/of(status))
+    | false => Try/raise(Handle/error(status))
     end;
 
 --- Rename what is at the first path to the second: `ok`, or the status of the failure.
@@ -139,7 +139,7 @@ pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
     let status = file_rename(Path/to_bytes(from), Path/to_bytes(to))!;
     match status == /sys/status/ok
     | true => Try/pure(())
-    | false => Try/raise(Io/Error/of(status))
+    | false => Try/raise(Handle/error(status))
     end;
 
 --- The process's working directory: `ok` beside its path, or the status of the failure.
@@ -150,7 +150,7 @@ pub let cwd() -> Try(Io, Io/Error, Path) =
     let reply = proc_cwd()!;
     match reply.status == /sys/status/ok
     | true => Try/pure(Path/of_bytes(reply.path))
-    | false => Try/raise(Io/Error/of(reply.status))
+    | false => Try/raise(Handle/error(reply.status))
     end;
 
 --- A directory at `path` and every missing parent; one that already exists is left as it is.

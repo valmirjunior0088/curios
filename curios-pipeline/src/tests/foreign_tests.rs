@@ -159,8 +159,8 @@ fn a_report_spells_a_row_as_its_declaration_is_reached() {
 fn a_report_spells_a_row_its_reader_cannot_reach_by_its_path() {
     let refusal = typecheck(
         r#"
-            use /std/{Eq, Handle, Io};
-            pub let p: Eq()(Handle/close(Handle/stdin), Io/pure(())) = Eq/refl();
+            use /std/{Eq, Io, Process};
+            pub let p: Eq()(Process/args(), Io/pure([])) = Eq/refl();
             /std/print("")
         "#,
     )
@@ -168,7 +168,7 @@ fn a_report_spells_a_row_its_reader_cannot_reach_by_its_path() {
 
     assert!(
         refusal.contains(
-            "expected: Eq(@Io({}))(/std/Handle/handle_close(Handle/stdin), Io/pure(@{}, ()))"
+            "expected: Eq(@Io(/std/List(/std/Bytes)))(/std/Process/proc_args(), Io/pure(@/std/List(/std/Bytes), []))"
         ),
         "{refusal}"
     );

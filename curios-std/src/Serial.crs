@@ -1,4 +1,5 @@
 use /std/{Nat, Bool, List, Path, Try, Io, Handle};
+use /std/Handle/{let Handle};
 
 --- An open serial port.
 pub struct Serial: Type {
@@ -68,7 +69,7 @@ pub let open(path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
             of_flow(c.flow))!;
     match reply.status == /sys/status/ok
     | true => Try/pure(Serial { reply.handle })
-    | false => Try/raise(Io/Error/of(reply.status))
+    | false => Try/raise(Handle/error(reply.status))
     end;
 
 --- Close `s`. What it accepted and has not sent is discarded, so the close never waits on the wire: `drain` first to send it, as `with` does.
@@ -87,7 +88,7 @@ pub let drain(s: Serial) -> Try(Io, Io/Error, {}) =
     let status = serial_drain(s.0)!;
     match status == /sys/status/ok
     | true => Try/pure(())
-    | false => Try/raise(Io/Error/of(status))
+    | false => Try/raise(Handle/error(status))
     end;
 
 satisfy Io/Write(Serial) {
@@ -102,7 +103,7 @@ let control(s: Serial, op: Nat, on: Bool) -> Try(Io, Io/Error, {}) =
     let status = serial_control(s.0, op, on)!;
     match status == /sys/status/ok
     | true => Try/pure(())
-    | false => Try/raise(Io/Error/of(status))
+    | false => Try/raise(Handle/error(status))
     end;
 
 --- The Data Terminal Ready line at `on`. Lowering and raising it is how most boards are reset.
@@ -143,5 +144,5 @@ pub let list() -> Try(Io, Io/Error, List(Path)) =
     let reply = serial_list()!;
     match reply.status == /sys/status/ok
     | true => Try/pure(List/map(reply.paths, Path/of_bytes))
-    | false => Try/raise(Io/Error/of(reply.status))
+    | false => Try/raise(Handle/error(reply.status))
     end;

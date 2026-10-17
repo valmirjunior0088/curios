@@ -17,7 +17,7 @@ fn small_suspension_programs_do_not_expand_into_callback_families() {
             b"".as_slice(),
         ),
         (
-            "/std/Io/wait([])",
+            "/std/Io/wait_filled([])",
             64 * 1024,
             1,
             curios_abi::DEADLOCK.as_bytes(),

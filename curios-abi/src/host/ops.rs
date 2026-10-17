@@ -84,10 +84,10 @@ macro_rules! for_each_host_op {
             ClockWall: fn clock_wall() -> Timestamp { module: time/Timestamp }
 
             /// Read the monotonic clock. `(secs, nanos)` elapsed since a fixed origin; only differences are meaningful.
-            ClockMono: fn clock_mono() -> Timestamp { module: time/Instant }
+            ClockMono: fn clock_mono() -> Timestamp { module: Handle }
 
             /// A handle that is ready once the monotonic clock, as `clock_mono` reads it, reaches `secs` seconds and `nanos` nanoseconds: what a description suspends on to sleep. An instant already passed is ready at once, and nanoseconds past a second carry into the seconds.
-            ClockTimer: fn clock_timer(secs: u64, nanos: u64) -> Handle { module: time/Instant }
+            ClockTimer: fn clock_timer(secs: u64, nanos: u64) -> Handle { module: Handle }
 
             /// Exactly `n` random bytes. A host that cannot find the memory or the entropy for them refuses the call, naming why, rather than answer fewer.
             RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> { module: rand }

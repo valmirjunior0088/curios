@@ -113,9 +113,9 @@ fn a_file_kind_no_code_names_fails_the_stat() {
 fn a_write_that_accepts_nothing_is_a_failure() {
     let code = answering(
         r#"
-        use /std/{Io, Handle, Try, Process};
+        use /std/{Io, Try, Process};
         let entry() -> /std/Io({}) =
-            let r = Try/run(Io/write(@Handle, Handle/stdout, x[0x41]))!;
+            let r = Try/run(Io/write(Process/stdout, x[0x41]))!;
             match r | success(_) => Process/exit(@{}, 0) | failure(_) => Process/exit(@{}, 7) end;
         entry()
         "#,
@@ -163,14 +163,14 @@ fn an_io_never_performed_asks_the_host_nothing() {
 fn a_program_cannot_name_a_row_the_library_declares() {
     let refusal = typecheck(
         r#"
-        use /std/Handle/{handle_read};
+        use /std/Process/{proc_args};
         /std/print("unread")
         "#,
     )
-    .expect_err("the row is private to `/std/Handle`");
+    .expect_err("the row is private to `/std/Process`");
 
     assert!(
-        refusal.contains("`handle_read` is private to `/std/Handle`"),
+        refusal.contains("`proc_args` is private to `/std/Process`"),
         "{refusal}"
     );
 }

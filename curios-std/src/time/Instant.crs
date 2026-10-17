@@ -6,20 +6,10 @@ pub struct Instant: Type {
     elapsed: Duration,
 }
 
---- The monotonic clock: seconds since a fixed origin, and the nanoseconds within the second.
-foreign clock_mono() -> {secs: Nat, nanos: Nat};
-
---- A handle ready once the clock reaches so many seconds and nanoseconds.
-foreign clock_timer(Nat, Nat) -> Handle;
-
---- A handle ready once the clock reaches `at`: what a description suspends on to sleep until then. One already passed is ready at once.
-pub let timer(at: Instant) -> Io(Handle) =
-    clock_timer(Duration/secs(at.elapsed), Duration/nanos(at.elapsed));
-
 --- The clock now.
 pub let now() -> Io(Instant) =
-    let r = clock_mono()!;
-    Io/pure(Instant { elapsed = Duration/of(r.secs, r.nanos) });
+    let elapsed = Handle/monotonic()!;
+    Io/pure(Instant { elapsed = elapsed });
 
 --- The moment `d` after `t`.
 pub let add(t: Instant, d: Duration) -> Instant =
