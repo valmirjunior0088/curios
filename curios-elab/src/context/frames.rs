@@ -745,11 +745,6 @@ impl<'s> Frames<'s> {
         self.withhold_refinements_from = previous;
     }
 
-    /// Whether any counterfactual refinement of any kind is registered in any frame, one set aside among them: the closed machine's gate.
-    pub(crate) fn any_refinements_registered(&self) -> bool {
-        self.every_frame().any(Frame::refined)
-    }
-
     /// Whether `name` is bound at the top level (the persistent base frame) — a global definition, always in scope. The metavariable solver admits such names in a solution even though they are not in the metavariable's Γ/spine (which holds only local binders): a solution may freely mention a global constant without that constant being a context binder.
     pub(crate) fn is_top_level(&self, name: &Free) -> bool {
         self.frames[0].assumptions.contains_key(name) || self.in_scope(name).is_some()

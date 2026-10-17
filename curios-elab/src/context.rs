@@ -1686,11 +1686,6 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// Whether any refinement of any kind is registered, in a frame that stands or in one a judgment set aside — the closed machine's gate. Standing on held frames must not open it: a key of a frame set aside is kept neutral by the strategy ([`Context::is_key_set_aside`]), and the machine evaluating it would unfold it.
-    pub(crate) fn any_refinements_registered(&self) -> bool {
-        self.typing.frames.any_refinements_registered()
-    }
-
     /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`] carries the rule and [`Caches::invalidate_settlement_boundary`] the cache protocol at each side.
     pub(crate) fn with_refinements_withheld_from<R>(
         &mut self,

@@ -8,7 +8,7 @@
 //!
 //! # What the machine refuses to see
 //!
-//! The entry gate is [`accelerable`] — no local frees and no metavariables, two bits cached per node — plus a host-side condition the hosts enforce at their call sites: no case-equation refinements in scope, because inside an arm a closed scrutinee *is* the arm's assumed value, definitionally, and evaluating it would answer a different question. A term that fails the gate takes the ordinary recursive strategy, unchanged.
+//! The entry gate is [`accelerable`] — no local frees and no metavariables, two bits cached per node — and nothing else: an arm's case equation is no reason to stand aside. Both checkers record an equation only under a spelling that names a local (`curios_analysis::records_case_equation`) and probe one only at a stuck form that names a local, so no equation answers a term the machine takes, and the hosts run it on a closed term wherever the term stands. That is also what gives a closed term one reduct: evaluated by the machine inside an arm and by the recursive strategy outside it, it would reach the same value spelled two ways, and a remembered reduct, or a solution spelled from one, would follow which of the two was asked first. A term that fails the gate takes the ordinary recursive strategy, unchanged.
 //!
 //! # How the machine differs from the recursive strategy, and why each difference is safe
 //!
@@ -111,7 +111,7 @@ impl ClosedMemo {
     }
 }
 
-/// Whether `term` is in the machine's domain: no local frees and no metavariables, read off the per-node cached bits in O(1). The hosts add their own judgment-side condition — no refinements in scope — at the call site.
+/// Whether `term` is in the machine's domain: no local frees and no metavariables, read off the per-node cached bits in O(1). It is the whole gate, an arm's equations included: see the module documentation.
 pub fn accelerable(term: &Term) -> bool {
     !term.has_local_free() && !term.has_metavar()
 }

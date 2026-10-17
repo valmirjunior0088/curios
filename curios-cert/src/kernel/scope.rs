@@ -218,9 +218,9 @@ impl Scope {
         }
     }
 
-    /// Whether any arm's case equation is currently in force — the judgment-side half of the closed machine's gate: inside an arm a closed scrutinee *is* the assumed value, so closed evaluation must stand aside for the strategy that consults these.
+    /// Whether any arm's case equation is currently in force: what files a judgment read off the scope apart from one that is the declaration's ([`Memos`](super::memos::Memos)), and what spares a stuck form the probe where there is nothing to consult.
     ///
-    /// Reads the equations *in force*, not the equations recorded: while a settlement withholds the inner ones, the machine is entitled to run wherever nothing is left to consult.
+    /// Reads the equations *in force*, not the equations recorded: while a settlement withholds the inner ones, nothing is left to consult where none stands.
     pub(super) fn has_refinements(&self) -> bool {
         self.in_force() != 0
     }

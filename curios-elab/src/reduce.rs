@@ -67,26 +67,19 @@ impl ClosedHost for Context<'_> {
     }
 }
 
-/// Whether the closed machine may take `term` in this context: the representation-side gate ([`accelerable`]) plus the judgment-side one — no refinement of any kind registered, suppressed or live, because a refined closed scrutinee *is* the arm's assumed value, a refined projection is its recorded reduct, and a *suppressed* key must stay withheld rather than be evaluated.
-fn machine_admissible(context: &Context, term: &Term) -> bool {
-    accelerable(term) && !context.any_refinements_registered()
-}
-
 /// `term` as its solutions spell it, where that is a term the closed machine takes and `term` as written is not: closed, and every metavariable it holds solved.
 ///
 /// **A solved metavariable is not an open one.** A hidden member unification has solved — the `@A` of `/std/Parse/run`, of `/std/Eq` — is spelled as its metavariable until its declaration is zonked, and the kernel is handed the term with the solution in its place. Asked of the term as written, the gate declines every closed claim that leaves a member to inference: the recursive strategy reduces it from the top, the machine run on each closed piece it meets under a memo of its own, and answers by name where the machine answers by value, a constructor over everything it left unentered, which the solver then commits a metavariable to and re-validation types whole.
 ///
 /// **Substituted only where a run or a remembered reduct follows.** A term over a free variable, or over a metavariable left open, is the recursive strategy's as written, and [`solved_through`] tells before anything is substituted, so the walk that writes the solutions in is paid by a term the machine then takes.
 fn solved_spelling(context: &Context, term: &Term) -> Option<Term> {
-    let closed_but_for_solutions = term.has_metavar()
-        && !term.has_local_free()
-        && !context.any_refinements_registered()
-        && solved_through(context, term);
+    let closed_but_for_solutions =
+        term.has_metavar() && !term.has_local_free() && solved_through(context, term);
     if !closed_but_for_solutions {
         return None;
     }
 
-    Some(zonk_solved_term_metas(context, term)).filter(|solved| machine_admissible(context, solved))
+    Some(zonk_solved_term_metas(context, term)).filter(accelerable)
 }
 
 /// Whether every metavariable `term` holds is solved, and every one its solution holds, through to terms that hold none: what substitution turns into a term with no metavariable. Each solution is read once, and the reading stops at the first metavariable left open.
@@ -295,7 +288,7 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
     //
     // The forced value is stored in the declaration's reduction cache unless it is a folded recursive spelling — a `reduce` probe must never be served a fold it expects to keep folded, but any other forced value is a weak-head form like any cached reduct. Without this store the elaborator would re-run the machine for every position that demands the same closed value — checking, conversion and re-validation each paying a `Str` literal's full scan while the kernel replays its memo.
-    if machine_admissible(context, &term) {
+    if accelerable(&term) {
         // The store below is what a later demand for the same value hits, and this is where it hits: a probe that finds an unfolded value answers without a run, while one that finds the folded spelling — a plain reduct stored under itself — has nothing to serve and runs.
         if let Some(cached) = context.cached_reduced(&term)
             && !is_folded(&cached)
@@ -1289,7 +1282,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
     }
 
     // A closed term takes the machine: same rules, same counter, machine depth instead of one native frame per element. Stored under the same cache entry a strategy-derived reduct would be.
-    if machine_admissible(context, &term) {
+    if accelerable(&term) {
         let entry = term.clone();
         let result = reduce_closed(context, term, Demand::Whnf)?;
         context.reduce(entry, &result);

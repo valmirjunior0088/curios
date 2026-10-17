@@ -67,9 +67,9 @@ fn closed_run(kernel: &mut Kernel, term: Term, demand: Demand) -> Result<Term, R
     value
 }
 
-/// Whether the closed machine may take `term` under this judgment: the kernel admits it at all (the `machine` field is false only in the differential fixture's strategy arm), the representation-side gate ([`accelerable`]) holds, and no case equation is in scope — because inside an arm a closed scrutinee *is* the arm's assumed value.
+/// Whether the closed machine may take `term` under this judgment: the kernel admits it at all (the `machine` field is false only in the differential fixture's strategy arm) and the representation-side gate ([`accelerable`]) holds. An equation in force is no reason to stand aside, since none answers a term that names no local: `Scope::refine` records only a local-bearing scrutinee and [`refined_reduct`] probes only a local-bearing form.
 fn machine_admissible(kernel: &Kernel, term: &Term) -> bool {
-    kernel.machine && accelerable(term) && !kernel.has_refinements()
+    kernel.machine && accelerable(term)
 }
 
 /// The kernel's reduction strategy: everything unfolds, and what a term unfolds to is remembered — for the declaration if it is local-free, for as long as the equations in force stand if it is not — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit is free.

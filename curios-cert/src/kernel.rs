@@ -1268,7 +1268,7 @@ impl<'s> Kernel<'s> {
         })
     }
 
-    /// Whether any arm's case equation is currently assumed — the judgment-side half of the closed machine's gate.
+    /// Whether any arm's case equation is currently assumed ([`Scope::has_refinements`]).
     pub(crate) fn has_refinements(&self) -> bool {
         self.scope.has_refinements()
     }
