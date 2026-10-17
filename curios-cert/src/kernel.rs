@@ -256,7 +256,7 @@ impl Error {
         syntax: &SyntaxRegistry,
     ) -> String {
         // See `curios_elab::Error::format_with`: a module carries only its own declarations, so *both* halves of the spelling have to be told what its environment put in scope, which each unit in scope says by the lexicon it keeps.
-        let own = module.lexicon(syntax);
+        let own = module.lexicon();
         let spelling = Rc::new(
             Spelling::default()
                 .with_lexicons(&own, scope)

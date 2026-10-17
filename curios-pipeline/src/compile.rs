@@ -622,7 +622,7 @@ where
     // The registry the context was made with, which is the one its elaboration synthesizes names from.
     let syntax = &context.syntax();
     // Read by the first report, each unit's where the unit keeps it, and by no elaboration that reports nothing.
-    let lexicons = LazyCell::new(|| predecessors.lexicons(syntax));
+    let lexicons = LazyCell::new(|| predecessors.lexicons());
     let LoweredEntry {
         program: mut lowered,
         minted,
@@ -819,7 +819,7 @@ impl Entered {
             elaborator_refusal(
                 &error,
                 &self.program.as_program().module,
-                &scope.lexicons(syntax),
+                &scope.lexicons(),
                 self.lowering(),
                 predecessors,
                 syntax,
@@ -1009,7 +1009,7 @@ fn close_over(
                 elaborator_refusal(
                     &error,
                     &own,
-                    &scope.lexicons(syntax),
+                    &scope.lexicons(),
                     lowered,
                     predecessors,
                     syntax,
@@ -1040,11 +1040,7 @@ fn judged(
         certify_program(&program, budget, &globals(scope), *syntax)
     };
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = verdict.format_with(
-            &program.as_program().module,
-            &scope.lexicons(syntax),
-            syntax,
-        );
+        let refusal = verdict.format_with(&program.as_program().module, &scope.lexicons(), syntax);
         return Err(CompileError::failure(match &verdict.name {
             Some(name) => format!("the kernel refused {}: {refusal}", name.faithful()),
             None => format!("the kernel refused the entrypoint: {refusal}"),
@@ -1197,7 +1193,7 @@ pub(crate) fn compile_lowered(
             elaborator_refusal(
                 &error,
                 lowered.core(),
-                &predecessors.lexicons(syntax),
+                &predecessors.lexicons(),
                 &lowered,
                 predecessors,
                 syntax,
@@ -1223,12 +1219,7 @@ pub(crate) fn compile_lowered(
 
     let rechecked = certify(&core, budget, predecessors, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = kernel_refusal(
-            verdict,
-            core.as_module(),
-            &predecessors.lexicons(syntax),
-            syntax,
-        );
+        let refusal = kernel_refusal(verdict, core.as_module(), &predecessors.lexicons(), syntax);
         return Err(refuse(&lowered, refusal));
     }
 
@@ -1239,7 +1230,7 @@ pub(crate) fn compile_lowered(
         let refusal = elaborator_refusal(
             &error,
             core.as_module(),
-            &predecessors.lexicons(syntax),
+            &predecessors.lexicons(),
             &lowered,
             predecessors,
             syntax,

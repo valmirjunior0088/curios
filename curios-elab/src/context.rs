@@ -3166,7 +3166,10 @@ impl<'s> Context<'s> {
 
     /// Where a report about the judgment under way stands: the witness binders in scope, and the frames standing, which its terms are settled on ([`Error::settled`]).
     pub(crate) fn reader_scope(&mut self) -> ReaderScope {
-        let witnesses = self.witness_scope().cloned().collect::<Vec<_>>();
+        let witnesses = self
+            .witness_scope()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>();
 
         ReaderScope::held(witnesses, self.hold_frames())
     }

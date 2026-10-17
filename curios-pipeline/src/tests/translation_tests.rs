@@ -25,7 +25,7 @@ fn shown(source: &str, name: &str) -> (String, String) {
             .chain([unit.core()])
             .collect::<Vec<_>>();
         let established = Established::over(&modules);
-        let lexicons = predecessors.lexicons(&SYNTAX);
+        let lexicons = predecessors.lexicons();
         let spellings = Rc::new(unit.text().spellings(&predecessors.text()));
         let reading = Reading {
             module: unit.core(),

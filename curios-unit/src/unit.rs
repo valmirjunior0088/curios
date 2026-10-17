@@ -7,7 +7,7 @@ use {
     curios_core::{Certification, Lexicon, Module, Places, Sharing},
     curios_elab::{ErasedUnit, Projection, Traces},
     curios_text::PreparedText,
-    curios_utilities::{Mount, SyntaxRegistry},
+    curios_utilities::Mount,
     std::{cell::OnceCell, rc::Rc},
 };
 
@@ -98,9 +98,9 @@ impl Uncertified {
         self.places.get_or_init(|| Places::of(&self.core))
     }
 
-    /// What a report spells this unit's names by. See the field. `syntax` is the compilation's one registry, which names the operator a concept's method is dispatched by.
-    pub fn lexicon(&self, syntax: &SyntaxRegistry) -> &Lexicon {
-        self.lexicon.get_or_init(|| self.core.lexicon(syntax))
+    /// What a report spells this unit's names by. See the field.
+    pub fn lexicon(&self) -> &Lexicon {
+        self.lexicon.get_or_init(|| self.core.lexicon())
     }
 
     /// What erasure has read of this unit's elaborated module out of its universes. See the field.
@@ -238,8 +238,8 @@ impl Unit {
     }
 
     /// See [`Uncertified::lexicon`].
-    pub fn lexicon(&self, syntax: &SyntaxRegistry) -> &Lexicon {
-        self.unit.lexicon(syntax)
+    pub fn lexicon(&self) -> &Lexicon {
+        self.unit.lexicon()
     }
 
     /// See [`Uncertified::projection`].

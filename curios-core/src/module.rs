@@ -8,13 +8,12 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, ConceptSpelling, Declarations, Enter, FieldSpelling, Free,
-        FuncType, Global, InductDecl, Items, Lexicon, Many, Members, Outline, Place, Places,
-        Polarity, RecGroup, RecMemberScopes, Scope, Sharing, Spelling, StructDecl, StructType,
-        Subterm, Symbols, Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId,
-        WitnessSpelling, build_shorten,
+        Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
+        Members, Outline, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
+        Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
+        UniverseError, Variance, WitnessId, build_shorten,
     },
-    curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
+    curios_utilities::{Mount, Plicity, Qualifier},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         fmt, mem,
@@ -259,26 +258,6 @@ impl DefinitionKind {
             DefinitionKind::Test => Declared::Test,
         }
     }
-}
-
-/// Each field of `fields` under the witness mark as its position beside the name its type applies, read where the field is written: a concept's superclass edges, where the elaborator has not recorded what they reach. A field whose type applies no name is left out.
-fn written_edges(fields: &Telescope<()>) -> Vec<(usize, Global)> {
-    let mut edges = Vec::new();
-    let mut position = 0;
-    let mut rest = fields;
-    while let Telescope::Cons(mark, type_, after) = rest {
-        let applied = match &**type_ {
-            Subterm::StructType(applied) => Some(applied.name),
-            _ => type_.head_name().and_then(Free::as_global).copied(),
-        };
-        if let (Plicity::Witness, Some(applied)) = (mark, applied) {
-            edges.push((position, applied));
-        }
-        position += 1;
-        rest = after.body();
-    }
-
-    edges
 }
 
 /// What a name is declared as: a [`DefinitionKind`] without the entry a former's carries, so it is read and compared with no declaration in hand.
@@ -1034,18 +1013,13 @@ impl Module {
     }
 
     /// What a report spells this unit's names by — see [`Lexicon`].
-    pub fn lexicon(&self, syntax: &SyntaxRegistry) -> Lexicon {
+    pub fn lexicon(&self) -> Lexicon {
         let located = self.located();
 
         Lexicon {
             symbols: Rc::new(Symbols::of(self.module_symbols())),
             plicities: Rc::new(self.nominal_plicities(&located)),
-            witnesses: Rc::new(self.witness_spelling(&located, syntax)),
             members: Rc::new(self.members(&located)),
-            declarations: Rc::new(Declarations {
-                items: self.items.clone(),
-                located,
-            }),
         }
     }
 
@@ -1080,65 +1054,6 @@ impl Module {
         }
 
         members
-    }
-
-    /// What a report spells this unit's witnesses against (axis (h)): each concept's fields — a superclass edge's concept, or a method's wrapper, whether that wrapper takes the method's own parameters in its group, and the operator `syntax` names for it — beside its record, and each witness's declared type. `syntax` is the registry's because this crate may not spell a prelude declaration.
-    fn witness_spelling(&self, located: &Located, syntax: &SyntaxRegistry) -> WitnessSpelling {
-        let mut spelling = WitnessSpelling::default();
-        for name in &self.declared_as(|declared| declared == Declared::Concept) {
-            let Global::Authored(path) = name else {
-                continue;
-            };
-            let Some(former) = self.definition_at(located, name) else {
-                continue;
-            };
-            let Some(Nominal::Concept { concept, record }) = former.kind.nominal() else {
-                continue;
-            };
-            let parameters = concept.params.len();
-            // What an edge reaches is the elaborator's to record, so a module as it was lowered holds none: there an edge is a field under the witness mark, read by the name its type applies, which the table takes for a concept only where it knows it as one.
-            let edges = match concept.supers.is_empty() {
-                false => concept.edges(record.fields()),
-                true => written_edges(record.fields()),
-            };
-            let fields = concept
-                .fields
-                .iter()
-                .enumerate()
-                .map(|(index, label)| {
-                    if let Some((_, reached)) = edges.iter().find(|(position, _)| *position == index)
-                    {
-                        return FieldSpelling::Super(*reached);
-                    }
-                    let wrapper = Global::Authored(path.with(label));
-                    // A method's wrapper takes the method's parameters beside the concept's and its witness; any other field's takes those alone.
-                    let merged = self.definition_at(located, &wrapper).is_some_and(|def| {
-                        matches!(&*def.type_, Subterm::FuncType(function) if function.plicities().len() > parameters + 1)
-                    });
-                    FieldSpelling::Method {
-                        wrapper,
-                        merged,
-                        operator: syntax.operator.operator_for(path, label),
-                    }
-                })
-                .collect();
-            spelling.concepts.insert(
-                *name,
-                ConceptSpelling {
-                    fields,
-                    arity: record.arity.clone(),
-                },
-            );
-        }
-
-        // Which definitions are witnesses is what each place says it declares, as which are type formers is.
-        for name in &self.declared_as(|declared| declared == Declared::Witness) {
-            if let Some(def) = self.definition_at(located, name) {
-                spelling.witnesses.insert(def.name, def.type_);
-            }
-        }
-
-        spelling
     }
 
     /// Every top-level name `item`'s elaboration consumed: what the item [reaches](Item::reaches) through its definitions, plus what the registry entries it declares reach — a struct's field types, an inductive's constructor payloads and a concept's parameters live only in the entry, and an item whose entry names another declaration depends on it as its body would.

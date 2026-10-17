@@ -996,7 +996,7 @@ pub(crate) fn report_goals(
             .metavar_entry(*id)
             .expect("a collected goal has a birth entry");
         let frames = entry.frames.clone();
-        let witnesses = entry.frames.witnesses().cloned().collect();
+        let witnesses = entry.frames.witnesses().map(|(name, _)| *name).collect();
         let mut scope = entry
             .telescope
             .iter()
@@ -1085,7 +1085,7 @@ fn goal_report(context: &Zonk, id: MetavarId) -> Error {
             context.metavar_solution(id).map(display),
         )
         .in_scope(ReaderScope::held(
-            entry.frames.witnesses().cloned().collect(),
+            entry.frames.witnesses().map(|(name, _)| *name).collect(),
             entry.frames.clone(),
         )),
         // A goal elaboration never reached was never birthed, so there is no scope or type to report — unreachable in practice, since every kept item elaborates.
@@ -1173,7 +1173,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                         };
                         match entry {
                             Some(entry) => unsolved.in_scope(ReaderScope::held(
-                                entry.frames.witnesses().cloned().collect(),
+                                entry.frames.witnesses().map(|(name, _)| *name).collect(),
                                 entry.frames.clone(),
                             )),
                             None => unsolved,

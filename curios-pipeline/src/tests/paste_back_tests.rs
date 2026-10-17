@@ -53,6 +53,22 @@ fn pasted(source: &str) -> Result<String, String> {
     Ok(rewritten)
 }
 
+/// Whether every goal `source` writes is reported with a term shown as the compiler holds it: a report declines a term no program writes where its reader stands, and says so.
+fn declined(source: &str) -> bool {
+    let Err(CompileError::Incomplete(reports)) = compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint_of(source),
+        &RootSource::none(),
+        |_| {},
+    ) else {
+        panic!("the program is refused for its goals alone");
+    };
+
+    reports
+        .iter()
+        .all(|report| report.message.contains("as the compiler holds it"))
+}
+
 /// The `? = …` line of a goal report, with the lines a long solution breaks onto: those are indented past the two spaces every other line of the report takes.
 fn solution(message: &str) -> Option<String> {
     let mut lines = message.lines();
@@ -307,6 +323,51 @@ fn a_binder_through_an_alias_of_a_concept_is_the_one_resolution_finds() {
     "#;
 
     reads_back(source).unwrap();
+}
+
+#[test]
+fn a_table_witness_where_an_arm_solves_the_binders_argument_is_declined() {
+    // Inside the `refl` arm `A` is `Nat`, so resolution answers a goal at `Nat` with the binder `use Show(A)`, where `x`'s type holds the table's witness: no program writes that type there.
+    let source = r#"
+        use /std/{Nat, Show, Eq};
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let f(@A: Type, use Show(A), e: Eq()(A, Nat), x: Box(Nat)) -> Nat =
+            match e | refl() => let y: ? = x; 0 end;
+        /std/print("")
+    "#;
+
+    assert!(declined(source));
+}
+
+#[test]
+fn a_table_witness_under_a_binder_through_an_alias_of_its_concept_is_declined() {
+    // `MyShow(Nat)` reduces to `Show(Nat)`, so resolution answers a goal at `Nat` with that binder, where `u`'s type holds the table's witness.
+    let source = r#"
+        use /std/{Nat, Show};
+        pub let MyShow(A: Type) -> Type = Show(A);
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let u(x: Box(Nat)) -> Nat = 0;
+        pub let w(use MyShow(Nat)) -> Nat = let y: ? = u; 0;
+        /std/print("")
+    "#;
+
+    assert!(declined(source));
+}
+
+#[test]
+fn a_readers_binder_resolution_passes_over_is_declined() {
+    // `b`'s type holds `w`'s binder, and inside `g` resolution answers a goal at `Nat` with `g`'s own: no program names the outer one there.
+    let source = r#"
+        use /std/{Nat, Show};
+        pub struct Box(A: Type, use Show(A)): pub Type { value: A }
+        pub let w(use Show(Nat)) -> Nat =
+            let b = Box { value = 0 };
+            let g(use Show(Nat)) -> Nat = let y: ? = b; 0;
+            0;
+        /std/print("")
+    "#;
+
+    assert!(declined(source));
 }
 
 #[test]

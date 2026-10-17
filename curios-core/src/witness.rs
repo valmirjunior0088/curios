@@ -418,7 +418,7 @@ impl Keying<'_> {
         }
     }
 
-    /// The head `term` is spelled by: a key's, one parameter at a time, and what a report tells two types apart by ([`Spelling::written_head`]). `None` where the spelling decides it no further than reduction would.
+    /// The head `term` is spelled by: a key's, one parameter at a time. `None` where the spelling decides it no further than reduction would.
     pub fn head(&self, term: &Term) -> Option<HeadKey> {
         self.applied(term, 0, &mut Vec::new())
     }

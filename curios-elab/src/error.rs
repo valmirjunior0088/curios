@@ -50,13 +50,13 @@ impl DeadArm {
 /// Where the reader of an error stands ([`Error::InScope`]): the witness binders in scope where it arose, outermost first, and, until the error is settled where it is final (`Error::settled`), the frames it arose in, which settling stands on. A settled error lets its frames go, so no state of the elaboration outlives the refusal.
 #[derive(Debug, Clone)]
 pub struct ReaderScope {
-    witnesses: Rc<[(Free, Term)]>,
+    witnesses: Rc<[Free]>,
     frames: Option<HeldFrames>,
 }
 
 impl ReaderScope {
     /// The scope of a judgment standing in `frames`, `witnesses` its witness binders.
-    pub(crate) fn held(witnesses: Vec<(Free, Term)>, frames: HeldFrames) -> Self {
+    pub(crate) fn held(witnesses: Vec<Free>, frames: HeldFrames) -> Self {
         Self {
             witnesses: Rc::from(witnesses),
             frames: Some(frames),
@@ -82,7 +82,7 @@ pub struct GoalReport {
     pub extent: Option<Extent>,
     /// The definition the goal was written in (the entrypoint's final term when `None`) and the witness binders in scope there, outermost first: the reader position its report is spelled for.
     pub owner: Option<Global>,
-    pub witnesses: Rc<[(Free, Term)]>,
+    pub witnesses: Rc<[Free]>,
     pub scope: Vec<(Term, Term)>,
     pub goal: Term,
     pub solution: Option<Term>,
@@ -1848,7 +1848,7 @@ impl Error {
     }
 
     /// The witness binders in scope where this error's reader stands: the reader position its report is spelled for.
-    fn witness_scope(&self) -> Rc<[(Free, Term)]> {
+    fn witness_scope(&self) -> Rc<[Free]> {
         self.reader_scope()
             .map(|scope| Rc::clone(&scope.witnesses))
             .unwrap_or_default()
@@ -1934,7 +1934,7 @@ impl Error {
         }
 
         // Each report is spelled for the reader standing where it arose: a goal where it was written, anything else in its innermost declaration and witness scope.
-        let for_reader = |owner: Option<Global>, witnesses: Rc<[(Free, Term)]>| {
+        let for_reader = |owner: Option<Global>, witnesses: Rc<[Free]>| {
             Rc::new(
                 spelling
                     .as_ref()
@@ -2237,17 +2237,16 @@ fn as_held(message: String, spelling: &Spelling) -> String {
     }
 }
 
-/// The spelling every report of `module`'s shares before a reader stands anywhere: everything a reader could see — `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so every table has to be told the prelude exists — the shortening to know `Vec` is an unambiguous suffix, the plicity marks to know `Eq`'s first parameter is implicit, the witness table to know `Show`'s method.
+/// The spelling every report of `module`'s shares before a reader stands anywhere: everything a reader could see — `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so every table has to be told the prelude exists — the shortening to know `Vec` is an unambiguous suffix, the plicity marks to know `Eq`'s first parameter is implicit.
 ///
 /// **Each unit in scope is read by the lexicon it keeps** ([`Lexicon`]), made once for the unit, and only `module`'s own is made here. So a report costs what its own unit holds and what it prints, however much is in scope, and it reads no declaration of a unit in scope it does not print.
 ///
-/// The reader's own unit stays a tier apart for the shortening: a declaration this reader wrote settles its own spelling before the environment competes for it, so a root `Holds` beside `/std/Bool/Holds` reports as the `Holds` that was written rather than as `/Holds`. The plicities and witnesses have no such contest — a name resolves to one declaration and reads its marks off that one.
+/// The reader's own unit stays a tier apart for the shortening: a declaration this reader wrote settles its own spelling before the environment competes for it, so a root `Holds` beside `/std/Bool/Holds` reports as the `Holds` that was written rather than as `/Holds`. The plicities have no such contest — a name resolves to one declaration and reads its marks off that one.
 fn report_spelling(module: &Module, scope: &[&Lexicon], syntax: &SyntaxRegistry) -> Spelling {
-    let own = module.lexicon(syntax);
+    let own = module.lexicon();
 
     Spelling::default()
         .with_lexicons(&own, scope)
-        .with_witnesses(&own, scope)
         .with_erased_universes()
         .with_anonymous_metavars()
         .with_string_literals(Global::Authored(syntax.string.string.qualifier()))

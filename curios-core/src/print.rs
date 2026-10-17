@@ -1,10 +1,10 @@
 use {
     super::{
-        Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor,
-        Declared, Field, Free, Func, FuncType, Global, HeadKey, InductArm, InductType, Infix,
-        Intrinsic, Item, Items, Keying, Label, Let, Match, MatchResult, Matrix, Nat, NumLit,
-        Pattern, Proj, Quality, Rec, Row, Scope, Spellings, Struct, StructType, Subterm, Telescope,
-        Term, Three, Transient, Tuple, TupleType, Two, Universes, Var, Variant, Written,
+        Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor, Field,
+        Free, Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label, Let, Match,
+        MatchResult, Matrix, Nat, NumLit, Pattern, Proj, Quality, Rec, Row, Scope, Spellings,
+        Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two,
+        Universes, Var, Variant,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
@@ -71,7 +71,7 @@ fn universe_suffix(universes: &Universes, spelling: &Rc<Spelling>) -> String {
 //
 // axis (g) — grouping: a flag under which a nested concatenation spells as the operand it is, `[..[..a, ..b], ..c]`, rather than splicing its entries into the enclosing literal. The splice is right everywhere the reader wants the program quoted rather than its lowering, and it is what makes two terms that differ only in how a run is grouped render as one string — which a mismatch report cannot afford, since grouping is a difference conversion can refuse on. The report's escalation sets it, first, because it changes nothing unless a nesting is present; nothing else does.
 //
-// axis (h) — witnesses: the concepts and witnesses a reader's printer spells against ([`Spelling::witness_table`]), and the witness binders in scope where its reader stands ([`ReaderPosition`]), so that a witness reads there as resolution would restore it: a `use` argument resolution would put back left out, a method projected off a witness written as the call or operator a program writes. This printer reads neither and prints a witness as it stands, which is what a dump, a kernel's refusal and a term a reader's printer declines are read as. Reports set it. Why is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (h) — witnesses: the witness binders in scope where a reader stands ([`ReaderPosition`]), so that a reader's printer declines a term that refers to one, the grammar writing no name beside the witness mark. Which witnesses a report's term leaves out is settled before the term reaches a printer: the elaborator writes it as a program writes it where the reader stands, a witness resolution puts back there an open slot (`curios-elab`'s `written`). This printer prints a witness as it stands, which is what a dump, a kernel's refusal and a term a reader's printer declines are read as. Reports set it. Why is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
@@ -92,16 +92,12 @@ pub struct Spelling {
     string_literal: Option<Global>,
     /// axis (g) — whether a nested concatenation keeps its grouping instead of being spliced into the enclosing literal.
     grouped: bool,
-    /// axis (h) — the concepts and witnesses a reader's printer spells a witness against, so it reads as resolution would restore it.
-    witnesses: Option<Rc<WitnessSpelling>>,
     /// axis (b) for a reader: how the unit's names can be written and where its definitions sit, so a global is spelled as resolution would find it from where the reader stands. Takes precedence over the shorten map, which stays what a render without a reader — a dump, a kernel refusal — spells by.
     names: Option<Rc<ReaderNames>>,
     /// Where the reader stands (axes (b) and (h)).
     reader: ReaderPosition,
     /// Each unit's structure fields and constructor payloads, the reader's own unit first: the marks and labels a field, a literal's entry and a constructor's argument are written by.
     members: Vec<Rc<Members>>,
-    /// Each unit's declarations, the reader's own unit first: what a name stands for where two types are told apart ([`Spelling::written_head`]).
-    declarations: Vec<Rc<Declarations>>,
     /// The reader's printer: a term shown to a reader is printed by it where it can be, and by this printer where it declines.
     printer: Option<Rc<dyn ReaderPrinter>>,
     /// Whether the reader's printer declined a term this spelling rendered. Shared by a spelling's copies and begun anew where a reader is placed ([`Spelling::for_reader`]), so it is one report's to read.
@@ -132,11 +128,11 @@ pub struct Members {
     pub(crate) payloads: BTreeMap<Global, Vec<(Atom, Vec<Plicity>)>>,
 }
 
-/// Where a reader stands when they read a rendered term: the definition they wrote it in (the entrypoint's final term when `None`), whose module and imports decide what reaches a name, and the witness binders in scope there, outermost first, which resolution searches before the global table.
+/// Where a reader stands when they read a rendered term: the definition they wrote it in (the entrypoint's final term when `None`), whose module and imports decide what reaches a name, and the witness binders in scope there, outermost first, which no program refers to by name.
 #[derive(Clone, Debug, Default)]
 pub struct ReaderPosition {
     pub owner: Option<Global>,
-    pub witnesses: Rc<[(Free, Term)]>,
+    pub witnesses: Rc<[Free]>,
 }
 
 /// What axis (b) spells a global by for a reader: the unit's [`Spellings`] and the module each of its definitions sits in, with the spellings already asked for.
@@ -180,170 +176,14 @@ impl ReaderNames {
     }
 }
 
-/// What a report spells one unit's names by: the globals it declares (axis (b)), its nominal families' parameter marks (axis (d)), and its concepts' fields and its witnesses' declared types (axis (h)).
+/// What a report spells one unit's names by: the globals it declares (axis (b)), its nominal families' parameter marks (axis (d)), and its structures' fields and constructors' payloads.
 ///
-/// **Made once for a unit and kept with it** ([`Module::lexicon`](crate::Module::lexicon)). A report reads each unit of its scope where it stands ([`Spelling::with_lexicons`], [`Spelling::with_witnesses`]) and builds no table over them, so what a report costs does not follow how much is in scope, and it reads no declaration it does not print.
+/// **Made once for a unit and kept with it** ([`Module::lexicon`](crate::Module::lexicon)). A report reads each unit of its scope where it stands ([`Spelling::with_lexicons`]) and builds no table over them, so what a report costs does not follow how much is in scope, and it reads no declaration it does not print.
 #[derive(Clone, Default)]
 pub struct Lexicon {
     pub(crate) symbols: Rc<Symbols>,
     pub(crate) plicities: Rc<BTreeMap<Global, Vec<Plicity>>>,
-    pub(crate) witnesses: Rc<WitnessSpelling>,
     pub(crate) members: Rc<Members>,
-    pub(crate) declarations: Rc<Declarations>,
-}
-
-/// One unit's declarations as a report reads a name through them: what each name is declared as, with no item read, and the body of a definition, the one item read where it is asked for and restored where the module was stored. A report asks of the names it compares two types by, which are few, so what it reads does not follow what its scope holds.
-#[derive(Default)]
-pub(crate) struct Declarations {
-    pub(crate) items: Items,
-    /// Where each name is declared: the item's place, and the name's place among those the item declares.
-    pub(crate) located: HashMap<Global, (usize, usize)>,
-}
-
-impl Declarations {
-    /// What `name` is declared as, as far as a key reads it ([`Written`]), where this unit declares it.
-    fn written(&self, name: &Global) -> Option<Written> {
-        let &(place, member) = self.located.get(name)?;
-        let declared = *self.items.declared(place).get(member)?;
-        let body = match (declared, self.items.is_group(place)) {
-            (Declared::Authored, false) => match &self.items[place] {
-                Item::Let(definition) => Some(&definition.body),
-                Item::Rec(_) => None,
-            },
-            _ => None,
-        };
-
-        Some(Written::of(declared, body))
-    }
-}
-
-/// What axis (h) spells a witness against: each concept's fields — a method's wrapper and the operator dispatching to it, or the concept a superclass edge reaches — beside its record, which says what an edge reaches for a witness at given arguments, and each global witness's declared type, whose terminal is the concept application it answers. Built per unit by [`Module::lexicon`](crate::Module::lexicon) and merged across a render's scope, as the plicity marks are.
-#[derive(Default)]
-pub struct WitnessSpelling {
-    pub(crate) concepts: BTreeMap<Global, ConceptSpelling>,
-    pub(crate) witnesses: BTreeMap<Global, Term>,
-    /// The tables of the units of a reader's scope, where this is the table a render reads ([`WitnessSpelling::over`]): each where its unit keeps it, read after this one's own entries.
-    units: Vec<Rc<WitnessSpelling>>,
-}
-
-/// One concept as a report spells against it: its fields by position, and its record's parameters ending in its field telescope, the one statement of what each superclass field is a witness of.
-pub(crate) struct ConceptSpelling {
-    pub(crate) fields: Vec<FieldSpelling>,
-    pub(crate) arity: Telescope<Telescope<()>>,
-}
-
-/// One field of a concept, by position.
-#[derive(Clone)]
-pub enum FieldSpelling {
-    /// A method or value field: the wrapper a program reaches it through, whether that wrapper takes a method's own parameters in its one group, and the operator dispatching to it.
-    Method {
-        wrapper: Global,
-        merged: bool,
-        operator: Option<InfixOp>,
-    },
-    /// A superclass edge, to the concept it reaches, or, in a module as it was lowered, to the name its field's type applies, which is a concept only where a table knows it as one.
-    Super(Global),
-}
-
-impl WitnessSpelling {
-    /// The table a reader's scope spells against: `units`, each unit's own where the unit keeps it, the reader's first. Nothing is copied out of any: a name resolves to one declaration, so the first unit to list it answers.
-    pub fn over(units: impl IntoIterator<Item = Rc<WitnessSpelling>>) -> Self {
-        Self {
-            units: units.into_iter().collect(),
-            ..Self::default()
-        }
-    }
-
-    /// The fields of `concept`, by position, where a unit of the table declares it.
-    pub fn fields(&self, concept: &Global) -> Option<&Vec<FieldSpelling>> {
-        self.concept(concept).map(|entry| &entry.fields)
-    }
-
-    /// The entry of `concept`, where a unit of the table declares it.
-    fn concept(&self, concept: &Global) -> Option<&ConceptSpelling> {
-        self.concepts
-            .get(concept)
-            .or_else(|| self.units.iter().find_map(|unit| unit.concept(concept)))
-    }
-
-    /// The concept application the superclass field at `index` of `concept` holds, for `witness`, a witness of the concept at `arguments`: the field's type read off the concept's record ([`Telescope::field_type_from`]), as resolution reads a projection's, so an edge whose type names an earlier field names that witness's. `None` where the record is not at hand, takes other arguments, or the field's type names no concept this table knows.
-    pub fn reached(
-        &self,
-        concept: &Global,
-        arguments: &[Term],
-        witness: &Term,
-        index: usize,
-    ) -> Option<(Global, Vec<Term>)> {
-        let entry = self.concept(concept)?;
-        if entry.arity.len() != arguments.len() {
-            return None;
-        }
-        let fields = entry.arity.open(&arguments.iter().collect::<Vec<_>>());
-        let type_ = fields.field_type_from(witness, &Field::Struct(*concept, index))?;
-
-        self.application(&type_)
-    }
-
-    /// The declared type of the global witness `witness`, where a unit of the table declares it.
-    fn declared(&self, witness: &Global) -> Option<&Term> {
-        self.witnesses
-            .get(witness)
-            .or_else(|| self.units.iter().find_map(|unit| unit.declared(witness)))
-    }
-
-    pub fn supers(&self, concept: &Global) -> impl Iterator<Item = (usize, &Global)> {
-        self.fields(concept)
-            .into_iter()
-            .flatten()
-            .enumerate()
-            .filter_map(|(index, field)| match field {
-                FieldSpelling::Super(super_) => Some((index, super_)),
-                FieldSpelling::Method { .. } => None,
-            })
-    }
-
-    /// The concept application a type names, when it names a concept this table knows: `Show(A)` elaborated to its record, or still the concept's name applied.
-    pub fn application(&self, type_: &Term) -> Option<(Global, Vec<Term>)> {
-        let (name, arguments) = match &**type_ {
-            Subterm::StructType(StructType { name, params, .. }) => (*name, params.clone()),
-            Subterm::Apply(_) | Subterm::Var(_) | Subterm::Instance(_) => {
-                let Free::Global(name) = type_.head_name()? else {
-                    return None;
-                };
-                (*name, spine_arguments(type_))
-            }
-            _ => return None,
-        };
-        self.fields(&name).is_some().then_some((name, arguments))
-    }
-
-    /// The concept application a global witness answers, its declared telescope opened at `arguments` — a premised witness is applied to its own hidden arguments. Without them the concept alone is known.
-    pub fn answers(&self, witness: &Global, arguments: &[Term]) -> Option<(Global, Vec<Term>)> {
-        let type_ = self.declared(witness)?;
-        match &**type_ {
-            Subterm::FuncType(FuncType { telescope, .. }) => {
-                if telescope.len() == arguments.len() {
-                    self.application(&telescope.open(&arguments.iter().collect::<Vec<_>>()))
-                } else {
-                    let (concept, _) = self.application(telescope.terminal())?;
-                    Some((concept, Vec::new()))
-                }
-            }
-            _ => self.application(type_),
-        }
-    }
-}
-
-/// Every argument along an application spine, outermost call last — `C(a)(b)` gives `[a, b]`.
-fn spine_arguments(term: &Term) -> Vec<Term> {
-    match &**term {
-        Subterm::Apply(Apply { head, arguments }) => {
-            let mut spine = spine_arguments(head);
-            spine.extend(arguments.iter().map(|argument| argument.term.clone()));
-            spine
-        }
-        _ => Vec::new(),
-    }
 }
 
 impl Spelling {
@@ -384,12 +224,6 @@ impl Spelling {
     /// For the report that has found two sides rendering as one string: a nesting is a difference conversion can refuse on, and the splice is what hid it. A consumer that has detected that case re-renders under this before it reaches for the universe instances, since grouping changes nothing where no nesting is present.
     pub fn with_faithful_grouping(mut self) -> Self {
         self.grouped = true;
-        self
-    }
-
-    /// Hand a reader's printer the table it spells a witness against (axis (h)): the one [`Module::lexicon`](crate::Module::lexicon) builds.
-    pub fn with_witness_spelling(mut self, witnesses: Rc<WitnessSpelling>) -> Self {
-        self.witnesses = Some(witnesses);
         self
     }
 
@@ -454,20 +288,7 @@ impl Spelling {
             .chain(scope.iter().copied())
             .map(|unit| Rc::clone(&unit.members))
             .collect();
-        self.declarations = std::iter::once(own)
-            .chain(scope.iter().copied())
-            .map(|unit| Rc::clone(&unit.declarations))
-            .collect();
         self
-    }
-
-    /// Hand a reader's printer the witness tables of the lexicons of a reader's scope (axis (h)) — see [`Spelling::with_lexicons`].
-    pub fn with_witnesses(self, own: &Lexicon, scope: &[&Lexicon]) -> Self {
-        let units = std::iter::once(own)
-            .chain(scope.iter().copied())
-            .map(|unit| Rc::clone(&unit.witnesses));
-
-        self.with_witness_spelling(Rc::new(WitnessSpelling::over(units)))
     }
 
     /// The display spelling of a global (axis (b)) — for a reader, as resolution would find it from where they stand, and in full where it cannot, since a suffix nothing resolves is a different program; without one, shortened against the module's other symbols when that is unambiguous, and in full otherwise. Globals never take axis (a)'s rename: their spelling is a path a programmer wrote, not a minted hint.
@@ -493,30 +314,6 @@ impl Spelling {
                 Some(hint) => hint.to_string(),
                 None => name.faithful().to_string(),
             })
-    }
-
-    /// The type former `term` is headed by as it is written, by the key the witness table files it under: the reading that spells a witness's key ([`Keying::head`]), over the declarations of the reader's scope, a name read through its definition, the one item read for it. `None` for a term whose head only reduction decides, and for a name no unit of the scope declares.
-    pub fn written_head(&self, term: &Term) -> Option<HeadKey> {
-        let written = |name: &Global| {
-            self.declarations
-                .iter()
-                .find_map(|unit| unit.written(name))
-                .unwrap_or(Written::Opaque)
-        };
-        // A concept's parameter marks, which a head is not read by: asked of the table for what a key is.
-        let marks = |name: &Global| {
-            self.witness_table()?.fields(name)?;
-            self.nominal_plicities
-                .iter()
-                .find_map(|unit| unit.get(name))
-                .cloned()
-        };
-
-        Keying {
-            written: &written,
-            marks: &marks,
-        }
-        .head(term)
     }
 
     /// The declared plicities of `name`'s arguments — parameters then indices, in the order a use site supplies them — or `None` when the declaration is not in this spelling's table, in which case an applied family renders unmarked.
@@ -545,11 +342,6 @@ impl Spelling {
             .iter()
             .find(|(declared, _)| declared == tag)
             .map(|(_, marks)| marks.as_slice())
-    }
-
-    /// The table a witness is spelled against (axis (h)), where one is set.
-    pub fn witness_table(&self) -> Option<&WitnessSpelling> {
-        self.witnesses.as_deref()
     }
 
     /// The certified-string declaration (axis (f)), where one is set.

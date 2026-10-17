@@ -103,7 +103,7 @@ fn reported(
 ) -> String {
     let lexicons = predecessors
         .iter()
-        .map(|unit| unit.lexicon(&SYNTAX))
+        .map(|unit| unit.lexicon())
         .collect::<Vec<_>>();
 
     error.format(&Reading {

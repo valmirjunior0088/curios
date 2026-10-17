@@ -106,7 +106,7 @@ pub(crate) fn compile_lowered_over(
             elaborator_refusal(
                 &error,
                 lowered.core(),
-                &predecessors.lexicons(syntax),
+                &predecessors.lexicons(),
                 &lowered,
                 predecessors,
                 syntax,
@@ -142,12 +142,7 @@ pub(crate) fn compile_lowered_over(
     // The kernel is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped.
     let rechecked = recheck_over(&core, budget, predecessors, baseline, moved, syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = kernel_refusal(
-            verdict,
-            core.as_module(),
-            &predecessors.lexicons(syntax),
-            syntax,
-        );
+        let refusal = kernel_refusal(verdict, core.as_module(), &predecessors.lexicons(), syntax);
         return Err(refuse(&lowered, refusal));
     }
     let certification = rechecked.certification;
@@ -174,7 +169,7 @@ pub(crate) fn compile_lowered_over(
         let refusal = elaborator_refusal(
             &error,
             core.as_module(),
-            &predecessors.lexicons(syntax),
+            &predecessors.lexicons(),
             &lowered,
             predecessors,
             syntax,

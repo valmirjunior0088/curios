@@ -1198,7 +1198,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         };
         let roots = [*sys];
         let predecessors = Predecessors::over(&roots);
-        let lexicons = predecessors.lexicons(&SYNTAX);
+        let lexicons = predecessors.lexicons();
         let spellings = Rc::new(std.text().spellings(&predecessors.text()));
         let reading = Reading {
             module: std.core(),
