@@ -161,6 +161,7 @@ fn raw_wasm_validates_and_executes_without_binaryen() {
         ("split-return", SPLIT_RETURN),
         ("looped-pick", LOOPED_PICK),
         ("variant-filler", VARIANT_FILLER),
+        ("float-literal-loop", FLOAT_LITERAL_LOOP),
     ] {
         let args = ["prog", "a", "b", "c"];
         let raw = run_raw(source, &args);

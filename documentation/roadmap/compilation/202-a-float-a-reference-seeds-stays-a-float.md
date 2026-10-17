@@ -19,7 +19,6 @@ Counted at `28bcb9aba` in the modules `curios wonder stage wasm` and `wasm-optm`
 - **A function taking two `{x: Flt, y: Flt}` structures and a float and answering one**, called once a round from a loop, takes the four fields the worker splits out as `anyref`, reads each through a cast and ends in two `struct.new $flt`: two allocations a round, though its body and the loop compute in registers.
 - **A loop in a function that escapes as a closure**, seeded from its parameter, keeps one a round.
 - **A float free in another function is boxed everywhere**, the loop that defines it included, read off `represent.rs`'s withdrawal of `free_values`.
-- **A float literal read raw is read through its box.** A hoisted `Flt` constant is loaded at a raw demand by `global.get`, a cast and `struct.get` (`context.rs`'s `load_value_instrs`), and Binaryen leaves the load in the loop.
 
 Binaryen's Heap2Local replaces an allocation only where nothing else is stored to the local it flows through, and a loop's seed and its back edge share one.
 
@@ -37,16 +36,14 @@ Binaryen's Heap2Local replaces an allocation only where nothing else is stored t
 3. **The uniform positions are the ones no single party controls**: an escaping function's own parameters and results, which its wrapper reaches at the shared `clsr/N` type, and the entry's, which the host calls.
 4. **A binder whose producer names no carrier states the register carrier its type names.** A function parameter, a call's result, a field or payload read, a sequence element, and a cell's or a channel's contents state `Immediate` as a word and `Flt` as a float where their type reduces to one, recorded by erasure from the type the binder is checked at, as it records a field's, and carried onto the continuation value. An operation's result states none, since its operation names its carrier, and the Ersd verifier refuses one there. A copy carries it, a binder a pass mints states none, and both printers spell it at the binder.
 5. **A stated carrier feeds a register and decides nothing else.** `word_params` and `float_params` take a value stating their carrier as one that feeds them, unboxed once on the edge or the call; the value keeps its own offer.
-6. **A float literal loaded raw is `f64.const`.** The hoisted global serves the boxed reads.
 
 ## Stages
 
-1. **The literal.** Decision 6. Check: a loop reading float literals raw holds `f64.const` and no `global.get` of a constant.
-2. **The tail-call classes, shared.** The return protocol's components and the tail positions that fix a class's results become one analysis the protocol and the representation read. No module changes.
-3. **Known calls.** Decisions 1 and 3. Check: a loop seeded by a known function's float parameter, one seeded by a call's result, and the two-structure step loop hold no `struct.new $flt`.
-4. **Captures.** Decision 2. Check: a float defined in a function and captured by an escaping closure seeds a loop in each, and neither loop holds a `struct.new $flt`; a captured counter in integer arithmetic answers as before.
-5. **Stated carriers.** Decision 4, with no reader yet. Check: erasure states a `Flt` parameter, a `Bool` parameter, a call's result and an `Option(Flt)` payload, and no value of a computed type, of a type variable, or an operation's result.
-6. **Stated carriers feed registers.** Decision 5. Check: a loop in an escaping function seeded by its parameter, and one seeded by a closure call's result, hold no `struct.new $flt`.
+1. **The tail-call classes, shared.** The return protocol's components and the tail positions that fix a class's results become one analysis the protocol and the representation read. No module changes.
+2. **Known calls.** Decisions 1 and 3. Check: a loop seeded by a known function's float parameter, one seeded by a call's result, and the two-structure step loop hold no `struct.new $flt`.
+3. **Captures.** Decision 2. Check: a float defined in a function and captured by an escaping closure seeds a loop in each, and neither loop holds a `struct.new $flt`; a captured counter in integer arithmetic answers as before.
+4. **Stated carriers.** Decision 4, with no reader yet. Check: erasure states a `Flt` parameter, a `Bool` parameter, a call's result and an `Option(Flt)` payload, and no value of a computed type, of a type variable, or an operation's result.
+5. **Stated carriers feed registers.** Decision 5. Check: a loop in an escaping function seeded by its parameter, and one seeded by a closure call's result, hold no `struct.new $flt`.
 
 ## Verification
 

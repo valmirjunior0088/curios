@@ -504,6 +504,20 @@ impl<'a, 'b> Context<'a, 'b> {
                 None => self.load_as_instrs(producer, load_as, local_data.is_nullable),
             }
         } else {
+            // A read at the const's own register carrier takes its value, never the global's box: the global serves the reads that want a reference.
+            if let Some((carrier, constant)) = self.table().const_register(value_name)
+                && matches!(
+                    (carrier, &load_as),
+                    (curios_cont::Repr::Flt, LoadAs::Flt)
+                        | (
+                            curios_cont::Repr::Nat,
+                            LoadAs::Nat | LoadAs::WireNat | LoadAs::WireInt
+                        )
+                )
+            {
+                return self.raw_as_instrs(vec![constant], carrier, load_as);
+            }
+
             let producer = vec![curios_wasm::Instr::GlobalGet {
                 global_name: self.table().find_const(value_name),
             }];

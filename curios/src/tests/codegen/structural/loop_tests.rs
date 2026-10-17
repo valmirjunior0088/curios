@@ -89,6 +89,56 @@ fn lcg_loop_carries_its_scalars_in_registers() {
     }
 }
 
+/// A float literal the loop reads in a register is its constant. Hoisting renames every literal to a module const, whose global holds a box for the reads that want a reference, and a read of it in a register took the global back out of that box: a global load, a cast and a field load every round, which Binaryen leaves where they are.
+#[test]
+fn a_float_literal_read_in_a_register_is_its_constant() {
+    let wat = wat(FLOAT_LITERAL_LOOP);
+    let globals = ["1.25", "0.375"].map(|literal| float_global(&wat, literal));
+    for kernel in loops_containing(&wat, "i32.const 7919") {
+        assert!(
+            kernel.contains("f64.const 1.25") && kernel.contains("f64.const 0.375"),
+            "both literals are read where the loop reads them: {kernel}"
+        );
+        for global in &globals {
+            assert!(
+                !kernel
+                    .lines()
+                    .any(|line| line.trim() == format!("global.get {global}")),
+                "no literal is read back out of its global's box, `{global}`: {kernel}"
+            );
+        }
+    }
+}
+
+/// The global a float literal is hoisted to: the one whose initializer boxes that literal, read off its declaration whether the printer kept it on one line or broke it before the initializer.
+fn float_global<'a>(wat: &'a str, literal: &str) -> &'a str {
+    let lines = wat.lines().collect::<Vec<_>>();
+    (0..lines.len())
+        .find_map(|index| {
+            let name = lines[index]
+                .trim()
+                .strip_prefix("(global ")?
+                .split_whitespace()
+                .next()?;
+            let continued = lines
+                .get(index + 1)
+                .filter(|next| !next.trim_start().starts_with('('));
+            let tokens = lines[index]
+                .split_whitespace()
+                .chain(
+                    continued
+                        .into_iter()
+                        .flat_map(|next| next.split_whitespace()),
+                )
+                .collect::<Vec<_>>();
+            tokens
+                .windows(2)
+                .any(|pair| pair[0] == "f64.const" && pair[1].trim_end_matches(')') == literal)
+                .then_some(name)
+        })
+        .unwrap_or_else(|| panic!("the literal `{literal}` is hoisted to a global"))
+}
+
 // -- trees ------------------------------------------------------------------
 
 /// Build and sum retain direct recursive code. `sum` is the function carrying the `1000003` modulus; `build` is the other user function with two direct self calls (the recursive `to_str` prelude helper has one). Both recurse through direct `call`/`return_call`, and — since no user function emits a `call_indirect` (see [`trees_hot_arithmetic_has_no_indirect_calls`]) — that recursion is direct.

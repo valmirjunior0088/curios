@@ -337,6 +337,8 @@ pub(crate) struct Table<'a> {
     consts: HashMap<&'a EmissionValueName, curios_wasm::GlobalName>,
     /// The module consts that are `Tuple`/`List` constructions — the hoisted half of the population `Context::refuse_raw_aggregate` refuses to hand to a register. A closed aggregate is lifted out of its region by `hoist`, so a guard reading region values alone would miss exactly the constant ones.
     const_aggregates: HashSet<&'a EmissionValueName>,
+    /// The scalar consts a register can hold, each with its carrier and the instruction that is its value there: a `Flt` and a small `Nat`. Hoisting renames a literal to its const whatever reads it, so a register read would otherwise take the global back out of its box.
+    const_registers: HashMap<&'a EmissionValueName, (curios_cont::Repr, curios_wasm::Instr)>,
     clsrs: HashMap<&'a EmissionClosureName, ClsrData<'a>>,
     funcs: HashMap<&'a EmissionFunctionName, FuncData<'a>>,
     /// The values the representation analysis decided to hold in a register, and at which carrier. A name absent here is held behind a reference, which is every synthetic name codegen mints for itself.
@@ -500,6 +502,27 @@ impl<'a> Table<'a> {
                         const_name,
                         curios_wasm::GlobalName::from(const_name.as_string()),
                     )
+                })
+                .collect(),
+            const_registers: module
+                .consts()
+                .iter()
+                .filter_map(|(const_name, data)| {
+                    let register = match data {
+                        &EmissionData::Flt(value) => (
+                            curios_cont::Repr::Flt,
+                            curios_wasm::Instr::F64Const { value },
+                        ),
+                        EmissionData::Nat(value) if curios_cont::nat_is_small(value) => (
+                            curios_cont::Repr::Nat,
+                            curios_wasm::Instr::I32Const {
+                                value: u32::try_from(value).expect("a small `Nat` is a word")
+                                    as i32,
+                            },
+                        ),
+                        _ => return None,
+                    };
+                    Some((const_name, register))
                 })
                 .collect(),
             const_aggregates: module
@@ -1356,6 +1379,14 @@ impl<'a> Table<'a> {
     /// Whether this name is a module const holding a `Tuple`/`List`. See `Context::refuse_raw_aggregate`.
     pub(crate) fn is_aggregate_const(&self, const_name: &EmissionValueName) -> bool {
         self.const_aggregates.contains(const_name)
+    }
+
+    /// The carrier a scalar const is held at in a register and the instruction that is its value there, or `None` for a const no register holds.
+    pub(crate) fn const_register(
+        &self,
+        const_name: &EmissionValueName,
+    ) -> Option<(curios_cont::Repr, curios_wasm::Instr)> {
+        self.const_registers.get(const_name).cloned()
     }
 
     pub(crate) fn find_const(&self, const_name: &EmissionValueName) -> curios_wasm::GlobalName {

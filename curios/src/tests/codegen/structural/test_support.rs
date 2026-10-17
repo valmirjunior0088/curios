@@ -243,6 +243,20 @@ pub(super) const VARIANT_FILLER: &str = r#"
     entry()
     "#;
 
+/// A loop that reads two float literals in registers, seeded by a float its own entry computes so its parameter is held in a register. `j % 7919` puts a small `Nat` the loop alone holds into it, the needle that finds it: a float literal's own text also stands in its global's initializer, outside every loop.
+pub(super) const FLOAT_LITERAL_LOOP: &str = r#"
+    use /std/{Nat, Flt, List, Process};
+    let go(acc : Flt, k : Nat) -> Flt =
+        match k
+        | 0 => acc
+        | j + 1 => go(acc * +1.25 + Nat/to_flt(j % 7919) * +0.375, j)
+        end;
+    let entry() -> /std/Io({}) =
+        let taint = List/len(Process/args()!);
+        /std/print(Flt/to_str(go(Nat/to_flt(taint), taint + 10)));
+    entry()
+    "#;
+
 /// A variant whose two constructors share a payload slot, joined from both: `success` hands the slot a float and `failure` an error. The join reads the payload as a float under one tag and as the error under the other.
 ///
 /// **The error has to arrive from a call.** `judged` recurses, so it is not inlined and `doubled` forwards a `failure` whose payload no edge shows being built: the emitter has no aggregate to refuse, and a payload held in a float register casts the error where the `failure` edge is taken. `taint + 1` and `taint + 3` take it and `taint` does not, so both constructors reach the join.
