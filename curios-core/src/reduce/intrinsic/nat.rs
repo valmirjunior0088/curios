@@ -11,7 +11,7 @@ use {
     },
     curios_num::Natural,
     curios_utilities::recurse,
-    std::iter,
+    std::{collections::HashMap, iter},
 };
 
 /// Which half of a Euclidean division a fold computes. One enum rather than the pair of closures the other families take: the symbolic laws below build the quotient and the remainder out of the *same* split, so the two halves cannot be parameterized independently.
@@ -68,11 +68,21 @@ impl Euclid {
 /// **`NatShl` has no bound**, for the reason `Operation::upper_bound` records: what reaches here as a `NatShl` is a shift by a *symbolic* count, which no operand bounds, since a literal count is [`then_coefficient`]'s and arrives as a `NatMul` with its coefficient already charged.
 ///
 /// An over-report only withholds the rule; an *under*-report is a false definitional equation, which is the direction `bound_upper_bounds_every_closed_instantiation` asserts. That gate is a hand-written block per shape rather than an enumeration, so a bound added to the algebra owes it one or it passes while checking nothing. A wrong bound is a false equation and not a wrong value.
+///
+/// **Once per node.** A term is a graph — a `let` chain read by value names each level along every path to it — so a node's bound is remembered by its identity for the call ([`Term::identity`]), and a part shared along many paths is bounded once.
 pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
+    nat_bound_within(term, &mut HashMap::new())
+}
+
+/// [`nat_bound`], with each node's bound remembered in `known` as it is read.
+fn nat_bound_within(term: &Term, known: &mut HashMap<usize, Option<Natural>>) -> Option<Natural> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return None;
     };
-    match intrinsic {
+    if let Some(bound) = known.get(&term.identity()) {
+        return bound.clone();
+    }
+    let bound = match intrinsic {
         Intrinsic::Nat(Nat::Zero) => Some(Natural::zero()),
         Intrinsic::Nat(Nat::Succ(floor, inner)) => Operation::Sum.upper_bound(&[
             Observed {
@@ -80,7 +90,7 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
                 literal: None,
             },
             Observed {
-                bound: nat_bound(inner),
+                bound: recurse(|| nat_bound_within(inner, known)),
                 literal: None,
             },
         ]),
@@ -96,7 +106,10 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
                     .iter()
                     .enumerate()
                     .map(|(at, operand)| Observed {
-                        bound: bounds.contains(&at).then(|| nat_bound(operand)).flatten(),
+                        bound: bounds
+                            .contains(&at)
+                            .then(|| recurse(|| nat_bound_within(operand, known)))
+                            .flatten(),
                         literal: literals
                             .contains(&at)
                             .then(|| operand.as_nat().and_then(|value| value.to_natural()))
@@ -107,19 +120,32 @@ pub(super) fn nat_bound(term: &Term) -> Option<Natural> {
             }
             _ => None,
         },
-    }
+    };
+    known.insert(term.identity(), bound.clone());
+
+    bound
 }
 
 /// A statically known lower bound on every value a reduced term takes: its floor over what its symbolic part is at least, and an operation's from what its operands are at least (`curios-algebra`'s `Operation::lower_bound`). Zero where nothing is known, which is no claim.
 ///
-/// The mirror of [`nat_bound`], and held the mirrored way: an *over*-report is a false definitional equation, the direction `least_lower_bounds_every_closed_instantiation` asserts. What it buys is positivity: a power `pow(2, k)` is at least one, so a sum or a product over one is, and `0 < shl(x + 1, k)` reduces.
+/// The mirror of [`nat_bound`], and held the mirrored way: an *over*-report is a false definitional equation, the direction `least_lower_bounds_every_closed_instantiation` asserts. What it buys is positivity: a power `pow(2, k)` is at least one, so a sum or a product over one is, and `0 < shl(x + 1, k)` reduces. Read once per node, as [`nat_bound`] is.
 pub(super) fn nat_least(term: &Term) -> Natural {
+    nat_least_within(term, &mut HashMap::new())
+}
+
+/// [`nat_least`], with what each node is at least remembered in `known` as it is read.
+fn nat_least_within(term: &Term, known: &mut HashMap<usize, Natural>) -> Natural {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return Natural::zero();
     };
-    match intrinsic {
+    if let Some(least) = known.get(&term.identity()) {
+        return least.clone();
+    }
+    let least = match intrinsic {
         Intrinsic::Nat(Nat::Zero) => Natural::zero(),
-        Intrinsic::Nat(Nat::Succ(floor, inner)) => floor.clone() + &recurse(|| nat_least(inner)),
+        Intrinsic::Nat(Nat::Succ(floor, inner)) => {
+            floor.clone() + &recurse(|| nat_least_within(inner, known))
+        }
         _ => match intrinsic.algebra() {
             Declaration::Operation {
                 carrier: Carrier::Natural,
@@ -129,13 +155,16 @@ pub(super) fn nat_least(term: &Term) -> Natural {
                 let least = operands
                     .as_slice()
                     .iter()
-                    .map(|operand| recurse(|| nat_least(operand)))
+                    .map(|operand| recurse(|| nat_least_within(operand, known)))
                     .collect::<Vec<_>>();
                 operation.lower_bound(&least)
             }
             _ => Natural::zero(),
         },
-    }
+    };
+    known.insert(term.identity(), least.clone());
+
+    least
 }
 
 /// The operands a reduced term never exceeds, as terms, each with whether the bound is strict — [`nat_bound`]'s criterion read at the operands instead of at a literal, as `curios-algebra`'s `Operation::dominators` states it per operation.

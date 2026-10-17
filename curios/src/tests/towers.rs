@@ -48,6 +48,8 @@ pub(super) enum Shape {
     TwoTowers,
     /// `g(x, x)` twice in one function's body, the second chain from a spelling that only reduces to the first's, and the two claimed equal: one spelling is not the other, so equality cannot answer and conversion compares them.
     Apart,
+    /// `x - c * 7 - d * 5`, `c` being `Nat/min(x / 7, 3)` and `d` being `Nat/min(x / 5, 2)`, so each line names the one before three times, under a bound on the last line proved below the function's `Nat`: checking the proof folds comparisons over the whole tower and remembers each line's reduct.
+    Bounded,
 }
 
 /// What a tower of values is written from, as the body of `tower`.
@@ -227,6 +229,21 @@ pub(super) fn tower(shape: Shape, lines: usize) -> String {
                 "    let _same: Eq()(x{lines}, y{lines}) = Eq/refl();\n    n;"
             );
         }
+        Shape::Bounded => {
+            source.push_str("use /std/{Nat};\nuse /std/Bool/{True, Holds};\n\n");
+            source.push_str("let tower(n: Nat) -> Nat =\n    let x0 = n;\n");
+            for index in 1..=lines {
+                let before = format!("x{}", index - 1);
+                let _ = writeln!(
+                    source,
+                    "    let c{index} = Nat/min({before} / 7, 3);\n    let d{index} = Nat/min({before} / 5, 2);\n    let x{index} = {before} - c{index} * 7 - d{index} * 5;"
+                );
+            }
+            let _ = writeln!(
+                source,
+                "    let _within: Holds(x{lines} <= n) = True/proved();\n    x{lines};"
+            );
+        }
     }
 
     source.push_str("\n/std/print(\"ok\\n\")\n");
@@ -325,6 +342,14 @@ fn a_sixty_line_tower_compiles() {
     ] {
         assert_eq!(compiles(&tower(shape, 60)), Ok(()));
     }
+}
+
+/// A tower of bounded lines compiles at sixty lines: each line names the one before three times, and the proof bounding the last is checked by folding comparisons over the whole tower, each side read for what it is at least and what bounds it, while the kernel remembers each line's reduct.
+///
+/// Mutation-checked: with a remembered reduct's hit adding its computation's identities to the counter, the kernel passes its identity space before seventeen lines; with the two `Nat` bound folds reading the tower once per path, every line doubles the time.
+#[test]
+fn a_sixty_line_bounded_tower_compiles() {
+    assert_eq!(compiles(&tower(Shape::Bounded, 60)), Ok(()));
 }
 
 /// A tower's `core-elab` rung prints. The type each `let` was elaborated at is a graph the rung prints as its tree — sixty lines of pairs are a type of 2⁶⁰ leaves — and a print bounded by its term's graph shows its beginning and elides the rest.

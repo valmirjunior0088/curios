@@ -467,3 +467,17 @@ fn least_lower_bounds_every_closed_instantiation() {
     above(pow(lit(0), count.clone()), "pow(0, x)", 0);
     above(plus(count, lit(4)), "x + 4", 4);
 }
+
+/// What a sum is at least and what bounds it are read once per node: sixty levels each adding the level below to itself, over `x + 1`, a tree no walk per path finishes, answer in the graph's own size — at least two to the sixtieth, and bounded by nothing.
+///
+/// Mutation-checked: with either fold reading the term once per path, the test does not return.
+#[test]
+fn a_shared_sum_is_bounded_once_per_node() {
+    let mut term = add(sym(0, "x"), lit(1));
+    for _ in 0..60 {
+        term = add(term.clone(), term);
+    }
+
+    assert_eq!(nat_least(&term), Natural::from(1u64 << 60));
+    assert_eq!(nat_bound(&term), None);
+}

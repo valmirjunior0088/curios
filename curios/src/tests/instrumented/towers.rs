@@ -144,6 +144,7 @@ fn tower_measurements() {
         ("arrows", Shape::Arrows),
         ("two towers", Shape::TwoTowers),
         ("apart", Shape::Apart),
+        ("bounded", Shape::Bounded),
     ];
 
     // The prelude is restored once per thread, and its restore is not a tower's cost.
