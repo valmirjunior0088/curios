@@ -1,0 +1,34 @@
+-- Push, then read the first: one append and one indexed read of the first element per step, over a list that grows to N. The read falls in the part built before the step, so the node it meets has a child never flattened at every second step, and the read flattens it: where a flattening copies its whole run, the program's time grows with the square of N, and where it writes into the room the run's first piece left, it copies the elements appended since.
+-- N is read from the command line; output is N times the first element, 75, mod 1000003. `rope_push_peek.crs` is the control: the same appends and the same arithmetic, each read the element just appended.
+use /std/{Str, Nat, List, Io};
+
+let run(k: Nat, s: Nat, built: List(Nat), acc: Nat) -> Nat =
+    match k: (_) => Nat
+    | 0 => acc
+    | m + 1 =>
+        let n = 75 * s % 65537;
+        let grown = [..built, n];
+        let first = match List/try_get(grown, 0) | some(x) => x | none() => 0 end;
+        run(m, n, grown, (acc + first) % 1000003)
+    end;
+
+let total(n: Nat) -> Nat =
+    run(n, 1, [], 0);
+
+let entry() -> /std/Io({}) =
+    let arguments = /std/Process/args()!;
+    let input = /std/List/try_get(arguments, 1);
+    match input: (_) => Io({})
+    | some(bytes) =>
+        match Str/of_bytes(bytes): (_) => Io({})
+        | success(s) =>
+            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
+            | none() => /std/print("bad input\n")
+            end
+        | failure(_) => /std/print("invalid utf-8\n")
+        end
+    | none() => /std/print("no input\n")
+    end;
+
+entry()
