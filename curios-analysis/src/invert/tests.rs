@@ -3,7 +3,7 @@
 use super::*;
 
 fn binder(index: u32, hint: &str) -> Free {
-    Free::local(index, Some(hint))
+    Free::local(u64::from(index), Some(hint))
 }
 
 /// `refl(@z) : (z, z)` targets its binder twice; the first position is the one read back.

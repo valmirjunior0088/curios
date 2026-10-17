@@ -118,13 +118,15 @@ impl Spend {
 
     /// A fresh binder identity, rendering as `hint`.
     pub(super) fn fresh(&self, hint: Option<&str>) -> Free {
-        let index = u32::try_from(self.minted.fresh()).expect("binder space exhausted");
-
-        Free::local(index, hint)
+        Free::local(self.minted.fresh(), hint)
     }
 
     /// Keep every binder minted from now on clear of `index`: one handed in from outside, which the counter would otherwise reach and hand out again — and an alias between two distinct binders is a capture.
-    pub(super) fn reserve(&mut self, index: u32) {
-        self.minted.seed(index as usize + 1);
+    pub(super) fn reserve(&mut self, index: u64) {
+        self.minted.seed(
+            index
+                .checked_add(1)
+                .expect("a handed-in identity was minted below the top of its space"),
+        );
     }
 }

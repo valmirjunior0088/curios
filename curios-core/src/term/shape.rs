@@ -903,8 +903,8 @@ impl From<usize> for MetavarId {
 }
 
 impl Mint for MetavarId {
-    fn mint(entropy: usize) -> Self {
-        Self(entropy)
+    fn mint(entropy: u64) -> Self {
+        Self(usize::mint(entropy))
     }
 }
 

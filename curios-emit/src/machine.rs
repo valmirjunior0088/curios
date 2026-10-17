@@ -462,7 +462,7 @@ impl<'a> MachineFunctionLowerer<'a> {
         let block_entropy = Entropy::new();
         block_entropy.seed(1);
         let value_entropy = Entropy::new();
-        value_entropy.seed(source.values().len());
+        value_entropy.seed(source.values().len() as u64);
         Self {
             source,
             id,

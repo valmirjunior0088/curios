@@ -20,7 +20,7 @@ fn nat() -> Term {
 }
 
 fn local(index: u32, hint: &str) -> Free {
-    Free::local(index, Some(hint))
+    Free::local(u64::from(index), Some(hint))
 }
 
 /// A function of one `Type` parameter to what `body` makes of it.

@@ -52,16 +52,16 @@ fn family(
 ) -> InductDecl {
     let binders = (100u32..)
         .take(params.len())
-        .map(|index| Free::local(index, Some("A")))
+        .map(|index| Free::local(u64::from(index), Some("A")))
         .collect::<Vec<_>>();
     let payloads = payloads(&binders);
     let typed = binders.iter().copied().zip(params).collect::<Vec<_>>();
     let indexed = (300u32..)
         .zip(indices)
-        .map(|(index, type_)| (Free::local(index, Some("i")), type_));
+        .map(|(index, type_)| (Free::local(u64::from(index), Some("i")), type_));
     let held = (200u32..)
         .zip(payloads.iter().cloned())
-        .map(|(index, type_)| (Free::local(index, Some("x")), type_));
+        .map(|(index, type_)| (Free::local(u64::from(index), Some("x")), type_));
     let plicities = binders
         .iter()
         .map(|_| Plicity::Implicit)

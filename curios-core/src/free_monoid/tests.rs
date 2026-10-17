@@ -21,7 +21,7 @@ fn deep_bin(grain: Grain, depth: usize) -> Term {
 /// Its `List` twin, over an element type that stays symbolic.
 fn deep_list(depth: usize) -> Term {
     let elem = Term::free_var(&crate::Free::local(0, Some("T")));
-    let leaf = |index: u32| {
+    let leaf = |index: u64| {
         Term::from(Subterm::Intrinsic(Intrinsic::List {
             element: elem.clone(),
             items: vec![Term::free_var(&crate::Free::local(index, Some("e")))],

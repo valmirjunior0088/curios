@@ -50,7 +50,7 @@ fn read(params: &[&str], term: &curios_core::Term) -> Option<Term> {
             let free = var.as_free()?;
 
             match free.local_index() {
-                Some(index) => name(params.get(index as usize)?),
+                Some(index) => name(params.get(usize::try_from(index).ok()?)?),
                 None => match free.as_global()? {
                     curios_core::Global::Authored(qualifier) => absolute(qualifier),
                     curios_core::Global::Witness(_) => return None,
@@ -91,7 +91,7 @@ pub(super) fn projection(
             parameter(params, operand)
                 .map(|index| {
                     curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(
-                        index as u32,
+                        index as u64,
                         None,
                     )))
                 })
@@ -117,7 +117,7 @@ pub(super) fn projection(
         let curios_core::Subterm::Var(var) = &**operand else {
             return None;
         };
-        let index = var.as_free()?.local_index()? as usize;
+        let index = usize::try_from(var.as_free()?.local_index()?).ok()?;
         let entry = match demand {
             Operand::IsType => (
                 match former {

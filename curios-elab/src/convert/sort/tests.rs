@@ -10,8 +10,8 @@ use {
 /// A record of two fields at one type, `depth` deep: a graph of `depth + 1` nodes whose tree has `2^depth` fields.
 fn doubled(base: Term, depth: u32) -> Term {
     (0..depth).fold(base, |type_, level| {
-        let first = Free::local(2 * level + 100, None);
-        let second = Free::local(2 * level + 101, None);
+        let first = Free::local(2 * u64::from(level) + 100, None);
+        let second = Free::local(2 * u64::from(level) + 101, None);
 
         Term::tuple_type([(first, type_.clone()), (second, type_)])
     })

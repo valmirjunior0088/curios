@@ -32,7 +32,7 @@ fn heads(constraint: &UniverseConstraint) -> impl Iterator<Item = LevelHead> + '
 pub(super) struct StoreMark {
     len: usize,
     rewrites: usize,
-    epoch: usize,
+    epoch: u64,
 }
 
 /// Where a speculative scope began: the position to unwind to, and the depth to *restore* rather than decrement.

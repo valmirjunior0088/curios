@@ -96,7 +96,7 @@ impl Families for Registry {
 
 /// A family of `params` type parameters and `indices` `Nat` indices with no constructor, carrying `variances`: all the alignment reads of a declaration is its counts and its vector.
 pub(super) fn shaped(params: usize, indices: usize, variances: &[Variance]) -> InductDecl {
-    let binders = |from: u32, count: usize, type_: Term| {
+    let binders = |from: u64, count: usize, type_: Term| {
         (from..)
             .take(count)
             .map(|index| (Free::local(index, None), type_.clone()))
@@ -156,7 +156,7 @@ pub(super) fn former(path: &str, level: u32) -> Term {
 }
 
 /// A left-nested application spine `((x a) a) …`, `DEEP` links tall.
-pub(super) fn deep_spine(seed: u32) -> Term {
+pub(super) fn deep_spine(seed: u64) -> Term {
     let argument = Term::free_var(&Free::local(seed, None));
     let mut term = Term::free_var(&Free::local(seed, None));
     for _ in 0..DEEP {

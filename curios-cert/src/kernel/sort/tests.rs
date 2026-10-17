@@ -210,7 +210,7 @@ fn a_value_in_type_position_is_refused() {
 }
 
 fn binder(index: u32, hint: &str) -> Free {
-    Free::local(index, Some(hint))
+    Free::local(u64::from(index), Some(hint))
 }
 
 // === The `Instance` arm, which reads its levels ==========================
@@ -307,8 +307,8 @@ fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level(
 /// A record of two fields at one type, `depth` deep: a graph of `depth + 1` nodes whose tree has `2^depth` fields.
 fn doubled(base: Term, depth: usize) -> Term {
     (0..depth).fold(base, |type_, level| {
-        let first = Free::local(2 * level as u32 + 100, None);
-        let second = Free::local(2 * level as u32 + 101, None);
+        let first = Free::local(2 * level as u64 + 100, None);
+        let second = Free::local(2 * level as u64 + 101, None);
 
         Term::tuple_type([(first, type_.clone()), (second, type_)])
     })

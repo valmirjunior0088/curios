@@ -643,9 +643,7 @@ impl<'s> Context<'s> {
 
     /// [`Context::fresh`] for a local opened from a scope's binder, recording where the lowering wrote that binder among its declaration's written binders: so a proof that reads the local credits the binder a lint names ([`Context::credit`]).
     pub(crate) fn fresh_for(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
-        let index = u32::try_from(self.typing.fresh_names.fresh()).expect("binder space exhausted");
-
-        let local = Free::local(index, hint);
+        let local = Free::local(self.typing.fresh_names.fresh(), hint);
         if let Some(written) = written {
             self.underway
                 .credits
@@ -656,7 +654,7 @@ impl<'s> Context<'s> {
 
     /// [`Context::fresh`] for a binder a scope is closed over before anything reads it, as the binder of a `let` the matrix compiler writes ahead of a row's body is: the local remembers where the lowering wrote its binder, as a lowered one does, so the scope closed over it does, and the local opened from that scope is the one a proof credits ([`Context::fresh_for`]).
     pub(crate) fn fresh_written(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
-        let index = u32::try_from(self.typing.fresh_names.fresh()).expect("binder space exhausted");
+        let index = self.typing.fresh_names.fresh();
 
         match written {
             Some(written) => Free::local_written(index, hint, written),

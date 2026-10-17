@@ -4,7 +4,7 @@ use {
 };
 
 fn leaf(index: u32, hint: &str) -> (Free, Term) {
-    let name = Free::local(index, Some(hint));
+    let name = Free::local(u64::from(index), Some(hint));
     let term = Term::free_var(&name);
     (name, term)
 }

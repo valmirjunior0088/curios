@@ -531,7 +531,7 @@ impl Definition {
         let mut params = Vec::new();
         let mut cursor = arity.cursor();
         while let (Some((hint, domain)), Some(mark)) = (cursor.entry(), cursor.mark()) {
-            let binder = Free::local(params.len() as u32, hint);
+            let binder = Free::local(params.len() as u64, hint);
             cursor.advance(Term::free_var(&binder));
             params.push((mark, binder, domain));
         }
@@ -543,7 +543,7 @@ impl Definition {
         if matches!(nominal, Nominal::Inductive(_)) {
             let mut cursor = within.cursor();
             while let Some((hint, domain)) = cursor.entry() {
-                let binder = Free::local((params.len() + indices.len()) as u32, hint);
+                let binder = Free::local((params.len() + indices.len()) as u64, hint);
                 cursor.advance(Term::free_var(&binder));
                 indices.push((Plicity::Explicit, binder, domain));
             }
@@ -1562,7 +1562,7 @@ fn module_positions(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Positional {
     /// A free local binder. Its index came from one compilation's binder counter, and every walk mints from a counter of its own that starts at zero — so a local surviving into stored output is an index two compilations can both hand out.
-    FreeLocal { owner: Option<Global>, index: u32 },
+    FreeLocal { owner: Option<Global>, index: u64 },
     /// A term metavariable. Zonking is contracted to substitute every solution and to refuse an unsolved hole, so one reaching here is that contract broken rather than a hole still to be solved.
     Metavar { owner: Option<Global> },
     /// A witness this module declares, scoped to a mount it does not own. Its name holds the module that declares it, so one carrying somebody else's is a name two units can both declare — the aliasing that would silently rebind a coherence-table entry.

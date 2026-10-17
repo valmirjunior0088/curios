@@ -15,7 +15,7 @@ pub(super) fn kernel() -> Kernel<'static> {
 
 /// A test binder. Once assumed it is one the kernel mints nothing over ([`Kernel::assume`]), so a binder it opens for eta-contraction cannot alias it.
 pub(super) fn binder(index: u32, hint: &str) -> Free {
-    Free::local(index, Some(hint))
+    Free::local(u64::from(index), Some(hint))
 }
 
 pub(super) fn nat(n: usize) -> Term {

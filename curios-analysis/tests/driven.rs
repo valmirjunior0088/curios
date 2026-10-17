@@ -657,7 +657,7 @@ fn forms(term: &Term) -> Vec<&'static str> {
 #[test]
 fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
     let name = || Global::Authored(Qualifier::from(["N"]));
-    let binder = |index: u32| Free::local(500 + index, None);
+    let binder = |index: u32| Free::local(500 + u64::from(index), None);
     let call = || Term::free_var(&planted());
     let group_of = |rec: &Term| {
         let Subterm::Rec(Rec { group, .. }) = &**rec else {

@@ -16,7 +16,7 @@ fn doubled(base: Term) -> Term {
 
 /// A record of two fields at `base`, sixty levels deep.
 fn doubled_record(base: Term) -> Term {
-    (0..60u32).fold(base, |type_, level| {
+    (0..60u64).fold(base, |type_, level| {
         let first = Free::local(2 * level + 100, None);
         let second = Free::local(2 * level + 101, None);
 

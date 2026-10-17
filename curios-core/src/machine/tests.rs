@@ -13,7 +13,7 @@ struct Host {
     definitions: BTreeMap<Free, Term>,
     budget: u64,
     by_category: BTreeMap<Category, u64>,
-    minted: u32,
+    minted: u64,
     /// What this host reads for a payload off a scrutinee's type: nothing, unless a test states one.
     stated: Option<Vec<Term>>,
     memo: ClosedMemo,
@@ -80,7 +80,7 @@ impl ClosedHost for Host {
 }
 
 fn binder(index: u32, hint: &str) -> Free {
-    Free::local(index, Some(hint))
+    Free::local(u64::from(index), Some(hint))
 }
 
 fn nat(n: usize) -> Term {

@@ -10,7 +10,7 @@ use {
 };
 
 /// The indices a stray local is tried at: every one the kernel mints first, so a walk that let the local through would open a binder carrying the same identity at one of them.
-const COLLIDING: std::ops::Range<u32> = 0..4;
+const COLLIDING: std::ops::Range<u64> = 0..4;
 
 fn nat() -> Term {
     Term::intrinsic(Intrinsic::NatType)

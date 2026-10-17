@@ -226,7 +226,7 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
             let mut binders = Vec::new();
             while let Some((hint, domain)) = cursor.entry() {
                 let at = binders.len();
-                let binder = Free::local(u32::try_from(at).expect("a row's binders"), hint);
+                let binder = Free::local(at as u64, hint);
                 binders.push((function.plicities()[at], binder, domain));
                 cursor.advance(Term::free_var(&binder));
             }

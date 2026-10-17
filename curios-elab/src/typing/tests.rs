@@ -104,7 +104,7 @@ fn both_checkers_decide_non_informativeness_alike() {
     let mut kernel = Kernel::new(100_000, SYNTAX);
 
     let nat = || Term::intrinsic(Intrinsic::NatType);
-    let binder = |index: u32| Free::local(index, Some("x"));
+    let binder = |index: u64| Free::local(index, Some("x"));
 
     // A `Prop`-sorted family has to be declared: `Prop` itself is `Type`-sorted, so no closed proposition can be built out of intrinsics and type formers alone. Registering it in both checkers is the whole of the setup either one needs.
     let held = Global::Authored(Qualifier::from(["Held"]));

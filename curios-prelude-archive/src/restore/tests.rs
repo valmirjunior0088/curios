@@ -588,7 +588,7 @@ fn domains(telescope: &Telescope<Term>) -> Vec<Term> {
     let mut cursor = telescope.cursor();
     let mut domains = Vec::new();
     while let Some((hint, domain)) = cursor.entry() {
-        let index = u32::try_from(domains.len()).expect("a telescope within reach");
+        let index = domains.len() as u64;
         domains.push(domain);
         cursor.advance(Term::free_var(&Free::local(index, hint)));
     }
@@ -610,10 +610,7 @@ fn at_a_value(telescope: &Telescope<Term>, position: usize, value: &Term) -> Ter
             continue;
         }
         // Bound again where the type is rebuilt, so the index is this walk's alone.
-        let binder = Free::local(
-            u32::try_from(index).expect("a telescope within reach"),
-            hint,
-        );
+        let binder = Free::local(index as u64, hint);
         cursor.advance(Term::free_var(&binder));
         kept.push((mark, binder, domain));
         kept_proofs.push(proof);

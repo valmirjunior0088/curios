@@ -17,7 +17,7 @@ pub(super) fn kernel() -> Kernel<'static> {
 }
 
 pub(super) fn binder(index: u32, hint: &str) -> Free {
-    Free::local(index, Some(hint))
+    Free::local(u64::from(index), Some(hint))
 }
 
 pub(super) fn nat(n: usize) -> Term {

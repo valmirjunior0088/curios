@@ -28,8 +28,8 @@ impl From<usize> for UniverseMetaId {
 }
 
 impl Mint for UniverseMetaId {
-    fn mint(entropy: usize) -> Self {
-        Self(entropy)
+    fn mint(entropy: u64) -> Self {
+        Self(usize::mint(entropy))
     }
 }
 

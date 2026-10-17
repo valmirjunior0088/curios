@@ -1,7 +1,7 @@
 use super::*;
 
 fn sym(index: u32, hint: &'static str) -> Term {
-    Term::free_var(&crate::Free::local(index, Some(hint)))
+    Term::free_var(&crate::Free::local(u64::from(index), Some(hint)))
 }
 
 fn add(left: Term, right: Term) -> Term {

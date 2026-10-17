@@ -43,12 +43,12 @@ pub(crate) struct Frames<'s> {
     spellings_forgotten: usize,
     /// One tick per mutation of a frame's locals (assume, frame exit, reassume) — an `Entropy` used as a version stamp: `fresh()` bumps, `count()` reads. Invalidates `identity_cache`, which shares the frozen telescope and identity spine between every meta born under an unchanged Γ.
     locals_stamp: Entropy,
-    identity_cache: Option<(usize, SharedTelescope, SharedSpine)>,
+    identity_cache: Option<(u64, SharedTelescope, SharedSpine)>,
     /// How many frames have been entered: the number the next one takes ([`Frame::number`]).
     entered: u64,
     /// One tick per change to the frames that stand or to what one holds — a frame entered or left, a write to one, a judgment standing on held frames or leaving them — invalidating `held_cache`, which shares one [`HeldFrames`] between every metavariable born under unchanged frames, as `identity_cache` shares the telescope.
     written: Entropy,
-    held_cache: Option<(usize, HeldFrames)>,
+    held_cache: Option<(u64, HeldFrames)>,
 }
 
 impl<'s> Frames<'s> {

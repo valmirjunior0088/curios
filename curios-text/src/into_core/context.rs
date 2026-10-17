@@ -377,8 +377,8 @@ pub(super) struct UseResolved {
 /// What the declaration being lowered mints from and has written of universes and sorts: everything that begins afresh where a source declaration does ([`Context::begin_declaration`]). No term in scope carries a local, a metavariable or a universe metavariable — a stored unit is refused one — so nothing minted here can alias an identity already there, and what a declaration mints depends on nothing compiled or written before it.
 pub(super) struct Declaring {
     // `Cell`-backed, as every counter here is, so it survives `Lowerer`'s immutable `&Context` borrow.
-    metavars: Entropy,
-    universes: Entropy,
+    metavars: Entropy<usize>,
+    universes: Entropy<usize>,
     // Every binder identity a lowered term closes over. Threaded (not a process-global atomic) for determinism: two runs over the same source must mint the same identities, or terms that should be equal would differ.
     binders: Entropy,
     // The seed table of the declaration being lowered, from index zero, in step with `universes`.
@@ -794,10 +794,7 @@ impl<'a> Context<'a> {
     ///
     /// Every binder a lowered term closes over comes from here, including the continuation binders `!` desugaring introduces. `curios-elab` mints more while elaborating and starts its counter above this declaration's count ([`curios_core::Mints::binders`]), so the two sources share one identity space per declaration without colliding.
     pub(super) fn fresh_binder(&self, hint: Option<&str>) -> curios_core::Free {
-        curios_core::Free::local(
-            u32::try_from(self.shared.declaring.binders.fresh()).expect("binder space exhausted"),
-            hint,
-        )
+        curios_core::Free::local(self.shared.declaring.binders.fresh(), hint)
     }
 
     /// [`Context::fresh_binder`] for a binder written in source, at `written` among its declaration's written binders — see [`curios_core::Free::local_written`].
@@ -806,11 +803,7 @@ impl<'a> Context<'a> {
         hint: Option<&str>,
         written: u32,
     ) -> curios_core::Free {
-        curios_core::Free::local_written(
-            u32::try_from(self.shared.declaring.binders.fresh()).expect("binder space exhausted"),
-            hint,
-            written,
-        )
+        curios_core::Free::local_written(self.shared.declaring.binders.fresh(), hint, written)
     }
 
     pub(super) fn syntax(&self) -> SyntaxRegistry {

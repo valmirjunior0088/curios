@@ -4,7 +4,7 @@ use {
 };
 
 fn sym(index: u32, hint: &'static str) -> Term {
-    Term::free_var(&Free::local(index, Some(hint)))
+    Term::free_var(&Free::local(u64::from(index), Some(hint)))
 }
 
 fn nat(value: u32) -> Term {
@@ -24,7 +24,7 @@ fn int(value: i32) -> Term {
 }
 
 /// `comparison` with each of `symbols` replaced by the literal `values` gives it, folded to its `Bool`: [`Folding`] folds intrinsics all the way down.
-fn value_at(comparison: &Intrinsic, symbols: &[(u32, &'static str)], values: &[Term]) -> bool {
+fn value_at(comparison: &Intrinsic, symbols: &[(u64, &'static str)], values: &[Term]) -> bool {
     let mut term = Term::intrinsic(comparison.clone());
     for ((index, hint), value) in symbols.iter().zip(values) {
         let binder = Free::local(*index, Some(hint));

@@ -32,7 +32,7 @@ impl Typing<'_> {
     /// A machine with nothing in scope, in which each declaration may spend `budget` units, synthesizing the names `syntax` registers.
     pub(super) fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
-            fresh_names: Entropy::<usize>::new(),
+            fresh_names: Entropy::new(),
             spend: Spend::new(budget),
             caches: Caches::new(),
             frames: Frames::new(),

@@ -8,7 +8,7 @@ use curios_core::{
 
 /// A binder no fixture spells: the suite names its symbols by small indices, so one minted far above them aliases none, and a process-wide counter keeps two openings in one test apart.
 fn fresh(hint: Option<&str>) -> Free {
-    static MINTED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1_000_000);
+    static MINTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1_000_000);
 
     Free::local(
         MINTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
@@ -67,7 +67,7 @@ pub(super) fn lit(n: u32) -> Term {
 }
 
 pub(super) fn sym(index: u32, hint: &'static str) -> Term {
-    Term::free_var(&Free::local(index, Some(hint)))
+    Term::free_var(&Free::local(u64::from(index), Some(hint)))
 }
 
 pub(super) fn add(left: Term, right: Term) -> Term {

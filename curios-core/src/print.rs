@@ -857,8 +857,8 @@ pub fn build_shorten_layered(own: &[Global], predecessors: &[Global]) -> Shorten
     Shorten::over(Rc::new(own), [Rc::new(around)])
 }
 
-/// Where the identities a render mints for the binders it opens begin: above every index a compilation mints, which counts up from zero and would exhaust its binder space long before reaching here.
-const PRINTED: u32 = 1 << 31;
+/// Where the identities a render mints for the binders it opens begin: above every index a compilation mints, which counts up from zero one binder at a time and does not reach half of a `u64` in any computation that ends.
+const PRINTED: u64 = 1 << 63;
 
 /// The fewest child documents a render may build, whatever its term: a report's worth of reading.
 const RENDER_FLOOR: u64 = 5_000;
@@ -874,7 +874,7 @@ const ELIDED: &str = "…";
 /// How one render labels the binders it opens. A scope remembers a binder's hint, never its identity, so the render mints one: the `k`th binder it opens is `PRINTED + k` under its hint. A dry run over the same term under the same spelling opens the same binders in the same order, which is how [`build_rename`] spells them before the render that uses the spellings.
 #[derive(Default)]
 pub struct Minting {
-    next: Cell<u32>,
+    next: Cell<u64>,
     /// How many child documents this render may still build — see [`RENDER_PER_NODE`].
     allowance: Cell<u64>,
     /// What a dry run minted, when this is one.

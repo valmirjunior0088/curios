@@ -9,7 +9,7 @@ use {
 /// A checker that answers yes of a sort and of a variable it entered at `Prop`, and keeps a record of what it was asked: a rule chosen to tell the walk's questions apart, and not the one a checker asks.
 #[derive(Default)]
 struct Sorts {
-    minted: u32,
+    minted: u64,
     entered: Vec<(Free, Option<Term>)>,
     asked: Vec<Term>,
 }
@@ -54,7 +54,7 @@ impl ProofBinders for Sorts {
 }
 
 fn binder(index: u32, hint: &str) -> Free {
-    Free::local(index, Some(hint))
+    Free::local(u64::from(index), Some(hint))
 }
 
 fn nat_type() -> Term {

@@ -11,7 +11,7 @@ fn tuple_type(labels: [Option<&str>; 2]) -> Term {
         labels
             .into_iter()
             .enumerate()
-            .map(|(index, label)| (Free::local(index as u32, label), Term::type_ground())),
+            .map(|(index, label)| (Free::local(index as u64, label), Term::type_ground())),
     )
 }
 
@@ -21,7 +21,7 @@ fn func_type(marks: &[Plicity], name: &str) -> Term {
         marks.iter().enumerate().map(|(index, mark)| {
             (
                 *mark,
-                Free::local(index as u32, Some(name)),
+                Free::local(index as u64, Some(name)),
                 Term::type_ground(),
             )
         }),

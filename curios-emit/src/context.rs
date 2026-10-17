@@ -66,7 +66,7 @@ impl<'a, 'b> Context<'a, 'b> {
         Self::Closure {
             table,
             data,
-            entropy: Entropy::<usize>::new(),
+            entropy: Entropy::new(),
             locals,
             frames: Vec::new(),
         }
@@ -80,7 +80,7 @@ impl<'a, 'b> Context<'a, 'b> {
         Self::Function {
             table,
             data,
-            entropy: Entropy::<usize>::new(),
+            entropy: Entropy::new(),
             locals,
             frames: Vec::new(),
         }

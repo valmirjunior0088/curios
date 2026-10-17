@@ -138,7 +138,7 @@ pub(crate) struct Attempted {
 impl Attempted {
     /// A state that has minted nothing, each of its counters above what `mints` says a lowering minted.
     pub(super) fn above(mints: &Mints) -> Self {
-        let fresh_names = Entropy::<usize>::new();
+        let fresh_names = Entropy::new();
         fresh_names.seed(mints.binders);
 
         Self {

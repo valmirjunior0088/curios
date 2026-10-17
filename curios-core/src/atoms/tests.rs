@@ -8,7 +8,7 @@ use {
 /// One call of a universe-polymorphic name at two instances, and the call at another argument.
 fn calls() -> (Term, Term, Term) {
     let name = Free::local(0, Some("f"));
-    let at = |level: u32, argument: u32| {
+    let at = |level: u32, argument: u64| {
         Term::apply(
             Term::instance_of(&name, vec![Level::constant(level)]),
             [Term::free_var(&Free::local(argument, Some("x")))],

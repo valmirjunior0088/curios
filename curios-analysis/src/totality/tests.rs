@@ -39,7 +39,7 @@ impl Env for Probe {
     fn fresh(&mut self, hint: Option<&str>) -> Free {
         let index = self.minted.get();
         self.minted.set(index + 1);
-        Free::local(1_000 + index, hint)
+        Free::local(1_000 + u64::from(index), hint)
     }
 
     fn unfold(&self, _: &Free) -> Option<&Term> {

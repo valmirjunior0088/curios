@@ -57,7 +57,7 @@ macro_rules! name {
         $crate::name!($name);
 
         impl $crate::Mint for $name {
-            fn mint(entropy: usize) -> Self {
+            fn mint(entropy: u64) -> Self {
                 Self::from(format!(concat!($prefix, "{}"), entropy))
             }
         }
@@ -117,8 +117,8 @@ macro_rules! id {
 
         impl $crate::Mint for $name {
             // Through the minting intrinsic rather than building the newtype again: one narrowing, and the exhaustion panic names the identity type instead of saying only that some space ran out.
-            fn mint(entropy: usize) -> Self {
-                <Self as $crate::ArenaId>::from_index(entropy)
+            fn mint(entropy: u64) -> Self {
+                <Self as $crate::ArenaId>::from_index(usize::try_from(entropy).unwrap_or(usize::MAX))
             }
         }
     };

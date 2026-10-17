@@ -23,14 +23,14 @@ name!(Atom; archive);
 #[derive(Debug, Clone, Copy)]
 #[curios_archive::archived]
 pub struct Mint {
-    index: u32,
+    index: u64,
     hint: Option<Symbol>,
     /// Where the binder sits among its declaration's written binders, when the lowering wrote it — diagnostic metadata excluded from identity as the hint is, which the scope closing over the binder remembers so a lint can be credited with a proof's reads.
     written: Option<u32>,
 }
 
 impl Mint {
-    pub(crate) fn new(index: u32, hint: Option<&str>) -> Self {
+    pub(crate) fn new(index: u64, hint: Option<&str>) -> Self {
         Self {
             index,
             hint: hint.map(Symbol::new),
@@ -143,11 +143,11 @@ pub enum CalleeId {
 #[curios_archive::archived]
 pub struct Mints {
     /// Binder identities. A lowered scope is closed before the elaborator sees it, so the ones that survive into a lowered term are the unbound names — each lowered to a free local that elaboration must report rather than find bound.
-    pub binders: usize,
+    pub binders: u64,
     /// Why each of those names resolved to nothing, by the binder it lowered to: what elaboration reports where it meets the binder ([`Unresolved`]). Held here, with the counter the binder was minted from, because a binder's index means something within its declaration alone: a table of the unit's would have two declarations answer for one another's names. Empty for every declaration of a unit that compiles.
     pub unbound: BTreeMap<Free, Unresolved>,
     /// Term metavariables, one per hole the lowering left for elaboration to solve.
-    pub metavariables: usize,
+    pub metavariables: u64,
     /// One seed per universe level the lowering minted, by its id: the role the solver reads the level's provenance off, and where it was written. Every copy of one written `Type` shares a level, so there are as many seeds as written types, not as occurrences.
     pub universes: Vec<UniverseSeed>,
     /// Where each `Sort` the declaration writes stands, by the id of the quality metavariable the lowering gave it: a quality its elaboration closes as a parameter of the declaration, where nothing of the declaration decides it. Every copy of one written `Sort` shares a quality, as a written `Type` shares a level.
@@ -201,12 +201,12 @@ impl Free {
     /// A local binder with identity `index`, rendering as `hint`.
     ///
     /// An index means something within the declaration that minted it and nowhere else: the lowering and the elaborator share one space per declaration, the elaborator's counter starting above the lowering's count ([`Mints::binders`]), and no stored term carries one.
-    pub fn local(index: u32, hint: Option<&str>) -> Self {
+    pub fn local(index: u64, hint: Option<&str>) -> Self {
         Free::Local(Mint::new(index, hint))
     }
 
     /// [`Free::local`] for a binder written in source, at `written` among its declaration's written binders. A local opened from its scope is no such binder: the place stays with the scope, for whoever opens it to read.
-    pub fn local_written(index: u32, hint: Option<&str>, written: u32) -> Self {
+    pub fn local_written(index: u64, hint: Option<&str>, written: u32) -> Self {
         Free::Local(Mint {
             written: Some(written),
             ..Mint::new(index, hint)
@@ -214,7 +214,7 @@ impl Free {
     }
 
     /// [`Free::local`] for a caller that already holds the hint as a symbol — a printer reopening a scope under the hint it remembers.
-    pub(crate) fn local_hinted(index: u32, hint: Option<Symbol>) -> Self {
+    pub(crate) fn local_hinted(index: u64, hint: Option<Symbol>) -> Self {
         Free::Local(Mint {
             index,
             hint,
@@ -238,7 +238,7 @@ impl Free {
     /// The raw counter behind a locally minted name, or `None` for a global.
     ///
     /// What a checker minting binders of its own must stay clear of: the kernel raises its counter above every local it is handed (`Kernel::assume`), and refuses a module or entry mentioning one it was not.
-    pub fn local_index(&self) -> Option<u32> {
+    pub fn local_index(&self) -> Option<u64> {
         self.as_local().map(|mint| mint.index)
     }
 

@@ -13,7 +13,10 @@ use {
 };
 
 fn applied(head: u32, hint: &'static str, argument: Term) -> Term {
-    Term::apply(Term::free_var(&Free::local(head, Some(hint))), [argument])
+    Term::apply(
+        Term::free_var(&Free::local(u64::from(head), Some(hint))),
+        [argument],
+    )
 }
 
 fn int_add(left: Term, right: Term) -> Term {

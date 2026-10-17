@@ -1866,8 +1866,8 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
 /// A record of two fields at one type, `levels` deep: a graph of `levels` nodes over a tree of two to the `levels` leaves. Its binders are minted from `mint`, so two such types name no binder in common.
 fn doubled_record(levels: u32, mint: u32) -> Term {
     (0..levels).fold(Term::intrinsic(Intrinsic::NatType), |type_, level| {
-        let first = Free::local(mint + 2 * level, None);
-        let second = Free::local(mint + 2 * level + 1, None);
+        let first = Free::local(u64::from(mint + 2 * level), None);
+        let second = Free::local(u64::from(mint + 2 * level + 1), None);
 
         Term::tuple_type([(first, type_.clone()), (second, type_)])
     })
@@ -1881,7 +1881,7 @@ fn erasure_answers_a_doubling_term_in_its_own_size() {
     let nat_type = || Term::intrinsic(Intrinsic::NatType);
     let doubled = doubled_record(60, 5_000);
 
-    let identity = |mint: u32| {
+    let identity = |mint: u64| {
         let a = Free::local(mint, Some("a"));
         (
             Term::func([(a, doubled.clone())], Term::free_var(&a)),
@@ -1896,7 +1896,7 @@ fn erasure_answers_a_doubling_term_in_its_own_size() {
 
     // `(let x0 = (n, n); let x1 = (x0, x0); …; x59).0`, each definition stated at its own doubling type: the projection's head is the whole chain, whose type is read by substituting every binding.
     let n = Free::local(4_003, Some("n"));
-    let names = (0..60u32)
+    let names = (0..60u64)
         .map(|level| Free::local(4_100 + level, Some("x")))
         .collect::<Vec<_>>();
     let mut paired = Term::free_var(&names[59]);
