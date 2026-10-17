@@ -21,7 +21,7 @@ let listening(addr: Bytes) -> Try(Io, Io/Error, Listener) =
 pub let listen(s: Io/Scope, host: Str, port: Nat) -> Try(Io, Io/Error, Listener) =
     let addr = resolve(host, port)!;
     let l = listening(addr)!;
-    let _ = Io/Scope/defer(s, (_) => close(l))!;
+    let _ = Io/Scope/defer(s, (_) => Io/close(l))!;
     Try/pure(l);
 
 --- The next connection on this listener: `ok` beside its handle, or the status of the failure.
@@ -47,8 +47,9 @@ pub let accept(s: Io/Scope, l: Listener) -> Try(Io, Io/Error, Socket) =
     Try/pure(Socket { h });
 
 --- Close `l` before its scope ends.
-pub let close(l: Listener) -> Io({}) =
-    Handle/close(l.0);
+satisfy Io/Close(Listener) {
+    close(l) = Io/close(l.0),
+}
 
 let accept_loop(l: Listener, on_conn: (Handle) -> Io({})) -> Io({}) =
     let go() -> Io({}) =
@@ -81,10 +82,7 @@ foreign tls_start_server(Handle, Handle) -> Nat;
 
 let serve_tls_conn(s: Io/Scope, h: Handle, cfg: Handle, handler: (Socket) -> Io({})) -> Io({}) =
     let status = tls_start_server(h, cfg)!;
-    match status == /sys/status/ok
-    | true => serve_conn(s, h, handler)
-    | false => Handle/close(h)
-    end;
+    match status == /sys/status/ok | true => serve_conn(s, h, handler) | false => Io/close(h) end;
 
 --- A server's TLS configuration from this certificate chain and this key: `ok` beside its handle, or the status of the failure.
 foreign tls_server_config(Bytes, Bytes) -> {status: Nat, handle: Handle};
@@ -104,7 +102,7 @@ pub let serve_tls(
             | true => Result/success(reply.handle)
             | false => Result/failure(error(reply.status))
             end!;
-        let _ = Io/Scope/defer(s, (_) => Handle/close(cfg))!;
+        let _ = Io/Scope/defer(s, (_) => Io/close(cfg))!;
         let l = listen(s, host, port)!;
         let _ = accept_loop(l, (h) => serve_tls_conn(s, h, cfg, handler))!;
         let _ = Io/Scope/join_all(s)!;

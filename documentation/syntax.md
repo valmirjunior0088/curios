@@ -526,7 +526,7 @@ let contents() -> Try(Io, Io/Error, Bytes) =
     Try/scope((s) =>
         let f = File/open(s, Path/of_str("notes.txt"), File/Mode/read())!;
         let text = Io/read_all(f)!;
-        let _ = File/close(f)!;
+        let _ = Io/close(f)!;
         Try/pure(text));
 ```
 

@@ -70,14 +70,15 @@ pub let open(s: Io/Scope, path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
     match reply.status == /sys/status/ok
     | true =>
         let port = Serial { reply.handle };
-        let _ = Io/Scope/defer(s, (_) => close(port))!;
+        let _ = Io/Scope/defer(s, (_) => Io/close(port))!;
         Try/pure(port)
     | false => Try/raise(error(reply.status))
     end;
 
 --- Close `s` before its scope ends, as the scope does when it ends. What it accepted and has not sent is discarded, so the close never waits on the wire: `drain` first to send it.
-pub let close(s: Serial) -> Io({}) =
-    Handle/close(s.0);
+satisfy Io/Close(Serial) {
+    close(s) = Io/close(s.0),
+}
 
 satisfy Io/Read(Serial) {
     read(s, n, @positive) = Io/read(@Handle, s.0, n, @positive),

@@ -1,6 +1,5 @@
 use /std/{List, Option, Cell, Io};
 use /std/Io/{Waiting};
-use /std/internal/{Handle};
 use /std/time/{Duration, Instant};
 
 --- A wait on cells alone, which made nothing to release.
@@ -45,4 +44,4 @@ pub let after(d: Duration) -> Io(Offer({})) =
                                 Waiting {
                                     on = [timer],
                                     filled = [],
-                                    release = Handle/close(timer) })))));
+                                    release = Io/close(timer) })))));

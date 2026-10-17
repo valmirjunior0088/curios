@@ -66,7 +66,7 @@ let timer(d: Duration) -> Io(Handle) =
 --- Until `d` has passed, on a timer of its own, closed whether the wait ends or is cancelled.
 pub let sleep(d: Duration) -> Io({}) =
     let h = timer(d)!;
-    /sys/Io/suspend([h], [], Handle/close(h), Handle/close(h));
+    /sys/Io/suspend([h], [], Close/close(h), Close/close(h));
 
 -- A cell filled already: what a suspension that may go on at once waits on. Private to the subtree, which is where every such suspension is made.
 let ready() -> Io(Cell({})) =
@@ -133,6 +133,13 @@ pub concept Finish(S: Type): pub Type {
 }
 
 pub use Finish/*;
+
+--- What a resource is closed through before the scope it was opened into closes it. Closing one already closed does nothing, so the scope's own close after an early one is harmless.
+pub concept Close(S: Type): pub Type {
+    close(S) -> Io({}),
+}
+
+pub use Close/*;
 
 -- Everything `read` yields up to the end of the stream; a failure before the end drops what was read. Every chunk holds a byte, so every read short of the end is progress.
 let drain(

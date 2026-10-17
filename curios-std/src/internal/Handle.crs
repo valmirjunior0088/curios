@@ -9,8 +9,9 @@ use /std/internal/{error};
 foreign handle_close(Handle) -> {};
 
 --- Close `h`. Closing a handle that names nothing does nothing.
-pub let close(h: Handle) -> Io({}) =
-    handle_close(h);
+satisfy Io/Close(Handle) {
+    close(h) = handle_close(h),
+}
 
 --- What a wait asks to be woken for.
 pub mod Interest;
@@ -94,7 +95,7 @@ let finishing(h: Handle) -> Io(Result(Nat, {})) =
 --- Until `h` is ready for `interest`, or has failed or hung up: a suspension on a watch of it, closed whether the wait ends or is cancelled. Readiness is advisory, so what waits retries the operation it waited for, and waits again where it would still block.
 pub let wait(h: Handle, interest: Interest) -> Io({}) =
     let watch = handle_watch(h, interest.readable, interest.writable)!;
-    /sys/Io/suspend([watch], [], close(watch), close(watch));
+    /sys/Io/suspend([watch], [], Io/close(watch), Io/close(watch));
 
 --- Up to `n` bytes, waiting while the host would block.
 let read_waiting(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Io(Result(Error, Io/Chunk)) =

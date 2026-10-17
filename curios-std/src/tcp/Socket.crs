@@ -17,11 +17,12 @@ satisfy Io/Finish(Socket) {
 }
 
 --- Close `c` before its scope ends, saying nothing to the peer. The scope's own release then finds nothing to close.
-pub let close(c: Socket) -> Io({}) =
-    Handle/close(c.0);
+satisfy Io/Close(Socket) {
+    close(c) = Io/close(c.0),
+}
 
 let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
-    let _ = Handle/close(h)!;
+    let _ = Io/close(h)!;
     Try/raise(e);
 
 --- Create a socket for the family of this address: `ok` beside its handle, or the status of the failure.
@@ -44,7 +45,7 @@ let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
     | status == /sys/status/ok => Try/pure((h, false))
     | status == /sys/status/would_block => Try/pure((h, true))
     | _ =>
-        let _ = Handle/close(h)!;
+        let _ = Io/close(h)!;
         Try/raise(error(status))
     end;
 

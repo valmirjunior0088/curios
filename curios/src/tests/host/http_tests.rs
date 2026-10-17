@@ -69,7 +69,7 @@ const SERVER: &str = r#"
             let l = Listener/listen(s, "0.0.0.0", 8080)!;
             let c = Listener/accept(s, l)!;
             let _ = Server/answer(Server/default, Scheme/http(), handler)(c)!;
-            Socket/close(c));
+            Io/close(c));
     let program() -> Io({}) =
         let r = Try/run(session())!;
         match r

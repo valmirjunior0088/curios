@@ -152,8 +152,18 @@ satisfy Io/Write(Output) {
     flush(o) = Io/flush(o.0),
 }
 
+--- Close this input before its scope or the process's end does.
+satisfy Io/Close(Input) {
+    close(i) = Io/close(i.0),
+}
+
+--- Close this output before its scope or the process's end does: its reader reads the end of the stream.
+satisfy Io/Close(Output) {
+    close(o) = Io/close(o.0),
+}
+
 let ended(o: Output) -> Try(Io, Io/Error, {}) =
-    let _ = Handle/close(o.0)!;
+    let _ = Io/close(o)!;
     Try/pure(());
 
 --- The reader at the other end reads the end of the stream: the stream is closed, which is the one way a pipe or a standard stream tells its reader it has ended. Writing it after answers `not_found`, as a closed handle does.

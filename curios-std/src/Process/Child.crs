@@ -92,10 +92,10 @@ pub let stderr(c: Child) -> Option(Process/Input) =
     c.stderr;
 
 let close_input(i: Option(Process/Output)) -> Io({}) =
-    match i | some(i) => Handle/close(i.0) | none() => Io/pure(()) end;
+    match i | some(i) => Io/close(i.0) | none() => Io/pure(()) end;
 
 let close_output(o: Option(Process/Input)) -> Io({}) =
-    match o | some(o) => Handle/close(o.0) | none() => Io/pure(()) end;
+    match o | some(o) => Io/close(o.0) | none() => Io/pure(()) end;
 
 let close_pipes(c: Child) -> Io({}) =
     let _ = close_input(c.stdin)!;
@@ -113,7 +113,7 @@ let killed(c: Child) -> Io({}) =
 -- End the child if it still runs, then close its handle and its pipes. The kill is the last use of the handle, and the host reaps the process whether or not anything waits for it.
 let release(c: Child) -> Io({}) =
     let _ = killed(c)!;
-    let _ = Handle/close(c.handle)!;
+    let _ = Io/close(c.handle)!;
     close_pipes(c);
 
 --- End the child if it still runs, and close its pipes.

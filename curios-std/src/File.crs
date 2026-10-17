@@ -33,14 +33,15 @@ pub let open(s: Io/Scope, path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
     match reply.status == /sys/status/ok
     | true =>
         let f = File { reply.handle };
-        let _ = Io/Scope/defer(s, (_) => close(f))!;
+        let _ = Io/Scope/defer(s, (_) => Io/close(f))!;
         Try/pure(f)
     | false => Try/raise(error(reply.status))
     end;
 
 --- Close `f` before its scope ends. The scope's own close then finds nothing to close.
-pub let close(f: File) -> Io({}) =
-    Handle/close(f.0);
+satisfy Io/Close(File) {
+    close(f) = Io/close(f.0),
+}
 
 satisfy Io/Read(File) {
     read(f, n, @positive) = Io/read(@Handle, f.0, n, @positive),
