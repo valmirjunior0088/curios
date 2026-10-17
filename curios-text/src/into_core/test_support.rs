@@ -355,12 +355,11 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
 
 /// The prelude these tests lower against: the real `/sys` roster, and a `/std` of stubs deep enough for every name `/sys` reaches through the registry — with one concept beside them, for the order a unit takes around a row it registers into a concept declared before it. `Nat` is a module and a declaration at its root, as the library's own is, so a fixture that imports it writes the type bare.
 fn prelude_fixture() -> RootSource {
-    let mut modules = RootSource::supplied();
-    modules.insert_root("sys", RootKind::Internal, sys_module(&SYNTAX));
-    modules.insert_root(
-        "std",
-        RootKind::Ordinary,
-        r#"
+    prelude_with("")
+}
+
+/// The `/std` of [`prelude_fixture`].
+const FIXTURE_STD: &str = r#"
             pub mod Str
                 pub let Valid : Type = Type;
             end
@@ -381,12 +380,26 @@ fn prelude_fixture() -> RootSource {
             mod Hidden
                 pub use /sys/{Handle};
             end
-        "#
-        .parse()
-        .unwrap(),
+"#;
+
+/// [`prelude_fixture`], its `/std` closing with `extra`.
+fn prelude_with(extra: &str) -> RootSource {
+    let mut modules = RootSource::supplied();
+    modules.insert_root("sys", RootKind::Internal, sys_module(&SYNTAX));
+    modules.insert_root(
+        "std",
+        RootKind::Ordinary,
+        [FIXTURE_STD, extra].concat().parse().unwrap(),
     );
     // `/sys` states each decided precondition as `Holds` over one of its own comparisons, and names `Holds` through the registry — so the scope has to hold whatever this fixture's registry points it at. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement.
     modules
+}
+
+/// The fixture's prelude with `extra` closing its `/std`, lowered as the one unit it is: the lens for what the prelude's own lowering refuses.
+pub(super) fn prepare_with(extra: &str) -> Result<(), String> {
+    super::prepare_prelude(&prelude_with(extra), &[], syntax())
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 /// [`lower_with_prelude`], with the entry seeing only `declared` of what the scope mounts — the lens for the undeclared-dependency refusal.

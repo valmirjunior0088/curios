@@ -1,7 +1,7 @@
 use {
     super::{Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped},
     crate::{Error, GroupItem, Name, OrderedMap, UseGroup},
-    curios_utilities::{Mount, Qualifier, nearest},
+    curios_utilities::{Mount, Qualifier, RootKind, nearest},
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,
@@ -97,6 +97,15 @@ impl PubUse {
 pub(super) struct Audiences {
     modules: HashMap<Qualifier, Vec<Qualifier>>,
     bindings: HashMap<Qualifier, Vec<Qualifier>>,
+    /// Each name one of this unit's exports shows at a path other than its own, with every such export: what a name under an internal root is seen through ([`AudienceScope::seen`]). Recorded beside the audiences, never folded into one: a name's own audience stays its declaring unit's.
+    relayed: HashMap<Qualifier, Vec<Relay>>,
+}
+
+/// One export of a name at a path other than its own: the path the export stands at, and who sees that path.
+#[derive(Clone)]
+pub(super) struct Relay {
+    site: Qualifier,
+    exposure: Vec<Qualifier>,
 }
 
 impl Audiences {
@@ -157,13 +166,25 @@ impl Audiences {
             }
         }
 
+        let mut relayed: HashMap<Qualifier, Vec<Relay>> = HashMap::new();
+
         for (module, interface) in public {
             let exposure = modules.get(module).cloned().unwrap_or_default();
-            let exported = interface
-                .bindings
-                .values()
-                .filter(|entry| declares_binding(&entry.target));
-            for entry in exported {
+            #[expect(
+                clippy::iter_over_hash_type,
+                reason = "each name's relays are sorted below"
+            )]
+            for (label, entry) in &interface.bindings {
+                let site = module.with(label);
+                if site != entry.target {
+                    relayed.entry(entry.target).or_default().push(Relay {
+                        site,
+                        exposure: exposure.clone(),
+                    });
+                }
+                if !declares_binding(&entry.target) {
+                    continue;
+                }
                 for root in &exposure {
                     widen(&mut bindings, entry.target, *root);
                 }
@@ -174,8 +195,15 @@ impl Audiences {
         for audience in modules.values_mut().chain(bindings.values_mut()) {
             audience.sort();
         }
+        relayed
+            .values_mut()
+            .for_each(|relays| relays.sort_by_key(|relay| relay.site));
 
-        Self { modules, bindings }
+        Self {
+            modules,
+            bindings,
+            relayed,
+        }
     }
 
     /// The audience of the module `qualifier` names, one of the unit's. A namespace the interface never mentions (a synthetic one built during lowering) inherits its parent's audience.
@@ -209,13 +237,76 @@ impl Audiences {
 #[derive(Clone, Copy)]
 pub(super) struct AudienceScope<'a> {
     own: &'a Audiences,
+    /// The unit's own prefixes, and the mounts it may name — its own among them.
+    own_mounts: &'a [Mount],
+    own_visible: &'a [Mount],
     /// The units already lowered, in dependency order.
     earlier: &'a [&'a PreparedText],
 }
 
 impl<'a> AudienceScope<'a> {
-    pub(super) fn over(own: &'a Audiences, earlier: &'a [&'a PreparedText]) -> Self {
-        Self { own, earlier }
+    pub(super) fn over(
+        own: &'a Audiences,
+        own_mounts: &'a [Mount],
+        own_visible: &'a [Mount],
+        earlier: &'a [&'a PreparedText],
+    ) -> Self {
+        Self {
+            own,
+            own_mounts,
+            own_visible,
+            earlier,
+        }
+    }
+
+    /// Who can see the binding `qualifier` names where `item`'s signature names it, beside the paths of the exports that show it, which a refusal reads the keeping module off. A name is seen by its own audience, except one under an internal root named outside that root: no reader but a unit that may name the root reaches it by its own path, so it is seen within those units and wherever an export shows it, whichever unit's export that is. An item under the root shares its readers, so what it names is seen as its own unit decided.
+    pub(super) fn seen(
+        &self,
+        qualifier: &Qualifier,
+        item: &Qualifier,
+    ) -> (Vec<Qualifier>, Vec<Qualifier>) {
+        let mut mounts = self
+            .own_mounts
+            .iter()
+            .chain(self.earlier.iter().flat_map(|unit| &unit.mounts));
+        let Some(root) = mounts
+            .find(|mount| mount.kind == RootKind::Internal && qualifier.is_within(&mount.prefix))
+            .map(|mount| mount.prefix)
+            .filter(|root| !item.is_within(root))
+        else {
+            return (self.binding(qualifier), Vec::new());
+        };
+
+        let units = self
+            .earlier
+            .iter()
+            .map(|unit| {
+                (
+                    unit.mounts.as_slice(),
+                    unit.visible.as_slice(),
+                    unit.audiences(),
+                )
+            })
+            .chain([(self.own_mounts, self.own_visible, self.own)]);
+        let (mut audience, mut sites) = (Vec::new(), Vec::new());
+        for (mounts, visible, audiences) in units {
+            if visible.iter().any(|mount| mount.prefix == root) {
+                audience.extend(
+                    mounts
+                        .iter()
+                        .filter(|mount| !mount.prefix.is_root())
+                        .map(|mount| mount.prefix),
+                );
+            }
+            // An export inside the root shows the name to nobody the root does not.
+            let relays = audiences.relayed.get(qualifier).into_iter().flatten();
+            for relay in relays.filter(|relay| !relay.site.is_within(&root)) {
+                audience.extend(relay.exposure.iter().copied());
+                sites.push(relay.site);
+            }
+        }
+
+        (audience, sites)
     }
 
     /// The earlier unit that declares `qualifier`, where one does: the one it lies under a prefix of. The compilation root is every unit's, so a name under no earlier unit's prefix is the unit's own.

@@ -122,16 +122,17 @@ fn alias_sources(
     sources
 }
 
-/// Everyone who can see `referent`, whether by its own name or through a transparent alias that stands for it.
+/// Everyone who can see `referent`, whether by its own name, through a transparent alias that stands for it, or, for a name under an internal root, through an export that shows it ([`AudienceScope::seen`]) — beside the paths of those exports.
 fn referent_audience(
     audiences: AudienceScope<'_>,
     sources: &BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
+    item: &Qualifier,
     referent: &curios_core::Global,
-) -> Vec<Qualifier> {
+) -> (Vec<Qualifier>, Vec<Qualifier>) {
     let Some(qualifier) = referent.qualifier() else {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     };
-    let mut audience = audiences.binding(qualifier);
+    let (mut audience, relays) = audiences.seen(qualifier, item);
 
     // A hop is matched by identity, and its qualifier is read off the name rather than split back out of a rendering.
     for alias in sources.get(referent).into_iter().flatten() {
@@ -141,26 +142,38 @@ fn referent_audience(
         audience.extend(audiences.binding(qualifier));
     }
 
-    audience
+    (audience, relays)
 }
 
-/// A name some reader of an item cannot see, with the subtrees whose modules can.
+/// A name some reader of an item cannot see, with the subtrees whose modules can, and the paths of the exports through which a name under an internal root is seen.
 pub(super) struct Unseen {
     pub(super) referent: curios_core::Global,
     reach: Vec<Qualifier>,
+    relays: Vec<Qualifier>,
 }
 
 impl Unseen {
     /// The module that keeps the name from the readers it does not reach: the one on the name's own path that stands directly under the widest subtree it reaches, where that module is written without `pub`. `child` answers whether a module declares a child of a label, and whether it wrote `pub` on it.
     ///
-    /// `None` where what stands there is the name itself, a declaration written without `pub`, and where the reach stops for a reason its own path does not show, an export elsewhere.
+    /// `None` where what stands there is the name itself, a declaration written without `pub`, and where the reach stops for a reason its own path does not show, an export elsewhere. A name under an internal root is kept by the module its export stands in, read off the export's path instead.
     ///
     /// **The widest subtree, not the innermost private module.** A name declared in one private module and exported out of it into another reaches the second one's audience: writing `pub` on the first changes nothing, and it is the second that a reader is told of.
     pub(super) fn behind(
         &self,
         child: &dyn Fn(&Qualifier, &str) -> Option<bool>,
     ) -> Option<Qualifier> {
-        let path = self.referent.qualifier()?;
+        self.referent
+            .qualifier()
+            .into_iter()
+            .chain(&self.relays)
+            .find_map(|path| self.behind_path(path, child))
+    }
+
+    fn behind_path(
+        &self,
+        path: &Qualifier,
+        child: &dyn Fn(&Qualifier, &str) -> Option<bool>,
+    ) -> Option<Qualifier> {
         let widest = self
             .reach
             .iter()
@@ -175,17 +188,22 @@ impl Unseen {
     }
 }
 
-/// Every consumer of an item exposed to `exposure` must be able to see everything the item's signature names, its `dependencies`: the first that one of them cannot see is handed back. Checked against audiences rather than the declaration path, so an item re-exported out of a private module counts as visible exactly where the re-export puts it.
+/// Every consumer of `item`, exposed to `exposure`, must be able to see everything the item's signature names, its `dependencies`: the first that one of them cannot see is handed back. Checked against audiences rather than the declaration path, so an item re-exported out of a private module counts as visible exactly where the re-export puts it.
 fn audit_dependencies(
     audiences: AudienceScope<'_>,
     sources: &BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
     exposure: &[Qualifier],
+    item: &Qualifier,
     dependencies: impl IntoIterator<Item = curios_core::Global>,
 ) -> Result<(), Unseen> {
     for referent in dependencies {
-        let reach = referent_audience(audiences, sources, &referent);
+        let (reach, relays) = referent_audience(audiences, sources, item, &referent);
         if !Audiences::covers(exposure, &reach) {
-            return Err(Unseen { referent, reach });
+            return Err(Unseen {
+                referent,
+                reach,
+                relays,
+            });
         }
     }
 
@@ -240,10 +258,12 @@ pub(super) fn audit_public_exposures(
         }
 
         let exposure = audiences.binding(path);
+        let item = *path;
         audit_dependencies(
             audiences,
             &sources,
             &exposure,
+            &item,
             declared.signature.iter().copied(),
         )
         .map_err(|unseen| {
@@ -279,6 +299,7 @@ pub(super) fn audit_public_exposures(
                         audiences,
                         &sources,
                         &exposure,
+                        &item,
                         dependencies.iter().copied(),
                     )
                     .map_err(exposed)?;
@@ -287,7 +308,7 @@ pub(super) fn audit_public_exposures(
 
             if let Some(induct_decl) = scope.induct(&nominal) {
                 let nominal_dependencies = globals(induct_decl.arity.free_vars());
-                audit_dependencies(audiences, &sources, &exposure, nominal_dependencies)
+                audit_dependencies(audiences, &sources, &exposure, &item, nominal_dependencies)
                     .map_err(exposed)?;
 
                 if induct_decl.rep_public {
@@ -295,6 +316,7 @@ pub(super) fn audit_public_exposures(
                         audiences,
                         &sources,
                         &exposure,
+                        &item,
                         globals(
                             induct_decl
                                 .constructors
@@ -312,14 +334,21 @@ pub(super) fn audit_public_exposures(
                     param_dependencies.extend(domain.free_vars());
                     walk = rest.body();
                 }
-                audit_dependencies(audiences, &sources, &exposure, globals(param_dependencies))
-                    .map_err(exposed)?;
+                audit_dependencies(
+                    audiences,
+                    &sources,
+                    &exposure,
+                    &item,
+                    globals(param_dependencies),
+                )
+                .map_err(exposed)?;
 
                 if struct_decl.rep_public {
                     audit_dependencies(
                         audiences,
                         &sources,
                         &exposure,
+                        &item,
                         globals(struct_decl.fields().free_vars()),
                     )
                     .map_err(exposed)?;

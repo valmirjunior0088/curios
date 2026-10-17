@@ -2435,7 +2435,7 @@ fn into_core_unit_within(
 
     // Decided here, of the unit's own layers, and kept with the unit: the audit below and every report after read the one answer.
     let audiences = Audiences::of(table.own(), public.own());
-    let in_scope = AudienceScope::over(&audiences, predecessors);
+    let in_scope = AudienceScope::over(&audiences, &own, &visible_mounts, predecessors);
     debug_assert!(
         in_scope.widens_nothing(public.own()),
         "an export of another unit's name shows it to nobody its own unit does not"

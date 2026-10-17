@@ -896,7 +896,7 @@ A public interface cannot mention an item its own consumers cannot reach. The in
 - inductive constructor signatures when the inductive representation is public;
 - declared types of definitions.
 
-The check compares audiences rather than declaration paths, so a name re-exported out of a private child counts as visible wherever the re-export puts it, and an item reaching only a subtree may freely mention other declarations of that subtree. It follows re-exports, identity aliases, and direct-headed type-family aliases whose declared result structurally ends in literal `Type` or `Prop`. Definition bodies are not interface, and neither are members synthesized into a nested namespace — an inductive's constructors, a concept's method wrappers — so a constructor facade may hand out values of a type the consumer cannot name.
+The check compares audiences rather than declaration paths, so a name re-exported out of a private child counts as visible wherever the re-export puts it, and an item reaching only a subtree may freely mention other declarations of that subtree. It follows re-exports, identity aliases, and direct-headed type-family aliases whose declared result structurally ends in literal `Type` or `Prop`. Definition bodies are not interface, and neither are members synthesized into a nested namespace — an inductive's constructors, a concept's method wrappers — so a constructor facade may hand out values of a type the consumer cannot name. A name under `/sys`, which only the standard library may name, is seen where a signature outside `/sys` names it only within the standard library and wherever one of its exports shows it.
 
 ## Recursive groups
 
