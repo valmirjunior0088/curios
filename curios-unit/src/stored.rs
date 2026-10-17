@@ -106,13 +106,25 @@ pub fn framed(record: &[u8], artifact: &[u8]) -> Vec<u8> {
     bytes
 }
 
+/// How many bytes open a slot file ahead of its record: the magic, then the record's length.
+pub const PREAMBLE: usize = MAGIC.len() + 8;
+
+/// The length of the record a slot file frames, read off the file's first [`PREAMBLE`] bytes, or `None` where they open no slot.
+///
+/// The one place a slot's framing is read: [`segments`] reads a slot in hand through it, and a reader that decides whether to believe a slot reads its record alone through it, leaving the artifact unread behind a record that disagrees.
+pub fn record_length(preamble: &[u8; PREAMBLE]) -> Option<usize> {
+    let length = preamble.strip_prefix(MAGIC)?;
+    let length = <[u8; 8]>::try_from(length).ok()?;
+
+    usize::try_from(u64::from_le_bytes(length)).ok()
+}
+
 /// The record and the artifact of the slot file `bytes`, or `None` for bytes that are not one: something else entirely, or a slot truncated past its record.
 ///
-/// The one place a slot's framing is read. The artifact segment is the same bytes the artifact is archived as on its own, so a reader that wants the unit and nothing about it takes the second half and decodes it as it would any archive.
+/// The artifact segment is the same bytes the artifact is archived as on its own, so a reader that wants the unit and nothing about it takes the second half and decodes it as it would any archive.
 pub fn segments(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
-    let body = bytes.strip_prefix(MAGIC)?;
-    let (length, rest) = body.split_first_chunk::<8>()?;
-    let length = usize::try_from(u64::from_le_bytes(*length)).ok()?;
+    let (preamble, rest) = bytes.split_first_chunk::<PREAMBLE>()?;
+    let length = record_length(preamble)?;
 
     (length <= rest.len()).then(|| rest.split_at(length))
 }

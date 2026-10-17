@@ -375,6 +375,32 @@ fn a_session_keeps_a_unit_the_store_restored() {
     );
 }
 
+/// A session answers a hit on a slot it filed with the unit it compiled, and reads nothing of the slot past its record: with every filed artifact damaged, the session's next check still takes each unit from the store, where a question with no session reads the damage and compiles each again.
+///
+/// What this spares an editor is the decode after a save: the save's check files the unit, the question after it hits that slot, and the session goes on holding the unit it compiled in place of a copy read back out of the bytes it just wrote.
+#[test]
+fn a_session_answers_a_hit_on_what_it_filed_with_the_unit_it_compiled() {
+    let root = mounted_project("session-filed");
+    let session = Session::default();
+
+    assert_eq!(
+        folded_reusing(&root, &Overlay::default(), &session),
+        ["compiling /alpha", "compiling /beta"]
+    );
+
+    damaged(&root);
+    assert_eq!(
+        folded_reusing(&root, &Overlay::default(), &session),
+        ["reused /alpha", "reused /beta"],
+        "each a hit on what the session filed, answered with the unit in hand"
+    );
+    assert_eq!(
+        folded(&root, &Overlay::default()),
+        ["compiling /alpha", "compiling /beta"],
+        "and a question with no session reads each damaged artifact, and neither believes nor compiles over it"
+    );
+}
+
 /// A session files a dependency when it compiles it, and not the unit its editor holds edited: every keystroke after that leaves the store as it was.
 #[test]
 fn a_session_files_a_dependency_and_no_keystroke() {
@@ -638,6 +664,15 @@ fn slots(root: &Path) -> BTreeMap<String, Vec<u8>> {
             )
         })
         .collect()
+}
+
+/// Damage the last byte of every unit slot the store at `root` holds: the artifact's, behind a record that still reads.
+fn damaged(root: &Path) {
+    for (name, mut bytes) in slots(root) {
+        let last = bytes.last_mut().expect("a slot holds an artifact");
+        *last ^= 0xff;
+        fs::write(root.join(".curios/verdicts").join(name), bytes).expect("a writable slot");
+    }
 }
 
 /// Leave the store at `root` unable to take a unit: a file where its slots would go.

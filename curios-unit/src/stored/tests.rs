@@ -33,9 +33,21 @@ fn bytes_that_do_not_open_with_the_magic_are_not_a_slot() {
 #[test]
 fn a_slot_truncated_past_its_record_is_not_read() {
     let slot = framed(b"the record", b"the artifact");
-    let truncated = &slot[..MAGIC.len() + 8 + 3];
+    let truncated = &slot[..PREAMBLE + 3];
 
     assert_eq!(segments(truncated), None);
+}
+
+/// A reader deciding whether to believe a slot reads its preamble and its record and nothing behind them.
+#[test]
+fn a_slots_record_is_found_from_its_preamble_alone() {
+    let slot = framed(b"the record", b"the artifact");
+    let preamble = slot
+        .first_chunk::<PREAMBLE>()
+        .expect("a slot opens with its preamble");
+
+    assert_eq!(record_length(preamble), Some(b"the record".len()));
+    assert_eq!(record_length(&[0; PREAMBLE]), None);
 }
 
 /// Containment is checked per read against every directory, so one read outside all of them is enough to refuse the record.
