@@ -21,22 +21,6 @@ pub(crate) struct Spend {
     heaviest: Cell<Consumption>,
 }
 
-/// A cap on what is in reach ([`Spend::cap`]), to be lifted by [`Spend::lift`].
-pub(crate) struct Capped {
-    /// What was left before the cap.
-    before: u64,
-    /// What the cap left in reach: the lesser of that and the allowance.
-    granted: u64,
-    allowance: u64,
-}
-
-impl Capped {
-    /// Whether the declaration's own remainder was what bound the work, the allowance being no lower: its exhaustion is then the declaration's verdict and not the cap's.
-    pub(crate) fn bound_by_the_remainder(&self) -> bool {
-        self.before <= self.allowance
-    }
-}
-
 impl Spend {
     /// A budget under which each declaration may spend `budget` units.
     pub(crate) fn new(budget: u64) -> Self {
@@ -120,24 +104,5 @@ impl Spend {
     /// The counterpart of `curios-cert`'s `Kernel::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
     pub(crate) fn heaviest(&self) -> Consumption {
         self.heaviest.get().heavier_of(self.consumed())
-    }
-
-    /// Leave at most `allowance` units of this declaration's budget in reach until the cap is lifted ([`Spend::lift`]).
-    pub(crate) fn cap(&self, allowance: u64) -> Capped {
-        let before = self.remaining.get();
-        let granted = before.min(allowance);
-        self.remaining.set(granted);
-
-        Capped {
-            before,
-            granted,
-            allowance,
-        }
-    }
-
-    /// Lift `capped`, putting back what it withheld. **What is spent is spent**: the work done under the cap stays charged, so a cap is a ceiling and never free work.
-    pub(crate) fn lift(&self, capped: &Capped) {
-        let spent = capped.granted.saturating_sub(self.remaining.get());
-        self.remaining.set(capped.before.saturating_sub(spent));
     }
 }

@@ -74,8 +74,8 @@ use {
     curios_core::{
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Definition, DefinitionKind,
         Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl,
-        Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, NumLit, Probe, Quality,
-        RecGroup, ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
+        Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, NumLit, Quality, RecGroup,
+        ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         Universes, Variance, WitnessKey, WitnessOrigin, instantiate_universes_scoped,
     },
@@ -875,28 +875,6 @@ impl<'s> Context<'s> {
             solved,
             levels,
         );
-    }
-
-    /// Run `attempt` with at most `allowance` units of this declaration's budget in reach, answering `None` when it did not finish inside that.
-    ///
-    /// **For work whose result is optional and whose cost must not be a program's cost.** Canonicalizing a refinement key is the case: settling it collapses two spellings of one comparison, failing to settle it leaves the two uncollapsed, and neither outcome changes what the program means. A guard over an opaque parameter settles in a handful of steps; one over a subject built by a hundred thousand iterations does not settle at all, and without a ceiling that single attempt spends the whole declaration.
-    ///
-    /// **What is spent is spent.** A bail is charged the allowance rather than refunded, so this is a cap and not free work — the invariant `Context::spend` states holds through it. What bounds the total is the memo the one caller keeps: an attempt happens once per key, so a declaration pays at most its guard count times this ceiling.
-    pub(crate) fn within_allowance<T>(
-        &mut self,
-        allowance: u64,
-        attempt: impl FnOnce(&mut Self) -> Result<T, ReduceError>,
-    ) -> Result<Option<T>, ReduceError> {
-        let capped = self.typing.spend.cap(allowance);
-
-        let outcome = attempt(self);
-        self.typing.spend.lift(&capped);
-
-        // An attempt the declaration's own remainder bound is a probe like any other: its exhaustion is the declaration's verdict, and absorbing it would hand the caller a declined attempt where the truth is that nothing is left to spend, the caller going ahead on that answer. Only an attempt the cap bound below the remainder is the allowance's to decline, its exhaustion with every other failure, since the declaration still holds what the cap withheld.
-        match capped.bound_by_the_remainder() {
-            true => outcome.probed(),
-            false => Ok(outcome.ok()),
-        }
     }
 
     /// The elaboration-level counterpart of the reduction cache ([`Context::cached_reduced`] / [`Context::reduce`]): memoize `(term, expected) → (rebuilt, type)` for subterms whose elaboration can neither read nor write anything context-dependent. Eligibility is O(1) per call (the bits are cached per `Term` node): the term — and the expected type, when checking — must contain no metavariable, no unsolved universe metavariable and no local ([`Term::has_local_free`](curios_core::Term::has_local_free)), so every free name it holds is a global. Writes are detected by snapshotting `mutation_stamp` around the computation: an entry is inserted only when the run minted, solved, parked, defined, and refined nothing — a pure run whose replay would be the identity on the context. Errors are never cached. The one deliberate delta on a hit: the skipped run's `expect` does not drain `retry_parked` at that exact point — safe deferral, since retries re-run at every later `expect` and the module drain reports whatever survives.

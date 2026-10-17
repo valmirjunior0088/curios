@@ -800,11 +800,6 @@ fn reduce_instance(context: &mut Context, instance: Instance) -> Result<Reduce, 
     Ok(Reduce::Continue(reduct))
 }
 
-/// What settling one entry's reduced spelling may spend before the attempt is abandoned.
-///
-/// A ceiling on *discarded* work, not a limit on what a program may compute: settling a key collapses two spellings of one comparison, and failing to settle it leaves them uncollapsed, so the program means the same either way. Sized to settle the shapes a guard actually takes — a comparison over parameters, over a local definition, over a measured literal — while stopping well short of a subject an accumulation built, which is the case that would otherwise spend a whole declaration on one attempt.
-const SETTLEMENT_ALLOWANCE: u64 = 100_000;
-
 /// A stuck comparison under a guard recorded on another spelling of it, asked at the shallow key under each of [`probe_spellings`] in turn. The false arm of `n < m` refines `n < m` and nothing else, and `m <= n` is that fact read the other way, so the dual answers with the literal negated. A bound reaches the probe as `i + 1 <= len(l)` while the guard that decided it was written `i < len(l)`, one fact on `Nat` and on `Int`, so the successor spelling answers with the literal carried across — these are the same proposition, where a dual's are opposite ones. And the two compose: the false arm of `x <= 4` is the fact `5 <= x`, which the dual of the successor spelling answers. Lookup only — the store keeps every key as written, which is what the comparison record protects and what keeps this the kernel's rule too.
 fn refined_spelling(context: &mut Context, term: &Term) -> Option<Term> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
@@ -1203,7 +1198,7 @@ fn scan_settled(
 ///
 /// **Withheld for the kernel's two reasons.** The entry's own frame holds the equation being settled, which reducing its key would meet at the first probe and answer with the case value it is assuming; and an inner frame retracts before the entry does, so a spelling resting on one would outlive its justification. The frames outside are exactly the equations the entry may rest on, and `Frames::withhold_refinements_from` leaves them live.
 ///
-/// **Capped where the kernel is not** ([`SETTLEMENT_ALLOWANCE`]), because the work is optional, since an unsettled entry answers nothing and the program means what it meant, and unbounded in the worst case, since a guard over a subject an accumulation built reduces that accumulation. The kernel settles each entry once, and so does the elaborator while what its key reduces to cannot have changed: it settles one again where a redefinition, a rollback or a universe rewrite forgot it, and where it held an unsolved metavariable and a solution has landed (`Frame::scrutinee_spellings`). A refusal or a bail settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration itself propagates.
+/// **Bounded by the declaration's budget alone**, as the kernel's settlement is. What a settlement spends reads what the tables remember, a hit being free, so a ceiling below the budget would make whether an entry settles follow when the tables were last cleared, and with it what the program elaborates to. A guard over a subject an accumulation built reduces that accumulation, which the declaration pays for as it pays for any reduction it asks. The kernel settles each entry once, and so does the elaborator while what its key reduces to cannot have changed: it settles one again where a redefinition, a rollback or a universe rewrite forgot it, and where it held an unsolved metavariable and a solution has landed (`Frame::scrutinee_spellings`). A refusal settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration propagates.
 ///
 /// **To count settlements.** Under `profile` each call opens a `reduce::settle` span carrying its key and its frame. In the stream `cargo xtask profile-prelude elaboration <PATH>` files, a span is nested where another `reduce::settle` span is open on its thread as it opens, and one inside a `declaration` span is a repeat where an earlier one in that span carried its frame and key. Counted at `aa026bb2e`: 4,573 spans, 240 of them nested, and in elaboration 2,506 first settlements and 1,828 repeats.
 fn settle(
@@ -1216,10 +1211,9 @@ fn settle(
     curios_profile::profile!("reduce::settle", key = %original, frame);
     let declined = context.declined();
     let settled = context.with_refinements_withheld_from(frame, |context| {
-        context.within_allowance(SETTLEMENT_ALLOWANCE, |context| {
-            let reduct = reduce(context, original.clone())?;
-            reduct_spelling(context, &reduct)
-        })
+        reduce(context, original.clone())
+            .and_then(|reduct| reduct_spelling(context, &reduct))
+            .probed()
     });
 
     // What a solution still to land could change: a key reducing through a metavariable, or stuck on one.

@@ -79,7 +79,7 @@ pub(crate) struct Settled {
 /// What a settlement left for one scrutinee entry.
 #[derive(Debug, Clone)]
 pub(super) struct Spelling {
-    /// The reduced spelling, or `None` where reducing the key refused or outran its allowance.
+    /// The reduced spelling, or `None` where reducing the key refused.
     pub(super) settled: Option<Settled>,
     /// How many solutions had been committed when it settled, where the key or the spelling held an unsolved metavariable — `None` where neither did, and no solution can change what the key reduces to.
     pub(super) solved: Option<usize>,
