@@ -66,6 +66,7 @@ fn let_item(path: &str, type_: Term, body: Term) -> Item {
         totality: Totality::default(),
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_,
         body,
     })

@@ -30,6 +30,8 @@ pub(crate) struct Program<'s> {
     totality: BTreeMap<Global, Totality>,
     /// Each finished definition's variance vector with how many arguments one spine applies it in full by, kept for a definition irrelevant in some level: any other is compared level by level, which is what a name with no entry answers.
     variances: BTreeMap<Global, (Vec<Variance>, usize)>,
+    /// Each finished record-valued definition's field vectors with its arity, kept for a definition one of whose fields is irrelevant in some level: a projection of any other is read by the definition's own vector, which is what a name with no entry answers.
+    field_variances: BTreeMap<Global, (Vec<Vec<Variance>>, usize)>,
     /// Every prefix this compilation mounts — the scope's, then the unit's own. Accumulated as each module is seeded, from the `mounts` that module carries, so the elaborator answers a privilege question out of what was actually mounted rather than out of a stamp copied onto each declaration.
     mounts: Vec<Mount>,
 }
@@ -314,6 +316,35 @@ impl<'s> Program<'s> {
             .get(name)
             .map(|(variances, arity)| (variances.as_slice(), *arity))
             .or_else(|| self.scope?.definition(name)?.irrelevance())
+    }
+
+    /// File a finished definition's field vectors, replacing what an earlier elaboration of the name left.
+    pub(crate) fn record_field_variances(
+        &mut self,
+        name: &Global,
+        fields: &[Vec<Variance>],
+        arity: usize,
+    ) {
+        match fields
+            .iter()
+            .flatten()
+            .any(|variance| *variance == Variance::Irrelevant)
+        {
+            true => self.field_variances.insert(*name, (fields.to_vec(), arity)),
+            false => self.field_variances.remove(name),
+        };
+    }
+
+    /// The vector of field `slot` of a definition one of whose fields is irrelevant in some level, with its arity.
+    pub(crate) fn field_variances(
+        &self,
+        name: &Global,
+        slot: usize,
+    ) -> Option<(&[Variance], usize)> {
+        match self.field_variances.get(name) {
+            Some((fields, arity)) => Some((fields.get(slot)?.as_slice(), *arity)),
+            None => self.scope?.definition(name)?.field_irrelevance(slot),
+        }
     }
 
     /// A definition's recorded totality, or `None` for a name not yet classified — a member of the group currently elaborating, which `group_totality` settles for the group as a whole.

@@ -22,6 +22,7 @@ fn stated(body: usize, proof: bool) -> Item {
         totality: Totality::Total,
         proof,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(body))),
     })

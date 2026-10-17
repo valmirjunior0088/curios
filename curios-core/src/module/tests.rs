@@ -15,6 +15,7 @@ fn definition(name: &str, universe_context: UniverseContext) -> Definition {
         totality: Totality::default(),
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_: Term::type_ground(),
         body: Term::free_var(&Free::from(&global)),
     }
@@ -79,6 +80,7 @@ fn every_local_a_term_mentions_is_found() {
         totality: Totality::Total,
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_: Term::intrinsic(crate::Intrinsic::NatType),
         body: Term::free_var(&mentioned),
     };
@@ -108,6 +110,7 @@ fn stored(body: Term) -> Module {
             totality: Totality::Total,
             proof: false,
             variances: Vec::new(),
+            field_variances: Vec::new(),
             type_: Term::intrinsic(crate::Intrinsic::NatType),
             body,
         })]

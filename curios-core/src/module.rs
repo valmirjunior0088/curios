@@ -368,6 +368,10 @@ pub struct Definition {
     ///
     /// The elaborator's level alignment is its one reader. The kernel compares two instances of a definition by their spines and levels and unfolds where that decides nothing, so it holds none of this: a vector claiming an irrelevance the body denies costs a kernel refusal and admits nothing.
     pub variances: Vec<Variance>,
+    /// Which of this definition's universe parameters each field of its value holds, where that value, beneath the definition's own binders, is a struct or tuple literal: one vector per field in slot order, each one entry per parameter of `universe_context`, read off the field's value beneath its own binders as `variances` is read off a body that answers no type. A projection of the definition applied in full is the field's value, so its levels are compared where this field's vector says, not wherever the literal mentions them: a witness is polymorphic in a level its concept's sort-valued member stands at, and a method projected from it holds none of it. Empty otherwise, as `variances` is.
+    ///
+    /// The elaborator's level alignment is its one reader, as it is of `variances`. The kernel forces a projection of a definition to its field before it compares heads, so a vector claiming an irrelevance the field denies costs a kernel refusal and admits nothing.
+    pub field_variances: Vec<Vec<Variance>>,
     /// Whether this definition is a proof a declaration wrote: one introduced as [`DefinitionKind::Authored`] whose type is a proposition, or a function into one. Its body is then read by its own check and by nothing after it: a judgment that asks what the name unfolds to is answered with nothing, in both checkers, so the name stands for a constant of its type. No judgment reads a proof's value, which is what a binder's mark rests on too ([`Scope::binds_proof`](super::Scope::binds_proof)), so a body withheld refuses nothing a body unfolded would admit, and what a later declaration reads of this one is its type.
     ///
     /// Written by `curios-elab` as the definition's item is published, with its binders' marks, and `false` until then. A constructor of a proposition and a law's projection are the compiler's own terms and stay what they unfold to. The certifier holds the mark one way, as it holds a binder's: a definition marked at a type it reads as no proposition is refused, and one left unmarked unfolds and is refused nowhere.
@@ -475,6 +479,7 @@ impl RecItem {
                 totality: definition.totality,
                 proof: definition.proof,
                 variances: Vec::new(),
+                field_variances: Vec::new(),
                 type_: member.type_.open(&name_refs),
                 body: member.body.open(&name_refs),
             })
@@ -565,6 +570,7 @@ impl Definition {
             island,
             totality: Totality::default(),
             variances: Vec::new(),
+            field_variances: Vec::new(),
             proof: false,
             type_,
             body,
@@ -911,6 +917,7 @@ impl Module {
             totality: definition.totality,
             proof: definition.proof,
             variances: definition.variances.clone(),
+            field_variances: definition.field_variances.clone(),
             type_: sharing.share(&definition.type_),
             body: sharing.share(&definition.body),
         };

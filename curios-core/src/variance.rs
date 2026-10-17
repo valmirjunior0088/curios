@@ -17,6 +17,11 @@ pub trait Families {
         None
     }
 
+    /// The vector of field `slot` of a definition whose value is a struct or tuple literal, with how many arguments one spine applies the definition in full by: `None` where this registry holds none for it, which is how a caller that reads no definition answers ([`Definition::field_variances`](crate::Definition::field_variances)).
+    fn field(&self, _: &Global, _: usize) -> Option<(&[Variance], usize)> {
+        None
+    }
+
     /// `name`'s variance in its `index`th universe parameter: invariant for a name this registry does not hold.
     fn variance(&self, name: &Global, index: usize) -> Variance {
         self.induct(name)

@@ -611,7 +611,7 @@ impl<'s> Context<'s> {
         self.typing.program.definition_totality(name)
     }
 
-    /// File the vector a finished definition carries, for conversion's level alignment: with the length of its type's outer telescope, which is the one spine that applies it in full.
+    /// File the vectors a finished definition carries, its own and its fields', for conversion's level alignment: with the length of its type's outer telescope, which is the one spine that applies it in full.
     pub(crate) fn record_definition_variances(&mut self, definition: &Definition) {
         let arity = match &*definition.type_ {
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.len(),
@@ -622,11 +622,26 @@ impl<'s> Context<'s> {
             &definition.variances,
             arity,
         );
+        self.typing.program.record_field_variances(
+            &definition.name,
+            &definition.field_variances,
+            arity,
+        );
     }
 
     pub(crate) fn definition_variances(&self, name: &Global) -> Option<(&[Variance], usize)> {
         self.asks(&Free::Global(*name), Question::Variances);
         self.typing.program.definition_variances(name)
+    }
+
+    /// The vector of field `slot` of a record-valued definition, with its arity: a read of the definition's vectors, as [`Self::definition_variances`] is.
+    pub(crate) fn field_variances(
+        &self,
+        name: &Global,
+        slot: usize,
+    ) -> Option<(&[Variance], usize)> {
+        self.asks(&Free::Global(*name), Question::Variances);
+        self.typing.program.field_variances(name, slot)
     }
 
     /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last.

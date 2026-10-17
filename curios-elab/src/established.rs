@@ -90,6 +90,7 @@ impl<'a> Standing<'a> {
                     universe_context: &definition.universe_context,
                     totality: definition.totality,
                     variances: &definition.variances,
+                    field_variances: &definition.field_variances,
                     island: definition.island,
                 })
             }
@@ -106,6 +107,7 @@ impl<'a> Standing<'a> {
                     totality: definition.totality,
                     // A group's member files no vector where it is published, so it answers none here.
                     variances: &[],
+                    field_variances: &[],
                     island: definition.island,
                 })
             }

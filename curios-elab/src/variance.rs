@@ -2,14 +2,14 @@
 //!
 //! The analysis itself lives in `curios-analysis/src/variance.rs` (see that module for the rule and its rationale) and is run by both checkers. It runs here twice for each declaration, for one reason each. When a family's group finalizes, because a later item of the same declaration may compare two of its instances: that vector is kept on the context's registry entry, and it is the one the unit carries. And as the declaration is published, where its telescopes are final and meta-free: that run writes nothing and holds the carried vector to what the declaration says.
 //!
-//! The same walk reads a definition, once, where its levels have closed ([`definition_variances`]): which of them its value holds. That vector is the elaborator's alone, since the kernel decides two instances of a definition by unfolding them, so nothing holds it to a second reading.
+//! The same walk reads a definition, once, where its levels have closed ([`definition_variances`]): which of them its value holds. A definition whose value is a struct or tuple literal is read a field at a time as well ([`field_variances`]), since a projection of it is that field's value. Those vectors are the elaborator's alone, since the kernel decides two instances of a definition by unfolding them, so nothing holds them to a second reading.
 
 use {
     super::{Context, Error, Published, zonk_solved_term_metas},
     curios_analysis::{Declarations, VarianceVectors, held_by, held_levels, variance_vectors},
     curios_core::{
-        Bound, Families, Func, FuncType, Global, InductDecl, InductParam, Level, LevelHead,
-        StructDecl, Subterm, Term, UniverseContext, UniverseMetaId, UniverseParam, Variance,
+        Bound, Families, Func, FuncType, Global, InductDecl, InductParam, Level, LevelHead, Struct,
+        StructDecl, Subterm, Term, Tuple, UniverseContext, UniverseMetaId, UniverseParam, Variance,
         rewrite_universe_levels_scoped_shared, universe_params,
     },
     std::{
@@ -30,6 +30,10 @@ impl Families for Context<'_> {
 
     fn definition(&self, name: &Global) -> Option<(&[Variance], usize)> {
         self.definition_variances(name)
+    }
+
+    fn field(&self, name: &Global, slot: usize) -> Option<(&[Variance], usize)> {
+        self.field_variances(name, slot)
     }
 }
 
@@ -215,6 +219,49 @@ pub(crate) fn definition_variances(
             false => Variance::Irrelevant,
         })
         .collect())
+}
+
+/// Which of a record-valued definition's universe parameters each field of its value holds, read where its levels have closed: one vector per field of the struct or tuple literal its body is beneath its own binders, each one entry per parameter of `universe_context`, and none for any other definition or one that takes no parameter.
+///
+/// A field is read as written, every level its value mentions held, its binders' annotations among them: a projection of the definition applied in full unfolds to that value, whether or not it is applied in turn, and two lambdas apart in an annotation alone are decided by the type they meet at, so a field claims no irrelevance in a level one of its annotations names. What it leaves out is the literal's own instance and the other fields, the levels a witness is polymorphic in where its concept states a sort-valued member and a method projected from it holds none of.
+pub(crate) fn field_variances(
+    universe_context: &UniverseContext,
+    type_: &Term,
+    body: &Term,
+) -> Vec<Vec<Variance>> {
+    let parameters = universe_context.parameter_count;
+    if parameters == 0 {
+        return Vec::new();
+    }
+
+    let outer = match &**type_ {
+        Subterm::FuncType(FuncType { telescope, .. }) => telescope.len(),
+        _ => 0,
+    };
+    let value = match (&**body, outer) {
+        (_, 0) => body,
+        (Subterm::Func(Func { telescope, .. }), _) if telescope.len() == outer => {
+            telescope.terminal()
+        }
+        _ => return Vec::new(),
+    };
+    let fields = match &**value {
+        Subterm::Struct(Struct { fields, .. }) | Subterm::Tuple(Tuple { fields, .. }) => fields,
+        _ => return Vec::new(),
+    };
+
+    fields
+        .iter()
+        .map(|field| {
+            let written = universe_params(field);
+            (0..parameters)
+                .map(|index| match written.contains(&UniverseParam(index)) {
+                    true => Variance::Invariant,
+                    false => Variance::Irrelevant,
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// The levels `type_`, a declaration's signature while its levels are still open, holds where conversion compares them: in each of its domains and in a terminal that is no sort, at a position no family or definition is irrelevant in. They are what [`UniverseSolver::finalize`](crate::UniverseSolver::finalize) holds as the declaration's parameters.

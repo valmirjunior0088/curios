@@ -45,6 +45,7 @@ fn definition(name: &str, type_: Term, body: Term) -> Item {
         totality: Totality::default(),
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_,
         body,
     })
@@ -784,6 +785,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
         totality: Totality::default(),
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_: Term::type_at(parameter.succ().unwrap()),
         body: Term::induct_type_at(
             nominal("Family"),
@@ -1042,6 +1044,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
         totality: Totality::default(),
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_: Term::type_ground(),
         body: opt_type(),
     });
@@ -1530,6 +1533,7 @@ fn top_level_recursive_items_erase_through_the_item_chain() {
         totality: Totality::default(),
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_: func_type.clone(),
         body: Term::func(
             [(x, Term::type_ground())],

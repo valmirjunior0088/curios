@@ -26,6 +26,8 @@ pub(crate) struct Defined<'a> {
     pub(crate) totality: Totality,
     /// The vector its publication filed, empty where it filed none.
     pub(crate) variances: &'a [Variance],
+    /// The vector of each field of its value its publication filed, empty where it filed none ([`curios_core::Definition::field_variances`]).
+    pub(crate) field_variances: &'a [Vec<Variance>],
     /// The module declaring it.
     pub(crate) island: Qualifier,
 }
@@ -33,14 +35,31 @@ pub(crate) struct Defined<'a> {
 impl<'a> Defined<'a> {
     /// Its vector, with how many arguments one spine applies it in full by, where it is irrelevant in some level: what a context files for a definition of its own unit (`Context::record_definition_variances`), read here off the definition.
     pub(crate) fn irrelevance(&self) -> Option<(&'a [Variance], usize)> {
-        let arity = match &**self.type_ {
-            Subterm::FuncType(FuncType { telescope, .. }) => telescope.len(),
-            _ => 0,
-        };
-
         self.variances
             .contains(&Variance::Irrelevant)
-            .then_some((self.variances, arity))
+            .then_some((self.variances, self.arity()))
+    }
+
+    /// The vector of field `slot` of its value, with its arity, where some field is irrelevant in some level: what a context files for a definition of its own unit (`Context::record_definition_variances`), read here off the definition.
+    pub(crate) fn field_irrelevance(&self, slot: usize) -> Option<(&'a [Variance], usize)> {
+        if !self
+            .field_variances
+            .iter()
+            .flatten()
+            .any(|variance| *variance == Variance::Irrelevant)
+        {
+            return None;
+        }
+
+        Some((self.field_variances.get(slot)?.as_slice(), self.arity()))
+    }
+
+    /// How many arguments one spine applies it in full by: its type's outer telescope.
+    fn arity(&self) -> usize {
+        match &**self.type_ {
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope.len(),
+            _ => 0,
+        }
     }
 }
 

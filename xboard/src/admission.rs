@@ -41,6 +41,7 @@ fn authored(name: &Global, type_: Term, body: Term) -> Item {
         totality: Totality::Total,
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_,
         body,
     })

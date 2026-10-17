@@ -405,6 +405,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         totality: Totality::Total,
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_: Term::func_type_marked(
             [(Plicity::Implicit, parameter, Term::type_ground())],
             Term::type_ground(),

@@ -827,6 +827,10 @@ fn std_former_derivation() {
                     ("body", stored.body != derived.body),
                     ("totality", stored.totality != derived.totality),
                     ("variances", stored.variances != derived.variances),
+                    (
+                        "field variances",
+                        stored.field_variances != derived.field_variances,
+                    ),
                     ("proof", stored.proof != derived.proof),
                 ]
                 .into_iter()

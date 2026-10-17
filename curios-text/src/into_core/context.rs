@@ -157,6 +157,7 @@ impl FlatLet {
             // Nor this: elaboration states it as the item is published, with its binders' marks.
             proof: false,
             variances: Vec::new(),
+            field_variances: Vec::new(),
             type_: self.type_,
             body: self.body,
         }

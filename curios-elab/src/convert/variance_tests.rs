@@ -103,6 +103,7 @@ fn define_pick(context: &mut Context, variance: Variance) {
         totality: Totality::Total,
         proof: false,
         variances: vec![variance],
+        field_variances: Vec::new(),
         type_: Term::func_type([(carrier, sort.clone())], nat_type()),
         body: Term::func([(carrier, sort)], nat(3)),
     };
@@ -380,5 +381,110 @@ fn a_family_whose_walk_the_budget_cuts_short_files_no_vector() {
                 assert_eq!(filed, Some(vec![Variance::Irrelevant]));
             }
         }
+    }
+}
+
+/// `let pair.{u}: {Type u, Nat} = (Nat, 3)` and `let held.{u}: {Type (u + 1)} = (Type u,)`, published with the vectors their values give them: the field a projection of `pair` reads holds no level, the one a projection of `held` reads holds its one.
+fn define_records(context: &mut Context) {
+    let level = || Level::param(UniverseParam(0));
+    let scheme = UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: Vec::new(),
+    };
+    let records = [
+        (
+            "pair",
+            Term::tuple_type([
+                (context.fresh(Some("first")), Term::type_at(level())),
+                (context.fresh(Some("second")), nat_type()),
+            ]),
+            Term::tuple([nat_type(), nat(3)]),
+        ),
+        (
+            "held",
+            Term::tuple_type([(
+                context.fresh(Some("first")),
+                Term::type_at(level().succ().expect("a parameter has a successor")),
+            )]),
+            Term::tuple([Term::type_at(level())]),
+        ),
+    ];
+
+    for (name, type_, body) in records {
+        let definition = Definition {
+            name: nominal(name),
+            kind: DefinitionKind::Authored,
+            universe_context: scheme.clone(),
+            island: Qualifier::empty(),
+            totality: Totality::Total,
+            proof: false,
+            variances: definition_variances(context, &scheme, &type_, &body)
+                .expect("a record's value reads within the budget"),
+            field_variances: field_variances(&scheme, &type_, &body),
+            type_,
+            body,
+        };
+        let free = Free::from(&definition.name);
+        context.define_assuming(
+            &free,
+            &definition.type_,
+            &definition.body,
+            Some(&definition.kind),
+        );
+        context.set_assumption_universe_context(&free, scheme.clone());
+        context.record_definition_variances(&definition);
+    }
+}
+
+/// The first field of the record `name` at `level`.
+fn first(name: &str, level: Level) -> Term {
+    Term::proj(
+        Term::instance_of(&Free::from(&nominal(name)), vec![level]),
+        0,
+    )
+}
+
+// A field of a definition applied in full is that field's value once the definition unfolds: two projections apart in a level the value drops are one term, and two apart in a level it holds are two. The kernel's twin of this proposition shares the name.
+#[test]
+fn a_field_that_drops_a_level_is_one_term_at_two_instances() {
+    for (record, converts) in [("pair", true), ("held", false)] {
+        let mut context = context();
+        define_records(&mut context);
+
+        assert_eq!(
+            conv(
+                &mut context,
+                &first(record, Level::zero()),
+                &first(record, Level::constant(1))
+            ) == Ok(true),
+            converts,
+            "{record}"
+        );
+    }
+}
+
+// Two projections apart in a level their field does not hold are one term, so a level bounded away from the other side is left where its bound puts it. Where the field holds the level, the pair is the equation it was, which the bound refuses where the declaration closes.
+#[test]
+fn a_field_of_a_definition_is_joined_where_it_can_be_and_never_required() {
+    for (record, required) in [("pair", false), ("held", true)] {
+        let mut context = context();
+        define_records(&mut context);
+        let bounded = bounded(&mut context);
+
+        assert_eq!(
+            conv(
+                &mut context,
+                &first(record, Level::meta(bounded)),
+                &first(record, Level::zero())
+            ),
+            Ok(true),
+            "{record}"
+        );
+        assert_eq!(
+            context.universes_mut().finalize([bounded], [], []).is_err(),
+            required,
+            "{record}"
+        );
     }
 }

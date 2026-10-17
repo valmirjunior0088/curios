@@ -1560,7 +1560,7 @@ impl Term {
     ///
     /// A ground `Type 0` is a level position like any other, so `(Type 0, Type u)` against `(Type u, Type 0)` differs in two pairs rather than aligning `u` with itself. A pair is reported once however many paths reach it, which is all its readers need: each asks whether every pair can be identified, never how many times one occurs.
     ///
-    /// **A level a family is irrelevant in is not a difference.** `families` is the caller's reading of the nominal families and of the definitions, and under it the pair at each position a vector calls irrelevant is set apart ([`LevelDifferences::irrelevant`]), at a nominal node, at a family's name or a definition applied in full, and at an `induct`'s former applied in full by its group's projection: two instances apart in such a level alone are one term, so there is nothing to identify. Under `()` nothing is set apart and no former is read as its node.
+    /// **A level a family is irrelevant in is not a difference.** `families` is the caller's reading of the nominal families and of the definitions, and under it the pair at each position a vector calls irrelevant is set apart ([`LevelDifferences::irrelevant`]), at a nominal node, at a family's name or a definition applied in full, at a projection of such a definition, by the vector of the field it reads ([`Families::field`]), and at an `induct`'s former applied in full by its group's projection: two instances apart in such a level alone are one term, so there is nothing to identify. Under `()` nothing is set apart and no former is read as its node.
     ///
     /// **A function short of its application is neither.** Two instances of a former or of a definition that are not applied in full, apart in a level their vector calls irrelevant, two projections of one former that are not, and two lambdas apart in a binder's annotation, convert where they meet at their function type, eta applying both to the same binders before either is read, and are compared level by level at any other, which the walk cannot tell. Their pairs are set apart as curried ([`LevelDifferences::curried`]) for a caller that goes on to the type; a reading that asks for none of this ([`Families::sets_curried_apart`]) has them compared. A lambda is what a definition's bare instance unfolds to, so the two are read alike whichever of them a reduction left standing.
     ///
@@ -1655,44 +1655,55 @@ impl Term {
                 continue;
             }
 
+            // A field of a definition applied in full is that field's value once the definition unfolds: its instance's levels at the positions the field's vector holds, then the definition's arguments.
+            if let (Some(this_projected), Some(that_projected)) = (
+                Projected::of(&this, families),
+                Projected::of(&that, families),
+            ) {
+                if this_projected.name != that_projected.name
+                    || this_projected.slot != that_projected.slot
+                    || this_projected.arguments.len() != that_projected.arguments.len()
+                {
+                    return None;
+                }
+                let vector = this_projected.vector;
+                pair_instances(
+                    &mut differences,
+                    depth,
+                    this_projected.universes,
+                    that_projected.universes,
+                    pairs_sorts,
+                    |position| vector.get(position).copied().unwrap_or(Variance::Invariant),
+                )?;
+                work.extend(
+                    this_projected
+                        .arguments
+                        .into_iter()
+                        .zip(that_projected.arguments)
+                        .rev()
+                        .map(|(this, that)| (depth, false, this.clone(), that.clone())),
+                );
+                continue;
+            }
+
             // A family's name or a definition applied in full: its instance's levels at the invariant positions, then its arguments.
             if let (Some(this_applied), Some(that_applied)) =
                 (Applied::of(&this, families), Applied::of(&that, families))
             {
-                // Two instances apart in a sort are apart in more than a level, unless the reading pairs sorts.
-                let sorts_apart: Vec<(Quality, Quality)> = this_applied
-                    .universes
-                    .qualities
-                    .iter()
-                    .copied()
-                    .zip(that_applied.universes.qualities.iter().copied())
-                    .filter(|(this, that)| this != that)
-                    .collect();
                 if this_applied.name != that_applied.name
-                    || this_applied.universes.levels.len() != that_applied.universes.levels.len()
-                    || this_applied.universes.qualities.len()
-                        != that_applied.universes.qualities.len()
-                    || (!pairs_sorts && !sorts_apart.is_empty())
                     || this_applied.arguments.len() != that_applied.arguments.len()
                 {
                     return None;
                 }
-                differences.sorts.extend(sorts_apart);
-                for (position, (this_level, that_level)) in this_applied
-                    .universes
-                    .levels
-                    .iter()
-                    .zip(&that_applied.universes.levels)
-                    .enumerate()
-                {
-                    if this_level != that_level {
-                        let pair = (depth, this_level.clone(), that_level.clone());
-                        match families.variance(this_applied.name, position) {
-                            Variance::Invariant => differences.compared.push(pair),
-                            Variance::Irrelevant => differences.irrelevant.push(pair),
-                        }
-                    }
-                }
+                let name = this_applied.name;
+                pair_instances(
+                    &mut differences,
+                    depth,
+                    this_applied.universes,
+                    that_applied.universes,
+                    pairs_sorts,
+                    |position| families.variance(name, position),
+                )?;
                 work.extend(
                     this_applied
                         .arguments
@@ -1874,7 +1885,7 @@ impl Term {
 pub struct LevelDifferences {
     /// The pairs at positions whose levels are part of the term: two terms are one only where every one of these is one level.
     pub compared: Vec<(usize, Level, Level)>,
-    /// The pairs at positions a vector calls irrelevant, a family's or a definition's applied in full, under the reading the walk was handed. They are no difference between the two terms; a caller that would rather hold one instance than two may still join them.
+    /// The pairs at positions a vector calls irrelevant, a family's, a definition's applied in full or a field's of one, under the reading the walk was handed. They are no difference between the two terms; a caller that would rather hold one instance than two may still join them.
     pub irrelevant: Vec<(usize, Level, Level)>,
     /// The pairs at a former or a definition short of its full application that its vector calls irrelevant, every pair of two curried projections of one former, and every pair inside a lambda's binder annotation. Whether they are a difference follows the type the two terms meet at, a function type or any other, which the walk does not know.
     pub curried: Vec<(usize, Level, Level)>,
@@ -1891,20 +1902,97 @@ struct Applied<'a> {
     arguments: Vec<&'a Term>,
 }
 
+/// The global an instance names, with its levels: the head [`Applied`] and [`Projected`] read a spine by.
+fn named(head: &Term) -> Option<(&Global, &Universes)> {
+    let Subterm::Instance(Instance {
+        head: InstanceHead::Var(var),
+        universes,
+    }) = head.look()
+    else {
+        return None;
+    };
+
+    Some((var.as_free()?.as_global()?, universes))
+}
+
+/// Two instances of one head paired level by level, as `variance` reads each position, and their sorts where the reading pairs them: `None` where they are apart in more than levels, with nothing recorded.
+fn pair_instances(
+    differences: &mut LevelDifferences,
+    depth: usize,
+    this: &Universes,
+    that: &Universes,
+    pairs_sorts: bool,
+    variance: impl Fn(usize) -> Variance,
+) -> Option<()> {
+    if this.levels.len() != that.levels.len() || this.qualities.len() != that.qualities.len() {
+        return None;
+    }
+    // Two instances apart in a sort are apart in more than a level, unless the reading pairs sorts.
+    let sorts_apart: Vec<(Quality, Quality)> = this
+        .qualities
+        .iter()
+        .copied()
+        .zip(that.qualities.iter().copied())
+        .filter(|(this, that)| this != that)
+        .collect();
+    if !pairs_sorts && !sorts_apart.is_empty() {
+        return None;
+    }
+    differences.sorts.extend(sorts_apart);
+    for (position, (this_level, that_level)) in this.levels.iter().zip(&that.levels).enumerate() {
+        if this_level != that_level {
+            let pair = (depth, this_level.clone(), that_level.clone());
+            match variance(position) {
+                Variance::Invariant => differences.compared.push(pair),
+                Variance::Irrelevant => differences.irrelevant.push(pair),
+            }
+        }
+    }
+
+    Some(())
+}
+
+/// A field of a definition applied in full, as conversion's raw spellings hold it: the definition, the slot, the instance and the arguments, with the vector of what that field's value holds ([`Families::field`]).
+///
+/// The definition is applied in one spine, its type's outer telescope, or bare where that asks for none: the shape a witness takes where an operator projects a method from it, `(witness.{u}).1`.
+struct Projected<'a, 'f> {
+    name: &'a Global,
+    slot: usize,
+    universes: &'a Universes,
+    arguments: Vec<&'a Term>,
+    vector: &'f [Variance],
+}
+
+impl<'a, 'f> Projected<'a, 'f> {
+    fn of(term: &'a Term, families: &'f impl Families) -> Option<Self> {
+        let Subterm::Proj(Proj { head, field }) = term.look() else {
+            return None;
+        };
+        let slot = field.slot()?;
+        let (name, universes, arguments) = match named(head) {
+            Some((name, universes)) => (name, universes, Vec::new()),
+            None => {
+                let Subterm::Apply(apply) = head.look() else {
+                    return None;
+                };
+                let (name, universes) = named(&apply.head)?;
+                (name, universes, apply.params().collect())
+            }
+        };
+        let (vector, arity) = families.field(name, slot)?;
+
+        (arguments.len() == arity).then_some(Self {
+            name,
+            slot,
+            universes,
+            arguments,
+            vector,
+        })
+    }
+}
+
 impl<'a> Applied<'a> {
     fn of(term: &'a Term, families: &impl Families) -> Option<Self> {
-        fn named(head: &Term) -> Option<(&Global, &Universes)> {
-            let Subterm::Instance(Instance {
-                head: InstanceHead::Var(var),
-                universes,
-            }) = head.look()
-            else {
-                return None;
-            };
-
-            Some((var.as_free()?.as_global()?, universes))
-        }
-
         // How many arguments one spine applies `name` in full by: a family's parameters or its indices where it takes only the one kind, and a definition's outer telescope.
         let in_full = |name: &Global, supplied: usize| match families.shape(name) {
             Some(shape) => shape == (supplied, 0) || shape == (0, supplied),

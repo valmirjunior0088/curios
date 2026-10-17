@@ -62,6 +62,7 @@ fn project_definition(definition: &Definition) -> Definition {
         totality: definition.totality,
         proof: definition.proof,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_: project_erased_universes(&definition.type_),
         body: project_erased_universes(&definition.body),
     }
@@ -200,6 +201,7 @@ impl<'a> Unit<'a> {
             totality: definition.totality,
             // Out of its universes a definition has no level to be irrelevant in.
             variances: &[],
+            field_variances: &[],
             island: definition.island,
         })
     }

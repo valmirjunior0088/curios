@@ -1,10 +1,6 @@
 //! Memoized rewrites keep sharing, and a deep term compares, releases and captures without native recursion.
 
-use {
-    super::test_support::*,
-    crate::*,
-    std::{collections::BTreeMap, rc::Rc},
-};
+use {super::test_support::*, crate::*, std::rc::Rc};
 
 #[test]
 fn a_memoized_rewrite_keeps_a_shared_subterm_shared() {
@@ -255,7 +251,7 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
     );
     let families = Registry {
         inducts: [(nominal("Wrap"), shaped(1, 0, &[Variance::Irrelevant]))].into(),
-        definitions: BTreeMap::new(),
+        ..Registry::default()
     };
     let wrapped = |level: u32| {
         Term::induct_type_at(

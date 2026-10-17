@@ -15,6 +15,7 @@ fn definition(name: &str) -> Definition {
         totality: Totality::default(),
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_: Term::type_ground(),
         body: Term::free_var(&Free::from(&global)),
     }

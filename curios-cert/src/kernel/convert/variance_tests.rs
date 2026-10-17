@@ -222,3 +222,61 @@ fn a_lambdas_body_is_read_by_the_vector_filed_for_its_family() {
     let boxing = Term::induct_type_at(boxed, [level(1)], Vec::<Term>::new(), Vec::<Term>::new());
     assert_eq!(held(&mut kernel, over(boxing)), [true, true]);
 }
+
+// `pair.{u}: {Type u, Nat} = (Nat, 3)` and `held.{u}: {Type (u + 1)} = (Type u,)`, each projected at two instances: the kernel forces a projection to its field before it compares heads, so a field whose value drops the level is one term at both, and one whose value holds it is two. The elaborator's twin of this proposition shares the name.
+#[test]
+fn a_field_that_drops_a_level_is_one_term_at_two_instances() {
+    let mut kernel = kernel();
+    let level = || Level::param(UniverseParam(0));
+    let scheme = UniverseContext {
+        parameter_count: 1,
+        quality_count: 0,
+        constraints: Vec::new(),
+    };
+    let pair = binder(86, "pair");
+    let held = binder(87, "held");
+    kernel
+        .define(
+            &pair,
+            &Term::tuple_type([
+                (binder(88, "first"), Term::type_at(level())),
+                (binder(89, "second"), nat_type()),
+            ]),
+            &Term::tuple([nat_type(), nat(3)]),
+            &scheme,
+        )
+        .expect("a name is declared once");
+    kernel
+        .define(
+            &held,
+            &Term::tuple_type([(
+                binder(92, "first"),
+                Term::type_at(level().succ().expect("a parameter has a successor")),
+            )]),
+            &Term::tuple([Term::type_at(level())]),
+            &scheme,
+        )
+        .expect("a name is declared once");
+    let first = |name: &Free, level: u32| {
+        Term::proj(Term::instance_of(name, vec![Level::constant(level)]), 0)
+    };
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &Term::type_ground(),
+            &first(&pair, 0),
+            &first(&pair, 1)
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &Term::type_ground(),
+            &first(&held, 0),
+            &first(&held, 1)
+        ),
+        Ok(false)
+    );
+}

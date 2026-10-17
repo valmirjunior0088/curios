@@ -16,9 +16,9 @@ use {
         Declared, ErasedSite, Established, GoalReport, GoalSite, Published, ScheduledTest, Traces,
         Zonked, body_levels, check_concept_registry, check_is_sort, check_proof_totality,
         check_rec_item_totality, check_type_totality, check_written_type_totality, compared_levels,
-        decide_polarities, definition_variances, family_levels, goal_sites, hold_prop,
-        hold_variances, record_definition_totality, record_superclasses, record_variances,
-        reduce_with, register_witness, report_goals, sort_term, stamp_totality,
+        decide_polarities, definition_variances, family_levels, field_variances, goal_sites,
+        hold_prop, hold_variances, record_definition_totality, record_superclasses,
+        record_variances, reduce_with, register_witness, report_goals, sort_term, stamp_totality,
         state_proof_binders, superclass_targets, test_program_tail, validate_entry_universes,
         validate_universes, zonk, zonk_arity, zonk_entry, zonk_published, zonk_solved_term_metas,
     },
@@ -854,9 +854,12 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     // A lone `struct` lowers to this `let`: its variance is settled as a group's is, for the later items that compare two of its instances. A name with no registry entry records nothing.
     record_variances(context, &[def.name])?;
     // After a struct's own vector, which its former's body is read by. A witness that names itself becomes a group of one below, and a member carries none.
-    let variances = match recursive_witness {
-        true => Vec::new(),
-        false => definition_variances(context, &universe_context, &type_, &body)?,
+    let (variances, field_variances) = match recursive_witness {
+        true => (Vec::new(), Vec::new()),
+        false => (
+            definition_variances(context, &universe_context, &type_, &body)?,
+            field_variances(&universe_context, &type_, &body),
+        ),
     };
 
     context.restore_checked_site(outer_site);
@@ -869,6 +872,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
         totality: def.totality,
         proof: def.proof,
         variances,
+        field_variances,
         type_,
         body,
     };
@@ -1218,6 +1222,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             totality: def.totality,
             proof: def.proof,
             variances: Vec::new(),
+            field_variances: Vec::new(),
             type_,
             body,
         })

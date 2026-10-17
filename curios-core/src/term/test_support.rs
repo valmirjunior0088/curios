@@ -76,6 +76,8 @@ pub(super) struct Registry {
     pub(super) inducts: BTreeMap<Global, InductDecl>,
     /// Each definition's vector, with how many arguments one spine applies it in full by.
     pub(super) definitions: BTreeMap<Global, (Vec<Variance>, usize)>,
+    /// Each record-valued definition's field vectors, with its arity.
+    pub(super) fields: BTreeMap<Global, (Vec<Vec<Variance>>, usize)>,
 }
 
 impl Families for Registry {
@@ -91,6 +93,12 @@ impl Families for Registry {
         self.definitions
             .get(name)
             .map(|(variances, arity)| (variances.as_slice(), *arity))
+    }
+
+    fn field(&self, name: &Global, slot: usize) -> Option<(&[Variance], usize)> {
+        let (fields, arity) = self.fields.get(name)?;
+
+        Some((fields.get(slot)?.as_slice(), *arity))
     }
 }
 

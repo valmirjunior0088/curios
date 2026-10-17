@@ -32,7 +32,7 @@ pub enum Question<N = Global, K = WitnessKey> {
     Kind(N),
     /// Whether a definition is total.
     Totality(N),
-    /// The variance vector a definition filed.
+    /// The variance vectors a definition filed, its own and its fields'.
     Variances(N),
     /// An inductive family's registry entry.
     Induct(N),

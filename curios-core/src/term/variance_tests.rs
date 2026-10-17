@@ -11,18 +11,18 @@ fn registry(families: &[(&str, InductDecl)]) -> Registry {
             .iter()
             .map(|(path, declaration)| (nominal(path), declaration.clone()))
             .collect(),
-        definitions: BTreeMap::new(),
+        ..Registry::default()
     }
 }
 
 /// A registry of definitions alone, each with its vector and the arity one spine applies it in full by.
 fn defining(definitions: &[(&str, &[Variance], usize)]) -> Registry {
     Registry {
-        inducts: BTreeMap::new(),
         definitions: definitions
             .iter()
             .map(|(path, variances, arity)| (nominal(path), (variances.to_vec(), *arity)))
             .collect(),
+        ..Registry::default()
     }
 }
 
@@ -182,6 +182,37 @@ fn a_definition_applied_in_full_is_read_by_its_vector() {
     );
     assert_eq!(
         pick([0, 0], 3).level_differences(&pick([1, 0], 3), |_| false, &()),
+        found(vec![pair(0, 1)], Vec::new())
+    );
+}
+
+// A field of a definition applied in full is that field's value once the definition unfolds, so its instance's levels pair by the field's vector, a level the literal names only elsewhere set apart, and the definition's arguments are aligned after them. Read with no registry, every level is compared.
+#[test]
+fn a_field_of_a_definition_applied_in_full_is_read_by_its_vector() {
+    let definitions = Registry {
+        fields: BTreeMap::from([(
+            nominal("witness"),
+            (vec![vec![STAR, EQUAL], vec![EQUAL, STAR]], 1),
+        )]),
+        ..Registry::default()
+    };
+    let field = |slot: usize, levels: [u32; 2], inner: u32| {
+        Term::proj(
+            Term::apply(named("witness", &levels), [Term::type_at(at(inner))]),
+            slot,
+        )
+    };
+
+    assert_eq!(
+        field(0, [0, 0], 3).level_differences(&field(0, [1, 2], 4), |_| false, &definitions),
+        found(vec![pair(0, 2), pair(3, 4)], vec![pair(0, 1)])
+    );
+    assert_eq!(
+        field(1, [0, 0], 3).level_differences(&field(1, [1, 2], 3), |_| false, &definitions),
+        found(vec![pair(0, 1)], vec![pair(0, 2)])
+    );
+    assert_eq!(
+        field(0, [0, 0], 3).level_differences(&field(0, [1, 0], 3), |_| false, &()),
         found(vec![pair(0, 1)], Vec::new())
     );
 }

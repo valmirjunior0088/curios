@@ -20,6 +20,7 @@ fn mentioning(path: &str, mentions: &str) -> Item {
         totality: Totality::default(),
         proof: false,
         variances: Vec::new(),
+        field_variances: Vec::new(),
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::free_var(&Free::from(&name(mentions))),
     })

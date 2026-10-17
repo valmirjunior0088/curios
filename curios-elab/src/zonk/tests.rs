@@ -34,6 +34,7 @@ fn lowered_module(body: Term) -> Module {
                 totality: Totality::default(),
                 proof: false,
                 variances: Vec::new(),
+                field_variances: Vec::new(),
                 type_: nat(),
                 body,
             })]

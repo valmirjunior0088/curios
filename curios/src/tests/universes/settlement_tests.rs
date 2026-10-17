@@ -76,6 +76,38 @@ fn a_family_takes_no_level_its_instances_cannot_differ_in() {
     }
 }
 
+// **A field read through a definition holds what the field's value holds.** `small` and `large` are polymorphic in the level `Config`'s field is typed at, and so is each witness of `/std/ops/Div`, in the level of the proposition `Div` states. A projection of one of them unfolds to the field's value, which holds no level here — `Nat`, a `Type` at the least level, `Nat`'s own `div` — so each signature reading a field through them settles that level at its least value, `one` and `two` among them, where each written `/` was a parameter of its own. The definitions keep their level: their own types hold it.
+#[test]
+fn a_field_read_through_a_definition_holds_what_its_value_holds() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        struct Config: Type { t: Type }
+        let small: Config = Config { t = Nat };
+        let large: Config = Config { t = Type };
+        let through_small(x: small.t) -> Nat = 0;
+        let through_large(x: large.t) -> Nat = 0;
+        let one(n: Nat) -> Eq()(n / 256, n / 256) = Eq/refl();
+        let two(n: Nat, m: Nat) -> Eq()(n / 256 + m / 16, n / 256 + m / 16) = Eq/refl();
+        /std/print("read")
+        "#;
+
+    let parameters = universe_parameters(source);
+    for (name, count) in [
+        ("/small", 1),
+        ("/large", 1),
+        ("/through_small", 0),
+        ("/through_large", 0),
+        ("/one", 0),
+        ("/two", 0),
+    ] {
+        assert_eq!(
+            parameters.get(name),
+            Some(&count),
+            "a signature kept a level only the literal it projects names, or a record-valued definition lost its own: {parameters:?}",
+        );
+    }
+}
+
 // **A concept's method level is its family's domain.** `ret`'s `@A: Type` is bounded only by the domain of `M`, and cumulativity already lets a caller pass anything smaller, so it is that domain: `Mon` takes its family's domain and codomain and no parameter per method. Generalized apart, a method level is one an implementation may answer at below its family's domain, which would leave `Result`'s `Monad` witness taking `Type 0` payloads only. `Two` is the control: its `pick` is bounded by two families' domains, which name no one level to be, so it keeps a level of its own.
 #[test]
 fn a_method_level_bounded_by_one_domain_is_that_domain() {
