@@ -845,6 +845,25 @@ impl<'s> Context<'s> {
             .sort_insert(type_, self.typing.asking.plain(), sort);
     }
 
+    /// What [`is_erasable_in`](crate::is_erasable_in) answered of the closed `type_`, where no scrutinee refinement stands ([`Caches::erasable`] carries why, and how long an answer is kept).
+    pub(crate) fn remembered_erasable(&mut self, type_: &Term) -> Option<bool> {
+        if self.typing.frames.has_scrutinee_refinements() {
+            return None;
+        }
+        self.typing
+            .caches
+            .erasable_get(type_, self.typing.asking.plain())
+    }
+
+    /// Remember what [`is_erasable_in`](crate::is_erasable_in) answered of the closed `type_`, where no scrutinee refinement stands.
+    pub(crate) fn remember_erasable(&mut self, type_: Term, erasable: bool) {
+        if !self.typing.frames.has_scrutinee_refinements() {
+            self.typing
+                .caches
+                .erasable_insert(type_, self.typing.asking.plain(), erasable);
+        }
+    }
+
     /// [`Context::kernel_spelling`] of a recorded scrutinee, remembered where no metavariable in it is left unsolved ([`Caches::kernel_spellings`]).
     pub(crate) fn kernel_spelled(&self, term: &Term) -> Term {
         if let Some(known) = self.typing.caches.kernel_spelling_get(term) {

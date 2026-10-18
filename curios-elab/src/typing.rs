@@ -159,27 +159,56 @@ pub(crate) fn is_erasable_in(
     opened: &mut Vec<(Free, Term)>,
     type_: &Term,
 ) -> Result<bool, Error> {
-    // A proposition known by its head is erased with nothing run to read it.
-    if is_declared_prop_in(context, opened, type_)? {
-        return Ok(true);
-    }
-
-    match Term::unwrap_or_clone(reduce_with(context, type_)?) {
-        Subterm::Sort(..) => Ok(true),
-        Subterm::Instance(instance) => is_erasable_in(context, opened, &instance.head.to_term()),
-        // A function erases iff what it ultimately returns does — a proof-/type-producing function is pure, content-free; an effectful `X -> {}` is not. Recurse past the parameters into the codomain, each opened binder joining `opened` so the codomain can read its sort.
-        Subterm::FuncType(FuncType { telescope, .. }) => {
-            let mark = opened.len();
-            let mut cursor = telescope.cursor();
-            while let Some((_, domain)) = cursor.entry() {
-                opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), domain));
-            }
-            let output = cursor.body().expect("a cursor past every entry");
-            let result = is_erasable_in(context, opened, &output);
-            opened.truncate(mark);
-            result
+    let mark = opened.len();
+    let mut passed = Vec::new();
+    let verdict = erasable_end(context, opened, type_, &mut passed);
+    opened.truncate(mark);
+    // Each closed type the walk passed through answers as the type it ended at, so a later question about any of them is answered without walking it again.
+    if let Ok(verdict) = verdict {
+        for type_ in passed {
+            context.remember_erasable(type_, verdict);
         }
-        _ => is_prop_in(context, opened, type_, "is_erasable_in"),
+    }
+    verdict
+}
+
+/// [`is_erasable_in`]'s walk, a loop to the type that decides it: an instance answers as its head and a function as what it ultimately returns, past its parameters, each opened binder joining `opened` so what follows can read its sort. A proof- or type-producing function is pure and content-free; an effectful `X -> {}` is not. Each closed type passed through goes into `passed`, to be remembered at the answer.
+fn erasable_end(
+    context: &mut Context,
+    opened: &mut Vec<(Free, Term)>,
+    type_: &Term,
+    passed: &mut Vec<Term>,
+) -> Result<bool, Error> {
+    let mut type_ = type_.clone();
+    loop {
+        let closed = type_.closed()
+            && !type_.has_local_free()
+            && !type_.has_metavar()
+            && !type_.has_universe_meta();
+        if closed {
+            if let Some(verdict) = context.remembered_erasable(&type_) {
+                return Ok(verdict);
+            }
+            passed.push(type_.clone());
+        }
+
+        // A proposition known by its head is erased with nothing run to read it.
+        if is_declared_prop_in(context, opened, &type_)? {
+            return Ok(true);
+        }
+
+        type_ = match Term::unwrap_or_clone(reduce_with(context, &type_)?) {
+            Subterm::Sort(..) => return Ok(true),
+            Subterm::Instance(instance) => instance.head.to_term(),
+            Subterm::FuncType(FuncType { telescope, .. }) => {
+                let mut cursor = telescope.cursor();
+                while let Some((_, domain)) = cursor.entry() {
+                    opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), domain));
+                }
+                cursor.body().expect("a cursor past every entry")
+            }
+            _ => return is_prop_in(context, opened, &type_, "is_erasable_in"),
+        };
     }
 }
 
@@ -193,24 +222,35 @@ pub(crate) fn is_proof_in(
     opened: &mut Vec<(Free, Term)>,
     type_: &Term,
 ) -> Result<bool, Error> {
-    // A proposition known by its head is one with nothing run to read it.
-    if is_declared_prop_in(context, opened, type_)? {
-        return Ok(true);
-    }
+    let mark = opened.len();
+    let verdict = proof_end(context, opened, type_);
+    opened.truncate(mark);
+    verdict
+}
 
-    match Term::unwrap_or_clone(reduce_with(context, type_)?) {
-        Subterm::FuncType(FuncType { telescope, .. }) => {
-            let mark = opened.len();
-            let mut cursor = telescope.cursor();
-            while let Some((_, domain)) = cursor.entry() {
-                opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), domain));
-            }
-            let output = cursor.body().expect("a cursor past every entry");
-            let result = is_proof_in(context, opened, &output);
-            opened.truncate(mark);
-            result
+/// [`is_proof_in`]'s walk, a loop past each function's parameters to what it ultimately returns, each opened binder joining `opened`.
+fn proof_end(
+    context: &mut Context,
+    opened: &mut Vec<(Free, Term)>,
+    type_: &Term,
+) -> Result<bool, Error> {
+    let mut type_ = type_.clone();
+    loop {
+        // A proposition known by its head is one with nothing run to read it.
+        if is_declared_prop_in(context, opened, &type_)? {
+            return Ok(true);
         }
-        _ => is_prop_in(context, opened, type_, "is_proof_in"),
+
+        type_ = match Term::unwrap_or_clone(reduce_with(context, &type_)?) {
+            Subterm::FuncType(FuncType { telescope, .. }) => {
+                let mut cursor = telescope.cursor();
+                while let Some((_, domain)) = cursor.entry() {
+                    opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), domain));
+                }
+                cursor.body().expect("a cursor past every entry")
+            }
+            _ => return is_prop_in(context, opened, &type_, "is_proof_in"),
+        };
     }
 }
 
