@@ -526,29 +526,29 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 ///
 /// # What it last printed
 ///
-/// Counted, at `85da54b97`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
+/// Counted, at `bad41555e`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
 ///
 /// ```text
 ///   program                      units   depth      other       units   depth      other  kernel/elab
-///   Str literal, n=250           22195       1      21171       22242       1      21218     1.0x
-///   Str literal, n=500           39445       1      38421       39492       1      38468     1.0x
-///   Str literal, n=1000          73945       1      72921       73992       1      72968     1.0x
-///   Str literal, n=2000         142945       1     141921      142992       1     141968     1.0x
-///   Str literal, n=4000         280945       1     279921      280992       1     279968     1.0x
-///   Str literal, n=8000         556945       1     555921      556992       1     555968     1.0x
-///   Str n=500, 1 uses            39445       1      38421       39492       1      38468     1.0x
-///   Str n=500, 3 uses            39445       1      38421       39492       1      38468     1.0x
-///   Bytes literal, n=500          1170       1        146        1254       1        230     1.1x
-///   Str n=500, cut               39445       1      38421       39492       1      38468     1.0x
+///   Str literal, n=250           22188       1      21164       22212       1      21188     1.0x
+///   Str literal, n=500           39438       1      38414       39462       1      38438     1.0x
+///   Str literal, n=1000          73938       1      72914       73962       1      72938     1.0x
+///   Str literal, n=2000         142938       1     141914      142962       1     141938     1.0x
+///   Str literal, n=4000         280938       1     279914      280962       1     279938     1.0x
+///   Str literal, n=8000         556938       1     555914      556962       1     555938     1.0x
+///   Str n=500, 1 uses            39438       1      38414       39462       1      38438     1.0x
+///   Str n=500, 3 uses            39438       1      38414       39462       1      38438     1.0x
+///   Bytes literal, n=500          2255       2        207        1276       1        252     0.6x
+///   Str n=500, cut               39438       1      38414       39462       1      38438     1.0x
 /// ```
 ///
 /// **A character costs 69 units on each checker**, at every rung of the ladder. Dividing the default budget by it puts the ceiling near 434 000 characters, by arithmetic rather than by bisection. Guarded depth is flat in the literal's length on both checkers, and so is the cost in use count.
 ///
 /// **Cutting costs nothing a unit column sees.** The cut row, which cuts through `Str/before` at a position whose boundary is decided by the one byte there, spends exactly the bare `n=500` row's units on both checkers.
 ///
-/// **The `kernel/elab` column reads 1.0× on every `Str` row**, the kernel 47 units over the elaborator at each.
+/// **The `kernel/elab` column reads 1.0× on every `Str` row**, the kernel 24 units over the elaborator at each.
 ///
-/// **The `Bytes` row is the control**: the same bytes with no proof over them cost each checker under 1 300 units, so a `Str` literal's units are its validity's.
+/// **The `Bytes` row is the control**: the same bytes with no proof over them cost each checker under 2 300 units, so a `Str` literal's units are its validity's.
 #[test]
 #[ignore = "measurement, counted: reports what a Str literal costs rather than asserting"]
 fn str_literal_cost_measurements() {
@@ -593,30 +593,30 @@ fn str_literal_cost_measurements() {
 ///
 /// # What it last printed
 ///
-/// Counted, at `85da54b97`.
+/// Counted, at `bad41555e`.
 ///
 /// ```text
 ///   program                      units   depth      other       units   depth      other  kernel/elab
-///   web n=8, applied              5161       5         41        3771       3        699     0.7x
-///   web n=8, scrutinized          9429       8       1237       10680       9       1464     1.1x
-///   web n=8, closed               5161       5         41        3771       3        699     0.7x
-///   web n=12, applied             5161       5         41        3771       3        699     0.7x
-///   web n=12, scrutinized         9429       8       1237       10680       9       1464     1.1x
-///   web n=12, closed              5161       5         41        3771       3        699     0.7x
-///   web n=13, applied             5161       5         41        3771       3        699     0.7x
-///   web n=13, scrutinized         9429       8       1237       10680       9       1464     1.1x
-///   web n=13, closed              5161       5         41        3771       3        699     0.7x
-///   web n=14, applied             5161       5         41        3771       3        699     0.7x
-///   web n=14, scrutinized         9429       8       1237       10680       9       1464     1.1x
-///   web n=14, closed              5161       5         41        3771       3        699     0.7x
-///   web n=20, applied             5161       5         41        3771       3        699     0.7x
-///   web n=20, scrutinized         9429       8       1237       10680       9       1464     1.1x
-///   web n=20, closed              5161       5         41        3771       3        699     0.7x
+///   web n=8, applied              6169       6         25        3676       3        604     0.6x
+///   web n=8, scrutinized          6169       6         25        3676       3        604     0.6x
+///   web n=8, closed               6169       6         25        3676       3        604     0.6x
+///   web n=12, applied             6169       6         25        3676       3        604     0.6x
+///   web n=12, scrutinized         6169       6         25        3676       3        604     0.6x
+///   web n=12, closed              6169       6         25        3676       3        604     0.6x
+///   web n=13, applied             6169       6         25        3676       3        604     0.6x
+///   web n=13, scrutinized         6169       6         25        3676       3        604     0.6x
+///   web n=13, closed              6169       6         25        3676       3        604     0.6x
+///   web n=14, applied             6169       6         25        3676       3        604     0.6x
+///   web n=14, scrutinized         6169       6         25        3676       3        604     0.6x
+///   web n=14, closed              6169       6         25        3676       3        604     0.6x
+///   web n=20, applied             6169       6         25        3676       3        604     0.6x
+///   web n=20, scrutinized         6169       6         25        3676       3        604     0.6x
+///   web n=20, closed              6169       6         25        3676       3        604     0.6x
 /// ```
 ///
 /// **Every unit column is constant across the sizes**, under each consumption and on both checkers: twenty definitions cost what eight do. Keyed on the reduced spelling rather than the written one, the middle row would grow by a factor of two per definition.
 ///
-/// **A `match` at a binder is paid in guarded depth**: three levels more than applying on the elaborator and six more on the kernel, a frame each, which is most of what its row adds. A `match` at a literal costs what applying does.
+/// **A `match` costs what applying does**, at a binder as at a literal, on both checkers: the web is closed, and the closed machine runs inside an arm as it does outside one, since no equation answers a term that names no local.
 #[test]
 #[ignore = "measurement, counted: reports what a combinator web costs each checker rather than asserting"]
 fn combinator_web_cost_measurements() {
