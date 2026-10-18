@@ -1,11 +1,7 @@
 pub use /sys/Nat/{lt};
 
-use /std/{Nat, Bool, Option, Eq};
+use /std/{Nat, Bool, Eq};
 use /std/Bool/{True, Holds};
-
---- The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
-pub let try(a: Nat, b: Nat) -> Option(Holds(a < b)) =
-    Bool/decide(a < b);
 
 --- A comparison that came back `false` is the other one: `a <= b` failing gives `b < a`.
 ---

@@ -42,7 +42,7 @@ pub let of_offset(
 
 --- The position `k` bytes into `s`, or `none` when `k` is past the end or inside a character. Decided by the one byte at `k`.
 pub let try_of_offset(s: Str, k: Nat) -> Option(At(s)) =
-    match Nat/le/try(k, Bytes/len(s.bytes))
+    match Bool/holds(k <= Bytes/len(s.bytes))
     | none() => Option/none()
     | some(within) =>
         match starts(Bytes/drop(s.bytes, k, @within))

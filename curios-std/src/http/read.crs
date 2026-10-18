@@ -18,7 +18,7 @@ let line_end_from(
     i: Nat,
     @onward: Holds(from <= i),
 ) -> Option(Found(b, from, 2)) =
-    match Nat/lt/try(i + 1, Bytes/len(b))
+    match Bool/holds(i + 1 < Bytes/len(b))
     | none() => Option/none()
     | some(room) =>
         match is(b, i, '\r') && is(b, i + 1, '\n')
@@ -62,7 +62,7 @@ let head_from(
             lenient,
             Searched { start = s.start, through = i + 1, ending = ending, lined = lined },
             held);
-    match Nat/lt/try(i, Bytes/len(held))
+    match Bool/holds(i < Bytes/len(held))
     | none() =>
         let known = Bytes/len(held) - s.ending;
         choose
@@ -138,7 +138,7 @@ let hex(byte: Byte) -> Option(Nat) =
 -- A chunk's size, read from its size line: hexadecimal digits, one or more, then nothing or an extension, which begins with `;` and holds no control octet. Anything else is no size line.
 let chunk_size(line: Bytes) -> Option(Nat) =
     let go(i: Nat, value: Nat, digits: Nat) -> Option(Nat) =
-        match Nat/lt/try(i, Bytes/len(line))
+        match Bool/holds(i < Bytes/len(line))
         | none() => match digits | 0 => Option/none() | _ => Option/some(value) end
         | some(inside) =>
             let byte = Bytes/get(line, i, @inside);
@@ -186,7 +186,7 @@ let size_from(
     ending: Bool,
     held: Bytes,
 ) -> Reader/Step(Decoded, Refusal, Bytes) =
-    match Nat/lt/try(i, Bytes/len(held))
+    match Bool/holds(i < Bytes/len(held))
     | none() =>
         match Bytes/len(held) - carried(ending) <= limits.chunk_line
         | true =>
@@ -252,7 +252,7 @@ let trailers_from(
     ending: Bool,
     held: Bytes,
 ) -> Reader/Step(Decoded, Refusal, Bytes) =
-    match Nat/lt/try(i, Bytes/len(held))
+    match Bool/holds(i < Bytes/len(held))
     | none() =>
         match Bytes/len(held) - carried(ending) - at <= limits.head
         | true =>

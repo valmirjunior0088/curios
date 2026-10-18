@@ -55,7 +55,7 @@ let pieces(b: Bytes) -> List(Bytes) =
         @ordered: Holds(from <= at),
         @reached: Holds(at <= Bytes/len(b)),
     ) -> List(Bytes) =
-        match Nat/lt/try(at, Bytes/len(b))
+        match Bool/holds(at < Bytes/len(b))
         | none() => List/reverse([Bytes/slice(b, from, at - from), ..found])
         | some(inside) =>
             let n = Byte/to_nat(Bytes/get(b, at, @inside));

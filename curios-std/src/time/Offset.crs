@@ -35,7 +35,7 @@ pub let utc: Offset =
 
 --- The offset `seconds` east of UTC, decided: `none` for a day or more.
 pub let try_of_seconds(seconds: Int) -> Option(Offset) =
-    match Bool/decide(Int/abs(seconds) <= 86399)
+    match Bool/holds(Int/abs(seconds) <= 86399)
     | some(ok) => Option/some(Offset/known(seconds, @ok))
     | none() => Option/none()
     end;

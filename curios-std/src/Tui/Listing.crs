@@ -1,4 +1,4 @@
-use /std/{Nat, Str, List, Option};
+use /std/{Nat, Str, Bool, List, Option};
 use /std/Tui/{Style, View, Pane, Key};
 use /std/Bool/{Holds};
 
@@ -10,7 +10,7 @@ pub struct Listing(A: Type): pub Type {
 }
 
 let at(@A: Type, items: List(A), i: Nat) -> Option({i: Nat, ok: Holds(i < List/len(items))}) =
-    match Nat/lt/try(i, List/len(items))
+    match Bool/holds(i < List/len(items))
     | none() => Option/none()
     | some(ok) => Option/some((i = i, ok = ok))
     end;

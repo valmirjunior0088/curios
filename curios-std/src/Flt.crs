@@ -135,7 +135,7 @@ let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
 
 --- The procedure that decides `FiniteNonZero(f)`.
 pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =
-    Bool/decide(is_finite(f) && Bool/not(is_zero(f)));
+    Bool/holds(is_finite(f) && Bool/not(is_zero(f)));
 
 --- IEEE's `remainder` (§5.3.1): `x - n · y` for the integer `n` nearest `x / y`, ties to even, which is exact. A zero answer has `x`'s sign; an infinite `x` or a zero `y` is invalid, and an infinite `y` leaves `x`. Unlike `rem`, which truncates the quotient, the answer is at most half of `y` in magnitude.
 pub let remainder(x: Flt, y: Flt) -> Flt =
@@ -342,11 +342,11 @@ pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
 
 --- The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
 pub let finite(f: Flt) -> Option(Finite(f)) =
-    Bool/decide(-inf.0 < f && f < +inf.0);
+    Bool/holds(-inf.0 < f && f < +inf.0);
 
 --- The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
 pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
-    Bool/decide(f >= +0.0 && f < +inf.0);
+    Bool/holds(f >= +0.0 && f < +inf.0);
 
 --- `f` truncated toward zero, or `none` unless it is a non-negative number.
 pub let try_to_nat(f: Flt) -> Option(Nat) =

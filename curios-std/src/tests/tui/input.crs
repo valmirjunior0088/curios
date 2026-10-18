@@ -1,5 +1,5 @@
 -- The input decoder: the legacy encoding and the kitty protocol's, the replies a terminal sends of itself, and what a chunk boundary leaves.
-use /std/{Nat, Bytes, List, Test, Tty};
+use /std/{Nat, Bytes, Bool, List, Test, Tty};
 use /std/Tui/{Key, Input, Reply, Mode};
 
 let inputs(b: Bytes) -> List(Input) =
@@ -177,7 +177,7 @@ let cut_anywhere(b: Bytes) -> Test({}) =
         List/map(
             List/range(0, Bytes/len(b) + 1),
             (at: Nat) =>
-                match Nat/le/try(at, Bytes/len(b))
+                match Bool/holds(at <= Bytes/len(b))
                 | none() => Test/assert(false)
                 | some(_) =>
                     let first = Input/decode(Bytes/slice(b, 0, at));
@@ -216,7 +216,7 @@ test flush_reads_a_lone_escape_as_the_key =
 let rest_is_a_suffix(b: Bytes) -> Test({}) =
     let read = Input/decode(b);
     let cut = Bytes/len(b) - Bytes/len(read.rest);
-    match Nat/le/try(cut, Bytes/len(b))
+    match Bool/holds(cut <= Bytes/len(b))
     | none() => Test/assert(false)
     | some(ok) =>
         Test/assert(Bytes/len(read.rest) <= Bytes/len(b) && Bytes/drop(b, cut, @ok) == read.rest)

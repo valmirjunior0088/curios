@@ -50,7 +50,7 @@ pub(super) fn reads_in_every_shape(carrier: &Carrier) -> String {
         %SETTLED%;
 
     let alike_up(a: %RUN%, b: %RUN%, i: Nat) -> Bool =
-        match Nat/lt/try(i, %LEN%(b))
+        match Bool/holds(i < %LEN%(b))
         | none() => true
         | some(_) => at(a, i) == at(b, i) && alike_up(a, b, i + 1)
         end;
@@ -59,7 +59,7 @@ pub(super) fn reads_in_every_shape(carrier: &Carrier) -> String {
         match left | 0 => true | k + 1 => at(a, k) == at(b, k) && alike_down(a, b, k) end;
 
     let window(run: %RUN%) -> %RUN% =
-        match Nat/le/try(25, %LEN%(run)) | some(fits) => %SLICE%(run, 5, 20) | none() => run end;
+        match Bool/holds(25 <= %LEN%(run)) | some(fits) => %SLICE%(run, 5, 20) | none() => run end;
 
     let shape(which: Nat, leaf: %RUN%, forced: %RUN%, view: %RUN%) -> %RUN% =
         match which
@@ -134,7 +134,7 @@ pub(super) fn extends_in_place(carrier: &Carrier) -> String {
         ${settled};
 
     let repeats_from(run: ${run}, leaf: ${run}, i: Nat) -> Bool =
-        match (Nat/lt/try(i, ${len}(run)), Nat/lt/try(0, ${len}(leaf)))
+        match (Bool/holds(i < ${len}(run)), Bool/holds(0 < ${len}(leaf)))
         | (some(_), some(_)) =>
             at(run, i) == at(leaf, i % ${len}(leaf)) && repeats_from(run, leaf, i + 1)
         | _ => true
@@ -144,7 +144,7 @@ pub(super) fn extends_in_place(carrier: &Carrier) -> String {
         ${len}(run) == times * ${len}(leaf) && repeats_from(run, leaf, 0);
 
     let window(run: ${run}, leaf: ${run}) -> ${run} =
-        match Nat/le/try(${len}(leaf), ${len}(run))
+        match Bool/holds(${len}(leaf) <= ${len}(run))
         | some(fits) => ${slice}(run, 0, ${len}(leaf))
         | none() => run
         end;

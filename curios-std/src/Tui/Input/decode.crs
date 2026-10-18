@@ -1,4 +1,4 @@
-use /std/{Nat, Str, Char, Byte, Bytes, List, Option, Tty};
+use /std/{Nat, Str, Char, Byte, Bytes, Bool, List, Option, Tty};
 use /std/Tui/{Key, Input, Reply, Mode};
 use /std/Bool/{Holds};
 
@@ -198,7 +198,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
     let key(k: Key, next: Nat) -> Step = Step/input(Input/key(k), next);
     -- The character the byte at `i` begins and `more` bytes continue. The bytes are decided text as the bytes they are, so the text is known to hold them and has a first character.
     let scalar(i: Nat, more: Nat) -> Step =
-        match Nat/le/try(i + (more + 1), Bytes/len(bytes))
+        match Bool/holds(i + (more + 1) <= Bytes/len(bytes))
         | none() => Step/cut()
         | some(within) =>
             let piece = Bytes/slice(bytes, i, more + 1, @within);
@@ -217,7 +217,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
             @onward: Holds(start <= j),
         ) -> Option(
             {at: Nat, onward: Holds(start <= at), room: Holds(at + 6 <= Bytes/len(bytes))}) =
-            match Nat/le/try(j + 6, Bytes/len(bytes))
+            match Bool/holds(j + 6 <= Bytes/len(bytes))
             | none() => Option/none()
             | some(room) =>
                 match Bytes/slice(bytes, j, 6, @room) == paste_end
@@ -331,7 +331,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
     ) -> {inputs: List(Input), replies: List(Reply), rest: Bytes} =
         let read(rest: Bytes) -> {inputs: List(Input), replies: List(Reply), rest: Bytes} =
             (inputs = List/reverse(inputs), replies = List/reverse(replies), rest = rest);
-        match Nat/lt/try(i, Bytes/len(bytes))
+        match Bool/holds(i < Bytes/len(bytes))
         | none() => read(x[])
         | some(inside) =>
             let head = Bytes/get(bytes, i, @inside);

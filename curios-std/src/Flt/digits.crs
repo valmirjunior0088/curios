@@ -209,7 +209,7 @@ pub let layout(ds: List(Nat), k: Int) -> Str =
         match kn == 0
         | true => leading(0)
         | false =>
-            match Nat/lt/try(kn, len)
+            match Bool/holds(kn < len)
             | some(inside) =>
                 Fmt/render("%.%")(
                     digits_to_str(List/take(ds, kn)))(

@@ -187,7 +187,7 @@ let walk(
                     | some(existing) =>
                         match existing
                         | arr(items) =>
-                            match Nat/lt/try(index, List/len(items))
+                            match Bool/holds(index < List/len(items))
                             | some(in_range) =>
                                 match List/get(@Toml, items, index, @in_range)
                                 | table(inner) =>
@@ -260,7 +260,7 @@ let walk(
                             | _ =>
                                 let index = List/len(items) - 1;
                                 let seg2 = Seg/at(name, index);
-                                match Nat/lt/try(index, List/len(items))
+                                match Bool/holds(index < List/len(items))
                                 | some(in_range) =>
                                     match List/get(@Toml, items, index, @in_range)
                                     | table(inner) =>

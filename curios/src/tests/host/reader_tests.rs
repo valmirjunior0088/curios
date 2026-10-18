@@ -38,7 +38,7 @@ fn reads(tail: &str) -> String {
 
 /// A stream of a program's own, whose chunks are what its other end is sent: a read of it waits until the program sends more, and ends once the sender is closed.
 const WIRE: &str = r#"
-    use /std/{Nat, Str, Bytes, Option, Result, Show, Try, Io, print, Channel};
+    use /std/{Str, Bytes, Bool, Option, Result, Show, Try, Io, print, Channel};
     use /std/time/{Duration};
     struct Wire: Type { Channel/Receiver(Bytes) }
     let next(w: Wire) -> Try(Io, Io/Error, Io/Chunk) =
@@ -46,7 +46,7 @@ const WIRE: &str = r#"
         match got
         | none() => Try/pure(Io/Chunk/ended())
         | some(bytes) =>
-            match Nat/lt/try(0, Bytes/len(bytes))
+            match Bool/holds(0 < Bytes/len(bytes))
             | some(held) => Try/pure(Io/Chunk/bytes(bytes, @held))
             | none() => next(w)
             end

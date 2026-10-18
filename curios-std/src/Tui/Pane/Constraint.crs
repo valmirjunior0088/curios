@@ -1,4 +1,4 @@
-use /std/{Nat, List};
+use /std/{Nat, Bool, List};
 use /std/Bool/{Holds};
 
 --- How a part claims its share of an axis.
@@ -35,7 +35,7 @@ pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
     let weights = total(List/map(cs, weight));
     let spare = avail - fixed;
     let share(c: Constraint) -> Nat =
-        match Nat/lt/try(0, weights)
+        match Bool/holds(0 < weights)
         | none() => claimed(avail, c)
         | some(_) => claimed(avail, c) + spare * weight(c) / weights
         end;

@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Byte, Option};
+use /std/{Nat, Bytes, Byte, Bool, Option};
 use /std/Bool/{Holds};
 use /std/Io/{Error};
 use /std/Io/Reader/{Step};
@@ -9,7 +9,7 @@ let index_from(
     byte: Byte,
     i: Nat,
 ) -> Option({at: Nat, within: Holds(at < Bytes/len(b))}) =
-    match Nat/lt/try(i, Bytes/len(b))
+    match Bool/holds(i < Bytes/len(b))
     | none() => Option/none()
     | some(inside) =>
         match Bytes/get(b, i, @inside) == byte
@@ -20,7 +20,7 @@ let index_from(
 
 -- `b` without the carriage return it ends with, where it ends with one.
 let without_return(b: Bytes) -> Bytes =
-    match Nat/lt/try(0, Bytes/len(b))
+    match Bool/holds(0 < Bytes/len(b))
     | none() => b
     | some(nonempty) =>
         let last = Bytes/len(b) - 1;

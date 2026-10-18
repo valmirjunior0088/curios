@@ -72,7 +72,7 @@ pub let of(year: Int, month: Month, day: Nat, @ok: Valid(year, month, day)) -> D
 
 --- The date, decided: `none` where the three spell no day.
 pub let try_of(year: Int, month: Month, day: Nat) -> Option(Date) =
-    match Bool/decide(Nat/in_range(day, 1, days_in_month(year, month)))
+    match Bool/holds(Nat/in_range(day, 1, days_in_month(year, month)))
     | some(ok) => Option/some(of(year, month, day, @ok))
     | none() => Option/none()
     end;

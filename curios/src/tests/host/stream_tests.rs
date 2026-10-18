@@ -118,13 +118,13 @@ fn read_all_surfaces_a_read_failure_instead_of_a_partial_prefix() {
     assert_eq!(run(source), b"error / error / ok:3");
 }
 
-/// A program's own stream proves every chunk it hands a reader holds a byte. One that builds a chunk from bytes it cannot see is refused where it builds it; one that decides the length with `Nat/lt/try` passes over an empty piece, so a reader over it reads on to the delimiter rather than taking an empty chunk for it and ending the read early.
+/// A program's own stream proves every chunk it hands a reader holds a byte. One that builds a chunk from bytes it cannot see is refused where it builds it; one that decides the length with `Bool/holds` passes over an empty piece, so a reader over it reads on to the delimiter rather than taking an empty chunk for it and ending the read early.
 #[test]
 fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     let stream = |answer: &str| {
         fill!(
             r#"
-            use /std/{Nat, Bytes, Str, List, Result, Cell, Try, Io, print};
+            use /std/{Bytes, Bool, Str, List, Result, Cell, Try, Io, print};
             struct Pieces: Type { List({Cell({}), Bytes}) }
             let next(ps: List({Cell({}), Bytes})) -> Try(Io, Io/Error, Io/Chunk) =
                 match ps
@@ -164,7 +164,7 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
     assert!(refused.contains("nothing discharged"), "{refused}");
 
     let decided = stream(
-        "match Nat/lt/try(0, Bytes/len(p.1)) | some(q) => Try/pure(Io/Chunk/bytes(p.1, @q)) | none() => next(more) end",
+        "match Bool/holds(0 < Bytes/len(p.1)) | some(q) => Try/pure(Io/Chunk/bytes(p.1, @q)) | none() => next(more) end",
     );
     assert_eq!(run(&decided), b"a");
 }

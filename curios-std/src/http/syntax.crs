@@ -85,12 +85,12 @@ pub let status_line(line: Bytes) -> Result(Refusal, {Version, Status}) =
                 "a status line is a version, a three-digit code and a reason phrase"));
     -- A line shorter than a version is read as one whole, which it is not.
     let stated =
-        match Nat/le/try(8, Bytes/len(line))
+        match Bool/holds(8 <= Bytes/len(line))
         | some(long) => version(Bytes/slice(line, 0, 8, @long))
         | none() => version(line)
         end!;
     -- A version, a space, three digits and a space stand ahead of the reason: thirteen octets.
-    match Nat/le/try(13, Bytes/len(line))
+    match Bool/holds(13 <= Bytes/len(line))
     | none() => unspelled
     | some(long) =>
         match octets/at(line, 8, ' ') && octets/at(line, 12, ' ')

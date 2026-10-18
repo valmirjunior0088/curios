@@ -12,11 +12,11 @@ pub let WholeMinutes(o: Offset) -> Prop =
 
 --- The procedure that decides `FourDigits(d)`.
 pub let four_digits(d: Date) -> Option(FourDigits(d)) =
-    Bool/decide(+0 <= d.year && d.year <= 9999);
+    Bool/holds(+0 <= d.year && d.year <= 9999);
 
 --- The procedure that decides `WholeMinutes(o)`.
 pub let whole_minutes(o: Offset) -> Option(WholeMinutes(o)) =
-    Bool/decide(Offset/ahead(o) % 60 == +0);
+    Bool/holds(Offset/ahead(o) % 60 == +0);
 
 --- A date as RFC 3339 reads one: four digits of year, a month and a day.
 pub let date: Parse(Str, Date) =

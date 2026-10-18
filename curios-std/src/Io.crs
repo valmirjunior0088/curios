@@ -126,7 +126,7 @@ end
 
 --- What a stream is read through. A read asks for a positive count and answers a chunk of between one byte and that count or the end of the stream, or fails; a read the host cannot answer yet waits until it can, by suspending, so it holds only the branch that reads.
 ---
---- The lower bound is the chunk's own, stated in its type, so a witness for a stream of its own proves every chunk it hands out holds a byte — `Nat/lt/try` decides it of a length the witness cannot see. The upper bound is the witness's promise, which the host's rows hold `Handle` to.
+--- The lower bound is the chunk's own, stated in its type, so a witness for a stream of its own proves every chunk it hands out holds a byte — `Bool/holds` decides it of a length the witness cannot see. The upper bound is the witness's promise, which the host's rows hold `Handle` to.
 pub concept Read(S: Type): pub Type {
     read(s: S, n: Nat, @positive: Holds(0 < n)) -> Try(Io, Error, Chunk),
 }

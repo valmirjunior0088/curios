@@ -47,7 +47,7 @@ pub let of(
 
 --- The time, decided: `none` where the four spell none.
 pub let try_of(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Option(Time) =
-    match Bool/decide(sound(hour, minute, second, nanosecond))
+    match Bool/holds(sound(hour, minute, second, nanosecond))
     | some(ok) => Option/some(of(hour, minute, second, nanosecond, @ok))
     | none() => Option/none()
     end;

@@ -1,11 +1,7 @@
 pub use /sys/Int/{lt};
 
-use /std/{Int, Bool, Option, Eq};
+use /std/{Int, Bool, Eq};
 use /std/Bool/{True, Holds};
-
---- The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
-pub let try(a: Int, b: Int) -> Option(Holds(a < b)) =
-    Bool/decide(a < b);
 
 --- A comparison that came back `false` is the other one: `a <= b` failing gives `b < a`.
 ---

@@ -14,7 +14,7 @@
 - **A splittable generator hands a pure program independent streams** without threading one state through it: SplitMix (Steele, Lea and Flood, OOPSLA 2014) and LXM (Steele and Vigna, OOPSLA 2021).
 - **A bounded draw is its own algorithm.** A draw below `n` by `%` is biased toward the low residues; Lemire's nearly divisionless method (ACM TOMACS 2019) and plain rejection are unbiased, and a float in `0, 1)` is 53 drawn bits scaled by `2^-53`.
 - **A property test is generators and a way to shrink.** QuickCheck ([Claessen and Hughes, ICFP 2000) shrinks by type; [Hedgehog](https://hedgehog.qa/) builds the shrinking into the generator; Hypothesis reduces the sequence of choices a generator made (MacIver and Donaldson, ECOOP 2020); QuickChick derives generators of the values an inductive relation admits (Lampropoulos, Paraskevopoulou and Pierce, POPL 2018); Lean's [Plausible](https://github.com/leanprover-community/plausible) tries a goal before it is proved.
-- **A type under proofs is drawn through a total constructor.** `Date/of_days`, `Time/of_seconds` and `Weekday/of_days_from_monday` are total over their counts, so a generator of a calendar value draws a count. A type whose fields a decided bound guards draws and decides through `Bool/decide`, and the retries are a cost to bound.
+- **A type under proofs is drawn through a total constructor.** `Date/of_days`, `Time/of_seconds` and `Weekday/of_days_from_monday` are total over their counts, so a generator of a calendar value draws a count. A type whose fields a decided bound guards draws and decides through `Bool/holds`, and the retries are a cost to bound.
 
 ## Refinement
 

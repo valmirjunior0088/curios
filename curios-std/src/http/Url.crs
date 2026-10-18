@@ -272,7 +272,7 @@ let hex_value(byte: Byte) -> Option({v: Nat, ok: Holds(v < 16)}) =
         | Nat/in_range(n, 'A', 'F') => n - 'A' + 10
         | _ => 16
         end;
-    match Nat/lt/try(digit, 16)
+    match Bool/holds(digit < 16)
     | some(ok) => Option/some((v = digit, ok = ok))
     | none() => Option/none()
     end;

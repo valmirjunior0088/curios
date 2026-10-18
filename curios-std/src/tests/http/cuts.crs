@@ -39,13 +39,13 @@ let fed(
     end;
 
 let front(b: Bytes, k: Nat) -> Bytes =
-    match Nat/le/try(k, Bytes/len(b))
+    match Bool/holds(k <= Bytes/len(b))
     | some(within) => Bytes/slice(b, 0, k, @within)
     | none() => b
     end;
 
 let past(b: Bytes, k: Nat) -> Bytes =
-    match Nat/le/try(k, Bytes/len(b))
+    match Bool/holds(k <= Bytes/len(b))
     | some(within) => Bytes/drop(b, k, @within)
     | none() => x[]
     end;

@@ -146,7 +146,7 @@ pub let of_str(s: Str) -> Option(Int) =
 
 --- The procedure that decides `0 <= n`: the evidence when it holds, `none` otherwise.
 pub let non_neg(n: Int) -> Option(NonNeg(n)) =
-    Bool/decide(n >= +0);
+    Bool/holds(n >= +0);
 
 satisfy Eql(Int) {
     eql = eql,
