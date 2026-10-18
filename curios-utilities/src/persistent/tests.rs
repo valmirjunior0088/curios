@@ -200,6 +200,22 @@ fn an_ordered_map_names_the_positions_on_either_side_of_one() {
     assert_eq!(ordered.before(i64::MAX), Some((30, &30)));
 }
 
+/// A value changed in place is changed in the version that changes it alone, and a key held by none is left so.
+#[test]
+fn a_sorted_update_changes_its_own_version_alone() {
+    let mut first = Sorted::new();
+    for key in ["a", "b", "c"] {
+        first.insert(key, vec![key]);
+    }
+    let mut second = first.clone();
+
+    assert!(second.update(&"b", |held| held.push("again")));
+    assert!(!second.update(&"z", |held| held.push("never")));
+    assert_eq!(first.get(&"b"), Some(&vec!["b"]));
+    assert_eq!(second.get(&"b"), Some(&vec!["b", "again"]));
+    assert_eq!(second.get(&"z"), None);
+}
+
 #[test]
 fn a_sorted_map_names_the_keys_on_either_side_of_one() {
     let mut sorted = Sorted::new();

@@ -11,7 +11,7 @@
 use {
     super::{
         Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, ModuleInfo, PublicInterface,
-        Scan, Shared, Step,
+        Scan, Shared, Step, Table,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
     curios_utilities::{Mount, Ordered, Persistent, Qualifier, Report},
@@ -103,24 +103,35 @@ impl Moved {
     /// **A binding moved where its entry did.** A step of a path reads one module's entry for one label, its export's target and representation and how the module declares it; a glob reads which labels a module exports. So the bindings that moved are read off the modules whose tables are not the baseline's, a label at a time, and every module whose `use` declarations read one of them has its scope moved with it, and is touched.
     pub(super) fn of(
         baseline: &PreparedText,
-        table: &HashMap<Qualifier, ModuleInfo>,
-        public: &HashMap<Qualifier, PublicInterface>,
+        table: &Table<ModuleInfo>,
+        public: &Table<PublicInterface>,
         mut touched: HashSet<Qualifier>,
     ) -> Self {
         let mut moved = HashSet::new();
         let modules = table
-            .keys()
-            .chain(public.keys())
-            .chain(baseline.table.keys())
-            .chain(baseline.public.keys())
+            .iter()
+            .chain(baseline.table.iter())
+            .map(|(module, _)| module)
+            .chain(
+                public
+                    .iter()
+                    .chain(baseline.public.iter())
+                    .map(|(module, _)| module),
+            )
             .copied()
             .collect::<BTreeSet<_>>();
         for module in modules {
             let (table_now, table_then) = (table.get(&module), baseline.table.get(&module));
             let (public_now, public_then) = (public.get(&module), baseline.public.get(&module));
-            if table_now == table_then && public_now == public_then {
+            if same(table_now, table_then) && same(public_now, public_then) {
                 continue;
             }
+            let (table_now, table_then) =
+                (table_now.map(|now| &**now), table_then.map(|then| &**then));
+            let (public_now, public_then) = (
+                public_now.map(|now| &**now),
+                public_then.map(|then| &**then),
+            );
             let labels = |table: Option<&ModuleInfo>, public: Option<&PublicInterface>| {
                 let children = table
                     .into_iter()
@@ -175,6 +186,15 @@ impl Moved {
             .collect();
 
         Self { touched, reached }
+    }
+}
+
+/// Whether a module's entry now is the one the baseline holds: shared with it, or equal.
+fn same<T: PartialEq>(now: Option<&Rc<T>>, then: Option<&Rc<T>>) -> bool {
+    match (now, then) {
+        (Some(now), Some(then)) => Rc::ptr_eq(now, then) || now == then,
+        (None, None) => true,
+        _ => false,
     }
 }
 

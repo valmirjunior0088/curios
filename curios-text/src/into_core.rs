@@ -157,8 +157,8 @@ impl<'a> Reach<'a> {
 
 /// Every absolute path a unit gives a global — each declaration of its own at its own path, each export at the path its module gives it, whichever unit declares what it exports — with who may write it. A function of the unit's own tables and the audiences it decided, so it is made once for the unit ([`PreparedText::paths`]): which paths a reader's unit may name, and which it reaches relatively, are the reader's, read where a report spells a name ([`spell()`]).
 fn writable_paths(
-    table: &BTreeMap<Qualifier, ModuleInfo>,
-    public: &BTreeMap<Qualifier, PublicInterface>,
+    table: &Table<ModuleInfo>,
+    public: &Table<PublicInterface>,
     audiences: &Audiences,
 ) -> BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>> {
     curios_profile::profile!("writable_paths");
@@ -170,13 +170,13 @@ fn writable_paths(
             .push(curios_core::WritablePath { path, audience });
     };
 
-    for (module, info) in table {
+    for (module, info) in table.iter() {
         for (label, _) in info.bindings() {
             let path = module.with(label);
             record(&path, path, audiences.binding(&path));
         }
     }
-    for (module, interface) in public {
+    for (module, interface) in public.iter() {
         #[expect(
             clippy::iter_over_hash_type,
             reason = "each global's paths are sorted below"
@@ -383,8 +383,10 @@ pub struct PreparedText {
     mounts: Vec<Mount>,
     /// The `foreign` rows this unit declares. Collected by the same walk that lowers its items, and carried here rather than dropped: a unit that declares one has to reach the link, and the prelude declaring none is a fact about the prelude, not about the shape.
     foreigns: ForeignStore,
-    table: BTreeMap<Qualifier, ModuleInfo>,
-    public: BTreeMap<Qualifier, PublicInterface>,
+    #[archived_with(curios_utilities::InSharedKeyOrder)]
+    table: Table<ModuleInfo>,
+    #[archived_with(curios_utilities::InSharedKeyOrder)]
+    public: Table<PublicInterface>,
     /// Who can see each declaration of this unit: decided where it was lowered, or the first time something asks of a restored one, and kept. Never stored, being read off `table` and `public`.
     #[archived_with(curios_archive::Skip)]
     audiences: OnceCell<Audiences>,
@@ -733,7 +735,7 @@ impl<'a> Resolved<'a> {
         source: &UnitSource<'_>,
         root: &[Headed],
         scans: Option<&BTreeMap<Qualifier, Scan>>,
-        predecessor_tables: &'a [&'a BTreeMap<Qualifier, ModuleInfo>],
+        predecessor_tables: &'a [&'a Table<ModuleInfo>],
         predecessor_mounts: &[Mount],
         own: &[Mount],
     ) -> Result<Self, Error> {
@@ -2325,7 +2327,8 @@ fn into_core_unit_within(
         };
         let touched = table
             .own()
-            .keys()
+            .iter()
+            .map(|(module, _)| module)
             .filter(|module| file_of(module).is_none_or(|loaded| loaded.touched()))
             .copied()
             .collect();
@@ -2456,15 +2459,7 @@ fn into_core_unit_within(
     );
     // The audit's refusal of one of the unit's items. It spells the item and what it exposes as a reader standing at the item writes each, as every report of the unit does once it is lowered ([`PreparedText::spellings`]), and a module by its path, as a name that does not resolve is told of one. Made where the audit refuses, from the tables as they stand, and by no audit that passes.
     let refused = |item: &Qualifier, unseen: &Unseen| {
-        let own_table = table
-            .own()
-            .iter()
-            .map(|(module, info)| (*module, info.clone()));
-        let own_public = public
-            .own()
-            .iter()
-            .map(|(module, interface)| (*module, interface.clone()));
-        let paths = writable_paths(&own_table.collect(), &own_public.collect(), &audiences);
+        let paths = writable_paths(table.own(), public.own(), &audiences);
         let spellings = spellings_over(
             &shared.imports.borrow(),
             Rc::new(paths),
@@ -2554,8 +2549,8 @@ fn into_core_unit_within(
     let unit = PreparedText {
         mounts: own.clone(),
         foreigns,
-        table: table.into_own().into_iter().collect(),
-        public: public.into_own().into_iter().collect(),
+        table: table.into_own(),
+        public: public.into_own(),
         audiences: OnceCell::from(audiences),
         paths: OnceCell::new(),
         places,
@@ -2728,8 +2723,8 @@ pub struct LoweredEntry {
 /// How the entry's names can be written, where: what its `use` lines brought into scope, and what the paths a report spells a name by are made from — the entry's direct interface and export view with the audiences its lowering decided, the prefixes it claims and the ones it may name. An entry's lowering hands back no unit, so these are what a unit would have kept of them.
 pub struct EntryNames {
     imports: curios_core::Imports,
-    table: BTreeMap<Qualifier, ModuleInfo>,
-    public: BTreeMap<Qualifier, PublicInterface>,
+    table: Table<ModuleInfo>,
+    public: Table<PublicInterface>,
     audiences: OnceCell<Audiences>,
     mounts: Vec<Mount>,
     visible: Vec<Mount>,

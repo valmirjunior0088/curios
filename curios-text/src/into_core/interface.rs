@@ -1,5 +1,5 @@
 use {
-    super::{Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped},
+    super::{Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped, Table},
     crate::{Error, GroupItem, Name, OrderedMap, UseGroup},
     curios_utilities::{Mount, Qualifier, RootKind, nearest},
     std::{
@@ -110,16 +110,12 @@ pub(super) struct Relay {
 
 impl Audiences {
     /// The audiences of the unit whose direct interface is `table` and whose export view is `public`, each the unit's own layer.
-    pub(super) fn of<'t>(
-        table: impl IntoIterator<Item = (&'t Qualifier, &'t ModuleInfo)> + Copy,
-        public: impl IntoIterator<Item = (&'t Qualifier, &'t PublicInterface)> + Copy,
-    ) -> Self {
+    pub(super) fn of(table: &Table<ModuleInfo>, public: &Table<PublicInterface>) -> Self {
         curios_profile::profile!("audiences::of");
         // What the unit declares. The compilation root every unit seeds lists each mounted prefix as a child, an earlier unit's among them, and an export may name an earlier unit's declaration: neither is this unit's to decide.
-        let declared = table.into_iter().collect::<HashMap<_, _>>();
-        let declares_module = |module: &Qualifier| declared.contains_key(module);
+        let declares_module = |module: &Qualifier| table.contains_key(module);
         let declares_binding = |binding: &Qualifier| {
-            declared
+            table
                 .get(&binding.without_last())
                 .is_some_and(|info| info.get_binding(binding.last()).is_some())
         };
@@ -128,7 +124,7 @@ impl Audiences {
         // The compilation root is visible to the whole program.
         modules.insert(Qualifier::empty(), vec![Qualifier::empty()]);
 
-        for (module, info) in table {
+        for (module, info) in table.iter() {
             for (label, vis_pub) in info.children() {
                 if !vis_pub {
                     widen(&mut modules, module.with(label), *module);
@@ -138,7 +134,7 @@ impl Audiences {
 
         loop {
             let mut changed = false;
-            for (module, interface) in public {
+            for (module, interface) in public.iter() {
                 let exposure = modules.get(module).cloned().unwrap_or_default();
                 let exported = interface
                     .children
@@ -158,7 +154,7 @@ impl Audiences {
 
         let mut bindings: HashMap<Qualifier, Vec<Qualifier>> = HashMap::new();
 
-        for (module, info) in table {
+        for (module, info) in table.iter() {
             for (label, vis_pub) in info.bindings() {
                 if !vis_pub {
                     widen(&mut bindings, module.with(label), *module);
@@ -168,7 +164,7 @@ impl Audiences {
 
         let mut relayed: HashMap<Qualifier, Vec<Relay>> = HashMap::new();
 
-        for (module, interface) in public {
+        for (module, interface) in public.iter() {
             let exposure = modules.get(module).cloned().unwrap_or_default();
             #[expect(
                 clippy::iter_over_hash_type,
@@ -335,11 +331,8 @@ impl<'a> AudienceScope<'a> {
     }
 
     /// Whether no export of `public`, the unit's own export view, shows an earlier unit's name to anyone its own unit does not: what lets every unit decide its audiences alone.
-    pub(super) fn widens_nothing<'t>(
-        &self,
-        public: impl IntoIterator<Item = (&'t Qualifier, &'t PublicInterface)>,
-    ) -> bool {
-        public.into_iter().all(|(module, interface)| {
+    pub(super) fn widens_nothing(&self, public: &Table<PublicInterface>) -> bool {
+        public.iter().all(|(module, interface)| {
             let exposure = self.own.module(module);
             let children = interface.children.values().all(|entry| {
                 self.declaring(&entry.target).is_none_or(|unit| {
@@ -625,10 +618,8 @@ fn seed(
         );
     }
 
-    public.insert(*prefix, interface);
-
     // Attach declaration provenance to directly exposed nominal bindings. The fixed point copies this bit alongside the canonical target.
-    if let Some(interface) = public.get_mut(prefix) {
+    {
         for headed in heads {
             match &headed.head {
                 Head::Struct(group) => {
@@ -662,6 +653,7 @@ fn seed(
             }
         }
     }
+    public.insert(*prefix, interface);
 
     for headed in heads {
         match &headed.head {
@@ -867,10 +859,10 @@ fn insert(
     label: String,
     entry: Entry,
 ) -> Result<bool, Error> {
-    let interface = public.get_mut(module).expect("seeded module");
+    let slots = public.get(module).expect("seeded module");
     let slot = match ns {
-        Ns::Module => &mut interface.children,
-        Ns::Binding => &mut interface.bindings,
+        Ns::Module => &slots.children,
+        Ns::Binding => &slots.bindings,
     };
 
     // Conflict is about *what* a slot exports, not which `pub use` claimed it: two selectors (a glob and a named item, or two paths through different re-export chains) that land on the same declaration agree, so re-deriving one is idempotent. Only genuinely divergent targets are ambiguous. Keeping the first entry preserves its representation provenance, which is derived from the target and therefore identical across the agreeing paths.
@@ -878,7 +870,13 @@ fn insert(
         Some(existing) if existing.target == entry.target => Ok(false),
         Some(_) => Err(Error::ExportConflict { label }),
         None => {
-            slot.insert(label, entry);
+            public.update(module, |interface| {
+                match ns {
+                    Ns::Module => &mut interface.children,
+                    Ns::Binding => &mut interface.bindings,
+                }
+                .insert(label, entry);
+            });
             Ok(true)
         }
     }

@@ -634,6 +634,21 @@ impl<K: Ord + Hash + Clone, V: Clone> Sorted<K, V> {
         Some(removed)
     }
 
+    /// The value `key` holds, changed in place by `change`: the nodes on the path to it are copied where another version holds them, and nothing is done where `key` holds nothing. Whether it held a value.
+    pub fn update(&mut self, key: &K, change: impl FnOnce(&mut V)) -> bool {
+        if self.tree.get(key).is_none() {
+            return false;
+        }
+        self.tree.upsert(key.clone(), sorted_priority(key), |held| {
+            if let Some(held) = held {
+                change(held);
+            }
+            None
+        });
+
+        true
+    }
+
     /// The entry of the greatest key below `key`.
     pub fn before(&self, key: &K) -> Option<(&K, &V)> {
         self.tree.before(key)
