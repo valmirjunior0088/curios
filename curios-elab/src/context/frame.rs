@@ -9,6 +9,7 @@
 //! **A frame may hold a name twice.** An arm assumes its own payload binder again at the type its case's solution gives it (`retype_locals`), so the locals are a list, read by the later entry, with the assumptions beside them by name.
 
 use {
+    super::Window,
     crate::{DeadArm, UniverseStateToken},
     curios_core::{DefinitionKind, Free, Term, UniverseContext},
     curios_utilities::Keyed,
@@ -74,6 +75,24 @@ pub(crate) struct ScrutineeEntry {
 pub(crate) struct Settled {
     pub(crate) compared: Term,
     pub(crate) unerased: Term,
+}
+
+/// What a settlement of one of a frame's entries remembered, beside the frames that stood when it was filed and how many times every spelling had been forgotten at once: it answers only while both stand.
+#[derive(Debug)]
+pub(super) struct KeptWindow {
+    pub(super) window: Window,
+    pub(super) stood: Prefix,
+    pub(super) forgotten: usize,
+}
+
+/// The frames that stand at one moment, as a later moment can ask whether they all still do: the stand they stand in, how many there are, and the number the innermost took.
+///
+/// A frame leaves only after every frame inside it, and no two frames take one number, so they all stand while the innermost does. A copy a stand holds keeps the number of the frame it copies and may hold less than that frame does now, so the stand is what tells the two apart.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Prefix {
+    pub(super) stand: u64,
+    pub(super) depth: usize,
+    pub(super) innermost: u64,
 }
 
 /// What a settlement left for one scrutinee entry.
@@ -202,6 +221,12 @@ pub(crate) struct Frame {
     ///
     /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the kernel settles an equation's reduct once for each.
     pub(super) scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
+    /// What the last settlement of one of this frame's entries remembered, of each of the two reductions: the next settlement made here starts from it (`Caches::enter_window`).
+    ///
+    /// **It rests on what a settled spelling rests on, and on the frames that stood when it was filed.** Every settlement of an entry registered here reads the frames outside this one under the same window, and those cannot change while this one stands. But what a settlement remembers is not its key's alone: a stuck form put to an entry is the probe's, and names what the frames inside stand for, a local definition under a label another frame may define again among them. So the window is filed with the frames that stand ([`Prefix`]) and answers only while they all still do, and it is forgotten as a spelling is.
+    ///
+    /// **Shared by the frame's copies**, which the prefix tells apart where a stand holds one.
+    pub(super) settled_windows: Rc<RefCell<[Option<KeptWindow>; 2]>>,
     /// Why the frame's arm is never taken, where the frame is an arm its scrutinee's indices rule out — `None` for every other frame. The reason is known where the arm opens, and an implicit bound nothing discharges under it is reported once the arm has closed, so it is kept here for the metavariable born there to read ([`HeldFrames::dead_arm`]).
     pub(super) dead_arm: Option<Rc<DeadArm>>,
     /// The guard and the case of the arm the frame is, where it is an arm that refines its scrutinee to a case — `None` for every other frame. Whether a value reaches such an arm is found by reducing its guard, which nothing does where the arm opens: it is asked where an error leaves the arm, and where a bound nothing discharges under it is given up ([`HeldFrames::arms`]).
@@ -225,6 +250,7 @@ impl Frame {
             refinement_projections: Recorded::new(),
             refinement_scrutinees: Recorded::new(),
             scrutinee_spellings: Default::default(),
+            settled_windows: Default::default(),
             dead_arm: None,
             arm: None,
             body: false,

@@ -9,8 +9,8 @@
 use {
     super::{
         DefEntry, Defined, Frame, HeldFrames, InScope, ProjectionEntry, ScrutineeEntry, Settled,
-        SharedSpine, SharedTelescope,
-        frame::{Spelling, refinements_within, stand},
+        SharedSpine, SharedTelescope, Window,
+        frame::{KeptWindow, Prefix, Spelling, refinements_within, stand},
     },
     crate::{DeadArm, UniverseStateToken},
     curios_core::{
@@ -33,6 +33,10 @@ pub(crate) struct Frames<'s> {
     frames: Vec<Rc<Frame>>,
     /// The frames each judgment standing on held frames set aside, the outermost stand first ([`Frames::stand_on`]): no lookup reads them, and the questions put to every frame are put to them too ([`Frames::every_frame`]).
     aside: Vec<Vec<Rc<Frame>>>,
+    /// The number each of those stands took, the outermost first: what a [`Prefix`] names the stand by.
+    stands: Vec<u64>,
+    /// How many judgments have stood on held frames: the number the next stand takes. The live frames stand in none, numbered zero.
+    stood: u64,
     /// Each top-level `rec` group the base frame defines a member of, beside the globals its members are defined under, in member order: its definitions read the other way, kept as each member is defined so that a reader holding a group and one of its names asks for the rest and scans nothing. Two declarations that define one group are two lists, each in the order its members were defined. A member not yet defined, or forgotten, is `None`. Asked by group and never read in order, which a hash map has none of.
     members: HashMap<Keyed<RecGroup>, Vec<Vec<Option<Global>>>>,
     /// How much of the refinement stack a settlement withholds from the inside, as the frame the entry being settled was registered in — `None` for none of it.
@@ -57,6 +61,8 @@ impl<'s> Frames<'s> {
             scope: None,
             frames: vec![Rc::new(Frame::new(0))],
             aside: Vec::new(),
+            stands: Vec::new(),
+            stood: 0,
             members: HashMap::new(),
             withhold_refinements_from: None,
             spellings_forgotten: 0,
@@ -234,6 +240,8 @@ impl<'s> Frames<'s> {
         let aside = self.frames.split_off(1);
         self.frames.extend(held.frames().iter().cloned());
         self.aside.push(aside);
+        self.stood += 1;
+        self.stands.push(self.stood);
 
         SetAside {
             withheld: self.withhold_refinements_from.take(),
@@ -247,6 +255,7 @@ impl<'s> Frames<'s> {
         self.frames.truncate(1);
         self.frames
             .extend(self.aside.pop().expect("a stand set its frames aside"));
+        self.stands.pop();
         self.withhold_refinements_from = aside.withheld;
     }
 
@@ -583,7 +592,53 @@ impl<'s> Frames<'s> {
                         .is_some_and(|settled| !settled.unerased.mentions_free(name))
                 });
             }
+            for kept in frame.settled_windows.borrow_mut().iter_mut().flatten() {
+                kept.window.retain_without(name);
+            }
         }
+    }
+
+    /// What the last settlement of an entry registered in `frame` remembered under the reduction `plain` names, taken for the next one to start from, where the frames that stood when it was filed all still stand and nothing has been forgotten since ([`Frame::settled_windows`](super::Frame)).
+    pub(crate) fn take_settled_window(&self, frame: usize, plain: bool) -> Option<Window> {
+        let kept =
+            self.frames.get(frame)?.settled_windows.borrow_mut()[usize::from(plain)].take()?;
+
+        (kept.forgotten == self.spellings_forgotten && self.still_stand(kept.stood))
+            .then_some(kept.window)
+    }
+
+    /// File what a settlement of an entry registered in `frame` remembered under the reduction `plain` names, for the next one.
+    pub(crate) fn keep_settled_window(&self, frame: usize, plain: bool, window: Window) {
+        if let Some(frame) = self.frames.get(frame) {
+            frame.settled_windows.borrow_mut()[usize::from(plain)] = Some(KeptWindow {
+                window,
+                stood: self.prefix(),
+                forgotten: self.spellings_forgotten,
+            });
+        }
+    }
+
+    /// The frames that stand now, for [`Frames::still_stand`] to be asked about later.
+    fn prefix(&self) -> Prefix {
+        Prefix {
+            stand: self.stand_number(),
+            depth: self.frames.len(),
+            innermost: self.innermost_frame().number,
+        }
+    }
+
+    /// Whether every frame that stood at `prefix` still stands, in the stand it stood in.
+    fn still_stand(&self, prefix: Prefix) -> bool {
+        self.stand_number() == prefix.stand
+            && self
+                .frames
+                .get(prefix.depth - 1)
+                .is_some_and(|frame| frame.number == prefix.innermost)
+    }
+
+    /// The number of the stand the frames stand in: zero for the live ones.
+    fn stand_number(&self) -> u64 {
+        self.stands.last().copied().unwrap_or(0)
     }
     /// Whether any scrutinee refinement is registered, in a frame that stands or in one set aside. The cheap outer gate for the reducer probe — skipped on the common refinement-free reduction without hashing anything.
     pub(crate) fn has_scrutinee_refinements(&self) -> bool {

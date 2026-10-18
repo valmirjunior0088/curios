@@ -1691,20 +1691,23 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`] carries the rule, and the caches set the live window's scoped answers aside for the bracket and hand them back where it ends ([`Caches::enter_window`]).
+    /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`] carries the rule, and the caches set the live window's scoped answers aside for the bracket and hand them back where it ends ([`Caches::enter_window`]). What the settlement remembers is kept by `frame`, for the next settlement of an entry registered there, which reads the same frames ([`Frames::take_settled_window`]).
     pub(crate) fn with_refinements_withheld_from<R>(
         &mut self,
         frame: usize,
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let plain = self.typing.asking.plain();
+        let kept = self.typing.frames.take_settled_window(frame, plain);
         self.typing
             .caches
-            .enter_window(Bracket::Settlement { plain });
+            .enter_window(Bracket::Settlement { plain }, kept);
         let previous = self.typing.frames.withhold_refinements_from(frame);
         let result = f(self);
         self.typing.frames.restore_withheld_refinements(previous);
-        self.typing.caches.leave_window();
+        if let Some(own) = self.typing.caches.leave_window() {
+            self.typing.frames.keep_settled_window(frame, plain, own);
+        }
 
         result
     }
@@ -2911,7 +2914,7 @@ impl<'s> Context<'s> {
 
         let windowed = set_aside_refined || stood_on_refined || redefined;
         if windowed {
-            self.typing.caches.enter_window(Bracket::Stand);
+            self.typing.caches.enter_window(Bracket::Stand, None);
             self.typing.caches.invalidate_for_stand();
         }
         if held.binds() || stood_on_refined || redefined {
