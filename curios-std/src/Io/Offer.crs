@@ -29,11 +29,7 @@ pub let after(d: Duration) -> Io(Offer({})) =
             Io/bind(
                 Instant/now(),
                 (t) =>
-                    Io/pure(
-                        match Instant/before(t, due)
-                        | true => Option/none()
-                        | false => Option/some(())
-                        end)),
+                    Io/pure(match t < due | true => Option/none() | false => Option/some(()) end)),
             Io/bind(
                 Instant/now(),
                 (t) =>

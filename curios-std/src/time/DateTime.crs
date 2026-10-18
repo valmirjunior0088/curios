@@ -1,4 +1,4 @@
-use /std/{Nat, Str, List, Spell, Fmt};
+use /std/{Nat, Int, Str, List, Option, Spell, Fmt};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
@@ -120,11 +120,14 @@ let of_seconds(secs: Nat) -> DateTime =
         minute = within % 3600 / 60,
         second = within % 60 };
 
---- The date and the time of day `t` is, to the second. The days since the epoch are counted in eras of 400 years, each of 146 097 days, and in years that begin on the first of March, so that a leap day is its year's last and a month's first day falls where a line through the months puts it; the first of January 1970 was a Thursday.
+--- The date and the time of day `t` is, to the second, or `none` before 1970. The days since the epoch are counted in eras of 400 years, each of 146 097 days, and in years that begin on the first of March, so that a leap day is its year's last and a month's first day falls where a line through the months puts it; the first of January 1970 was a Thursday.
 ---
 --- An era is taken apart into its centuries, a century into its cycles of four years and a cycle into its years, each by a remainder, so the day of the year is at most the 365 a leap year's last day is and the month it falls in is one of twelve by its bound. An era's last day is the 36 525th of its fourth century and a cycle's last the 366th of its fourth year, which is why each count stops at three.
-pub let of_timestamp(t: Timestamp) -> DateTime =
-    of_seconds(Timestamp/to_unix(t).secs);
+pub let of_timestamp(t: Timestamp) -> Option(DateTime) =
+    match Int/view(Timestamp/to_unix_secs(t))
+    | nonneg(secs) => Option/some(of_seconds(secs))
+    | neg(_) => Option/none()
+    end;
 
 --- The weekday in the three letters the Internet message format writes it in.
 pub let weekday_name(d: Weekday) -> Str =

@@ -1,58 +1,71 @@
-use /std/{Nat, Bool};
+use /std/{Int, Ord, Hash, Spell, Fmt};
+use /std/ops/{Eql, Cmp, Add, Sub};
 
---- A length of time, with no sign.
+--- A length of time, signed: one count of nanoseconds, so a sum and a difference are the count's own and a length below zero is one too.
 pub struct Duration: Type {
-    secs: Nat,
-    nanos: Nat,
+    nanos: Int,
 }
 
---- `secs` and `nanos`, with nanoseconds past a second carried.
-pub let of(secs: Nat, nanos: Nat) -> Duration =
-    Duration { secs = secs + nanos / 1000000000, nanos = nanos % 1000000000 };
+satisfy Eql(Duration) {
+    ..
+}
+
+satisfy Ord(Duration) {
+    ..
+}
+
+satisfy Hash(Duration) {
+    ..
+}
+
+satisfy Cmp(Duration) {
+    lt(a, b) = a.nanos < b.nanos,
+    le(a, b) = a.nanos <= b.nanos,
+    gt(a, b) = a.nanos > b.nanos,
+    ge(a, b) = a.nanos >= b.nanos,
+}
+
+satisfy Add(Duration) {
+    add(a, b) = Duration { nanos = a.nanos + b.nanos },
+}
+
+satisfy Sub(Duration) {
+    sub(a, b) = Duration { nanos = a.nanos - b.nanos },
+}
+
+--- As its constructor's call: `Duration/of_nanos(+1500000000)`.
+satisfy Spell(Duration) {
+    spell(d) = Fmt/render("Duration/of_nanos(#)")(d.nanos),
+}
 
 --- No time.
 pub let zero: Duration =
-    Duration { secs = 0, nanos = 0 };
+    Duration { nanos = +0 };
 
---- `secs` seconds.
-pub let of_secs(secs: Nat) -> Duration =
-    Duration { secs = secs, nanos = 0 };
+--- `n` seconds.
+pub let of_secs(n: Int) -> Duration =
+    Duration { nanos = n * 1000000000 };
 
---- `ms` milliseconds.
-pub let of_millis(ms: Nat) -> Duration =
-    Duration { secs = ms / 1000, nanos = ms % 1000 * 1000000 };
+--- `n` milliseconds.
+pub let of_millis(n: Int) -> Duration =
+    Duration { nanos = n * 1000000 };
 
---- The whole seconds.
-pub let secs(d: Duration) -> Nat =
-    d.secs;
+--- `n` microseconds.
+pub let of_micros(n: Int) -> Duration =
+    Duration { nanos = n * 1000 };
 
---- The nanoseconds within the second.
-pub let nanos(d: Duration) -> Nat =
+--- `n` nanoseconds.
+pub let of_nanos(n: Int) -> Duration =
+    Duration { nanos = n };
+
+--- The whole seconds, rounded toward zero as `Int`'s `/` rounds.
+pub let to_secs(d: Duration) -> Int =
+    d.nanos / 1000000000;
+
+--- The whole milliseconds, rounded toward zero.
+pub let to_millis(d: Duration) -> Int =
+    d.nanos / 1000000;
+
+--- The nanoseconds, exactly.
+pub let to_nanos(d: Duration) -> Int =
     d.nanos;
-
---- The whole milliseconds.
-pub let to_millis(d: Duration) -> Nat =
-    d.secs * 1000 + d.nanos / 1000000;
-
---- The sum.
-pub let add(a: Duration, b: Duration) -> Duration =
-    let nanos = a.nanos + b.nanos;
-    match nanos < 1000000000
-    | true => Duration { secs = a.secs + b.secs, nanos = nanos }
-    | false => Duration { secs = a.secs + b.secs + 1, nanos = nanos - 1000000000 }
-    end;
-
---- Whether `a` is shorter than `b`.
-pub let before(a: Duration, b: Duration) -> Bool =
-    choose | a.secs < b.secs => true | a.secs > b.secs => false | _ => a.nanos < b.nanos end;
-
---- `a - b`, and zero when `a` is not longer than `b`.
-pub let sub(a: Duration, b: Duration) -> Duration =
-    match before(a, b)
-    | true => zero
-    | false =>
-        match a.nanos < b.nanos
-        | true => Duration { secs = a.secs - b.secs - 1, nanos = a.nanos + 1000000000 - b.nanos }
-        | false => Duration { secs = a.secs - b.secs, nanos = a.nanos - b.nanos }
-        end
-    end;

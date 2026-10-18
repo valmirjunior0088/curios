@@ -47,7 +47,7 @@ pub use Request/{let Request, get, post};
 pub mod Response;
 pub use Response/{let Response};
 
---- How an exchange is performed: the deadline, the redirect limit and how much of a reply is taken.
+--- How an exchange is performed: the timeout, the redirect limit and how much of a reply is taken.
 pub mod Client;
 pub use Client/{let Client};
 
@@ -60,7 +60,7 @@ pub use Server/{let Server};
 
 use /std/{Bytes, Nat, Option, Try, Io};
 
---- Why an exchange failed: the wire, a reply that is not read, a reply cut short, the deadline, or a redirect chain past the client's limit.
+--- Why an exchange failed: the wire, a reply that is not read, a reply cut short, the timeout, or a redirect chain past the client's limit.
 pub induct Error: pub Type
 --- The wire failed.
 | net(Io/Error)
@@ -68,7 +68,7 @@ pub induct Error: pub Type
 | refused(Refusal)
 --- The peer closed before its reply was whole (RFC 9112 §8). What arrived comes with it: nothing where the head itself was cut short, and otherwise the head and the content received, the octets of a stated length or the whole chunks of a chunked body.
 | incomplete(Option({Response/Head, Bytes}))
---- The deadline passed.
+--- The timeout passed.
 | timeout()
 --- The redirect chain ran past the client's limit, after this many.
 | redirected(Nat)

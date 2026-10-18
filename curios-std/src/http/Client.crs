@@ -124,7 +124,7 @@ let follow(c: Client, request: Request, left: Nat) -> Try(Io, Error, Response) =
         end
     end;
 
---- One exchange: connect by the scheme, send the request whole, read the reply as its framing delimits it and no further, and follow a redirect while the limit allows — all under the deadline, which is reported as `timeout`. A reply the peer closes on before it is whole is `incomplete` with what arrived of it, and one that is malformed or past `c.limits` is `refused`. A reply a peer sent before it had read the request is the answer even where the request could not then be sent whole.
+--- One exchange: connect by the scheme, send the request whole, read the reply as its framing delimits it and no further, and follow a redirect while the limit allows — all under the timeout, whose passing is reported as `timeout`. A reply the peer closes on before it is whole is `incomplete` with what arrived of it, and one that is malformed or past `c.limits` is `refused`. A reply a peer sent before it had read the request is the answer even where the request could not then be sent whole.
 pub let perform(c: Client, request: Request) -> Try(Io, Error, Response) =
     let outcome = Io/timeout(c.timeout, Try/run(follow(c, request, c.redirects)))!;
     match outcome | none() => Try/raise(Error/timeout()) | some(r) => Try/attempt(Io/pure(r)) end;

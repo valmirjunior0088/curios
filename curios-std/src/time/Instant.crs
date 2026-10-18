@@ -1,9 +1,29 @@
-use /std/{Bool, Io};
+use /std/{Nat, Int, Io, Ord, Hash};
+use /std/ops/{Eql, Cmp};
 use /std/time/{Duration};
 
---- A reading of the monotonic clock.
+--- A reading of the monotonic clock: nanoseconds since its origin, which two readings share only within one run.
 pub struct Instant: Type {
-    elapsed: Duration,
+    nanos: Int,
+}
+
+satisfy Eql(Instant) {
+    ..
+}
+
+satisfy Ord(Instant) {
+    ..
+}
+
+satisfy Hash(Instant) {
+    ..
+}
+
+satisfy Cmp(Instant) {
+    lt(a, b) = a.nanos < b.nanos,
+    le(a, b) = a.nanos <= b.nanos,
+    gt(a, b) = a.nanos > b.nanos,
+    ge(a, b) = a.nanos >= b.nanos,
 }
 
 --- The monotonic clock: seconds since a fixed origin, and the nanoseconds within the second.
@@ -12,16 +32,16 @@ foreign clock_mono() -> {secs: Nat, nanos: Nat};
 --- The clock now.
 pub let now() -> Io(Instant) =
     let r = clock_mono()!;
-    Io/pure(Instant { elapsed = Duration/of(r.secs, r.nanos) });
+    Io/pure(Instant { nanos = Nat/to_int(r.secs) * 1000000000 + Nat/to_int(r.nanos) });
 
---- The moment `d` after `t`.
+--- The instant `d` after `t`.
 pub let add(t: Instant, d: Duration) -> Instant =
-    Instant { elapsed = Duration/add(t.elapsed, d) };
+    Instant { nanos = t.nanos + Duration/to_nanos(d) };
 
---- `a - b`, and zero when `a` is not after `b`.
+--- The instant `d` before `t`.
+pub let sub(t: Instant, d: Duration) -> Instant =
+    Instant { nanos = t.nanos - Duration/to_nanos(d) };
+
+--- How long after `b` the reading `a` was taken: below zero where `a` is the earlier.
 pub let diff(a: Instant, b: Instant) -> Duration =
-    Duration/sub(a.elapsed, b.elapsed);
-
---- Whether `a` was read before `b`.
-pub let before(a: Instant, b: Instant) -> Bool =
-    Duration/before(a.elapsed, b.elapsed);
+    Duration/of_nanos(a.nanos - b.nanos);

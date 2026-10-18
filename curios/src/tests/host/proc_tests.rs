@@ -268,9 +268,9 @@ fn a_cancelled_scope_kills_the_child_spawned_into_it() {
             let body() -> Try(Io, Io/Error, {}) =
                 Try/scope((inner) =>
                     let _ = Process/Child/spawn(inner, Process/new("sleepy", []))!;
-                    let _ = Io/sleep(/std/time/Duration/of(60, 0))!;
+                    let _ = Io/sleep(/std/time/Duration/of_secs(60))!;
                     Try/pure(()));
-            let ran = Io/timeout(/std/time/Duration/of(0, 0), Try/run(body()))!;
+            let ran = Io/timeout(/std/time/Duration/zero, Try/run(body()))!;
             Try/pure(match ran | none() => "cancelled" | some(_) => "finished" end)
         "#,
     );

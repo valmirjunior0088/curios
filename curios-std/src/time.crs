@@ -2,11 +2,11 @@
 pub mod Instant;
 pub use Instant/{let Instant};
 
---- A length of time, with no sign.
+--- A length of time, signed: one count of nanoseconds.
 pub mod Duration;
 pub use Duration/{let Duration};
 
---- A moment that means something: seconds since the Unix epoch, as the wall clock and a file's modification time report it.
+--- A moment that means something: nanoseconds since the Unix epoch, signed, as the wall clock and a file's modification time report it.
 pub mod Timestamp;
 pub use Timestamp/{let Timestamp};
 

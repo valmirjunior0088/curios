@@ -25,7 +25,7 @@ pub use Reader/{let Reader};
 pub mod Scope;
 pub use Scope/{let Scope};
 
-use /std/{Monad, Bytes, Nat, Bool, List, Option, Cell, Program, Try};
+use /std/{Monad, Bytes, Nat, Int, Bool, List, Option, Cell, Program, Try};
 use /std/internal/{Handle};
 use /std/Bool/{Holds};
 use /std/time/{Duration};
@@ -60,9 +60,11 @@ pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
 --- A handle ready once so many seconds and nanoseconds have passed.
 foreign clock_timer(Nat, Nat) -> Handle;
 
---- A handle ready once `d` has passed: what a description suspends on to wait that long. One of no time is ready at once.
+--- A handle ready once `d` has passed: what a description suspends on to wait that long. One of no time, or of less, is ready at once.
 let timer(d: Duration) -> Io(Handle) =
-    clock_timer(Duration/secs(d), Duration/nanos(d));
+    let n = Duration/to_nanos(d);
+    let left = match n >= +0 | true => Int/to_nat(n) | false => 0 end;
+    clock_timer(left / 1000000000, left % 1000000000);
 
 --- Until `d` has passed, on a timer of its own, closed whether the wait ends or is cancelled.
 pub let sleep(d: Duration) -> Io({}) =

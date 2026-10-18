@@ -211,9 +211,9 @@ fn join_all_holds_the_body_until_every_child_has_ended() {
     let (system, io) = ticking();
     run_text(
         r#"
-        use /std/{Str, Nat, Io};
+        use /std/{Str, Int, Io};
         use /std/time/{Duration};
-        let child(seconds: Nat, mark: Str) -> Io({}) =
+        let child(seconds: Int, mark: Str) -> Io({}) =
             let _ = Io/sleep(Duration/of_secs(seconds))!;
             /std/print(mark);
         let body(s: Io/Scope) -> Io({}) =

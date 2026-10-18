@@ -103,7 +103,7 @@ fn clock_diff_of_two_distinct_now_readings() {
             let a = /std/time/Instant/now()!;
             let b = /std/time/Instant/now()!;
             let d = /std/time/Instant/diff(b, a);
-            let _ = /std/print(/std/Nat/to_str(/std/time/Duration/secs(d)))!;
+            let _ = /std/print(/std/Int/to_str(/std/time/Duration/to_secs(d)))!;
             /std/Io/pure(());
         entry()
         "#,
@@ -111,28 +111,29 @@ fn clock_diff_of_two_distinct_now_readings() {
     )
     .expect("expected result");
 
-    assert_eq!(io.output(), b"30");
+    assert_eq!(io.output(), b"+30");
 }
 
-// `Timestamp` is the moment with a meaning: it reads the wall clock, its nanoseconds canonicalise on the way in — a second of them carries into the seconds — and it shows as the epoch seconds with nine digits of fraction.
+// `Timestamp` is the moment with a meaning: it reads the wall clock into one count of nanoseconds, compares and subtracts as that count, and shows as the Unix second it lies in with nine digits of the nanoseconds past it.
 #[test]
-fn a_timestamp_reads_the_wall_clock_canonicalises_and_shows_as_epoch_seconds() {
+fn a_timestamp_reads_the_wall_clock_into_one_count_and_shows_as_epoch_seconds() {
     let (system, io) = MockHost::builder()
         .wall([(1_000_000_100, 500), (1_000_000_130, 900)])
         .build();
     run_text(
         r#"
-        use /std/{Str, Nat, Bool, Show};
+        use /std/{Str, Int, Bool, Show};
         use /std/time/{Timestamp, Duration};
         let entry() -> /std/Io({}) =
             let a = Timestamp/now()!;
             let b = Timestamp/now()!;
             /std/print(Str/join(" ", [
-                Nat/to_str(Duration/secs(Timestamp/diff(b, a))),
+                Int/to_str(Duration/to_secs(Timestamp/diff(b, a))),
                 Show/show(a),
-                Show/show(Timestamp/of_unix(1000000000, 1500000000)),
-                Bool/to_str(Timestamp/before(a, b)),
-                Bool/to_str(a == Timestamp/of_unix(1000000100, 500))
+                Show/show(Timestamp/of_unix_nanos(1000000001500000000)),
+                Show/show(Timestamp/of_unix_nanos(-500000000)),
+                Bool/to_str(a < b),
+                Bool/to_str(a == Timestamp/of_unix_nanos(1000000100000000500))
             ]));
         entry()
         "#,
@@ -142,7 +143,7 @@ fn a_timestamp_reads_the_wall_clock_canonicalises_and_shows_as_epoch_seconds() {
 
     assert_eq!(
         io.output(),
-        b"30 1000000100.000000500 1000000001.500000000 true true"
+        b"+30 +1000000100.000000500 +1000000001.500000000 -1.500000000 true true"
     );
 }
 
@@ -155,7 +156,7 @@ fn clock_mono_reads_scripted_elapsed() {
             let earlier = /std/time/Instant/now()!;
             let later = /std/time/Instant/now()!;
             let e = /std/time/Instant/diff(later, earlier);
-            let _ = /std/print(/std/Nat/to_str(/std/time/Duration/secs(e)))!;
+            let _ = /std/print(/std/Int/to_str(/std/time/Duration/to_secs(e)))!;
             /std/Io/pure(());
         entry()
         "#,
@@ -163,7 +164,7 @@ fn clock_mono_reads_scripted_elapsed() {
     )
     .expect("expected result");
 
-    assert_eq!(io.output(), b"3");
+    assert_eq!(io.output(), b"+3");
 }
 
 #[test]

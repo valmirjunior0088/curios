@@ -1,27 +1,32 @@
 -- A moment as the calendar names it: the date and the time of day a timestamp is, and the form HTTP writes one in.
-use /std/{Str, Nat, List, Test};
+use /std/{Str, Int, List, Option, Test};
 use /std/time/{Timestamp};
 use /std/time/{DateTime};
 use /std/time/DateTime/{Month, Weekday};
 
-let at(secs: Nat) -> DateTime =
-    DateTime/of_timestamp(Timestamp/of_unix(secs, 0));
+let at(secs: Int) -> Option(DateTime) =
+    DateTime/of_timestamp(Timestamp/of_unix_secs(secs));
 
-let spelled(secs: Nat) -> Str =
-    DateTime/to_imf_fixdate(at(secs));
+let spelled(secs: Int) -> Str =
+    match at(secs) | some(d) => DateTime/to_imf_fixdate(d) | none() => "no date" end;
 
 -- The epoch is the first of January 1970, a Thursday, at midnight.
 test the_epoch_is_a_thursday =
     Test/equal(
         at(0),
-        DateTime {
-            year = 1970,
-            month = Month/january(),
-            day = 1,
-            weekday = Weekday/thursday(),
-            hour = 0,
-            minute = 0,
-            second = 0 });
+        Option/some(
+            DateTime {
+                year = 1970,
+                month = Month/january(),
+                day = 1,
+                weekday = Weekday/thursday(),
+                hour = 0,
+                minute = 0,
+                second = 0 }));
+
+-- A moment before 1970 is none this calendar names.
+test a_moment_before_the_epoch_has_no_date_here =
+    Test/equal(at(-1), Option/none());
 
 -- A leap day is the twenty-ninth of February, in a year four divides and in a century four hundred divides; a century it does not has none, so the day after its twenty-eighth of February is the first of March.
 test a_leap_day_falls_where_the_calendar_puts_it =

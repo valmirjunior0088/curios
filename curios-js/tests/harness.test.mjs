@@ -488,17 +488,16 @@ test("the monotonic clock answers the nanoseconds within a second, a reading jus
   );
 
   const { stdout } = await execute(`
-use /std/{Nat, Str, print};
+use /std/{Int, print};
 use /std/time/{Instant, Duration};
 let main() -> /std/Io({}) =
     let a = Instant/now()!;
     let b = Instant/now()!;
-    let d = Instant/diff(b, a);
-    print(Str/flatten([Nat/to_str(Duration/secs(d)), " ", Nat/to_str(Duration/nanos(d))]));
+    print(Int/to_str(Duration/to_nanos(Instant/diff(b, a))));
 main()
 `);
 
-  assert.equal(stdout, "1 999999999");
+  assert.equal(stdout, "+1999999999");
 });
 
 test("an exit ends the run with its code", async () => {

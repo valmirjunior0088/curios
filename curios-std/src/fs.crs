@@ -61,7 +61,10 @@ pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
             Metadata {
                 kind = kind,
                 size = reply.size,
-                mtime = Timestamp/of_unix(reply.mtime_secs, reply.mtime_nanos) })
+                mtime =
+                    Timestamp/of_unix_nanos(
+                        Nat/to_int(reply.mtime_secs) * 1000000000
+                            + Nat/to_int(reply.mtime_nanos)) })
     | none() => Try/raise(unnamed)
     end;
 

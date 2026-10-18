@@ -1,16 +1,58 @@
-use /std/{Nat, Bool, Str, Io, Show, Fmt};
-use /std/ops/{Eql};
+use /std/{Nat, Int, Str, Io, Ord, Hash, Show, Spell, Fmt};
+use /std/ops/{Eql, Cmp};
 use /std/time/{Duration};
 
---- A moment, as seconds since the Unix epoch.
+--- A moment: nanoseconds since 1970-01-01T00:00:00Z, counted as POSIX counts its seconds, with no leap second, and signed, so a moment before 1970 is one too.
 pub struct Timestamp: Type {
-    secs: Nat,
-    nanos: Nat,
+    nanos: Int,
 }
 
---- The moment `secs` seconds and `nanos` nanoseconds after the epoch, with nanoseconds past a second carried.
-pub let of_unix(secs: Nat, nanos: Nat) -> Timestamp =
-    Timestamp { secs = secs + nanos / 1000000000, nanos = nanos % 1000000000 };
+satisfy Eql(Timestamp) {
+    ..
+}
+
+satisfy Ord(Timestamp) {
+    ..
+}
+
+satisfy Hash(Timestamp) {
+    ..
+}
+
+satisfy Cmp(Timestamp) {
+    lt(a, b) = a.nanos < b.nanos,
+    le(a, b) = a.nanos <= b.nanos,
+    gt(a, b) = a.nanos > b.nanos,
+    ge(a, b) = a.nanos >= b.nanos,
+}
+
+--- As its constructor's call: `Timestamp/of_unix_nanos(+1500000000)`.
+satisfy Spell(Timestamp) {
+    spell(t) = Fmt/render("Timestamp/of_unix_nanos(#)")(t.nanos),
+}
+
+--- `secs.nanos`: the Unix second the moment lies in, and the nanoseconds past it in nine digits.
+satisfy Show(Timestamp) {
+    show(t) =
+        let split = Int/DivMod/of(t.nanos, 1000000000);
+        Fmt/render("%.%")(split.quotient)(Str/pad_start(Nat/to_str(split.remainder), 9, '0')),
+}
+
+--- The moment `n` seconds after the epoch.
+pub let of_unix_secs(n: Int) -> Timestamp =
+    Timestamp { nanos = n * 1000000000 };
+
+--- The moment `n` nanoseconds after the epoch.
+pub let of_unix_nanos(n: Int) -> Timestamp =
+    Timestamp { nanos = n };
+
+--- The Unix second the moment lies in, as POSIX counts it: floored, so a moment half a second before the epoch lies in its second `-1`.
+pub let to_unix_secs(t: Timestamp) -> Int =
+    Int/DivMod/of(t.nanos, 1000000000).quotient;
+
+--- The nanoseconds since the epoch, exactly.
+pub let to_unix_nanos(t: Timestamp) -> Int =
+    t.nanos;
 
 --- The wall clock: seconds since the Unix epoch, and the nanoseconds within the second.
 foreign clock_wall() -> {secs: Nat, nanos: Nat};
@@ -18,28 +60,16 @@ foreign clock_wall() -> {secs: Nat, nanos: Nat};
 --- The wall clock now.
 pub let now() -> Io(Timestamp) =
     let r = clock_wall()!;
-    Io/pure(of_unix(r.secs, r.nanos));
+    Io/pure(Timestamp { nanos = Nat/to_int(r.secs) * 1000000000 + Nat/to_int(r.nanos) });
 
---- The seconds since the epoch, and the nanoseconds within the second.
-pub let to_unix(t: Timestamp) -> {secs: Nat, nanos: Nat} =
-    (secs = t.secs, nanos = t.nanos);
+--- The moment `d` after `t`.
+pub let add(t: Timestamp, d: Duration) -> Timestamp =
+    Timestamp { nanos = t.nanos + Duration/to_nanos(d) };
 
---- Whether `a` is earlier than `b`.
-pub let before(a: Timestamp, b: Timestamp) -> Bool =
-    choose | a.secs < b.secs => true | a.secs > b.secs => false | _ => a.nanos < b.nanos end;
+--- The moment `d` before `t`.
+pub let sub(t: Timestamp, d: Duration) -> Timestamp =
+    Timestamp { nanos = t.nanos - Duration/to_nanos(d) };
 
-let total_nanos(t: Timestamp) -> Nat =
-    t.secs * 1000000000 + t.nanos;
-
---- `a - b` as a duration, and zero when `a` is not after `b`.
+--- How long after `b` the moment `a` is: below zero where `a` is the earlier.
 pub let diff(a: Timestamp, b: Timestamp) -> Duration =
-    Duration/of(0, total_nanos(a) - total_nanos(b));
-
-satisfy Eql(Timestamp) {
-    ..
-}
-
---- `secs.nanos`, the nanoseconds padded to nine digits.
-satisfy Show(Timestamp) {
-    show(t) = Fmt/render("%.%")(t.secs)(Str/pad_start(Nat/to_str(t.nanos), 9, '0')),
-}
+    Duration/of_nanos(a.nanos - b.nanos);
