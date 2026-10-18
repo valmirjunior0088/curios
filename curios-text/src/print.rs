@@ -1204,20 +1204,28 @@ fn print_top_mod(item: TopMod) -> Printer {
     }
 }
 
-/// How one module item is separated from the next, wherever a module is printed: a `use` following a `use` or a `mod` closes up against it, since an import block reads as one paragraph, and everything else takes a blank line.
+/// How one module item is separated from the next, wherever a module is printed: a `use` following a `use` or a file-backed `mod` keeps the separation it was written with, closed up against it or a blank line apart, and everything else takes a blank line. `written_apart` is whether the source parts the two with a blank line, `None` where there is no source to read, and then the `use` closes up.
 ///
-/// Shared with [`crate::format::emit`], which prints a *file*'s items, so the two cannot disagree about what a module looks like: an inline `mod … end` keeps every blank line written inside it, as a file does.
-pub(crate) fn between_items(previous: Option<&TopItem>, next: &TopItem) -> Printer {
-    match previous {
-        None => pure(""),
-        Some(TopItem::Use(_)) if matches!(next, TopItem::Use(_)) => hard_line(),
+/// Which imports read as one paragraph is the author's to say: a facade's `mod x; use x/{…}` stacks, and the file's imports that follow its last facade stand apart from it, which no rule over the two items alone can tell from the facade's own lines.
+///
+/// Shared with [`crate::format::emit`], which prints a *file*'s items, so the two cannot disagree about what a module looks like.
+pub(crate) fn between_items(
+    previous: Option<&TopItem>,
+    next: &TopItem,
+    written_apart: Option<bool>,
+) -> Printer {
+    let closes_up = match previous {
+        None => return pure(""),
+        Some(TopItem::Use(_)) => matches!(next, TopItem::Use(_)),
         // A *file-backed* `mod x;` is one line of the same paragraph; an inline `mod … end` spans lines of its own, so what follows it starts a new one.
-        Some(TopItem::Mod(previous))
-            if previous.module.is_none() && matches!(next, TopItem::Use(_)) =>
-        {
-            hard_line()
+        Some(TopItem::Mod(previous)) => {
+            previous.module.is_none() && matches!(next, TopItem::Use(_))
         }
-        Some(_) => flat([hard_line(), hard_line()]),
+        Some(_) => false,
+    };
+    match closes_up && written_apart != Some(true) {
+        true => hard_line(),
+        false => flat([hard_line(), hard_line()]),
     }
 }
 
@@ -1226,7 +1234,7 @@ pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
     let mut previous: Option<&TopItem> = None;
 
     for item in &items {
-        parts.push(between_items(previous, item));
+        parts.push(between_items(previous, item, None));
         parts.push(print_top_item(item.clone()));
         previous = Some(item);
     }

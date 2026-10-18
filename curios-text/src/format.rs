@@ -110,7 +110,7 @@ fn render(printer: Printer, original: &Original<'_>) -> String {
     Within(RefCell::new(Some(printer)), original).to_string()
 }
 
-/// The parsed file as one document: items separated by exactly one blank line — except consecutive `use` declarations and a `use` directly following a `mod`, which stack with none, as the corpus writes its import heads and its `mod X; use X/{…}` pairs — and the tail last.
+/// The parsed file as one document: items separated by exactly one blank line — except a `use` following a `use` or a `mod X;`, which keeps the separation it was written with, stacked as the corpus writes its import heads and its `mod X; use X/{…}` pairs, or one blank line apart however many were written — and the tail last.
 ///
 /// **One document for the whole file, rendered once.** Every comment is placed by that single run, which is what lets a comment between two items be placed at all: rendering each item separately would give each its own renderer, and a comment belonging to neither would have to be spliced in as text by this function. Nothing here handles comments.
 pub(crate) fn emit(input: &FormatInput, original: &Original<'_>) -> String {
@@ -118,7 +118,8 @@ pub(crate) fn emit(input: &FormatInput, original: &Original<'_>) -> String {
     let mut previous: Option<&TopItem> = None;
 
     for (item, span) in input.module.items.iter().zip(&input.item_spans) {
-        parts.push(between_items(previous, item));
+        let apart = previous.map(|_| written_apart(original.text, span.start));
+        parts.push(between_items(previous, item, apart));
 
         // Marked at both ends, as a term is — see `print_term`.
         parts.push(reached(span.start));
@@ -135,6 +136,23 @@ pub(crate) fn emit(input: &FormatInput, original: &Original<'_>) -> String {
     }
 
     format!("{}\n", render(flat(parts), original))
+}
+
+/// Whether a blank line stands between the item that starts at `start` and the code before it, read back over the comment lines between them: a comment is no blank line, and an item sharing its line with the one before is not apart from it. Read from the item's start, since an item's span runs on over the blank lines and comments the parse consumed after it.
+fn written_apart(text: &str, start: usize) -> bool {
+    let line_start = text[..start].rfind('\n').map_or(0, |index| index + 1);
+    if !text[line_start..start].chars().all(is_blank) {
+        return false;
+    }
+    for line in text[..line_start].lines().rev() {
+        if line.chars().all(is_blank) {
+            return true;
+        }
+        if !line.trim_start().starts_with("--") {
+            return false;
+        }
+    }
+    false
 }
 
 /// The refuse-to-write gate: the output must reparse to the same program (structural equality — spans are excluded from it by design) carrying the same number of comments.

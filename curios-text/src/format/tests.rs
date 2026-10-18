@@ -261,12 +261,26 @@ fn an_interior_comment_survives_and_forces_a_break() {
 }
 
 #[test]
-fn consecutive_use_declarations_stack_without_blank_lines() {
+fn a_use_keeps_the_separation_it_was_written_with() {
     let source = "use /std/{Nat};\n\n\nuse /std/{Bool};\nuse /std/{Str};\nlet a : Nat = 1;\na\n";
     assert_eq!(
         formatted(source),
-        "use /std/{Nat};\nuse /std/{Bool};\nuse /std/{Str};\n\nlet a: Nat =\n    1;\n\na\n"
+        "use /std/{Nat};\n\nuse /std/{Bool};\nuse /std/{Str};\n\nlet a: Nat =\n    1;\n\na\n"
     );
+}
+
+/// A facade's lines stack under its `mod`, and the imports written apart after the last facade stay apart from it.
+#[test]
+fn imports_written_apart_from_a_facade_stay_apart() {
+    let source = "mod a;\npub use a/{let a};\n\nmod b;\n\nuse /std/{Nat};\nuse /std/{Bool};\n\nlet n: Nat =\n    1;\n\nn\n";
+    assert_eq!(formatted(source), source);
+}
+
+/// A comment between two items is no blank line: what stacks around it stays stacked.
+#[test]
+fn a_comment_between_two_uses_does_not_part_them() {
+    let source = "use /std/{Nat};\n-- why\nuse /std/{Bool};\n\nlet n: Nat =\n    1;\n\nn\n";
+    assert_eq!(formatted(source), source);
 }
 
 #[test]
