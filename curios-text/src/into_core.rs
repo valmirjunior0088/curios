@@ -70,7 +70,7 @@ use {
     std::{
         borrow::Cow,
         cell::OnceCell,
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
         sync::Arc,
     },
@@ -374,6 +374,12 @@ struct Resolved<'a> {
     mod_spans: HashMap<Qualifier, Span>,
     /// This unit's own module graph, over what the units in scope established. Every insertion below targets a module the unit declares; reads cross the boundary, which is why this is layered rather than copied. See [`Scoped`].
     table: Scoped<'a, ModuleInfo>,
+    /// The modules whose direct interface was read off their text now: every one, where no baseline's was carried, and otherwise each whose text the edit touched or the baseline does not hold, with the compilation root.
+    touched: HashSet<Qualifier>,
+    /// What the carried table held that the unit no longer declares, each module with every one under it: modules taken away, and the namespaces of the declarations of a touched module, which are read off its text again.
+    removed: Vec<Qualifier>,
+    /// Each module the unit declares, by where the walk over the module tree meets it.
+    order: HashMap<Qualifier, usize>,
 }
 
 /// One unit's text-stage state — its resolution tables, its lowered module and what the lowering recorded beside it — opaque outside this crate and carried on the unit for the units compiled after it.
@@ -602,7 +608,7 @@ impl PreparedText {
     /// Who read each binding, of the unit's lowered declarations read backwards. See the field.
     fn lookup_readers(&self) -> &LookupReaders {
         self.lookups
-            .get_or_init(|| LookupReaders::of(self.lowerings()))
+            .get_or_init(|| LookupReaders::of(self.lowerings(), &self.half().uses))
     }
 
     /// The unit's baseline half, read out of its bytes now where the unit was restored and nothing has asked before.
@@ -731,6 +737,8 @@ impl<'a> Resolved<'a> {
     /// **One walk for the entry and a mounted unit.** They differ in where a root's items come from and in which prefixes the compilation root lists as children, both of which are answered below rather than duplicated: two copies of a tree walk agree only by being read, which is the shape every configuration-dependent defect in this stage has had.
     ///
     /// No synthesized `mod sys;`-style declarations here: the compilation root's own `ModuleInfo` is built from the entry's raw items, then every mounted prefix is registered as its child *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (which rejects any collision, not just pub/pub) is what catches a user's own `mod std` colliding with that registration, in either direction.
+    ///
+    /// **Over a baseline's table, a module whose text stands keeps the baseline's entry** (`carried`): its direct interface is a function of its text alone.
     fn of(
         source: &UnitSource<'_>,
         root: &[Headed],
@@ -738,12 +746,16 @@ impl<'a> Resolved<'a> {
         predecessor_tables: &'a [&'a Table<ModuleInfo>],
         predecessor_mounts: &[Mount],
         own: &[Mount],
+        carried: Option<&Table<ModuleInfo>>,
     ) -> Result<Self, Error> {
         curios_profile::profile!("resolved::of");
         let mut resolved = Resolved {
             modules: HashMap::new(),
             mod_spans: HashMap::new(),
-            table: Scoped::over(predecessor_tables),
+            table: Scoped::from(predecessor_tables, carried.cloned().unwrap_or_default()),
+            touched: HashSet::new(),
+            removed: Vec::new(),
+            order: HashMap::new(),
         };
 
         // The compilation root: the entry's own module when the entry is what is being lowered, and otherwise a synthetic one belonging to no unit — which is why its children are *every* mounted prefix rather than only this unit's.
@@ -753,30 +765,62 @@ impl<'a> Resolved<'a> {
         for child in mounted_children(predecessor_mounts.iter().chain(own)) {
             root_info.insert_child(&Label::from(child), true)?;
         }
+        let carried_root = carried.and_then(|carried| carried.get(&Qualifier::empty()).cloned());
         resolved.table.insert(Qualifier::empty(), root_info);
+        resolved.touched.insert(Qualifier::empty());
+        resolved.order.insert(Qualifier::empty(), 0);
 
         // The entry's children hang off the root, whose `ModuleInfo` was just built by hand; a mounted unit has no root items, so this recurses over nothing for it.
-        resolved.discover_children(root, &Qualifier::empty(), source, scans)?;
+        resolved.discover_children(root, &Qualifier::empty(), false, source, scans)?;
 
         for mount in own.iter().filter(|mount| !mount.prefix.is_root()) {
             let header = Rc::new(Loaded::of(source, scans, &mount.prefix)?);
             resolved.modules.insert(mount.prefix, Rc::clone(&header));
-            resolved.discover(&header.heads, &mount.prefix, source, scans)?;
+            let standing = carried.is_some() && !header.touched();
+            resolved.discover(&header.heads, &mount.prefix, standing, source, scans)?;
+        }
+
+        // What a touched module declared and no longer does: a child module taken away, and every namespace its declarations made, which seeding its export view makes again.
+        if let Some(carried) = carried {
+            let touched = resolved.touched.iter().copied().collect::<Vec<_>>();
+            for module in touched {
+                let held = match module.is_root() {
+                    true => carried_root.clone(),
+                    false => carried.get(&module).cloned(),
+                };
+                let Some(held) = held else {
+                    continue;
+                };
+                for (label, _) in held.children() {
+                    let path = module.with(label);
+                    // A mounted prefix the root lists is another unit's, and the carried table holds nothing of it.
+                    if !resolved.order.contains_key(&path) && carried.contains_key(&path) {
+                        resolved.table.remove_subtree(&path);
+                        resolved.removed.push(path);
+                    }
+                }
+            }
         }
 
         Ok(resolved)
     }
 
-    // `mod` declarations only name children, so the module graph is a tree: every qualifier is reached exactly once and no cycles are possible. Hence the walk needs neither a visited-set nor a cache hit-check — just load each file module once and recurse.
+    // `mod` declarations only name children, so the module graph is a tree: every qualifier is reached exactly once and no cycles are possible. Hence the walk needs neither a visited-set nor a cache hit-check — just load each file module once and recurse. A module whose text `standing` says is the one a carried table was made of keeps its entry.
     fn discover(
         &mut self,
         heads: &[Headed],
         prefix: &Qualifier,
+        standing: bool,
         source: &UnitSource<'_>,
         scans: Option<&BTreeMap<Qualifier, Scan>>,
     ) -> Result<(), Error> {
-        self.table.insert(*prefix, scan_module_info(heads)?);
-        self.discover_children(heads, prefix, source, scans)
+        let order = self.order.len();
+        self.order.insert(*prefix, order);
+        if !(standing && self.table.own().contains_key(prefix)) {
+            self.table.insert(*prefix, scan_module_info(heads)?);
+            self.touched.insert(*prefix);
+        }
+        self.discover_children(heads, prefix, standing, source, scans)
     }
 
     // The child-recursion half of `discover`, split out so `of` can build the compilation root's `ModuleInfo` itself (with every mounted prefix pre-registered as a child) and recurse into its children without a second, unconditional `scan_module_info` call clobbering that registration.
@@ -784,6 +828,7 @@ impl<'a> Resolved<'a> {
         &mut self,
         heads: &[Headed],
         prefix: &Qualifier,
+        standing: bool,
         source: &UnitSource<'_>,
         scans: Option<&BTreeMap<Qualifier, Scan>>,
     ) -> Result<(), Error> {
@@ -801,7 +846,8 @@ impl<'a> Resolved<'a> {
                 }
 
                 match inline {
-                    Some(heads) => self.discover(heads, &path, source, scans)?,
+                    // An inline module's text is its parent's.
+                    Some(heads) => self.discover(heads, &path, standing, source, scans)?,
                     None => {
                         let module =
                             Loaded::of(source, scans, &path).map_err(|error| match span {
@@ -809,9 +855,10 @@ impl<'a> Resolved<'a> {
                                 None => error,
                             })?;
                         let module = Rc::new(module);
+                        let standing = scans.is_some() && !module.touched();
 
                         self.modules.insert(path, Rc::clone(&module));
-                        self.discover(&module.heads, &path, source, scans)?;
+                        self.discover(&module.heads, &path, standing, source, scans)?;
                     }
                 }
             }
@@ -946,8 +993,10 @@ struct Lowering<'a> {
     tests: Vec<curios_core::Global>,
     foreigns: ForeignStore,
     broken: Vec<BrokenItem>,
-    /// What the `use` declarations of each module body read, by the module ([`BaselineHalf::uses`]).
-    uses: BTreeMap<Qualifier, Vec<Consulted>>,
+    /// What the `use` declarations of each module body read, by the module ([`BaselineHalf::uses`]): over a baseline, the baseline's, with each body whose scope does not stand recorded again.
+    uses: Table<Vec<Consulted>>,
+    /// The bodies whose `use` declarations this walk resolved and recorded again.
+    relisted: Vec<Qualifier>,
     /// Each declaration the walk met over the baseline, kept or lowered, in order ([`Step`]).
     steps: Vec<Step>,
 }
@@ -982,6 +1031,8 @@ fn process_items(
     lowered: &mut Lowering,
     modules: &HashMap<Qualifier, Rc<Loaded>>,
 ) -> Result<(), Error> {
+    // Every binding the body's `use` declarations read, where its scope does not stand.
+    let mut read_by_uses = Vec::new();
     for headed in heads {
         match &headed.head {
             Head::Mod { label, .. } => {
@@ -1160,12 +1211,7 @@ fn process_items(
                 context.hush(quiet);
                 // What resolving it read is the scope's, which every declaration after it in the body stands in.
                 if !standing {
-                    let read = context.journal().consulted;
-                    lowered
-                        .uses
-                        .entry(context.prefix())
-                        .or_default()
-                        .extend(read);
+                    read_by_uses.extend(context.journal().consulted);
                 }
                 continue;
             }
@@ -1987,11 +2033,20 @@ fn process_items(
     // What the declarations of this body kept unasked read of its scope marks the `use` sites asking them would have.
     if let Some(baseline) = lowered.baseline {
         baseline.mark_uses(context);
-        if baseline.stands(&context.prefix())
-            && let Some(read) = baseline.uses_of(&context.prefix())
-        {
-            lowered.uses.insert(context.prefix(), read.clone());
+    }
+    // What a body's `use` declarations read is recorded again where its scope does not stand, and is the baseline's where it does.
+    let prefix = context.prefix();
+    if !lowered
+        .baseline
+        .is_some_and(|baseline| baseline.stands(&prefix))
+    {
+        match read_by_uses.is_empty() {
+            true => {
+                lowered.uses.remove(&prefix);
+            }
+            false => lowered.uses.insert(prefix, Rc::new(read_by_uses)),
         }
+        lowered.relisted.push(prefix);
     }
     context.close_body();
 
@@ -2272,6 +2327,9 @@ fn into_core_unit_within(
         mut table,
         modules,
         mod_spans,
+        touched,
+        removed,
+        order,
     } = Resolved::of(
         source,
         &root,
@@ -2279,6 +2337,7 @@ fn into_core_unit_within(
         &predecessor_tables,
         &predecessor_mounts,
         &own,
+        baseline.map(|baseline| &baseline.table),
     )?;
 
     // Every prefix this compilation mounts — the predecessors', then this unit's. Resolution asks the whole set; the lowered module records only `own`, because a module states what its own unit provides.
@@ -2291,14 +2350,37 @@ fn into_core_unit_within(
     let visible_mounts = source.visible_mounts(predecessors, &own);
     let reach = Reach::over(&mounts, &visible_mounts);
 
-    let public = interface::resolve_unit(
-        &root,
-        &own,
-        &modules,
-        &mut table,
-        reach,
-        Scoped::over(&predecessor_public),
-    )?;
+    // Where the units in scope are the ones the baseline was lowered against, the export view is the baseline's with what the edit reached resolved again; where one moved, every module's is resolved again, since a `pub use` may read it.
+    let settled = over
+        .filter(|(_, settled)| *settled)
+        .map(|(baseline, _)| baseline);
+    let (public, revised) = match settled {
+        Some(baseline) => {
+            let (public, revised) = interface::resolve_unit_over(
+                &root,
+                &modules,
+                &order,
+                &mut table,
+                reach,
+                Scoped::from(&predecessor_public, baseline.public.clone()),
+                baseline,
+                &touched,
+                &removed,
+            )?;
+            (public, Some(revised))
+        }
+        None => (
+            interface::resolve_unit(
+                &root,
+                &own,
+                &modules,
+                &mut table,
+                reach,
+                Scoped::over(&predecessor_public),
+            )?,
+            None,
+        ),
+    };
 
     // Over a baseline, what the lowering mints, imports and anchors starts as the baseline's.
     let shared = baseline.map_or_else(Shared::new, Shared::over);
@@ -2310,34 +2392,17 @@ fn into_core_unit_within(
         }
     }
 
-    // What the edit moved of what the lowering reads, found from the edit, where the units in scope are the ones the baseline was lowered against: the modules whose text it touched, which every module whose file's text the baseline holds is not, and the bindings whose entries are not the baseline's.
-    let moved = over.filter(|(_, settled)| *settled).map(|(baseline, _)| {
-        // The file a module's body is written in: its own, or the one of the nearest module above it that has one, an inline module's.
-        let file_of = |module: &Qualifier| {
-            let mut ancestor = *module;
-            loop {
-                if let Some(loaded) = modules.get(&ancestor) {
-                    return Some(loaded);
-                }
-                if ancestor.is_root() {
-                    return None;
-                }
-                ancestor = ancestor.without_last();
-            }
-        };
-        let touched = table
-            .own()
-            .iter()
-            .map(|(module, _)| module)
-            .filter(|module| file_of(module).is_none_or(|loaded| loaded.touched()))
-            .copied()
-            .collect();
-
-        Moved::of(baseline, table.own(), public.own(), touched)
-    });
+    // What the edit moved of what the lowering reads, found from the edit where the units in scope are the ones the baseline was lowered against: the modules whose text it touched or whose scope a binding that moved is read in, and the bindings whose entries are not the baseline's.
+    let moved = settled
+        .zip(revised)
+        .map(|(baseline, revised)| Moved::found(baseline, revised));
     let baseline = baseline.map(|baseline| Baseline::of(baseline).moving(moved));
     let mut lowered = Lowering {
         baseline: baseline.as_ref(),
+        uses: baseline
+            .as_ref()
+            .map(|baseline| baseline.unit().half().uses.clone())
+            .unwrap_or_default(),
         ..Lowering::default()
     };
 
@@ -2379,16 +2444,26 @@ fn into_core_unit_within(
         tests,
         foreigns,
         broken,
-        uses,
+        mut uses,
+        relisted,
         steps,
     } = lowered;
     // The mounts the declarations kept unasked wrote a name under are reached, as asking their lookups would have reached them.
     if let Some(baseline) = &baseline {
         baseline.mark_mounts(&mounts, &shared);
     }
-    let lookups = baseline
-        .as_ref()
-        .map(|baseline| baseline.readers_of(&declarations));
+    // A body the unit no longer holds keeps no record of what its `use` declarations read.
+    let gone = uses
+        .iter()
+        .map(|(body, _)| *body)
+        .filter(|body| !shared.closes(body))
+        .collect::<Vec<_>>();
+    for body in &gone {
+        uses.remove(body);
+    }
+    let lookups = baseline.as_ref().map(|baseline| {
+        baseline.readers_of(&declarations, &uses, relisted.into_iter().chain(gone))
+    });
     // What each file declared, kept for the lowering that reads the same text again.
     let scans = modules
         .iter()
@@ -2644,6 +2719,7 @@ pub fn document_unit(
         &predecessor_tables,
         &predecessor_mounts,
         &unit.mounts,
+        None,
     )?;
     let modules = modules
         .into_iter()

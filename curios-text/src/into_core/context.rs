@@ -482,6 +482,11 @@ impl Shared {
         }
     }
 
+    /// Whether this lowering recorded what the `use` declarations of the module body `body` brought into scope: whether it walked the body.
+    pub(super) fn closes(&self, body: &Qualifier) -> bool {
+        self.closed.borrow().contains(body)
+    }
+
     /// What a unit lowered over `baseline` starts from: what the baseline minted, its import scopes and where its declarations lie, which the lowering changes where it lowers a declaration again, and [`Shared::settle`] where it takes one away.
     pub(super) fn over(baseline: &crate::PreparedText) -> Self {
         let shared = Self::new();

@@ -1,9 +1,9 @@
 use {
-    super::{Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped, Table},
+    super::{Consulted, Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped, Table},
     crate::{Error, GroupItem, Name, OrderedMap, UseGroup},
     curios_utilities::{Mount, Qualifier, RootKind, nearest},
     std::{
-        collections::{HashMap, HashSet},
+        collections::{BTreeSet, HashMap, HashSet},
         rc::Rc,
     },
 };
@@ -582,6 +582,195 @@ pub(super) fn resolve_unit<'a>(
     Ok(public)
 }
 
+/// [`resolve_unit`] over the export view of `baseline`, the unit an earlier text of the same sources lowered to, `public` holding it as the unit's own half: every module whose text `touched` holds is seeded again, with every module whose `use` declarations read a binding that moved and every one after them, until nothing more moved; every other module's view is the baseline's. `removed` holds what discovery took away, each module with every one under it. Beside the view, the modules seeded again and the bindings that moved.
+///
+/// **A view seeded again is the one a whole resolution makes**, since a module's view is its own seed and what its `pub use` declarations select, and a module none of whose selections read a moved binding selects what it did.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the tables resolution reads, and the baseline with what discovery found moved"
+)]
+pub(super) fn resolve_unit_over<'a>(
+    root: &[Headed],
+    modules: &HashMap<Qualifier, Rc<Loaded>>,
+    order: &HashMap<Qualifier, usize>,
+    table: &mut Scoped<'_, ModuleInfo>,
+    reach: Reach<'_>,
+    mut public: Scoped<'a, PublicInterface>,
+    baseline: &PreparedText,
+    touched: &HashSet<Qualifier>,
+    removed: &[Qualifier],
+) -> Result<(Scoped<'a, PublicInterface>, Resolution), Error> {
+    curios_profile::profile!("resolve_unit_over");
+    for module in removed {
+        public.remove_subtree(module);
+    }
+    let readers = baseline.lookup_readers();
+    let in_order = |modules: &mut Vec<Qualifier>| {
+        modules.sort_by_key(|module| (order.get(module).copied(), *module));
+    };
+
+    let mut affected = HashSet::new();
+    let mut seeded = BTreeSet::new();
+    let mut pub_uses = Vec::new();
+    let mut moved = HashSet::new();
+    let mut pending = touched.iter().copied().collect::<Vec<_>>();
+    loop {
+        in_order(&mut pending);
+        for module in pending.drain(..) {
+            if !affected.insert(module) {
+                continue;
+            }
+            if let Some(heads) = heads_of(&module, root, modules) {
+                seed_module(
+                    heads,
+                    &module,
+                    table,
+                    &mut public,
+                    &mut pub_uses,
+                    &mut seeded,
+                )?;
+            }
+        }
+        // A whole resolution meets the `pub use` declarations in the order of their modules.
+        pub_uses.sort_by_key(|use_| order.get(&use_.module).copied());
+        fixed_point(&mut public, table, reach, &pub_uses)?;
+
+        let found = moved_between(
+            baseline,
+            table.own(),
+            public.own(),
+            seeded.iter().chain(removed),
+        );
+        pending = found
+            .iter()
+            .filter(|consulted| !moved.contains(*consulted))
+            .flat_map(|consulted| readers.of_body(consulted))
+            .filter(|module| !affected.contains(*module))
+            .copied()
+            .collect();
+        moved.extend(found);
+        if pending.is_empty() {
+            break;
+        }
+    }
+    classify_dead(&public, table, reach, &pub_uses)?;
+
+    Ok((public, Resolution { affected, moved }))
+}
+
+/// What resolving a unit's export view over a baseline's found ([`resolve_unit_over`]): the modules it seeded again, and the bindings whose entries are not the baseline's ([`Consulted`]).
+pub(super) struct Resolution {
+    pub affected: HashSet<Qualifier>,
+    pub moved: HashSet<Consulted>,
+}
+
+/// What `module`'s items declare: the compilation root's are `root`, a file module's its file's, and an inline module's its parent's for it. `None` for a namespace a declaration makes, which its module seeds.
+fn heads_of<'h>(
+    module: &Qualifier,
+    root: &'h [Headed],
+    modules: &'h HashMap<Qualifier, Rc<Loaded>>,
+) -> Option<&'h [Headed]> {
+    if module.is_root() {
+        return Some(root);
+    }
+    if let Some(loaded) = modules.get(module) {
+        return Some(&loaded.heads);
+    }
+    let parent = heads_of(&module.without_last(), root, modules)?;
+    parent.iter().find_map(|headed| match &headed.head {
+        Head::Mod {
+            label,
+            inline: Some(heads),
+            ..
+        } if label.as_str() == module.last() => Some(heads.as_slice()),
+        _ => None,
+    })
+}
+
+/// The bindings whose entries in `table` and `public`, the unit's own halves, are not `baseline`'s, among `modules`: what a resolution reads of a module, read off the labels each declares or exports, and the labels a glob reads.
+///
+/// **A binding moved where its entry did.** A step of a path reads one module's entry for one label, its export's target and representation and how the module declares it; a glob reads which labels a module exports. So the bindings that moved are read off the modules whose tables are not the baseline's, a label at a time.
+pub(super) fn moved_between<'m>(
+    baseline: &PreparedText,
+    table: &Table<ModuleInfo>,
+    public: &Table<PublicInterface>,
+    modules: impl IntoIterator<Item = &'m Qualifier>,
+) -> HashSet<Consulted> {
+    let mut moved = HashSet::new();
+    for module in modules.into_iter().copied().collect::<BTreeSet<_>>() {
+        let (table_now, table_then) = (table.get(&module), baseline.table.get(&module));
+        let (public_now, public_then) = (public.get(&module), baseline.public.get(&module));
+        if same(table_now, table_then) && same(public_now, public_then) {
+            continue;
+        }
+        let (table_now, table_then) = (table_now.map(|now| &**now), table_then.map(|then| &**then));
+        let (public_now, public_then) = (
+            public_now.map(|now| &**now),
+            public_then.map(|then| &**then),
+        );
+        let labels = |table: Option<&ModuleInfo>, public: Option<&PublicInterface>| {
+            let children = table
+                .into_iter()
+                .flat_map(|info| info.children().map(|(label, _)| (label.to_string(), false)))
+                .chain(public.into_iter().flat_map(|interface| {
+                    interface
+                        .children
+                        .keys()
+                        .map(|label| (label.clone(), false))
+                }));
+            let bindings = table
+                .into_iter()
+                .flat_map(|info| info.bindings().map(|(label, _)| (label.to_string(), true)))
+                .chain(public.into_iter().flat_map(|interface| {
+                    interface.bindings.keys().map(|label| (label.clone(), true))
+                }));
+            children.chain(bindings).collect::<BTreeSet<_>>()
+        };
+        let mut all = labels(table_now, public_now);
+        all.extend(labels(table_then, public_then));
+        for (label, binding) in all {
+            let entry = |table: Option<&ModuleInfo>, public: Option<&PublicInterface>| {
+                let exported = public.and_then(|interface| match binding {
+                    true => interface.bindings.get(&label),
+                    false => interface.children.get(&label),
+                });
+                let declared = table.and_then(|info| info.declares(&label, binding));
+                (exported.cloned(), declared)
+            };
+            if entry(table_now, public_now) != entry(table_then, public_then) {
+                moved.insert(Consulted::Member {
+                    at: module.with(&label),
+                    binding,
+                });
+            }
+        }
+        if exported(public_now) != exported(public_then) {
+            moved.insert(Consulted::Members(module));
+        }
+    }
+
+    moved
+}
+
+/// The labels `public` exports, children and bindings: what a glob reads of a module.
+fn exported(public: Option<&PublicInterface>) -> Option<(BTreeSet<&String>, BTreeSet<&String>)> {
+    public.map(|interface| {
+        (
+            interface.children.keys().collect(),
+            interface.bindings.keys().collect(),
+        )
+    })
+}
+
+/// Whether a module's entry now is the one the baseline holds: shared with it, or equal.
+fn same<T: PartialEq>(now: Option<&Rc<T>>, then: Option<&Rc<T>>) -> bool {
+    match (now, then) {
+        (Some(now), Some(then)) => Rc::ptr_eq(now, then) || now == then,
+        (None, None) => true,
+        _ => false,
+    }
+}
+
 // Walk the module tree (mirroring `discover`/`process_items`): for each module, seed its `PublicInterface` from the direct interface already in `table`; materialize each inductive's constructor module; and collect every `pub use`.
 fn seed(
     heads: &[Headed],
@@ -591,6 +780,37 @@ fn seed(
     public: &mut Scoped<'_, PublicInterface>,
     pub_uses: &mut Vec<PubUse>,
 ) -> Result<(), Error> {
+    seed_module(heads, prefix, table, public, pub_uses, &mut BTreeSet::new())?;
+    for headed in heads {
+        if let Head::Mod { label, inline, .. } = &headed.head {
+            let path = prefix.with(label);
+            let child = match inline {
+                Some(heads) => heads,
+                None => {
+                    &modules
+                        .get(&path)
+                        .expect("module loaded during discovery")
+                        .heads
+                }
+            };
+
+            seed(child, &path, modules, table, public, pub_uses)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Seed the `PublicInterface` of the one module `prefix` from the direct interface already in `table`, materialize the namespace each of its inductives and concepts makes, and collect its `pub use` declarations, noting in `seeded` every module whose entries this wrote.
+fn seed_module(
+    heads: &[Headed],
+    prefix: &Qualifier,
+    table: &mut Scoped<'_, ModuleInfo>,
+    public: &mut Scoped<'_, PublicInterface>,
+    pub_uses: &mut Vec<PubUse>,
+    seeded: &mut BTreeSet<Qualifier>,
+) -> Result<(), Error> {
+    seeded.insert(*prefix);
     let mut interface = PublicInterface::new();
     let info = table
         .get(prefix)
@@ -674,6 +894,7 @@ fn seed(
                         direct.insert_binding(case, true)?;
                     }
                     table.insert(ctor, direct);
+                    seeded.insert(ctor);
 
                     let mut interface = PublicInterface::new();
                     for case in &induct.cases {
@@ -700,6 +921,7 @@ fn seed(
                         direct.insert_binding(label, true)?;
                     }
                     table.insert(namespace, direct);
+                    seeded.insert(namespace);
 
                     let mut interface = PublicInterface::new();
                     for label in &concept.fields {
@@ -714,20 +936,6 @@ fn seed(
                     }
                     public.insert(namespace, interface);
                 }
-            }
-            Head::Mod { label, inline, .. } => {
-                let path = prefix.with(label);
-                let child = match inline {
-                    Some(heads) => heads,
-                    None => {
-                        &modules
-                            .get(&path)
-                            .expect("module loaded during discovery")
-                            .heads
-                    }
-                };
-
-                seed(child, &path, modules, table, public, pub_uses)?;
             }
             _ => {}
         }

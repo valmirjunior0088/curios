@@ -10,8 +10,8 @@
 
 use {
     super::{
-        Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, ModuleInfo, PublicInterface,
-        Scan, Shared, Step, Table,
+        Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Shared, Step,
+        Table,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
     curios_utilities::{Mount, Ordered, Persistent, Qualifier, Report},
@@ -29,19 +29,20 @@ pub(super) type Key = (curios_core::Anchor, u32);
 /// A unit's records, by the place of each declaration's first item among the unit's items ([`curios_core::Items::places`]): the declarations lie in the order their items do.
 pub(crate) type Records = Ordered<Rc<LoweredDeclaration>>;
 
-/// Who read each binding, of a unit's lowered declarations read backwards: what a lowering over the unit finds the declarations an edit could reach by, from the bindings it moved ([`Consulted`]).
+/// Who read each binding, of a unit's lowered declarations and of the `use` declarations of its module bodies, read backwards: what a lowering over the unit finds the declarations and the bodies an edit could reach by, from the bindings it moved ([`Consulted`]).
 ///
-/// **Read off the records, never stored.** Made the first time a lowering over the unit asks, and kept with the unit; the unit lowered over it holds it with the edges of every declaration lowered again or taken away replaced, so a session reads no record backwards twice.
+/// **Read off the records, never stored.** Made the first time a lowering over the unit asks, and kept with the unit; the unit lowered over it holds it with the edges of every declaration lowered again or taken away, and of every body whose `use` declarations were resolved again or taken away, replaced, so a session reads no record backwards twice.
 ///
-/// **Looked up, never walked**: its map is persistent and keyed by hash.
+/// **Looked up, never walked**: its maps are persistent and keyed by hash.
 #[derive(Clone, Default)]
 pub(crate) struct LookupReaders {
     by: Persistent<Consulted, Vec<Key>>,
+    bodies: Persistent<Consulted, Vec<Qualifier>>,
 }
 
 impl LookupReaders {
-    /// Who read what, of `declarations`.
-    pub(super) fn of(declarations: &Records) -> Self {
+    /// Who read what, of `declarations` and of the bodies whose `use` declarations `uses` records.
+    pub(super) fn of(declarations: &Records, uses: &Table<Vec<Consulted>>) -> Self {
         curios_profile::profile!("lookup_readers::of", declarations = declarations.len());
         // Gathered whole first, so each binding's list is built once.
         let mut gathered = BTreeMap::<Consulted, Vec<Key>>::new();
@@ -52,9 +53,18 @@ impl LookupReaders {
                 }
             }
         }
+        let mut bodies = BTreeMap::<Consulted, Vec<Qualifier>>::new();
+        for (body, read) in uses.iter() {
+            for consulted in read.iter() {
+                bodies.entry(*consulted).or_default().push(*body);
+            }
+        }
         let mut readers = LookupReaders::default();
         for (consulted, keys) in gathered {
             readers.by.insert(consulted, keys);
+        }
+        for (consulted, read) in bodies {
+            readers.bodies.insert(consulted, read);
         }
 
         readers
@@ -63,6 +73,36 @@ impl LookupReaders {
     /// The declarations whose lookups read `consulted`.
     fn of_binding(&self, consulted: &Consulted) -> &[Key] {
         self.by.get(consulted).map_or(&[], Vec::as_slice)
+    }
+
+    /// The module bodies whose `use` declarations read `consulted`.
+    pub(super) fn of_body(&self, consulted: &Consulted) -> &[Qualifier] {
+        self.bodies.get(consulted).map_or(&[], Vec::as_slice)
+    }
+
+    /// Replace the edges of the module body `body`: those `earlier`, what its `use` declarations read, added are taken out, and those `now` adds are put in.
+    fn replace_body(&mut self, body: Qualifier, earlier: &[Consulted], now: &[Consulted]) {
+        for consulted in earlier {
+            let Some(held) = self.bodies.get(consulted) else {
+                continue;
+            };
+            let kept = held
+                .iter()
+                .filter(|held| **held != body)
+                .copied()
+                .collect::<Vec<_>>();
+            match kept.is_empty() {
+                true => {
+                    self.bodies.remove(consulted);
+                }
+                false => self.bodies.insert(*consulted, kept),
+            }
+        }
+        for consulted in now {
+            let mut held = self.bodies.get(consulted).cloned().unwrap_or_default();
+            held.push(body);
+            self.bodies.insert(*consulted, held);
+        }
     }
 
     /// Replace the edges of the declaration found by `key`: those `earlier`, what its lookups read, added are taken out, and those `now` adds are put in.
@@ -98,103 +138,20 @@ pub(super) struct Moved {
 }
 
 impl Moved {
-    /// What moved between `baseline`'s tables and the unit's, `table` and `public` being what the unit's own modules declare and export now. `touched` holds the modules whose text the edit touched or that `baseline` does not hold.
-    ///
-    /// **A binding moved where its entry did.** A step of a path reads one module's entry for one label, its export's target and representation and how the module declares it; a glob reads which labels a module exports. So the bindings that moved are read off the modules whose tables are not the baseline's, a label at a time, and every module whose `use` declarations read one of them has its scope moved with it, and is touched.
-    pub(super) fn of(
-        baseline: &PreparedText,
-        table: &Table<ModuleInfo>,
-        public: &Table<PublicInterface>,
-        mut touched: HashSet<Qualifier>,
-    ) -> Self {
-        let mut moved = HashSet::new();
-        let modules = table
-            .iter()
-            .chain(baseline.table.iter())
-            .map(|(module, _)| module)
-            .chain(
-                public
-                    .iter()
-                    .chain(baseline.public.iter())
-                    .map(|(module, _)| module),
-            )
-            .copied()
-            .collect::<BTreeSet<_>>();
-        for module in modules {
-            let (table_now, table_then) = (table.get(&module), baseline.table.get(&module));
-            let (public_now, public_then) = (public.get(&module), baseline.public.get(&module));
-            if same(table_now, table_then) && same(public_now, public_then) {
-                continue;
-            }
-            let (table_now, table_then) =
-                (table_now.map(|now| &**now), table_then.map(|then| &**then));
-            let (public_now, public_then) = (
-                public_now.map(|now| &**now),
-                public_then.map(|then| &**then),
-            );
-            let labels = |table: Option<&ModuleInfo>, public: Option<&PublicInterface>| {
-                let children = table
-                    .into_iter()
-                    .flat_map(|info| info.children().map(|(label, _)| (label.to_string(), false)))
-                    .chain(public.into_iter().flat_map(|interface| {
-                        interface
-                            .children
-                            .keys()
-                            .map(|label| (label.clone(), false))
-                    }));
-                let bindings = table
-                    .into_iter()
-                    .flat_map(|info| info.bindings().map(|(label, _)| (label.to_string(), true)))
-                    .chain(public.into_iter().flat_map(|interface| {
-                        interface.bindings.keys().map(|label| (label.clone(), true))
-                    }));
-                children.chain(bindings).collect::<BTreeSet<_>>()
-            };
-            let mut all = labels(table_now, public_now);
-            all.extend(labels(table_then, public_then));
-            for (label, binding) in all {
-                let entry = |table: Option<&ModuleInfo>, public: Option<&PublicInterface>| {
-                    let exported = public.and_then(|interface| match binding {
-                        true => interface.bindings.get(&label),
-                        false => interface.children.get(&label),
-                    });
-                    let declared = table.and_then(|info| info.declares(&label, binding));
-                    (exported.cloned(), declared)
-                };
-                if entry(table_now, public_now) != entry(table_then, public_then) {
-                    moved.insert(Consulted::Member {
-                        at: module.with(&label),
-                        binding,
-                    });
-                }
-            }
-            if exported(public_now) != exported(public_then) {
-                moved.insert(Consulted::Members(module));
-            }
-        }
-
-        for (module, read) in &baseline.half().uses {
-            if read.iter().any(|consulted| moved.contains(consulted)) {
-                touched.insert(*module);
-            }
-        }
+    /// What moved, as resolving the unit's export view over the baseline's found it ([`Resolution`]): every module it seeded again is asked whole, its text touched or its scope read through a binding that moved, and of the others each declaration whose lookups read a binding that moved.
+    pub(super) fn found(baseline: &PreparedText, revised: Resolution) -> Self {
         let readers = baseline.lookup_readers();
-        let reached = moved
+        let reached = revised
+            .moved
             .iter()
             .flat_map(|consulted| readers.of_binding(consulted))
             .copied()
             .collect();
 
-        Self { touched, reached }
-    }
-}
-
-/// Whether a module's entry now is the one the baseline holds: shared with it, or equal.
-fn same<T: PartialEq>(now: Option<&Rc<T>>, then: Option<&Rc<T>>) -> bool {
-    match (now, then) {
-        (Some(now), Some(then)) => Rc::ptr_eq(now, then) || now == then,
-        (None, None) => true,
-        _ => false,
+        Self {
+            touched: revised.affected,
+            reached,
+        }
     }
 }
 
@@ -204,16 +161,6 @@ fn same<T: PartialEq>(now: Option<&Rc<T>>, then: Option<&Rc<T>>) -> bool {
 pub(crate) struct Lookup {
     pub absolute: bool,
     pub path: Qualifier,
-}
-
-/// The labels `public` exports, children and bindings: what a glob reads of a module.
-fn exported(public: Option<&PublicInterface>) -> Option<(BTreeSet<&String>, BTreeSet<&String>)> {
-    public.map(|interface| {
-        (
-            interface.children.keys().collect(),
-            interface.bindings.keys().collect(),
-        )
-    })
 }
 
 /// A binding the lowering read to resolve a name, found or not: what an answer to a lookup can move with. Each is a label of one table, named by the path the label extends.
@@ -376,8 +323,9 @@ pub(crate) struct BaselineHalf {
     pub declarations: Records,
     /// Each file-backed module's scan, by the module.
     pub scans: BTreeMap<Qualifier, Scan>,
-    /// Every binding the `use` declarations of each module body read, by the module: what the scope of its body can move with.
-    pub uses: BTreeMap<Qualifier, Vec<Consulted>>,
+    /// Every binding the `use` declarations of each module body read, by the module: what the scope of its body can move with. A body that reads none holds none.
+    #[archived_with(curios_utilities::InSharedKeyOrder)]
+    pub uses: Table<Vec<Consulted>>,
 }
 
 /// A unit an earlier text of the same sources lowered to, as a later one is lowered over it: its declarations by the text each was lowered from, each by the place of its first item.
@@ -437,11 +385,6 @@ impl<'a> Baseline<'a> {
             .is_some_and(|moved| !moved.touched.contains(module))
     }
 
-    /// What the `use` declarations of the module body `module` read, as the baseline records it.
-    pub(super) fn uses_of(&self, module: &Qualifier) -> Option<&'a Vec<Consulted>> {
-        self.unit.half().uses.get(module)
-    }
-
     /// Mark used each `use` site of the module body `context` is whose label a declaration kept unasked read: what asking its lookups again would have marked.
     pub(super) fn mark_uses(&self, context: &Context) {
         let unasked = self.unasked.borrow();
@@ -485,8 +428,13 @@ impl<'a> Baseline<'a> {
         }
     }
 
-    /// Who read what of the unit lowered over this baseline, `declarations` being its records: the baseline's, with the edges of every declaration lowered again or taken away replaced.
-    pub(super) fn readers_of(&self, declarations: &[Rc<LoweredDeclaration>]) -> LookupReaders {
+    /// Who read what of the unit lowered over this baseline, `declarations` being its records and `uses` what the `use` declarations of its bodies read: the baseline's, with the edges of every declaration lowered again or taken away replaced, and of every body of `bodies`, each one whose `use` declarations were resolved again or that the unit no longer holds.
+    pub(super) fn readers_of(
+        &self,
+        declarations: &[Rc<LoweredDeclaration>],
+        uses: &Table<Vec<Consulted>>,
+        bodies: impl IntoIterator<Item = Qualifier>,
+    ) -> LookupReaders {
         let mut readers = self.unit.lookup_readers().clone();
         let now = declarations.iter().map(Rc::as_ptr).collect::<HashSet<_>>();
         let then = self
@@ -508,6 +456,15 @@ impl<'a> Baseline<'a> {
             {
                 readers.replace(key, &[], &declaration.consulted);
             }
+        }
+        let earlier = &self.unit.half().uses;
+        for body in bodies {
+            let read = |uses: &Table<Vec<Consulted>>| {
+                uses.get(&body)
+                    .map_or(&[][..], |read| read.as_slice())
+                    .to_vec()
+            };
+            readers.replace_body(body, &read(earlier), &read(uses));
         }
 
         readers

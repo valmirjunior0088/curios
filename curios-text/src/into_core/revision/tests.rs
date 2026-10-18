@@ -122,3 +122,98 @@ fn declarations_added_and_taken_away_leave_the_unit_a_whole_lowering_gives() {
         ["/lib/a/y"],
     );
 }
+
+/// `files` written under a directory of their own, `lib.crs` the header of the unit `/lib`.
+fn files(name: &str, files: &[(&str, &str)]) -> Temporary {
+    let root = Temporary::new("revision", name);
+    fs::create_dir_all(&*root).unwrap();
+    for (path, text) in files {
+        fs::write(root.join(path), text).unwrap();
+    }
+
+    root
+}
+
+/// The file `path` under `root` written as `text`, the unit lowered over `baseline` and lowered whole, each with the tables a lowering over it reads.
+fn rewritten(
+    root: &Path,
+    path: &str,
+    text: &str,
+    baseline: &PreparedText,
+) -> (PreparedText, PreparedText) {
+    fs::write(root.join(path), text).unwrap();
+    let source = library(root);
+    let over =
+        into_core_unit_over(&UnitSource::mounted(&source), &[], syntax(), baseline, true).unwrap();
+    let whole = into_core_unit(&UnitSource::mounted(&source), &[], syntax()).unwrap();
+
+    (over, whole)
+}
+
+/// The direct interfaces, the export views and the items of a unit lowered over a baseline are the ones a whole lowering gives.
+fn same_unit(over: &PreparedText, whole: &PreparedText) {
+    assert!(over.table == whole.table, "the direct interfaces differ");
+    assert!(over.public == whole.public, "the export views differ");
+    assert_eq!(over.core(), whole.core());
+}
+
+/// A binding added to a module another re-exports by a glob is exported by both, the module that re-exports it resolved again for what its `pub use` read.
+#[test]
+fn a_binding_added_reaches_the_modules_that_re_export_it() {
+    let root = files(
+        "glob",
+        &[
+            ("lib.crs", "pub mod a;\npub mod b;\n"),
+            ("a.crs", "pub let x: Type = Type;\n"),
+            ("b.crs", "pub use /lib/a/*;\n"),
+        ],
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = rewritten(
+        &root,
+        "a.crs",
+        "pub let x: Type = Type;\n\npub let y: Type = Type;\n",
+        &baseline,
+    );
+
+    same_unit(&over, &whole);
+}
+
+/// A module the unit no longer declares leaves its tables, with every module under it.
+#[test]
+fn a_module_taken_away_leaves_the_tables() {
+    let root = files(
+        "taken",
+        &[
+            ("lib.crs", "pub mod a;\npub mod b;\n"),
+            ("a.crs", "pub let x: Type = Type;\n"),
+            ("b.crs", "pub mod inner\n    pub let w: Type = Type;\nend\n"),
+        ],
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = rewritten(&root, "lib.crs", "pub mod a;\n", &baseline);
+
+    same_unit(&over, &whole);
+}
+
+/// The namespace an inductive makes leaves the tables with the inductive.
+#[test]
+fn a_family_taken_away_takes_its_namespace() {
+    let root = files(
+        "family",
+        &[
+            ("lib.crs", "pub mod a;\n"),
+            (
+                "a.crs",
+                "pub induct Colour : pub Type | red() | green() end\n\npub let x: Type = Type;\n",
+            ),
+        ],
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = rewritten(&root, "a.crs", "pub let x: Type = Type;\n", &baseline);
+
+    same_unit(&over, &whole);
+}

@@ -52,6 +52,30 @@ impl<'a, V: Clone> Scoped<'a, V> {
         self.own.insert(name, Rc::new(value));
     }
 
+    /// The unit's own entries for `root` and every module under it, taken out: what a module the unit no longer declares leaves.
+    pub(super) fn remove_subtree(&mut self, root: &Qualifier) {
+        let mut under = Vec::new();
+        let mut at = self.own.get(root).map(|_| *root);
+        if at.is_none() {
+            at = self
+                .own
+                .after(root)
+                .map(|(name, _)| *name)
+                .filter(|name| name.is_within(root));
+        }
+        while let Some(name) = at {
+            under.push(name);
+            at = self
+                .own
+                .after(&name)
+                .map(|(next, _)| *next)
+                .filter(|next| next.is_within(root));
+        }
+        for name in under {
+            self.own.remove(&name);
+        }
+    }
+
     /// The unit's own entry for `name` changed in place by `change`, copied first where another version shares it. Whether the unit holds one.
     pub(super) fn update(&mut self, name: &Qualifier, change: impl FnOnce(&mut V)) -> bool {
         self.own.update(name, |held| change(Rc::make_mut(held)))
