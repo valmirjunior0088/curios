@@ -1174,7 +1174,7 @@ impl<'r, 'c, R: Reducer> Walk<'r, 'c, R> {
         let Subterm::Intrinsic(intrinsic) = &*node else {
             return Ok(node);
         };
-        Ok(reduce_intrinsic(self.reducer, intrinsic)?.into())
+        Ok(node.rebuilt(reduce_intrinsic(self.reducer, intrinsic)?))
     }
 
     /// `node`, of `kind`, a node the table leaves an operand out of, spelled as the first of its kind whose first `read` operands are spelled as its are, and itself where there is none; as it is where the walk spells nothing.

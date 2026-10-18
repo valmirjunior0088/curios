@@ -924,7 +924,7 @@ impl Machine {
                     values: &values,
                 };
 
-                let value = Term::from(reduce_intrinsic(&mut tap, &intrinsic)?);
+                let value = key.rebuilt(reduce_intrinsic(&mut tap, &intrinsic)?);
                 // Two entries of two `Term` handles each, on the buffer row, charged before they are made. The self-entry is what makes a *rebuilt* neutral — a chain link — recognizable as already evaluated when it comes back around as somebody's operand.
                 host.spend(Cost::buffer(4))?;
                 let memo = host.closed_memo();

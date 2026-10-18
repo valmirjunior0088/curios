@@ -172,10 +172,14 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
         }
 
         let closed = !term.has_local_free();
+        // An intrinsic's allocation, for a fold that leaves it as it was to hand back ([`Term::rebuilt`]).
+        let intrinsic = matches!(&*term, Subterm::Intrinsic(_)).then(|| term.clone());
         let step = match Term::unwrap_or_clone(term) {
-            Subterm::Intrinsic(intrinsic) => {
-                Step::Stop(reduce_intrinsic(kernel, &intrinsic)?.into())
-            }
+            Subterm::Intrinsic(written) => Step::Stop(
+                intrinsic
+                    .expect("an intrinsic's allocation is kept")
+                    .rebuilt(reduce_intrinsic(kernel, &written)?),
+            ),
             Subterm::Var(var) => step_var(kernel, var)?,
             Subterm::Apply(apply) => step_apply(kernel, apply)?,
             Subterm::Proj(proj) => step_proj(kernel, proj)?,

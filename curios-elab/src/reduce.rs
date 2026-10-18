@@ -1338,12 +1338,16 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             }
 
             let closed = !term.has_local_free() && !term.has_metavar();
+            // An intrinsic's allocation, for a fold that leaves it as it was to hand back ([`Term::rebuilt`]).
+            let intrinsic = matches!(&*term, Subterm::Intrinsic(_)).then(|| term.clone());
             match Term::unwrap_or_clone(term) {
                 // **The one arm that answers a normal form and breaks, so the one that has to ask the store a second time.** Every other arm `Continue`s when it makes progress and the loop comes back around, which re-runs the probe above on the new term — that is how a refinement keeps up with reduction, and why no other arm needs anything here. This one folds and leaves, so a fold that turns the term *into* the registered shape would never be asked about again: `Le(s + l, len b)` instantiated at a call is `NatLe(0 + n, len b)`, whose sum folds to `n` only inside `reduce_intrinsic`, and every window bound in the language has that shape.
                 //
                 // The written keys alone ([`refined_after_fold`]): an intrinsic's head tag is its *operation*, so reducing a key to compare it here would put that cost on every comparison of that operation in the declaration. A fold that leaves another spelling of a guard is met at the stuck-reduct probe below.
-                Subterm::Intrinsic(intrinsic) => {
-                    let folded: Term = reduce_intrinsic(context, &intrinsic)?.into();
+                Subterm::Intrinsic(written) => {
+                    let folded = intrinsic
+                        .expect("an intrinsic's allocation is kept")
+                        .rebuilt(reduce_intrinsic(context, &written)?);
 
                     match refined_after_fold(context, &folded) {
                         Some(value) => Reduce::Continue(value),
