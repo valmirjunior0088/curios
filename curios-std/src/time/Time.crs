@@ -1,5 +1,6 @@
-use /std/{Nat, Bool, Option};
+use /std/{Nat, Bool, Option, Spell};
 use /std/Bool/{True, Holds};
+use /std/ops/{Eql};
 
 let sound(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Bool =
     hour <= 23 && minute <= 59 && second <= 60 && nanosecond <= 999999999;
@@ -15,6 +16,14 @@ pub struct Time: pub Type {
     second: Nat,
     nanosecond: Nat,
     @ok: Valid(hour, minute, second, nanosecond),
+}
+
+satisfy Eql(Time) {
+    ..
+}
+
+satisfy Spell(Time) {
+    ..
 }
 
 --- The time, under the evidence that the four spell one.

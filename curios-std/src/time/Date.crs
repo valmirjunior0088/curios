@@ -1,5 +1,6 @@
-use /std/{Nat, Bool, Option};
+use /std/{Nat, Bool, Option, Spell};
 use /std/Bool/{True, Holds};
+use /std/ops/{Eql};
 
 let leap(year: Nat) -> Bool =
     choose
@@ -28,9 +29,9 @@ let days_in(year: Nat, month: Nat) -> Nat =
     end;
 
 let sound(year: Nat, month: Nat, day: Nat) -> Bool =
-    year <= 9999 && Nat/in_range(month, 1, 12) && Nat/in_range(day, 1, days_in(year, month));
+    Nat/in_range(month, 1, 12) && Nat/in_range(day, 1, days_in(year, month));
 
---- That the three spell a day: a year of at most four digits, a month of the year, and a day the month has.
+--- That the three spell a day: a month of the year, and a day the month has.
 pub let Valid(year: Nat, month: Nat, day: Nat) -> Prop =
     Holds(sound(year, month, day));
 
@@ -40,6 +41,14 @@ pub struct Date: pub Type {
     month: Nat,
     day: Nat,
     @ok: Valid(year, month, day),
+}
+
+satisfy Eql(Date) {
+    ..
+}
+
+satisfy Spell(Date) {
+    ..
 }
 
 --- The date, under the evidence that the three spell one.

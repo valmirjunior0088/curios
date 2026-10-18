@@ -1,5 +1,7 @@
 use /std/{Nat, Int, Bool, Char, Str, Parse, Toml};
-use /std/Toml/{Date, Time, OffsetDateTime, LocalDateTime};
+use /std/Bool/{True};
+use /std/time/{Date, Time, OffsetDateTime};
+use /std/Toml/{LocalDateTime, FourDigits};
 
 let digit: Parse(Str, Nat) =
     Parse/label(
@@ -98,10 +100,17 @@ let offset_parse() -> Parse(Str, Int) =
         Parse/commit(offset_fields(sign))
     end;
 
+-- `built` over the evidence that `d`'s year has the four digits TOML writes, or the refusal of a date with more.
+let dated(d: Date, built: (ok: FourDigits(d)) -> Toml) -> Parse(Str, Toml) =
+    match d.year <= 9999
+    | true => Parse/pure(built(True/proved()))
+    | false => Parse/fail("invalid date")
+    end;
+
 let offset_tail(date: Date, time: Time) -> Parse(Str, Toml) =
     let off = offset_parse()!;
     match OffsetDateTime/try_of(date, time, off)
-    | some(odt) => Parse/pure(Toml/offset_date_time(odt))
+    | some(odt) => dated(odt.date, (ok) => Toml/offset_date_time(odt, @ok))
     | none() => Parse/fail("invalid offset")
     end;
 
@@ -110,11 +119,11 @@ let date_time_tail(date: Date) -> Parse(Str, Toml) =
     let time = time_parse()!;
     Parse/or(
         offset_tail(date, time),
-        Parse/pure(Toml/local_date_time(LocalDateTime { date = date, time = time })));
+        dated(date, (ok) => Toml/local_date_time(LocalDateTime { date = date, time = time }, @ok)));
 
 let date_led() -> Parse(Str, Toml) =
     let date = date_parse()!;
-    Parse/or(date_time_tail(date), Parse/pure(Toml/local_date(date)));
+    Parse/or(date_time_tail(date), dated(date, (ok) => Toml/local_date(date, @ok)));
 
 --- A date, a time, or the two together, with or without an offset.
 pub let date_time_value: Parse(Str, Toml) =

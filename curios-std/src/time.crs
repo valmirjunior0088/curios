@@ -10,6 +10,18 @@ pub use Duration/{let Duration};
 pub mod Timestamp;
 pub use Timestamp/{let Timestamp};
 
+--- A calendar date, and the bound its fields carry.
+pub mod Date;
+pub use Date/{let Date};
+
+--- A time of day to the nanosecond, and the bound its fields carry.
+pub mod Time;
+pub use Time/{let Time};
+
+--- A date and time at an offset from UTC, and the bound that offset carries.
+pub mod OffsetDateTime;
+pub use OffsetDateTime/{let OffsetDateTime};
+
 --- A date and a time of day: a timestamp as the calendar and the clock name it in UTC.
 pub mod DateTime;
 pub use DateTime/{let DateTime};

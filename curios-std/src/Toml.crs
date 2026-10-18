@@ -1,16 +1,10 @@
 use /std/{Int, Flt, Bool, Str, List, Map};
+use /std/Bool/{Holds};
+use /std/time/{Date, Time, OffsetDateTime};
 
---- A calendar date, and the bound its fields carry.
-pub mod Date;
-pub use Date/{let Date};
-
---- A time of day, and the bound its fields carry.
-pub mod Time;
-pub use Time/{let Time};
-
---- A moment at an offset from UTC, and the bound that offset carries.
-pub mod OffsetDateTime;
-pub use OffsetDateTime/{let OffsetDateTime};
+--- That a date's year has the four digits RFC 3339 writes, the only years TOML reads: what every date a value holds carries, so that a value encodes to a document that decodes.
+pub let FourDigits(d: Date) -> Prop =
+    Holds(d.year <= 9999);
 
 --- A date and time with no offset.
 pub struct LocalDateTime: pub Type {
@@ -29,11 +23,11 @@ pub induct Toml: pub Type
 --- `true` or `false`.
 | bool(Bool)
 --- A date and time with an offset from UTC.
-| offset_date_time(OffsetDateTime)
+| offset_date_time(value: OffsetDateTime, @four_digits: FourDigits(value.date))
 --- A date and time with no offset.
-| local_date_time(LocalDateTime)
+| local_date_time(value: LocalDateTime, @four_digits: FourDigits(value.date))
 --- A date alone.
-| local_date(Date)
+| local_date(value: Date, @four_digits: FourDigits(value))
 --- A time of day alone.
 | local_time(Time)
 --- An array, in order.

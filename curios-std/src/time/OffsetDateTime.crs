@@ -1,6 +1,7 @@
-use /std/{Int, Bool, Option};
+use /std/{Int, Bool, Option, Spell};
 use /std/Bool/{True, Holds};
-use /std/Toml/{Date, Time};
+use /std/ops/{Eql};
+use /std/time/{Date, Time};
 
 let sound(offset_minutes: Int) -> Bool =
     Int/abs(offset_minutes) <= 1439;
@@ -15,6 +16,14 @@ pub struct OffsetDateTime: pub Type {
     time: Time,
     offset_minutes: Int,
     @ok: Valid(offset_minutes),
+}
+
+satisfy Eql(OffsetDateTime) {
+    ..
+}
+
+satisfy Spell(OffsetDateTime) {
+    ..
 }
 
 --- The moment, under the evidence that the offset is one.
