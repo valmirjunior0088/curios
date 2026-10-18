@@ -85,9 +85,9 @@ pub enum Pattern {
     Nil,
     /// `[head, ..tail]`, with the hypothesis written beside it where one is.
     Cons(Option<Bind>),
-    /// `b[]` or `x[]`.
+    /// `x[]`.
     End(Grain),
-    /// `b[head, ..tail]` or `x[head, ..tail]`, with the hypothesis written beside it where one is.
+    /// `x[head, ..tail]`, with the hypothesis written beside it where one is.
     Atom(Grain, Option<Bind>),
 }
 

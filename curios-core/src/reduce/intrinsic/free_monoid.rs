@@ -32,7 +32,7 @@ pub(super) enum Shape<L> {
 
 /// Classify a reduced `Bin` value into its product shape (generators are bytes).
 ///
-/// **The literal arm materializes the whole run**, one `u8` per generator — which at the bit grain is a byte per *bit*, eight times the value's own width. An operation whose result is a single `Nat` therefore allocates its entire subject to compute it, and that is why this takes a reducer: the buffer is charged before it is filled. `Bin/len` of a wholly-literal value answers from the free monoid's measure without reaching here, but every symbolic shape falls through to the homomorphism and pays this.
+/// **The literal arm materializes the whole run**, one `u8` per generator. An operation whose result is a single `Nat` therefore allocates its entire subject to compute it, and that is why this takes a reducer: the buffer is charged before it is filled. `Bin/len` of a wholly-literal value answers from the free monoid's measure without reaching here, but every symbolic shape falls through to the homomorphism and pays this.
 pub(super) fn bin_shape(
     reducer: &mut impl Reducer,
     grain: Grain,
@@ -43,9 +43,6 @@ pub(super) fn bin_shape(
             reducer.spend(Cost::buffer(value.len(grain) as u64))?;
 
             Shape::Literal(match grain {
-                Grain::B => (0..value.bit_length())
-                    .map(|index| u8::from(value.bit(index).unwrap()))
-                    .collect(),
                 Grain::X => value.to_bytes().unwrap(),
             })
         }
@@ -175,24 +172,20 @@ pub(super) fn bin_piece(grain: Grain, piece: Piece<'_>) -> Term {
 ///
 /// The generator at an index of a literal run, as the value its grain reads it as.
 ///
-/// **The one place the grain decides what a generator *is*.** `Binary` has a reader per grain and the two produce different carriers — a `Byte` at X, a `Bool` at B — so every path that reads one generator branches here and nowhere else, which is what lets the fold arms above take the grain as a parameter rather than as a case.
+/// **The one place the grain decides what a generator *is*** — a `Byte` at X — so every path that reads one generator branches here and nowhere else, which is what lets the fold arms above take the grain as a parameter rather than as a case.
 pub(super) fn element_of_run(grain: Grain, run: &Binary, local: usize) -> Option<Subterm> {
     match grain {
         Grain::X => run
             .byte(local)
             .map(|byte| Subterm::Intrinsic(Intrinsic::Byte(byte))),
-        Grain::B => run
-            .bit(local)
-            .map(|bit| Subterm::Intrinsic(Intrinsic::Bool(bit))),
     }
 }
 
 /// One generator, read out of the term an element reduced to.
 ///
-/// The other direction of [`element_of_run`]'s seam, and the rest of what the grain decides: reading a generator *into* a run takes both a carrier — a `Byte` at X, a `Bool` at B — and an append that can refuse, since a byte has to land on a byte boundary where a bit lands anywhere. Naming the generator separates the two steps the append arm needs kept apart, because the budget is charged between them: the read decides whether there is work to do, and the charge has to precede the copy that does it.
+/// The other direction of [`element_of_run`]'s seam, and the rest of what the grain decides: reading a generator *into* a run takes both a carrier — a `Byte` at X — and an append that can refuse, since a byte has to land on a byte boundary. Naming the generator separates the two steps the append arm needs kept apart, because the budget is charged between them: the read decides whether there is work to do, and the charge has to precede the copy that does it.
 pub(super) enum Generator {
     Byte(u8),
-    Bit(bool),
 }
 
 impl Generator {
@@ -203,15 +196,13 @@ impl Generator {
                 Subterm::Intrinsic(Intrinsic::Byte(byte)) => Some(Self::Byte(*byte)),
                 _ => None,
             },
-            Grain::B => element.as_bool().map(Self::Bit),
         }
     }
 
-    /// The run with this generator appended — `None` at the byte grain alone, over a run that is not byte-aligned.
+    /// The run with this generator appended — `None` over a run that is not byte-aligned.
     pub(super) fn appended_to(self, run: &Binary) -> Option<Binary> {
         match self {
             Self::Byte(byte) => run.append_byte(byte),
-            Self::Bit(bit) => Some(run.append_bit(bit)),
         }
     }
 
@@ -221,7 +212,6 @@ impl Generator {
     pub(super) fn replicated(self, count: usize) -> Binary {
         match self {
             Self::Byte(byte) => Binary::replicate(Grain::X, byte, count),
-            Self::Bit(bit) => Binary::replicate(Grain::B, u8::from(bit), count),
         }
     }
 }

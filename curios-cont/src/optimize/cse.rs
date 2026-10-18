@@ -9,8 +9,6 @@ use {
 };
 
 /// An operand under a total order, with `Flt` by bit pattern and packed data by the value's own, so commutative normalization can sort and the scope table can key deterministically.
-///
-/// A `Bin` holds the [`Binary`], which carries its logical length, rather than a re-derived byte string that does not. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — so a key built from packed bytes would collide them, deduplicating two `BinEql`s against those two literals into one.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum AtomKey {
     Value(u32),

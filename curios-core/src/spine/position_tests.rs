@@ -79,7 +79,7 @@ fn peel_position_decides_a_position_through_a_window_equal() {
     );
 }
 
-// The declining side: a position one past the named one, and the same position of another base, may still hold one element, so neither clashes; and two grains are not one carrier's pair at all.
+// The declining side: a position one past the named one, and the same position of another base, may still hold one element, so neither clashes.
 #[test]
 fn peel_position_declines_an_unlike_position_or_base_without_clashing() {
     let (xs, ys, s, l) = (sym(0, "xs"), sym(1, "ys"), sym(2, "s"), sym(3, "l"));
@@ -100,14 +100,6 @@ fn peel_position_declines_an_unlike_position_or_base_without_clashing() {
             Some(Deduction::Undecided)
         ),
         "another base is not this one"
-    );
-    assert!(
-        peel_position(
-            &bin_get(Grain::X, xs.clone(), s.clone()),
-            &bin_get(Grain::B, xs, s)
-        )
-        .is_none(),
-        "two grains are two carriers"
     );
 }
 

@@ -17,14 +17,14 @@ pub enum Carrier {
     Byte,
     /// binary64.
     Float,
-    /// A packed sequence of bits or bytes.
+    /// A packed sequence of bytes.
     Packed(Grain),
     /// A sequence of elements.
     List,
 }
 
 impl Carrier {
-    /// Whether a value of this carrier can hold a type: a list's elements are of any type, a type among them, where a number, a truth value, a byte, a float and a packed sequence of bits or bytes hold none. So a universe level can be part of a list's value, and of no other carrier's.
+    /// Whether a value of this carrier can hold a type: a list's elements are of any type, a type among them, where a number, a truth value, a byte, a float and a packed sequence of bytes hold none. So a universe level can be part of a list's value, and of no other carrier's.
     pub fn holds_types(self) -> bool {
         matches!(self, Carrier::List)
     }
@@ -67,7 +67,7 @@ pub enum Operation {
     Min,
     /// The greater of two operands.
     Max,
-    /// A value of `from` as a value of the carrier the operation is declared at — a byte's value as a natural, `0..=255` by its carrier; a natural as an integer, ℕ → ℤ; a run regrouped at the other grain. Which conversions undo which is [`Operation::undoes`].
+    /// A value of `from` as a value of the carrier the operation is declared at — a byte's value as a natural, `0..=255` by its carrier; a natural as an integer, ℕ → ℤ; a float as its eight bytes. Which conversions undo which is [`Operation::undoes`].
     Conversion {
         from: Carrier,
     },
@@ -252,15 +252,15 @@ impl Operation {
 ///
 /// - **`Nat` and `Byte`, both ways.** A byte's value is a natural below 256, and the narrowing states `n < 256` of the natural it is handed, so each direction is the other's inverse on what it accepts.
 /// - **`Nat` and `Int`, both ways.** ℕ embeds in ℤ, and the narrowing states `0 <= i`.
-/// - **A run and its regrouping at the other grain, both ways.** Regrouping moves no bit, and the alignment the inner regrouping demanded is what makes the composite well formed.
 /// - **`Flt` and its eight little-endian bytes, both ways.** Every one of the 2⁶⁴ bit patterns is a distinct float and no NaN is canonicalized, so decoding what encoding wrote is the float it was given, NaNs and both zeros included, and encoding what decoding read is the run it was handed, the decoding stating its eight bytes.
 pub fn round_trip(source: Carrier, target: Carrier) -> bool {
-    match (source, target) {
-        (Carrier::Natural, Carrier::Byte) | (Carrier::Byte, Carrier::Natural) => true,
-        (Carrier::Natural, Carrier::Integer) | (Carrier::Integer, Carrier::Natural) => true,
-        (Carrier::Packed(grain), Carrier::Packed(other)) => grain != other,
-        (Carrier::Float, Carrier::Packed(Grain::X))
-        | (Carrier::Packed(Grain::X), Carrier::Float) => true,
-        _ => false,
-    }
+    matches!(
+        (source, target),
+        (Carrier::Natural, Carrier::Byte)
+            | (Carrier::Byte, Carrier::Natural)
+            | (Carrier::Natural, Carrier::Integer)
+            | (Carrier::Integer, Carrier::Natural)
+            | (Carrier::Float, Carrier::Packed(Grain::X))
+            | (Carrier::Packed(Grain::X), Carrier::Float)
+    )
 }

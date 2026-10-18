@@ -344,7 +344,7 @@ impl MatchPattern {
 pub enum NatPattern {
     /// The `0` leaf.
     Zero,
-    /// The `pred + 1; ih` leaf. `pred_label` is always a plain binder name, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches. The `; ih` binds the *fold result*, not scrutinee shape, so it takes any irrefutable [`Pattern`] (`; (cur, live)` destructures a tuple-valued hypothesis exactly as a `let` binder would); it is optional, exactly like the `; ih` on the `List`/`Bits`/`Bytes` cons leaves below — omitting it makes the arm an ordinary case split.
+    /// The `pred + 1; ih` leaf. `pred_label` is always a plain binder name, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches. The `; ih` binds the *fold result*, not scrutinee shape, so it takes any irrefutable [`Pattern`] (`; (cur, live)` destructures a tuple-valued hypothesis exactly as a `let` binder would); it is optional, exactly like the `; ih` on the `List`/`Bytes` cons leaves below — omitting it makes the arm an ordinary case split.
     Succ {
         pred_label: Label,
         ih: Option<Pattern>,

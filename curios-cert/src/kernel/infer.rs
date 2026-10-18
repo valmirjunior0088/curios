@@ -867,7 +867,6 @@ fn check_free_monoid(
 
             let atom_type = Term::intrinsic(match grain {
                 Grain::X => Intrinsic::ByteType,
-                Grain::B => Intrinsic::BoolType,
             });
             let head = kernel.fresh(cons_case.first_hint());
             let tail = kernel.fresh(cons_case.second_hint());

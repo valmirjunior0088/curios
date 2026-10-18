@@ -629,7 +629,6 @@ fn intrinsic_call_name(op: IntrinsicCall) -> &'static str {
 
 fn grain_carrier(grain: Grain) -> &'static str {
     match grain {
-        Grain::B => "Bits",
         Grain::X => "Bytes",
     }
 }
@@ -736,12 +735,6 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::BinConcat(grain, _) => return format!("{}/concat", grain_carrier(*grain)),
         Intrinsic::BinChunk(grain, _) => return format!("{}/chunk", grain_carrier(*grain)),
         Intrinsic::BinReplicate(grain) => return format!("{}/replicate", grain_carrier(*grain)),
-        Intrinsic::BinReinterp(grain) => {
-            return match grain {
-                Grain::X => "Bytes/to_bits".to_string(),
-                Grain::B => "Bits/to_bytes".to_string(),
-            };
-        }
         Intrinsic::BinAnd(grain) => return format!("{}/and", grain_carrier(*grain)),
         Intrinsic::BinOr(grain) => return format!("{}/or", grain_carrier(*grain)),
         Intrinsic::BinXor(grain) => return format!("{}/xor", grain_carrier(*grain)),
@@ -772,7 +765,6 @@ fn render_literal(literal: &Literal) -> String {
                 .map(|byte| format!("{byte:02x}"))
                 .collect::<String>();
             match grain {
-                Grain::B => format!("b\"{rendered}\"/{}", bits.bit_length()),
                 Grain::X => format!("x\"{rendered}\""),
             }
         }

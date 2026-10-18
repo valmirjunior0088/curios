@@ -45,7 +45,6 @@ impl SeqCarrier<'_> {
         match self {
             SeqCarrier::List { element } => element.clone(),
             SeqCarrier::Bin { grain } => Term::intrinsic(match grain {
-                Grain::B => Intrinsic::BoolType,
                 Grain::X => Intrinsic::ByteType,
             }),
         }

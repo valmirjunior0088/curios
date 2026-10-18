@@ -1,18 +1,15 @@
 //! What a packed, shifted, summed or distributed result costs, charged before the value is built.
 //!
-//! **An asymmetry in what two spellings cost can be earned rather than drifted into.** Two formulas that differ may each be right for its own implementation — a bit-grain append that rebuilt its value a `bool` per bit would earn a whole extra buffer that a byte-grain copy of the packed payload does not. Before unifying two prices, check whether the operations differ for a reason — where they do, the reason is the thing to remove, and unifying over it writes the accident into the budget permanently.
+//! **An asymmetry in what two spellings cost can be earned rather than drifted into.** Two formulas that differ may each be right for its own implementation. Before unifying two prices, check whether the operations differ for a reason — where they do, the reason is the thing to remove, and unifying over it writes the accident into the budget permanently.
 //!
 //! Each bound is computed from operand *sizes* rather than from the result, so a fold that would allocate more than the budget allows is refused before `num-bigint` is asked for anything — the difference between a diagnostic and a process the allocator does not return from.
 
 use {crate::Cost, curios_algebra::distribution_size, curios_num::Grain};
 
-/// What a packed value of `bits` logical bits costs, in its grain's own row of the price list.
-///
-/// One function rather than two call sites choosing a row, because the two rows differ by a factor of eight and picking the wrong one undercharges by that factor at the byte grain.
+/// What a packed value of `bits` logical bits costs, in its grain's row of the price list.
 pub(super) fn packed_bound(grain: Grain, bits: u64) -> Cost {
     match grain {
         Grain::X => Cost::packed_bytes(bits / 8),
-        Grain::B => Cost::packed_bits(bits),
     }
 }
 

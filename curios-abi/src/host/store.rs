@@ -23,13 +23,12 @@ pub enum WireLeaf {
     Int,
     Bool,
     Bytes,
-    Bits,
     Handle,
 }
 
 /// The type of one value crossing the host boundary — a closed *subset of guest types*, not a vocabulary of wire shapes. Nothing below the type distinguishes `Bytes` from `Handle`: they share a wasm `ValType`, a wasmtime `FuncType` slot, and a load/force/embed path. What separates them is only the guest type `curios-core`'s `wire_term` builds, which is why each variant is spelled the way its guest type is.
 ///
-/// The scalar cases matter to codegen: a `Bool` or a `Byte` crosses as its raw wasm `i32` word, and a `Nat` or `Int` is narrowed to a raw wasm `i64` — an i31 read signed and widened, and a boxed magnitude the `i64` cannot hold refused, the one place either narrows by refusing. An `Flt` is read out of its boxed `f64` and crosses as a raw wasm `f64`, every bit kept by the native runtime; a JavaScript host receives a `Number`, and the WebAssembly JavaScript interface leaves a NaN's sign and payload to the engine in both directions, so a NaN's bits are guaranteed only against the native runtime. A scalar result comes back the same way, as the raw number, and the guest boxes it ([`WireScalar`] says why). `Bytes` and `Bits` are the two packed grains, distinct guest types over one payload: a row states which grain it means, and the guest seals the returned payload at that grain's length. A `Byte` is a word below 256 in both directions and is not a list element: `List(Byte)` is the `Bytes` a row already spells.
+/// The scalar cases matter to codegen: a `Bool` or a `Byte` crosses as its raw wasm `i32` word, and a `Nat` or `Int` is narrowed to a raw wasm `i64` — an i31 read signed and widened, and a boxed magnitude the `i64` cannot hold refused, the one place either narrows by refusing. An `Flt` is read out of its boxed `f64` and crosses as a raw wasm `f64`, every bit kept by the native runtime; a JavaScript host receives a `Number`, and the WebAssembly JavaScript interface leaves a NaN's sign and payload to the engine in both directions, so a NaN's bits are guaranteed only against the native runtime. A scalar result comes back the same way, as the raw number, and the guest boxes it ([`WireScalar`] says why). A `Byte` is a word below 256 in both directions and is not a list element: `List(Byte)` is the `Bytes` a row already spells.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum WireType {
@@ -39,7 +38,6 @@ pub enum WireType {
     Byte,
     Flt,
     Bytes,
-    Bits,
     Handle,
     List(WireLeaf),
     Option(WireLeaf),
@@ -53,7 +51,6 @@ impl From<WireLeaf> for WireType {
             WireLeaf::Int => WireType::Int,
             WireLeaf::Bool => WireType::Bool,
             WireLeaf::Bytes => WireType::Bytes,
-            WireLeaf::Bits => WireType::Bits,
             WireLeaf::Handle => WireType::Handle,
         }
     }
@@ -77,7 +74,6 @@ pub enum WireScalar {
 #[curios_archive::archived]
 pub enum WireReference {
     Bytes,
-    Bits,
     Handle,
     List(WireLeaf),
     Option(WireLeaf),
@@ -92,7 +88,7 @@ pub enum WireShape {
 
 /// What a wire type crosses the boundary as at the Wasm level, in either direction: the one statement the emitter types an import by and a runtime answers it by, so the two ends have no mapping of their own to keep alike.
 ///
-/// A scalar is the number it is. A reference is a flat payload, an array the guest forces a value to on the way out and embeds back on the way in: bytes for the two packed grains and for a handle's token, and for a list one element a value, a scalar as a lone one crosses and a reference as its own payload. An option crosses as its element's list would, holding the one value `some` holds, and `none` as null ([`WireType::admits_null`]): so `none` costs nothing to cross, and `some` crosses by every path a list already does.
+/// A scalar is the number it is. A reference is a flat payload, an array the guest forces a value to on the way out and embeds back on the way in: bytes for a packed run and for a handle's token, and for a list one element a value, a scalar as a lone one crosses and a reference as its own payload. An option crosses as its element's list would, holding the one value `some` holds, and `none` as null ([`WireType::admits_null`]): so `none` costs nothing to cross, and `some` crosses by every path a list already does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Carrier {
     /// A raw `i64`: a `Nat` or an `Int`.
@@ -101,13 +97,13 @@ pub enum Carrier {
     I32,
     /// A raw `f64`: an `Flt`.
     F64,
-    /// An array of `i8`: a `Bytes`, a `Bits`, or the token a `Handle` is.
+    /// An array of `i8`: a `Bytes`, or the token a `Handle` is.
     Bytes,
     /// An array of `i64`: a list of `Nat` or of `Int`.
     Longs,
     /// An array of `i32`: a list of `Bool`.
     Words,
-    /// An array of references, each the payload its element crosses as: a list of `Bytes`, `Bits` or `Handle`.
+    /// An array of references, each the payload its element crosses as: a list of `Bytes` or `Handle`.
     Elems,
 }
 
@@ -118,11 +114,11 @@ impl WireType {
             WireType::Nat | WireType::Int => Carrier::I64,
             WireType::Bool | WireType::Byte => Carrier::I32,
             WireType::Flt => Carrier::F64,
-            WireType::Bytes | WireType::Bits | WireType::Handle => Carrier::Bytes,
+            WireType::Bytes | WireType::Handle => Carrier::Bytes,
             WireType::List(leaf) | WireType::Option(leaf) => match leaf {
                 WireLeaf::Nat | WireLeaf::Int => Carrier::Longs,
                 WireLeaf::Bool => Carrier::Words,
-                WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle => Carrier::Elems,
+                WireLeaf::Bytes | WireLeaf::Handle => Carrier::Elems,
             },
         }
     }
@@ -141,7 +137,6 @@ impl WireType {
             WireType::Byte => WireShape::Scalar(WireScalar::Byte),
             WireType::Flt => WireShape::Scalar(WireScalar::Flt),
             WireType::Bytes => WireShape::Reference(WireReference::Bytes),
-            WireType::Bits => WireShape::Reference(WireReference::Bits),
             WireType::Handle => WireShape::Reference(WireReference::Handle),
             WireType::List(leaf) => WireShape::Reference(WireReference::List(leaf)),
             WireType::Option(leaf) => WireShape::Reference(WireReference::Option(leaf)),
@@ -159,7 +154,6 @@ impl Display for WireType {
             WireType::Byte => formatter.write_str("Byte"),
             WireType::Flt => formatter.write_str("Flt"),
             WireType::Bytes => formatter.write_str("Bytes"),
-            WireType::Bits => formatter.write_str("Bits"),
             WireType::Handle => formatter.write_str("Handle"),
             WireType::List(leaf) => write!(formatter, "List({})", WireType::from(*leaf)),
             WireType::Option(leaf) => write!(formatter, "Option({})", WireType::from(*leaf)),
@@ -183,7 +177,6 @@ impl From<WireReference> for WireType {
     fn from(reference: WireReference) -> Self {
         match reference {
             WireReference::Bytes => WireType::Bytes,
-            WireReference::Bits => WireType::Bits,
             WireReference::Handle => WireType::Handle,
             WireReference::List(leaf) => WireType::List(leaf),
             WireReference::Option(leaf) => WireType::Option(leaf),

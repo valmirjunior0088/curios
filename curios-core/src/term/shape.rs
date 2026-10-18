@@ -598,7 +598,6 @@ impl Carrier {
             Carrier::Bin { grain, .. } => vec![
                 Term::intrinsic(match grain {
                     Grain::X => Intrinsic::ByteType,
-                    Grain::B => Intrinsic::BoolType,
                 }),
                 Term::intrinsic(Intrinsic::BinType(*grain)),
             ],

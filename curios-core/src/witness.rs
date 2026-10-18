@@ -262,7 +262,6 @@ impl fmt::Display for HeadKey {
             HeadKey::Int => write!(f, "Int"),
             HeadKey::Flt => write!(f, "Flt"),
             HeadKey::Bool => write!(f, "Bool"),
-            HeadKey::Bin(Grain::B) => write!(f, "Bits"),
             HeadKey::Bin(Grain::X) => write!(f, "Bytes"),
             HeadKey::Handle => write!(f, "Handle"),
             HeadKey::List => write!(f, "List"),

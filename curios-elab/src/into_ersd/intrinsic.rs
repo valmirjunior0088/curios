@@ -332,9 +332,6 @@ pub(super) fn erase_intrinsic(
         Intrinsic::BinGet { grain, .. } => seq!(curios_ersd::SequenceOp::BinGet(*grain)),
         Intrinsic::BinSlice { grain, .. } => seq!(curios_ersd::SequenceOp::BinSlice(*grain)),
         Intrinsic::BinAppend { grain, .. } => seq!(curios_ersd::SequenceOp::BinAppend(*grain)),
-        Intrinsic::BinReinterp { grain, .. } => {
-            seq!(curios_ersd::SequenceOp::BinReinterp(*grain))
-        }
         Intrinsic::BinReplicate { grain, .. } => {
             seq!(curios_ersd::SequenceOp::BinReplicate(*grain))
         }

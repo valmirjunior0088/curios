@@ -579,7 +579,7 @@ pub enum Error {
     NotListType {
         head_type: Box<Term>,
     },
-    /// `grain` names the packed binary the operation wanted, so the message says `Bits` or `Bytes` — the spellings the surface has. There is no surface type named after the grain-parametric family.
+    /// `grain` names the packed binary the operation wanted, so the message says `Bytes` — the spelling the surface has. There is no surface type named after the grain-parametric family.
     NotBinType {
         grain: Grain,
         head_type: Box<Term>,
@@ -646,8 +646,6 @@ pub enum Error {
     },
     /// A `Nat` column mixing a successor arm with a literal one. A literal peels no successor, so the two are the fold and the dispatch, and one column is one of them.
     MatrixMixedNatDispatch,
-    /// A packed column mixing bit and byte patterns. A scrutinee is of one grain, so every row of its column writes one prefix.
-    MatrixMixedBinGrain,
     /// A match over constructors — or, where `no_arms`, one with none, which eliminates only an empty type — whose scrutinee's type is no inductive.
     NotAInductType {
         head_type: Box<Term>,

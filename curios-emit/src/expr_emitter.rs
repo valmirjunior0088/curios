@@ -152,7 +152,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
                 let rope = self.context.table().bin_rope();
                 let bytes = match grain {
-                    Grain::B => value.to_packed_bytes(),
                     Grain::X => value
                         .to_bytes()
                         .expect("X literals are always byte-aligned"),

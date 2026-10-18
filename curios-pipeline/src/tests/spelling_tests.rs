@@ -284,18 +284,8 @@ fn intrinsics_unreached_from_the_root() -> Vec<String> {
     })
 }
 
-/// The declarations of `/sys` a report writes an intrinsic by and a reader at a program's root reaches by no name: `/std` calls each only inside a declaration of its own that does more than name it (`documentation/roadmap/tools/000-findings.md`), or, for `/sys/Bits` and `/sys/Bytes/to_bits`, not at all.
-const UNREACHED_INTRINSICS: [&str; 55] = [
-    "/sys/Bits/Bits",
-    "/sys/Bits/and",
-    "/sys/Bits/get",
-    "/sys/Bits/len",
-    "/sys/Bits/or",
-    "/sys/Bits/replicate",
-    "/sys/Bits/slice",
-    "/sys/Bits/to_bytes",
-    "/sys/Bits/xor",
-    "/sys/Bytes/to_bits",
+/// The declarations of `/sys` a report writes an intrinsic by and a reader at a program's root reaches by no name: `/std` calls each only inside a declaration of its own that does more than name it (`documentation/roadmap/tools/000-findings.md`).
+const UNREACHED_INTRINSICS: [&str; 45] = [
     "/sys/Channel/capacity",
     "/sys/Channel/close",
     "/sys/Channel/closed",

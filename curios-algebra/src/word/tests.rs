@@ -203,19 +203,7 @@ fn a_position_inside_an_operand_is_its_position_in_the_concatenation() {
 }
 
 #[test]
-fn packed_runs_strip_across_bits_and_clash_where_they_differ() {
-    let bits = |pattern: &[bool]| Packed {
-        grain: Grain::B,
-        bits: Binary::from_bits(pattern.iter().copied()),
-    };
-    let mut left = bits(&[true, false, true]);
-    let right = bits(&[true, false, false, true]);
-    assert_eq!(left.shared_prefix(&right), 2);
-    left.skip(2);
-    assert_eq!(left, bits(&[true]));
-    left.extend(bits(&[false]));
-    assert_eq!(left, bits(&[true, false]));
-
+fn packed_runs_share_the_prefix_where_their_bytes_agree() {
     let bytes = |values: &[u8]| Packed {
         grain: Grain::X,
         bits: Binary::from_bytes(values.to_vec()),

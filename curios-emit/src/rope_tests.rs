@@ -40,29 +40,16 @@ fn func<'a>(wat: &'a str, name: &str) -> &'a str {
     &wat[start..end]
 }
 
-/// A read of a node that was never flattened looks in its two children before it reaches for `force`, in each grain: a read that falls in a flat child copies nothing.
+/// A read of a node that was never flattened looks in its two children before it reaches for `force`, in each carrier: a read that falls in a flat child copies nothing.
 #[test]
 fn a_read_of_an_unflattened_node_looks_in_its_children_before_it_forces() {
-    let packed = |grain| {
-        wat(&intrinsic_main(
-            curios_cont::Intrinsic::BinGet(grain),
-            vec![bin_lit(vec![1, 2, 3]), nat(1)],
-        ))
-    };
+    let packed = wat(&intrinsic_main(
+        curios_cont::Intrinsic::BinGet(Grain::X),
+        vec![bin_lit(vec![1, 2, 3]), nat(1)],
+    ));
 
     for (wat, read, node, force) in [
-        (
-            packed(Grain::X),
-            "$bytes/read",
-            "$rope/bin/node",
-            "$bytes/force",
-        ),
-        (
-            packed(Grain::B),
-            "$bits/read",
-            "$rope/bin/node",
-            "$bits/force",
-        ),
+        (packed, "$bytes/read", "$rope/bin/node", "$bytes/force"),
         (
             wat(&list_read()),
             "$list/read",
@@ -88,16 +75,10 @@ fn a_read_of_an_unflattened_node_looks_in_its_children_before_it_forces() {
 /// A consumer of a forced payload bounds its walk by the run's `len` and never by its array's length, which a flattened payload may hold room past: equality, the pointwise combiners, a map, and the host's deep and scalar forms read no `array.len` at all, and a force reads two, its worklist's and, where it claims its first piece's room, the capacity of that piece's payload.
 #[test]
 fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
-    let packed = |op: fn(Grain) -> curios_cont::Intrinsic, grain| {
-        let operand = |bytes: Vec<u8>| {
-            curios_cont::Atom::Literal(curios_cont::Literal::Bin(
-                grain,
-                curios_num::Binary::from_bytes(bytes),
-            ))
-        };
+    let packed = |op: fn(Grain) -> curios_cont::Intrinsic| {
         wat(&intrinsic_main(
-            op(grain),
-            vec![operand(vec![1, 2, 3, 4]), operand(vec![5, 6, 7, 8])],
+            op(Grain::X),
+            vec![bin_lit(vec![1, 2, 3, 4]), bin_lit(vec![5, 6, 7, 8])],
         ))
     };
     let host = wat(&foreign_call_to(row(
@@ -108,8 +89,8 @@ fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
         ],
         WireResults::single(WireType::Nat),
     )));
-    let eql = packed(curios_cont::Intrinsic::BinEql, Grain::X);
-    let and = packed(curios_cont::Intrinsic::BinAnd, Grain::B);
+    let eql = packed(curios_cont::Intrinsic::BinEql);
+    let and = packed(curios_cont::Intrinsic::BinAnd);
     let map = wat(&list_map());
 
     for (wat, helper) in [
@@ -123,41 +104,30 @@ fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
     }
     for (wat, force) in [
         (&eql, "$bytes/force"),
-        (&and, "$bits/force"),
+        (&and, "$bytes/force"),
         (&map, "$list/force"),
     ] {
         assert_eq!(count(func(wat, force), "array.len"), 2, "{force}");
     }
 }
 
-/// What leaves the rope as a flat array takes the run exact: a settle and a reinterpretation seal their leaf over `exact`'s payload, and a host operand, a host list's elements among them, crosses as it — which answers the forced payload where its array is the run's length, and a copy of the run otherwise.
+/// What leaves the rope as a flat array takes the run exact: a settle seals its leaf over `exact`'s payload, and a host operand, a host list's elements among them, crosses as it — which answers the forced payload where its array is the run's length, and a copy of the run otherwise.
 #[test]
 fn what_leaves_the_rope_is_its_exact_payload() {
     let settle = wat(&list_settle());
-    let reinterp = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BinReinterp(Grain::X),
-        vec![bin_lit(vec![1, 2, 3, 4])],
-    ));
     let host = wat(&foreign_call_to(row(
         "send",
-        vec![
-            WireType::Bytes,
-            WireType::Bits,
-            WireType::List(WireLeaf::Bytes),
-        ],
+        vec![WireType::Bytes, WireType::List(WireLeaf::Bytes)],
         WireResults::single(WireType::Nat),
     )));
 
     assert_contains(func(&settle, "$func/main"), "call $list/exact");
-    assert_contains(func(&reinterp, "$bytes/to_bits"), "call $bytes/exact");
     assert_contains(func(&host, "$func/main"), "call $bytes/exact");
-    assert_contains(func(&host, "$func/main"), "call $bits/exact");
     assert_contains(func(&host, "$list/bytes/force"), "call $bytes/exact");
 
     for (wat, exact, force) in [
         (&settle, "$list/exact", "call $list/force"),
         (&host, "$bytes/exact", "call $bytes/force"),
-        (&host, "$bits/exact", "call $bits/force"),
     ] {
         let exact = func(wat, exact);
         assert_contains(exact, force);
@@ -166,41 +136,31 @@ fn what_leaves_the_rope_is_its_exact_payload() {
     }
 }
 
-/// A flattening reads its first piece's written extent before it allocates, so a run that ends at its payload's extent extends that payload instead; a fresh payload's room is twice the run, clamped to the largest length a run holds; and the bit grain claims only from a byte boundary, a guard the byte and element grains do without.
+/// A flattening reads its first piece's written extent before it allocates, so a run that ends at its payload's extent extends that payload instead; and a fresh payload's room is twice the run, clamped to the largest length a run holds.
 #[test]
 fn a_flattening_reads_its_first_pieces_extent_before_it_allocates() {
-    let packed = |grain| {
-        wat(&intrinsic_main(
-            curios_cont::Intrinsic::BinGet(grain),
-            vec![bin_lit(vec![1, 2, 3, 4]), nat(1)],
-        ))
-    };
-    let bytes = packed(Grain::X);
-    let bits = packed(Grain::B);
+    let bytes = wat(&intrinsic_main(
+        curios_cont::Intrinsic::BinGet(Grain::X),
+        vec![bin_lit(vec![1, 2, 3, 4]), nat(1)],
+    ));
     let list = wat(&list_read());
 
-    for (wat, force, payload, guarded) in [
-        (&bytes, "$bytes/force", "$bytes", false),
-        (&bits, "$bits/force", "$bytes", true),
-        (&list, "$list/force", "$elems", false),
+    for (wat, force, payload) in [
+        (&bytes, "$bytes/force", "$bytes"),
+        (&list, "$list/force", "$elems"),
     ] {
         let force = func(wat, force);
         let extent = force
             .find("struct.get $rope/room $extent")
             .expect("the force reads the extent");
         // The run's payload, which the worklist ahead of the walk may share a type with.
-        let allocation = extent
-            + force[extent..]
-                .find(&format!("array.new_default {payload}"))
-                .expect("the force allocates the run's payload after the extent");
+        assert!(
+            force[extent..].contains(&format!("array.new_default {payload}")),
+            "the force allocates the run's payload after the extent"
+        );
         assert_contains(force, "struct.set $rope/room $extent");
         assert_contains(force, "struct.new $rope/room");
         assert_contains(force, &format!("i64.const {}", u32::MAX));
-        assert_eq!(
-            force[extent..allocation].contains("i32.const 7"),
-            guarded,
-            "{force}"
-        );
     }
 }
 
@@ -239,31 +199,22 @@ fn bin_concat_builds_o1_nodes_inline_without_a_helper() {
     assert_absent(&wat, "call $bytes/slice");
 }
 
-/// Two immediates that fit their grain's envelope join without leaving it: the arm that tests both operands and their lengths stands ahead of the node, and ends in the immediate it builds. One arm a pair, so a join of three holds two.
+/// Two immediates that fit the envelope join without leaving it: the arm that tests both operands and their lengths stands ahead of the node, and ends in the immediate it builds. One arm a pair, so a join of three holds two.
 #[test]
 fn bin_concat_joins_two_immediates_by_arithmetic_ahead_of_the_node() {
-    for grain in [Grain::X, Grain::B] {
-        let operand = |bytes: Vec<u8>| {
-            curios_cont::Atom::Literal(curios_cont::Literal::Bin(
-                grain,
-                curios_num::Binary::from_bytes(bytes),
-            ))
-        };
+    let pair = wat(&intrinsic_main(
+        curios_cont::Intrinsic::BinConcat(Grain::X, 2),
+        vec![bin_lit(vec![1]), bin_lit(vec![2])],
+    ));
+    assert_eq!(count(&pair, "block $bin_concat_rope"), 1);
+    assert_eq!(count(&pair, "br $bin_concat"), 1);
+    assert_contains(&pair, "struct.new $rope/bin/node");
 
-        let pair = wat(&intrinsic_main(
-            curios_cont::Intrinsic::BinConcat(grain, 2),
-            vec![operand(vec![1]), operand(vec![2])],
-        ));
-        assert_eq!(count(&pair, "block $bin_concat_rope"), 1, "{grain:?}");
-        assert_eq!(count(&pair, "br $bin_concat"), 1, "{grain:?}");
-        assert_contains(&pair, "struct.new $rope/bin/node");
-
-        let triple = wat(&intrinsic_main(
-            curios_cont::Intrinsic::BinConcat(grain, 3),
-            vec![operand(vec![1]), operand(vec![2]), operand(vec![3])],
-        ));
-        assert_eq!(count(&triple, "block $bin_concat_rope"), 2, "{grain:?}");
-    }
+    let triple = wat(&intrinsic_main(
+        curios_cont::Intrinsic::BinConcat(Grain::X, 3),
+        vec![bin_lit(vec![1]), bin_lit(vec![2]), bin_lit(vec![3])],
+    ));
+    assert_eq!(count(&triple, "block $bin_concat_rope"), 2);
 }
 
 #[test]

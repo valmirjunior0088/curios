@@ -265,36 +265,21 @@ fn every_monoid_the_oracle_names_keeps_its_laws_under_its_fold() {
     }
 }
 
-/// Every sequence operation, at both packed grains.
+/// Every sequence operation, at the packed grain.
 fn every_sequence_operation() -> Vec<SequenceOp> {
-    use {
-        SequenceOp::*,
-        curios_num::Grain::{B, X},
-    };
+    use {SequenceOp::*, curios_num::Grain::X};
     listed![
         SequenceOp;
         BinLen(X) => BinLen(X),
-        BinLen(B) => BinLen(B),
         BinEql(X) => BinEql(X),
-        BinEql(B) => BinEql(B),
         BinGet(X) => BinGet(X),
-        BinGet(B) => BinGet(B),
         BinSlice(X) => BinSlice(X),
-        BinSlice(B) => BinSlice(B),
         BinAppend(X) => BinAppend(X),
-        BinAppend(B) => BinAppend(B),
         BinConcat(X) => BinConcat(X),
-        BinConcat(B) => BinConcat(B),
         BinReplicate(X) => BinReplicate(X),
-        BinReplicate(B) => BinReplicate(B),
-        BinReinterp(X) => BinReinterp(X),
-        BinReinterp(B) => BinReinterp(B),
         BinAnd(X) => BinAnd(X),
-        BinAnd(B) => BinAnd(B),
         BinOr(X) => BinOr(X),
-        BinOr(B) => BinOr(B),
         BinXor(X) => BinXor(X),
-        BinXor(B) => BinXor(B),
         ListBuild => ListBuild,
         ListLen => ListLen,
         ListGet => ListGet,
@@ -311,15 +296,6 @@ fn runs_of(grain: Grain) -> Vec<Constant> {
             .into_iter()
             .map(|bytes| Constant::Bin(grain, Binary::from_bytes(bytes.to_vec())))
             .collect(),
-        Grain::B => [
-            &[][..],
-            &[true],
-            &[false, true, true],
-            &[true, false, false, true, true, false, true, false, true],
-        ]
-        .into_iter()
-        .map(|bits| Constant::Bin(grain, Binary::from_bits(bits.iter().copied())))
-        .collect(),
     }
 }
 
@@ -332,15 +308,6 @@ fn generators_of(grain: Grain) -> Vec<(Constant, Constant)> {
                 (
                     Constant::Byte(byte),
                     Constant::Bin(grain, Binary::from_bytes(vec![byte])),
-                )
-            })
-            .collect(),
-        Grain::B => [false, true]
-            .into_iter()
-            .map(|bit| {
-                (
-                    Constant::Bool(bit),
-                    Constant::Bin(grain, Binary::from_bits([bit])),
                 )
             })
             .collect(),

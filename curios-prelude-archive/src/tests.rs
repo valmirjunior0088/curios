@@ -99,7 +99,6 @@ fn the_library_declares_every_row_a_host_answers() {
 
 /// The roots of `/std` that may spell each part of `/sys`: the one statement of who reads it. `curios-std/README.md`'s "`/std` is laid out by purity, subject and kind" gives the rule: a carrier is read by its own root, a wire code set by the root owning the rows it travels on, and the status every row answers by `internal`, which decodes it once. Every other module reaches `/sys` through these.
 const SYS_READERS: &[(&str, &[&str])] = &[
-    ("Bits", &[]),
     ("Bool", &["Bool"]),
     ("Byte", &["Byte"]),
     ("Bytes", &["Bytes"]),

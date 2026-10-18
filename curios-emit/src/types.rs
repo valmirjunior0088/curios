@@ -2,7 +2,7 @@
 //!
 //! # The rope representation
 //!
-//! `Bits`, `Bytes`, and `List` are *ropes*: the two packed grains share one three-shape tagged union behind the non-final `$rope/bin` struct base, while lists use `$rope/list` (both have fields `tag` + `len`). A `leaf` holds a flat payload array (`$bytes` / `$elems`) exactly its run; a `node` holds two children plus a memoization `cache`, which may hold room past the run, and the `$rope/room` record of that room's written extent; a `view` is a window — a `base` rope plus an `offset`. The cost model this buys:
+//! `Bytes` and `List` are *ropes*: a three-shape tagged union behind the non-final `$rope/bin` struct base for `Bytes`, and `$rope/list` for lists (both have fields `tag` + `len`). A `leaf` holds a flat payload array (`$bytes` / `$elems`) exactly its run; a `node` holds two children plus a memoization `cache`, which may hold room past the run, and the `$rope/room` record of that room's written extent; a `view` is a window — a `base` rope plus an `offset`. The cost model this buys:
 //!
 //! - `concat`/`append` are O(1): one `node` allocation, no copying.
 //! - `len` is O(1): every shape carries it.
@@ -10,7 +10,7 @@
 //! - `get` on an uncached node reads through one level: the child that holds the element answers where it is flat-available — a leaf, a view, a cached node — and nothing is forced, so an append then a read of the part just appended copies nothing.
 //! - The first *whole-value read* (`eql` on equal lengths, `map`, a host call, a `slice` of an uncached node, and a `get` that falls in a child of one that is itself an uncached node) forces the rope — one O(n) fill into a fresh flat payload, memoized in the entry node's `cache` (its children are then nulled, releasing the tree). Later reads are O(1) to reach the payload. (A `view` is not memoized: forcing one is a single window copy of exactly its own size.)
 //! - A run read, grown and read again copies only what it grew by. A forcing whose first piece is a view or a flattened node fills a payload with room twice its run, and one whose first piece is a flattened node ending at its payload's written extent, the payload holding the whole run, claims that payload: it writes only the pieces after the first, past the extent, and raises the extent to its own length. So alternating append with a whole-value read, or with a `get` of the older part — which re-forces at every second append, the node above a cached one reading through and the node above that meeting an uncached child — copies each element a bounded number of times over the run's life.
-//! - What is left of the hazard: a run handed to a host at every step crosses exact, a copy where its payload holds room; a bit run that ends off a byte boundary claims no room, since past its extent lies the padding of a byte an older version holds, so alternating one re-forces it whole; and a run extended two ways at every step copies whole at every step, since a payload's room is one run's to write — as a list that grows and is read through an eager flat build of itself and two more elements does, the build copying what the next append's flattening claims.
+//! - What is left of the hazard: a run handed to a host at every step crosses exact, a copy where its payload holds room; and a run extended two ways at every step copies whole at every step, since a payload's room is one run's to write — as a list that grows and is read through an eager flat build of itself and two more elements does, the build copying what the next append's flattening claims.
 //!
 //! Naive accumulation loops are therefore O(n) by construction, and so are loops that read what they accumulate and head/tail peel loops (`get` head + `slice` tail): the first peel forces once, every later peel is an O(1) window over the settled payload. There is no compile-time recognition anywhere.
 //!
@@ -35,7 +35,7 @@ pub fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm::SubTy
     }
 }
 
-/// `$bytes` — a `Bits`/`Bytes` rope's flat packed payload, and the wire-`Bytes` host-boundary shape: `array (mut i8)`. Exported so curios-js's bridge declares the identical shape rather than a copy that could drift.
+/// `$bytes` — a `Bytes` rope's flat packed payload, and the wire-`Bytes` host-boundary shape: `array (mut i8)`. Exported so curios-js's bridge declares the identical shape rather than a copy that could drift.
 pub fn bytes_sub_type() -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,

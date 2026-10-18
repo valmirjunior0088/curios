@@ -463,13 +463,12 @@ fn the_proof_of_a_bound_is_not_run() {
     );
 }
 
-/// An operation that does not fold keeps the proof of its bound as it was written: the three folds that rebuild their node over a proof — a pointwise operation, a regrouping and a channel's creation — hand it on unreduced.
+/// An operation that does not fold keeps the proof of its bound as it was written: the two folds that rebuild their node over a proof — a pointwise operation and a channel's creation — hand it on unreduced.
 #[test]
 fn an_operation_that_does_not_fold_keeps_its_proof_as_written() {
     let mut host = Host::new(100_000);
     let (left, right) = (binder(92, "left"), binder(93, "right"));
     let stuck = [
-        Intrinsic::bin_reinterp(Grain::X, Term::free_var(&left), spinning()),
         Intrinsic::BinAnd {
             grain: Grain::X,
             left: Term::free_var(&left),

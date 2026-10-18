@@ -1097,15 +1097,11 @@ impl<'m> Compiler<'m> {
                     continue;
                 }
             };
-            if grain.is_some_and(|grain| grain != written) {
-                return Err(Error::MatrixMixedBinGrain);
-            }
             grain = Some(written);
         }
         let grain = grain.expect("a column of packed sequences has a row that writes one");
 
         let cases = match grain {
-            Grain::B => ["b[]", "b[_, .._]"],
             Grain::X => ["x[]", "x[_, .._]"],
         };
         self.sequence(

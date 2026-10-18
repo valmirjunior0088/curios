@@ -95,22 +95,10 @@ fn a_shift_coefficient_is_refused_before_it_is_built() {
 /// Bytes are not the only protected payload. Each subject below builds a result whose logical size its operands decide, and each is charged **at least** that size — so a carrier priced as a constant would show up here as a charge that does not cover what it built.
 ///
 /// At least, rather than exactly: a fold pays for traversing its operands as well as for its result, and the price list is an upper bound rather than an equality. The lower bound is the half that matters, because undercharging is the direction that loses the property.
-///
-/// The `Bin` subject appends rather than concatenates, deliberately: `FUSION_CAP` stops a concatenation fusing past 64 generators, so past that it builds *nothing* and correctly charges nothing. An append has no cap and rebuilds its whole value, which is the shape whose price has to scale.
 #[test]
 fn every_payload_carrier_is_charged_for_at_least_what_it_builds() {
-    const BITS: usize = 4_096;
     const DIGITS: usize = 1_000;
     const ELEMENTS: usize = 32;
-
-    let appended_bits = Term::intrinsic(Intrinsic::BinAppend {
-        grain: Grain::B,
-        bin: Term::intrinsic(Intrinsic::Bin(
-            Grain::B,
-            Binary::from_bits((0..BITS).map(|index| index % 2 == 0)),
-        )),
-        element: Term::intrinsic(Intrinsic::Bool(true)),
-    });
 
     let digits = Natural::parse_bytes(&vec![b'9'; DIGITS], 10).expect("a decimal numeral");
     let natural = || Term::intrinsic(Intrinsic::Nat(Nat::new(digits.clone())));
@@ -131,7 +119,6 @@ fn every_payload_carrier_is_charged_for_at_least_what_it_builds() {
     let digit_bits = (DIGITS as u64 * 33) / 10;
 
     for (carrier, charge, built) in [
-        ("bits", charged(appended_bits), BITS as u64 / 64),
         ("natural", charged(sum), digit_bits / 64),
         ("integer", charged(product), digit_bits * 2 / 64),
         ("list", charged(joined), ELEMENTS as u64 * 2),

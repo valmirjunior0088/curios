@@ -90,7 +90,6 @@ pub(super) fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_
         SequenceOp::BinAppend(grain) => curios_cont::Intrinsic::BinAppend(grain),
         SequenceOp::BinConcat(grain) => curios_cont::Intrinsic::BinConcat(grain, arity),
         SequenceOp::BinReplicate(grain) => curios_cont::Intrinsic::BinReplicate(grain),
-        SequenceOp::BinReinterp(grain) => curios_cont::Intrinsic::BinReinterp(grain),
         SequenceOp::BinAnd(grain) => curios_cont::Intrinsic::BinAnd(grain),
         SequenceOp::BinOr(grain) => curios_cont::Intrinsic::BinOr(grain),
         SequenceOp::BinXor(grain) => curios_cont::Intrinsic::BinXor(grain),

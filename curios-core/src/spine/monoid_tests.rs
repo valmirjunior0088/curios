@@ -9,10 +9,6 @@ fn bytes(run: impl Into<Vec<u8>>) -> Term {
     Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(run.into())))
 }
 
-fn bits(run: impl IntoIterator<Item = bool>) -> Term {
-    Term::intrinsic(Intrinsic::Bin(Grain::B, Binary::from_bits(run)))
-}
-
 fn nats(run: impl IntoIterator<Item = u32>) -> Term {
     let elems = run.into_iter().map(|n| sym(n, "e")).collect();
     Term::intrinsic(Intrinsic::List {
@@ -28,37 +24,19 @@ fn nats(run: impl IntoIterator<Item = u32>) -> Term {
 fn peel_bin_decides_a_split_literal_run_against_a_whole_one() {
     let tail = sym(0, "b");
 
-    for (grain, split, whole) in [
-        (
-            Grain::X,
-            vec![bytes([0x30, 0x31]), bytes([0x32, 0x33]), tail.clone()],
-            vec![bytes([0x30, 0x31, 0x32, 0x33]), tail.clone()],
-        ),
-        (
-            Grain::B,
-            vec![
-                bits([true, false]),
-                bits([true, true]),
-                bits([false]),
-                tail.clone(),
-            ],
-            vec![bits([true, false, true, true, false]), tail.clone()],
-        ),
-    ] {
-        let split = Intrinsic::BinConcat {
-            grain,
-            operands: split,
-        };
-        let whole = Intrinsic::BinConcat {
-            grain,
-            operands: whole,
-        };
+    let split = Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![bytes([0x30, 0x31]), bytes([0x32, 0x33]), tail.clone()],
+    };
+    let whole = Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![bytes([0x30, 0x31, 0x32, 0x33]), tail],
+    };
 
-        assert!(
-            matches!(peel_bin(&split, &whole), Some(Deduction::Equal)),
-            "{grain:?}: a run split across operands is the run"
-        );
-    }
+    assert!(
+        matches!(peel_bin(&split, &whole), Some(Deduction::Equal)),
+        "a run split across operands is the run"
+    );
 }
 
 // The same premise one level deeper, over the shape the cap actually produces. An accumulation appends to its own result, so what it builds is *left-nested* — `concat(concat(concat(a, b), c), d)` — never a flat operand list. Flattening has to see through that nesting, or the cap would hold for a spelling nobody writes.
@@ -257,44 +235,31 @@ fn peel_bin_decides_a_fill_of_a_successor_against_the_cons_it_equals() {
     let count = sym(0, "n");
     let tail = sym(1, "t");
 
-    for (grain, atom, one) in [
-        (
-            Grain::X,
-            Term::intrinsic(Intrinsic::Byte(0x30)),
-            bytes([0x30]),
-        ),
-        (
-            Grain::B,
-            Term::intrinsic(Intrinsic::Bool(true)),
-            bits([true]),
-        ),
-    ] {
-        let fill = |n: Term| {
-            Term::intrinsic(Intrinsic::BinReplicate {
-                grain,
-                count: n,
-                atom: atom.clone(),
-            })
-        };
+    let fill = |n: Term| {
+        Term::intrinsic(Intrinsic::BinReplicate {
+            grain: Grain::X,
+            count: n,
+            atom: Term::intrinsic(Intrinsic::Byte(0x30)),
+        })
+    };
 
-        // `replicate(n + 1, a) ++ t` against `[a] ++ replicate(n, a) ++ t`.
-        let filled = Intrinsic::BinConcat {
-            grain,
-            operands: vec![
-                fill(Term::intrinsic(Intrinsic::Nat(nat_of(1, count.clone())))),
-                tail.clone(),
-            ],
-        };
-        let consed = Intrinsic::BinConcat {
-            grain,
-            operands: vec![one, fill(count.clone()), tail.clone()],
-        };
+    // `replicate(n + 1, a) ++ t` against `[a] ++ replicate(n, a) ++ t`.
+    let filled = Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![
+            fill(Term::intrinsic(Intrinsic::Nat(nat_of(1, count.clone())))),
+            tail.clone(),
+        ],
+    };
+    let consed = Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![bytes([0x30]), fill(count), tail],
+    };
 
-        assert!(
-            matches!(peel_bin(&filled, &consed), Some(Deduction::Equal)),
-            "{grain:?}: a fill of a successor is its atom over a shorter fill"
-        );
-    }
+    assert!(
+        matches!(peel_bin(&filled, &consed), Some(Deduction::Equal)),
+        "a fill of a successor is its atom over a shorter fill"
+    );
 }
 
 // The other half of the same rule, and the one that keeps it sound: a count carrying no floor might be zero, so the fill might be empty and its leading generator is *not* known. Declining is the refusing direction — the caller falls back to a structural comparison — where clashing would call two equal values unequal.

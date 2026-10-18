@@ -11,9 +11,6 @@ fn every_payload_formula_rounds_up() {
     );
     assert_eq!(Cost::packed_bytes(9).get(), Cost::packed_bytes(8).get() + 1);
 
-    assert_eq!(Cost::packed_bits(1).get(), Cost::packed_bits(64).get());
-    assert_eq!(Cost::packed_bits(65).get(), Cost::packed_bits(64).get() + 1);
-
     assert_eq!(Cost::big_number(1).get(), Cost::big_number(64).get());
     assert_eq!(Cost::big_number(65).get(), Cost::big_number(64).get() + 1);
 }
@@ -23,7 +20,6 @@ fn every_payload_formula_rounds_up() {
 fn an_empty_payload_still_costs_its_header() {
     for empty in [
         Cost::packed_bytes(0),
-        Cost::packed_bits(0),
         Cost::big_number(0),
         Cost::collection(0),
         Cost::buffer(0),
@@ -94,8 +90,8 @@ fn the_larger_contributor_keeps_its_category() {
 /// Multiplying keeps the row: two payloads are still payload, which is what `Binary::concat`'s double charge has to report.
 #[test]
 fn multiplying_keeps_the_category() {
-    let doubled = Cost::packed_bits(64).saturating_mul(2);
+    let doubled = Cost::packed_bytes(8).saturating_mul(2);
 
     assert_eq!(doubled.category(), Category::Payload);
-    assert_eq!(doubled.get(), Cost::packed_bits(64).get() * 2);
+    assert_eq!(doubled.get(), Cost::packed_bytes(8).get() * 2);
 }

@@ -725,7 +725,6 @@ fn an_intrinsic_spells_its_carrier_and_operation() {
         ),
         (Intrinsic::FltOfLeBytes, "Flt/of_le_bytes"),
         (Intrinsic::BinLen(Grain::X), "Bytes/len"),
-        (Intrinsic::BinChunk(Grain::B, 3), "Bits/chunk"),
         (Intrinsic::ListConcat(2), "List/concat"),
         (Intrinsic::WindowExtent, "Window/extent"),
         (Intrinsic::IsImmediate, "Immediate/is"),

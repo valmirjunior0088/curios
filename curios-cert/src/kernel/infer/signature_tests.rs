@@ -119,13 +119,6 @@ fn bytes(run: &[u8]) -> Term {
     Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(run.to_vec())))
 }
 
-fn bits(run: &[bool]) -> Term {
-    Term::intrinsic(Intrinsic::Bin(
-        Grain::B,
-        Binary::from_bits(run.iter().copied()),
-    ))
-}
-
 fn list(items: &[usize]) -> Term {
     Term::intrinsic(Intrinsic::List {
         element: nat_type(),
@@ -137,7 +130,6 @@ fn list(items: &[usize]) -> Term {
 fn run(grain: Grain, length: usize) -> Term {
     match grain {
         Grain::X => bytes(&vec![0xA5; length]),
-        Grain::B => bits(&vec![true; length]),
     }
 }
 
@@ -145,7 +137,6 @@ fn run(grain: Grain, length: usize) -> Term {
 fn generator(grain: Grain) -> Term {
     match grain {
         Grain::X => byte(0x5A),
-        Grain::B => truth(false),
     }
 }
 
@@ -322,71 +313,59 @@ fn inside() -> Vec<Term> {
             bin: bytes(&[0; 8]),
             eight_bytes: qed(),
         },
-        // A whole number of bytes read as bits, and of bits read as bytes.
-        Intrinsic::BinReinterp {
-            grain: Grain::X,
-            bin: run(Grain::X, 2),
-            aligned: qed(),
-        },
-        Intrinsic::BinReinterp {
-            grain: Grain::B,
-            bin: run(Grain::B, 8),
-            aligned: qed(),
-        },
     ]);
 
-    for grain in [Grain::X, Grain::B] {
-        rows.extend([
-            Intrinsic::BinLen(grain, run(grain, 2)),
-            Intrinsic::BinEql(grain, run(grain, 2), run(grain, 1)),
-            // The last index, and a window ending where the run does.
-            Intrinsic::BinGet {
-                grain,
-                bin: run(grain, 2),
-                index: nat(1),
-                in_range: qed(),
-            },
-            Intrinsic::BinSlice {
-                grain,
-                bin: run(grain, 2),
-                start: nat(1),
-                length: nat(1),
-                within: qed(),
-            },
-            Intrinsic::BinAppend {
-                grain,
-                bin: run(grain, 2),
-                element: generator(grain),
-            },
-            Intrinsic::BinConcat {
-                grain,
-                operands: vec![run(grain, 2), run(grain, 1)],
-            },
-            Intrinsic::BinReplicate {
-                grain,
-                count: nat(3),
-                atom: generator(grain),
-            },
-            Intrinsic::BinAnd {
-                grain,
-                left: run(grain, 2),
-                right: run(grain, 2),
-                same_length: qed(),
-            },
-            Intrinsic::BinOr {
-                grain,
-                left: run(grain, 2),
-                right: run(grain, 2),
-                same_length: qed(),
-            },
-            Intrinsic::BinXor {
-                grain,
-                left: run(grain, 2),
-                right: run(grain, 2),
-                same_length: qed(),
-            },
-        ]);
-    }
+    let grain = Grain::X;
+    rows.extend([
+        Intrinsic::BinLen(grain, run(grain, 2)),
+        Intrinsic::BinEql(grain, run(grain, 2), run(grain, 1)),
+        // The last index, and a window ending where the run does.
+        Intrinsic::BinGet {
+            grain,
+            bin: run(grain, 2),
+            index: nat(1),
+            in_range: qed(),
+        },
+        Intrinsic::BinSlice {
+            grain,
+            bin: run(grain, 2),
+            start: nat(1),
+            length: nat(1),
+            within: qed(),
+        },
+        Intrinsic::BinAppend {
+            grain,
+            bin: run(grain, 2),
+            element: generator(grain),
+        },
+        Intrinsic::BinConcat {
+            grain,
+            operands: vec![run(grain, 2), run(grain, 1)],
+        },
+        Intrinsic::BinReplicate {
+            grain,
+            count: nat(3),
+            atom: generator(grain),
+        },
+        Intrinsic::BinAnd {
+            grain,
+            left: run(grain, 2),
+            right: run(grain, 2),
+            same_length: qed(),
+        },
+        Intrinsic::BinOr {
+            grain,
+            left: run(grain, 2),
+            right: run(grain, 2),
+            same_length: qed(),
+        },
+        Intrinsic::BinXor {
+            grain,
+            left: run(grain, 2),
+            right: run(grain, 2),
+            same_length: qed(),
+        },
+    ]);
 
     let item = binder(10, "item");
     let accumulator = binder(11, "accumulator");
@@ -505,11 +484,6 @@ fn outside() -> Vec<Term> {
             bin: bytes(&[0; 9]),
             eight_bytes: qed(),
         },
-        Intrinsic::BinReinterp {
-            grain: Grain::B,
-            bin: run(Grain::B, 7),
-            aligned: qed(),
-        },
         Intrinsic::ListGet {
             element: nat_type(),
             list: list(&[4, 5]),
@@ -530,41 +504,40 @@ fn outside() -> Vec<Term> {
         },
     ];
 
-    for grain in [Grain::X, Grain::B] {
-        rows.extend([
-            Intrinsic::BinGet {
-                grain,
-                bin: run(grain, 2),
-                index: nat(2),
-                in_range: qed(),
-            },
-            Intrinsic::BinSlice {
-                grain,
-                bin: run(grain, 2),
-                start: nat(1),
-                length: nat(2),
-                within: qed(),
-            },
-            Intrinsic::BinAnd {
-                grain,
-                left: run(grain, 2),
-                right: run(grain, 1),
-                same_length: qed(),
-            },
-            Intrinsic::BinOr {
-                grain,
-                left: run(grain, 2),
-                right: run(grain, 1),
-                same_length: qed(),
-            },
-            Intrinsic::BinXor {
-                grain,
-                left: run(grain, 2),
-                right: run(grain, 1),
-                same_length: qed(),
-            },
-        ]);
-    }
+    let grain = Grain::X;
+    rows.extend([
+        Intrinsic::BinGet {
+            grain,
+            bin: run(grain, 2),
+            index: nat(2),
+            in_range: qed(),
+        },
+        Intrinsic::BinSlice {
+            grain,
+            bin: run(grain, 2),
+            start: nat(1),
+            length: nat(2),
+            within: qed(),
+        },
+        Intrinsic::BinAnd {
+            grain,
+            left: run(grain, 2),
+            right: run(grain, 1),
+            same_length: qed(),
+        },
+        Intrinsic::BinOr {
+            grain,
+            left: run(grain, 2),
+            right: run(grain, 1),
+            same_length: qed(),
+        },
+        Intrinsic::BinXor {
+            grain,
+            left: run(grain, 2),
+            right: run(grain, 1),
+            same_length: qed(),
+        },
+    ]);
 
     rows.into_iter().map(Term::intrinsic).collect()
 }
@@ -625,7 +598,7 @@ fn a_bounded_row_is_refused_one_step_past_its_folds_domain() {
 
 /// The carriers are written a second time inside the trusted base: `Intrinsic::algebra` declares each operation a law reads at a carrier, and a law is stated per operation of a carrier — a bound over the naturals, a negation over a total order — so an operation declared at a carrier its row does not type is a law applied to values it was never true of. Each declaration is read against its row: a conversion from its source into the carrier, a comparison over the carrier into `Bool`, a shift of the carrier by a natural, an integer's magnitude from the integers into the naturals, and every other operation closed on the carrier, over one operand, two, or a fused multiply-add's three.
 ///
-/// The tally is every declaration `algebra` makes today, the two packed ones at both grains, so a grid that stopped reaching them fails. A declaration added there owes [`inside`] its row, and nothing fails until it has one.
+/// The tally is every declaration `algebra` makes today, so a grid that stopped reaching them fails. A declaration added there owes [`inside`] its row, and nothing fails until it has one.
 ///
 /// Mutation-checked: `IntShr` declared at the naturals, where a right shift never exceeds what it shifts, fails on the row's `Int`.
 #[test]
@@ -704,7 +677,7 @@ fn an_operation_is_declared_to_the_algebra_at_the_carrier_its_row_types() {
         assert_eq!((operands, result), stated, "{application:?}");
     }
 
-    assert_eq!(declared, 60);
+    assert_eq!(declared, 57);
 }
 
 /// The classification walks a declared operation by position: the operands its meaning reads are the first its traversal meets, in the declaration's order, and what the traversal meets after them is what the declaration leaves out. So a walk that reads as many children as the declaration has operands reads the declaration's, and rebuilds the operation by the same traversal.
@@ -845,7 +818,6 @@ fn a_literal_is_typed_at_the_carrier_its_payload_is_a_value_of() {
         (int(-7), Intrinsic::IntType),
         (flt(2.5), Intrinsic::FltType),
         (run(Grain::X, 2), Intrinsic::BinType(Grain::X)),
-        (run(Grain::B, 2), Intrinsic::BinType(Grain::B)),
         (Term::intrinsic(Intrinsic::Handle(7)), Intrinsic::HandleType),
         (list(&[4, 5]), Intrinsic::ListType(nat_type())),
     ] {

@@ -263,10 +263,9 @@ impl Sequence for Grain {
     }
 }
 
-/// An appended or replicated `Bin` element as its segment: a decided bit or byte — taken mod 256, as the runtime's packed store takes it — is a one-element run, and anything else a single element.
+/// An appended or replicated `Bin` element as its segment: a decided byte — taken mod 256, as the runtime's packed store takes it — is a one-element run, and anything else a single element.
 fn generator(grain: Grain, element: &Term) -> Segment<Words<Grain>> {
     let bits = match (grain, &**element) {
-        (Grain::B, Subterm::Intrinsic(Intrinsic::Bool(bit))) => Some(Binary::from_bits([*bit])),
         (Grain::X, Subterm::Intrinsic(Intrinsic::Byte(byte))) => {
             Some(Binary::from_bytes(vec![*byte]))
         }

@@ -97,7 +97,6 @@ fn shape_class(shape: FieldShape) -> &'static str {
         FieldShape::Number => "number",
         FieldShape::Flt => "flt",
         FieldShape::Packed(Grain::X) => "bytes",
-        FieldShape::Packed(Grain::B) => "bits",
         FieldShape::List => "list",
         FieldShape::Closure(_) => "closure",
         FieldShape::Product(_) => "product",

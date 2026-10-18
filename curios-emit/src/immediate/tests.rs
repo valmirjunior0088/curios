@@ -18,20 +18,6 @@ fn the_derived_quantities_are_the_transcribed_constants() {
         ),
         (3, 29, 0x00FF_FFFF, 3, 1, 8, 0xFF)
     );
-
-    let bits = ImmediateLayout::of(Grain::B);
-    assert_eq!(
-        (
-            bits.envelope,
-            bits.len_shift,
-            bits.payload_mask(),
-            bits.slots(),
-            bits.unit(),
-            bits.stride(),
-            bits.elem_mask()
-        ),
-        (26, 26, 0x03FF_FFFF, 4, 8, 1, 1)
-    );
 }
 
 /// A packed immediate reads back as the length and bytes it was built from, which is the agreement the emitted `box` helper depends on.
@@ -41,8 +27,6 @@ fn a_packed_immediate_reads_back_as_its_length_and_bytes() {
         (Grain::X, 0usize, vec![]),
         (Grain::X, 1, vec![0xAB]),
         (Grain::X, 3, vec![0x01, 0x02, 0x03]),
-        (Grain::B, 1, vec![0x01]),
-        (Grain::B, 26, vec![0xFF, 0xFF, 0xFF, 0x03]),
     ] {
         let layout = ImmediateLayout::of(grain);
         let packed = layout.pack(length, &bytes);
@@ -63,14 +47,10 @@ fn a_packed_immediate_reads_back_as_its_length_and_bytes() {
     }
 }
 
-/// The envelope is a length question, not a byte-count one: three bytes ride an immediate where four do not, and twenty-six bits where twenty-seven do not.
+/// Three bytes ride an immediate where four do not.
 #[test]
 fn the_envelope_decides_which_lengths_ride_an_immediate() {
     let bytes = ImmediateLayout::of(Grain::X);
     assert!(bytes.holds(3));
     assert!(!bytes.holds(4));
-
-    let bits = ImmediateLayout::of(Grain::B);
-    assert!(bits.holds(26));
-    assert!(!bits.holds(27));
 }

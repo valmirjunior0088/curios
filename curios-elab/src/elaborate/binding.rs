@@ -346,7 +346,7 @@ pub(super) fn elaborate_num_lit(
                 };
                 (Intrinsic::Byte(value), byte_type)
             }
-            // A bit is a `Bool` in this language — `Bits` is the packed carrier of `Bool` — so `0` and `1` realize where a `Bool` is expected, which is what lets a packed literal's constant atoms stay ordinary numerals.
+            // A bit is a `Bool` in this language, so `0` and `1` realize where a `Bool` is expected.
             Subterm::Intrinsic(Intrinsic::BoolType) if !sign.is_negative() => {
                 let value = match u8::try_from(magnitude).ok() {
                     Some(0) => false,

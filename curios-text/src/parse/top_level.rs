@@ -126,10 +126,12 @@ pub(super) fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<
 }
 
 /// The words a wire type is one of, which the refusal of anything else names.
-const WIRE_TYPE_EXPECTED: &str = "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Bits, Handle, List(...), or Option(...))";
+const WIRE_TYPE_EXPECTED: &str =
+    "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Handle, List(...), or Option(...))";
 
 /// The words a `List`'s or an `Option`'s element is one of.
-const WIRE_LEAF_EXPECTED: &str = "expected a List or Option element type (Nat, Int, Bool, Bytes, Bits, or Handle — neither nests)";
+const WIRE_LEAF_EXPECTED: &str =
+    "expected a List or Option element type (Nat, Int, Bool, Bytes, or Handle — neither nests)";
 
 /// What refuses `List` written with no element.
 const LIST_STATES_ITS_ELEMENT: &str = "`List` is written with its element type, as in `List(Nat)`";
@@ -154,7 +156,6 @@ fn parse_wire_leaf<'a>(state: ParserState<'a>) -> Parsed<'a, WireLeaf> {
             "Int" => pure(WireLeaf::Int).boxed(),
             "Bool" => pure(WireLeaf::Bool).boxed(),
             "Bytes" => pure(WireLeaf::Bytes).boxed(),
-            "Bits" => pure(WireLeaf::Bits).boxed(),
             "Handle" => pure(WireLeaf::Handle).boxed(),
             // A word read here is an element type or nothing, so the refusal commits and is the diagnosis. Left to backtrack it reached no reader at all: the enclosing list took the failure for an empty one and the `)` after it complained instead, naming a paren for a mistake about a type.
             other => commit(fail_from(
@@ -171,7 +172,7 @@ fn refuse_qualified_wire_name<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     commit(not_ahead("/").map_err("a wire type is written bare: `Nat` rather than `/std/Nat`, since the wire grammar is its own closed vocabulary and resolves no names")).parse(state)
 }
 
-// One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Byte`/`Flt`/`Bytes`/`Bits`/`Handle` are literal keywords here, and `List(T)` and `Option(T)` take a leaf.
+// One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Byte`/`Flt`/`Bytes`/`Handle` are literal keywords here, and `List(T)` and `Option(T)` take a leaf.
 pub(super) fn parse_wire_type<'a>(state: ParserState<'a>) -> Parsed<'a, WireType> {
     refuse_qualified_wire_name
         .and_keep(mark().and(parse_identifier.map_err(WIRE_TYPE_EXPECTED)))
@@ -182,7 +183,6 @@ pub(super) fn parse_wire_type<'a>(state: ParserState<'a>) -> Parsed<'a, WireType
             "Byte" => pure(WireType::Byte).boxed(),
             "Flt" => pure(WireType::Flt).boxed(),
             "Bytes" => pure(WireType::Bytes).boxed(),
-            "Bits" => pure(WireType::Bits).boxed(),
             "Handle" => pure(WireType::Handle).boxed(),
             // `List` is read, so its element follows or nothing does. Left to backtrack, an operand list came back empty and its `)` complained where the word stands.
             "List" => commit(

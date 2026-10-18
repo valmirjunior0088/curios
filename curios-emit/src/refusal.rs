@@ -14,9 +14,7 @@ pub(crate) fn refusal_message(class: curios_cont::Panic) -> &'static str {
         curios_cont::Panic::Capacity => {
             "a value is past what the runtime can hold: a length or capacity exceeds 2^32 - 1 elements; use a smaller value"
         }
-        curios_cont::Panic::OutOfBounds => {
-            "a read reached past the end of a Bits, Bytes or List value"
-        }
+        curios_cont::Panic::OutOfBounds => "a read reached past the end of a Bytes or List value",
         curios_cont::Panic::FltDecode => {
             "a Flt was decoded from a byte string that is not eight bytes long"
         }

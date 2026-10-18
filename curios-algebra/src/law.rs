@@ -559,19 +559,6 @@ pub const TABLE: &[Declared] = &[
         families: &[Family::Homomorphism],
     },
     Declared {
-        carrier: Carrier::Packed(Grain::B),
-        operation: Operation::Concat,
-        families: &[
-            Family::Unit(Position::Both, Constant::Empty),
-            Family::Associativity,
-        ],
-    },
-    Declared {
-        carrier: Carrier::Packed(Grain::B),
-        operation: Operation::Length,
-        families: &[Family::Homomorphism],
-    },
-    Declared {
         carrier: Carrier::List,
         operation: Operation::Concat,
         families: &[
@@ -591,28 +578,6 @@ pub const TABLE: &[Declared] = &[
             Family::SelfCancellation(Constant::True),
             Family::Commutativity,
         ],
-    },
-    Declared {
-        carrier: Carrier::Packed(Grain::B),
-        operation: Operation::Equal,
-        families: &[
-            Family::SelfCancellation(Constant::True),
-            Family::Commutativity,
-        ],
-    },
-    Declared {
-        carrier: Carrier::Packed(Grain::X),
-        operation: Operation::Conversion {
-            from: Carrier::Packed(Grain::B),
-        },
-        families: &[Family::InversePair],
-    },
-    Declared {
-        carrier: Carrier::Packed(Grain::B),
-        operation: Operation::Conversion {
-            from: Carrier::Packed(Grain::X),
-        },
-        families: &[Family::InversePair],
     },
 ];
 
@@ -882,7 +847,6 @@ fn result_carrier(carrier: Carrier, operation: Operation) -> Carrier {
 /// The carrier a word's elements are of, and `None` for a carrier that is no word.
 fn element_carrier(carrier: Carrier) -> Option<Carrier> {
     match carrier {
-        Carrier::Packed(Grain::B) => Some(Carrier::Boolean),
         Carrier::Packed(Grain::X) => Some(Carrier::Byte),
         Carrier::List => Some(Carrier::Natural),
         _ => None,

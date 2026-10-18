@@ -18,7 +18,6 @@ enum ConstKey {
     Nat(Natural),
     Int(Integer),
     Flt(u64),
-    /// The [`Binary`] itself, which carries its logical length. Packing alone underdetermines a bit-grain value — `b[1]` and `b[1, 0]` pack identically — and a key built from packed bytes would intern them into one constant, whose emitted length would be whichever literal arrived first.
     Bin(Grain, Binary),
     List(Vec<String>),
     Tuple(Vec<String>),

@@ -3,10 +3,9 @@
 use {
     super::dedupe_intrinsics,
     crate::{
-        Atom, Continuation, Edge, Function, Intrinsic, Literal, Module, Node, ValueId,
+        Atom, Continuation, Edge, Function, Intrinsic, Module, Node, ValueId,
         test_support::duplicate_pair_module,
     },
-    curios_num::{Binary, Grain},
     std::collections::BTreeMap,
 };
 
@@ -186,53 +185,4 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
     });
     assert!(forwards, "the merged use forwards the dominating result");
     module.verify().unwrap();
-}
-
-/// `b[1]` and `b[1, 0]` pack into the same byte, so an operand key built from packed bytes would make these two comparisons duplicates, and the second would answer the first's result — `false` for `x == b[1, 0]` where `x` is `b[1, 0]`.
-#[test]
-fn keeps_bit_literals_of_equal_packing_and_unequal_length_distinct() {
-    let mut module = Module::new();
-    let entry = module.reserve_function();
-    let return_cont = module.reserve_continuation();
-    let x = module.add_value(Some("x".into()));
-    let first = module.add_value(Some("first".into()));
-    let second = module.add_value(Some("second".into()));
-
-    let return_node = module.add_node(Node::ApplyCont(Edge {
-        target: return_cont,
-        args: vec![Atom::Value(second)],
-    }));
-    let second_node = module.add_node(Node::LetIntrinsic {
-        result: second,
-        op: Intrinsic::BinEql(Grain::B),
-        args: vec![
-            Atom::Value(x),
-            Atom::Literal(Literal::Bin(Grain::B, Binary::from_bits([true, false]))),
-        ],
-        next: return_node,
-    });
-    let first_node = module.add_node(Node::LetIntrinsic {
-        result: first,
-        op: Intrinsic::BinEql(Grain::B),
-        args: vec![
-            Atom::Value(x),
-            Atom::Literal(Literal::Bin(Grain::B, Binary::from_bits([true]))),
-        ],
-        next: second_node,
-    });
-    module.define_function(
-        entry,
-        Function {
-            debug_name: Some("main".into()),
-            params: vec![x],
-            return_cont,
-            body: first_node,
-            droppable: false,
-        },
-    );
-    module.set_entry(entry);
-
-    assert!(!dedupe_intrinsics(&mut module));
-    assert!(module.node(first_node).is_some());
-    assert!(module.node(second_node).is_some());
 }

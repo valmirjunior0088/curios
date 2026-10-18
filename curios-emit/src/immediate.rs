@@ -17,10 +17,9 @@ pub(crate) struct ImmediateLayout {
 
 impl ImmediateLayout {
     pub(crate) fn of(grain: Grain) -> Self {
-        // The byte grain's length rides the top 2 payload bits over up to 3 bytes, the bit grain's the top 5 over up to 26 bits, both LSB-first.
+        // The length rides the top 2 payload bits over up to 3 bytes, LSB-first.
         let (envelope, len_shift) = match grain {
             Grain::X => (3, 29),
-            Grain::B => (26, 26),
         };
         let layout = Self {
             grain,
@@ -58,7 +57,7 @@ impl ImmediateLayout {
         (1 << self.payload_bits()) - 1
     }
 
-    /// How many payload bytes the immediate can occupy — the ceiling, since the bit grain's last byte is partial.
+    /// How many payload bytes the immediate can occupy.
     pub(crate) fn slots(&self) -> i32 {
         (self.payload_bits() as u32).div_ceil(8) as i32
     }

@@ -166,7 +166,6 @@ fn answering(carrier: Carrier) -> Option<&'static str> {
         Carrier::Byte => Some("byte_of"),
         Carrier::Float => Some("flt_of"),
         Carrier::Packed(Grain::X) => Some("bytes_of"),
-        Carrier::Packed(Grain::B) => unreachable!("the grid states no row at the bit grain"),
         Carrier::List => None,
     }
 }

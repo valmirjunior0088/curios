@@ -331,7 +331,6 @@ impl Semantics {
             SequenceOp::BinAppend(_)
             | SequenceOp::BinConcat(_)
             | SequenceOp::BinReplicate(_)
-            | SequenceOp::BinReinterp(_)
             | SequenceOp::BinAnd(_)
             | SequenceOp::BinOr(_)
             | SequenceOp::BinXor(_)
@@ -571,7 +570,7 @@ impl Semantics {
         fold_outcome(compute())
     }
 
-    /// Constant-fold a sequence operation. Only packed-binary operations can fold — the constant domain has no list carrier, so list operations are always [`FoldOutcome::Unknown`] here (the evaluator interprets them over its own value domain instead). Elements stay grain-shaped: a byte grain yields `Byte`, a bit grain `Bool`.
+    /// Constant-fold a sequence operation. Only packed-binary operations can fold — the constant domain has no list carrier, so list operations are always [`FoldOutcome::Unknown`] here (the evaluator interprets them over its own value domain instead). An element is a `Byte`.
     pub fn fold_sequence(operation: SequenceOp, operands: &[Constant]) -> FoldOutcome {
         let bin = |index: usize, grain: Grain| match operands.get(index) {
             Some(Constant::Bin(found, value)) if *found == grain => Some(value),
@@ -585,10 +584,6 @@ impl Semantics {
             Some(Constant::Byte(value)) => Some(*value),
             _ => None,
         };
-        let bool_ = |index: usize| match operands.get(index) {
-            Some(Constant::Bool(value)) => Some(*value),
-            _ => None,
-        };
 
         let compute = || -> Option<Result<Constant, TrapKind>> {
             Some(Ok(match operation {
@@ -600,14 +595,6 @@ impl Semantics {
                     return Some(
                         match bin(0, Grain::X)?.byte(usize::try_from(nat(1)?).ok()?) {
                             Some(byte) => Ok(Constant::Byte(byte)),
-                            None => Err(TrapKind::IndexOutOfBounds),
-                        },
-                    );
-                }
-                SequenceOp::BinGet(Grain::B) => {
-                    return Some(
-                        match bin(0, Grain::B)?.bit(usize::try_from(nat(1)?).ok()?) {
-                            Some(bit) => Ok(Constant::Bool(bit)),
                             None => Err(TrapKind::IndexOutOfBounds),
                         },
                     );
@@ -630,9 +617,6 @@ impl Semantics {
                 SequenceOp::BinAppend(Grain::X) => {
                     Constant::Bin(Grain::X, bin(0, Grain::X)?.append_byte(byte(1)?)?)
                 }
-                SequenceOp::BinAppend(Grain::B) => {
-                    Constant::Bin(Grain::B, bin(0, Grain::B)?.append_bit(bool_(1)?))
-                }
                 SequenceOp::BinConcat(grain) => Constant::Bin(
                     grain,
                     Binary::concat(
@@ -641,18 +625,9 @@ impl Semantics {
                             .collect::<Option<Vec<_>>>()?,
                     ),
                 ),
-                // Split by grain for [`SequenceOp::BinAppend`]'s reason: the generator is a `Byte` constant at one and a `Bool` at the other, and only the grain says which to read.
                 SequenceOp::BinReplicate(Grain::X) => Constant::Bin(
                     Grain::X,
                     Binary::replicate(Grain::X, byte(1)?, usize::try_from(nat(0)?).ok()?),
-                ),
-                SequenceOp::BinReplicate(Grain::B) => Constant::Bin(
-                    Grain::B,
-                    Binary::replicate(
-                        Grain::B,
-                        u8::from(bool_(1)?),
-                        usize::try_from(nat(0)?).ok()?,
-                    ),
                 ),
                 // Two literals of different lengths decline to fold rather than answering, exactly as the Core reducer declines them: the length is the type's to hold and the checker's to enforce, and a folder that decided it here would be answering for a run that is neither operand's.
                 SequenceOp::BinAnd(grain) => {
@@ -669,19 +644,6 @@ impl Semantics {
                     let (left, right) = (bin(0, grain)?, bin(1, grain)?);
                     (left.bit_length() == right.bit_length())
                         .then(|| Constant::Bin(grain, left.xor(right)))?
-                }
-                // One condition at both grains: a byte run's bit length is eight times its count and always passes, while a bit run's is exactly what the bound states. A window holding whole bytes at an offset that is not one is repacked rather than shared.
-                SequenceOp::BinReinterp(grain) => {
-                    let run = bin(0, grain)?;
-                    run.bit_length().is_multiple_of(8).then(|| {
-                        Constant::Bin(
-                            grain.other(),
-                            match run.is_x_aligned() {
-                                true => run.clone(),
-                                false => Binary::from_bytes(run.to_packed_bytes()),
-                            },
-                        )
-                    })?
                 }
                 SequenceOp::ListLen
                 | SequenceOp::ListGet
@@ -787,7 +749,6 @@ impl Semantics {
             | SequenceOp::BinGet(_)
             | SequenceOp::BinSlice(_)
             | SequenceOp::BinReplicate(_)
-            | SequenceOp::BinReinterp(_)
             | SequenceOp::BinAnd(_)
             | SequenceOp::BinOr(_)
             | SequenceOp::BinXor(_)

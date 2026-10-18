@@ -90,9 +90,6 @@ impl Lowering<'_> {
             WireType::Bytes => {
                 self.constant_atom(curios_ersd::Constant::Bin(Grain::X, Binary::empty()))
             }
-            WireType::Bits => {
-                self.constant_atom(curios_ersd::Constant::Bin(Grain::B, Binary::empty()))
-            }
             WireType::Handle => self.constant_atom(curios_ersd::Constant::Handle(0)),
             WireType::List(_) | WireType::Option(_) => self.empty_list(),
         }

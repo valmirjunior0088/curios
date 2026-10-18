@@ -28,7 +28,6 @@ fn an_atom_of_a_carrier_that_holds_no_type_is_one_up_to_universe_instances() {
         Carrier::Byte,
         Carrier::Float,
         Carrier::Packed(Grain::X),
-        Carrier::Packed(Grain::B),
     ] {
         assert!(same_atom(carrier, &this, &that), "{carrier:?}");
         assert!(!same_atom(carrier, &this, &other), "{carrier:?}");

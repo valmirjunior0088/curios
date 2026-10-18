@@ -321,7 +321,7 @@ impl Instantiated {
 
 /// What one wire type costs a plugin's signature, and how a value of it crosses.
 ///
-/// A scalar is itself: a `Nat` or `Int` an `i64`, a `Bool` or a `Byte` an `i32`, an `Flt` an `f64`, as they cross to the host. A byte string is a `(ptr, len)` pair, which is why it costs two slots where a scalar costs one — the shape every raw-ABI toolchain already emits, rather than a convention invented here. `Bits` crosses as that same pair over its packed bytes, `len` counting bytes as it does for `Bytes`: the wire has no slot for a bit count, and a plugin needing one reads it in band.
+/// A scalar is itself: a `Nat` or `Int` an `i64`, a `Bool` or a `Byte` an `i32`, an `Flt` an `f64`, as they cross to the host. A byte string is a `(ptr, len)` pair, which is why it costs two slots where a scalar costs one — the shape every raw-ABI toolchain already emits, rather than a convention invented here.
 ///
 /// `Handle`, `List` and `Option` are refused. A handle is a token into the *host's* resource table and means nothing inside a plugin, which holds none; a list or an option holds elements whose marshalling nothing has asked for. Each is refused where a signature is read rather than mistranslated where it is called.
 fn crossing(wire: WireType, subject: &Subject, declaration: &str) -> Result<Crossing, String> {
@@ -331,7 +331,7 @@ fn crossing(wire: WireType, subject: &Subject, declaration: &str) -> Result<Cros
         WireType::Bool => Ok(Crossing::Bool),
         WireType::Byte => Ok(Crossing::Byte),
         WireType::Flt => Ok(Crossing::Float),
-        WireType::Bytes | WireType::Bits => Ok(Crossing::Bytes),
+        WireType::Bytes => Ok(Crossing::Bytes),
         WireType::Handle | WireType::List(_) | WireType::Option(_) => Err(format!(
             "{subject} answers `{declaration}`, whose signature names a `Handle`, a `List` or an `Option`. A foreign module takes scalars and byte strings: a handle is a token into the host's own table and names nothing inside a plugin, and a list or an option has no element marshalling yet"
         )),

@@ -82,15 +82,13 @@ pub enum Intrinsic {
     BinConcat(Grain, usize),
     /// `(count, element) -> bin`: one flat leaf of `count` copies of `element`. The size is an operand's value rather than an operand's extent, which is what separates it from every other construction here.
     BinReplicate(Grain),
-    /// `(bin) -> bin`: the run read at the other grain, eight bits to the byte. The [`Grain`] is the operand's, so the result is the one it is not — the only row here whose result grain differs from the one it names.
-    BinReinterp(Grain),
     /// `(a, b) -> bin`: the element-wise conjunction of two binaries the type has already held to one length. Total — the bound is discharged above erasure and nothing here can fail it.
     BinAnd(Grain),
     /// `(a, b) -> bin`: the element-wise disjunction, as [`Intrinsic::BinAnd`].
     BinOr(Grain),
     /// `(a, b) -> bin`: the element-wise difference, as [`Intrinsic::BinAnd`].
     BinXor(Grain),
-    /// `(element…) -> bin`: one flat leaf holding exactly these elements at the given grain — the fused form of an append chain, minted only by the optimizer's `fuse_append_chains` and never by the door. The arity is the element count in grain units; the byte grain stores one element per payload byte, the bit grain packs eight.
+    /// `(element…) -> bin`: one flat leaf holding exactly these elements at the given grain — the fused form of an append chain, minted only by the optimizer's `fuse_append_chains` and never by the door. The arity is the element count, one per payload byte.
     BinChunk(Grain, usize),
     ListLen,
     ListGet,
@@ -162,7 +160,6 @@ impl Intrinsic {
             }
             // A fill takes a count and a generator, and neither is a rope: the element rides the `Nat` grain as an append's does.
             (Self::BinReplicate(_), _) => Repr::Nat,
-            (Self::BinReinterp(grain), _) => Repr::Bin(*grain),
             (Self::ListGet | Self::ListSlice | Self::ListRest | Self::ListAppend, 0) => Repr::List,
             (Self::ListGet | Self::ListSlice | Self::ListRest, _) => Repr::Nat,
             // A chunk element is one packed byte, carried at the `Nat` grain like an append's.
@@ -369,8 +366,6 @@ impl Intrinsic {
             | Self::BinAnd(grain)
             | Self::BinOr(grain)
             | Self::BinXor(grain) => Repr::Bin(*grain),
-            // The one row whose result grain is not the one it names: the grain is the operand's, and reading it at the other is the whole operation.
-            Self::BinReinterp(grain) => Repr::Bin(grain.other()),
             Self::FltToLeBytes => Repr::Bin(Grain::X),
             Self::ListSlice
             | Self::ListRest
@@ -416,7 +411,6 @@ impl Intrinsic {
             | Self::FltMantissa
             | Self::FltExponent
             | Self::BinLen(_)
-            | Self::BinReinterp(_)
             | Self::ListLen
             | Self::TupleGet(_)
             | Self::RowGet(..)
@@ -524,7 +518,6 @@ impl Intrinsic {
             | Self::ListSettle
             | Self::ListFlat(_)
             | Self::BinReplicate(_)
-            | Self::BinReinterp(_)
             | Self::BinAnd(_)
             | Self::BinOr(_)
             | Self::BinXor(_)
@@ -675,7 +668,6 @@ impl Intrinsic {
             | Self::BinAppend(_)
             | Self::BinConcat(_, _)
             | Self::BinReplicate(_)
-            | Self::BinReinterp(_)
             | Self::BinAnd(_)
             | Self::BinOr(_)
             | Self::BinXor(_)

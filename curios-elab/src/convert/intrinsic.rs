@@ -159,7 +159,7 @@ impl Driver for Elaborating<'_, '_> {
         }
     }
 
-    /// Solving-side only. The packed-literal view undoes exactly the constant folding that removed the spine spelling from the literal side — `append(b[], true)` folds to `b[1]`, and no shape congruence relates the folded form to `append(b[], ?h)` — and the list view pairs what two lists are written to lead with, where the congruence would compare a run of one length with a run of another. The reducer's laws are untouched, and once the goals commit their solutions the two spellings agree by plain reduction, so the kernel needs no matching rule.
+    /// Solving-side only. The packed-literal view undoes exactly the constant folding that removed the spine spelling from the literal side — `append(x[], 0x01)` folds to `x[0x01]`, and no shape congruence relates the folded form to `append(x[], ?h)` — and the list view pairs what two lists are written to lead with, where the congruence would compare a run of one length with a run of another. The reducer's laws are untouched, and once the goals commit their solutions the two spellings agree by plain reduction, so the kernel needs no matching rule.
     fn solving_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool> {
         packed_literal_view(self.cmp, this, that).or_else(|| list_view(self.cmp, this, that))
     }
@@ -210,7 +210,6 @@ fn known_len(grain: Grain, term: &Term) -> Option<usize> {
 
 fn literal_len(grain: Grain, value: &Binary) -> usize {
     match grain {
-        Grain::B => value.bit_length(),
         Grain::X => value
             .to_bytes()
             .expect("an X-grain literal packs whole bytes")
@@ -223,16 +222,14 @@ fn literal_slice(grain: Grain, value: &Binary, lo: usize, hi: usize) -> Term {
     Term::intrinsic(Intrinsic::Bin(
         grain,
         match grain {
-            Grain::B => Binary::from_bits((lo..hi).map(|index| value.bit(index).unwrap())),
             Grain::X => Binary::from_bytes(value.to_bytes().unwrap()[lo..hi].to_vec()),
         },
     ))
 }
 
-/// The literal's atom at `index` as the element intrinsic an `append` operand carries: a `Bool` for `Bits`, a `Byte` for `Bytes`.
+/// The literal's atom at `index` as the element intrinsic an `append` operand carries: a `Byte`.
 fn literal_atom(grain: Grain, value: &Binary, index: usize) -> Term {
     Term::intrinsic(match grain {
-        Grain::B => Intrinsic::Bool(value.bit(index).unwrap()),
         Grain::X => Intrinsic::Byte(value.to_bytes().unwrap()[index]),
     })
 }

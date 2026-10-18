@@ -491,7 +491,6 @@ fn wire_carrier(wire: &WireType) -> Option<Repr> {
         WireType::Nat
         | WireType::Int
         | WireType::Bytes
-        | WireType::Bits
         | WireType::Handle
         | WireType::List(_)
         | WireType::Option(_) => None,

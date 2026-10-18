@@ -1,5 +1,5 @@
 use {
-    super::{Bits, Element, ExitTrap, Handle, Returned, Termination},
+    super::{Element, ExitTrap, Handle, Returned, Termination},
     curios_abi::{Encoded, HostOp, ReplyShape, WireLeaf, WireReply, WireType, WireValue},
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
@@ -263,39 +263,6 @@ impl Lower for Vec<u8> {
     }
 }
 
-/// A `Bits` result, as the packed bytes it crosses as.
-impl Lower for Bits {
-    fn shape() -> Vec<WireType> {
-        vec![WireType::Bits]
-    }
-
-    fn lower(
-        self,
-        caller: &mut Caller<'_, ()>,
-        results: &mut [Val],
-    ) -> Result<(), wasmtime::Error> {
-        self.0.lower(caller, results)
-    }
-}
-
-/// `List(Bits)`, each run as the packed bytes it crosses as.
-impl Lower for Vec<Bits> {
-    fn shape() -> Vec<WireType> {
-        vec![WireType::List(WireLeaf::Bits)]
-    }
-
-    fn lower(
-        self,
-        caller: &mut Caller<'_, ()>,
-        results: &mut [Val],
-    ) -> Result<(), wasmtime::Error> {
-        self.into_iter()
-            .map(|Bits(bytes)| bytes)
-            .collect::<Vec<_>>()
-            .lower(caller, results)
-    }
-}
-
 /// `List(Bytes)`: an array of `anyref` whose elements are `Bytes` (`i8` arrays). The outer element type `(mut (ref null any))` matches the codegen's `$elems`, so the array's runtime type is the one downstream `ref.cast`s expect.
 impl Lower for Vec<Vec<u8>> {
     fn shape() -> Vec<WireType> {
@@ -485,13 +452,11 @@ pub(crate) fn filled(
             WireType::Nat | WireType::Int => reply[0] = Val::I64(0),
             WireType::Bool | WireType::Byte => reply[0] = Val::I32(0),
             WireType::Flt => reply[0] = Val::F64(0f64.to_bits()),
-            WireType::Bytes | WireType::Bits | WireType::Handle => {
-                Vec::<u8>::new().lower(caller, reply)?
-            }
+            WireType::Bytes | WireType::Handle => Vec::<u8>::new().lower(caller, reply)?,
             WireType::List(WireLeaf::Nat) => Vec::<u64>::new().lower(caller, reply)?,
             WireType::List(WireLeaf::Int) => Vec::<i64>::new().lower(caller, reply)?,
             WireType::List(WireLeaf::Bool) => Vec::<bool>::new().lower(caller, reply)?,
-            WireType::List(WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle) => {
+            WireType::List(WireLeaf::Bytes | WireLeaf::Handle) => {
                 Vec::<Vec<u8>>::new().lower(caller, reply)?
             }
             WireType::Option(_) => reply[0] = Val::AnyRef(None),

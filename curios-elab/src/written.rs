@@ -716,7 +716,6 @@ impl Writing {
             } => {
                 let grain = *grain;
                 let atom = Term::intrinsic(match grain {
-                    Grain::B => Intrinsic::BoolType,
                     Grain::X => Intrinsic::ByteType,
                 });
                 let sequence = Term::intrinsic(Intrinsic::BinType(grain));

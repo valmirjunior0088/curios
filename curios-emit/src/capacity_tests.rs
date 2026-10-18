@@ -1,9 +1,8 @@
-//! The construction boundary: logical length arithmetic stays wide until checked, including host bit payloads and fused flat lists.
+//! The construction boundary: logical length arithmetic stays wide until checked, including fused flat lists.
 
 use {
-    super::{EmissionModule, RopeEmitter, Table, test_support::*},
+    super::test_support::*,
     curios_num::{Binary, Grain, Natural},
-    std::collections::HashMap,
 };
 
 /// One construction over a bound input, ending without an exit-code conversion so every narrowing belongs to the construction itself.
@@ -51,25 +50,23 @@ fn construction(
 
 #[test]
 fn every_length_sum_is_checked_before_its_node_or_flat_allocation() {
-    for grain in [Grain::B, Grain::X] {
-        for op in [
-            curios_cont::Intrinsic::BinConcat(grain, 2),
-            curios_cont::Intrinsic::BinAppend(grain),
-        ] {
-            let append = matches!(op, curios_cont::Intrinsic::BinAppend(_));
-            let wat = construction(
-                op,
-                curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
-                    grain,
-                    Binary::from_bytes(vec![1, 2, 3, 4]),
-                )),
-                2,
-                append,
-            );
-            assert_contains(&wat, "i64.add");
-            assert_contains(&wat, "i64.gt_u");
-            assert_contains(&wat, "call $refuse/capacity");
-        }
+    for op in [
+        curios_cont::Intrinsic::BinConcat(Grain::X, 2),
+        curios_cont::Intrinsic::BinAppend(Grain::X),
+    ] {
+        let append = matches!(op, curios_cont::Intrinsic::BinAppend(_));
+        let wat = construction(
+            op,
+            curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
+                Grain::X,
+                Binary::from_bytes(vec![1, 2, 3, 4]),
+            )),
+            2,
+            append,
+        );
+        assert_contains(&wat, "i64.add");
+        assert_contains(&wat, "i64.gt_u");
+        assert_contains(&wat, "call $refuse/capacity");
     }
     for op in [
         curios_cont::Intrinsic::ListConcat(2),
@@ -91,61 +88,15 @@ fn every_length_sum_is_checked_before_its_node_or_flat_allocation() {
 
 #[test]
 fn a_requested_count_reaches_its_capacity_check_without_position_saturation() {
-    for grain in [Grain::B, Grain::X] {
-        let wat = construction(
-            curios_cont::Intrinsic::BinReplicate(grain),
-            curios_cont::ValueExpr::Literal(curios_cont::Literal::Nat(Natural::from(1u64 << 32))),
-            2,
-            true,
-        );
-        assert_contains(&wat, "call $big/count");
-        // The element is a word; only the count preceding its capacity guard must avoid position saturation.
-        let guard = wat.find("call $refuse/capacity").unwrap();
-        assert_absent(&wat[..guard], "call $big/word");
-        assert!(
-            wat.find("call $refuse/capacity").unwrap()
-                < wat
-                    .find("call $bits/replicate")
-                    .or_else(|| wat.find("call $bytes/replicate"))
-                    .unwrap()
-        );
-    }
-}
-
-#[test]
-fn a_byte_to_bit_scale_is_checked_before_forcing_the_payload() {
     let wat = construction(
-        curios_cont::Intrinsic::BinReinterp(Grain::X),
-        curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
-            Grain::X,
-            Binary::from_bytes(vec![1, 2, 3, 4]),
-        )),
-        1,
-        false,
+        curios_cont::Intrinsic::BinReplicate(Grain::X),
+        curios_cont::ValueExpr::Literal(curios_cont::Literal::Nat(Natural::from(1u64 << 32))),
+        2,
+        true,
     );
-    assert_contains(&wat, "i64.shl");
-    assert!(wat.find("call $refuse/capacity").unwrap() < wat.find("call $bytes/exact").unwrap());
-}
-
-#[test]
-fn a_host_bit_payload_is_checked_at_both_embedding_depths() {
-    for deep in [false, true] {
-        let emission = EmissionModule::new();
-        let raw = HashMap::new();
-        let table = Table::new(&emission, &raw);
-        let mut module = curios_wasm::Module::new("embed");
-        let mut ropes = RopeEmitter::new(&table, &mut module);
-        if deep {
-            ropes.emit_list_bin_embed_func(Grain::B, table.list_bits_embed_func());
-        } else {
-            ropes.emit_bits_embed_func(table.bits_embed_func());
-        }
-        let wat = module.to_string();
-        assert_contains(&wat, "i64.shl");
-        assert_contains(&wat, "call $refuse/capacity");
-        assert!(
-            wat.find("call $refuse/capacity").unwrap()
-                < wat.find("struct.new $rope/bin/leaf").unwrap()
-        );
-    }
+    assert_contains(&wat, "call $big/count");
+    // The element is a word; only the count preceding its capacity guard must avoid position saturation.
+    let guard = wat.find("call $refuse/capacity").unwrap();
+    assert_absent(&wat[..guard], "call $big/word");
+    assert!(guard < wat.find("call $bytes/replicate").unwrap());
 }

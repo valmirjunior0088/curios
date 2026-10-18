@@ -728,7 +728,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// Add the rope helpers the emitted code referenced. Helpers whose bodies call other helpers go first: *building* a body references its callees through the table, so the callee used-flags must settle before they are read — deep host-boundary forms, then everything else whose body calls `exact` or `force` (`norm`, `box`, `eql`, `map`, the reinterpretations, `slice`, `read`), then `exact`, then `force`/`embed`.
+    /// Add the rope helpers the emitted code referenced. Helpers whose bodies call other helpers go first: *building* a body references its callees through the table, so the callee used-flags must settle before they are read — deep host-boundary forms, then everything else whose body calls `exact` or `force` (`norm`, `box`, `eql`, `map`, `slice`, `read`), then `exact`, then `force`/`embed`.
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
@@ -749,14 +749,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_list_bin_embed_func(Grain::X, self.table.list_bytes_embed_func());
         }
 
-        if self.table.list_bits_force_used() {
-            ropes.emit_list_bin_force_func(Grain::B, self.table.list_bits_force_func());
-        }
-
-        if self.table.list_bits_embed_used() {
-            ropes.emit_list_bin_embed_func(Grain::B, self.table.list_bits_embed_func());
-        }
-
         if self.table.bytes_norm_used() {
             ropes.emit_norm_func(
                 Grain::X,
@@ -765,20 +757,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        if self.table.bits_norm_used() {
-            ropes.emit_norm_func(
-                Grain::B,
-                self.table.bits_norm_func(),
-                self.table.bits_force_func(),
-            );
-        }
-
         if self.table.bytes_box_used() {
             ropes.emit_box_func(Grain::X, self.table.bytes_box_func());
-        }
-
-        if self.table.bits_box_used() {
-            ropes.emit_box_func(Grain::B, self.table.bits_box_func());
         }
 
         if self.table.bytes_eql_used() {
@@ -787,10 +767,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 self.table.bytes_eql_func(),
                 self.table.bytes_force_func(),
             );
-        }
-
-        if self.table.bits_eql_used() {
-            ropes.emit_bits_eql_func(self.table.bits_eql_func(), self.table.bits_read_func());
         }
 
         if self.table.bin_and_used() {
@@ -809,26 +785,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_replicate_func(Grain::X, self.table.bytes_replicate_func());
         }
 
-        if self.table.bits_replicate_used() {
-            ropes.emit_replicate_func(Grain::B, self.table.bits_replicate_func());
-        }
-
-        if self.table.bytes_to_bits_used() {
-            ropes.emit_reinterp_func(
-                Grain::X,
-                self.table.bytes_to_bits_func(),
-                self.table.bytes_exact_func(),
-            );
-        }
-
-        if self.table.bits_to_bytes_used() {
-            ropes.emit_reinterp_func(
-                Grain::B,
-                self.table.bits_to_bytes_func(),
-                self.table.bits_exact_func(),
-            );
-        }
-
         if self.table.list_map_used() {
             ropes.emit_map_func(self.table.list_map_func(), self.table.list_force_func());
         }
@@ -838,14 +794,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 &self.table.bin_rope(),
                 self.table.bytes_slice_func(),
                 self.table.bytes_force_func(),
-            );
-        }
-
-        if self.table.bits_slice_used() {
-            ropes.emit_slice_func(
-                &self.table.bin_rope(),
-                self.table.bits_slice_func(),
-                self.table.bits_force_func(),
             );
         }
 
@@ -865,10 +813,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        if self.table.bits_read_used() {
-            ropes.emit_bits_read_func(self.table.bits_read_func(), self.table.bits_force_func());
-        }
-
         if self.table.list_read_used() {
             ropes.emit_read_func(
                 &self.table.list_rope(),
@@ -877,17 +821,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        // After everything that takes a run exact — a host operand, a settle, a reinterpretation, a host list's elements — and before `force`, which each calls.
+        // After everything that takes a run exact — a host operand, a settle, a host list's elements — and before `force`, which each calls.
         if self.table.bytes_exact_used() {
             ropes.emit_exact_func(
                 &self.table.bin_rope(),
                 self.table.bytes_exact_func(),
                 self.table.bytes_force_func(),
             );
-        }
-
-        if self.table.bits_exact_used() {
-            ropes.emit_bits_exact_func(self.table.bits_exact_func(), self.table.bits_force_func());
         }
 
         if self.table.list_exact_used() {
@@ -902,20 +842,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_force_func(&self.table.bin_rope(), self.table.bytes_force_func());
         }
 
-        if self.table.bits_force_used() {
-            ropes.emit_bits_force_func(self.table.bits_force_func());
-        }
-
         if self.table.list_force_used() {
             ropes.emit_force_func(&self.table.list_rope(), self.table.list_force_func());
         }
 
         if self.table.bytes_embed_used() {
             ropes.emit_embed_func(&self.table.bin_rope(), self.table.bytes_embed_func());
-        }
-
-        if self.table.bits_embed_used() {
-            ropes.emit_bits_embed_func(self.table.bits_embed_func());
         }
 
         if self.table.list_embed_used() {

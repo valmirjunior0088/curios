@@ -217,17 +217,6 @@ impl Intrinsic {
                 },
                 Operands::One([bin]),
             ),
-            Intrinsic::BinReinterp {
-                grain,
-                bin,
-                aligned: _,
-            } => declared(
-                Carrier::Packed(grain.other()),
-                Operation::Conversion {
-                    from: Carrier::Packed(*grain),
-                },
-                Operands::One([bin]),
-            ),
             Intrinsic::FltAdd(rounding, left, right) => declared(
                 Carrier::Float,
                 Operation::RoundedSum(*rounding),

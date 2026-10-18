@@ -23,12 +23,6 @@ fn rope_names_match_the_wasm_vocabulary() {
     assert_eq!(list.view.as_str(), "rope/list/view");
     assert_eq!(list.payload.as_str(), "elems");
 
-    assert_eq!(table.bits_force_func().as_str(), "bits/force");
-    assert_eq!(table.bits_exact_func().as_str(), "bits/exact");
-    assert_eq!(table.bits_slice_func().as_str(), "bits/slice");
-    assert_eq!(table.bits_read_func().as_str(), "bits/read");
-    assert_eq!(table.bits_eql_func().as_str(), "bits/eql");
-
     assert_eq!(table.bytes_force_func().as_str(), "bytes/force");
     assert_eq!(table.bytes_exact_func().as_str(), "bytes/exact");
     assert_eq!(table.bytes_embed_func().as_str(), "bytes/embed");

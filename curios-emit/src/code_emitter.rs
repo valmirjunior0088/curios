@@ -1184,7 +1184,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Lower a packed element read with the immediate split: an i31 answers by shift and mask — the bounds trap first, exactly where the helper's leaf arm traps — and a rope takes the byte grain's leaf split in front of the shared helper (the bit grain's leaf arm is the packed extraction, several instructions past the array read, so it stays a call). On an immediate key this is the whole read: no call, no load, no allocation.
+    /// Lower a packed element read with the immediate split: an i31 answers by shift and mask — the bounds trap first, exactly where the helper's leaf arm traps — and a rope takes the leaf split in front of the shared helper. On an immediate key this is the whole read: no call, no load, no allocation.
     fn emit_bin_get(
         &mut self,
         grain: Grain,
@@ -1195,7 +1195,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let rope = self.context.table().bin_rope();
         let read = match grain {
             Grain::X => self.context.table().bytes_read_func(),
-            Grain::B => self.context.table().bits_read_func(),
         };
         let imm = self.context.push_local(
             "bytes_imm",
@@ -1246,12 +1245,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 curios_wasm::Instr::I32Const { value: 0xFF },
                 curios_wasm::Instr::I32And,
             ]),
-            // (v >> i) & 1.
-            Grain::B => imm_arm.extend([
-                curios_wasm::Instr::I32ShrU,
-                curios_wasm::Instr::I32Const { value: 1 },
-                curios_wasm::Instr::I32And,
-            ]),
         }
 
         let cast_rope = curios_wasm::Instr::RefCast {
@@ -1295,12 +1288,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     else_instructions: read_arm,
                 });
             }
-            Grain::B => {
-                rope_arm.extend(self.context.load_value_instrs(index, LoadAs::Nat));
-                rope_arm.push(curios_wasm::Instr::Call {
-                    func_name: self.context.table().bits_read_func(),
-                });
-            }
         }
 
         self.emit_instr(curios_wasm::Instr::If {
@@ -1321,7 +1308,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let rope = self.context.table().bin_rope();
         let eql = match grain {
             Grain::X => self.context.table().bytes_eql_func(),
-            Grain::B => self.context.table().bits_eql_func(),
         };
         let i31 = || curios_wasm::Instr::RefTest {
             ref_type: Table::int_type(false),
@@ -1379,7 +1365,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// Force both operands and hand their payloads, with the run's own length and the bytes it occupies, to the shared combiner.
     ///
-    /// **The forcing is here rather than inside the helper**, which is what lets one grain-free helper serve both grains: a pair of calls is a straight-line sequence, and straight-line is exactly what a call site may inline. The loop, which it may not, stays in `rope_emitter`. Both lengths come off the left operand's run because a payload's extent is not the run's: at the bit grain `ceil(len/8)` bytes hold `len` bits, and at either grain a payload may hold room past the run.
+    /// **The forcing is here rather than inside the helper**, which is what keeps the helper a walk over two byte arrays: a pair of calls is a straight-line sequence, and straight-line is exactly what a call site may inline. The loop, which it may not, stays in `rope_emitter`. Both lengths come off the left operand's run because a payload's extent is not the run's: a payload may hold room past the run.
     fn emit_bin_pointwise(
         &mut self,
         grain: Grain,
@@ -1389,11 +1375,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     ) {
         let force = match grain {
             Grain::X => self.context.table().bytes_force_func(),
-            Grain::B => self.context.table().bits_force_func(),
         };
         let norm = match grain {
             Grain::X => self.context.table().bytes_norm_func(),
-            Grain::B => self.context.table().bits_norm_func(),
         };
         let rope = self.context.table().bin_rope();
 
@@ -1407,7 +1391,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             .collect();
         let count_instrs = match grain {
             Grain::X => length_instrs.clone(),
-            Grain::B => Table::bits_payload_len_instrs(length_instrs.clone()),
         };
 
         self.emit_instrs(left_instrs);
@@ -1423,7 +1406,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instr(curios_wasm::Instr::Call { func_name: norm });
     }
 
-    /// Lower a packed concatenation with the immediate split, pair by pair from the left. Two immediates whose lengths together fit their grain's envelope join by arithmetic — the right payload shifted past the left's elements, the two lengths summed — with no box, no node and no normalisation; every other pair is the rope's: a node over its boxed operands, a side that is empty answering the other, normalised since that answer may be a boxed immediate. Fewer than two operands join nothing and take the rope's lowering whole.
+    /// Lower a packed concatenation with the immediate split, pair by pair from the left. Two immediates whose lengths together fit the envelope join by arithmetic — the right payload shifted past the left's elements, the two lengths summed — with no box, no node and no normalisation; every other pair is the rope's: a node over its boxed operands, a side that is empty answering the other, normalised since that answer may be a boxed immediate. Fewer than two operands join nothing and take the rope's lowering whole.
     ///
     /// **The split is here for what a cons costs.** `x[h, ..t]` is a chunk of one concatenated with `t`, so a short run built from the front is this lowering once an element; without the arithmetic arm each step boxes both operands, allocates their node and gathers it back into the immediate it was always going to be.
     fn emit_bin_concat(
@@ -1437,10 +1420,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             Grain::X => (
                 self.context.table().bytes_norm_func(),
                 self.context.table().bytes_box_func(),
-            ),
-            Grain::B => (
-                self.context.table().bits_norm_func(),
-                self.context.table().bits_box_func(),
             ),
         };
         let (first, rest) = match operands {
@@ -1565,7 +1544,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         }
     }
 
-    /// Lower a packed append with the immediate split. A base inside its grain's envelope appends by arithmetic — mask the element, OR it at the next slot, bump the length — with no allocation at all; a full immediate boxes into a leaf under a fresh node, entering the rope world one element past the envelope; a rope base (past the envelope, by canonicity) builds the ordinary node, whose result can never be small, so no arm normalises.
+    /// Lower a packed append with the immediate split. A base inside the envelope appends by arithmetic — mask the element, OR it at the next slot, bump the length — with no allocation at all; a full immediate boxes into a leaf under a fresh node, entering the rope world one element past the envelope; a rope base (past the envelope, by canonicity) builds the ordinary node, whose result can never be small, so no arm normalises.
     fn emit_bin_append(
         &mut self,
         grain: Grain,
@@ -1582,7 +1561,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let rope = self.context.table().bin_rope();
         let boxf = match grain {
             Grain::X => self.context.table().bytes_box_func(),
-            Grain::B => self.context.table().bits_box_func(),
         };
         let imm = self.context.push_local(
             "bytes_imm",
@@ -2321,10 +2299,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             curios_cont::Intrinsic::BinSlice(grain) => {
                 let funcs = match grain {
-                    Grain::B => WindowFuncs {
-                        slice: self.context.table().bits_slice_func(),
-                        norm: Some(self.context.table().bits_norm_func()),
-                    },
                     Grain::X => WindowFuncs {
                         slice: self.context.table().bytes_slice_func(),
                         norm: Some(self.context.table().bytes_norm_func()),
@@ -2341,10 +2315,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             curios_cont::Intrinsic::BinRest(grain) => {
                 let funcs = match grain {
-                    Grain::B => WindowFuncs {
-                        slice: self.context.table().bits_slice_func(),
-                        norm: Some(self.context.table().bits_norm_func()),
-                    },
                     Grain::X => WindowFuncs {
                         slice: self.context.table().bytes_slice_func(),
                         norm: Some(self.context.table().bytes_norm_func()),
@@ -2370,36 +2340,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_cont::Intrinsic::BinConcat(grain, _) => {
                 self.emit_bin_concat(grain, &result_local, args);
             }
-            curios_cont::Intrinsic::BinReinterp(grain) => {
-                // The norm is the *result*'s, not the operand's: a run that crosses grains lands at a different length, and whether it fits an immediate is a question about where it lands.
-                let (reinterp, norm) = match grain {
-                    Grain::X => (
-                        self.context.table().bytes_to_bits_func(),
-                        self.context.table().bits_norm_func(),
-                    ),
-                    Grain::B => (
-                        self.context.table().bits_to_bytes_func(),
-                        self.context.table().bytes_norm_func(),
-                    ),
-                };
-                let operand = self.context.load_value_instrs(&args[0], LoadAs::Bin(grain));
-                self.emit_instrs(operand);
-                self.emit_instr(curios_wasm::Instr::Call {
-                    func_name: reinterp,
-                });
-                self.emit_instr(curios_wasm::Instr::Call { func_name: norm });
-                self.emit_instr(curios_wasm::Instr::LocalSet {
-                    local_name: result_local.clone(),
-                });
-            }
             curios_cont::Intrinsic::BinReplicate(grain) => {
                 let replicate = match grain {
                     Grain::X => self.context.table().bytes_replicate_func(),
-                    Grain::B => self.context.table().bits_replicate_func(),
                 };
                 let norm = match grain {
                     Grain::X => self.context.table().bytes_norm_func(),
-                    Grain::B => self.context.table().bits_norm_func(),
                 };
                 let count = self.context.load_length_instrs(&args[0]);
                 let atom = self.context.load_value_instrs(&args[1], LoadAs::Nat);
@@ -2475,25 +2421,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                         self.emit_instr(curios_wasm::Instr::ArrayNewFixed {
                             type_name: rope.payload.clone(),
                             length: arity as u32,
-                        });
-                    }
-                    // Each payload byte ORs its up-to-eight elements at constant positions, LSB-first — the packing `$bits/force` writes and `$bits/read` reads.
-                    Grain::B => {
-                        for byte in args.chunks(8) {
-                            for (bit, arg) in byte.iter().enumerate() {
-                                self.emit_instrs(self.context.load_value_instrs(arg, LoadAs::Nat));
-                                if bit != 0 {
-                                    self.emit_instr(curios_wasm::Instr::I32Const {
-                                        value: bit as i32,
-                                    });
-                                    self.emit_instr(curios_wasm::Instr::I32Shl);
-                                    self.emit_instr(curios_wasm::Instr::I32Or);
-                                }
-                            }
-                        }
-                        self.emit_instr(curios_wasm::Instr::ArrayNewFixed {
-                            type_name: rope.payload.clone(),
-                            length: args.len().div_ceil(8) as u32,
                         });
                     }
                 }

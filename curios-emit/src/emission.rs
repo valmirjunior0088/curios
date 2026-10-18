@@ -10,7 +10,7 @@ use {
     },
 };
 
-/// A constructed value: the scalar immediates, packed `Bits`/`Bytes`, `List`/`Tuple` aggregates, a nominal `Row`, and `Closure` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `EmissionData` — so constructing one is a single allocation. `EmissionData` is also the payload of module consts, where codegen materialises it into a wasm global.
+/// A constructed value: the scalar immediates, packed `Bytes`, `List`/`Tuple` aggregates, a nominal `Row`, and `Closure` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `EmissionData` — so constructing one is a single allocation. `EmissionData` is also the payload of module consts, where codegen materialises it into a wasm global.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionData {
     Nat(Natural),

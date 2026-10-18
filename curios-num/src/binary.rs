@@ -1,18 +1,16 @@
-//! The packed `Binary` a `Bits` or `Bytes` value is, beside the numbers every constant folder shares, and the `Grain` it is read at.
+//! The packed `Binary` a `Bytes` value is, beside the numbers every constant folder shares, and the `Grain` it is read at.
 //!
-//! Values are immutable windows over a shared byte buffer. Bit zero is the least-significant bit of the first byte, so advancing a B tail is O(1).
+//! Values are immutable windows over a shared byte buffer. Bit zero is the least-significant bit of the first byte.
 
 use {
     crate::BufferBytes,
     std::{hash::Hash, sync::Arc},
 };
 
-/// The closed logical grain of a packed binary sequence.
+/// The logical grain of a packed binary sequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub enum Grain {
-    /// One logical atom per bit.
-    B,
     /// One logical atom per byte.
     X,
 }
@@ -20,16 +18,7 @@ pub enum Grain {
 impl Grain {
     pub const fn bits(self) -> usize {
         match self {
-            Self::B => 1,
             Self::X => 8,
-        }
-    }
-
-    /// The grain a run is read at when it is read at the one it is not. Two variants, so the opposite is a fact rather than a choice — which is what lets one reinterpretation row name its operand's grain and leave the result's derived.
-    pub const fn other(self) -> Self {
-        match self {
-            Self::B => Self::X,
-            Self::X => Self::B,
         }
     }
 }
@@ -74,28 +63,10 @@ impl Binary {
         }
     }
 
-    /// `count` copies of one generator — a byte at `X`, a bit at `B`, where `atom` is `0` or `1`.
-    ///
-    /// **The one place a fill has to mask.** Every other constructor here writes padding as zero because it starts from a zeroed buffer and sets only the bits it owns; an all-ones bit fill is the exception, since the byte it repeats carries eight set bits whether or not the length claims them. Left alone, `replicate(B, 1, 3)` would pack as `0xFF` and compare unequal to the `b[1, 1, 1]` it is, because [`Binary::cmp`] and [`Binary::hash`] read the stored bytes and trust the padding to be zero.
+    /// `count` copies of one generator, a byte.
     pub fn replicate(grain: Grain, atom: u8, count: usize) -> Self {
         match grain {
             Grain::X => Self::from_bytes(vec![atom; count]),
-            Grain::B => {
-                let mut bytes = vec![if atom == 0 { 0x00 } else { 0xFF }; count.div_ceil(8)];
-
-                if atom != 0
-                    && !count.is_multiple_of(8)
-                    && let Some(last) = bytes.last_mut()
-                {
-                    *last = (1u8 << (count % 8)) - 1;
-                }
-
-                Self {
-                    bytes: bytes.into(),
-                    bit_offset: 0,
-                    bit_length: count,
-                }
-            }
         }
     }
 
@@ -123,7 +94,7 @@ impl Binary {
     /// **Asserted rather than debug-asserted.** A byte-grain length over a window that is not byte-aligned is not a near miss but a wrong number, and `bit_length / 8` hands it back silently — into the reducer's cost accounting, into an out-of-range report, and through conversion into what the kernel compares. The alignment holds by construction, since [`Binary::window`] adds offsets and an X-grain [`Binary::slice`] multiplies both of its bounds by eight, so this never fires; what it buys is that a path which breaks the invariant says so where it breaks it rather than somewhere downstream of a wrong length.
     pub fn len(&self, grain: Grain) -> usize {
         assert!(
-            grain == Grain::B || self.is_x_aligned(),
+            self.is_x_aligned(),
             "a byte-grain length needs a byte-aligned window"
         );
         self.bit_length / grain.bits()

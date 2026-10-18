@@ -701,7 +701,7 @@ fn sequence_length(grain: SequenceGrain, sequence: &Value) -> Result<usize, Bail
     }
 }
 
-/// One peel of a sequence at `at`: the element there and the suffix after it, or `None` at the end. A byte grain peels a `Byte`, a bit grain a `Bool`.
+/// One peel of a sequence at `at`: the element there and the suffix after it, or `None` at the end. A byte grain peels a `Byte`.
 ///
 /// Read off the original value the way the door's `Emitter::emit_peel` reads it at runtime — the element by index and the suffix as a window sharing the allocation — so a peel costs the same whether three elements or a hundred thousand follow it. Rebuilding each suffix element by element would make a recursive byte walk quadratic.
 fn peel(grain: SequenceGrain, sequence: &Value, at: usize) -> Result<Option<(Value, Value)>, Bail> {
@@ -722,7 +722,6 @@ fn peel(grain: SequenceGrain, sequence: &Value, at: usize) -> Result<Option<(Val
             }
             let element = match expected {
                 Grain::X => packed.byte(at).map(Value::Byte),
-                Grain::B => packed.bit(at).map(Value::Bool),
             };
             let suffix = packed.slice(expected, at + 1, length);
             match (element, suffix) {
@@ -779,7 +778,6 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
         | SequenceOp::BinConcat(_)
         | SequenceOp::BinEql(_)
         | SequenceOp::BinReplicate(_)
-        | SequenceOp::BinReinterp(_)
         | SequenceOp::BinAnd(_)
         | SequenceOp::BinOr(_)
         | SequenceOp::BinXor(_) => {

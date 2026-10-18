@@ -652,7 +652,6 @@ impl fmt::Display for Displayed<'_> {
             Error::NotBinType { grain, head_type } => {
                 let head_type = head_type.spelled(spelling);
                 let expected = match grain {
-                    Grain::B => "Bits",
                     Grain::X => "Bytes",
                 };
 
@@ -1091,9 +1090,6 @@ impl fmt::Display for Displayed<'_> {
                     f,
                     "a `Nat` match arm mixes successor-peeling (`n + 1; ih`) with literal dispatch (`5`) in one column; use one or the other"
                 )
-            }
-            Error::MatrixMixedBinGrain => {
-                write!(f, "binary match arms mix `b[…]` and `x[…]` patterns")
             }
             // A name a program wrote is reported by the reason the lowering filed for it, in that value's own words, so a misspelled name reads the same whichever stage refuses for it.
             Error::UnboundVariable { why: Some(why), .. } => write!(f, "{why}"),

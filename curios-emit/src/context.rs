@@ -299,11 +299,10 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ]
             }
-            // A packed value is small-canonical — an immediate inside its grain's envelope, a rope past it — so a position demanding the rope goes through its grain's box helper, which materialises an immediate and casts (trapping on null) as a bare cast would. The grain rides the load because the two immediate layouts share no runtime discrimination.
+            // A packed value is small-canonical — an immediate inside its envelope, a rope past it — so a position demanding the rope goes through the box helper, which materialises an immediate and casts (trapping on null) as a bare cast would.
             LoadAs::Bin(grain) => {
                 let func_name = match grain {
                     Grain::X => self.table().bytes_box_func(),
-                    Grain::B => self.table().bits_box_func(),
                 };
                 vec![curios_wasm::Instr::Call { func_name }]
             }
@@ -971,10 +970,8 @@ impl<'a, 'b> Context<'a, 'b> {
                 return vec![];
             }
             WireType::Bytes | WireType::Handle => self.table().bytes_exact_func(),
-            WireType::Bits => self.table().bits_exact_func(),
             WireType::List(inner) | WireType::Option(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_force_func(),
-                WireLeaf::Bits => self.table().list_bits_force_func(),
                 leaf @ (WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int) => {
                     self.table().scalars_force_func(*leaf)
                 }
@@ -997,19 +994,8 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ];
             }
-            WireReference::Bits => {
-                return vec![
-                    curios_wasm::Instr::Call {
-                        func_name: self.table().bits_embed_func(),
-                    },
-                    curios_wasm::Instr::Call {
-                        func_name: self.table().bits_norm_func(),
-                    },
-                ];
-            }
             WireReference::List(inner) | WireReference::Option(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_embed_func(),
-                WireLeaf::Bits => self.table().list_bits_embed_func(),
                 leaf @ (WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int) => {
                     self.table().scalars_embed_func(leaf)
                 }
@@ -1261,7 +1247,6 @@ impl From<&WireType> for LoadAs {
             WireType::Int => LoadAs::WireInt,
             WireType::Flt => LoadAs::Flt,
             WireType::Bytes | WireType::Handle => LoadAs::Bin(Grain::X),
-            WireType::Bits => LoadAs::Bin(Grain::B),
             WireType::List(_) | WireType::Option(_) => LoadAs::List,
         }
     }

@@ -43,7 +43,7 @@ pub trait Alphabet {
 
 /// A run of elements a literal spells out.
 pub trait Run {
-    /// Whether elements are decided values, so that two runs whose first elements differ are two values. Packed bits and bytes are; element terms are not, since two of them may still convert.
+    /// Whether elements are decided values, so that two runs whose first elements differ are two values. Packed bytes are; element terms are not, since two of them may still convert.
     const DECIDED: bool;
     /// How many elements the run holds.
     fn len(&self) -> usize;
@@ -59,7 +59,7 @@ pub trait Run {
     fn extend(&mut self, other: Self);
 }
 
-/// A packed run: bits or bytes as `curios-num` holds them, never an element per bit.
+/// A packed run: bytes as `curios-num` holds them, never an element per byte.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Packed {
     pub grain: Grain,
@@ -76,9 +76,6 @@ impl Run for Packed {
     fn shared_prefix(&self, other: &Self) -> usize {
         let bound = self.len().min(other.len());
         match self.grain {
-            Grain::B => (0..bound)
-                .take_while(|&index| self.bits.bit(index) == other.bits.bit(index))
-                .count(),
             Grain::X => (0..bound)
                 .take_while(|&index| self.bits.byte(index) == other.bits.byte(index))
                 .count(),

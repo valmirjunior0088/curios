@@ -796,7 +796,6 @@ fn fields(row: &[Field]) -> String {
                 FieldShape::Number => format!("{name}:number"),
                 FieldShape::Flt => format!("{name}:flt"),
                 FieldShape::Packed(Grain::X) => format!("{name}:bytes"),
-                FieldShape::Packed(Grain::B) => format!("{name}:bits"),
                 FieldShape::List => format!("{name}:list"),
                 FieldShape::Closure(arity) => format!("{name}:closure/{arity}"),
                 FieldShape::Product(schema) => format!("{name}:product/{schema}"),
@@ -808,11 +807,10 @@ fn fields(row: &[Field]) -> String {
         .join(", ")
 }
 
-/// The pattern prefix that selects a sequence carrier, exactly as the surface writes a packed fold: bare for `List`, `b` for `Bits`, `x` for `Bytes`.
+/// The pattern prefix that selects a sequence carrier, exactly as the surface writes a packed fold: bare for `List`, `x` for `Bytes`.
 fn grain_prefix(grain: &SequenceGrain) -> &'static str {
     match grain {
         SequenceGrain::List => "",
-        SequenceGrain::Bin(Grain::B) => "b",
         SequenceGrain::Bin(Grain::X) => "x",
     }
 }
@@ -820,7 +818,6 @@ fn grain_prefix(grain: &SequenceGrain) -> &'static str {
 /// The carrier a sequence operation belongs to, as `/sys` modules it.
 fn grain_carrier(grain: Grain) -> &'static str {
     match grain {
-        Grain::B => "Bits",
         Grain::X => "Bytes",
     }
 }
@@ -926,14 +923,6 @@ fn sequence_name(operation: SequenceOp) -> String {
         SequenceOp::BinAppend(grain) => (grain_carrier(grain), "append"),
         SequenceOp::BinConcat(grain) => (grain_carrier(grain), "concat"),
         SequenceOp::BinReplicate(grain) => (grain_carrier(grain), "replicate"),
-        // The grain names the operand, so the spelling is the direction it is read out of.
-        SequenceOp::BinReinterp(grain) => (
-            grain_carrier(grain),
-            match grain {
-                Grain::X => "to_bits",
-                Grain::B => "to_bytes",
-            },
-        ),
         SequenceOp::BinAnd(grain) => (grain_carrier(grain), "and"),
         SequenceOp::BinOr(grain) => (grain_carrier(grain), "or"),
         SequenceOp::BinXor(grain) => (grain_carrier(grain), "xor"),
@@ -998,7 +987,6 @@ fn render_constant(constant: &Constant) -> String {
                 .map(|byte| format!("{byte:02x}"))
                 .collect::<String>();
             match grain {
-                Grain::B => format!("b\"{rendered}\"/{}", bits.bit_length()),
                 Grain::X => format!("x\"{rendered}\""),
             }
         }

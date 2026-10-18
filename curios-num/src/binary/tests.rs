@@ -117,49 +117,6 @@ fn first_written_bit_is_least_significant() {
 }
 
 #[test]
-fn exhaustive_short_bit_operations_match_vec_model() {
-    for length in 0..=10 {
-        for mask in 0..(1usize << length) {
-            let model = (0..length)
-                .map(|index| mask & (1 << index) != 0)
-                .collect::<Vec<_>>();
-            let value = Binary::from_bits(model.iter().copied());
-
-            assert_eq!(value.len(Grain::B), model.len());
-            for index in 0..=length {
-                assert_eq!(value.bit(index), model.get(index).copied());
-            }
-            for start in 0..=length {
-                for end in start..=length {
-                    let slice = value.slice(Grain::B, start, end).unwrap();
-                    let expected = Binary::from_bits(model[start..end].iter().copied());
-                    assert_eq!(slice, expected);
-                    assert_eq!(hash(&slice), hash(&expected));
-
-                    // Appending to a *window*, whose bit offset is where an append that reads the packed payload rather than the bits would go wrong. Appending only to offset-zero values leaves that untested.
-                    for bit in [false, true] {
-                        let mut shifted = model[start..end].to_vec();
-                        shifted.push(bit);
-                        assert_eq!(
-                            slice.append_bit(bit),
-                            Binary::from_bits(shifted.into_iter())
-                        );
-                    }
-                }
-            }
-            for bit in [false, true] {
-                let mut expected = model.clone();
-                expected.push(bit);
-                assert_eq!(
-                    value.append_bit(bit),
-                    Binary::from_bits(expected.into_iter())
-                );
-            }
-        }
-    }
-}
-
-#[test]
 fn byte_operations_preserve_alignment_and_match_vec_model() {
     let models = [vec![], vec![0], vec![0xff], vec![1, 2, 3, 4, 5, 6, 7, 8, 9]];
     for model in models {
@@ -285,29 +242,6 @@ fn the_byte_grain_orders_as_the_language_does() {
     assert!(model(vec![]) < model(vec![0]));
 }
 
-/// The bit grain's fill masks its own padding, and it is the only constructor here that has to.
-///
-/// An all-ones byte carries eight set bits whether or not the length claims them, so `replicate(B, 1, 3)` would pack as `0xFF` and compare unequal to the `b[1, 1, 1]` it denotes — the failure this masks away, and the reason the pointwise operations above it need no mask of their own.
-#[test]
-fn a_replicated_fill_leaves_no_padding_set() {
-    for count in 0..=20 {
-        for atom in [0u8, 1] {
-            let filled = Binary::replicate(Grain::B, atom, count);
-            let model = Binary::from_bits((0..count).map(|_| atom != 0));
-
-            assert_eq!(filled, model, "a fill of {atom} at length {count}");
-            assert_eq!(hash(&filled), hash(&model));
-            assert_eq!(filled.len(Grain::B), count);
-        }
-    }
-
-    for count in 0..=6 {
-        let filled = Binary::replicate(Grain::X, 0xA5, count);
-        assert_eq!(filled, Binary::from_bytes(vec![0xA5; count]));
-        assert_eq!(filled.len(Grain::X), count);
-    }
-}
-
 /// Pointwise combination agrees with the bit model at every length across a byte boundary and every pair of operands, including the lengths whose last byte is partial — where a dirty padding bit would be reported by both equality and the hash.
 #[test]
 fn pointwise_operations_agree_with_the_bit_model() {
@@ -325,26 +259,6 @@ fn pointwise_operations_agree_with_the_bit_model() {
                 assert_eq!(l.xor(&r), bits(length, left ^ right));
                 assert_eq!(hash(&l.xor(&r)), hash(&bits(length, left ^ right)));
             }
-        }
-    }
-}
-
-/// The two arms of the normalization meet: an operand read out of a misaligned window answers what the same bits answer packed from zero, which is what lets `/std`'s `not` be an `xor` against a fill.
-#[test]
-fn a_misaligned_operand_combines_as_its_packed_twin_does() {
-    for length in 0usize..=10 {
-        for offset in 0usize..=9 {
-            let framed = Binary::from_bits(
-                (0..offset + length + 3).map(|index: usize| index.is_multiple_of(3)),
-            );
-            let window = framed.window(offset, length).unwrap();
-            let packed = Binary::from_bits((0..length).map(|i| (i + offset).is_multiple_of(3)));
-            let ones = Binary::replicate(Grain::B, 1, length);
-
-            assert_eq!(window, packed);
-            assert_eq!(window.xor(&ones), packed.xor(&ones));
-            assert_eq!(window.and(&ones), packed);
-            assert_eq!(window.or(&ones), ones);
         }
     }
 }

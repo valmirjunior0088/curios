@@ -85,7 +85,6 @@ impl FreeMonoid {
 
 /// A leading generator peeled off a `Bin` value: a concrete byte (`Literal`) or the symbolic byte of a cons `append(x[], c)`, the head `x[c, ..t]` lowers to (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Nat`, `Bin/get`/`Bin/slice` into a one-byte `Bin` chunk.
 enum Head {
-    LiteralBit(bool),
     LiteralByte(u8),
     Symbolic(Term),
 }
@@ -94,7 +93,6 @@ impl Head {
     /// Reflect into the eliminator's grain-specific element type.
     fn into_atom(self) -> Term {
         match self {
-            Head::LiteralBit(bit) => Subterm::Intrinsic(Intrinsic::Bool(bit)).into(),
             Head::LiteralByte(byte) => Subterm::Intrinsic(Intrinsic::Byte(byte)).into(),
             Head::Symbolic(atom) => atom,
         }
@@ -103,9 +101,6 @@ impl Head {
     /// Reflect into a length-1 `Bin` chunk — the cons head `Bin/get`/`Bin/slice` rebuild as `head ++ tail` (`get(head, 0)` is the byte; a symbolic cons head stays `append(x[], c)`).
     fn into_chunk(self, grain: Grain) -> Term {
         match self {
-            Head::LiteralBit(bit) => {
-                Subterm::Intrinsic(Intrinsic::Bin(Grain::B, Binary::from_bits([bit]))).into()
-            }
             Head::LiteralByte(byte) => {
                 Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![byte]))).into()
             }
@@ -152,13 +147,6 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
                 };
 
                 break match grain {
-                    Grain::B => match bytes.bit(0) {
-                        None => Front::Empty,
-                        Some(bit) => Front::Cons {
-                            head: Head::LiteralBit(bit),
-                            tail: tail(),
-                        },
-                    },
                     Grain::X => match bytes.byte(0) {
                         None => Front::Empty,
                         Some(byte) => Front::Cons {
@@ -643,7 +631,7 @@ fn window(
     })
 }
 
-/// The largest literal operand reduction will fuse, in the carrier's own generators — bits at [`Grain::B`], bytes at [`Grain::X`], elements for `List`.
+/// The largest literal operand reduction will fuse, in the carrier's own generators — bytes at [`Grain::X`], elements for `List`.
 ///
 /// **Fusion is an optimization for small runs, not a normalization obligation.** [`normalize_concat`] copies every operand it fuses, so an accumulation that appends to its own result recopies everything accumulated so far on every step: a linear number of transitions performing a quadratic volume of construction. Declining to fuse past this size leaves the `Concat` node standing instead, and each step is then one node over operands it shares rather than copies. `curios`'s `tests::reduction` measures both halves; `tests::runtime`'s `accumulation_loops_are_linear_by_construction` is the same loop at runtime, where a rope has always made it linear.
 ///
@@ -659,10 +647,10 @@ fn window(
 ///
 /// So the corpus fuses almost nothing, and what it does fuse is one to three generators; the pathological case is unbounded. Any cap of four or more leaves every normal form the corpus reaches untouched, and this one clears the observed maximum by more than an order of magnitude while stopping the accumulation within a handful of steps. The third row is the whole defect in one line: operands of 10, 20, 30 … 7990, the accumulator recopied every step.
 ///
-/// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that would close by literal equality failing to close through the peel. It does not: `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges adjacent runs, so a capped spelling and the literal it would have fused to decompose identically. `curios-core`'s `spine` tests state that per grain and per carrier, `curios`'s `tests::aggregates::monoid_tests::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
+/// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that would close by literal equality failing to close through the peel. It does not: `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges adjacent runs, so a capped spelling and the literal it would have fused to decompose identically. `curios-core`'s `spine` tests state that per carrier, `curios`'s `tests::aggregates::monoid_tests::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
 pub(crate) const FUSION_CAP: usize = 64;
 
-/// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`Binary` for both `Bin` grains, the element vector for `List`), exposing only the emptiness [`normalize_concat`] drops.
+/// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`Binary` for `Bin`, the element vector for `List`), exposing only the emptiness [`normalize_concat`] drops.
 pub(crate) trait Run {
     fn is_empty(&self) -> bool;
 }
@@ -679,7 +667,7 @@ impl Run for Vec<Term> {
     }
 }
 
-/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BinConcat` (both grains) and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `b[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `Binary::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands. Which operands are dropped, fused or kept is `curios-algebra`'s `join`, over what `literal` says each one is; this reads them for it and builds what it decides.
+/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BinConcat` and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `Binary::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands. Which operands are dropped, fused or kept is `curios-algebra`'s `join`, over what `literal` says each one is; this reads them for it and builds what it decides.
 ///
 /// An over-cap operand therefore reads exactly like a symbolic one here: not droppable as empty, not fusible, and left standing by `into_concat`. That is the whole of the cap's implementation, and it is why the emptiness filter below is unaffected — an over-cap run is never empty.
 ///

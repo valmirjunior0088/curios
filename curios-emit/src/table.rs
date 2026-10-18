@@ -39,7 +39,7 @@ impl FieldData {
     }
 }
 
-/// The name bundle for one internal rope carrier (`$rope/bin` or `$rope/list`): the base struct the emitter casts carrier refs to, its `leaf`/`node`/`view` subtypes, the flat payload array, the room record both carriers share, and every field name — one handle to thread through the op emitters so packed `Bits`/`Bytes` and `List` share their lowering code.
+/// The name bundle for one internal rope carrier (`$rope/bin` or `$rope/list`): the base struct the emitter casts carrier refs to, its `leaf`/`node`/`view` subtypes, the flat payload array, the room record both carriers share, and every field name — one handle to thread through the op emitters so packed `Bytes` and `List` share their lowering code.
 #[derive(Debug, Clone)]
 pub(crate) struct RopeData {
     pub base: curios_wasm::TypeName,
@@ -385,43 +385,30 @@ pub(crate) struct Table<'a> {
     flt: [OnceCell<curios_wasm::FuncName>; FltHelper::ALL.len()],
     // The shared rope helpers, minted lazily: the first call site recorded during emission names the function, and the module emitter then adds exactly the recorded set after the program's own functions (see `emit_rope_funcs`).
     bytes_force: OnceCell<curios_wasm::FuncName>,
-    bits_force: OnceCell<curios_wasm::FuncName>,
     list_force: OnceCell<curios_wasm::FuncName>,
     bytes_exact: OnceCell<curios_wasm::FuncName>,
-    bits_exact: OnceCell<curios_wasm::FuncName>,
     list_exact: OnceCell<curios_wasm::FuncName>,
     list_bytes_force: OnceCell<curios_wasm::FuncName>,
-    list_bits_force: OnceCell<curios_wasm::FuncName>,
     list_empty: OnceCell<curios_wasm::GlobalName>,
     bytes_embed: OnceCell<curios_wasm::FuncName>,
-    bits_embed: OnceCell<curios_wasm::FuncName>,
     bytes_box: OnceCell<curios_wasm::FuncName>,
     bytes_norm: OnceCell<curios_wasm::FuncName>,
-    bits_box: OnceCell<curios_wasm::FuncName>,
-    bits_norm: OnceCell<curios_wasm::FuncName>,
     list_embed: OnceCell<curios_wasm::FuncName>,
     /// The scalar leaves whose list crosses to a host, each through `$list/<leaf>/to_<payload>`.
     scalars_forces: RefCell<Vec<WireLeaf>>,
     /// The scalar leaves whose list a host answers, each through `$list/<leaf>/of_<payload>`.
     scalars_embeds: RefCell<Vec<WireLeaf>>,
     list_bytes_embed: OnceCell<curios_wasm::FuncName>,
-    list_bits_embed: OnceCell<curios_wasm::FuncName>,
     bytes_slice: OnceCell<curios_wasm::FuncName>,
-    bits_slice: OnceCell<curios_wasm::FuncName>,
     list_slice: OnceCell<curios_wasm::FuncName>,
     bytes_read: OnceCell<curios_wasm::FuncName>,
-    bits_read: OnceCell<curios_wasm::FuncName>,
     list_read: OnceCell<curios_wasm::FuncName>,
     bytes_eql: OnceCell<curios_wasm::FuncName>,
-    bits_eql: OnceCell<curios_wasm::FuncName>,
-    // The pointwise trio takes forced payloads, so one of each serves both grains.
+    // The pointwise trio takes forced payloads.
     bin_and: OnceCell<curios_wasm::FuncName>,
     bin_or: OnceCell<curios_wasm::FuncName>,
     bin_xor: OnceCell<curios_wasm::FuncName>,
     bytes_replicate: OnceCell<curios_wasm::FuncName>,
-    bits_replicate: OnceCell<curios_wasm::FuncName>,
-    bytes_to_bits: OnceCell<curios_wasm::FuncName>,
-    bits_to_bytes: OnceCell<curios_wasm::FuncName>,
     list_map: OnceCell<curios_wasm::FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Lazy used-tracking: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
@@ -485,40 +472,27 @@ impl<'a> Table<'a> {
             big: Default::default(),
             flt: Default::default(),
             bytes_force: OnceCell::new(),
-            bits_force: OnceCell::new(),
             list_force: OnceCell::new(),
             bytes_exact: OnceCell::new(),
-            bits_exact: OnceCell::new(),
             list_exact: OnceCell::new(),
             list_bytes_force: OnceCell::new(),
-            list_bits_force: OnceCell::new(),
             list_empty: OnceCell::new(),
             bytes_embed: OnceCell::new(),
-            bits_embed: OnceCell::new(),
             bytes_box: OnceCell::new(),
             bytes_norm: OnceCell::new(),
-            bits_box: OnceCell::new(),
-            bits_norm: OnceCell::new(),
             list_embed: OnceCell::new(),
             scalars_forces: RefCell::new(Vec::new()),
             scalars_embeds: RefCell::new(Vec::new()),
             list_bytes_embed: OnceCell::new(),
-            list_bits_embed: OnceCell::new(),
             bytes_slice: OnceCell::new(),
-            bits_slice: OnceCell::new(),
             list_slice: OnceCell::new(),
             bytes_read: OnceCell::new(),
-            bits_read: OnceCell::new(),
             list_read: OnceCell::new(),
             bytes_eql: OnceCell::new(),
-            bits_eql: OnceCell::new(),
             bin_and: OnceCell::new(),
             bin_or: OnceCell::new(),
             bin_xor: OnceCell::new(),
             bytes_replicate: OnceCell::new(),
-            bits_replicate: OnceCell::new(),
-            bytes_to_bits: OnceCell::new(),
-            bits_to_bytes: OnceCell::new(),
             list_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
             row_types: module
@@ -763,7 +737,7 @@ impl<'a> Table<'a> {
         match leaf {
             WireLeaf::Nat | WireLeaf::Int => self.longs_type.clone(),
             WireLeaf::Bool => self.words_type.clone(),
-            WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle => {
+            WireLeaf::Bytes | WireLeaf::Handle => {
                 panic!("a list of `{leaf:?}` crosses as its payloads, never as scalars")
             }
         }
@@ -773,7 +747,7 @@ impl<'a> Table<'a> {
         self.elems_type.clone()
     }
 
-    /// The shared packed `Bits`/`Bytes` rope's name bundle.
+    /// The packed `Bytes` rope's name bundle.
     pub(crate) fn bin_rope(&self) -> RopeData {
         RopeData {
             base: self.bin_rope_type.clone(),
@@ -908,23 +882,6 @@ impl<'a> Table<'a> {
         )
     }
 
-    /// A bit length's ceiling in bytes. Widen before rounding so every valid logical length, including the last seven, has enough packed payload.
-    pub(crate) fn bits_payload_len_instrs(
-        producer: Vec<curios_wasm::Instr>,
-    ) -> Vec<curios_wasm::Instr> {
-        producer
-            .into_iter()
-            .chain([
-                curios_wasm::Instr::I64ExtendI32U,
-                i64_const(7),
-                curios_wasm::Instr::I64Add,
-                i64_const(3),
-                curios_wasm::Instr::I64ShrU,
-                curios_wasm::Instr::I32WrapI64,
-            ])
-            .collect()
-    }
-
     /// `$refuse/<class> () -> ()`: build the class's sentence from its data segment, hand it to `sys.panic`, and never return. First use marks it for emission, so nothing is allocated for a refusal until one fires.
     fn refuse_func(&self, panic: curios_cont::Panic) -> curios_wasm::FuncName {
         let slot = curios_cont::Panic::ALL
@@ -957,17 +914,6 @@ impl<'a> Table<'a> {
         self.bytes_force.get().is_some()
     }
 
-    /// `$bits/force (ref $rope/bin) -> (ref $bytes)`: flatten a bit-grain rope to its packed payload, memoizing in the entry node; the payload holds the run in its first `ceil(len/8)` bytes and may hold room past them. First use marks it for emission.
-    pub(crate) fn bits_force_func(&self) -> curios_wasm::FuncName {
-        self.bits_force
-            .get_or_init(|| curios_wasm::FuncName::from("bits/force"))
-            .clone()
-    }
-
-    pub(crate) fn bits_force_used(&self) -> bool {
-        self.bits_force.get().is_some()
-    }
-
     /// `$list/force (ref $rope/list) -> (ref $elems)`: the `List` mirror of [`bytes_force_func`](Self::bytes_force_func).
     pub(crate) fn list_force_func(&self) -> curios_wasm::FuncName {
         self.list_force
@@ -988,17 +934,6 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bytes_exact_used(&self) -> bool {
         self.bytes_exact.get().is_some()
-    }
-
-    /// `$bits/exact (ref $rope/bin) -> (ref $bytes)`: the bit-grain mirror of [`bytes_exact_func`](Self::bytes_exact_func), exact at the `ceil(len/8)` bytes the run occupies.
-    pub(crate) fn bits_exact_func(&self) -> curios_wasm::FuncName {
-        self.bits_exact
-            .get_or_init(|| curios_wasm::FuncName::from("bits/exact"))
-            .clone()
-    }
-
-    pub(crate) fn bits_exact_used(&self) -> bool {
-        self.bits_exact.get().is_some()
     }
 
     /// `$list/exact (ref $rope/list) -> (ref $elems)`: the `List` mirror of [`bytes_exact_func`](Self::bytes_exact_func).
@@ -1034,17 +969,6 @@ impl<'a> Table<'a> {
         self.list_empty.get().is_some()
     }
 
-    /// `$list/bits/force (ref $rope/list) -> (ref $elems)`: the bit-grain mirror of [`list_bytes_force_func`](Self::list_bytes_force_func) — each element forced through `$bits/force`, so the host reads a `List(Bits)`'s elements as packed `$bytes` too.
-    pub(crate) fn list_bits_force_func(&self) -> curios_wasm::FuncName {
-        self.list_bits_force
-            .get_or_init(|| curios_wasm::FuncName::from("list/bits/force"))
-            .clone()
-    }
-
-    pub(crate) fn list_bits_force_used(&self) -> bool {
-        self.list_bits_force.get().is_some()
-    }
-
     /// `$bytes/embed (ref $bytes) -> (ref $rope/bin)`: embed a host-built flat payload into a fresh leaf on re-entry.
     pub(crate) fn bytes_embed_func(&self) -> curios_wasm::FuncName {
         self.bytes_embed
@@ -1054,17 +978,6 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bytes_embed_used(&self) -> bool {
         self.bytes_embed.get().is_some()
-    }
-
-    /// `$bits/embed (ref $bytes) -> (ref $rope/bin)`: the bit-grain mirror of [`bytes_embed_func`](Self::bytes_embed_func) — the same host-built payload sealed at eight times its byte count, which is what a `Bits` wire slot means.
-    pub(crate) fn bits_embed_func(&self) -> curios_wasm::FuncName {
-        self.bits_embed
-            .get_or_init(|| curios_wasm::FuncName::from("bits/embed"))
-            .clone()
-    }
-
-    pub(crate) fn bits_embed_used(&self) -> bool {
-        self.bits_embed.get().is_some()
     }
 
     /// `$bytes/box (ref null any) -> (ref $rope/bin)`: a small-canonical `Bytes` as a rope — an immediate is materialised into a fresh leaf, a rope passes through. The entry every rope-shaped consumer pays where a bare `ref.cast` would reject the immediate form.
@@ -1087,28 +1000,6 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bytes_norm_used(&self) -> bool {
         self.bytes_norm.get().is_some()
-    }
-
-    /// `$bits/box (ref null any) -> (ref $rope/bin)`: the bit-grain mirror of [`bytes_box_func`](Self::bytes_box_func) — length in the top 5 payload bits (0–26), packed bits LSB-first below.
-    pub(crate) fn bits_box_func(&self) -> curios_wasm::FuncName {
-        self.bits_box
-            .get_or_init(|| curios_wasm::FuncName::from("bits/box"))
-            .clone()
-    }
-
-    pub(crate) fn bits_box_used(&self) -> bool {
-        self.bits_box.get().is_some()
-    }
-
-    /// `$bits/norm (ref $rope/bin) -> (ref any)`: the bit-grain mirror of [`bytes_norm_func`](Self::bytes_norm_func) — at most 26 bits packs into the i31, anything longer passes through.
-    pub(crate) fn bits_norm_func(&self) -> curios_wasm::FuncName {
-        self.bits_norm
-            .get_or_init(|| curios_wasm::FuncName::from("bits/norm"))
-            .clone()
-    }
-
-    pub(crate) fn bits_norm_used(&self) -> bool {
-        self.bits_norm.get().is_some()
     }
 
     /// `$list/embed (ref $elems) -> (ref $rope/list)`: the `List` mirror of [`bytes_embed_func`](Self::bytes_embed_func), for scalar-element results.
@@ -1173,17 +1064,6 @@ impl<'a> Table<'a> {
         self.list_bytes_embed.get().is_some()
     }
 
-    /// `$list/bits/embed (ref $elems) -> (ref $rope/list)`: the bit-grain mirror of [`list_bytes_embed_func`](Self::list_bytes_embed_func) — each element sealed at eight times its byte count and normalised through `$bits/norm`.
-    pub(crate) fn list_bits_embed_func(&self) -> curios_wasm::FuncName {
-        self.list_bits_embed
-            .get_or_init(|| curios_wasm::FuncName::from("list/bits/embed"))
-            .clone()
-    }
-
-    pub(crate) fn list_bits_embed_used(&self) -> bool {
-        self.list_bits_embed.get().is_some()
-    }
-
     /// `$bytes/slice (ref $rope/bin, i32, i32) -> (ref $rope/bin)`, taking a start and a *count*: the `Bytes` O(1) view constructor — bounds-check, answer the empty leaf or the whole rope on the trivial windows, collapse a view-of-view, and force an uncached node base so every `view` it builds reads through in O(1).
     pub(crate) fn bytes_slice_func(&self) -> curios_wasm::FuncName {
         self.bytes_slice
@@ -1193,16 +1073,6 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bytes_slice_used(&self) -> bool {
         self.bytes_slice.get().is_some()
-    }
-
-    pub(crate) fn bits_slice_func(&self) -> curios_wasm::FuncName {
-        self.bits_slice
-            .get_or_init(|| curios_wasm::FuncName::from("bits/slice"))
-            .clone()
-    }
-
-    pub(crate) fn bits_slice_used(&self) -> bool {
-        self.bits_slice.get().is_some()
     }
 
     /// `$list/slice (ref $rope/list, i32, i32) -> (ref $rope/list)`: the `List` mirror of [`bytes_slice_func`](Self::bytes_slice_func).
@@ -1227,16 +1097,6 @@ impl<'a> Table<'a> {
         self.bytes_read.get().is_some()
     }
 
-    pub(crate) fn bits_read_func(&self) -> curios_wasm::FuncName {
-        self.bits_read
-            .get_or_init(|| curios_wasm::FuncName::from("bits/read"))
-            .clone()
-    }
-
-    pub(crate) fn bits_read_used(&self) -> bool {
-        self.bits_read.get().is_some()
-    }
-
     /// `$list/read (ref $rope/list, i32) -> anyref`: the `List` mirror of [`bytes_read_func`](Self::bytes_read_func).
     pub(crate) fn list_read_func(&self) -> curios_wasm::FuncName {
         self.list_read
@@ -1257,16 +1117,6 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bytes_eql_used(&self) -> bool {
         self.bytes_eql.get().is_some()
-    }
-
-    pub(crate) fn bits_eql_func(&self) -> curios_wasm::FuncName {
-        self.bits_eql
-            .get_or_init(|| curios_wasm::FuncName::from("bits/eql"))
-            .clone()
-    }
-
-    pub(crate) fn bits_eql_used(&self) -> bool {
-        self.bits_eql.get().is_some()
     }
 
     /// `$bin/and (ref $payload, ref $payload, i32) -> (ref $rope/bin)`: two forced payloads combined byte for byte, sealed at the logical length the caller supplies.
@@ -1313,39 +1163,6 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bytes_replicate_used(&self) -> bool {
         self.bytes_replicate.get().is_some()
-    }
-
-    /// `$bits/replicate (i32 count, i32 atom) -> (ref $rope/bin)`: the bit grain's fill, which masks the padding its all-ones byte would otherwise leave set.
-    pub(crate) fn bits_replicate_func(&self) -> curios_wasm::FuncName {
-        self.bits_replicate
-            .get_or_init(|| curios_wasm::FuncName::from("bits/replicate"))
-            .clone()
-    }
-
-    pub(crate) fn bits_replicate_used(&self) -> bool {
-        self.bits_replicate.get().is_some()
-    }
-
-    /// `$bytes/to_bits (ref $rope/bin) -> (ref $rope/bin)`: the same payload resealed at eight times the length, which is what a byte run is as bits.
-    pub(crate) fn bytes_to_bits_func(&self) -> curios_wasm::FuncName {
-        self.bytes_to_bits
-            .get_or_init(|| curios_wasm::FuncName::from("bytes/to_bits"))
-            .clone()
-    }
-
-    pub(crate) fn bytes_to_bits_used(&self) -> bool {
-        self.bytes_to_bits.get().is_some()
-    }
-
-    /// `$bits/to_bytes (ref $rope/bin) -> (ref $rope/bin)`: the reverse, exact because the caller proved the run holds whole bytes.
-    pub(crate) fn bits_to_bytes_func(&self) -> curios_wasm::FuncName {
-        self.bits_to_bytes
-            .get_or_init(|| curios_wasm::FuncName::from("bits/to_bytes"))
-            .clone()
-    }
-
-    pub(crate) fn bits_to_bytes_used(&self) -> bool {
-        self.bits_to_bytes.get().is_some()
     }
 
     /// `$list/map (ref $rope/list, ref $envr/1) -> (ref $rope/list)`: apply a unary closure to every element of the forced payload, filling a fresh leaf.
@@ -1531,7 +1348,7 @@ fn scalar_leaf_name(leaf: WireLeaf) -> &'static str {
         WireLeaf::Nat => "nat",
         WireLeaf::Int => "int",
         WireLeaf::Bool => "bool",
-        WireLeaf::Bytes | WireLeaf::Bits | WireLeaf::Handle => {
+        WireLeaf::Bytes | WireLeaf::Handle => {
             panic!("a list of `{leaf:?}` crosses as its payloads, never as scalars")
         }
     }

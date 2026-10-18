@@ -789,7 +789,6 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::BinAppend { .. }
             | Intrinsic::BinConcat { .. }
             | Intrinsic::BinReplicate { .. }
-            | Intrinsic::BinReinterp { .. }
             | Intrinsic::BinAnd { .. }
             | Intrinsic::BinOr { .. }
             | Intrinsic::BinXor { .. }

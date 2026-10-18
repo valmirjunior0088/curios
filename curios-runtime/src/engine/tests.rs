@@ -2,10 +2,9 @@
 
 use {
     super::{Answers, ForeignBindings, host_rows, link, shared_engine},
-    crate::{Bits, HostOps, MockHost, Termination},
+    crate::{HostOps, MockHost, Termination},
     curios_abi::{
-        ForeignFunction, ForeignStore, HostOp, WireLeaf, WireResults, WireReturn, WireSignature,
-        WireType,
+        ForeignFunction, ForeignStore, HostOp, WireResults, WireReturn, WireSignature, WireType,
     },
     std::sync::Arc,
     wasmtime::Linker,
@@ -164,23 +163,4 @@ fn every_host_answer_crosses_as_its_row() {
         )
         .unwrap_or_else(|refusal| panic!("{refusal}"));
     }
-}
-
-/// A binding states `Bits` where its row does: the grains are two types on both sides of the wire, though one payload crosses for either, so an answer written for `Bytes` is no answer to a `Bits` row.
-#[test]
-fn a_bits_row_is_bound_by_a_bits_value() {
-    let runs = WireType::List(WireLeaf::Bits);
-    let store = declaring("/echo", runs, runs);
-
-    let mut bindings = ForeignBindings::empty();
-    bindings.define("/echo", |runs: Vec<Bits>| runs);
-    linked(&store, &bindings, "/echo").expect("the answer crosses as the row");
-
-    let mut bytes = ForeignBindings::empty();
-    bytes.define("/echo", |runs: Vec<Vec<u8>>| runs);
-
-    assert_eq!(
-        linked(&store, &bytes, "/echo").unwrap_err(),
-        "a binding answers `/echo` as (List(Bytes)) -> (List(Bytes)), and the program declares it (List(Bits)) -> (List(Bits))"
-    );
 }

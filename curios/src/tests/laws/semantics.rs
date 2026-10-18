@@ -64,10 +64,6 @@ fn samples(carrier: Carrier) -> Vec<Value> {
         .into_iter()
         .map(|bytes| Value::Packed(Grain::X, Binary::from_bytes(bytes.to_vec())))
         .collect(),
-        Carrier::Packed(Grain::B) => [&[][..], &[true], &[true, false, true], &[false; 8]]
-            .into_iter()
-            .map(|bits| Value::Packed(Grain::B, Binary::from_bits(bits.iter().copied())))
-            .collect(),
         Carrier::List => [&[][..], &[0u32], &[1, 2, 3]]
             .into_iter()
             .map(|items| Value::List(items.iter().map(|item| Natural::from(*item)).collect()))
@@ -295,36 +291,12 @@ fn apply(carrier: Carrier, operation: Operation, operands: &[Value]) -> Option<V
             },
             [Value::Float(value)],
         ) => Value::Packed(Grain::X, value.to_le_bytes()),
-        (
-            Carrier::Packed(Grain::X),
-            Operation::Conversion {
-                from: Carrier::Packed(Grain::B),
-            },
-            [Value::Packed(Grain::B, bits)],
-        ) => {
-            if !bits.bit_length().is_multiple_of(8) {
-                return None;
-            }
-            Value::Packed(Grain::X, Binary::from_bytes(bits.to_packed_bytes()))
-        }
-        (
-            Carrier::Packed(Grain::B),
-            Operation::Conversion {
-                from: Carrier::Packed(Grain::X),
-            },
-            [Value::Packed(Grain::X, bytes)],
-        ) => Value::Packed(Grain::B, bytes.clone()),
         (Carrier::Packed(grain), Operation::Concat, [Value::Packed(_, a), Value::Packed(_, b)]) => {
             Value::Packed(grain, Binary::concat([a, b]))
         }
         (Carrier::Packed(grain), Operation::Length, [Value::Packed(_, word)]) => {
             Value::Natural(Natural::from(word.len(grain)))
         }
-        (
-            Carrier::Packed(Grain::B),
-            Operation::Append,
-            [Value::Packed(_, word), Value::Boolean(bit)],
-        ) => Value::Packed(Grain::B, word.append_bit(*bit)),
         (
             Carrier::Packed(Grain::X),
             Operation::Append,

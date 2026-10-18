@@ -471,10 +471,9 @@ impl SequenceSplit {
                 Atoms::Bin { grain } => {
                     let grain = *grain;
                     let atom_type = Subterm::Intrinsic(match grain {
-                        Grain::B => Intrinsic::BoolType,
                         Grain::X => Intrinsic::ByteType,
                     });
-                    // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bits`/`Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(x[], head)` (an atom appended to the empty packed sequence), not a literal run.
+                    // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(x[], head)` (an atom appended to the empty packed sequence), not a literal run.
                     let singleton: Term = Subterm::Intrinsic(Intrinsic::BinAppend {
                         grain,
                         bin: Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())).into(),

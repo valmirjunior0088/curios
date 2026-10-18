@@ -12,8 +12,6 @@ use {
 pub(super) fn declared() -> Vec<(Carrier, Operation, Family)> {
     TABLE
         .iter()
-        // The table's rows at the bit grain stand until its carrier goes, and `/std` no longer spells one to state them in.
-        .filter(|declared| !at_the_bit_grain(declared.carrier, declared.operation))
         .flat_map(|declared| {
             declared
                 .families
@@ -21,11 +19,6 @@ pub(super) fn declared() -> Vec<(Carrier, Operation, Family)> {
                 .map(|family| (declared.carrier, declared.operation, *family))
         })
         .collect()
-}
-
-fn at_the_bit_grain(carrier: Carrier, operation: Operation) -> bool {
-    let bits = Carrier::Packed(Grain::B);
-    carrier == bits || operation == Operation::Conversion { from: bits }
 }
 
 /// One generated row: where it comes from, the law, and its spelling — binders, then claim.
@@ -166,7 +159,6 @@ pub(super) fn name(index: usize, carrier: Carrier) -> &'static str {
         Carrier::Byte => ["m", "n", "o", "k", "r"],
         Carrier::Float => ["f", "g", "h", "e", "s"],
         Carrier::Packed(Grain::X) => ["bs", "cs", "ds", "es", "fs"],
-        Carrier::Packed(Grain::B) => unreachable!("the grid states no row at the bit grain"),
         Carrier::List => ["xs", "ys", "zs", "ws", "vs"],
     };
     names[index]
@@ -180,7 +172,6 @@ pub(super) fn type_name(carrier: Carrier) -> &'static str {
         Carrier::Byte => "Byte",
         Carrier::Float => "Flt",
         Carrier::Packed(Grain::X) => "Bytes",
-        Carrier::Packed(Grain::B) => unreachable!("the grid states no row at the bit grain"),
         Carrier::List => "List(Nat)",
     }
 }

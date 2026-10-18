@@ -136,12 +136,6 @@ impl Cost {
             .saturating_add(Self::of(units_of(length, 8), Category::Payload))
     }
 
-    /// A packed bit string of `length` bits: the value header, plus one unit per sixty-four bits, rounded up.
-    pub fn packed_bits(length: u64) -> Self {
-        Self::of(VALUE_HEADER, Category::Payload)
-            .saturating_add(Self::of(units_of(length, 64), Category::Payload))
-    }
-
     /// A big natural or integer of `bits` magnitude bits: the value header, plus one unit per base-2^64 logical limb, rounded up.
     ///
     /// Logical limbs, from the magnitude's bit length, rather than whatever `num-bigint` chose for this target — which is the whole reason this takes a bit count and not a limb count.

@@ -107,10 +107,9 @@ impl Intrinsic {
         let io_type = |result: Term| Term::intrinsic(Intrinsic::IoType(result));
         let unit = Term::tuple_type_unit;
 
-        // A grain says what a `Bin` is a sequence *of*: bytes at `X`, bits at `B`. Every `Bin` operation is the same rule at two element types.
+        // A grain says what a `Bin` is a sequence *of*: bytes at `X`.
         let grain_element = |grain| match grain {
             Grain::X => byte_type(),
-            Grain::B => bool_type(),
         };
 
         let decided = |slot: SyntaxName, args: Vec<Term>| {
@@ -394,28 +393,6 @@ impl Intrinsic {
                 ],
                 bin_type(*grain),
             ),
-            // One row for both directions, its bound uniform in position and decided per grain — `NatDiv`'s arrangement, which is what keeps this from being two rows that differ only in which way they read.
-            Self::BinReinterp { grain, bin, .. } => sig(
-                vec![
-                    Operand::At(bin_type(*grain)),
-                    Operand::At(match grain {
-                        // `n` bytes are `8n` bits, so no count of them leaves a remainder.
-                        Grain::X => holds(Self::Bool(true)),
-                        // The run holds a whole number of bytes. Spelled with the remainder rather than a mask of the low three bits: the two decide the same thing, and this is the one a caller can read.
-                        Grain::B => holds(Self::NatEql(
-                            Term::intrinsic(Self::NatRem {
-                                dividend: bin_len(Grain::B, bin.clone()),
-                                divisor: Term::intrinsic(Self::Nat(self::Nat::new(8u32))),
-                                // `0 < 8` over the literal, which reduces to the proposition the registry names an inhabitant for.
-                                non_zero: decided(syntax.proof.true_qed, vec![]),
-                            }),
-                            Term::intrinsic(Self::Nat(self::Nat::new(0u32))),
-                        )),
-                    }),
-                ],
-                bin_type(grain.other()),
-            ),
-
             // `List`. Every operation carries its element type as an operand, which is what lets it be typed without inventing anything — `[]` included, which has no element to read a type from.
             Self::List { element, items } => sig(
                 std::iter::once(Operand::IsType)

@@ -341,7 +341,7 @@ export async function run(config) {
   const truth = (word, fail) =>
     word === 0 || word === 1 ? word === 1 : fail(`a Bool arrived as ${word}`);
 
-  // What a hook is handed for each type a row spells: a `BigInt` for a `Nat` or an `Int`, a boolean for a `Bool`, a number for a `Byte` or an `Flt`, a `Uint8Array` for a `Bytes`, `Bits` or `Handle`, an array of those for a `List`, and for an `Option` its one value or `null` — each a copy the hook owns.
+  // What a hook is handed for each type a row spells: a `BigInt` for a `Nat` or an `Int`, a boolean for a `Bool`, a number for a `Byte` or an `Flt`, a `Uint8Array` for a `Bytes` or `Handle`, an array of those for a `List`, and for an `Option` its one value or `null` — each a copy the hook owns.
   const lifts = {
     Nat: (value) => BigInt.asUintN(64, value),
     Int: (value) => value,
@@ -349,7 +349,6 @@ export async function run(config) {
     Byte: (value) => value,
     Flt: (value) => value,
     Bytes: decodeBytes,
-    Bits: decodeBytes,
     Handle: decodeBytes,
     "List(Nat)": (ref) =>
       elements("longs", ref, bridge.longs_get).map((value) =>
@@ -360,14 +359,12 @@ export async function run(config) {
       elements("words", ref, bridge.words_get).map((word) => truth(word, fail)),
     "List(Bytes)": (ref) =>
       elements("list", ref, bridge.list_get).map(decodeBytes),
-    "List(Bits)": (ref) =>
-      elements("list", ref, bridge.list_get).map(decodeBytes),
     "List(Handle)": (ref) =>
       elements("list", ref, bridge.list_get).map(decodeBytes),
   };
 
   // An option rides its element's list, holding the one value `some` holds, and crosses as null where it holds none.
-  for (const leaf of ["Nat", "Int", "Bool", "Bytes", "Bits", "Handle"]) {
+  for (const leaf of ["Nat", "Int", "Bool", "Bytes", "Handle"]) {
     lifts[`Option(${leaf})`] = (ref, fail) => {
       if (ref === null) {
         return null;
@@ -410,7 +407,6 @@ export async function run(config) {
       encodeBytes,
       "a Uint8Array",
     ],
-    Bits: [(value) => value instanceof Uint8Array, encodeBytes, "a Uint8Array"],
     Handle: [
       (value) => value instanceof Uint8Array,
       encodeBytes,
@@ -423,7 +419,6 @@ export async function run(config) {
     Int: [bridge.longs_new, bridge.longs_set],
     Bool: [bridge.words_new, bridge.words_set],
     Bytes: [bridge.list_new, bridge.list_set],
-    Bits: [bridge.list_new, bridge.list_set],
     Handle: [bridge.list_new, bridge.list_set],
   };
 

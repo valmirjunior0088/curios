@@ -24,7 +24,6 @@ pub fn wire_term(wire_type: &WireType, syntax: &SyntaxRegistry) -> Term {
         WireType::Byte => Intrinsic::ByteType,
         WireType::Flt => Intrinsic::FltType,
         WireType::Bytes => Intrinsic::BinType(Grain::X),
-        WireType::Bits => Intrinsic::BinType(Grain::B),
         WireType::Handle => Intrinsic::HandleType,
         WireType::List(element) => Intrinsic::ListType(wire_term(&(*element).into(), syntax)),
         WireType::Option(element) => {
@@ -328,18 +327,6 @@ pub enum Intrinsic<T = Term> {
         right: T,
         same_length: T,
     },
-    /// One packed run read at the other grain — eight bits to the byte, least significant first, which is the order the payload holds them in either way. `grain` is the operand's, as it is in every other `Bin` row, so the result is the one it is not.
-    ///
-    /// **`aligned` is stated at both grains and trivially true at one**, which is [`Intrinsic::NatDiv`]'s arrangement rather than a vestige: a bound uniform in its position and decided per grain keeps one row where two would otherwise be needed, and the byte grain pays nothing for it. At `B` it proves `len(bin) % 8 == 0` — the run holds a whole number of bytes; at `X` it proves `true`, because *n* bytes are always exactly *8n* bits and no count of them can leave a remainder.
-    ///
-    /// The bit-to-byte direction states its domain rather than extending it, and for a sharper reason than [`Intrinsic::BinAnd`]'s: a run ending mid-byte has no byte to answer with at all, so neither truncating nor padding is a *reading* of the operand — each answers for some other value. That is `get`'s case, where no extension exists, rather than `Nat/sub`'s, where one is forced.
-    ///
-    /// The payload is not rebuilt, but this is not free: a rope carries its length in the grain's own units at every node, so the conversion is one force and one leaf at the scaled length.
-    BinReinterp {
-        grain: Grain,
-        bin: T,
-        aligned: T,
-    },
     ListType(T),
     // A list literal, carrying its element type: the one value form whose elements alone cannot name it — `[]` has nothing to read a type from.
     List {
@@ -598,19 +585,6 @@ impl Intrinsic {
             grain,
             bin: bin.into(),
             element: byte.into(),
-        }
-    }
-
-    /// A `BinReinterp` node from a term-shaped run and the proof it regroups exactly.
-    pub fn bin_reinterp<B, P>(grain: Grain, bin: B, aligned: P) -> Self
-    where
-        B: Into<Term>,
-        P: Into<Term>,
-    {
-        Self::BinReinterp {
-            grain,
-            bin: bin.into(),
-            aligned: aligned.into(),
         }
     }
 
@@ -923,8 +897,6 @@ impl Intrinsic {
             | Intrinsic::Flt(_)
             | Intrinsic::BinType(Grain::X)
             | Intrinsic::Bin(Grain::X, _)
-            | Intrinsic::BinType(Grain::B)
-            | Intrinsic::Bin(Grain::B, _)
             | Intrinsic::HandleType
             | Intrinsic::Handle(_) => {}
 
@@ -942,7 +914,6 @@ impl Intrinsic {
             | Intrinsic::FltSqrt(_, t)
             | Intrinsic::FltRoundIntegral(_, t)
             | Intrinsic::BinLen(Grain::X, t)
-            | Intrinsic::BinLen(Grain::B, t)
             | Intrinsic::ListType(t)
             | Intrinsic::IoType(t) => visit(t),
 
@@ -995,12 +966,6 @@ impl Intrinsic {
             | Intrinsic::BinEql(Grain::X, a, b)
             | Intrinsic::BinAppend {
                 grain: Grain::X,
-                bin: a,
-                element: b,
-            }
-            | Intrinsic::BinEql(Grain::B, a, b)
-            | Intrinsic::BinAppend {
-                grain: Grain::B,
                 bin: a,
                 element: b,
             }
@@ -1120,12 +1085,7 @@ impl Intrinsic {
             | Intrinsic::FltToNat { flt: a, non_neg: p }
             | Intrinsic::FltToInt { flt: a, finite: p }
             | Intrinsic::FltMantissa { flt: a, finite: p }
-            | Intrinsic::FltExponent { flt: a, finite: p }
-            | Intrinsic::BinReinterp {
-                grain: _,
-                bin: a,
-                aligned: p,
-            } => {
+            | Intrinsic::FltExponent { flt: a, finite: p } => {
                 visit(a);
                 bound(visit, p);
             }
@@ -1195,10 +1155,6 @@ impl Intrinsic {
 
             Intrinsic::BinConcat {
                 grain: Grain::X,
-                operands: terms,
-            }
-            | Intrinsic::BinConcat {
-                grain: Grain::B,
                 operands: terms,
             } => terms.iter().for_each(&mut *visit),
 
@@ -1521,15 +1477,6 @@ impl Intrinsic {
                     atom,
                 })
             }
-            Intrinsic::BinReinterp {
-                grain,
-                bin,
-                aligned,
-            } => traverse_binary(bin, aligned, visit, |bin, aligned| Intrinsic::BinReinterp {
-                grain: *grain,
-                bin,
-                aligned,
-            }),
             Intrinsic::BinAnd {
                 grain,
                 left,
@@ -1967,17 +1914,6 @@ impl<T> Intrinsic<T> {
                     }
                 })?
             }
-            Intrinsic::BinReinterp {
-                grain,
-                bin,
-                aligned,
-            } => try_binary(bin, aligned, operand, |bin, aligned| {
-                Intrinsic::BinReinterp {
-                    grain: *grain,
-                    bin,
-                    aligned,
-                }
-            })?,
             Intrinsic::BinAnd {
                 grain,
                 left,
