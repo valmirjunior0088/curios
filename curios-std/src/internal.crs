@@ -1,5 +1,3 @@
-use /std/{Io};
-
 --- A host resource the library holds for a program behind a type of its own: a stream, a lookup, a child, a configuration.
 pub mod Handle;
 pub use Handle/{let Handle};
@@ -7,6 +5,8 @@ pub use Handle/{let Handle};
 --- What a host operation answers beside its payload.
 pub mod Status;
 pub use Status/{let Status};
+
+use /std/{Io};
 
 --- The failure no errno names: what a reply its row rules out is read as, and a write that accepted nothing, as the host names the errno-less failure.
 pub let unnamed: Io/Error =

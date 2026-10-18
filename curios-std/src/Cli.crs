@@ -1,8 +1,3 @@
-use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Fmt, Process,
-    print, print_err};
-use /std/Bool/{True};
-use /std/ops/{Eql};
-
 -- The problems that keep a declaration from describing one unambiguous command line.
 mod check;
 
@@ -19,6 +14,11 @@ mod parse;
 pub mod Parsed;
 pub use Parsed/{let Parsed, Slot, Carrier, option_slots, slots, Slots, Values, Chosen, Lookup, Has,
     get, HasIn, NamedIn, HasCommand, Named, command};
+
+use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Fmt, Process,
+    print, print_err};
+use /std/Bool/{True};
+use /std/ops/{Eql};
 
 --- How an argument's text is read: the type it is read into, the placeholder help shows for it, the reader, the printer help shows a default with, and the values it takes where they are a closed set, which help lists.
 pub struct Value: pub Type {

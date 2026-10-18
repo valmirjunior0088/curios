@@ -1,18 +1,22 @@
-use /std/{Try, Io};
-use /std/internal/{Handle};
-
 --- A host and a port as the address the socket operations take.
 pub mod resolve;
 pub use resolve/{let resolve};
+
+--- A connected socket: connecting it into a scope, and reading and writing it.
+pub mod Socket;
+
+--- A bound, listening socket, and the accept loop written over it.
+pub mod Listener;
+pub use Listener/{let Listener};
+
+use /std/{Try, Io};
+use /std/internal/{Handle};
 
 -- Declared here and not in its module, so that a listener builds one and nothing outside this subtree does.
 --- A connected socket, read and written as a stream.
 pub struct Socket: Type {
     Handle,
 }
-
---- A connected socket: connecting it into a scope, and reading and writing it.
-pub mod Socket;
 
 -- What the connection hands its peer as it is released from a scope that finished: what it holds of the writes it accepted, a TLS stream's records, and its sending half ended, a TLS stream's closure alert ahead of the socket's own end. A courtesy to a peer that may already be gone, so neither failure is anyone's.
 let courtesy(h: Handle) -> Io({}) =
@@ -24,7 +28,3 @@ let courtesy(h: Handle) -> Io({}) =
 let release(h: Handle, how: Io/Ended) -> Io({}) =
     let _ = match how | finished() => courtesy(h) | cancelled() => Io/pure(()) end!;
     Io/close(h);
-
---- A bound, listening socket, and the accept loop written over it.
-pub mod Listener;
-pub use Listener/{let Listener};

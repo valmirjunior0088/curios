@@ -1,5 +1,14 @@
 pub use /sys/{Bytes};
 pub use /sys/Bytes/{get, len, eql, slice, replicate, and, or, xor, to_bits};
+
+--- The number a minimal encoding denotes, which is `of_nat`'s inverse, with the bound a run's length puts on it.
+pub mod to_nat;
+pub use to_nat/{let to_nat};
+
+--- The order of two byte strings, bytewise with a proper prefix first, and its laws.
+pub mod ord;
+pub use ord/{let ord};
+
 use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Ordering, Ord};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp};
@@ -13,10 +22,6 @@ pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
 --- A direct cons, which is the shape `x[h, ..t]` builds and the shape `to_nat` folds back, so taking one apart is the eliminator's own seam rather than the window at the far one a big-endian snoc would need.
 pub let of_nat(n: Nat) -> Bytes =
     match n == 0 | true => x[] | false => x[Nat/to_byte(n % 256), ..of_nat(n / 256)] end;
-
---- The number a minimal encoding denotes, which is `of_nat`'s inverse, with the bound a run's length puts on it.
-pub mod to_nat;
-pub use to_nat/{let to_nat};
 
 -- A cons has no length of zero: the comparison that decides the two lengths refutes the equation.
 let no_cons(k: Byte, p: Bytes, e: Eq()(0, len(x[k, ..p]))) -> False =
@@ -234,10 +239,6 @@ pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
         x[],
         (i, ok) => List/get(@Bytes, parts, i, @ok),
         (l, r) => x[..l, ..sep, ..r]);
-
---- The order of two byte strings, bytewise with a proper prefix first, and its laws.
-pub mod ord;
-pub use ord/{let ord};
 
 satisfy Eql(Bytes) {
     eql = eql,

@@ -1,8 +1,5 @@
 pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, div, rem, gt, ge, and, or, xor, shr, to_nat, to_flt};
-use /std/{Nat, Bool, Str, Option, Show, Spell, Ord, Eq};
-use /std/Bool/{True, Holds};
-use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- The laws of `a < b`, and its crossings with `a <= b`.
 ---
@@ -47,6 +44,10 @@ pub use shl/{let shl};
 --- The order of two integers as an `Ordering`, and the laws that tie each answer to the comparison it stands for.
 pub mod ord;
 pub use ord/{let ord};
+
+use /std/{Nat, Bool, Str, Option, Show, Spell, Ord, Eq};
+use /std/Bool/{True, Holds};
+use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
 pub let NonZero(a: Int) -> Prop =

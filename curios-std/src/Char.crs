@@ -1,7 +1,3 @@
-use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Fmt, Ord};
-use /std/Bool/{True};
-use /std/ops/{Eql, Cmp};
-
 --- That a code point is a Unicode scalar value, which is what `Char` carries, and deciding it where no guard has.
 pub mod Valid;
 pub use Valid/{let Valid};
@@ -20,6 +16,10 @@ pub use IndicConjunctBreak/{let IndicConjunctBreak};
 --- A character's `East_Asian_Width` class (UAX #11).
 pub mod EastAsianWidth;
 pub use EastAsianWidth/{let EastAsianWidth};
+
+use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Fmt, Ord};
+use /std/Bool/{True};
+use /std/ops/{Eql, Cmp};
 
 --- One Unicode scalar value.
 pub struct Char: pub Type {

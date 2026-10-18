@@ -1,7 +1,5 @@
 pub use /sys/{Bool};
 pub use /sys/Bool/{xor, eql, Holds};
-use /std/{Str, Option, Eq, Show, Spell, Ordering, Ord};
-use /std/ops/{Eql, Or, And, Cmp};
 
 --- The trivial proposition, inhabited by `qed`: what a decided bound reduces to when it holds.
 pub mod True;
@@ -18,6 +16,9 @@ pub use and/{let and};
 --- Disjunction, with what makes one hold.
 pub mod or;
 pub use or/{let or};
+
+use /std/{Str, Option, Eq, Show, Spell, Ordering, Ord};
+use /std/ops/{Eql, Or, And, Cmp};
 
 --- The other value.
 pub let not(b: Bool) -> Bool =

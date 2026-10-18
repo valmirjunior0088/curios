@@ -1,8 +1,5 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map, fold};
-use /std/{Nat, Bool, Option, Str, Show, Spell, Fmt, Monad, Ordering, Ord};
-use /std/Bool/{True, Holds};
-use /std/ops/{Eql, Cmp};
 
 --- That a value is an element of a list, as a proposition, with its laws.
 pub mod Member;
@@ -31,6 +28,10 @@ pub use sort_by/{let sort_by};
 --- A stable sort by a type's own order, and `sort_by`'s theorem read at it.
 pub mod sort;
 pub use sort/{let sort};
+
+use /std/{Nat, Bool, Option, Str, Show, Spell, Fmt, Monad, Ordering, Ord};
+use /std/Bool/{True, Holds};
+use /std/ops/{Eql, Cmp};
 
 --- The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =

@@ -1,3 +1,7 @@
+--- Whether two runs part at a byte where the first's is the smaller, with the laws of what stands past that byte.
+pub mod below;
+pub use below/{let below};
+
 use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, Ord};
 use /std/Bool/{True, Holds};
 
@@ -29,10 +33,6 @@ pub let past(p: Bytes, a: Bytes, b: Bytes) -> Eq()(ord(x[..p, ..a], x[..p, ..b])
     | x[] => Eq/refl()
     | x[_, .._]; ih => ih
     end;
-
---- Whether two runs part at a byte where the first's is the smaller, with the laws of what stands past that byte.
-pub mod below;
-pub use below/{let below};
 
 --- `ord` answers the flipped answer with its operands swapped.
 ---

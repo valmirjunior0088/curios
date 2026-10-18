@@ -1,3 +1,30 @@
+-- How UTF-8 reads bytes: what a byte begins, how far through a character a walk has come, and the ranges a character in flight can still end in.
+mod utf8;
+pub use utf8/{classify, step, scan_from, count_scalars};
+use utf8/{pending, concluded, advanced, begins_scalars_of};
+
+--- That bytes are well-formed UTF-8, which is what `Str` carries: what that rests on, from any scan state, and what the operations carry it through.
+pub mod Valid;
+pub use Valid/{let Valid};
+
+--- A position in text: a byte offset at which a character may begin, typed by the text it belongs to.
+---
+--- Deciding one reads a single byte; that such an offset is where valid text divides into valid text is `Valid/before` and `Valid/after`.
+pub mod At;
+pub use At/{let At};
+
+-- The walks a search makes: a character a predicate accepts, a piece held at a position forward or back, and a needle's first occurrence.
+mod search;
+use search/{seek, meets, meets_back, occurrence, first_occurrence, back_over};
+
+--- How many characters, not bytes, with how a concatenation's count is its halves'.
+pub mod len;
+pub use len/{let len};
+
+--- The order of two texts, by code point, and its laws.
+pub mod ord;
+pub use ord/{let ord};
+
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp};
@@ -21,25 +48,6 @@ pub induct Scan: pub Type
 --- Past a byte the encoding does not admit, which nothing recovers from.
 | bad()
 end
-
--- How UTF-8 reads bytes: what a byte begins, how far through a character a walk has come, and the ranges a character in flight can still end in.
-mod utf8;
-pub use utf8/{classify, step, scan_from, count_scalars};
-use utf8/{pending, concluded, advanced, begins_scalars_of};
-
---- That bytes are well-formed UTF-8, which is what `Str` carries: what that rests on, from any scan state, and what the operations carry it through.
-pub mod Valid;
-pub use Valid/{let Valid};
-
---- A position in text: a byte offset at which a character may begin, typed by the text it belongs to.
----
---- Deciding one reads a single byte; that such an offset is where valid text divides into valid text is `Valid/before` and `Valid/after`.
-pub mod At;
-pub use At/{let At};
-
--- The walks a search makes: a character a predicate accepts, a piece held at a position forward or back, and a needle's first occurrence.
-mod search;
-use search/{seek, meets, meets_back, occurrence, first_occurrence, back_over};
 
 --- Text: bytes certified as UTF-8.
 pub struct Str: pub Type {
@@ -224,10 +232,6 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
 --- The characters.
 pub let to_list(s: Str) -> List(Char) =
     fold(s, [], (c, acc) => [..acc, c]);
-
---- How many characters, not bytes, with how a concatenation's count is its halves'.
-pub mod len;
-pub use len/{let len};
 
 --- `count_scalars` splits at the seam of a concatenation whose first half reads to the end, from whatever state the reading starts in — the strengthening `len/concat` needs to descend a byte, where the state has moved.
 let count_concat(
@@ -473,10 +477,6 @@ satisfy Spell(Str) {
                     end));
         concat("\"", concat(body, "\"")),
 }
-
---- The order of two texts, by code point, and its laws.
-pub mod ord;
-pub use ord/{let ord};
 
 satisfy Cmp(Str) {
     lt(a, b) = Ordering/is_lt(ord(a, b)),

@@ -1,3 +1,27 @@
+--- Why a document did not decode.
+pub mod Error;
+pub use Error/{let Error};
+
+mod build;
+
+mod scan;
+
+mod strings;
+
+mod keys;
+
+mod numbers;
+
+mod date_time;
+
+mod values;
+
+mod decode;
+pub use decode/{let decode};
+
+mod encode;
+pub use encode/{let encode};
+
 use /std/{Int, Flt, Bool, Str, List, Map};
 use /std/Bool/{Holds};
 use /std/time/{Date, Time, OffsetDateTime};
@@ -37,27 +61,3 @@ pub induct Toml: pub Type
 end
 
 pub use Toml/*;
-
---- Why a document did not decode.
-pub mod Error;
-pub use Error/{let Error};
-
-mod build;
-
-mod scan;
-
-mod strings;
-
-mod keys;
-
-mod numbers;
-
-mod date_time;
-
-mod values;
-
-mod decode;
-pub use decode/{let decode};
-
-mod encode;
-pub use encode/{let encode};

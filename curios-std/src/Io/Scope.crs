@@ -1,3 +1,6 @@
+--- Waiting for a task's answer.
+pub mod Task;
+
 use /std/{Nat, List, Channel, Io};
 use /std/Io/{Ended, Future, Signal, Branch, drive, into, answered, using};
 
@@ -31,9 +34,6 @@ pub struct Scope: Type {
 pub struct Task(A: Type): Type {
     Future(A),
 }
-
---- Waiting for a task's answer.
-pub mod Task;
 
 --- `child` run beside the body of the scope `s`, answering at once with the task `Task/join` waits on. A child still running when the body of its scope answers is cancelled where it waits, and one spawned once the scope has answered never runs.
 pub let spawn(@A: Type, s: Scope, child: Io(A)) -> Io(Task(A)) =

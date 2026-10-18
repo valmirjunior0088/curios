@@ -1,8 +1,3 @@
-use /std/{Str, Bytes, Byte, Nat, Bool, List, Option, Spell};
-use /std/Bool/{Holds};
-use /std/ops/{Eql};
-use /std/http/{octets};
-
 --- A field's name: a token.
 pub mod Name;
 pub use Name/{let Name};
@@ -10,6 +5,11 @@ pub use Name/{let Name};
 --- A field's value: octets, none of them a control octet but the tab.
 pub mod Value;
 pub use Value/{let Value};
+
+use /std/{Str, Bytes, Byte, Nat, Bool, List, Option, Spell};
+use /std/Bool/{Holds};
+use /std/ops/{Eql};
+use /std/http/{octets};
 
 --- One field line of a message: its name and its value, each what a line can carry, so a message's fields are written as they are held.
 pub struct Field: pub Type {

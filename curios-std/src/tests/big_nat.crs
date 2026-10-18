@@ -1,4 +1,30 @@
 -- The binary naturals `/std/BigNat` was until `Nat` became unbounded at run time: a trimmed word of `Bits` beside its certificate, each operation a facade with its laws proved beneath it. Kept because its proofs are the heaviest the checkers meet — recursion that descends on either of two words, packed-literal views, a refinement over a packed carrier — and the tests at its end run the arithmetic those proofs are about.
+--- Addition, with its laws beneath.
+pub mod add;
+pub use add/{let add};
+
+--- The successor, with its laws beneath.
+pub mod succ;
+pub use succ/{let succ};
+
+--- Comparison, with its laws beneath.
+pub mod ord;
+pub use ord/{let ord};
+
+--- Multiplication, with its laws beneath.
+pub mod mul;
+pub use mul/{let mul};
+
+--- Subtraction, truncated at zero.
+pub mod sub;
+pub use sub/{let sub};
+
+mod parity;
+pub use parity/{is_even, div2, shr};
+
+mod convert;
+pub use convert/{to_str, bit_len, is_decimal, Decimal, of_decimal, of_str};
+
 use /std/{Nat, Bool, Bits, Eq, Str, Option, Ordering, Test};
 use /std/Bits/{nonempty};
 use /std/Bool/{false_neq_true, True, Holds};
@@ -217,32 +243,6 @@ pub let trim_of_trimmed(x: Bits, p: Eq()(is_trimmed(x), true)) -> Eq()(trim(x), 
         | b[th, ..tt] => cong_combine(h, trim_of_trimmed(b[th, ..tt], p))
         end
     end;
-
---- Addition, with its laws beneath.
-pub mod add;
-pub use add/{let add};
-
---- The successor, with its laws beneath.
-pub mod succ;
-pub use succ/{let succ};
-
---- Comparison, with its laws beneath.
-pub mod ord;
-pub use ord/{let ord};
-
---- Multiplication, with its laws beneath.
-pub mod mul;
-pub use mul/{let mul};
-
---- Subtraction, truncated at zero.
-pub mod sub;
-pub use sub/{let sub};
-
-mod parity;
-pub use parity/{is_even, div2, shr};
-
-mod convert;
-pub use convert/{to_str, bit_len, is_decimal, Decimal, of_decimal, of_str};
 
 -- `add` propagates carry along the binary numeral: 99_999_999 ends in eight set bits, so adding 1 ripples the carry through all of them — the `pos_add`/`pos_add_c` twin recursion — before it lands.
 test add_ripples_carry =

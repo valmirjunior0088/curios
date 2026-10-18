@@ -1,6 +1,3 @@
-use /std/{Nat, Bool, List, Option, Result, Io, Try, Tty, Channel};
-use /std/time/{Duration};
-
 --- A terminal colour, in the four forms a terminal understands.
 pub mod Color;
 pub use Color/{let Color};
@@ -78,6 +75,9 @@ pub use Focus/{let Focus};
 --- What an `update` asks the loop to do beside the new model.
 pub mod Directive;
 pub use Directive/{let Directive};
+
+use /std/{Nat, Bool, List, Option, Result, Io, Try, Tty, Channel};
+use /std/time/{Duration};
 
 --- A program: its first model and directive, how an event changes the model, and what the model looks like.
 pub struct Tui(M: Type, E: Type): pub Type {

@@ -1,9 +1,9 @@
-use /std/{Nat, Str, Option};
-use /std/Tui/{Style, Glyph, Line};
-
 --- A column and a row within a view, by proof.
 pub mod Point;
 pub use Point/{let Point};
+
+use /std/{Nat, Str, Option};
+use /std/Tui/{Style, Glyph, Line};
 
 --- What a terminal is to show at `w` by `h`, as a description every reading folds over — what it draws, `Frame/of_view`, and where it asks for the cursor, `cursor` — so the two cannot disagree. The size is the type's, so two views join only where their sizes agree.
 pub induct View: (w: Nat, h: Nat) -> pub Type

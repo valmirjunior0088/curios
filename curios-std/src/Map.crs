@@ -1,7 +1,3 @@
-use /std/{Nat, Bool, Bytes, Str, List, Option, Eq, Hash, Show, Spell, Fmt};
-use /std/Bool/{True, Holds};
-use /std/ops/{Eql};
-
 --- How a key type encodes to the byte string that identifies it, in its own order: the concept, a witness for each key type the library has, and the laws every key has from it.
 pub mod Key;
 pub use Key/{let Key};
@@ -12,6 +8,22 @@ mod bits;
 --- What `Map`'s own modules share and no program sees: a `pub` inside it reaches all of `Map` and no further.
 mod internal;
 use internal/{Node};
+
+--- A map's keys, with the theorem that they are in their type's own order.
+pub mod keys;
+pub use keys/{let keys};
+
+--- A map's least entry, with the theorems that its key is the map's and that no key of the map is below it.
+pub mod least;
+pub use least/{let least};
+
+--- A map's greatest entry, with the theorems that its key is the map's and that no key of the map is above it.
+pub mod greatest;
+pub use greatest/{let greatest};
+
+use /std/{Nat, Bool, Bytes, Str, List, Option, Eq, Hash, Show, Spell, Fmt};
+use /std/Bool/{True, Holds};
+use /std/ops/{Eql};
 
 -- That a root's trie is sound, in the form a map holds: a family over the root that applies no function to it.
 induct Rooted(K: Type, use Key(K), V: Type): (Option(Node(K, V))) -> Prop
@@ -160,18 +172,6 @@ pub let fold(
 --- The entries, in the order of their keys.
 pub let to_list(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List({K, V}) =
     fold(m, [], (k, v, acc) => [..acc, (k, v)]);
-
---- A map's keys, with the theorem that they are in their type's own order.
-pub mod keys;
-pub use keys/{let keys};
-
---- A map's least entry, with the theorems that its key is the map's and that no key of the map is below it.
-pub mod least;
-pub use least/{let least};
-
---- A map's greatest entry, with the theorems that its key is the map's and that no key of the map is above it.
-pub mod greatest;
-pub use greatest/{let greatest};
 
 --- The values, in the order of their keys.
 pub let values(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List(V) =

@@ -1,6 +1,3 @@
-use /std/{Nat, Str, List};
-use /std/Tui/{Style, Line, View};
-
 --- How a part claims its share of an axis, and the pass that shares one out.
 pub mod Constraint;
 pub use Constraint/{let Constraint};
@@ -12,6 +9,9 @@ pub use border/{let border};
 --- A run of readings as a line.
 pub mod wave;
 pub use wave/{let wave};
+
+use /std/{Nat, Str, List};
+use /std/Tui/{Style, Line, View};
 
 --- A view of whatever size it is given: what a program shows its model as, what a layout shares an axis among, and what a drawing that fills its room is.
 pub let Pane: Type =

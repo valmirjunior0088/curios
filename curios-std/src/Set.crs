@@ -1,3 +1,7 @@
+--- A set's elements, with the theorem that they are in their type's own order.
+pub mod to_list;
+pub use to_list/{let to_list};
+
 use /std/{Nat, Bool, List, Map, Show, Spell, Fmt};
 use /std/ops/{Eql};
 use /std/Map/{Key};
@@ -32,10 +36,6 @@ pub let remove(@K: Type, use Key(K), s: Set(K), k: K) -> Set(K) =
 --- Over the elements in their order, with `f(elem, acc)`.
 pub let fold(@K: Type, use Key(K), @A: Type, s: Set(K), init: A, f: (K, A) -> A) -> A =
     Map/fold(s.map, init, (k, _, acc) => f(k, acc));
-
---- A set's elements, with the theorem that they are in their type's own order.
-pub mod to_list;
-pub use to_list/{let to_list};
 
 --- The set of the elements of `l`.
 pub let of_list(@K: Type, use Key(K), l: List(K)) -> Set(K) =

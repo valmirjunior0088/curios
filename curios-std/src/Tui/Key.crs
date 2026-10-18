@@ -1,9 +1,9 @@
-use /std/{Bool, Spell};
-use /std/ops/{Eql};
-
 --- A character, or a named key.
 pub mod Code;
 pub use Code/{let Code};
+
+use /std/{Bool, Spell};
+use /std/ops/{Eql};
 
 --- A code and the modifiers held with it — Shift, Alt, Ctrl and Super — as the kitty keyboard protocol reports them, the lock keys left out.
 pub struct Key: pub Type {

@@ -1,9 +1,9 @@
-use /std/{Str, Bytes, Try, Io, File};
-use /std/internal/{Handle, Status};
-
 --- The terminal's size in cells.
 pub mod Size;
 pub use Size/{let Size};
+
+use /std/{Str, Bytes, Try, Io, File};
+use /std/internal/{Handle, Status};
 
 --- The terminal this process's session has: one device, read for its keys and written for its screen.
 pub struct Tty: Type {

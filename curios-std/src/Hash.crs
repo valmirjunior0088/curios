@@ -1,3 +1,9 @@
+--- A natural's encoding in the order of the numbers, with the laws that say so.
+pub mod nat;
+
+--- An integer's encoding in the order of the numbers, with the laws that say so.
+pub mod int;
+
 use /std/{Nat, Byte, Bytes, Bits, Bool, Str, List, Option, Int, Flt};
 use /std/Bool/{Holds};
 
@@ -10,12 +16,6 @@ pub concept Hash(T: Type): pub Type {
 }
 
 pub use Hash/*;
-
---- A natural's encoding in the order of the numbers, with the laws that say so.
-pub mod nat;
-
---- An integer's encoding in the order of the numbers, with the laws that say so.
-pub mod int;
 
 --- `b` ahead of enough zero bytes to reach `width`, or `b` itself when it is already that long.
 ---

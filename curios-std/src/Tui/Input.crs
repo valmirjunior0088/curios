@@ -1,10 +1,10 @@
-use /std/{Bool, Str, Spell, Tty};
-use /std/ops/{Eql};
-use /std/Tui/{Key};
-
 --- The bytes a terminal sends, read as the inputs and the replies they encode.
 mod decode;
 pub use decode/{let decode, let flush};
+
+use /std/{Bool, Str, Spell, Tty};
+use /std/ops/{Eql};
+use /std/Tui/{Key};
 
 --- What a terminal sends its program: a key, a paste, its new size, or whether it has the focus.
 pub induct Input: pub Type

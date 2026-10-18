@@ -1,3 +1,6 @@
+--- The rules of UAX #29 that decide where an extended grapheme cluster ends.
+mod grapheme;
+
 use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord};
 use /std/Char/{GraphemeBreak};
 use /std/Str/{utf8};
@@ -192,9 +195,6 @@ pub let try_prev(
     at: At(s),
 ) -> Option({char: Char, past: At(s), progress: Holds(past.offset < at.offset)}) =
     match 0 < at.offset | true => Option/some(prev(s, at)) | false => Option/none() end;
-
---- The rules of UAX #29 that decide where an extended grapheme cluster ends.
-mod grapheme;
 
 --- The position past the extended grapheme cluster that begins at `at`, and the proof that it lies past: what a reader sees as one character, which may be several characters of `s` — a letter and its marks, an emoji sequence, a flag. Its boundaries are UAX #29's, over the classes `Char` reads from the Unicode Character Database the toolchain pins.
 pub let next_grapheme(

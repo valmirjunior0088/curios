@@ -1,3 +1,9 @@
+mod encode;
+pub use encode/{let encode};
+
+mod decode;
+pub use decode/{let decode};
+
 use /std/{Bool, Flt, Str, List};
 
 --- A JSON value.
@@ -16,9 +22,3 @@ pub induct Json: pub Type
 end
 
 pub use Json/*;
-
-mod encode;
-pub use encode/{let encode};
-
-mod decode;
-pub use decode/{let decode};

@@ -1,3 +1,11 @@
+--- How a child ended: with an exit code, or by a signal.
+pub mod Exit;
+pub use Exit/{let Exit};
+
+--- A child this process started: starting it, the pipes to its streams, waiting for it, and ending it.
+pub mod Child;
+pub use Child/{let Child};
+
 use /std/{Byte, Bytes, Str, List, Option, Result, Path, Try, Io};
 use /std/internal/{Handle, Status};
 
@@ -10,10 +18,6 @@ pub induct Stdio: pub Type
 --- It goes to the null device.
 | null()
 end
-
---- How a child ended: with an exit code, or by a signal.
-pub mod Exit;
-pub use Exit/{let Exit};
 
 --- A program to run, and how to run it: what a child is started from.
 pub struct Process: pub Type {
@@ -38,10 +42,6 @@ pub let new(program: Str, args: List(Str)) -> Process =
         stdin = Stdio/inherit(),
         stdout = Stdio/inherit(),
         stderr = Stdio/inherit() };
-
---- A child this process started: starting it, the pipes to its streams, waiting for it, and ending it.
-pub mod Child;
-pub use Child/{let Child};
 
 let drain(o: Option(Input)) -> Io(Result(Io/Error, Bytes)) =
     match o | some(o) => Try/run(Io/read_all(o)) | none() => Io/pure(Result/success(x[])) end;

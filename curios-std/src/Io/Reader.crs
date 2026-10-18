@@ -1,3 +1,6 @@
+--- The pieces the named reads ask for.
+pub mod piece;
+
 use /std/{Nat, Bytes, Byte, Bool, Str, Option, Result, Spell, Io, Try, Channel};
 use /std/ops/{Eql};
 use /std/Io/{Error};
@@ -37,9 +40,6 @@ pub induct Stop(St: Type, R: Type): pub Type
 | ended(St)
 | failed(St, Error)
 end
-
---- The pieces the named reads ask for.
-pub mod piece;
 
 -- What a reader's slot holds: the bytes read past the last piece, and how many pieces have been cut from them.
 struct Held: Type {

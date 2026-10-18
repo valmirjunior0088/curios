@@ -1,4 +1,5 @@
 pub use /sys/Nat/{pow};
+
 use /std/{Nat, Eq};
 use /std/Bool/{True, Holds};
 

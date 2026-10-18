@@ -1,3 +1,6 @@
+mod parse;
+pub use parse/{of_str, decode};
+
 use /std/{Str, Char, Bool, List, Option, Spell, Show, Fmt};
 use /std/ops/{Eql};
 
@@ -172,6 +175,3 @@ pub let named(h: Html, name: Str) -> List(Html) =
 --- The text of the first `title` element in `h`, trimmed, or `none`.
 pub let title_of(h: Html) -> Option(Str) =
     Option/map(List/try_get(named(h, "title"), 0), (t) => Str/trim(text_of(t)));
-
-mod parse;
-pub use parse/{of_str, decode};

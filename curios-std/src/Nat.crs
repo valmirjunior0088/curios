@@ -1,9 +1,6 @@
 pub use /sys/{Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shr, to_int,
     to_flt, to_byte};
-use /std/{Str, Option, Char, Bool, Show, Spell, Ord, Eq};
-use /std/Bool/{Holds};
-use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- `a < b`'s laws, and its crossings with `a <= b`.
 ---
@@ -42,6 +39,42 @@ pub use shl/{let shl};
 --- The exponent of the highest power of two not above a number, with the bounds that make it that.
 pub mod log2;
 pub use log2/{let log2};
+
+--- The order of two naturals, and its laws.
+pub mod ord;
+pub use ord/{let ord};
+
+--- Recursion on a measure that descends, by a bound the measure fits under.
+pub mod descend;
+pub use descend/{let descend};
+
+--- Whether a decision holds of every number below a bound, and that it then holds of each.
+pub mod all_below;
+pub use all_below/{let all_below};
+
+--- Division with remainder, certified: `of` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity and the remainder's bound.
+pub mod DivMod;
+pub use DivMod/{let DivMod};
+
+--- That `d` divides `n`, with its laws beneath.
+pub mod Divides;
+pub use Divides/{let Divides};
+
+--- A greatest common divisor with its proofs: it divides both operands, and every common divisor divides it.
+pub mod Gcd;
+pub use Gcd/{let Gcd};
+
+--- That two numbers share no divisor but one, with Euclid's lemma and the reduced fraction beneath.
+pub mod Coprime;
+pub use Coprime/{let Coprime};
+
+--- A positive number as an odd part at a binary scale, with the proof that no other pair rebuilds it.
+pub mod Scale;
+pub use Scale/{let Scale};
+
+use /std/{Str, Option, Char, Bool, Show, Spell, Ord, Eq};
+use /std/Bool/{Holds};
+use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `n` is not zero, decided — what `/` and `%` on `Nat` ask of a divisor. It is the proposition `Holds(0 < n)` is: a natural is not zero exactly where zero is below it, which conversion decides.
 pub let NonZero(n: Nat) -> Prop =
@@ -166,18 +199,6 @@ pub let eq_of_eql(a: Nat, b: Nat, h: Holds(a == b)) -> Eq()(a, b) =
         end
     end;
 
---- The order of two naturals, and its laws.
-pub mod ord;
-pub use ord/{let ord};
-
---- Recursion on a measure that descends, by a bound the measure fits under.
-pub mod descend;
-pub use descend/{let descend};
-
---- Whether a decision holds of every number below a bound, and that it then holds of each.
-pub mod all_below;
-pub use all_below/{let all_below};
-
 satisfy Show(Nat) {
     show = to_str,
 }
@@ -189,23 +210,3 @@ satisfy Spell(Nat) {
 satisfy Ord(Nat) {
     ord = ord,
 }
-
---- Division with remainder, certified: `of` hands back the quotient and remainder `/` and `%` compute, with Euclid's identity and the remainder's bound.
-pub mod DivMod;
-pub use DivMod/{let DivMod};
-
---- That `d` divides `n`, with its laws beneath.
-pub mod Divides;
-pub use Divides/{let Divides};
-
---- A greatest common divisor with its proofs: it divides both operands, and every common divisor divides it.
-pub mod Gcd;
-pub use Gcd/{let Gcd};
-
---- That two numbers share no divisor but one, with Euclid's lemma and the reduced fraction beneath.
-pub mod Coprime;
-pub use Coprime/{let Coprime};
-
---- A positive number as an odd part at a binary scale, with the proof that no other pair rebuilds it.
-pub mod Scale;
-pub use Scale/{let Scale};

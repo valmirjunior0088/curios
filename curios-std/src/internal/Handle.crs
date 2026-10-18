@@ -1,5 +1,10 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr};
+
+--- What a wait asks to be woken for.
+pub mod Interest;
+pub use Interest/{let Interest};
+
 use /std/{Bool, Byte, Bytes, Nat, List, Result, Io, Try};
 use /std/Io/{Error};
 use /std/Bool/{Holds};
@@ -31,10 +36,6 @@ foreign handle_close(Handle) -> {};
 satisfy Io/Close(Handle) {
     close(h) = handle_close(h),
 }
-
---- What a wait asks to be woken for.
-pub mod Interest;
-pub use Interest/{let Interest};
 
 let flagged(report: Byte, flag: Byte) -> Bool =
     Byte/to_nat(report && flag) > 0;
