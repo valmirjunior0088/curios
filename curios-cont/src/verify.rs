@@ -958,10 +958,13 @@ impl Module {
 
         for atom in atoms(node) {
             match atom {
-                Atom::Value(value) => {
-                    // Naming the referencing statement turns a dangling-operand refusal from a value id into a site: which node, and — through its spelled form — which rewrite left it behind.
-                    self.require_value(*value, &format!("statement {id} ({node:?}) operand"))?
+                // Naming the referencing statement turns a dangling-operand refusal from a value id into a site: which node, and — through its spelled form — which rewrite left it behind. Spelled only for a refusal, since a statement of n operands spelled at each is the square of its width.
+                Atom::Value(value) if self.value(*value).is_none() => {
+                    return Err(VerifyError(format!(
+                        "statement {id} ({node:?}) operand references missing {value}"
+                    )));
                 }
+                Atom::Value(_) => {}
                 Atom::Fun(function) => self.require_fun(*function, "function atom")?,
                 Atom::Literal(_) | Atom::Filler => {}
             }
