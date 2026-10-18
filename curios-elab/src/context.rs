@@ -1605,7 +1605,7 @@ impl<'s> Context<'s> {
         let body = self.typing.frames.definition_body(name);
         match body {
             Some(body) => self.opens(name, body),
-            None => self.missed(name),
+            None => self.absent(name),
         }
 
         body
@@ -1617,10 +1617,16 @@ impl<'s> Context<'s> {
         let reduct = self.typing.frames.var_reduct(name);
         match reduct {
             Some(reduct) => self.opens(name, reduct),
-            None => self.missed(name),
+            None => self.absent(name),
         }
 
         reduct
+    }
+
+    /// `name` has no definition to unfold to: a need where its declaration has not finished ([`Context::missed`]), and a name a fresh definition can unstick a reduct on ([`Caches::note_absent`]).
+    fn absent(&self, name: &Free) {
+        self.missed(name);
+        self.typing.caches.note_absent(name);
     }
 
     /// `name` unfolded to `reduct`: where it is a member of a top-level group, the group is filed as opened from it ([`Caches::note_opened`]).
@@ -1636,7 +1642,7 @@ impl<'s> Context<'s> {
         let reduct = self.typing.frames.var_reduct_at(name);
         match reduct {
             Some(reduct) => self.opens(name, reduct),
-            None => self.missed(name),
+            None => self.absent(name),
         }
 
         reduct

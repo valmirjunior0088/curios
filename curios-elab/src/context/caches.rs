@@ -129,6 +129,8 @@ pub(crate) struct Caches {
     mutation_stamp: Entropy,
     /// A recorded scrutinee against itself as the kernel spells it — solved metavariables materialized, local definitions substituted, refined variables as their values — kept where no metavariable in it is left unsolved: what the filter in front of an entry reads (`reduce`'s `could_settle`), which would otherwise rebuild the scrutinee at every stuck form. It rests on the solutions, the definitions and the refinements in the window, so it goes wherever the reducts do, and a bracket sets it aside with them ([`Caches::enter_window`]). Behind a cell because the filter runs while the entries are borrowed.
     kernel_spellings: RefCell<HashMap<Term, Term>>,
+    /// Every name a lookup found no definition for, and not defined since: what a remembered reduct can be stuck on — in a table of either life, a window set aside or one a frame keeps — and so the names a fresh definition can unstick one of ([`Caches::retain_reductions_without`]). Kept across every clear of the tables, since a window outlives one; a name leaves it where it is defined. A name minted for a binding is defined before anything reduces under it, so its definition reads no reduct. Behind a cell because a definition is looked up through a shared reference.
+    absent: RefCell<HashSet<Free>>,
     /// Monotonic universe-solver writes are tracked separately. Elaboration entries may survive them only when their keys and results contain no transitively unresolved universe meta; reducts survive them outright, being parametric in levels (see `Context::cached_reduced`); rollback/finalization clears every cache at the non-monotonic boundaries.
     universe_mutation_stamp: Entropy,
     /// Whether every boundary clears every table, as each did before an answer was kept for as long as what it read stands ([`Caches::wholesale`]).
@@ -478,6 +480,11 @@ impl Caches {
         self.kernel_spellings.get_mut().clear();
     }
 
+    /// A lookup found no definition for `name`: a reduct remembered from here on may be stuck on its absence.
+    pub(crate) fn note_absent(&self, name: &Free) {
+        self.absent.borrow_mut().insert(*name);
+    }
+
     /// Every remembered sort and every verdict filed beside them, of both reductions.
     fn clear_sorts(&mut self) {
         for sorts in &mut self.sorts {
@@ -691,29 +698,31 @@ impl Caches {
         self.clear_elaborations();
     }
 
-    /// A name was *freshly* defined. A fresh definition can only unstick reductions that read this name's absence, and a stuck read always leaves the name free in the WHNF — so the reduction cache retains every entry whose result does not mention it instead of clearing. The elaboration cache survives untouched: its insert gate already refused every entry naming a not-yet-defined global. No stamp — definition is the one ambient fact a pure run may read, and the settled-globals gate covers it.
+    /// A name was *freshly* defined. A fresh definition can only unstick reductions that read this name's absence, and a stuck read always leaves the name free in the WHNF — so the reduction cache retains every entry whose result does not mention it instead of clearing. A name no lookup found absent unstuck nothing, and no reduct is read for it ([`Caches::note_absent`]): the definitions a declaration mints cost what they define, not what was remembered before them. The elaboration cache survives untouched: its insert gate already refused every entry naming a not-yet-defined global. No stamp — definition is the one ambient fact a pure run may read, and the settled-globals gate covers it.
     pub(crate) fn retain_reductions_without(&mut self, name: &Free) {
-        let lives = self
-            .reduction
-            .iter_mut()
-            .zip(&mut self.reduction_erased)
-            .chain(self.lasting.iter_mut().zip(&mut self.lasting_erased));
-        for (reduction, erased) in lives {
-            reduction.retain(|_, reduct| !reduct.mentions_free(name));
-            // The second door indexes exact keys, so it keeps exactly the ones the exact table kept.
-            erased.retain(|_, key| reduction.contains_key(key));
-        }
-        for forced in self.forced.iter_mut().chain(&mut self.lasting_forced) {
-            forced.retain(|_, value| !value.mentions_free(name));
-        }
-        // A window set aside is handed back after the definition, which may outlive the bracket.
-        for window in &mut self.windows {
-            for scoped in &mut window.scoped {
-                scoped.retain_without(name);
+        if self.absent.get_mut().remove(name) {
+            let lives = self
+                .reduction
+                .iter_mut()
+                .zip(&mut self.reduction_erased)
+                .chain(self.lasting.iter_mut().zip(&mut self.lasting_erased));
+            for (reduction, erased) in lives {
+                reduction.retain(|_, reduct| !reduct.mentions_free(name));
+                // The second door indexes exact keys, so it keeps exactly the ones the exact table kept.
+                erased.retain(|_, key| reduction.contains_key(key));
             }
-        }
-        for closed in &mut self.closed {
-            closed.retain_without(name);
+            for forced in self.forced.iter_mut().chain(&mut self.lasting_forced) {
+                forced.retain(|_, value| !value.mentions_free(name));
+            }
+            // A window set aside is handed back after the definition, which may outlive the bracket.
+            for window in &mut self.windows {
+                for scoped in &mut window.scoped {
+                    scoped.retain_without(name);
+                }
+            }
+            for closed in &mut self.closed {
+                closed.retain_without(name);
+            }
         }
         // A sort is read through reducts and names none, so it has nothing to be retained by.
         self.clear_sorts();
