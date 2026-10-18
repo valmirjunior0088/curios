@@ -2,7 +2,7 @@
 //!
 //! Dead-parameter elimination asks only whether a value is used at all, which a use count answers. A return protocol needs more: whether *every* use projects a field, so a constructor could be delivered as its fields rather than as a heap tuple. Those are two points of one order, so they are computed once here rather than by two walks that could drift apart.
 //!
-//! **The fact is interprocedural.** A value passed to a known call or jumped along an edge asks exactly what the receiving parameter's own uses ask, so an argument's demand defers to that parameter and the round becomes a genuine fixpoint under the shared solver. Two transfers deliberately keep the syntactic reading: an argument to a closure call crosses an indirection this walk does not resolve, and a value on an edge into a bodyless return sentinel is consumed by the caller's resume, whose linkage belongs to the return protocol rather than to this lattice.
+//! **The fact is interprocedural.** A value passed to a known call or jumped along an edge asks exactly what the receiving parameter's own uses ask, so an argument's demand defers to that parameter and the rules reach a genuine fixpoint under the shared solver. Two transfers deliberately keep the syntactic reading: an argument to a closure call crosses an indirection this walk does not resolve, and a value on an edge into a bodyless return sentinel is consumed by the caller's resume, whose linkage belongs to the return protocol rather than to this lattice.
 
 use {
     super::{Atom, Callee, Edge, Intrinsic, Lattice, Module, Node, Solver, ValueId, atoms},
@@ -68,7 +68,7 @@ fn defer_edge(module: &Module, solver: &mut Solver<Demand>, edge: &Edge) {
         if let Atom::Value(value) = atom {
             let deferred = params
                 .and_then(|params| params.get(position))
-                .and_then(|param| solver.facts().get(param).cloned())
+                .and_then(|param| solver.fact(param).cloned())
                 .unwrap_or(Demand::Opaque);
             solver.join(*value, deferred);
         }
@@ -79,9 +79,9 @@ fn defer_edge(module: &Module, solver: &mut Solver<Demand>, edge: &Edge) {
 pub(crate) fn demands(module: &Module) -> BTreeMap<ValueId, Demand> {
     let seeds = module.value_ids().collect::<Vec<_>>();
 
-    Solver::solve(seeds, |solver| {
+    Solver::solve(seeds, |rules| {
         for (_, node) in module.live_nodes() {
-            match node {
+            rules.add(move |solver| match node {
                 // A projection reads one field and nothing else — the only use that does not consume the whole value. It is taken before the general fallback below, which would otherwise report `Opaque` for the same operand and erase the refinement.
                 Node::LetIntrinsic {
                     op: Intrinsic::TupleGet(index) | Intrinsic::RowGet(_, index),
@@ -147,7 +147,7 @@ pub(crate) fn demands(module: &Module) -> BTreeMap<ValueId, Demand> {
                         if let Atom::Value(value) = atom {
                             let deferred = params
                                 .and_then(|params| params.get(position))
-                                .and_then(|param| solver.facts().get(param).cloned())
+                                .and_then(|param| solver.fact(param).cloned())
                                 .unwrap_or(Demand::Opaque);
                             solver.join(*value, deferred);
                         }
@@ -190,7 +190,7 @@ pub(crate) fn demands(module: &Module) -> BTreeMap<ValueId, Demand> {
                         }
                     }
                 }
-            }
+            });
         }
     })
 }

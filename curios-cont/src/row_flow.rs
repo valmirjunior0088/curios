@@ -2,7 +2,7 @@
 //!
 //! The fact is a may-set. A construction contributes its own row; a number, a word, a sequence, a closure, a literal and null contribute none; and what this analysis cannot see into — a reference read out of a value, an indirect call's result, a cell's or a channel's — contributes every row. A set never says that a value *is* a row, only which rows it could be, so the one question it answers is the one a row test asks when the answer is no: a value no flow builds a row for is not a struct of it. What a test asks of a forced description's answer is the case it exists for — an action that never suspends answers no suspension, and its bind's test folds.
 //!
-//! Each function-return position has its own fact, even where no caller receives it. Known calls deliver those facts to their resumes, including a caller's own return positions for tail calls, so recursion and ordinary value flow settle together. The boundaries are seeded with every row each round, as `origins` seeds them opaque: an escaping function's parameters and the entry's are its callers', which this module does not see. Only facts that reach the entry's returns determine its suspension capability; an internally consumed suspension does not escape merely because it was constructed.
+//! Each function-return position has its own fact, even where no caller receives it. Known calls deliver those facts to their resumes, including a caller's own return positions for tail calls, so recursion and ordinary value flow settle together. The boundaries are seeded with every row, as `origins` seeds them opaque: an escaping function's parameters and the entry's are its callers', which this module does not see. Only facts that reach the entry's returns determine its suspension capability; an internally consumed suspension does not escape merely because it was constructed.
 
 use {
     super::{
@@ -131,26 +131,28 @@ fn row_facts(module: &Module) -> BTreeMap<RowKey, Rows> {
         }
     };
 
-    Solver::solve(seeds, |solver| {
-        let fact = |solver: &Solver<Rows, RowKey>, atom: &Atom| match atom {
-            Atom::Value(value) => solver
-                .facts()
-                .get(&RowKey::Value(*value))
-                .cloned()
-                .unwrap_or(Rows::Any),
-            Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => Rows::none(),
-        };
+    let fact = |solver: &Solver<Rows, RowKey>, atom: &Atom| match atom {
+        Atom::Value(value) => solver
+            .fact(&RowKey::Value(*value))
+            .cloned()
+            .unwrap_or(Rows::Any),
+        Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => Rows::none(),
+    };
+    let (arities, deliver) = (&arities, &deliver);
 
+    Solver::solve(seeds, |rules| {
         for (function, definition) in module.live_functions() {
             if escaping.contains(&function) || module.entry() == Some(function) {
-                for param in &definition.params {
-                    solver.join(RowKey::Value(*param), Rows::Any);
-                }
+                rules.add(move |solver| {
+                    for param in &definition.params {
+                        solver.join(RowKey::Value(*param), Rows::Any);
+                    }
+                });
             }
         }
 
         for (_, node) in module.live_nodes() {
-            match node {
+            rules.add(move |solver| match node {
                 Node::LetValue { result, value, .. } => {
                     let rows = match value {
                         ValueExpr::Row(row, _) => Rows::Of(BTreeSet::from([*row])),
@@ -185,8 +187,7 @@ fn row_facts(module: &Module) -> BTreeMap<RowKey, Rows> {
                             let returned = (0..arities[callee])
                                 .map(|index| {
                                     solver
-                                        .facts()
-                                        .get(&RowKey::Returned(*callee, index))
+                                        .fact(&RowKey::Returned(*callee, index))
                                         .cloned()
                                         .unwrap_or(Rows::Any)
                                 })
@@ -232,7 +233,7 @@ fn row_facts(module: &Module) -> BTreeMap<RowKey, Rows> {
                 | Node::Halt { .. }
                 | Node::Panic(_)
                 | Node::Unreachable => {}
-            }
+            });
         }
     })
 }

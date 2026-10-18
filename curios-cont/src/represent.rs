@@ -509,25 +509,26 @@ pub fn representation(module: &Module) -> Representation {
         .chain(boundaries.result_sites())
         .collect::<Vec<_>>();
 
-    let facts = Solver::solve(seeds, |solver| {
+    let (offers, read) = (&offers, &read);
+    let facts = Solver::solve(seeds, |rules| {
         for (_, node) in module.live_nodes() {
-            match node {
+            rules.add(move |solver| match node {
                 // The roster states what each operand position reads.
                 Node::LetIntrinsic { op, args, .. } => {
                     for (index, arg) in args.iter().enumerate() {
-                        demand(arg, raw_carrier(&op.operand_repr(index)), &offers, solver);
+                        demand(arg, raw_carrier(&op.operand_repr(index)), offers, solver);
                     }
                 }
 
                 // A tag is read as a raw unsigned scalar.
                 Node::Switch { scrutinee, .. } => {
-                    demand(scrutinee, Some(Repr::Nat), &offers, solver);
+                    demand(scrutinee, Some(Repr::Nat), offers, solver);
                 }
 
                 // A host call reads its scalar parameters raw and its reference parameters as shapes, whether or not it returns.
                 Node::Foreign { function, args, .. } | Node::Halt { function, args } => {
                     for (arg, wire) in args.iter().zip(&function.signature().imported_params()) {
-                        demand(arg, wire_carrier(wire), &offers, solver);
+                        demand(arg, wire_carrier(wire), offers, solver);
                     }
                 }
 
@@ -540,7 +541,7 @@ pub fn representation(module: &Module) -> Representation {
                         demand(
                             atom,
                             raw_carrier(&module.slot_repr(*row, index)),
-                            &offers,
+                            offers,
                             solver,
                         );
                     }
@@ -562,35 +563,38 @@ pub fn representation(module: &Module) -> Representation {
                 | Node::LetCont { .. }
                 | Node::Panic(_)
                 | Node::Unreachable => {}
-            }
+            });
         }
 
         // A resume parameter nothing reads is held as the slot feeding it hands it over: no use disagrees with the register, and holding it boxed would be a coercion no use asked for, an allocation a call where a float result goes unread.
         for &(source, target) in &flows {
             if let (Source::Site(slot), Site::Value(param)) = (source, target)
                 && !read.contains_key(&param)
-                && let Some(carrier) = solver
-                    .facts()
-                    .get(&slot)
-                    .and_then(|decided| decided.raw_carrier())
             {
-                demand_site(target, carrier, &offers, solver);
+                rules.add(move |solver| {
+                    if let Some(carrier) =
+                        solver.fact(&slot).and_then(|decided| decided.raw_carrier())
+                    {
+                        demand_site(target, carrier, offers, solver);
+                    }
+                });
             }
         }
 
         // An argument inherits the storage of the join it feeds — the rule that carries a decision around a loop, across a call and back out of a return.
         for &(source, target) in &flows {
-            let Some(carrier) = solver
-                .facts()
-                .get(&target)
-                .and_then(|decided| decided.raw_carrier())
-            else {
-                continue;
-            };
-            match source {
-                Source::Atom(atom) => demand(atom, Some(carrier), &offers, solver),
-                Source::Site(site) => demand_site(site, carrier, &offers, solver),
-            }
+            rules.add(move |solver| {
+                let Some(carrier) = solver
+                    .fact(&target)
+                    .and_then(|decided| decided.raw_carrier())
+                else {
+                    return;
+                };
+                match source {
+                    Source::Atom(atom) => demand(atom, Some(carrier), offers, solver),
+                    Source::Site(site) => demand_site(site, carrier, offers, solver),
+                }
+            });
         }
     });
 

@@ -138,18 +138,20 @@ pub(crate) fn invariant_fixpoint(
     constraints: &[(FunctionId, Vec<Atom>)],
     known_literals: &BTreeMap<ValueId, Atom>,
 ) -> BTreeMap<ValueId, Knowledge> {
-    Solver::solve(params_of.values().flatten().copied(), |solver| {
+    Solver::solve(params_of.values().flatten().copied(), |rules| {
         for (callee, args) in constraints {
             let Some(params) = params_of.get(callee) else {
                 continue;
             };
-            for (index, arg) in args.iter().enumerate() {
-                let Some(&param) = params.get(index) else {
-                    continue;
-                };
-                let incoming = resolve_atom(arg, solver.facts(), known_literals);
-                solver.join(param, incoming);
-            }
+            rules.add(move |solver| {
+                for (index, arg) in args.iter().enumerate() {
+                    let Some(&param) = params.get(index) else {
+                        continue;
+                    };
+                    let incoming = resolve_atom(arg, solver, known_literals);
+                    solver.join(param, incoming);
+                }
+            });
         }
     })
 }

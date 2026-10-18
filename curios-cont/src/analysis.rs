@@ -1,7 +1,8 @@
 use {
     super::{
         Atom, Callee, ContinuationId, Edge, FunctionId, InScope, Knowledge, Module, Node, NodeId,
-        ValueExpr, ValueId, atoms, merge_inputs, record_known_literals, scc_invariant_knowns,
+        Solver, ValueExpr, ValueId, atoms, merge_inputs, record_known_literals,
+        scc_invariant_knowns,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -543,7 +544,7 @@ pub(crate) fn known_values(module: &Module) -> BTreeMap<ValueId, Atom> {
 /// Resolve an argument atom to its lattice value: literals and function references are known; a value is a forwarded SCC parameter (its current class), a caller constant (`known_literals`), or otherwise an unobservable runtime value that forces `Conflict`.
 pub(crate) fn resolve_atom(
     atom: &Atom,
-    class: &BTreeMap<ValueId, Knowledge>,
+    class: &Solver<Knowledge>,
     known_literals: &BTreeMap<ValueId, Atom>,
 ) -> Knowledge {
     match atom {
@@ -552,7 +553,7 @@ pub(crate) fn resolve_atom(
         // A filler is unobservable rather than known: propagating it would substitute "no value" into a position that reads one.
         Atom::Filler => Knowledge::Conflict,
         Atom::Value(value) => {
-            if let Some(knowledge) = class.get(value) {
+            if let Some(knowledge) = class.fact(value) {
                 knowledge.clone()
             } else if let Some(atom @ (Atom::Literal(_) | Atom::Fun(_))) = known_literals.get(value)
             {

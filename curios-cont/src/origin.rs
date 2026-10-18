@@ -10,7 +10,7 @@
 //!
 //! **What the fact deliberately does not record is the discriminant.** A variant region's cheapness comes from its tag being a constant on each entry edge, but that is a *consequence* rather than an admission condition, and requiring it would decline the motivating flow: once `split_returns` delivers a constructor as fields, the resume rebuilds it with the tag in a parameter, so many of the scan region's constructions carry no literal at slot zero at all. Constant discriminants are then found by the passes that already fold them — projection forwarding through a visible construction, and jump threading over a literal switch.
 //!
-//! Boundaries are stated by injection rather than by omission: a resume parameter receives whatever an unsplit return interface delivers, an escaping function's parameters receive whatever unknown callers pass, the entry's parameters belong to the host, and a knot-tied value is a closure — each is seeded `Opaque` so a bottom that survives the round means *unreached*, never *assumed constructed*.
+//! Boundaries are stated by injection rather than by omission: a resume parameter receives whatever an unsplit return interface delivers, an escaping function's parameters receive whatever unknown callers pass, the entry's parameters belong to the host, and a knot-tied value is a closure — each is seeded `Opaque` so a bottom that survives the solve means *unreached*, never *assumed constructed*.
 
 use {
     super::{
@@ -22,7 +22,7 @@ use {
 /// What flows into a value, ordered `Unreached < Constructed(_)/Variant(..) < Opaque`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Origin {
-    /// No flow reached it in the round — an unentered parameter or an unreachable binding.
+    /// No flow reached it — an unentered parameter or an unreachable binding.
     Unreached,
     /// Every flow reaching it is a tuple construction, or an alias of one, and these are the widths they carry. One width is an exact product; several are a merged flow, which travels as its widest construction with each narrower edge filled.
     Constructed(BTreeSet<usize>),
@@ -100,7 +100,7 @@ impl Lattice for Origin {
 /// Join `atom`'s fact into `target`: a value hands its own fact forward, and anything that is not a value is not a construction.
 fn flow(solver: &mut Solver<Origin>, atom: &Atom, target: ValueId) {
     let incoming = match atom {
-        Atom::Value(value) => solver.facts().get(value).cloned().unwrap_or(Origin::Opaque),
+        Atom::Value(value) => solver.fact(value).cloned().unwrap_or(Origin::Opaque),
         Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => Origin::Opaque,
     };
     solver.join(target, incoming);
@@ -121,18 +121,20 @@ pub(crate) fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
     let escaping = analyze_calls(module).escaping;
     let seeds = module.value_ids().collect::<Vec<_>>();
 
-    Solver::solve(seeds, |solver| {
-        // The injected boundaries, restated every round so a later join cannot narrow them.
+    Solver::solve(seeds, |rules| {
+        // The injected boundaries: each a rule that reads nothing, so it runs once, and a join can only raise what it raised.
         for (function, definition) in module.live_functions() {
             if escaping.contains(&function) || module.entry() == Some(function) {
-                for param in &definition.params {
-                    solver.join(*param, Origin::Opaque);
-                }
+                rules.add(move |solver| {
+                    for param in &definition.params {
+                        solver.join(*param, Origin::Opaque);
+                    }
+                });
             }
         }
 
         for (_, node) in module.live_nodes() {
-            match node {
+            rules.add(move |solver| match node {
                 Node::LetValue { result, value, .. } => {
                     let origin = match value {
                         ValueExpr::Tuple(atoms) => Origin::of_width(atoms.len()),
@@ -183,7 +185,7 @@ pub(crate) fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
                 | Node::Halt { .. }
                 | Node::Panic(_)
                 | Node::Unreachable => {}
-            }
+            });
         }
     })
 }
