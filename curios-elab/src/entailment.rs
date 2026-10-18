@@ -10,7 +10,7 @@
 //! - A proposition a fact in scope states outright — a hypothesis, or a proof field one level down, whose statement converts with the bound with nothing solved: [`stated_by_a_fact`]. The fact is the proof, whatever the proposition is: a decision the linear view reads nothing in, or an inductive proposition the procedure never opens, such as an equation.
 //! - A `Nat` or `Int` comparison that follows from the facts in scope ([`Reader`]) by linear arithmetic over the rationals, a strict integer fact strengthened to its successor, within the search's cap ([`refute`]): a `<` or a `<=` as it stands, a disequality through the equation its negation is, and an equality through the two cases its negation makes ([`negated`]). A consequence that holds only over the integers and needs a cut is refused, as `linarith` and `omega` without its dark and grey shadows refuse it.
 //! - Over `Nat`, through the operations whose definitions are linear facts: a quotient or remainder through the quotient's bounds, a truncated subtraction through the case split `omega` makes, a `min` or a `max` through the split on its operands' order and an `Int`'s `abs` or `sign` through the splits on its operand's sign, each opened only where the search needs it ([`plan`]) — a subtraction, a `min` and a `max` being asked first through what both of their cases state, so a sum of them that turns on no case opens none — and a power of a base conversion holds at least one, as the `pow(2, m)` a shift by a symbolic count multiplies by is, through its being at least one.
-//! - Where linear arithmetic finds an assignment, through the products of pairs of facts and the negated goal, as `nlinarith` does ([`products`]): what a multiplier that is no literal needs, `Nat/div_mod`'s among them.
+//! - Where linear arithmetic finds an assignment, through the products of pairs of facts and the negated goal, as `nlinarith` does ([`products`]): what a multiplier that is no literal needs, `Nat/div_mod`'s among them. A case a split opens multiplies its own facts by them and by one another ([`case_products`]), so the fact a case adds — each order the disequality an equality goal is refuted through makes — enters a product as an order's negated goal does.
 //! - Where the products leave one too, through the disequalities the scope states, each as the order comparison conversion holds it to be ([`disequalities`]): `total / (n + m)` under `Holds(n != 0)`. Asked last, so a bound the facts prove is proved as it was before a disequality was read at all.
 //! - An empty proposition the facts refute: how `False/refuted` reaches the procedure, and `True/proved` wherever its proposition is one.
 //!
@@ -210,7 +210,8 @@ fn linear(
         Plan::Satisfied(assignment) => {
             let linear = SearchOutcome::Counterexample(assignment);
             let products = products(context, &mut views, &mut classes, &facts, &negated)?;
-            let multiplied = !products.is_empty();
+            let cased = case_products(context, &mut views, &mut classes, &mut facts, &negated)?;
+            let multiplied = !products.is_empty() || cased;
             let with_products = match multiplied {
                 true => {
                     facts.facts.extend(products);

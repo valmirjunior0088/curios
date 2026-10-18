@@ -1852,7 +1852,48 @@ pub(super) fn products(
     facts: &Facts,
     negated: &[Fact],
 ) -> Result<Vec<Fact>, Error> {
-    let factors = facts
+    let factors = factors(facts, negated);
+    let mut reader = Reader::new(views, classes);
+    for (index, first) in factors.iter().enumerate() {
+        for second in &factors[index + 1..] {
+            product(context, &mut reader, first, second)?;
+        }
+    }
+    Ok(reader.read.facts)
+}
+
+/// The products of each case's own facts with the factors [`products`] multiplies and with one another, added to that case: a fact a split opens — the disequality an equality goal is refuted through among them — is multiplied where it holds, as the negated goal of an order is. Whether any case gained one.
+pub(super) fn case_products(
+    context: &mut Context,
+    views: &mut LinearViews,
+    classes: &mut Classes,
+    facts: &mut Facts,
+    negated: &[Fact],
+) -> Result<bool, Error> {
+    let factors = factors(facts, negated)
+        .into_iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut gained = false;
+    for split in &mut facts.splits {
+        for case in [&mut split.holds, &mut split.fails] {
+            let own = case.clone();
+            let mut reader = Reader::new(views, classes);
+            for (index, first) in own.iter().enumerate() {
+                for second in factors.iter().chain(&own[index + 1..]) {
+                    product(context, &mut reader, first, second)?;
+                }
+            }
+            gained |= !reader.read.facts.is_empty();
+            case.extend(reader.read.facts);
+        }
+    }
+    Ok(gained)
+}
+
+/// What [`products`] multiplies: the facts and the negated goal, a natural's sign only over one atom.
+fn factors<'f>(facts: &'f Facts, negated: &'f [Fact]) -> Vec<&'f Fact> {
+    facts
         .facts
         .iter()
         .chain(negated)
@@ -1864,48 +1905,51 @@ pub(super) fn products(
                     .iter()
                     .all(|(_, monomial)| monomial.atoms().len() == 1)
         })
-        .collect::<Vec<_>>();
-    let mut reader = Reader::new(views, classes);
-    for (index, first) in factors.iter().enumerate() {
-        for second in &factors[index + 1..] {
-            if first.origin == Origin::Natural && second.origin == Origin::Natural {
-                continue;
-            }
-            let carrier = match (first.carrier, second.carrier) {
-                (Carrier::Natural, Carrier::Natural) => Carrier::Natural,
-                _ => Carrier::Integer,
-            };
-            let mul = order(context, carrier).mul;
-            if !in_scope(context, &[mul]) {
-                continue;
-            }
-            let ((a, b), (c, d)) = (first.sides_at(carrier), second.sides_at(carrier));
-            let proof = Term::apply_marked(
-                global(mul),
-                [
-                    (Plicity::Implicit, a.clone()),
-                    (Plicity::Implicit, b.clone()),
-                    (Plicity::Implicit, c.clone()),
-                    (Plicity::Implicit, d.clone()),
-                    (Plicity::Explicit, first.proof.clone()),
-                    (Plicity::Explicit, second.proof.clone()),
-                ],
-            );
-            let times = |left: &Term, right: &Term| multiply(carrier, left.clone(), right.clone());
-            let statement = comparison_of(
-                carrier,
-                Operation::AtMost,
-                &add(carrier, times(&a, &d), times(&b, &c)),
-                &add(carrier, times(&a, &c), times(&b, &d)),
-            );
-            let origin = Origin::Product(
-                Box::new(first.origin.clone()),
-                Box::new(second.origin.clone()),
-            );
-            reader.admit(context, statement, proof, origin)?;
-        }
+        .collect()
+}
+
+/// The product of `first` and `second` through `le/mul`, admitted by `reader`; nothing for two naturals' signs, or where `le/mul` is not in scope.
+fn product(
+    context: &mut Context,
+    reader: &mut Reader<'_>,
+    first: &Fact,
+    second: &Fact,
+) -> Result<(), Error> {
+    if first.origin == Origin::Natural && second.origin == Origin::Natural {
+        return Ok(());
     }
-    Ok(reader.read.facts)
+    let carrier = match (first.carrier, second.carrier) {
+        (Carrier::Natural, Carrier::Natural) => Carrier::Natural,
+        _ => Carrier::Integer,
+    };
+    let mul = order(context, carrier).mul;
+    if !in_scope(context, &[mul]) {
+        return Ok(());
+    }
+    let ((a, b), (c, d)) = (first.sides_at(carrier), second.sides_at(carrier));
+    let proof = Term::apply_marked(
+        global(mul),
+        [
+            (Plicity::Implicit, a.clone()),
+            (Plicity::Implicit, b.clone()),
+            (Plicity::Implicit, c.clone()),
+            (Plicity::Implicit, d.clone()),
+            (Plicity::Explicit, first.proof.clone()),
+            (Plicity::Explicit, second.proof.clone()),
+        ],
+    );
+    let times = |left: &Term, right: &Term| multiply(carrier, left.clone(), right.clone());
+    let statement = comparison_of(
+        carrier,
+        Operation::AtMost,
+        &add(carrier, times(&a, &d), times(&b, &c)),
+        &add(carrier, times(&a, &c), times(&b, &d)),
+    );
+    let origin = Origin::Product(
+        Box::new(first.origin.clone()),
+        Box::new(second.origin.clone()),
+    );
+    reader.admit(context, statement, proof, origin)
 }
 
 /// A quotient or a remainder: its dividend, its divisor, and the program's proof that the divisor is not zero — so the quotient and the remainder rebuilt from it are the atoms the program wrote.

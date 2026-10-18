@@ -592,6 +592,11 @@ const ROWS: &[Row] = &[
         "a: Nat, b: Nat, c: Nat, p: Holds(a + c <= b), q: Holds(b <= a + c)",
         "Holds(b == a + c)",
     ),
+    // And where each case is refuted only through a product of its own fact: two splits of one number by a divisor, each remainder below it, have one quotient, since quotients one apart would put the remainders a whole divisor apart.
+    claim(
+        "q: Int, s: Int, d: Int, r: Int, t: Int, r_low: Holds(+0 <= r), r_high: Holds(r < d), t_low: Holds(+0 <= t), t_high: Holds(t < d), same: Holds(q * d + r == s * d + t)",
+        "Holds(q == s)",
+    ),
     // An equality or a disequality conversion holds to be an order is asked as that order: a sum of naturals against zero.
     claim("n: Nat, p: Holds(n < 1)", "Holds(n == 0)"),
     claim("n: Nat, m: Nat, p: Holds(0 < n)", "Holds(n + m != 0)"),
