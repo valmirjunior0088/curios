@@ -9,8 +9,8 @@
 use {
     super::{Answered, Context, InScope, Question},
     crate::{
-        Binders, Error, InductCase, enter_induct_case, is_erasable_in, reduce_with, refine_head,
-        sort_term, synth_neutral,
+        Binders, Error, InductCase, Opened, enter_induct_case, is_erasable_in, reduce_with,
+        refine_head, sort_term, synth_neutral,
     },
     curios_core::{
         Advance, Atom, Cost, DefinitionKind, Free, Global, InductDecl, InductInstance, ReduceError,
@@ -216,7 +216,7 @@ impl<'s> Retyping<'s> {
     /// Whether a value of `type_` carries nothing at run time, under the binders `opened` ([`is_erasable_in`]).
     pub(crate) fn is_erasable_in(
         &mut self,
-        opened: &mut Vec<(Free, Term)>,
+        opened: &mut Opened,
         type_: &Term,
     ) -> Result<bool, Error> {
         is_erasable_in(&mut self.context, opened, type_)
@@ -224,7 +224,12 @@ impl<'s> Retyping<'s> {
 
     /// The type of the neutral `term`, read with no binder a conversion opened ([`synth_neutral`]): a walk over finished terms assumes the binders it stands under.
     pub(crate) fn synth_neutral(&mut self, term: &Term) -> Result<Option<Term>, ReduceError> {
-        synth_neutral(&mut self.context, &Binders::default(), &[], term)
+        synth_neutral(
+            &mut self.context,
+            &Binders::default(),
+            &Opened::default(),
+            term,
+        )
     }
 
     /// Install the equation an arm stands under: `head` is `value` there ([`refine_head`]).

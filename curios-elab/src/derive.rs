@@ -15,7 +15,7 @@
 //! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `tied` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it.
 
 use {
-    super::{Context, Error, Mode, Sort, Underivable, elaborate, reduce_with},
+    super::{Context, Error, Mode, Opened, Sort, Underivable, elaborate, reduce_with},
     curios_core::{
         CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many,
         MetavarOrigin, Scope, StructDecl, StructEntry, StructType, Subterm, Term, WitnessOrigin,
@@ -276,7 +276,7 @@ struct Classified {
 fn classify(
     context: &mut Context,
     site: &Site<'_>,
-    opened: &mut Vec<(Free, Term)>,
+    opened: &mut Opened,
     position: usize,
     payload: Payload,
     type_: &Term,
@@ -306,7 +306,7 @@ fn classify(
     let telescope_variable = match &*reduced {
         Subterm::Var(var) => var
             .as_free()
-            .is_some_and(|free| free.is_local() && !opened.iter().any(|(bound, _)| bound == free)),
+            .is_some_and(|free| free.is_local() && !opened.binds(free)),
         _ => false,
     };
     Ok(Classified {
@@ -364,7 +364,8 @@ impl Constructor<'_> {
             .chain(binders.iter().map(Term::free_var))
             .collect::<Vec<_>>();
 
-        let mut opened = vec![(*value, site.key.clone())];
+        let mut opened = Opened::default();
+        opened.push(*value, site.key.clone());
         let mut parts = Vec::new();
         self.signature
             .telescope
@@ -384,7 +385,7 @@ impl Constructor<'_> {
                             type_,
                         )?);
                     }
-                    opened.push((binders[position], type_.clone()));
+                    opened.push(binders[position], type_.clone());
                 }
                 Ok::<(), Error>(())
             })?;
@@ -423,7 +424,8 @@ fn struct_parts(
         .collect::<Vec<_>>();
 
     let marks = fields.marks();
-    let mut opened = vec![(*value, site.key.clone())];
+    let mut opened = Opened::default();
+    opened.push(*value, site.key.clone());
     let mut parts = Vec::new();
     let mut ordinal = 0;
     fields.walk(&projections, |index, _, type_| {

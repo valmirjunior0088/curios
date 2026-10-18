@@ -4,7 +4,7 @@
 
 use {
     super::Lowering,
-    crate::{Error, Retyping},
+    crate::{Error, Opened, Retyping},
     curios_core::{
         Advance, Bound, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType,
     },
@@ -15,7 +15,7 @@ use {
 ///
 /// CRITICAL: an answer here is one reading's. A polymorphic field `value : A` is kept (its abstract `A` is neither prop nor type) and reads as a proof at a construction where `A := SomeProp`. So a runtime shape is decided from this only for a nominal declaration, against its *declared* signature opened with the surrounding binders as opaque variables ([`constructor_entries`]); everywhere else the answer decides what a slot holds and never whether the slot is there.
 pub(crate) fn is_erasable(context: &mut Retyping, type_: &Term) -> Result<bool, Error> {
-    context.is_erasable_in(&mut Vec::new(), type_)
+    context.is_erasable_in(&mut Opened::default(), type_)
 }
 
 /// The payload view of a nominal declaration's telescope: one entry per binder — its label, whether it is erased, and the recorded carrier shape of a kept one — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`crate::is_erasable_in`]). That opaque-open discipline is what makes a row a fact of its declaration, the same at every instantiation, so this is the only walk that computes one; the terminal body is ignored. It pairs with a concrete walk over the actual values: the row decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types. An erased entry's shape is `Opaque`; nothing reads it.
@@ -25,7 +25,7 @@ pub(crate) fn constructor_entries<B: Bound>(
     telescope: Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool, curios_ersd::FieldShape)>, Error> {
     let mut entries = Vec::new();
-    let mut opened = Vec::new();
+    let mut opened = Opened::default();
     let mut cursor = telescope.cursor();
     while let Some((hint, type_)) = cursor.entry() {
         let label = hint.map(str::to_string);
@@ -36,7 +36,7 @@ pub(crate) fn constructor_entries<B: Bound>(
         };
         let name = cursor.advance_fresh(|hint| context.fresh(hint));
         entries.push((label, erasable, shape));
-        opened.push((name, type_));
+        opened.push(name, type_);
     }
     Ok(entries)
 }

@@ -2,6 +2,9 @@
 //!
 //! Both are the *non*-structural half of conversion: [`synth_neutral`] answers what type a head-and-arguments term inhabits, which is what type-directed comparison needs before it can compare anything, and [`identify_universe_levels`] disposes of a problem by committing level equalities rather than by descending. The structural comparison that calls them lives with [`Convert`](super::Convert).
 
+#[cfg(test)]
+mod tests;
+
 use {
     crate::{Context, Structural, reduce, reduce_forced},
     curios_core::{
@@ -9,7 +12,7 @@ use {
         Match, MatchResult, Proj, Quality, ReduceError, StructType, Subterm, Term, TupleType,
         UniverseConstraintKind, UniverseConstraintOrigin, instantiate_universes_scoped,
     },
-    std::rc::Rc,
+    std::{collections::HashMap, rc::Rc},
 };
 
 /// Decide a problem whose sides differ only in universe levels by *identifying* the levels: commit every differing pair as the same `Conversion` equality constraint the structural path emits for a type's vectors, and accept — after the commitment the two spellings are one term, which is the license the acceptance stands on. Neither side is reduced, which is the point: two spellings of one computation are identified without running it, so registering the fact does not cost the fact's own subject — a partial definition at two fresh instances, an accumulation under a strict operation.
@@ -249,10 +252,75 @@ pub(super) enum Curried {
     Compared,
 }
 
-/// Binders opened locally by [`Sort::of`](super::Sort::of) while walking a telescope, innermost last.
+/// Binders opened locally by [`Sort::of`](super::Sort::of) while walking a telescope, innermost last, each found by its name.
 ///
 /// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion problem (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only: a label minted here is among no problem's [`Binders`], so it must never reach one. It cannot, because `Sort::of` returns a `Sort`.
-pub(crate) type Opened = [(Free, Term)];
+///
+/// **A binder is found by its name, and a type asked which it names by the names it holds.** A record's fields are each opened beside the ones before it, and each field's type is asked whether it names any of them: read off a list, field by field, that is the square of the fields.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Opened {
+    /// Each binder at its type, innermost last, beside the position the name stood at before it where it shadows one.
+    binders: Vec<(Free, Term, Option<usize>)>,
+    positions: HashMap<Free, usize>,
+}
+
+impl Opened {
+    /// How many binders are open: the mark [`Opened::truncate`] closes back to.
+    pub(crate) fn len(&self) -> usize {
+        self.binders.len()
+    }
+
+    /// Open `binder` at `type_`, innermost.
+    pub(crate) fn push(&mut self, binder: Free, type_: Term) {
+        let shadowed = self.positions.insert(binder, self.binders.len());
+        self.binders.push((binder, type_, shadowed));
+    }
+
+    /// Close the innermost binder.
+    pub(crate) fn pop(&mut self) {
+        if let Some((binder, _, shadowed)) = self.binders.pop() {
+            match shadowed {
+                Some(position) => self.positions.insert(binder, position),
+                None => self.positions.remove(&binder),
+            };
+        }
+    }
+
+    /// Close every binder opened past `mark`.
+    pub(crate) fn truncate(&mut self, mark: usize) {
+        while self.binders.len() > mark {
+            self.pop();
+        }
+    }
+
+    /// The type `name` was opened at, where it is open.
+    pub(crate) fn type_of(&self, name: &Free) -> Option<&Term> {
+        let position = *self.positions.get(name)?;
+
+        Some(&self.binders[position].1)
+    }
+
+    /// Whether `name` is open.
+    pub(crate) fn binds(&self, name: &Free) -> bool {
+        self.positions.contains_key(name)
+    }
+
+    /// Whether `term` names an open binder, read off the names it holds or the binders open, whichever are fewer.
+    pub(crate) fn names_one_in(&self, term: &Term) -> bool {
+        if self.binders.is_empty() || !term.has_local_free() {
+            return false;
+        }
+        let frees = term.free_vars_shared();
+
+        match frees.len() < self.binders.len() {
+            true => frees.iter().any(|name| self.binds(name)),
+            false => self
+                .binders
+                .iter()
+                .any(|(binder, _, _)| frees.contains(binder)),
+        }
+    }
+}
 
 /// The binders a conversion problem is posed under, each at the type its position gave it, innermost first.
 ///
@@ -323,8 +391,8 @@ pub(crate) fn synth_neutral(
     match &**term {
         Subterm::Var(var) => {
             let name = var.unwrap();
-            // Locally opened binders shadow the context, innermost first.
-            if let Some((_, type_)) = opened.iter().rev().find(|(bound, _)| bound == name) {
+            // Locally opened binders shadow the context.
+            if let Some(type_) = opened.type_of(name) {
                 return Ok(Some(type_.clone()));
             }
             match context
@@ -344,7 +412,7 @@ pub(crate) fn synth_neutral(
             }
             InstanceHead::Var(var) => {
                 let name = var.unwrap();
-                if let Some((_, type_)) = opened.iter().rev().find(|(bound, _)| bound == name) {
+                if let Some(type_) = opened.type_of(name) {
                     return Ok(Some(type_.clone()));
                 }
                 let Some(scheme) = context.assumption(name).cloned() else {
@@ -445,7 +513,7 @@ pub(super) fn apply_param_types(
     head: &Term,
     arguments: &[Argument],
 ) -> Result<Option<Vec<Term>>, ReduceError> {
-    let Some(head_type) = synth_neutral(context, binders, &[], head)? else {
+    let Some(head_type) = synth_neutral(context, binders, &Opened::default(), head)? else {
         return Ok(None);
     };
 

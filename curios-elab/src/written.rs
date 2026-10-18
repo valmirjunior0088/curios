@@ -8,8 +8,8 @@
 
 use {
     crate::{
-        Binders, Context, Entailed, InductCase, Outcome, Resolution, convert_outcome, entail,
-        enter_induct_case, reduce_with, refine_head, resolve_witness, synth_neutral,
+        Binders, Context, Entailed, InductCase, Opened, Outcome, Resolution, convert_outcome,
+        entail, enter_induct_case, reduce_with, refine_head, resolve_witness, synth_neutral,
         trivially_inhabited, zonk_solved_term_metas,
     },
     curios_core::{
@@ -370,8 +370,12 @@ impl Writing {
             .collect::<Vec<_>>();
 
         context.asking(|context| {
-            let Ok(Some(type_)) = synth_neutral(context, &Binders::default(), &[], &projection)
-            else {
+            let Ok(Some(type_)) = synth_neutral(
+                context,
+                &Binders::default(),
+                &Opened::default(),
+                &projection,
+            ) else {
                 return false;
             };
             let Ok(reduced) = reduce_with(context, &type_) else {
@@ -901,7 +905,7 @@ fn enter_case_of(
     labels: &[Free],
     vars: &[Term],
 ) -> bool {
-    let Some(type_) = synth_neutral(context, &Binders::default(), &[], head)
+    let Some(type_) = synth_neutral(context, &Binders::default(), &Opened::default(), head)
         .ok()
         .flatten()
     else {
@@ -956,7 +960,7 @@ fn dictionary_type(context: &mut Context, dictionary: &Term) -> Option<Term> {
             universes: universes.clone(),
             params: params.clone(),
         }))),
-        _ => synth_neutral(context, &Binders::default(), &[], dictionary)
+        _ => synth_neutral(context, &Binders::default(), &Opened::default(), dictionary)
             .ok()
             .flatten(),
     }

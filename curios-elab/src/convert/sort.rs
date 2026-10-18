@@ -7,7 +7,7 @@ use {
     super::probe_level_fallback,
     crate::{Binders, Context, Opened, probe_open_sort, reduce, reduce_forced, synth_neutral},
     curios_core::{
-        Bound, Free, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, MatchResult,
+        Bound, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, MatchResult,
         Quality, ReduceError, StructType, Subterm, Term, TupleType,
     },
 };
@@ -59,13 +59,13 @@ impl Sort {
 
     /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens. An unsolved metavariable is classified by its own type rather than defaulted, at the quality and the level that type states, so one whose type is `Prop` is a proposition before it is solved — which is what makes `p` in `@P: Prop, @p: P` a bound at its insertion, parked and filled once `P` is known, where defaulting would read it as an ordinary implicit nothing retries. A quality still open is handed back as it stands, a metavariable or a declaration's parameter, and is no proposition's to [`Sort::is_prop`].
     pub(crate) fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
-        Sort::of_in(context, &mut Vec::new(), type_)
+        Sort::of_in(context, &mut Opened::default(), type_)
     }
 
     /// [`Sort::of`] under the binders a surrounding telescope walk has opened. The `opened` scope is threaded rather than installed on the [`Context`], because assuming a binder bumps the mutation stamp that validates the memoization caches, and a walk that assumed at every binder would invalidate them.
     pub(crate) fn of_in(
         context: &mut Context,
-        opened: &mut Vec<(Free, Term)>,
+        opened: &mut Opened,
         type_: &Term,
     ) -> Result<Sort, ReduceError> {
         Sort::of_under(context, &Binders::default(), opened, type_)
@@ -77,15 +77,12 @@ impl Sort {
     pub(crate) fn of_under(
         context: &mut Context,
         binders: &Binders,
-        opened: &mut Vec<(Free, Term)>,
+        opened: &mut Opened,
         type_: &Term,
     ) -> Result<Sort, ReduceError> {
         let remembered = type_.reach() == 0
             && (!type_.has_local_free()
-                || (opened
-                    .iter()
-                    .all(|(binder, _)| !type_.mentions_free(binder))
-                    && !binders.names_one_in(type_)));
+                || (!opened.names_one_in(type_) && !binders.names_one_in(type_)));
         if remembered && let Some(sort) = context.cached_sort(type_) {
             return Ok(sort);
         }
@@ -103,7 +100,7 @@ impl Sort {
     fn classify_under(
         context: &mut Context,
         binders: &Binders,
-        opened: &mut Vec<(Free, Term)>,
+        opened: &mut Opened,
         type_: &Term,
     ) -> Result<Sort, ReduceError> {
         // Asked of the type as written, before anything is run to classify it.
@@ -150,7 +147,7 @@ impl Sort {
                     levels.push(field.level);
                     let binder = context.fresh(hint);
                     let variable = Term::free_var(&binder);
-                    opened.push((binder, ty));
+                    opened.push(binder, ty);
                     Ok(variable)
                 })?;
                 opened.truncate(mark);
@@ -310,7 +307,7 @@ impl Sort {
                     domains.push(Sort::of_under(context, binders, opened, &domain)?.level);
                     let binder = context.fresh(hint);
                     let variable = Term::free_var(&binder);
-                    opened.push((binder, domain));
+                    opened.push(binder, domain);
                     Ok(variable)
                 })?;
                 // A function type takes its codomain's quality, a proposition where it answers one, at the join of its domains' levels and the codomain's.

@@ -2849,7 +2849,7 @@ impl Convert {
             // Definitional proof irrelevance before either side is reduced, where neither side is flexible — the kernel's order, for the kernel's reason: reducing a proof to discover it equals another proof is work whose answer was already known. Here the work could be unbounded, too: under an arm's case equation a proof can reduce forever, and comparing it with another proof would spend the budget on a goal irrelevance decides outright. A side mentioning a metavariable still goes through the dispatch below, so it is solved against the other side rather than left dangling, and the check after that dispatch covers it.
             if !this.has_metavar()
                 && !that.has_metavar()
-                && Sort::of_under(context, &posed, &mut Vec::new(), &type_)?
+                && Sort::of_under(context, &posed, &mut Opened::default(), &type_)?
                     .is_prop_to(context, "Convert::drain")
             {
                 continue;
@@ -3008,7 +3008,7 @@ impl Convert {
             }
 
             // Definitional proof irrelevance: any two inhabitants of a strict proposition are convertible. Placed after the metavar dispatch so a flexible side is still solved against the other (a metavar is not left dangling merely because its type is a proposition); a pair with neither side flexible was decided before either was reduced, above.
-            if Sort::of_under(context, &posed, &mut Vec::new(), &type_)?
+            if Sort::of_under(context, &posed, &mut Opened::default(), &type_)?
                 .is_prop_to(context, "Convert::drain")
             {
                 continue;
@@ -3509,7 +3509,7 @@ fn holds_data<B: Bound>(
             false => type_,
         };
         if type_.has_metavar()
-            || !Sort::of_under(context, binders, &mut Vec::new(), &type_)?
+            || !Sort::of_under(context, binders, &mut Opened::default(), &type_)?
                 .is_prop_to(context, "holds_data")
         {
             return Ok(true);
@@ -3543,7 +3543,7 @@ fn by_their_own_type(
     // The type first, and the sides only where it decides: nearly every pair here is two types at a sort, which this leaves at the cost of two lookups.
     let this_type = through(context, &this_type);
     if this_type.has_metavar()
-        || !Sort::of_under(context, binders, &mut Vec::new(), &this_type)?
+        || !Sort::of_under(context, binders, &mut Opened::default(), &this_type)?
             .is_prop_to(context, "by_their_own_type")
     {
         return Ok(false);
@@ -3584,7 +3584,7 @@ fn looked_up(
         ..
     }) = &**term
     else {
-        return synth_neutral(context, binders, &[], term);
+        return synth_neutral(context, binders, &Opened::default(), term);
     };
     let Some(Some(constructor)) = declared_facet(context, name, universes, params, |at| {
         at.constructor(tag).transpose()

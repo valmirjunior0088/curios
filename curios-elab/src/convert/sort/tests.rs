@@ -1,7 +1,7 @@
 //! The sort a type inhabits, remembered: what the table saves, and what ends it.
 
 use {
-    crate::{Context, Sort},
+    crate::{Context, Opened, Sort},
     curios_analysis::test_support::SYNTAX,
     curios_core::{Free, Global, Intrinsic, Level, Nat, Quality, Term},
     curios_utilities::Qualifier,
@@ -112,15 +112,16 @@ fn a_type_naming_a_binder_its_walk_opened_is_not_remembered() {
     let mut context = Context::with_default_budget(SYNTAX);
     let binder = Free::local(0, Some("x"));
     let type_ = Term::free_var(&binder);
+    let opened_at = |type_: Term| {
+        let mut opened = Opened::default();
+        opened.push(binder, type_);
+        opened
+    };
 
-    let at_a_type = Sort::of_in(
-        &mut context,
-        &mut vec![(binder, Term::type_ground())],
-        &type_,
-    )
-    .expect("classifies");
+    let at_a_type =
+        Sort::of_in(&mut context, &mut opened_at(Term::type_ground()), &type_).expect("classifies");
     let at_a_proposition =
-        Sort::of_in(&mut context, &mut vec![(binder, Term::prop())], &type_).expect("classifies");
+        Sort::of_in(&mut context, &mut opened_at(Term::prop()), &type_).expect("classifies");
 
     assert_eq!(at_a_type, Sort::type_at(Level::zero()));
     assert_eq!(at_a_proposition, Sort::prop_at(Level::zero()));

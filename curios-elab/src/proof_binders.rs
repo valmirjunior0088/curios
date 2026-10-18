@@ -7,7 +7,7 @@
 //! **A name the item declares is the one binder its terms do not hold.** It is asked here with them, at its declared type, and the answer is kept on its definition ([`curios_core::Definition::proof`]): a proof a declaration wrote is bound, from its publication on, to a body no judgment unfolds it to. That mark does decide a judgment, which a binder's never does, since a name that does not unfold is a constant to conversion. It refuses nothing a body unfolded would admit, because conversion holds two proofs of one proposition equal before it reduces either.
 
 use {
-    crate::{Context, Error, Published, is_proof_in},
+    crate::{Context, Error, Opened, Published, is_proof_in},
     curios_core::{Advance, Bound, DefinitionKind, Free, Item, ProofBinders, Telescope, Term},
 };
 
@@ -15,7 +15,7 @@ use {
 struct Asking<'a, 's> {
     context: &'a mut Context<'s>,
     /// The binders entered at a type, each with that type: what the rule reads a bound variable's sort off.
-    opened: Vec<(Free, Term)>,
+    opened: Opened,
     /// Whether each binder entered came with a type, innermost last, so leaving one takes its entry out of `opened` only where it put one in.
     typed: Vec<bool>,
 }
@@ -31,7 +31,7 @@ impl ProofBinders for Asking<'_, '_> {
         let binder = self.context.fresh(hint);
         self.typed.push(type_.is_some());
         if let Some(type_) = type_ {
-            self.opened.push((binder, type_.clone()));
+            self.opened.push(binder, type_.clone());
         }
 
         binder
@@ -51,7 +51,7 @@ fn stated(context: &mut Context, term: &Term, binders: &[Term]) -> Result<Term, 
     term.stating_proofs_under(
         &mut Asking {
             context,
-            opened: Vec::new(),
+            opened: Opened::default(),
             typed: Vec::new(),
         },
         binders,
@@ -64,11 +64,11 @@ fn stated_telescope<B: Bound>(
     telescope: &Telescope<B>,
 ) -> Result<Telescope<B>, Error> {
     let mut proofs = Vec::new();
-    let mut opened = Vec::new();
+    let mut opened = Opened::default();
     let mut cursor = telescope.cursor();
     while let Some((_, type_)) = cursor.entry() {
         proofs.push(is_proof_in(context, &mut opened, &type_)?);
-        opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), type_));
+        opened.push(cursor.advance_fresh(|hint| context.fresh(hint)), type_);
     }
 
     Ok(telescope.clone().with_proofs(&proofs))
@@ -76,7 +76,8 @@ fn stated_telescope<B: Bound>(
 
 /// Whether the definition `kind` introduced at `type_` is a proof a declaration wrote ([`curios_core::Definition::proof`]). A generated definition is left what it unfolds to: a constructor of a proposition and a law's projection are terms the compiler writes, one node deep.
 fn proves(context: &mut Context, kind: &DefinitionKind, type_: &Term) -> Result<bool, Error> {
-    Ok(matches!(kind, DefinitionKind::Authored) && is_proof_in(context, &mut Vec::new(), type_)?)
+    Ok(matches!(kind, DefinitionKind::Authored)
+        && is_proof_in(context, &mut Opened::default(), type_)?)
 }
 
 /// State, on every binder of `published`, whether it binds a proof: each function literal's and each `let`'s in the item's terms, each constructor's payloads in the registry entries the item declares, which an arm then binds under, and each name the item declares, on its definition.

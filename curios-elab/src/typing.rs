@@ -71,7 +71,7 @@ pub(crate) fn sort_term(context: &mut Context, type_: &Term) -> Result<Term, Err
 
 /// Whether `type_` is a strict proposition (its sort is `Prop`). Wraps `Sort::of`, mapping an exhausted budget like the helpers above.
 pub(crate) fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error> {
-    is_prop_in(context, &mut Vec::new(), type_, "is_prop")
+    is_prop_in(context, &mut Opened::default(), type_, "is_prop")
 }
 
 /// [`is_prop`] under the binders a surrounding walk has opened, asked by the reader named `reader` ([`Sort::is_prop_to`]).
@@ -79,7 +79,7 @@ pub(crate) fn is_prop(context: &mut Context, type_: &Term) -> Result<bool, Error
 /// The binders are threaded rather than assumed into the [`Context`], because `Context::assume` bumps the mutation stamp that validates the memoization caches. A seeding walk that assumed instead would invalidate them at every binder it descended through.
 fn is_prop_in(
     context: &mut Context,
-    opened: &mut Vec<(Free, Term)>,
+    opened: &mut Opened,
     type_: &Term,
     reader: &'static str,
 ) -> Result<bool, Error> {
@@ -156,7 +156,7 @@ pub(crate) fn is_declared_prop_in(
 /// **One reading's answer.** A domain that is a variable here is a proof where the variable is instantiated at a proposition, so a `false` says only that this reading keeps the value. A `true` holds at every instantiation: a sort, a proposition and a function into one stay what they are under any substitution. Erasure asks through its reader ([`crate::Retyping`]), of a declaration's signature for what the declaration stores and of a slot's type for what the slot holds.
 pub(crate) fn is_erasable_in(
     context: &mut Context,
-    opened: &mut Vec<(Free, Term)>,
+    opened: &mut Opened,
     type_: &Term,
 ) -> Result<bool, Error> {
     let mark = opened.len();
@@ -175,7 +175,7 @@ pub(crate) fn is_erasable_in(
 /// [`is_erasable_in`]'s walk, a loop to the type that decides it: an instance answers as its head and a function as what it ultimately returns, past its parameters, each opened binder joining `opened` so what follows can read its sort. A proof- or type-producing function is pure and content-free; an effectful `X -> {}` is not. Each closed type passed through goes into `passed`, to be remembered at the answer.
 fn erasable_end(
     context: &mut Context,
-    opened: &mut Vec<(Free, Term)>,
+    opened: &mut Opened,
     type_: &Term,
     passed: &mut Vec<Term>,
 ) -> Result<bool, Error> {
@@ -203,7 +203,7 @@ fn erasable_end(
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let mut cursor = telescope.cursor();
                 while let Some((_, domain)) = cursor.entry() {
-                    opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), domain));
+                    opened.push(cursor.advance_fresh(|hint| context.fresh(hint)), domain);
                 }
                 cursor.body().expect("a cursor past every entry")
             }
@@ -219,7 +219,7 @@ fn erasable_end(
 /// A `true` holds at every instantiation, as [`is_erasable_in`]'s does, and a `false` says only that this reading computes the value.
 pub(crate) fn is_proof_in(
     context: &mut Context,
-    opened: &mut Vec<(Free, Term)>,
+    opened: &mut Opened,
     type_: &Term,
 ) -> Result<bool, Error> {
     let mark = opened.len();
@@ -229,11 +229,7 @@ pub(crate) fn is_proof_in(
 }
 
 /// [`is_proof_in`]'s walk, a loop past each function's parameters to what it ultimately returns, each opened binder joining `opened`.
-fn proof_end(
-    context: &mut Context,
-    opened: &mut Vec<(Free, Term)>,
-    type_: &Term,
-) -> Result<bool, Error> {
+fn proof_end(context: &mut Context, opened: &mut Opened, type_: &Term) -> Result<bool, Error> {
     let mut type_ = type_.clone();
     loop {
         // A proposition known by its head is one with nothing run to read it.
@@ -245,7 +241,7 @@ fn proof_end(
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let mut cursor = telescope.cursor();
                 while let Some((_, domain)) = cursor.entry() {
-                    opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), domain));
+                    opened.push(cursor.advance_fresh(|hint| context.fresh(hint)), domain);
                 }
                 cursor.body().expect("a cursor past every entry")
             }
@@ -287,7 +283,7 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
 /// A type at a written `Sort` is a variable or an application of one, so the sort is read off the neutral's own type, where the written quality still stands for itself.
 pub(crate) fn decided_sort_of(context: &mut Context, type_: &Term) -> Option<Option<Extent>> {
     let reduced = reduce_forced(context, type_.clone()).ok()?;
-    let sort = synth_neutral(context, &Binders::default(), &[], &reduced).ok()??;
+    let sort = synth_neutral(context, &Binders::default(), &Opened::default(), &reduced).ok()??;
 
     match &*reduce_forced(context, sort).ok()? {
         Subterm::Sort(quality, _) => context.universes().written_decision(*quality),
