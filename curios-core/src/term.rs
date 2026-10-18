@@ -38,8 +38,8 @@ use {
     super::{
         Atom, Bound, Enter, Extent, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
         MaskedLevels, Quality, QualityMetaId, Scope, SelfReference, Spelled, Spelling, Telescope,
-        Three, Two, UniverseMetaId, Universes, Var, Variance, Visit, print_term,
-        project_erased_universes, stamp_declaration_instance, universe_metas,
+        Three, Two, UniverseMetaId, Universes, Var, Variance, Visit, capture_placed, oldest_local,
+        print_term, project_erased_universes, stamp_declaration_instance, universe_metas,
     },
     curios_abi::ForeignFunction,
     curios_algebra::Rank,
@@ -47,7 +47,7 @@ use {
     curios_print::{run_printer, run_printer_within},
     curios_utilities::{Plicity, recurse},
     std::{
-        collections::{BTreeMap, BTreeSet, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         fmt,
         hash::{Hash, Hasher},
         mem,
@@ -1328,18 +1328,27 @@ impl Term {
             .map(|(binder, _, _)| binder)
             .collect::<Vec<_>>();
 
-        // A binding's index `p` names the `p`-th binder of the block, outermost first, which is the order `capture` numbers a list in.
-        let mut bindings = items
-            .iter()
-            .enumerate()
-            .map(|(index, (_, type_, value))| match index {
-                0 => LetBinding::new(type_.clone(), value.clone()),
-                _ => LetBinding::new(
-                    type_.capture(&binders[..index]),
-                    value.capture(&binders[..index]),
-                ),
+        // A binding's index `p` names the `p`-th binder of the block, outermost first, which is the order `capture` numbers a list in. Each binding is closed over a prefix of one list, so a name's place in it is looked up once for all of them: searched per prefix and occurrence, a block would cost its length times its occurrences.
+        let mut places = HashMap::new();
+        for (place, binder) in binders.iter().enumerate() {
+            places.entry(**binder).or_insert(place);
+        }
+        let closed = |term: &Term, count: usize, oldest: Option<u64>| {
+            capture_placed(term, count, oldest, |name| {
+                places.get(name).copied().filter(|&place| place < count)
             })
-            .collect::<Vec<_>>();
+        };
+        let mut oldest = Some(u64::MAX);
+        let mut bindings = Vec::with_capacity(items.len());
+        for (index, (binder, type_, value)) in items.iter().enumerate() {
+            bindings.push(match index {
+                0 => LetBinding::new(type_.clone(), value.clone()),
+                _ => LetBinding::new(closed(type_, index, oldest), closed(value, index, oldest)),
+            });
+            oldest = oldest_local(&[binder])
+                .zip(oldest)
+                .map(|(this, before)| this.min(before));
+        }
 
         // The tail keeps where it was written, as in [`Term::let_`].
         let extent = tail.extent();
@@ -1351,8 +1360,8 @@ impl Term {
                 for binding in inner {
                     let (binding_type, binding_value) = binding.into_parts();
                     bindings.push(LetBinding::new(
-                        binding_type.capture(&binders),
-                        binding_value.capture(&binders),
+                        closed(&binding_type, binders.len(), oldest),
+                        closed(&binding_value, binders.len(), oldest),
                     ));
                 }
 

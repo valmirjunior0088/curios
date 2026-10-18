@@ -194,23 +194,9 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     ///
     /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size and not its tree's. And where every binder is a local, a subterm whose every local is older than each binder, with no loose index to shift, is handed back unwalked, since nothing in it is a binder's occurrence. Binders are minted as they are opened and closed innermost first, so a body's own locals are older than the binder closing it: a nest of lambdas whose bodies name only an outer binder closes each lambda without walking the lambdas within it.
     fn capture(&self, binders: &[&Free]) -> Self {
-        let oldest = binders.iter().try_fold(u64::MAX, |oldest, binder| {
-            binder.as_local().map(|mint| oldest.min(mint.index()))
-        });
-        self.traverse(&mut Visit::capturing(oldest, |depth, var| {
-            var.as_free()
-                .and_then(|name| {
-                    binders
-                        .iter()
-                        .position(|&candidate| name == candidate)
-                        .map(|index| Subterm::Var(Var::bound(depth + index)))
-                })
-                .or_else(|| {
-                    var.as_bound()
-                        .filter(|&index| index >= depth)
-                        .map(|index| Subterm::Var(Var::bound(index + binders.len())))
-                })
-        }))
+        capture_placed(self, binders.len(), oldest_local(binders), |name| {
+            binders.iter().position(|&candidate| name == candidate)
+        })
     }
 
     /// The opening half of the locally-nameless discipline: substitute the outermost `terms.len()` loose bound indices with `terms` (each shifted by the depth it lands under) and re-tighten the loose indices beyond them. `Scope::open` is this plus the arity check; effects depend only on indices `>= depth`, so the traversal prunes by `reach`, and a node more than one owner holds is released once per depth.
@@ -289,6 +275,31 @@ impl Bound for () {
     fn has_universe_meta(&self) -> bool {
         false
     }
+}
+
+/// [`Bound::capture`] over `count` binders, `place` answering a name's index among them and `oldest` the oldest of them where every one is a local ([`oldest_local`]): for a caller that closes terms over the prefixes of one list, which looks a name's place up once for all of them where a capture would search each prefix at each occurrence.
+pub(crate) fn capture_placed<B: Bound>(
+    value: &B,
+    count: usize,
+    oldest: Option<u64>,
+    place: impl Fn(&Free) -> Option<usize>,
+) -> B {
+    value.traverse(&mut Visit::capturing(oldest, |depth, var| {
+        var.as_free()
+            .and_then(|name| place(name).map(|index| Subterm::Var(Var::bound(depth + index))))
+            .or_else(|| {
+                var.as_bound()
+                    .filter(|&index| index >= depth)
+                    .map(|index| Subterm::Var(Var::bound(index + count)))
+            })
+    }))
+}
+
+/// The oldest of `binders` where every one is a local, which a capture passes over a subterm holding only older locals by; `None` where one is a global.
+pub(crate) fn oldest_local(binders: &[&Free]) -> Option<u64> {
+    binders.iter().try_fold(u64::MAX, |oldest, binder| {
+        binder.as_local().map(|mint| oldest.min(mint.index()))
+    })
 }
 
 /// [`rewrite_universe_levels_scoped_shared`] for a hook that reads no depth.
