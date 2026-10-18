@@ -10,15 +10,14 @@
 
 use {
     super::{
-        Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Shared, Step,
-        Table,
+        Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Step, Table,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
-    curios_utilities::{Mount, Ordered, Persistent, Qualifier, Report, Sorted},
+    curios_utilities::{Ordered, Persistent, Qualifier, Report, Sorted},
     std::{
         borrow::Borrow,
         cell::RefCell,
-        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashSet},
         rc::Rc,
     },
 };
@@ -123,6 +122,13 @@ impl LookupReaders {
     /// The declarations whose lookups read `consulted`.
     fn of_binding(&self, consulted: &Consulted) -> &[Key] {
         self.by.get(consulted).map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether a declaration or a body's `use` declarations wrote a name under the mount `prefix`, which the name reached.
+    pub(super) fn reaches_mount(&self, prefix: Qualifier) -> bool {
+        let consulted = Consulted::Mount(prefix);
+
+        !self.of_binding(&consulted).is_empty() || !self.of_body(&consulted).is_empty()
     }
 
     /// The module bodies whose `use` declarations read `consulted`.
@@ -249,6 +255,8 @@ pub(crate) struct LoweredDeclaration {
     text: Option<Key>,
     /// The module body it is written in.
     body: Qualifier,
+    /// Whether its lowering registered a `foreign` row, which the unit's store holds in the order the declarations stand.
+    foreign: bool,
     /// What the unit-wide passes read of each item it lowered to, in the unit's order.
     items: Vec<LoweredItem>,
     /// The definitions it recorded an import scope for, each by its place among the declaration's.
@@ -262,7 +270,12 @@ pub(crate) struct LoweredDeclaration {
 
 impl LoweredDeclaration {
     /// What the declaration `context` has just lowered to `items` is recorded as, `facts` having been taken of them.
-    pub(super) fn made(context: &Context, items: &[FlatItem], facts: Vec<LoweredItem>) -> Self {
+    pub(super) fn made(
+        context: &Context,
+        items: &[FlatItem],
+        facts: Vec<LoweredItem>,
+        foreign: bool,
+    ) -> Self {
         let Journal {
             trace,
             consulted,
@@ -307,6 +320,7 @@ impl LoweredDeclaration {
             key,
             text,
             body: context.prefix(),
+            foreign,
             items: facts,
             scoped: scoped.unwrap_or_default(),
             lints: lints.unwrap_or_default(),
@@ -337,6 +351,16 @@ impl LoweredDeclaration {
     /// Whether a later lowering may keep this. See [`LoweredDeclaration::key`].
     pub(super) fn keyable(&self) -> bool {
         self.key.is_some()
+    }
+
+    /// The text a later lowering keeps this by. See the field.
+    pub(super) fn key(&self) -> Option<Key> {
+        self.key
+    }
+
+    /// Whether this registered a `foreign` row. See the field.
+    pub(super) fn foreign(&self) -> bool {
+        self.foreign
     }
 }
 
@@ -389,6 +413,9 @@ pub(crate) struct BaselineHalf {
     /// Every binding the `use` declarations of each module body read, by the module: what the scope of its body can move with. A body that reads none holds none.
     #[archived_with(curios_utilities::InSharedKeyOrder)]
     pub uses: Table<Vec<Consulted>>,
+    /// Every lint each module body's declarations and `use` declarations were found to leave, by the body, before elaboration credits a binder: what a body a later lowering passes unwalked contributes. A body that leaves none holds none.
+    #[archived_with(curios_utilities::InSharedKeyOrder)]
+    pub lints: Table<Vec<Lint>>,
     /// Every name each witness's key read, by the witness: what its name can move with.
     #[archived_with(curios_utilities::InSharedKeyOrder)]
     pub keyed: Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
@@ -397,7 +424,7 @@ pub(crate) struct BaselineHalf {
 /// A unit an earlier text of the same sources lowered to, as a later one is lowered over it: its declarations by the text each was lowered from, each by the place of its first item.
 pub(super) struct Baseline<'a> {
     unit: &'a PreparedText,
-    by_text: HashMap<Key, i64>,
+    by_text: &'a Persistent<Key, i64>,
     /// Whether the unit declares a foreign function at all, which the prelude does not: a row is looked up by its import name, spelled for the asking.
     foreign: bool,
     /// What the edit moved of what the lowering reads ([`Moved`]): `None` where a unit in scope moved, and every declaration is asked.
@@ -410,16 +437,9 @@ pub(super) struct Baseline<'a> {
 
 impl<'a> Baseline<'a> {
     pub(super) fn of(unit: &'a PreparedText) -> Self {
-        let mut by_text = HashMap::with_capacity(unit.lowerings().len());
-        for (first, declaration) in unit.lowerings().iter() {
-            if let Some(key) = declaration.key {
-                by_text.insert(key, first);
-            }
-        }
-
         Self {
             unit,
-            by_text,
+            by_text: unit.by_text(),
             foreign: unit.foreigns.iter().next().is_some(),
             moved: None,
             unasked: RefCell::new(HashSet::new()),
@@ -476,24 +496,6 @@ impl<'a> Baseline<'a> {
             .collect::<Vec<_>>();
         for site in used {
             context.use_site(site);
-        }
-    }
-
-    /// Note reached each of `mounts` a declaration kept unasked wrote a name under.
-    pub(super) fn mark_mounts(&self, mounts: &[Mount], shared: &Shared) {
-        let unasked = self.unasked.borrow();
-        if unasked.is_empty() {
-            return;
-        }
-        let readers = self.unit.lookup_readers();
-        for mount in mounts {
-            let reached = readers
-                .of_binding(&Consulted::Mount(mount.prefix))
-                .iter()
-                .any(|key| unasked.contains(key));
-            if reached {
-                shared.reached.borrow_mut().insert(mount.prefix);
-            }
         }
     }
 

@@ -549,6 +549,18 @@ impl Imports {
         self.bodies.iter().map(|(body, _)| body)
     }
 
+    /// The imports the module body `body` holds, in the order they were written.
+    pub fn body(&self, body: &Qualifier) -> &[Import] {
+        self.bodies
+            .get(body)
+            .map_or(&[][..], |body| body.as_slice())
+    }
+
+    /// Forget what `module` offers, no body importing it any longer.
+    pub fn withdraw(&mut self, module: &Qualifier) {
+        self.members.remove(module);
+    }
+
     /// Every binding some scope of the unit has imported, under each spelling it was imported by.
     pub fn everywhere(&self) -> impl Iterator<Item = Imported<'_>> {
         self.entries().flat_map(|import| self.brought(import))

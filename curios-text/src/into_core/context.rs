@@ -14,6 +14,8 @@ use {
 
 /// One `use` selector or glob as resolution met it: what it imports, whether it re-exports, and whether any reference resolved through it — the fact the `unused-import` lint reads. Shared across the unit's contexts as the import table is, since a lint is about the unit.
 pub(super) struct UseSite {
+    /// The module body the `use` is written in.
+    pub body: Qualifier,
     pub span: Option<Span>,
     pub what: UseSiteKind,
     /// A `pub use` is a re-export, which is its own use.
@@ -132,6 +134,11 @@ impl Anchoring {
     /// The span `extent` lies on, among the declarations this lowering has reached.
     pub(super) fn resolved(&self, extent: &curios_core::Extent) -> Option<Span> {
         self.anchors.borrow().resolve(extent)
+    }
+
+    /// Where `name` was written, among the declarations this lowering has reached.
+    pub(super) fn label(&self, name: &curios_core::Global) -> Option<Span> {
+        curios_core::Anchors::label(&[&self.anchors.borrow()], name)
     }
 
     /// Record that `name` was written at `label`: where a report about it is placed when nothing in it is.
@@ -450,7 +457,7 @@ pub(super) struct Shared {
     // The prefix of every mount some reference of this unit resolved into — what decides whether a declared dependency is used. Recorded where a target is resolved, never where it is spelled, so an absolute path and an import count alike.
     pub(super) reached: RefCell<BTreeSet<Qualifier>>,
     // Every lint a `Lowerer` of this unit decided — see `Lowerer::flush`.
-    pub(super) lints: RefCell<Vec<Lint>>,
+    pub(super) lints: RefCell<BTreeMap<Qualifier, Vec<Lint>>>,
     // Where the unit's declarations lie, and the one being lowered — see `Anchoring`.
     pub(super) anchoring: Anchoring,
     // The module bodies whose `use` declarations this lowering has recorded what they brought into scope of.
@@ -482,11 +489,6 @@ impl Shared {
         }
     }
 
-    /// Whether this lowering recorded what the `use` declarations of the module body `body` brought into scope: whether it walked the body.
-    pub(super) fn closes(&self, body: &Qualifier) -> bool {
-        self.closed.borrow().contains(body)
-    }
-
     /// Every module body this lowering walked.
     pub(super) fn closed(&self) -> Vec<Qualifier> {
         self.closed.borrow().iter().copied().collect()
@@ -502,12 +504,13 @@ impl Shared {
         shared
     }
 
-    /// Take out of what a unit lowered over a baseline started from what the baseline holds and the unit does not: each kept witness named otherwise is minted under the name it takes now, and every name `dropped`, every text `gone` and every module body this lowering did not close is forgotten.
+    /// Take out of what a unit lowered over a baseline started from what the baseline holds and the unit does not: each kept witness named otherwise is minted under the name it takes now, and every name `dropped`, every text `gone` and every module body of `removed`, which the unit no longer declares, is forgotten.
     pub(super) fn settle(
         &self,
         renamed: &[(curios_core::Global, curios_core::Global)],
         dropped: &BTreeSet<curios_core::Global>,
         gone: &[(curios_core::Anchor, u32)],
+        removed: &[Qualifier],
     ) {
         let mut minted = self.minted.borrow_mut();
         for (then, now) in renamed {
@@ -523,14 +526,8 @@ impl Shared {
         for (anchor, stamp) in gone {
             anchors.forget_text(*anchor, *stamp);
         }
-        let closed = self.closed.borrow();
-        let open = imports
-            .bodies()
-            .filter(|body| !closed.contains(*body))
-            .copied()
-            .collect::<Vec<_>>();
-        for body in open {
-            imports.hold(body, Vec::new());
+        for body in removed {
+            imports.hold(*body, Vec::new());
         }
     }
 }
@@ -611,7 +608,12 @@ impl<'a> Context<'a> {
             .borrow_mut()
             .lints
             .extend(lints.iter().cloned());
-        self.shared.lints.borrow_mut().extend(lints);
+        self.shared
+            .lints
+            .borrow_mut()
+            .entry(self.prefix)
+            .or_default()
+            .extend(lints);
     }
 
     /// Open the `use` site every label imported until [`Self::close_site`] is credited to.

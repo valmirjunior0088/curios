@@ -161,7 +161,7 @@ pub(super) struct Named<'a> {
     pub witnesses: &'a mut BTreeSet<curios_core::Global>,
     pub minted: &'a mut curios_core::Minted,
     pub imports: &'a mut curios_core::Imports,
-    pub lints: &'a mut [Lint],
+    pub lints: &'a mut BTreeMap<Qualifier, Vec<Lint>>,
 }
 
 /// Give each witness `names` holds the name it takes there ([`witness_names`]), in each table that holds the name it holds.
@@ -203,7 +203,8 @@ pub(super) fn rename_witnesses(
     }
     for binder in named
         .lints
-        .iter_mut()
+        .values_mut()
+        .flatten()
         .filter_map(|lint| lint.binder.as_mut())
     {
         binder.declaration = binder.declaration.map(renamed);

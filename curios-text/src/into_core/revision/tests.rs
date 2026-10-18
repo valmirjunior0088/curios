@@ -448,3 +448,42 @@ fn a_declaration_made_private_is_reported_where_nothing_reads_it() {
         ],
     );
 }
+
+/// The outcome of the file `path` under `root` written as `text`, lowered over `baseline` and lowered whole: the refusal each prints, or that each lowered.
+fn outcomes(root: &Path, path: &str, text: &str, baseline: &PreparedText) -> (String, String) {
+    fs::write(root.join(path), text).unwrap();
+    let source = library(root);
+    let outcome = |lowered: Result<PreparedText, crate::Error>| match lowered {
+        Ok(_) => "lowered".to_string(),
+        Err(error) => error.to_string(),
+    };
+
+    (
+        outcome(into_core_unit_over(
+            &UnitSource::mounted(&source),
+            &[],
+            syntax(),
+            baseline,
+            true,
+        )),
+        outcome(into_core_unit(&UnitSource::mounted(&source), &[], syntax())),
+    )
+}
+
+/// An alias lowered again has the unit audited whole, every definition and re-export of the unit made read where the walk did not lower it, and the unit lowers or is refused as a whole lowering is.
+#[test]
+fn an_alias_lowered_again_is_audited_with_the_whole_unit() {
+    let root = written(
+        "alias",
+        "struct Hidden: Type { }\n\npub struct Shown: pub Type { }\n\npub let Alias: Type = Shown;\n\npub let used(x: Alias) -> Type = Type;\n",
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    for text in [
+        "struct Hidden: Type { }\n\npub struct Shown: pub Type { }\n\npub let Alias: Type = Hidden;\n\npub let used(x: Alias) -> Type = Type;\n",
+        "struct Hidden: Type { }\n\npub struct Shown: pub Type { }\n\npub let Alias: Type = Shown;\n\npub let used(x: Alias) -> Type = Type;\n\npub let more(x: Alias) -> Type = Type;\n",
+    ] {
+        let (over, whole) = outcomes(&root, "a.crs", text, &baseline);
+        assert_eq!(over, whole, "after writing {text:?}");
+    }
+}

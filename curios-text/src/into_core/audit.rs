@@ -4,7 +4,7 @@
 
 use {
     super::{
-        AliasEdge, Aliases, AudienceScope, Audiences, Entry, FlatItem, LoweredItem, PreparedText,
+        AliasEdge, Aliases, AudienceScope, Audiences, Declared, Entry, PreparedText,
         PublicInterface, Scoped, globals,
     },
     crate::Error,
@@ -46,6 +46,8 @@ pub(super) struct NominalScope<'a> {
     predecessors: &'a [&'a PreparedText],
     induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    /// Over a baseline, the baseline with every name it declared the unit no longer holds as it did: what holds the entry of a declaration the walk did not lower.
+    kept: Option<(&'a PreparedText, &'a HashSet<curios_core::Global>)>,
 }
 
 impl<'a> NominalScope<'a> {
@@ -53,12 +55,23 @@ impl<'a> NominalScope<'a> {
         predecessors: &'a [&'a PreparedText],
         induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
         struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
+        kept: Option<(&'a PreparedText, &'a HashSet<curios_core::Global>)>,
     ) -> Self {
         Self {
             predecessors,
             induct_decls,
             struct_decls,
+            kept,
         }
+    }
+
+    /// The entry the unit holds for `name` where the walk did not lower its declaration: the baseline's.
+    fn kept(&self, name: &curios_core::Global) -> Option<&'a curios_core::Nominal> {
+        let (baseline, gone) = self.kept?;
+
+        (!gone.contains(name))
+            .then(|| baseline.nominal(name))
+            .flatten()
     }
 
     /// Whether `name` names an `induct` or a `struct` anywhere in scope.
@@ -67,21 +80,27 @@ impl<'a> NominalScope<'a> {
     }
 
     fn induct(&self, name: &curios_core::Global) -> Option<&'a curios_core::InductDecl> {
-        self.induct_decls.get(name).or_else(|| {
-            self.predecessors
-                .iter()
-                .rev()
-                .find_map(|base| base.nominal(name)?.inductive())
-        })
+        self.induct_decls
+            .get(name)
+            .or_else(|| self.kept(name)?.inductive())
+            .or_else(|| {
+                self.predecessors
+                    .iter()
+                    .rev()
+                    .find_map(|base| base.nominal(name)?.inductive())
+            })
     }
 
     fn struct_(&self, name: &curios_core::Global) -> Option<&'a curios_core::StructDecl> {
-        self.struct_decls.get(name).or_else(|| {
-            self.predecessors
-                .iter()
-                .rev()
-                .find_map(|base| base.nominal(name)?.record())
-        })
+        self.struct_decls
+            .get(name)
+            .or_else(|| self.kept(name)?.record())
+            .or_else(|| {
+                self.predecessors
+                    .iter()
+                    .rev()
+                    .find_map(|base| base.nominal(name)?.record())
+            })
     }
 }
 
@@ -173,19 +192,13 @@ fn audit_dependencies(
     Ok(())
 }
 
-/// What an audit over a baseline reads again, where nothing else a whole audit reads could fail now ([`audit_public_exposures`]): the definitions of the items at `items`, by their place among those it is handed, and each re-export `reexports` names, by its module and label.
-pub(super) struct Only {
-    pub items: HashSet<usize>,
-    pub reexports: BTreeSet<(Qualifier, String)>,
-}
-
 /// Audit every declared signature and every exposed representation against the audience of the item carrying it. This runs after lowering because registry telescopes contain the complete signatures and transparent aliases have become canonical free-variable references. Re-export entries retain their representation provenance through the fixed point, so no `pub use` can upgrade an opaque declaration.
 ///
 /// The declared type of every definition is audited here rather than during lowering: only the converged interface graph knows where a name ends up visible, so a signature naming an item re-exported out of a private child is accepted, while one naming something its own consumers cannot reach is not.
 ///
-/// A refusal is placed at the name of the item that exposes: the declaration's own, or, for a binding a module re-exports, the declaration it stands for where this unit wrote it. `placed` gives the span an extent of one of the unit's declarations lies on. `refused` makes the refusal of the item whose path it is handed, for the name one of its readers cannot see: it holds the tables that say how a reader standing at the item writes each, and which declaration keeps the name from the rest.
+/// A refusal is placed at the name of the item that exposes: the declaration's own, or, for a binding a module re-exports, the declaration it stands for where this unit wrote it. `placed` gives the span an extent of one of the unit's declarations lies on, and `named` the span a definition's name was written at. `refused` makes the refusal of the item whose path it is handed, for the name one of its readers cannot see: it holds the tables that say how a reader standing at the item writes each, and which declaration keeps the name from the rest.
 ///
-/// **Over a baseline, `only` the definitions and the re-exports an edit could have made fail are audited** ([`Only`]); every other one passed where the baseline was lowered and reads nothing that moved. The first refusal a whole audit would find is then the first of these.
+/// **The definitions audited are `definitions`, each by its name in the order the unit's items stand, and the re-exports every one the unit makes or only those `reexports` names.** Over a baseline, these are what an edit could have made fail: every other one passed where the baseline was lowered and reads nothing that moved, so the first refusal a whole audit would find is the first of these. A definition not written under its own name is audited through nothing, its signature taken of none.
 #[expect(
     clippy::too_many_arguments,
     reason = "the tables an audit reads, and what it audits of them"
@@ -193,50 +206,30 @@ pub(super) struct Only {
 pub(super) fn audit_public_exposures(
     public: &Scoped<'_, PublicInterface>,
     audiences: AudienceScope<'_>,
-    items: &[FlatItem],
-    facts: &[&LoweredItem],
+    definitions: &[(curios_core::Global, &Declared)],
     aliases: &Aliases,
     scope: NominalScope<'_>,
     placed: &dyn Fn(&curios_core::Extent) -> Option<Span>,
+    named: &dyn Fn(&curios_core::Global) -> Option<Span>,
     refused: &dyn Fn(&Qualifier, &Unseen) -> Error,
-    only: Option<&Only>,
+    reexports: Option<&BTreeSet<(Qualifier, String)>>,
 ) -> Result<(), Error> {
     curios_profile::profile!("audit_public_exposures");
     let sources = &aliases.sources;
     let aliases = &aliases.edges;
-
-    let definitions = || {
-        items
-            .iter()
-            .zip(facts)
-            .flat_map(|(item, lowered)| item.declared().zip(&lowered.definitions))
-    };
-    // Read where a refusal is raised, and by no audit that passes.
-    let named = |path: Qualifier| {
-        let name = curios_core::Global::Authored(path);
-        let (_, declared) = definitions().find(|((declared, _, _), _)| *declared == name)?;
-
-        placed(declared.label.as_ref()?)
-    };
     let at = |error: Error, place: Option<Span>| match place {
         Some(span) => error.at(span),
         None => error,
     };
 
-    let audited = items
-        .iter()
-        .zip(facts)
-        .enumerate()
-        .filter(|(index, _)| only.is_none_or(|only| only.items.contains(index)))
-        .flat_map(|(_, (item, lowered))| item.declared().zip(&lowered.definitions));
-    for ((name, _, island), declared) in audited {
-        // Only definitions the source actually wrote. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module rather than in it, and is audited through the declaration that produced it.
+    for (name, declared) in definitions {
+        // Only definitions the source actually wrote, whose signature was taken. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module rather than in it, and is audited through the declaration that produced it.
         //
         // A witness has no authored path at all, which is the same answer arrived at structurally: "who can see this by its name" is not a question an anonymous declaration has. Its reach is the coherence check's.
         let Some(path) = name.qualifier() else {
             continue;
         };
-        if path.without_last() != island {
+        if declared.signature.is_empty() {
             continue;
         }
 
@@ -258,9 +251,8 @@ pub(super) fn audit_public_exposures(
     }
 
     // By module and by label, so the exposure reported is the first the names give and not the first a hash's order does.
-    let mut modules = match only {
-        Some(only) => only
-            .reexports
+    let mut modules = match reexports {
+        Some(reexports) => reexports
             .iter()
             .map(|(module, _)| module)
             .collect::<BTreeSet<_>>()
@@ -274,7 +266,7 @@ pub(super) fn audit_public_exposures(
         let mut bindings = interface.bindings.iter().collect::<Vec<_>>();
         bindings.sort_by(|left, right| left.0.cmp(right.0));
         for (label, entry) in bindings {
-            if only.is_some_and(|only| !only.reexports.contains(&(*module, label.clone()))) {
+            if reexports.is_some_and(|reexports| !reexports.contains(&(*module, label.clone()))) {
                 continue;
             }
             let Some((nominal, traversed)) = exposed_nominal(entry, aliases, scope) else {
@@ -285,7 +277,8 @@ pub(super) fn audit_public_exposures(
             let exposed = |unseen: Unseen| {
                 at(
                     refused(&item, &unseen),
-                    named(item).or_else(|| named(entry.target)),
+                    named(&curios_core::Global::Authored(item))
+                        .or_else(|| named(&curios_core::Global::Authored(entry.target))),
                 )
             };
 

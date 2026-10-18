@@ -68,7 +68,8 @@ use {
     curios_archive::{Bytes, joined, parted},
     curios_document::Documentation,
     curios_utilities::{
-        Mount, Plicity, Qualifier, Report, RootKind, Source, Span, SyntaxRegistry, grown,
+        Mount, Persistent, Plicity, Qualifier, Report, RootKind, Source, Span, SyntaxRegistry,
+        grown,
     },
     std::{
         borrow::Cow,
@@ -453,9 +454,15 @@ pub struct PreparedText {
     /// Each module body's declarations, by the place of each one's first item, made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`Bodies`]).
     #[archived_with(curios_archive::Skip)]
     bodies: OnceCell<Bodies>,
+    /// The declarations a later lowering may keep, by the text each was lowered from, made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline.
+    #[archived_with(curios_archive::Skip)]
+    by_text: OnceCell<Persistent<Key, i64>>,
     /// What the `unused-declaration` lint's roots reach of the unit's items, made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`Reachability`]).
     #[archived_with(curios_archive::Skip)]
     reachability: OnceCell<Rc<Reachability>>,
+    /// How many module bodies import each module, made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline: what says whether a module is still offered once a body stops importing it.
+    #[archived_with(curios_archive::Skip)]
+    importers: OnceCell<Persistent<Qualifier, usize>>,
     /// What the entry's terms name, each a root of the lint, where the unit was lowered in this process: nothing for a unit with no entry, and `None` for one restored, whose entry no unit holds.
     #[archived_with(curios_archive::Skip)]
     entry_roots: Option<Rc<BTreeSet<curios_core::Global>>>,
@@ -721,6 +728,25 @@ impl PreparedText {
     /// Each module body's declarations. See the field.
     fn bodies(&self) -> &Bodies {
         self.bodies.get_or_init(|| Bodies::of(self.lowerings()))
+    }
+
+    /// The declarations a later lowering may keep, by the text each was lowered from: the place of each one's first item. See the field.
+    fn by_text(&self) -> &Persistent<Key, i64> {
+        self.by_text.get_or_init(|| texts_of(self.lowerings()))
+    }
+
+    /// How many module bodies import each module. See the field.
+    fn importers(&self) -> &Persistent<Qualifier, usize> {
+        self.importers.get_or_init(|| {
+            let mut importers = Persistent::new();
+            for import in self.imports().entries() {
+                if let curios_core::Import::Module { module, .. } = import {
+                    let count = importers.get(module).copied().unwrap_or_default();
+                    importers.insert(*module, count + 1);
+                }
+            }
+            importers
+        })
     }
 
     /// What the lint's roots reach of the unit's items. See the field. `None` for an entry restored, whose entry's terms no unit holds.
@@ -1066,7 +1092,7 @@ struct Lowering<'a> {
 
 impl Lowering<'_> {
     /// Record what the declaration `context` has just lowered to, the unit's items from `from` on: what the unit-wide passes read of each, taken while its registry entries and the text it was written in are at hand, and what the declaration asked of its scope.
-    fn note(&mut self, context: &Context, from: usize) {
+    fn note(&mut self, context: &Context, from: usize, foreign: bool) {
         let facts = self.items[from..]
             .iter()
             .map(|item| {
@@ -1083,6 +1109,7 @@ impl Lowering<'_> {
             context,
             &self.items[from..],
             facts,
+            foreign,
         )));
     }
 }
@@ -1175,6 +1202,7 @@ fn process_items(
         // A source declaration mints in a space of its own, shared by every item it lowers to; a nested module's declarations each take theirs.
         let declares = !matches!(headed.head, Head::Mod { .. });
         let lowered_from = lowered.items.len();
+        let foreigns_from = lowered.foreigns.iter().count();
         if declares {
             context.begin_declaration();
             // And is written in a text of its own: what it lowers to holds positions in that text, wherever the file holds it. A module built rather than parsed has no text, and its terms no position.
@@ -1240,6 +1268,7 @@ fn process_items(
                         for item in items {
                             let full = use_item.name.with_label(item.label());
                             context.open_site(UseSite {
+                                body: context.prefix(),
                                 span: item.label().span().cloned(),
                                 what: UseSiteKind::Selector(item.label().clone()),
                                 exported: use_item.vis_pub,
@@ -1262,6 +1291,7 @@ fn process_items(
                     }
                     UseGroup::Glob => {
                         context.open_site(UseSite {
+                            body: context.prefix(),
                             span: use_item.span.clone(),
                             what: UseSiteKind::Glob(format!("{}/*", use_item.name.join())),
                             exported: use_item.vis_pub,
@@ -2083,7 +2113,8 @@ fn process_items(
                     .iter()
                     .flat_map(FlatItem::names),
             );
-            lowered.note(context, lowered_from);
+            let foreign = lowered.foreigns.iter().count() > foreigns_from;
+            lowered.note(context, lowered_from, foreign);
             if lowered.baseline.is_some() {
                 lowered.steps.push(Step {
                     kept: None,
@@ -2485,6 +2516,7 @@ fn into_core_unit_within(
             .collect::<BTreeSet<_>>(),
         _ => BTreeSet::new(),
     };
+    let revised_changed = revised.as_ref().map(|revised| revised.changed.clone());
     let moved = settled
         .zip(revised)
         .map(|(baseline, revised)| Moved::found(baseline, revised));
@@ -2540,15 +2572,11 @@ fn into_core_unit_within(
         relisted,
         steps,
     } = lowered;
-    // The mounts the declarations kept unasked wrote a name under are reached, as asking their lookups would have reached them.
-    if let Some(baseline) = &baseline {
-        baseline.mark_mounts(&mounts, &shared);
-    }
     // A body the unit no longer holds keeps no record of what its `use` declarations read.
-    let unwalked = uses
+    let unwalked = removed
         .iter()
-        .map(|(body, _)| *body)
-        .filter(|body| !shared.closes(body))
+        .filter(|body| uses.contains_key(body))
+        .copied()
         .collect::<Vec<_>>();
     for body in &unwalked {
         uses.remove(body);
@@ -2608,10 +2636,21 @@ fn into_core_unit_within(
                     .flatten()
             })
         };
-        let marks = |name: &curios_core::Global| {
-            concepts
-                .contains_key(name)
-                .then(|| struct_decls.get(name).map(|record| record.arity.marks()))
+        // A concept the walk did not lower is the baseline's.
+        let marks = |name: &curios_core::Global| match concepts.contains_key(name) {
+            true => Some(struct_decls.get(name).map(|record| record.arity.marks())),
+            false => {
+                let baseline = baseline.as_ref()?;
+                if gone_names.contains(name) {
+                    return None;
+                }
+                match baseline.unit().nominal(name)? {
+                    curios_core::Nominal::Concept { record, .. } => {
+                        Some(Some(record.arity.marks()))
+                    }
+                    _ => None,
+                }
+            }
         };
         let own = Own {
             written: &written,
@@ -2705,16 +2744,83 @@ fn into_core_unit_within(
         )
     });
 
+    // The mounts a name was written under: what the walk reached, and, over a baseline, each a declaration or a body's `use` declarations it passed read.
+    let reached = {
+        let mut reached = shared.reached.take();
+        if let Some(lookups) = &lookups {
+            reached.extend(
+                mounts
+                    .iter()
+                    .map(|mount| mount.prefix)
+                    .filter(|prefix| lookups.reaches_mount(*prefix)),
+            );
+        }
+        reached
+    };
+
     // The entrypoint, for the one unit that has one. Its tail closes the root body, so the imports in scope there are the last the root saw.
     context.record_import_scope(None);
-    // Every scope is recorded: the members of the modules they import are the interfaces' to state, once for the unit.
-    {
+    // Every scope is recorded: the members of the modules they import are the interfaces' to state, once for the unit. Over a baseline, each module a body walked or taken away imported then or imports now, and each whose interface changed, is offered again, or withdrawn where no body imports it any longer.
+    let importers = {
         let mut imports = shared.imports.borrow_mut();
-        let members = module_members(imports.entries(), &public);
-        for (module, offered) in members {
-            imports.offer(module, offered);
+        match (&baseline, &revised_changed) {
+            (Some(baseline), Some(changed)) => {
+                let earlier = baseline.unit().imports();
+                let mut importers = baseline.unit().importers().clone();
+                let mut asked = changed.clone();
+                let modules = |imports: &[curios_core::Import]| {
+                    imports
+                        .iter()
+                        .filter_map(|import| match import {
+                            curios_core::Import::Module { module, .. } => Some(*module),
+                            curios_core::Import::Binding { .. } => None,
+                        })
+                        .collect::<Vec<_>>()
+                };
+                for body in shared.closed().iter().chain(&removed) {
+                    for module in modules(earlier.body(body)) {
+                        let count = importers.get(&module).copied().unwrap_or_default();
+                        importers.insert(module, count.saturating_sub(1));
+                        asked.insert(module);
+                    }
+                    for module in modules(imports.body(body)) {
+                        let count = importers.get(&module).copied().unwrap_or_default();
+                        importers.insert(module, count + 1);
+                        asked.insert(module);
+                    }
+                }
+                for module in asked {
+                    match importers.get(&module).copied().unwrap_or_default() {
+                        0 => {
+                            importers.remove(&module);
+                            imports.withdraw(&module);
+                        }
+                        _ => {
+                            let offered = module_members(
+                                [curios_core::Import::Module {
+                                    module,
+                                    label: String::new(),
+                                }]
+                                .iter(),
+                                &public,
+                            );
+                            for (module, offered) in offered {
+                                imports.offer(module, offered);
+                            }
+                        }
+                    }
+                }
+                OnceCell::from(importers)
+            }
+            _ => {
+                let members = module_members(imports.entries(), &public);
+                for (module, offered) in members {
+                    imports.offer(module, offered);
+                }
+                OnceCell::new()
+            }
         }
-    }
+    };
     // The entry mints in a space of its own, as a declaration does, and is written in a text of its own.
     context.begin_declaration();
     if let Some(span) = source
@@ -2777,16 +2883,18 @@ fn into_core_unit_within(
         || gone
             .iter()
             .any(|gone| gone.record.facts().iter().any(alias));
-    let aliases = match (&baseline, aliases_moved) {
-        (Some(baseline), false) => Rc::clone(baseline.unit().aliases()),
-        _ => Rc::new(aliases(
+    // The aliases: the baseline's where no alias was lowered or taken away, those of the unit's items otherwise, read off the unit once it is made over a baseline.
+    let whole_aliases = match (&baseline, aliases_moved) {
+        (None, _) => Some(Rc::new(aliases(
             flat_items
                 .iter()
                 .map(|item| item.declared().map(|(name, _, _)| name).collect())
                 .zip(facts.iter().copied()),
-        )),
+        ))),
+        (Some(baseline), false) => Some(Rc::clone(baseline.unit().aliases())),
+        (Some(_), true) => None,
     };
-    let only = match (&baseline, reread.clone()) {
+    let reexports = match (&baseline, reread.clone()) {
         (Some(baseline), Some(reread)) if !aliases_moved => {
             let made_names = made
                 .iter()
@@ -2819,33 +2927,47 @@ fn into_core_unit_within(
                     )
                     .filter_map(|name| name.qualifier().copied())
                     .collect::<Vec<_>>();
-                Only {
-                    items: made.clone(),
-                    reexports: reexported
-                        .iter()
-                        .cloned()
-                        .chain(
-                            formers
-                                .iter()
-                                .flat_map(|former| audiences.exported_at(former)),
-                        )
-                        .collect(),
-                }
+                reexported
+                    .iter()
+                    .cloned()
+                    .chain(
+                        formers
+                            .iter()
+                            .flat_map(|former| audiences.exported_at(former)),
+                    )
+                    .collect::<BTreeSet<_>>()
             })
         }
         _ => None,
     };
-    audit_public_exposures(
-        &public,
-        in_scope,
-        &flat_items,
-        &facts,
-        &aliases,
-        NominalScope::new(predecessors, &induct_decls, &struct_decls),
-        &|extent| shared.anchoring.resolved(extent),
-        &refused,
-        only.as_ref(),
-    )?;
+    // The definitions the audit reads, by name in the order the items stand: whole, every one; over a baseline, those lowered now where nothing else could fail, and every one of the unit once it is made otherwise.
+    let mut lowered_now = made.iter().copied().collect::<Vec<_>>();
+    lowered_now.sort_unstable();
+    let audited = match (&baseline, &reexports) {
+        (None, _) => Some(
+            flat_items
+                .iter()
+                .zip(&facts)
+                .flat_map(|(item, lowered)| {
+                    item.declared()
+                        .map(|(name, _, _)| name)
+                        .zip(&lowered.definitions)
+                })
+                .collect::<Vec<_>>(),
+        ),
+        (Some(_), Some(_)) => Some(
+            lowered_now
+                .iter()
+                .flat_map(|index| {
+                    flat_items[*index]
+                        .declared()
+                        .map(|(name, _, _)| name)
+                        .zip(&facts[*index].definitions)
+                })
+                .collect::<Vec<_>>(),
+        ),
+        (Some(_), None) => None,
+    };
 
     // Whole, what no root reaches is found by a walk from every root; over a baseline, it is the baseline's decided again where the edit could have moved it, once the unit is a version of the baseline's.
     let whole_dead = match &baseline {
@@ -2867,14 +2989,19 @@ fn into_core_unit_within(
         .collect::<Vec<_>>();
     let entry_roots = entry_names(entry.as_ref());
 
-    // Where each definition is named, by the name it leaves the lowering under, which for a witness is the one its signature gave it above.
-    let definitions = flat_items
-        .iter()
-        .zip(&facts)
-        .flat_map(|(item, lowered)| item.declared().zip(&lowered.definitions));
-    for ((name, _, _), declared) in definitions {
-        if let Some(label) = declared.label {
-            shared.anchoring.name(name, label);
+    // Where each definition is named, by the name it leaves the lowering under, which for a witness is the one its signature gave it above: whole, every one; over a baseline, each lowered now and each kept witness named otherwise, every other's being the baseline's.
+    let taken = renames.values().copied().collect::<HashSet<_>>();
+    for (index, (item, lowered)) in flat_items.iter().zip(&facts).enumerate() {
+        if baseline.is_some()
+            && !made.contains(&index)
+            && !item.names().iter().any(|name| taken.contains(name))
+        {
+            continue;
+        }
+        for ((name, _, _), declared) in item.declared().zip(&lowered.definitions) {
+            if let Some(label) = declared.label {
+                shared.anchoring.name(name, label);
+            }
         }
     }
 
@@ -2886,13 +3013,14 @@ fn into_core_unit_within(
         .map(FlatItem::into_core)
         .collect::<Vec<_>>();
     // Over a baseline, the unit is a version of the baseline's: its items, records, names and declarations, and what it minted, imported and anchored, the baseline's with what the walk changed.
-    let (items, records, places, declared, bodies, revision, renamed) = match &baseline {
+    let (items, records, places, declared, bodies, texts, revision, renamed) = match &baseline {
         Some(baseline) => {
             let revised = revise(baseline.unit(), &steps, &declarations, &made, &gone);
             shared.settle(
                 &revised.renamed,
                 &revised.revision.dropped,
                 &texts_gone(&gone, &declarations),
+                &removed,
             );
 
             (
@@ -2901,19 +3029,156 @@ fn into_core_unit_within(
                 OnceCell::from(revised.places),
                 OnceCell::from(revised.declarations),
                 OnceCell::from(revised.bodies),
+                OnceCell::from(revised.texts),
                 Some(revised.revision),
                 revised.renamed,
             )
         }
         None => (
             made.into(),
-            in_walk_order(declarations),
+            in_walk_order(declarations.iter().cloned()),
+            OnceCell::new(),
             OnceCell::new(),
             OnceCell::new(),
             OnceCell::new(),
             None,
             Vec::new(),
         ),
+    };
+
+    // What each body's declarations and `use` declarations were found to leave unused: the baseline's, with each body the walk passed found again and each it no longer holds taken away.
+    let mut body_lints = baseline
+        .as_ref()
+        .map(|baseline| baseline.unit().half().lints.clone())
+        .unwrap_or_default();
+    {
+        let mut found = shared.lints.take();
+        let mut imports = BTreeMap::<Qualifier, Vec<UseSite>>::new();
+        for site in shared.sites.take() {
+            imports.entry(site.body).or_default().push(site);
+        }
+        for body in shared.closed() {
+            let lints = unused_imports(imports.remove(&body).unwrap_or_default())
+                .into_iter()
+                .chain(found.remove(&body).unwrap_or_default())
+                .collect::<Vec<_>>();
+            match lints.is_empty() {
+                true => {
+                    body_lints.remove(&body);
+                }
+                false => body_lints.insert(body, Rc::new(lints)),
+            }
+        }
+        // The entry's term is lowered in the compilation root's body, which a unit with no entry does not walk.
+        for (body, lints) in found {
+            let mut held = body_lints
+                .get(&body)
+                .map(|held| (**held).clone())
+                .unwrap_or_default();
+            held.extend(lints);
+            body_lints.insert(body, Rc::new(held));
+        }
+        for body in &removed {
+            body_lints.remove(body);
+        }
+    }
+
+    // Over a baseline, the witnesses and the tests are the baseline's with what the walk changed, the tests in the order their items stand.
+    let (witnesses, tests) = match &baseline {
+        Some(baseline) => {
+            let earlier = baseline.unit().core();
+            let mut held = earlier
+                .witnesses
+                .iter()
+                .filter(|name| !gone_names.contains(*name) && !renames.contains_key(*name))
+                .copied()
+                .collect::<BTreeSet<_>>();
+            held.extend(renames.values().copied());
+            held.extend(witnesses);
+            let places = places
+                .get()
+                .expect("a version holds where it places each name");
+            let mut tested = earlier
+                .tests
+                .iter()
+                .filter(|name| !gone_names.contains(*name))
+                .copied()
+                .chain(tests)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .filter_map(|name| Some((places.place(&name)?.item(), name)))
+                .collect::<Vec<_>>();
+            tested.sort_by_key(|(place, _)| *place);
+            (held, tested.into_iter().map(|(_, name)| name).collect())
+        }
+        None => (witnesses, tests),
+    };
+
+    // The audit, over the unit made: what an edit could have made fail over a baseline, and every definition and re-export otherwise.
+    {
+        let view = places.get().map(|places| reachability::Items {
+            items: &items,
+            places,
+            records: &records,
+        });
+        let held = &items;
+        let every = || {
+            let view = view.expect("a unit made over a baseline holds where it places each name");
+            held.places()
+                .flat_map(move |place| {
+                    held.names(place)
+                        .into_iter()
+                        .copied()
+                        .zip(&view.facts(place).definitions)
+                })
+                .collect::<Vec<_>>()
+        };
+        let aliases = whole_aliases.clone().unwrap_or_else(|| {
+            let view = view.expect("a unit made over a baseline holds where it places each name");
+            Rc::new(aliases(items.places().map(|place| {
+                (
+                    items.names(place).into_iter().copied().collect(),
+                    view.facts(place),
+                )
+            })))
+        });
+        let definitions = audited.clone().unwrap_or_else(every);
+        audit_public_exposures(
+            &public,
+            in_scope,
+            &definitions,
+            &aliases,
+            NominalScope::new(
+                predecessors,
+                &induct_decls,
+                &struct_decls,
+                baseline
+                    .as_ref()
+                    .map(|baseline| (baseline.unit(), &gone_names)),
+            ),
+            &|extent| shared.anchoring.resolved(extent),
+            &|name| shared.anchoring.label(name),
+            &refused,
+            reexports.as_ref(),
+        )?;
+    }
+    let aliases = match whole_aliases {
+        Some(aliases) => aliases,
+        None => {
+            let view = reachability::Items {
+                items: &items,
+                places: places
+                    .get()
+                    .expect("a unit made over a baseline holds where it places each name"),
+                records: &records,
+            };
+            Rc::new(aliases(items.places().map(|place| {
+                (
+                    items.names(place).into_iter().copied().collect(),
+                    view.facts(place),
+                )
+            })))
+        }
     };
 
     // Over a baseline, what no root reaches decided again where the edit could have moved it, and every item decided again where the modules open to a consumer may have.
@@ -2970,6 +3235,7 @@ fn into_core_unit_within(
         places,
         declarations: declared,
         bodies,
+        by_text: texts,
         revision,
         core: curios_core::Module {
             items,
@@ -2986,22 +3252,24 @@ fn into_core_unit_within(
         visible: visible_mounts,
         broken,
         lints: ordered(
-            unused_imports(shared.sites.into_inner())
-                .into_iter()
-                .chain(shared.lints.into_inner())
+            body_lints
+                .iter()
+                .flat_map(|(_, lints)| lints.iter().cloned())
                 .chain(dead)
                 .collect(),
         ),
         credited: BTreeSet::new(),
-        reached: shared.reached.into_inner(),
+        reached,
         anchors: curios_archive::Deferred::held(shared.anchoring.into_anchors()),
         baseline: curios_archive::Deferred::held(BaselineHalf {
             declarations: records,
             scans,
             uses,
             keyed: held_keys,
+            lints: body_lints,
         }),
         lookups: lookups.map(OnceCell::from).unwrap_or_default(),
+        importers,
         reachability,
         entry_roots: Some(Rc::new(entry_roots)),
     };

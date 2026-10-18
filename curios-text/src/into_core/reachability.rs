@@ -37,7 +37,7 @@ pub(super) struct Items<'u> {
 
 impl<'u> Items<'u> {
     /// What was taken of the item at `place` where it was lowered.
-    fn facts(&self, place: usize) -> &'u LoweredItem {
+    pub(super) fn facts(&self, place: usize) -> &'u LoweredItem {
         let (first, record) = self
             .records
             .before(position(place) + 1)
