@@ -630,7 +630,8 @@ impl Solutions {
 
     /// `term`, spelled with the names of `entry`'s birth telescope, as it reads at the occurrence `metavar`.
     fn at_occurrence(entry: &MetaEntry, metavar: &Metavar, term: &Term) -> Term {
-        if metavar.spine.is_empty() {
+        // A term naming no binder reads nothing of the spine, which has an entry for every binder the metavariable was born under: resolving it is free whatever the scope.
+        if metavar.spine.is_empty() || !term.has_local_free() && term.reach() == 0 {
             return term.clone();
         }
 

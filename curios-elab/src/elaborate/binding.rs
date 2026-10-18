@@ -69,7 +69,20 @@ pub(super) fn elaborate_let(
             .collect::<Vec<_>>();
         let tail_type = leaving(context, tail_type, &values);
 
-        // In one pass rather than merged a binding at a time: each binding's type carries metavariable spines as long as the binders before it, so re-closing every later binding at each earlier one would be cubic in the block's length.
+        // Materialized before the block closes, as a group is: a committed solution substituted here is captured in its own size, where its occurrence would have the capture walk a spine as long as the scope it was born in. Tolerant, so what is not yet committed waits for the final zonk.
+        let triples = triples
+            .into_iter()
+            .map(|(label, type_, value)| {
+                (
+                    label,
+                    zonk_solved_term_metas(context, &type_),
+                    zonk_solved_term_metas(context, &value),
+                )
+            })
+            .collect::<Vec<_>>();
+        let tail_elaborated = zonk_solved_term_metas(context, &tail_elaborated);
+
+        // In one pass rather than merged a binding at a time: re-closing every later binding at each earlier one would be quadratic in the block's length, and cubic with the spines a binding not yet materialized carries.
         Ok((Term::let_block(triples, tail_elaborated), tail_type))
     })
 }
@@ -1212,6 +1225,9 @@ pub(super) fn elaborate_func_check(
         context.open_body();
         check(context, &body, output)
     })?;
+
+    // Materialized before the binders close over it, as a block's bindings are: the capture then walks the body in its own size, not each committed occurrence's spine.
+    let body = zonk_solved_term_metas(context, &body);
 
     Ok((Term::func_marked(domains, body), expected))
 }

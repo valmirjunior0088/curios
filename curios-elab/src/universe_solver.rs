@@ -24,7 +24,10 @@ use {
         UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed, Universes,
     },
     curios_utilities::recurse,
-    std::collections::{BTreeMap, BTreeSet, VecDeque},
+    std::{
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet, VecDeque},
+    },
 };
 
 /// Where a scheme is instantiated: the declaration an occurrence names, and where that occurrence is written, when a term of the declaration being elaborated wrote it. A constraint the scheme states is restated under both ([`UniverseSolver::instantiate_at`]).
@@ -644,6 +647,36 @@ pub struct UniverseSolver {
     consistency: Option<ConsistencyCache>,
     /// The pairs conversion met at positions a nominal family or a definition is irrelevant in, in the order it met them. None is a constraint, since no checker compares the two levels of one; each is tried where its declaration's levels settle ([`UniverseSolver::join_weak_equations`]).
     weak: Vec<(Level, Level)>,
+    /// What [`UniverseSolver::zonk`] has made of a solved metavariable, kept once it names no metavariable at all, so a chain of solutions is followed once rather than at every read of a level that names its head ([`ZonkedLevels`]).
+    zonked: RefCell<ZonkedLevels>,
+}
+
+/// The zonked solutions [`UniverseSolver::zonk`] keeps, each with how many solutions stood when it was taken.
+///
+/// A zonked solution naming no metavariable reads only solutions committed before it was taken, and a commitment never changes, so it stands until a rollback unwinds one of those: [`UniverseSolver::rollback`] drops each taken past what it keeps. Kept in the order they were taken, since the count of standing solutions never falls among those that survive, so a rollback drops a suffix.
+#[derive(Debug, Clone, Default)]
+struct ZonkedLevels {
+    solutions: BTreeMap<UniverseMetaId, Level>,
+    taken: Vec<(usize, UniverseMetaId)>,
+}
+
+impl ZonkedLevels {
+    fn keep(&mut self, meta: UniverseMetaId, zonked: &Level, standing: usize) {
+        if zonked.metas().next().is_none() && self.solutions.insert(meta, zonked.clone()).is_none()
+        {
+            self.taken.push((standing, meta));
+        }
+    }
+
+    /// Drop each zonked solution taken while more than `standing` solutions stood.
+    fn unwind(&mut self, standing: usize) {
+        while let Some(&(taken, meta)) = self.taken.last()
+            && taken > standing
+        {
+            self.taken.pop();
+            self.solutions.remove(&meta);
+        }
+    }
 }
 
 /// The meta `level` is, when it is one bare meta at offset zero.
@@ -710,6 +743,7 @@ impl UniverseSolver {
             quality_joins: Vec::new(),
             consistency: None,
             weak: Vec::new(),
+            zonked: RefCell::default(),
         }
     }
 
@@ -809,6 +843,7 @@ impl UniverseSolver {
             let meta = self.solution_log.pop().unwrap();
             self.metas[meta.0].solution = None;
         }
+        self.zonked.get_mut().unwind(mark.solution_log_len);
         self.unsolve_qualities(mark.quality_log_len);
         self.quality_joins.truncate(mark.quality_joins_len);
         self.constraints.rollback(mark.constraints);
@@ -865,6 +900,10 @@ impl UniverseSolver {
                     if visiting.contains(&meta) {
                         continue;
                     }
+                    if let Some(zonked) = solver.zonked.borrow().solutions.get(&meta) {
+                        resolved.insert(head, zonked.clone());
+                        continue;
+                    }
                     let Some(solution) = solver.solution(meta).cloned() else {
                         continue;
                     };
@@ -872,8 +911,13 @@ impl UniverseSolver {
                     visiting.insert(meta);
                     let zonked = walk(solver, &solution, visiting);
                     visiting.remove(&meta);
+                    let zonked = zonked?;
 
-                    resolved.insert(head, zonked?);
+                    solver
+                        .zonked
+                        .borrow_mut()
+                        .keep(meta, &zonked, solver.solution_log.len());
+                    resolved.insert(head, zonked);
                 }
 
                 level.substitute(|head| resolved.get(&head).cloned())

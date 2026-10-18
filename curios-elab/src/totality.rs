@@ -15,7 +15,7 @@ mod tests;
 /// The two obligations run one analysis over one partiality relation, seeded twice, and this says which seeding rejected: a type must be total or type formation may not terminate, a proof must be total or it proves anything. Both checkers state that same distinction and each carries it in its own diagnostic, so a second declaration of it would be two vocabularies that could drift while describing one thing.
 pub use curios_analysis::Erased;
 use {
-    super::{Context, ErasedSite, Error, proof_position, zonk},
+    super::{Context, ErasedSite, Error, ZonkPass, proof_position},
     curios_analysis::{group_totality, yields_a_sort},
     curios_core::{
         Definition, Enter, Entrypoint, Extent, Global, Item, Module, Rec, RecGroup, RecItem,
@@ -276,16 +276,22 @@ fn faults(
 /// One map serves types and terms alike because zonk is a *function of its argument*: a term appearing in both populations has one zonked form, and sharing the entry is correct rather than merely convenient. Sound to share across the two obligations of one declaration, or of the entry, for the reason either could memoize alone — the solution set is final once what they read has been published, or the module zonked.
 ///
 /// The cost is memory: this is held across both obligations rather than dropped between them. That is the trade; the cache is not free, it is cheaper than the work it removes.
-pub type Zonked = HashMap<Term, Term>;
+///
+/// It holds one zonk pass besides, so a node the recorded terms share is zonked once across them all: a type nested in another is a recorded type of its own, and zonked apart each would walk the ones inside it again.
+#[derive(Default)]
+pub(crate) struct Zonked {
+    done: HashMap<Term, Term>,
+    pass: ZonkPass,
+}
 
 /// `term` zonked, through `cache`: the two types and two terms the two obligations zonk.
 fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Error> {
-    if let Some(done) = cache.get(term) {
+    if let Some(done) = cache.done.get(term) {
         return Ok(done.clone());
     }
 
-    let done = zonk(context, term)?;
-    cache.insert(term.clone(), done.clone());
+    let done = cache.pass.zonk(context, term)?;
+    cache.done.insert(term.clone(), done.clone());
     Ok(done)
 }
 
@@ -339,7 +345,7 @@ fn checked_type_positions(
         }
     }
 
-    curios_profile::sample!("totality::type_distinct_raw", cache.len());
+    curios_profile::sample!("totality::type_distinct_raw", cache.done.len());
     curios_profile::sample!("totality::type_sites", sites.len());
     curios_profile::sample!("totality::checked_type_positions", positions.len());
     Ok(positions)
@@ -402,7 +408,7 @@ fn checked_proof_positions(
         }
     }
 
-    curios_profile::sample!("totality::proof_distinct_raw", cache.len());
+    curios_profile::sample!("totality::proof_distinct_raw", cache.done.len());
     curios_profile::sample!("totality::proof_distinct_zonked", memo.len());
     curios_profile::sample!("totality::proof_sites", sites.len());
     curios_profile::sample!("totality::checked_proof_positions", positions.len());

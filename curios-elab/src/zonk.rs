@@ -20,6 +20,7 @@ use {
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
+        mem,
         rc::Rc,
         sync::Arc,
     },
@@ -59,13 +60,34 @@ impl<'a> std::ops::Deref for Zonk<'a> {
     }
 }
 
+/// One strict zonk a caller holds across many terms, so a node any of them shares is zonked once however many hold it: a declaration's recorded terms are each other's subterms, and zonked apart they cost the sum of their sizes.
+///
+/// Sound only while the solutions and the universe solver stand as they did at the first term, which the caller states where it holds one.
+#[derive(Default)]
+pub(crate) struct ZonkPass {
+    zonked: NodeMemo,
+}
+
+impl ZonkPass {
+    /// `term` zonked within this pass, as [`zonk`] zonks it alone.
+    pub(crate) fn zonk(&mut self, context: &Context, term: &Term) -> Result<Term, Error> {
+        let pass = Zonk {
+            context,
+            zonked: RefCell::new(mem::take(&mut self.zonked)),
+        };
+        let zonked = zonk_term(&pass, term);
+        self.zonked = pass.zonked.into_inner();
+        zonked
+    }
+}
+
 /// Materialize the solutions already committed for term metavariables without rejecting holes that remain legitimately deferred. Universe levels are preserved verbatim: declaration finalization rewrites them only after this pass has exposed the levels hidden in solved term-meta solutions.
 pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> B {
     if !value.has_metavar() {
         return value.clone();
     }
 
-    type Solution = (Vec<Free>, Term);
+    type Solution = (Rc<Vec<(Free, Term)>>, Term);
     /// The metavariables whose solutions this walk is inside right now.
     ///
     /// Substitution cannot expand a cyclic solution graph, and elaborating a `rec` group produces one: a member's slot is filled with the body that other solutions already mention, so materializing either reaches the other forever. Left unguarded the walk simply descends, and `curios_utilities::recurse` answers a deepening walk by asking the allocator for stack — so the compilation would die by exhausting the machine rather than by refusing anything, on a route no budget prices ([`Cost::FRAME`]'s documentation states the gap: `recurse` grows the stack and nothing else bounds total depth).
@@ -104,6 +126,14 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
                     Rc::clone(&rewrite_solutions),
                     Rc::clone(&rewrite_active),
                 );
+                // A solution that names no binder is the occurrence as it stands, its spine unread, as the strict zonk takes one.
+                if !resolved.has_local_free() && resolved.reach() == 0 {
+                    rewrite_active.borrow_mut().remove(id);
+                    return Some(match term.extent() {
+                        Some(extent) => resolved.with_extent(extent),
+                        None => resolved,
+                    });
+                }
                 let spine = spine
                     .iter()
                     .map(|term| {
@@ -115,7 +145,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
                     })
                     .collect::<Vec<_>>();
                 rewrite_active.borrow_mut().remove(id);
-                let labels = labels.iter().collect::<Vec<_>>();
+                let labels = labels.iter().map(|(name, _)| name).collect::<Vec<_>>();
                 let spine = spine.iter().collect::<Vec<_>>();
                 let zonked = resolved.capture(&labels).release(&spine);
                 Some(match term.extent() {
@@ -153,23 +183,12 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
         };
         // A filled recursive slot stands for its member, and the member is spelled by its name: substituting the *body* is what closes the cycle, since the body reaches the very solution being materialized. The name is what `RecItem::try_new` captures, so this is also the spelling the group's binder is waiting for. Its body is deliberately not walked — nothing in it needs materializing here, and walking it is the divergence.
         if let Some(name) = context.rec_slot_name(id) {
-            // The birth telescope's names are kept so the occurrence's spine still matches, as every entry here must. Capturing them in a term that mentions none of them leaves it alone, which is right: a member's value does not depend on the slot's spine.
-            let labels = entry
-                .telescope
-                .iter()
-                .map(|(name, _)| *name)
-                .collect::<Vec<_>>();
-            solutions.insert(id, (labels, Term::free_var(name)));
+            // The birth telescope is kept so the occurrence's spine still matches, as every entry here must. A member's name names no binder, so the spine is never read: a member's value does not depend on the slot's spine.
+            solutions.insert(id, (Rc::clone(&entry.telescope), Term::free_var(name)));
             continue;
         }
         pending.extend(solution.metavars());
-        solutions.insert(
-            id,
-            (
-                entry.telescope.iter().map(|(name, _)| *name).collect(),
-                solution.clone(),
-            ),
-        );
+        solutions.insert(id, (Rc::clone(&entry.telescope), solution.clone()));
     }
     if solutions.is_empty() {
         return value.clone();
@@ -1276,6 +1295,14 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
 
             // Resolve the solution in its own (named) frame first: nested solved metavariables are substituted before the spine splice below.
             let resolved = zonk_term(context, solution)?;
+
+            // A solution that names no binder reads nothing of the spine, so the occurrence is the solution: the spine, one entry for each binder the metavariable was born under, is left unwalked.
+            if !resolved.has_local_free() && resolved.reach() == 0 {
+                return Ok(match term.extent() {
+                    Some(extent) => resolved.with_extent(extent),
+                    None => resolved,
+                });
+            }
 
             // A contextual occurrence: the spine records, in this site's own (already de-Bruijn-correct) form, what each birth binder corresponds to here. Zonk the spine entries (they may embed solved metavariables), then splice the solution through them — birth names captured, spine terms released.
             let entry = context

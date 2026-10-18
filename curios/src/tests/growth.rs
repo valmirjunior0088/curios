@@ -6,6 +6,8 @@
 
 use {
     super::compile,
+    curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
+    curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
     std::{fmt::Write, iter},
 };
@@ -306,6 +308,31 @@ fn joined(items: impl Iterator<Item = String>, separator: &str) -> String {
 /// Whether `source` compiles through every stage — Binaryen and Cranelift included — with what it is refused for where it does not.
 fn compiles(source: &str) -> Result<(), String> {
     compile(source).map(|_| ())
+}
+
+/// Whether `source` is lowered and elaborated, its erasure obligations met, with what it is refused for where it is not: what a fixture holding elaboration's own cost asks, the stages after it being other fixtures'.
+fn elaborates(source: &str) -> Result<(), String> {
+    let entrypoint = source
+        .parse::<Entrypoint>()
+        .map_err(|error| error.format())?;
+    let checked = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+        .map_err(|refused| format!("{refused:?}"))?;
+    match checked.obligations.is_empty() {
+        true => Ok(()),
+        false => Err(format!("{:?}", checked.obligations)),
+    }
+}
+
+/// Elaboration takes a deep expression in its size: a left-leaning and a right-nested chain of ten thousand operators, whose recorded terms are each other's subterms and are zonked in one pass, and a thousand nested list literals, whose levels are a chain of solutions zonked once along it.
+#[test]
+fn deep_expressions_elaborate_in_their_size() {
+    for (growth, size) in [
+        (Growth::LeftPlus, 10_000),
+        (Growth::RightPlus, 10_000),
+        (Growth::Lists, 1_000),
+    ] {
+        assert_eq!(elaborates(&grown(growth, size)), Ok(()), "{growth:?}");
+    }
 }
 
 /// Nesting ten thousand deep compiles on a test thread's stack: parentheses, each a nonterminal the parser re-enters, and an arrow, each parameter a term the lowering lowers inside the one before. The depth is bought with stack where it is spent, so no stage's acceptance follows the thread it runs on.

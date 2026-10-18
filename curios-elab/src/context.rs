@@ -67,7 +67,7 @@ use {
         UniverseSolver, UniverseStateToken, Witness, zonk_universe_levels_scoped,
     },
     crate::{
-        Published, Refusal, Sort, hold_at_one_instance, key_spelling, metavar_spines,
+        Published, Refusal, Sort, ZonkPass, hold_at_one_instance, key_spelling, metavar_spines,
         read_by_value, shallow_scrutinee, zonk, zonk_solved_term_metas,
     },
     curios_analysis::{Classification, Unfolding, records_case_equation},
@@ -528,14 +528,17 @@ impl<'s> Context<'s> {
     }
 
     /// Zonk every term recorded since `mark`, the finished item's, so the erasure obligations read them once the state they were recorded in is gone.
+    ///
+    /// One pass across them all, the solutions standing still while it runs: the terms are each other's subterms, a deep expression's recorded once at each of its levels, and zonked apart they would cost the sum of their sizes.
     pub(crate) fn settle_checked(&mut self, mark: usize) -> Result<(), Error> {
         let mut zonked = HashMap::<Term, Term>::new();
+        let mut pass = ZonkPass::default();
         let mut settled = Vec::with_capacity(self.underway.checked.mark() - mark);
         for (term, type_, site) in &self.underway.checked.terms()[mark..] {
             let mut settle = |term: &Term| match zonked.get(term) {
                 Some(done) => Ok(done.clone()),
                 None => {
-                    let done = zonk(self, term)?;
+                    let done = pass.zonk(self, term)?;
                     zonked.insert(term.clone(), done.clone());
                     Ok::<_, Error>(done)
                 }
