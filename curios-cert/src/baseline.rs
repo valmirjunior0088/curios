@@ -4,6 +4,8 @@
 //!
 //! **In the order a module is stored.** A declaration follows what it reads, so every name its record holds is settled, adopted or judged, before the declaration is asked about. A read of a name not settled by then is one the order does not account for, and the declaration is judged.
 //!
+//! **Asked only where an edit could have reached.** The record read backwards says which declarations read each name, so the walk finds from the edit which declarations a moved one could reach, and asks the reads of those alone; one none reaches takes its record as it stands ([`Adopting::recorded`]), every declaration its reads name standing.
+//!
 //! **A read of a unit in scope stands where the unit is the one that was read, or the part read digests as it did.** A record names what a judgment read, so a read of this unit is compared, the baseline's declaration against the one in hand. Of a unit in scope there is no earlier declaration in hand, so a walk records the digest of each part it read of one (`read_digest`) and a later walk digests the part again, unless whoever mounted the unit says it is the one the baseline's walk read (`Globals::standing`). That the scope is the one the earlier walk judged in is what a baseline's address says — a unit is offered as a baseline only after the units it was compiled after — and it is the one claim a caller makes of a baseline.
 //!
 //! **What a declaration's own terms decide is decided of its terms.** Its universe contexts, the levels and binders it mentions and what it spells of elaboration's own syntax are held to their rules by the walk that first met those terms, so a declaration whose terms are the baseline's is passed over by every such check whether or not its verdict is adopted.
@@ -167,33 +169,43 @@ impl<'a> Adopting<'a> {
         abroad: impl Fn(&Global, bool) -> bool,
     ) -> Option<Vec<(Totality, &'a Reads)>> {
         let names = item.declared_names();
-        let certification = self.baseline.certification;
         let stands = |read: &Global, body: bool| match self.stood.get(read) {
             Some(stood) if body => stood.body,
             Some(stood) => stood.signature,
             // Another unit's, or no one's.
             None => abroad(read, body),
         };
+        let recorded = self.recorded(item)?;
 
-        names
+        recorded
+            .iter()
+            .all(|(_, reads)| {
+                reads
+                    .signatures
+                    .iter()
+                    .all(|read| names.contains(&read) || stands(read, false))
+                    && reads
+                        .bodies
+                        .iter()
+                        .all(|read| names.contains(&read) || stands(read, true))
+            })
+            .then_some(recorded)
+    }
+
+    /// The baseline's record of each name `item` declares, in the order the item declares them, where it covers each and files a vector for each registry entry `module` holds under one; `None` where it does not, and the walk judges the item. What it read is not asked: [`Adopting::adopts`] asks it, and a declaration no edit can have reached takes its record as it stands.
+    pub(crate) fn recorded(&self, item: &Item) -> Option<Vec<(Totality, &'a Reads)>> {
+        let certification = self.baseline.certification;
+
+        item.declared_names()
             .iter()
             .map(|name| {
-                let totality = certification.totality(name)?;
-                let reads = certification.reads(name)?;
                 let vectored = item.nominal(name).is_none()
                     || (certification.polarities(name).is_some()
                         && certification.variances(name).is_some());
 
-                (vectored
-                    && reads
-                        .signatures
-                        .iter()
-                        .all(|read| names.contains(&read) || stands(read, false))
-                    && reads
-                        .bodies
-                        .iter()
-                        .all(|read| names.contains(&read) || stands(read, true)))
-                .then_some((totality, reads))
+                vectored
+                    .then(|| Some((certification.totality(name)?, certification.reads(name)?)))
+                    .flatten()
             })
             .collect()
     }

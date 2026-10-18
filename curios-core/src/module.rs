@@ -13,8 +13,9 @@ use {
         Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
         UniverseError, Variance, WitnessId, build_shorten,
     },
-    curios_utilities::{Mount, Plicity, Qualifier},
+    curios_utilities::{Mount, Persistent, Plicity, Qualifier},
     std::{
+        cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         fmt, mem,
         rc::Rc,
@@ -57,6 +58,107 @@ pub struct Certification {
     /// **Of the unit's baseline half**, as its traces are: skipped where the record is stored, stored beside it ([`Certification::reads_bytes`]), handed back as bytes where it is restored ([`Certification::with_reads`]), and read out of them when a walk over the unit first asks.
     #[archived_with(curios_archive::Skip)]
     reads: curios_archive::Deferred<Read>,
+    /// What judging each definition read, read backwards. See [`ReadBy`].
+    #[archived_with(curios_archive::Skip)]
+    read_by: OnceCell<ReadBy>,
+}
+
+/// Who read what of a certifier's record, read backwards: for each name, the definitions whose judgment read its signature, and those whose judgment asked for its body. What a walk over the record's unit as a baseline finds the declarations an edit could reach by, from the edit, where asking every definition's reads asks the whole record.
+///
+/// **Read off the record, never stored.** Made the first time a walk over the unit asks, and held with the record for as long as its unit is held; a walk over a baseline hands the record it files the baseline's, with the edges of every definition it judged or the module no longer holds replaced ([`ReadBy::replace`]), so a session reads no record backwards twice.
+///
+/// **Looked up, never walked.** Its maps are persistent and keyed by hash, so their order follows the process, and what reads them asks after one name at a time.
+#[derive(Debug, Clone, Default)]
+pub struct ReadBy {
+    signatures: Persistent<Global, Vec<Global>>,
+    bodies: Persistent<Global, Vec<Global>>,
+}
+
+impl ReadBy {
+    /// Who read what, of what judging each definition of `by` read.
+    fn of(by: &BTreeMap<Global, Reads>) -> Self {
+        // Gathered whole first, so each name's list is built once and not copied at every reader a persistent insert would add.
+        let (mut signatures, mut bodies) = (
+            BTreeMap::<Global, Vec<Global>>::new(),
+            BTreeMap::<Global, Vec<Global>>::new(),
+        );
+        for (reader, reads) in by {
+            for name in &reads.signatures {
+                signatures.entry(*name).or_default().push(*reader);
+            }
+            for name in &reads.bodies {
+                bodies.entry(*name).or_default().push(*reader);
+            }
+        }
+        let mut read_by = ReadBy::default();
+        for (name, readers) in signatures {
+            read_by.signatures.insert(name, readers);
+        }
+        for (name, readers) in bodies {
+            read_by.bodies.insert(name, readers);
+        }
+
+        read_by
+    }
+
+    /// The definitions whose judgment read `name`'s signature: its type, universe scheme, registry entry or verdict.
+    pub fn signature(&self, name: &Global) -> &[Global] {
+        self.signatures.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    /// The definitions whose judgment asked for `name`'s body.
+    pub fn body(&self, name: &Global) -> &[Global] {
+        self.bodies.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    /// Every name some judgment read, each once, in no stated order.
+    pub fn names(&self) -> impl Iterator<Item = &Global> {
+        self.signatures.iter().map(|(name, _)| name).chain(
+            self.bodies
+                .iter()
+                .map(|(name, _)| name)
+                .filter(|name| !self.signatures.contains_key(name)),
+        )
+    }
+
+    /// Replace the edges of the definition `reader`: those `earlier`, what judging it read, added are taken out, and those `now`, what it reads, adds are put in. `None` on either side is a definition that was, or is, not judged.
+    pub fn replace(&mut self, reader: Global, earlier: Option<&Reads>, now: Option<&Reads>) {
+        if let Some(earlier) = earlier {
+            for (names, map) in [
+                (&earlier.signatures, &mut self.signatures),
+                (&earlier.bodies, &mut self.bodies),
+            ] {
+                for name in names {
+                    let Some(held) = map.get(name) else {
+                        continue;
+                    };
+                    let kept = held
+                        .iter()
+                        .filter(|held| **held != reader)
+                        .copied()
+                        .collect::<Vec<_>>();
+                    match kept.is_empty() {
+                        true => {
+                            map.remove(name);
+                        }
+                        false => map.insert(*name, kept),
+                    }
+                }
+            }
+        }
+        if let Some(now) = now {
+            for (names, map) in [
+                (&now.signatures, &mut self.signatures),
+                (&now.bodies, &mut self.bodies),
+            ] {
+                for name in names {
+                    let mut held = map.get(name).cloned().unwrap_or_default();
+                    held.push(reader);
+                    map.insert(*name, held);
+                }
+            }
+        }
+    }
 }
 
 /// What a walk's judgments read, held apart from what they concluded: of the items of its own unit, by name, and of the declarations of other units, each by the digest of the part read.
@@ -143,7 +245,27 @@ impl Certification {
                 by,
                 abroad: abroad.into_iter().collect(),
             }),
+            read_by: OnceCell::new(),
         }
+    }
+
+    /// This record holding `read_by` as who read what of it: the index a walk over a baseline made of the baseline's, with the edges of what it judged replaced. See [`ReadBy`].
+    pub fn reading(self, read_by: ReadBy) -> Self {
+        let held = OnceCell::new();
+        let _ = held.set(read_by);
+
+        Self {
+            read_by: held,
+            ..self
+        }
+    }
+
+    /// Who read what of this record, read backwards the first time it is asked. See [`ReadBy`].
+    pub fn read_by(&self) -> &ReadBy {
+        self.read_by.get_or_init(|| {
+            curios_profile::profile!("read_by::of", definitions = self.read().by.len());
+            ReadBy::of(&self.read().by)
+        })
     }
 
     /// What the walk's judgments read, read out of its bytes now where the record was restored and no walk has asked before.

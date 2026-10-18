@@ -222,6 +222,11 @@ impl<'s> Globals<'s> {
             .is_some_and(|mounted| !mounted.moved)
     }
 
+    /// Whether every unit here is the one a baseline's walk read, so no read of one has moved.
+    pub(crate) fn settled(&self) -> bool {
+        self.mounted.iter().all(|mounted| !mounted.moved)
+    }
+
     /// Whether a read of `name`, which a unit here declares, is one a walk records: every one but a read of a fixed unit.
     pub(crate) fn recorded(&self, name: &Global) -> bool {
         self.mounted

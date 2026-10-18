@@ -5,7 +5,7 @@ use {
     crate::{Baseline, Error, Globals, Kernel, Rechecked, induct_alike, struct_alike},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Certification, Certified, Free, Global, Intrinsic, Module, Nat, Places, Reads, Term,
+        Certification, Certified, Free, Global, Intrinsic, Item, Module, Nat, Places, Reads, Term,
         Totality,
     },
     curios_utilities::Qualifier,
@@ -179,6 +179,65 @@ fn a_signature_read_stands_through_an_edit_to_the_body_behind_it() {
         rechecked.certification.reads(&global("identity")),
         None,
         "the judged declaration is in the record beside the adopted ones",
+    );
+}
+
+/// `base : (Nat) -> Nat`, total as `(n) => n` or partial as [`diverging_sink`]'s body, then `middle : Nat = base(1)`, `top : Nat = middle` and `apart : Nat = 7`, the two readers stamped as `base` is: `top` reads `middle` and nothing of `base`.
+fn chained_module(partial: bool) -> Module {
+    let n = Free::local(10, Some("n"));
+    let stamped = |name: &str, type_: Term, body: Term| match partial {
+        true => authored_partial(&global(name), type_, body),
+        false => authored(&global(name), type_, body),
+    };
+    let base = match (partial, diverging_sink()) {
+        (true, Item::Let(sink)) => stamped("base", sink.type_, sink.body),
+        _ => stamped(
+            "base",
+            Term::func_type([(n, nat())], nat()),
+            Term::func([(n, nat())], Term::free_var(&n)),
+        ),
+    };
+
+    Module {
+        mounts: Vec::new(),
+        items: vec![
+            base,
+            stamped(
+                "middle",
+                nat(),
+                Term::apply(Term::free_var(&Free::from(&global("base"))), [literal(1)]),
+            ),
+            stamped("top", nat(), Term::free_var(&Free::from(&global("middle")))),
+            authored(&global("apart"), nat(), literal(7)),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    }
+}
+
+/// A verdict that moves reaches what read it through a declaration whose terms stand: `base` made partial is judged, `middle`, which read its signature, is judged and comes out partial, and so does `top`, which read `middle` alone and whose terms are the baseline's. `apart` reads nothing that moved and keeps the baseline's verdict.
+///
+/// Mutation-checked: with the declarations that read a moved one marked and theirs not, `top` keeps the baseline's `Total`.
+#[test]
+fn a_verdict_that_moves_reaches_what_read_it_through_a_declaration_whose_terms_stand() {
+    let baseline = chained_module(false);
+    let certification = walked(&baseline).certification;
+    let edited = chained_module(true);
+
+    let rechecked = walked_over(&edited, &baseline, &certification);
+
+    assert_eq!(rechecked.verdicts, Vec::new());
+    for name in ["base", "middle", "top"] {
+        assert_eq!(
+            rechecked.certification.totality(&global(name)),
+            Some(Totality::Partial),
+            "{name}",
+        );
+    }
+    assert_eq!(
+        rechecked.certification.totality(&global("apart")),
+        Some(Totality::Total),
     );
 }
 

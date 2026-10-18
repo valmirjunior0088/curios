@@ -493,6 +493,10 @@ fn verdicts_within<'s>(
     };
     let changed_inducts = changed_entries(&mut inducts.keys());
     let changed_structs = changed_entries(&mut structs.keys());
+    // Whether each part the baseline's walk read of a unit that moved is the part in scope now: asked once, a part being read by every declaration that names it.
+    let abroad = RefCell::new(HashMap::<(Global, bool), bool>::new());
+    // What an edit could have reached, by the baseline's record read backwards: the walk asks the reads of these declarations alone.
+    let reached = baseline.map(|baseline| Reached::of(module, globals, baseline, &kept, &abroad));
 
     // The environment is the kernel's starting scope, not something consulted beside it: an item already in scope stands exactly as a refused item does — at its declared type, with its real body — so every judged item downstream sees what a walk that judged everything would have shown it. A baseline is beneath the walk as the scope is, answering for the declarations whose verdict the walk adopts.
     kernel.seed(globals);
@@ -617,8 +621,6 @@ fn verdicts_within<'s>(
     file_scope_polarities(kernel, &mut verdicts);
     file_scope_variances(kernel, &mut verdicts);
 
-    // Whether each part the baseline's walk read of a unit that moved is the part in scope now: asked once, a part being read by every declaration that names it.
-    let abroad = RefCell::new(HashMap::<(Global, bool), bool>::new());
     // What each judged definition read of other items, taken at each judgment's end so it holds that judgment's reads alone.
     let mut reads: BTreeMap<Global, Reads> = BTreeMap::new();
     kernel.take_reads();
@@ -628,17 +630,23 @@ fn verdicts_within<'s>(
     // The vector the walk filed for each registry entry it accepted.
     let mut polarities: BTreeMap<Global, Vec<Polarity>> = BTreeMap::new();
     let mut variances: BTreeMap<Global, Vec<Variance>> = BTreeMap::new();
+    // The names of the declarations the walk judged, whose reads are its own.
+    let mut judged = Vec::new();
 
     // The items as the module stores them, which is every item after the items it reaches where the module was made by the elaborator (`Module::ordered`). The walk sorts nothing: an item that names one stored after it finds the name unbound, and a family it stores in one accepted after it finds no vector filed, each of which refuses.
     for (index, item) in module.items.iter().enumerate() {
         let item_name = item.declared_names().first().map(|&name| *name);
 
-        // A declaration whose terms are the baseline's and whose every recorded read stands takes the baseline's verdict, and stands as the walk leaves any item it does not judge.
+        // A declaration whose terms are the baseline's and whose every recorded read stands takes the baseline's verdict, and stands as the walk leaves any item it does not judge. One no edit can have reached reads nothing that moved, and takes it unasked.
         if let Some(adopting) = &mut adopting
             && kept[index]
-            && let Some(certified) = adopting.adopts(item, |name, body| {
-                read_stands(globals, adopting.baseline(), &abroad, name, body)
-            })
+            && let Some(certified) =
+                match reached.as_ref().is_some_and(|reached| reached.holds(item)) {
+                    true => adopting.adopts(item, |name, body| {
+                        read_stands(globals, adopting.baseline(), &abroad, name, body)
+                    }),
+                    false => adopting.recorded(item),
+                }
         {
             let adopted = adopt(kernel, adopting.baseline(), item, &certified);
             verdicts.extend(adopted.refusals);
@@ -734,6 +742,7 @@ fn verdicts_within<'s>(
         let item_reads = kernel.take_reads();
         for name in item.declared_names() {
             reads.insert(*name, item_reads.clone());
+            judged.push(*name);
         }
 
         let (drained, failure) = kernel.take_checked();
@@ -829,6 +838,16 @@ fn verdicts_within<'s>(
         read_abroad
     };
 
+    // Who read what of the record this walk files: the baseline's, with the edges of every declaration judged, or no longer held, replaced.
+    let read_by = baseline.zip(reached).map(|(baseline, reached)| {
+        let mut read_by = baseline.certification.read_by().clone();
+        for name in judged.iter().chain(&reached.lost) {
+            read_by.replace(*name, baseline.certification.reads(name), reads.get(name));
+        }
+
+        read_by
+    });
+
     // The record of what this walk concluded: every judged definition's totality, from the set each was classified into, with what its judgment read, and every accepted entry's polarity vector — so a later walk reading it needs nothing of this one's.
     let certification = Certification::of(
         module
@@ -847,10 +866,113 @@ fn verdicts_within<'s>(
         variances,
         read_abroad,
     );
+    let certification = match read_by {
+        Some(read_by) => certification.reading(read_by),
+        None => certification,
+    };
 
     Rechecked {
         verdicts,
         certification,
+    }
+}
+
+/// What an edit could have reached, of a module walked over a baseline, by the baseline's record read backwards ([`ReadBy`](curios_core::ReadBy)).
+///
+/// **Found from the edit, by the certifier's own record.** A declaration whose terms or registry entries are not the baseline's ([`Baseline::holds`]), a name the baseline declared and the module does not, and, of a unit in scope that moved, each part read whose digest moved ([`read_stands`]) are where what was read can have moved. A declaration whose filed reads name one of them is reached, and so is one whose reads name a declaration reached. A declaration none reaches reads only what stands, so asking its reads would adopt it: nothing another component computed decides that, and the record is the one this crate filed.
+struct Reached {
+    /// The names of the module's declarations reached, each declaration whole.
+    names: HashSet<Global>,
+    /// The names the baseline declared and the module does not.
+    lost: Vec<Global>,
+}
+
+impl Reached {
+    fn of(
+        module: &Module,
+        globals: &Globals,
+        baseline: Baseline<'_>,
+        kept: &[bool],
+        abroad: &RefCell<HashMap<(Global, bool), bool>>,
+    ) -> Self {
+        let read_by = baseline.certification.read_by();
+        // Where the module holds each name, so a declaration is reached whole.
+        let item_of = module
+            .items
+            .iter()
+            .enumerate()
+            .flat_map(|(index, item)| {
+                item.declared_names()
+                    .into_iter()
+                    .map(move |name| (*name, index))
+            })
+            .collect::<HashMap<_, _>>();
+        let mut reached = Reached {
+            names: HashSet::new(),
+            lost: Vec::new(),
+        };
+        let mut frontier = Vec::new();
+        let reach = |index: usize, names: &mut HashSet<Global>, frontier: &mut Vec<Global>| {
+            for name in module.items[index].declared_names() {
+                if names.insert(*name) {
+                    frontier.push(*name);
+                }
+            }
+        };
+
+        for (index, held) in kept.iter().enumerate() {
+            if !held {
+                reach(index, &mut reached.names, &mut frontier);
+            }
+        }
+        for place in 0..baseline.module.items.len() {
+            for name in baseline.module.items.names(place) {
+                if !item_of.contains_key(name) {
+                    reached.lost.push(*name);
+                    frontier.push(*name);
+                }
+            }
+        }
+        if !globals.settled() {
+            let foreign = read_by
+                .names()
+                .filter(|name| {
+                    !item_of.contains_key(*name) && baseline.places.place(name).is_none()
+                })
+                .copied()
+                .collect::<Vec<_>>();
+            for name in foreign {
+                for (body, readers) in [
+                    (false, read_by.signature(&name)),
+                    (true, read_by.body(&name)),
+                ] {
+                    if readers.is_empty() || read_stands(globals, baseline, abroad, &name, body) {
+                        continue;
+                    }
+                    for reader in readers {
+                        if let Some(&index) = item_of.get(reader) {
+                            reach(index, &mut reached.names, &mut frontier);
+                        }
+                    }
+                }
+            }
+        }
+        while let Some(name) = frontier.pop() {
+            for reader in read_by.signature(&name).iter().chain(read_by.body(&name)) {
+                if let Some(&index) = item_of.get(reader) {
+                    reach(index, &mut reached.names, &mut frontier);
+                }
+            }
+        }
+
+        reached
+    }
+
+    /// Whether an edit could have reached `item`.
+    fn holds(&self, item: &Item) -> bool {
+        item.declared_names()
+            .iter()
+            .any(|name| self.names.contains(*name))
     }
 }
 
