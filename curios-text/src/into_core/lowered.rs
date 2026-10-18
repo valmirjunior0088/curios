@@ -14,7 +14,7 @@ use {
         Table,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
-    curios_utilities::{Mount, Ordered, Persistent, Qualifier, Report},
+    curios_utilities::{Mount, Ordered, Persistent, Qualifier, Report, Sorted},
     std::{
         borrow::Borrow,
         cell::RefCell,
@@ -38,11 +38,17 @@ pub(crate) type Records = Ordered<Rc<LoweredDeclaration>>;
 pub(crate) struct LookupReaders {
     by: Persistent<Consulted, Vec<Key>>,
     bodies: Persistent<Consulted, Vec<Qualifier>>,
+    /// The witnesses whose key read each name.
+    keys: Persistent<curios_core::Global, Vec<curios_core::Global>>,
 }
 
 impl LookupReaders {
-    /// Who read what, of `declarations` and of the bodies whose `use` declarations `uses` records.
-    pub(super) fn of(declarations: &Records, uses: &Table<Vec<Consulted>>) -> Self {
+    /// Who read what, of `declarations`, of the bodies whose `use` declarations `uses` records, and of the witnesses whose keys `keyed` records.
+    pub(super) fn of(
+        declarations: &Records,
+        uses: &Table<Vec<Consulted>>,
+        keyed: &Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
+    ) -> Self {
         curios_profile::profile!("lookup_readers::of", declarations = declarations.len());
         // Gathered whole first, so each binding's list is built once.
         let mut gathered = BTreeMap::<Consulted, Vec<Key>>::new();
@@ -66,8 +72,52 @@ impl LookupReaders {
         for (consulted, read) in bodies {
             readers.bodies.insert(consulted, read);
         }
+        let mut keys = BTreeMap::<curios_core::Global, Vec<curios_core::Global>>::new();
+        for (witness, read) in keyed.iter() {
+            for name in read.iter() {
+                keys.entry(*name).or_default().push(*witness);
+            }
+        }
+        for (name, witnesses) in keys {
+            readers.keys.insert(name, witnesses);
+        }
 
         readers
+    }
+
+    /// The witnesses whose key read `name`.
+    pub(super) fn of_key(&self, name: &curios_core::Global) -> &[curios_core::Global] {
+        self.keys.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    /// Replace the edges of the witness `witness`: those `earlier`, what its key read, added are taken out, and those `now` adds are put in.
+    fn replace_key(
+        &mut self,
+        witness: curios_core::Global,
+        earlier: &[curios_core::Global],
+        now: &[curios_core::Global],
+    ) {
+        for name in earlier {
+            let Some(held) = self.keys.get(name) else {
+                continue;
+            };
+            let kept = held
+                .iter()
+                .filter(|held| **held != witness)
+                .copied()
+                .collect::<Vec<_>>();
+            match kept.is_empty() {
+                true => {
+                    self.keys.remove(name);
+                }
+                false => self.keys.insert(*name, kept),
+            }
+        }
+        for name in now {
+            let mut held = self.keys.get(name).cloned().unwrap_or_default();
+            held.push(witness);
+            self.keys.insert(*name, held);
+        }
     }
 
     /// The declarations whose lookups read `consulted`.
@@ -326,6 +376,9 @@ pub(crate) struct BaselineHalf {
     /// Every binding the `use` declarations of each module body read, by the module: what the scope of its body can move with. A body that reads none holds none.
     #[archived_with(curios_utilities::InSharedKeyOrder)]
     pub uses: Table<Vec<Consulted>>,
+    /// Every name each witness's key read, by the witness: what its name can move with.
+    #[archived_with(curios_utilities::InSharedKeyOrder)]
+    pub keyed: Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
 }
 
 /// A unit an earlier text of the same sources lowered to, as a later one is lowered over it: its declarations by the text each was lowered from, each by the place of its first item.
@@ -338,6 +391,8 @@ pub(super) struct Baseline<'a> {
     moved: Option<Moved>,
     /// The declarations kept without asking, by their keys: what marks the `use` sites and the mounts their lookups read, where asking would have.
     unasked: RefCell<HashSet<Key>>,
+    /// The declarations kept, by the place of each one's first item: a declaration is kept once, a second written as the same text, which the same anchor and stamp find, being lowered.
+    claimed: RefCell<HashSet<i64>>,
 }
 
 impl<'a> Baseline<'a> {
@@ -355,6 +410,7 @@ impl<'a> Baseline<'a> {
             foreign: unit.foreigns.iter().next().is_some(),
             moved: None,
             unasked: RefCell::new(HashSet::new()),
+            claimed: RefCell::new(HashSet::new()),
         }
     }
 
@@ -370,7 +426,7 @@ impl<'a> Baseline<'a> {
             return None;
         }
         let (key, index) = context.sited(|key, _| Some((key, *self.by_text.get(&key)?)))??;
-        if moved.reached.contains(&key) {
+        if moved.reached.contains(&key) || !self.claimed.borrow_mut().insert(index) {
             return None;
         }
         self.unasked.borrow_mut().insert(key);
@@ -434,6 +490,8 @@ impl<'a> Baseline<'a> {
         declarations: &[Rc<LoweredDeclaration>],
         uses: &Table<Vec<Consulted>>,
         bodies: impl IntoIterator<Item = Qualifier>,
+        keyed: &Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
+        witnesses: impl IntoIterator<Item = curios_core::Global>,
     ) -> LookupReaders {
         let mut readers = self.unit.lookup_readers().clone();
         let now = declarations.iter().map(Rc::as_ptr).collect::<HashSet<_>>();
@@ -466,6 +524,16 @@ impl<'a> Baseline<'a> {
             };
             readers.replace_body(body, &read(earlier), &read(uses));
         }
+        let earlier = &self.unit.half().keyed;
+        for witness in witnesses {
+            let read = |keyed: &Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>| {
+                keyed
+                    .get(&witness)
+                    .map_or(&[][..], |read| read.as_slice())
+                    .to_vec()
+            };
+            readers.replace_key(witness, &read(earlier), &read(keyed));
+        }
 
         readers
     }
@@ -482,12 +550,18 @@ impl<'a> Baseline<'a> {
 
             (self.unit.anchors().text(key.0, key.1) == Some(text)).then_some(first)
         })??;
+        if self.claimed.borrow().contains(&first) {
+            return None;
+        }
 
         let stands = self
             .record(first)
             .trace
             .stands(|lookup, found| context.answers(lookup, found));
         context.forget_asked();
+        if stands {
+            self.claimed.borrow_mut().insert(first);
+        }
 
         stands.then_some(first)
     }
@@ -572,12 +646,11 @@ impl<'a> Baseline<'a> {
         context: &Context,
         lowered: &mut Lowering,
     ) -> FlatLet {
-        let name = match definition.kind {
-            curios_core::DefinitionKind::Witness => {
-                curios_core::Global::Witness(context.fresh_witness())
-            }
-            _ => definition.name,
-        };
+        // A kept witness keeps the name the baseline gives it, which naming changes where its place or its key may have moved; it still takes its place among its module's, which a witness lowered after it counts.
+        if matches!(definition.kind, curios_core::DefinitionKind::Witness) {
+            context.fresh_witness();
+        }
+        let name = definition.name;
         self.keep_entries(&definition.name, name, &definition.kind, lowered);
 
         FlatLet {

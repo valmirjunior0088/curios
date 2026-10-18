@@ -610,8 +610,9 @@ impl PreparedText {
 
     /// Who read each binding, of the unit's lowered declarations read backwards. See the field.
     fn lookup_readers(&self) -> &LookupReaders {
-        self.lookups
-            .get_or_init(|| LookupReaders::of(self.lowerings(), &self.half().uses))
+        self.lookups.get_or_init(|| {
+            LookupReaders::of(self.lowerings(), &self.half().uses, &self.half().keyed)
+        })
     }
 
     /// The unit's baseline half, read out of its bytes now where the unit was restored and nothing has asked before.
@@ -2501,17 +2502,14 @@ fn into_core_unit_within(
         baseline.mark_mounts(&mounts, &shared);
     }
     // A body the unit no longer holds keeps no record of what its `use` declarations read.
-    let gone = uses
+    let unwalked = uses
         .iter()
         .map(|(body, _)| *body)
         .filter(|body| !shared.closes(body))
         .collect::<Vec<_>>();
-    for body in &gone {
+    for body in &unwalked {
         uses.remove(body);
     }
-    let lookups = baseline.as_ref().map(|baseline| {
-        baseline.readers_of(&declarations, &uses, relisted.into_iter().chain(gone))
-    });
     // What each file declared, kept for the lowering that reads the same text again.
     let scans = modules
         .iter()
@@ -2527,8 +2525,95 @@ fn into_core_unit_within(
         "every lowered item belongs to a declaration"
     );
 
-    // Every item is lowered, so every definition a witness's signature may name is at hand.
-    name_witnesses(
+    // The items lowered now, by their place among the walk's, and the baseline's declarations the walk did not keep, with the names they declared.
+    let made = steps
+        .iter()
+        .zip(
+            steps
+                .iter()
+                .skip(1)
+                .map(|step| step.from)
+                .chain([flat_items.len()]),
+        )
+        .filter(|(step, _)| step.kept.is_none())
+        .flat_map(|(step, end)| step.from..end)
+        .collect::<HashSet<_>>();
+    let gone = baseline
+        .as_ref()
+        .map(|baseline| revision::gone(baseline.unit(), &steps))
+        .unwrap_or_default();
+    let gone_names = gone
+        .iter()
+        .flat_map(|(_, names)| names)
+        .copied()
+        .collect::<HashSet<_>>();
+
+    // Every item is lowered, so every definition a witness's signature may name is at hand: whole, every one; over a baseline, the items lowered now, and the baseline's for every other.
+    let (renames, keyed) = {
+        curios_profile::profile!("name_witnesses");
+        let lowered_now = flat_items
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| baseline.is_none() || made.contains(index))
+            .flat_map(|(_, item)| keyed_of(item))
+            .collect::<HashMap<_, _>>();
+        let written = |name: &curios_core::Global| {
+            lowered_now.get(name).copied().or_else(|| {
+                let baseline = baseline.as_ref()?;
+                (!gone_names.contains(name))
+                    .then(|| baseline.unit().written(name))
+                    .flatten()
+            })
+        };
+        let marks = |name: &curios_core::Global| {
+            concepts
+                .contains_key(name)
+                .then(|| struct_decls.get(name).map(|record| record.arity.marks()))
+        };
+        let own = Own {
+            written: &written,
+            marks: &marks,
+        };
+        // Over a baseline, the witnesses of each module where one is lowered now, whose place may come before a kept one's, and of each where a kept one's key read a declaration lowered now or taken away.
+        let rekeyed = baseline
+            .as_ref()
+            .map(|baseline| {
+                let readers = baseline.unit().lookup_readers();
+                made.iter()
+                    .flat_map(|index| flat_items[*index].names())
+                    .chain(gone_names.iter().copied())
+                    .flat_map(|name| readers.of_key(&name).to_vec())
+                    .filter(|witness| !gone_names.contains(witness))
+                    .collect::<HashSet<_>>()
+            })
+            .unwrap_or_default();
+        let modules = made
+            .iter()
+            .flat_map(|index| flat_items[*index].names())
+            .chain(rekeyed.iter().copied())
+            .filter_map(|name| match name {
+                curios_core::Global::Witness(id) => Some(*id.module()),
+                curios_core::Global::Authored(_) => None,
+            })
+            .collect::<HashSet<_>>();
+        let spelled = |name: &curios_core::Global| match name {
+            curios_core::Global::Witness(id) if !rekeyed.contains(name) => id
+                .spelled()
+                .and_then(|(concept, key)| Some((concept.qualifier().copied()?, key))),
+            _ => None,
+        };
+        let naming = Naming {
+            modules: &modules,
+            spelled: &spelled,
+        };
+        witness_names(
+            &flat_items,
+            &own,
+            predecessors,
+            baseline.as_ref().map(|_| &naming),
+        )
+    };
+    rename_witnesses(
         Named {
             items: &mut flat_items,
             witnesses: &mut witnesses,
@@ -2536,10 +2621,42 @@ fn into_core_unit_within(
             imports: &mut shared.imports.borrow_mut(),
             lints: &mut shared.lints.borrow_mut(),
         },
-        &struct_decls,
-        &concepts,
-        predecessors,
+        &renames,
     );
+    // What each witness's key read: the baseline's, with what naming read now in place of what it read of each witness named or taken away.
+    let mut held_keys = baseline
+        .as_ref()
+        .map(|baseline| baseline.unit().half().keyed.clone())
+        .unwrap_or_default();
+    let mut keys_changed = Vec::new();
+    for name in gone_names
+        .iter()
+        .filter(|name| matches!(name, curios_core::Global::Witness(_)))
+    {
+        held_keys.remove(name);
+        keys_changed.push(*name);
+    }
+    let moved = renames
+        .iter()
+        .filter_map(|(held, taken)| Some((*taken, held_keys.remove(held)?)))
+        .collect::<Vec<_>>();
+    keys_changed.extend(renames.iter().flat_map(|(held, taken)| [*held, *taken]));
+    for (taken, read) in moved {
+        held_keys.insert(taken, read);
+    }
+    for (witness, read) in keyed {
+        held_keys.insert(witness, Rc::new(read));
+        keys_changed.push(witness);
+    }
+    let lookups = baseline.as_ref().map(|baseline| {
+        baseline.readers_of(
+            &declarations,
+            &uses,
+            relisted.into_iter().chain(unwalked),
+            &held_keys,
+            keys_changed,
+        )
+    });
 
     // The entrypoint, for the one unit that has one. Its tail closes the root body, so the imports in scope there are the last the root saw.
     context.record_import_scope(None);
@@ -2603,22 +2720,6 @@ fn into_core_unit_within(
         }
     };
     // Over a baseline, what could fail now that did not: each definition lowered now, each re-export made otherwise, and each export of a former lowered now or taken away, where no alias was lowered or taken away and no name the baseline declared is seen otherwise. A whole audit otherwise.
-    let made = steps
-        .iter()
-        .zip(
-            steps
-                .iter()
-                .skip(1)
-                .map(|step| step.from)
-                .chain([flat_items.len()]),
-        )
-        .filter(|(step, _)| step.kept.is_none())
-        .flat_map(|(step, end)| step.from..end)
-        .collect::<HashSet<_>>();
-    let gone = baseline
-        .as_ref()
-        .map(|baseline| revision::gone(baseline.unit(), &steps))
-        .unwrap_or_default();
     let alias = |lowered: &LoweredItem| {
         lowered
             .definitions
@@ -2794,6 +2895,7 @@ fn into_core_unit_within(
             declarations: records,
             scans,
             uses,
+            keyed: held_keys,
         }),
         lookups: lookups.map(OnceCell::from).unwrap_or_default(),
     };

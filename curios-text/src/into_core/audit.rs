@@ -258,7 +258,17 @@ pub(super) fn audit_public_exposures(
     }
 
     // By module and by label, so the exposure reported is the first the names give and not the first a hash's order does.
-    let mut modules = public.own().iter().collect::<Vec<_>>();
+    let mut modules = match only {
+        Some(only) => only
+            .reexports
+            .iter()
+            .map(|(module, _)| module)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .filter_map(|module| Some((module, public.own().get(module)?)))
+            .collect::<Vec<_>>(),
+        None => public.own().iter().collect::<Vec<_>>(),
+    };
     modules.sort_by(|left, right| left.0.cmp(right.0));
     for (module, interface) in modules {
         let mut bindings = interface.bindings.iter().collect::<Vec<_>>();

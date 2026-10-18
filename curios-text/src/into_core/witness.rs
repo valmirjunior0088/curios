@@ -4,17 +4,39 @@
 //!
 //! **A key is read off lowered forms alone**, the unit's and those of the units in scope: a `let` by its body, a group's member not at all, a concept's marks off its record entry's arity. A unit in scope is asked by name ([`PreparedText::written`]), so naming a witness reads the lowered form of each definition its signature names and of no other. How a declaration is written is the lowering's to say, so a witness's name is a function of the text in scope and of nothing that elaborated.
 //!
+//! **Over a baseline, a kept witness keeps its name** unless its module holds a witness lowered now, whose place among the module's may come before it, or its key read a declaration lowered now or taken away ([`Naming`]): what each key read is recorded with the unit for that ([`BaselineHalf::keyed`](super::BaselineHalf::keyed)).
+//!
 //! **No lowered term names a witness** — one is reached by resolution, which is elaboration's — so a name changes in the tables that are keyed by it and nowhere else: the items, the unit's witness set, what each declaration minted, the import scope of each, and the binders a lint names.
 
 use {
     super::{FlatItem, FlatLet},
     crate::{Lint, PreparedText},
     curios_utilities::{Plicity, Qualifier},
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet, HashSet},
+    },
 };
 
 /// A name's declaration as a key reads it: its kind, and its body where it is a `let`'s.
-type Keyed<'a> = (curios_core::Declared, Option<&'a curios_core::Term>);
+pub(super) type Keyed<'a> = (curios_core::Declared, Option<&'a curios_core::Term>);
+
+/// How `item` declares each of its names, as a key reads it: a `let` with its body, a group's members without theirs.
+pub(super) fn keyed_of(item: &FlatItem) -> Vec<(curios_core::Global, Keyed<'_>)> {
+    match item {
+        FlatItem::Let(let_) => vec![(let_.name, (let_.kind.declared(), Some(&let_.body)))],
+        // A member's body is closed over its group, which a key is not read through.
+        FlatItem::Rec(lets) => lets
+            .iter()
+            .map(|let_| (let_.name, (let_.kind.declared(), None)))
+            .collect(),
+        FlatItem::Kept(rec) => rec
+            .definitions
+            .iter()
+            .map(|definition| (definition.name, (definition.kind.declared(), None)))
+            .collect(),
+    }
+}
 
 /// What a declaration is, as far as a key reads it: a type former, a definition with its body, or anything a key is not read through.
 fn written(declared: Option<Keyed<'_>>) -> curios_core::Written {
@@ -24,61 +46,61 @@ fn written(declared: Option<Keyed<'_>>) -> curios_core::Written {
     }
 }
 
-/// The name each witness of `items` takes where its signature spells a concept and a key, by the name it was lowered under. Its place counts the witnesses its module declares ahead of it at that concept and key: none in a coherent unit.
+/// How a unit's own declarations are read where a key names one: how each is written, and the marks of a concept's parameters, `None` for a name the unit does not declare, which is read as the units in scope declare it.
+pub(super) struct Own<'o> {
+    pub written: &'o dyn Fn(&curios_core::Global) -> Option<Keyed<'o>>,
+    pub marks: &'o dyn Fn(&curios_core::Global) -> Option<Option<Vec<Plicity>>>,
+}
+
+/// Which witnesses a lowering names: every one, where the unit is lowered whole; over a baseline, those of `modules`, every other keeping the name it holds, and each kept one of them whose key `spelled` holds, read again where it is not there.
+pub(super) struct Naming<'n> {
+    pub modules: &'n HashSet<Qualifier>,
+    /// What the baseline spells each kept witness at, by the name it holds, for each whose key reads nothing that moved.
+    pub spelled: &'n dyn Fn(&curios_core::Global) -> Option<(Qualifier, curios_core::WitnessKey)>,
+}
+
+/// The name each witness of `items` takes, by the name it holds, where that is another, beside what each named witness's key read, by the name it takes. A witness whose signature spells a concept and a key is named by them and its place among the witnesses its module declares ahead of it at that concept and key — none in a coherent unit; one whose signature spells none keeps its name.
 ///
 /// `scope` holds every unit in scope, in dependency order.
-fn witness_names(
+pub(super) fn witness_names(
     items: &[FlatItem],
-    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
-    concepts: &BTreeMap<curios_core::Global, curios_core::ConceptDecl>,
+    own: &Own<'_>,
     scope: &[&PreparedText],
-) -> BTreeMap<curios_core::Global, curios_core::Global> {
+    naming: Option<&Naming<'_>>,
+) -> (
+    BTreeMap<curios_core::Global, curios_core::Global>,
+    BTreeMap<curios_core::Global, Vec<curios_core::Global>>,
+) {
     let witnesses = items
         .iter()
         .flat_map(FlatItem::lets)
         .filter(|let_| matches!(let_.kind, curios_core::DefinitionKind::Witness))
+        .filter(|let_| naming.is_none_or(|naming| naming.modules.contains(&module_of(let_))))
         .collect::<Vec<_>>();
     if witnesses.is_empty() {
-        return BTreeMap::new();
+        return (BTreeMap::new(), BTreeMap::new());
     }
 
-    let mut unit = BTreeMap::<curios_core::Global, Keyed<'_>>::new();
-    for item in items {
-        match item {
-            FlatItem::Let(let_) => {
-                unit.insert(let_.name, (let_.kind.declared(), Some(&let_.body)));
-            }
-            // A member's body is closed over its group, which a key is not read through.
-            FlatItem::Rec(lets) => {
-                for let_ in lets {
-                    unit.insert(let_.name, (let_.kind.declared(), None));
-                }
-            }
-            FlatItem::Kept(rec) => {
-                for definition in &rec.definitions {
-                    unit.insert(definition.name, (definition.kind.declared(), None));
-                }
-            }
-        }
-    }
+    // What a key reads, noted name by name for the witness being named.
+    let read_names = RefCell::new(Vec::new());
     // A name the unit does not declare is read as the nearest unit in scope declares it.
     let read = |name: &curios_core::Global| {
-        let declared = unit
-            .get(name)
-            .copied()
+        read_names.borrow_mut().push(*name);
+        let declared = (own.written)(name)
             .or_else(|| scope.iter().rev().find_map(|earlier| earlier.written(name)));
 
         written(declared)
     };
     // A concept's parameters are its record entry's, whose arity states the mark each is declared under.
     let marks = |name: &curios_core::Global| -> Option<Vec<Plicity>> {
+        read_names.borrow_mut().push(*name);
         let declared = |earlier: &PreparedText| match earlier.nominal(name)? {
             curios_core::Nominal::Concept { record, .. } => Some(record.arity.marks()),
             _ => None,
         };
-        match concepts.contains_key(name) {
-            true => Some(struct_decls.get(name)?.arity.marks()),
-            false => scope.iter().rev().find_map(|earlier| declared(earlier)),
+        match (own.marks)(name) {
+            Some(marks) => marks,
+            None => scope.iter().rev().find_map(|earlier| declared(earlier)),
         }
     };
     let spelled = curios_core::Keying {
@@ -88,29 +110,39 @@ fn witness_names(
 
     let mut alike = BTreeMap::<(Qualifier, Qualifier, curios_core::WitnessKey), u32>::new();
     let mut names = BTreeMap::new();
+    let mut keyed = BTreeMap::new();
     for witness in witnesses {
-        let Some((concept, key)) = spelled.key(&witness.type_) else {
-            continue;
+        read_names.borrow_mut().clear();
+        let held = naming.and_then(|naming| (naming.spelled)(&witness.name));
+        let key = match held {
+            Some(held) => Some(held),
+            None => spelled
+                .key(&witness.type_)
+                // A concept is an authored declaration; a signature that applied anything else spelled none.
+                .and_then(|(concept, key)| Some((concept.qualifier().copied()?, key))),
         };
-        // A concept is an authored declaration; a signature that applied anything else spelled none.
-        let Some(concept) = concept.qualifier().copied() else {
+        let reads = std::mem::take(&mut *read_names.borrow_mut());
+        let Some((concept, key)) = key else {
             continue;
         };
         let module = module_of(witness);
         let place = alike.entry((module, concept, key)).or_default();
-        names.insert(
-            witness.name,
-            curios_core::Global::Witness(curios_core::WitnessId::Spelled {
-                concept,
-                key,
-                module,
-                place: *place,
-            }),
-        );
+        let name = curios_core::Global::Witness(curios_core::WitnessId::Spelled {
+            concept,
+            key,
+            module,
+            place: *place,
+        });
         *place += 1;
+        if held.is_none() {
+            keyed.insert(name, reads);
+        }
+        if name != witness.name {
+            names.insert(witness.name, name);
+        }
     }
 
-    names
+    (names, keyed)
 }
 
 /// The module declaring a witness, which its lowering wrote into the name it was lowered under.
@@ -132,15 +164,11 @@ pub(super) struct Named<'a> {
     pub lints: &'a mut [Lint],
 }
 
-/// Give every witness of the unit whose signature spells a concept and a key the name that says so ([`witness_names`]), in each table that holds the name it was lowered under.
-pub(super) fn name_witnesses(
+/// Give each witness `names` holds the name it takes there ([`witness_names`]), in each table that holds the name it holds.
+pub(super) fn rename_witnesses(
     named: Named<'_>,
-    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
-    concepts: &BTreeMap<curios_core::Global, curios_core::ConceptDecl>,
-    scope: &[&PreparedText],
+    names: &BTreeMap<curios_core::Global, curios_core::Global>,
 ) {
-    curios_profile::profile!("name_witnesses");
-    let names = witness_names(named.items, struct_decls, concepts, scope);
     if names.is_empty() {
         return;
     }
@@ -153,10 +181,25 @@ pub(super) fn name_witnesses(
         .into_iter()
         .map(renamed)
         .collect();
-    // A witness is lowered under a name of its module's places and given one its key spells, so no name it takes was another's.
-    for (name, spelled) in &names {
-        named.minted.rename(name, *spelled);
-        named.imports.rename(name, *spelled);
+    // One witness may take the name another held, its place among its module's moved: every entry is taken under the name it was held by before any is placed under the one it takes.
+    let held = names
+        .keys()
+        .map(|name| {
+            let mints = named.minted.shared(name).cloned();
+            let in_scope = named.imports.scoped(name);
+            named.minted.forget(name);
+            named.imports.forget(name);
+            (*name, mints, in_scope)
+        })
+        .collect::<Vec<_>>();
+    for (name, mints, in_scope) in held {
+        let taken = renamed(name);
+        if let Some(mints) = mints {
+            named.minted.declare(&mints, [taken]);
+        }
+        if let Some(in_scope) = in_scope {
+            named.imports.scope(taken, in_scope);
+        }
     }
     for binder in named
         .lints

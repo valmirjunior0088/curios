@@ -574,6 +574,11 @@ impl Imports {
         self.tail = in_scope;
     }
 
+    /// Where `owner` was written, where it was recorded.
+    pub fn scoped(&self, owner: &Global) -> Option<InScope> {
+        self.by_item.get(owner).copied()
+    }
+
     /// Record where `owner` was written under `renamed` instead.
     pub fn rename(&mut self, owner: &Global, renamed: Global) {
         if let Some(in_scope) = self.by_item.remove(owner) {

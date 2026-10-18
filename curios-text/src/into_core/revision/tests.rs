@@ -297,3 +297,82 @@ fn a_name_made_private_refuses_what_exposes_it() {
 
     assert_eq!(over, whole);
 }
+
+/// A concept, two records and `rest` after them.
+fn witnessed(rest: &str) -> String {
+    [
+        "pub concept Show(A: Type): pub Type { show: A }\n\n",
+        "pub struct Foo: pub Type { }\n\n",
+        "pub struct Bar: pub Type { }\n\n",
+        rest,
+    ]
+    .concat()
+}
+
+/// The records of what each witness's key read, of a unit lowered over a baseline and of a whole lowering, are one.
+fn same_keys(over: &PreparedText, whole: &PreparedText) {
+    assert!(
+        over.half().keyed == whole.half().keyed,
+        "what the witnesses' keys read differs"
+    );
+}
+
+/// A witness an edit elsewhere does not reach keeps its name, and nothing of it is lowered again.
+#[test]
+fn a_witness_no_edit_reaches_keeps_its_name() {
+    let root = written(
+        "witness-kept",
+        &witnessed("satisfy Show(Foo) { show = Foo { } }\n\npub let x: Type = Type;\n"),
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = edited(
+        &root,
+        &witnessed("satisfy Show(Foo) { show = Foo { } }\n\npub let x: Type = Foo;\n"),
+        &baseline,
+    );
+
+    same_unit(&over, &whole);
+    same_keys(&over, &whole);
+    assert_eq!(anew(&over), ["/lib/a/x"]);
+}
+
+/// A witness whose key reads a declaration lowered again is named by what its key reads now.
+#[test]
+fn a_witness_whose_key_read_moved_is_named_again() {
+    let root = written(
+        "witness-rekeyed",
+        &witnessed("pub let Shown: Type = Foo;\n\nsatisfy Show(Shown) { show = Foo { } }\n"),
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = edited(
+        &root,
+        &witnessed("pub let Shown: Type = Bar;\n\nsatisfy Show(Shown) { show = Foo { } }\n"),
+        &baseline,
+    );
+
+    same_unit(&over, &whole);
+    same_keys(&over, &whole);
+}
+
+/// A witness written ahead of a kept one at the same concept and key takes the kept one's place among its module's, and the kept one the next.
+#[test]
+fn a_witness_written_ahead_of_one_alike_takes_its_place() {
+    let root = written(
+        "witness-alike",
+        &witnessed("satisfy Show(Foo) { show = Foo { } }\n"),
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = edited(
+        &root,
+        &witnessed(
+            "satisfy Show(Foo) { show = Foo { } }\n\nsatisfy Show(Foo) { show = Foo { } }\n",
+        ),
+        &baseline,
+    );
+
+    same_unit(&over, &whole);
+    same_keys(&over, &whole);
+}
