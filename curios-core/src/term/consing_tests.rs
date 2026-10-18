@@ -81,6 +81,18 @@ fn a_structure_keeps_the_binder_names_it_was_written_with() {
     assert!(Rc::ptr_eq(&min.inner, &max.inner));
 }
 
+/// A term consed already is consed again as the nodes it is, each adopted as itself rather than copied.
+///
+/// Mutation-checked: built anew at every node, the second consing hands back a copy.
+#[test]
+fn a_consed_term_is_adopted_as_itself() {
+    let consed = Sharing::new().share(&binary("a", "b"));
+
+    let again = Sharing::new().share(&consed);
+
+    assert!(Rc::ptr_eq(&consed.inner, &again.inner));
+}
+
 /// A consed term sits under no position and holds none beneath it, so two occurrences that differ only in where they were written are one node.
 #[test]
 fn a_consed_term_sits_under_no_position() {

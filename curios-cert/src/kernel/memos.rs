@@ -21,7 +21,7 @@
 use {
     super::{Prefix, Sort},
     curios_analysis::{Classification, Erased},
-    curios_core::{Bound, ClosedMemo, Term},
+    curios_core::{Bound, ClosedMemo, Sharing, Term},
     curios_utilities::Keyed,
     std::{collections::HashMap, hash::Hash, mem, rc::Rc},
 };
@@ -134,6 +134,8 @@ pub(super) struct Memos {
     /// What classifying each stuck operation found (`curios_analysis::Classification`), by the operation as reduction left it, for the stuck fold above it to extend rather than walk the operation again. One no conversion class entered reads the operation alone — its walk reduces nothing and asks nothing — so it lives the declaration, local-bearing as the operation is; one the kernel's conversion classed rests on what that question read, the equations in force and the types the locals stand at, as a local-bearing reduct does, and lives as long as they ([`Memos::begin_equations`]). Only a judgment's reduction takes a stuck fold again, so there is no table for plain reduction.
     classifications: HashMap<Term, Rc<Classification>>,
     classified: HashMap<Term, Rc<Classification>>,
+    /// The canonical node of each local-free key the declaration's tables file and ask by ([`Memos::key`]).
+    keys: Sharing,
 }
 
 impl Memos {
@@ -152,6 +154,15 @@ impl Memos {
             closed: ClosedMemo::default(),
             classifications: HashMap::new(),
             classified: HashMap::new(),
+            keys: Sharing::new(),
+        }
+    }
+
+    /// `term` as a table files and asks it: its canonical node where it names no local.
+    fn key(&self, term: &Term) -> Term {
+        match term.has_local_free() {
+            true => term.clone(),
+            false => self.keys.share(term),
         }
     }
 
@@ -186,8 +197,8 @@ impl Memos {
 
         // Dispatched by whether the term mentions a local, on the lookup as on the store, so a closed term is never answered from the scoped tables nor a local-bearing one from the tables that outlive a scope.
         match (term.has_local_free(), forced) {
-            (false, false) => self.whnf.get(term).cloned(),
-            (false, true) => self.forced.get(term).cloned(),
+            (false, false) => self.whnf.get(&self.key(term)).cloned(),
+            (false, true) => self.forced.get(&self.key(term)).cloned(),
             (true, false) => self.local[usize::from(plain)].get(term).cloned(),
             (true, true) => self.local_forced[usize::from(plain)].get(term).cloned(),
         }
@@ -200,8 +211,8 @@ impl Memos {
         }
 
         match (term.has_local_free(), forced) {
-            (false, false) => self.whnf.insert(term, reduct),
-            (false, true) => self.forced.insert(term, reduct),
+            (false, false) => self.whnf.insert(self.key(&term), reduct),
+            (false, true) => self.forced.insert(self.key(&term), reduct),
             (true, false) => self.local[usize::from(plain)].insert(term, reduct),
             (true, true) => self.local_forced[usize::from(plain)].insert(term, reduct),
         };
@@ -214,7 +225,9 @@ impl Memos {
         in_arm: bool,
         plain: bool,
     ) -> Option<(Option<Prefix>, Sort)> {
-        self.sorts[usize::from(plain)].get(type_, self.judged(&[type_], in_arm)?)
+        let life = self.judged(&[type_], in_arm)?;
+
+        self.sorts[usize::from(plain)].get(&self.key(type_), life)
     }
 
     /// Remember `type_`'s sort for the reduction that read it, in the table [`Memos::sort`] reads it from under the same `in_arm`, under the binders `prefix` holds.
@@ -227,6 +240,7 @@ impl Memos {
         sort: Sort,
     ) {
         if let Some(life) = self.judged(&[&type_], in_arm) {
+            let type_ = self.key(&type_);
             self.sorts[usize::from(plain)].insert(type_, life, prefix, sort);
         }
     }
@@ -237,7 +251,9 @@ impl Memos {
         type_: &Term,
         in_arm: bool,
     ) -> Option<(Option<Prefix>, Option<Erased>)> {
-        self.halves.get(type_, self.judged(&[type_], in_arm)?)
+        let life = self.judged(&[type_], in_arm)?;
+
+        self.halves.get(&self.key(type_), life)
     }
 
     /// Remember the erased half of a position at `type_`, read under the binders `prefix` holds.
@@ -249,6 +265,7 @@ impl Memos {
         half: Option<Erased>,
     ) {
         if let Some(life) = self.judged(&[&type_], in_arm) {
+            let type_ = self.key(&type_);
             self.halves.insert(type_, life, prefix, half);
         }
     }
@@ -259,7 +276,9 @@ impl Memos {
         term: &Term,
         in_arm: bool,
     ) -> Option<(Option<Prefix>, (Term, bool))> {
-        self.types.get(term, self.judged(&[term], in_arm)?)
+        let life = self.judged(&[term], in_arm)?;
+
+        self.types.get(&self.key(term), life)
     }
 
     /// Remember `term`'s type, in the table [`Memos::infer`] reads it from under the same `in_arm`.
@@ -271,6 +290,7 @@ impl Memos {
         typed: (Term, bool),
     ) {
         if let Some(life) = self.judged(&[&term], in_arm) {
+            let term = self.key(&term);
             self.types.insert(term, life, prefix, typed);
         }
     }
@@ -371,6 +391,7 @@ impl Memos {
 
     /// Discard every remembered reduct, sort, type, check and verdict. Called wherever the budget is restored, which is what makes a hit on them free rather than order-dependent.
     pub(super) fn begin_declaration(&mut self) {
+        self.keys = Sharing::new();
         self.whnf.clear();
         self.forced.clear();
         self.closed.clear();

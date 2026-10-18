@@ -2234,6 +2234,29 @@ fn held_twice(term: &Term) -> bool {
     Rc::strong_count(&term.inner) > 2
 }
 
+/// Whether `node`'s children are `consed`'s, pair by pair the same allocation, and each held under no extent: a node consing would rebuild into a copy of itself.
+fn holds_as_consed(node: &Subterm, consed: &Subterm) -> bool {
+    let mut children = Vec::new();
+    let positioned = node.any_child_term(&mut |child| {
+        children.push(Rc::as_ptr(&child.inner));
+        child.extent.is_some()
+    });
+    if positioned {
+        return false;
+    }
+
+    let mut index = 0;
+    let differs = consed.any_child_term(&mut |child| {
+        let same = children
+            .get(index)
+            .is_some_and(|pointer| std::ptr::eq(*pointer, Rc::as_ptr(&child.inner)));
+        index += 1;
+        !same
+    });
+
+    !differs && index == children.len()
+}
+
 /// Whether two nodes' children are the same allocations pair by pair: `Some(true)` when every child is, `Some(false)` when the counts differ — the nodes cannot be equal — and `None` when some pair is two allocations, which only a structural walk can settle.
 fn children_pairwise_shared(this: &Subterm, that: &Subterm) -> Option<bool> {
     let mut these = Vec::new();
@@ -2398,7 +2421,7 @@ impl Bound for Term {
 impl Term {
     /// This term as the canonical node of its spelling in a consing visit's table, under no extent.
     ///
-    /// **Built over its canonical children, never handed back as it was.** [`Term::rebuilt`] answers a payload equal to the node's own with the node, which holds the children it had — and under a consing visit every payload is equal to the node's own, since consing changes no structure. Taken through it, the first node met of a structure is adopted with every duplicate beneath it kept, and what the pass shares is whole terms that repeat.
+    /// **Built over its canonical children, never handed back as it was.** [`Term::rebuilt`] answers a payload equal to the node's own with the node, which holds the children it had — and under a consing visit every payload is equal to the node's own, since consing changes no structure. Taken through it, the first node met of a structure is adopted with every duplicate beneath it kept, and what the pass shares is whole terms that repeat. A node whose children are the canonical ones already, each under no extent, is the node a rebuild would make, and is adopted as itself: a term consed before — a restored image, a key asked again — costs no copy.
     fn consed<F>(&self, visit: &mut Visit<F>) -> Self
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
@@ -2408,7 +2431,11 @@ impl Term {
         }
 
         visit.begin_node();
-        let fresh = Term::from((**self).traverse(visit));
+        let traversed = (**self).traverse(visit);
+        let fresh = match holds_as_consed(self.look(), &traversed) {
+            true => self.clone().occurring_at(None),
+            false => Term::from(traversed),
+        };
         let mut children = Vec::new();
         fresh.as_ref().any_child_term(&mut |child| {
             children.push(Rc::as_ptr(&child.inner) as usize);

@@ -51,10 +51,11 @@ mod universes_tests;
 
 use {
     super::{
-        Adopting, Baseline, Error, Globals, Kernel, Totals, Unvisited, check_definition,
-        check_entrypoint, check_induct_decl, check_positions, check_rec_group, check_struct_decl,
-        define_as_stated, free_locals_of, open_quality, positivity_vectors, read_digest,
-        rewrite_universe_levels_scoped_shared, satisfiable, universe_metas, variance_vectors,
+        Adopting, Baseline, Error, Globals, Kernel, PositionVerdicts, Totals, Unvisited,
+        check_definition, check_entrypoint, check_induct_decl, check_positions, check_rec_group,
+        check_struct_decl, define_as_stated, free_locals_of, open_quality, positivity_vectors,
+        read_digest, rewrite_universe_levels_scoped_shared, satisfiable, universe_metas,
+        variance_vectors,
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
     curios_core::{
@@ -642,7 +643,7 @@ fn verdicts_within<'s>(
     kernel.take_reads();
     // The definitions not known to terminate, as the walk comes to know them: the environment's, then each item's as it is judged.
     let mut totals = Totals::seeded(kernel, globals);
-    let mut local_memo = HashMap::new();
+    let mut local_memo = PositionVerdicts::default();
     // The vector the walk filed for each registry entry it accepted.
     let mut polarities: BTreeMap<Global, Vec<Polarity>> = BTreeMap::new();
     let mut variances: BTreeMap<Global, Vec<Variance>> = BTreeMap::new();

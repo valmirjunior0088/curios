@@ -16,7 +16,7 @@ use {
     super::{Error, Globals, Kernel, Position, Sort, declared_into_prop},
     curios_analysis::Erased,
     curios_core::{
-        Enter, Free, FuncType, Global, Item, RecGroup, Reducer, Subterm, Term, Totality,
+        Enter, Free, FuncType, Global, Item, RecGroup, Reducer, Sharing, Subterm, Term, Totality,
     },
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
@@ -185,11 +185,18 @@ impl<'g> Totals<'g> {
 }
 
 /// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.
+/// What [`calls_a_diverging_row`] found of each node of the positions a walk records, carried across the whole walk and keyed by the positions' canonical nodes: a position's term is recorded where it was typed, built there, so a type recorded at every level of a nesting is a copy at each, and two copies are compared node by node at every probe that finds one.
+#[derive(Default)]
+pub(crate) struct PositionVerdicts {
+    keys: Sharing,
+    verdicts: HashMap<Term, bool>,
+}
+
 pub(crate) fn check_positions(
     kernel: &Kernel,
     positions: &[Position],
     totals: &Totals<'_>,
-    memo: &mut HashMap<Term, bool>,
+    memo: &mut PositionVerdicts,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_positions");
     for position in positions {
@@ -205,7 +212,9 @@ pub(crate) fn check_positions(
                 reached: Some(*reached),
             });
         }
-        if position.encloses_partial || calls_a_diverging_row(&position.term, memo) {
+        if position.encloses_partial
+            || calls_a_diverging_row(&memo.keys.share(&position.term), &mut memo.verdicts)
+        {
             return Err(Error::NotTotal {
                 erased: position.erased,
                 reached: None,

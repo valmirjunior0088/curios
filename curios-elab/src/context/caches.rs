@@ -18,8 +18,8 @@ use {
     curios_analysis::Classification,
     curios_core::{
         AsideAnswers, Bound, ClosedMemo, Enter, Families, Free, Global, InductDecl, Level,
-        LevelHead, Quality, QualityMetaId, Rec, RecGroup, StructDecl, Subterm, Term, UniverseError,
-        UniverseMetaId, Universes, lasting, rewrite_universe_qualities,
+        LevelHead, Quality, QualityMetaId, Rec, RecGroup, Sharing, StructDecl, Subterm, Term,
+        UniverseError, UniverseMetaId, Universes, lasting, rewrite_universe_qualities,
         substitute_universe_metas_scoped,
     },
     curios_utilities::{Entropy, Keyed},
@@ -145,6 +145,8 @@ pub(crate) struct Caches {
     rewrites: usize,
     withdrawals: usize,
     redefinitions: usize,
+    /// The canonical node of each lasting key the reducts and the sorts are filed and asked by, for the declaration ([`Caches::key`]).
+    keys: Sharing,
 }
 
 /// A bracket of the scope: a span in which the frames in view are not the ones around it, after which they are again.
@@ -310,9 +312,10 @@ impl Caches {
     /// A spelling holding a term metavariable, and one whose stored reduct holds one, is answered by the exact table alone: a solution can hold a universe metavariable the key holds too, which carrying would move in the key and not in the solution ([`AcrossUniverses`]).
     pub(crate) fn reduction_get(&mut self, term: &Term, plain: bool) -> Option<Term> {
         let plain = usize::from(plain);
+        let key = self.key(term);
         if let Some(reduct) = self.lasting[plain]
-            .get(term)
-            .or_else(|| self.reduction[plain].get(term))
+            .get(&key)
+            .or_else(|| self.reduction[plain].get(&key))
         {
             return Some(reduct.clone());
         }
@@ -387,6 +390,7 @@ impl Caches {
 
     pub(crate) fn reduction_insert(&mut self, term: Term, reduct: Term, plain: bool) {
         let plain = usize::from(plain);
+        let term = self.key(&term);
         let (table, door) = match lasting(&term) && lasting(&reduct) {
             true => (&mut self.lasting[plain], &mut self.lasting_erased[plain]),
             false => (
@@ -404,15 +408,17 @@ impl Caches {
     /// What `term` was forced to, as plain reduction forced it where `plain` and as a judgment's did otherwise ([`Caches::forced`]).
     pub(crate) fn forced_get(&self, term: &Term, plain: bool) -> Option<Term> {
         let plain = usize::from(plain);
+        let key = self.key(term);
 
         self.lasting_forced[plain]
-            .get(term)
-            .or_else(|| self.forced[plain].get(term))
+            .get(&key)
+            .or_else(|| self.forced[plain].get(&key))
             .cloned()
     }
 
     pub(crate) fn forced_insert(&mut self, term: Term, value: Term, plain: bool) {
         let plain = usize::from(plain);
+        let term = self.key(&term);
         let table = match lasting(&term) && lasting(&value) {
             true => &mut self.lasting_forced[plain],
             false => &mut self.forced[plain],
@@ -529,12 +535,25 @@ impl Caches {
     pub(crate) fn sort_get(&mut self, type_: &Term, plain: bool) -> Option<Sort> {
         self.settle_sorts();
 
-        self.sorts[usize::from(plain)].get(type_).cloned()
+        self.sorts[usize::from(plain)]
+            .get(&self.key(type_))
+            .cloned()
     }
 
     pub(crate) fn sort_insert(&mut self, type_: Term, plain: bool, sort: Sort) {
         self.settle_sorts();
+        let type_ = self.key(&type_);
         self.sorts[usize::from(plain)].insert(type_, sort);
+    }
+
+    /// `term` as the reducts and the sorts are filed and asked by: its canonical node where it is [`lasting`], and itself otherwise.
+    ///
+    /// **A lasting term is one node however often it is built.** A type written once and checked against at each level of a value is built again at each, and two equal terms in two allocations are compared node by node at every probe that finds one, so a nesting asks its depth at each of its levels. A key that names a local or a metavariable is the scope's, and stands as it is: a metavariable's spine is as wide as the scope it was born in, which consing it would walk.
+    fn key(&self, term: &Term) -> Term {
+        match lasting(term) {
+            true => self.keys.share(term),
+            false => term.clone(),
+        }
     }
 
     /// What `this` and `that` were answered to be, in either order, where nothing was written since: as plain reduction asked where `plain`, and as a judgment's did otherwise.
@@ -583,6 +602,7 @@ impl Caches {
 
     /// A new declaration: every table is discarded — the reducts and the elaborations — so that what one declaration can afford is decided by nothing the declarations before it left behind.
     pub(crate) fn begin_declaration(&mut self) {
+        self.keys = Sharing::new();
         self.note_redefinition();
         self.proofs.clear();
         self.instances.clear();

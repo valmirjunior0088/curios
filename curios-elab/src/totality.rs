@@ -19,7 +19,7 @@ use {
     curios_analysis::{group_totality, yields_a_sort},
     curios_core::{
         Definition, Enter, Entrypoint, Extent, Global, Item, Module, Rec, RecGroup, RecItem,
-        Subterm, Term, Totality,
+        Sharing, Subterm, Term, Totality,
     },
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -236,10 +236,11 @@ fn faults(
         .collect::<Vec<_>>();
 
     let mut faults = Vec::new();
-    // One cache across every position: (V) seeds a literal's derivation once per link, and those links share their tails.
+    // One cache across every position: (V) seeds a literal's derivation once per link, and those links share their tails. It is keyed by the positions' canonical nodes, so a type zonked apart from an equal one is that one's key and is found by identity.
+    let keys = Sharing::new();
     let mut memo = LocalMemo::new();
     for position in positions {
-        if locally_partial(context, &position.term, &mut memo)? {
+        if locally_partial(context, &keys.share(&position.term), &mut memo)? {
             faults.push((
                 ErasedSite::clone(&position.site),
                 Fault::Inline,
@@ -475,7 +476,7 @@ pub fn check_rec_item_totality(context: &mut Context, rec: &RecItem) -> Result<(
 
 /// Per-node verdicts for [`locally_partial`], carried across the terms one pass classifies.
 ///
-/// Keyed on the term, whose hash is cached on the node and whose equality is already a worklist walk, so a lookup does not re-traverse what it is looking up. See [`checked_proof_positions`] for the same key and the same caveat.
+/// Keyed on the term, whose hash is cached on the node and whose equality is already a worklist walk, so a lookup does not re-traverse what it is looking up. Where the terms classified were built apart — the positions' types, each zonked from its own recorded term — they are keyed by their canonical nodes, since two equal terms in two allocations are compared node by node at every probe that finds one.
 type LocalMemo = HashMap<Term, bool>;
 
 /// Whether `term` contains a call to a diverging host row or a `rec` group that does not descend — the "is this term partial on its own account" test both obligations apply one level below a definition.

@@ -36,8 +36,9 @@ use {
     super::{
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
         Func, Global, Instance, InstanceHead, Intrinsic, Layer, Let, LetBinding, Many, Match,
-        MatchResult, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Subterm, Telescope,
-        Term, Universes, instantiate_universes_scoped, project_literal, reduce_intrinsic,
+        MatchResult, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm,
+        Telescope, Term, Universes, instantiate_universes_scoped, project_literal,
+        reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
@@ -90,6 +91,8 @@ pub struct ClosedMemo {
     lasting: Answers,
     /// The answers that go with the host's scope.
     scoped: Answers,
+    /// The canonical node of each [`lasting`] term an answer is filed or asked under, for as long as the answers stand: a value built twice is one key, found by identity rather than compared node by node.
+    keys: Sharing,
 }
 
 /// A host's scoped answers, set aside while a bracket of its scope runs and handed back where the bracket closes ([`ClosedMemo::set_aside`]).
@@ -142,6 +145,7 @@ impl ClosedMemo {
     pub fn clear(&mut self) {
         self.lasting.clear();
         self.scoped.clear();
+        self.keys = Sharing::new();
     }
 
     /// Forget every answer that does not stand for the declaration.
@@ -165,7 +169,16 @@ impl ClosedMemo {
         self.scoped.retain_without(name);
     }
 
+    /// `term` as an answer is filed and asked under: its canonical node where it is [`lasting`].
+    fn key(&self, term: &Term) -> Term {
+        match lasting(term) {
+            true => self.keys.share(term),
+            false => term.clone(),
+        }
+    }
+
     fn remembered(&self, term: &Term, demand: Demand) -> Option<&Term> {
+        let term = &self.key(term);
         let plain = || self.lasting.plain(term).or_else(|| self.scoped.plain(term));
         match demand {
             Demand::Whnf => plain(),
@@ -179,6 +192,7 @@ impl ClosedMemo {
 
     /// Remember `value` as what `key` evaluates to at `demand`, in the life the two give the answer.
     fn remember(&mut self, key: Term, value: Term, demand: Demand) {
+        let key = self.key(&key);
         let answers = match lasting(&key) && lasting(&value) {
             true => &mut self.lasting,
             false => &mut self.scoped,
