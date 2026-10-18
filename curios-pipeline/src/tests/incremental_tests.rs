@@ -75,6 +75,28 @@ fn an_edited_body_reaches_the_value_computed_over_it() {
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
+/// A declaration new to the unit is stored where the order puts it, the baseline's order kept around it: `alpha` reaches nothing and is stored first, `delta` reaches nothing and is stored before `zeta`, the first declaration named after it, and `gamma` reaches `zeta` and is stored after it.
+///
+/// Mutation-checked: with a new declaration stored after every other, the unit is stored in another order than the whole compile's.
+#[test]
+fn a_declaration_new_to_the_unit_is_stored_where_the_order_puts_it() {
+    let base = "use /std/{Nat};
+
+pub let beta: Nat = 1;
+
+pub let zeta: Nat = beta + 1;
+";
+    let edited = fill!(
+        "${base}\npub let alpha: Nat = 0;\n\npub let gamma: Nat = zeta + 1;\n\npub let delta: Nat = 2;\n",
+        base
+    );
+    let baseline = unit_of(base);
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    assert_stored_alike(&unit_of(&edited), &incremental);
+}
+
 /// An edited value reaches a value computed over one computed over it: `b` is computed from `a` where the unit is erased, and `c` from `b`, so `a` respelled is erased again, `b` with it, and `c`, which ran what `b` erased to, with that. Each reads the one before it by its signature alone, so each is the declaration it was.
 ///
 /// Mutation-checked: with the items that read an item erased again marked and theirs not, `c` is stored as the value it computed over `b`'s old form.

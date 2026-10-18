@@ -25,8 +25,8 @@ use {
     curios_analysis::group_totality,
     curios_core::{
         Advance, Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType,
-        Global, InductDecl, InductParam, Intrinsic, Item, Level, Minted, Module, Nominal, Places,
-        Quality, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term, Totality,
+        Global, InductDecl, InductParam, Intrinsic, Item, Items, Level, Minted, Module, Nominal,
+        Places, Quality, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term, Totality,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
         Universes, Visit, stamp_declaration_instance, universe_metas,
     },
@@ -2198,12 +2198,12 @@ fn elaborate_and_zonk_over<'s>(
             obligations,
         } = finalized?;
         let (traces, kept, readers) = (elaborated.traces, elaborated.kept, elaborated.readers);
-        let (module, standing) = {
+        let (module, ordered) = {
             curios_profile::profile!("assemble_unit_over");
             assembled(&recompile, module, &kept, made)
         };
-        // A module that is its baseline's, item for item, is in the order the baseline was given: the order is a function of what the items declare and name.
-        let module = match standing {
+        // A module whose items reach what the baseline's reached is in the order the baseline was given, every item new to it where that order puts it: the order is a function of what the items declare and name.
+        let module = match ordered {
             true => module,
             false => {
                 curios_profile::profile!("order_unit_over");
@@ -2235,7 +2235,7 @@ fn elaborate_and_zonk_over<'s>(
     })
 }
 
-/// The declarations elaborated and the ones kept as one module: `made`, with the baseline's own item and registry entries for every declaration of `lowered` the walk `kept`, the kept items in the order the baseline holds them. The caller puts the items in the order a module is stored in, which they are in already where the module is the baseline's whole, nothing made and no item of the baseline left out: the second answer.
+/// The declarations elaborated and the ones kept as one module: `made`, with the baseline's own item and registry entries for every declaration of `lowered` the walk `kept`. The items are in the order a module is stored in where the edit moved no item's place in it ([`kept_order`]), the second answer; the caller puts them in it otherwise.
 ///
 /// The markers follow the items, as a whole compile's do: a witness or a test naming an item that is not there would reach erasure as a marker for nothing. On a run that dropped nothing every one is admitted, which is every run that produces a unit.
 fn assembled(
@@ -2244,21 +2244,27 @@ fn assembled(
     kept: &BTreeSet<Global>,
     made: Module,
 ) -> (Module, bool) {
-    let Module { mut items, .. } = made;
-    let made = items.len();
-    items.extend(
-        recompile
-            .baseline
-            .items
-            .iter()
-            .filter(|item| {
-                item.declared_names()
-                    .first()
-                    .is_some_and(|name| kept.contains(*name))
-            })
-            .cloned(),
-    );
-    let standing = made == 0 && items.len() == recompile.baseline.items.len();
+    let made = made.items.into_iter().collect::<Vec<_>>();
+    let (items, ordered) = match kept_order(recompile, kept, &made) {
+        Some(items) => (Items::from(items), true),
+        None => {
+            let mut items = Items::from(made);
+            items.extend(
+                recompile
+                    .baseline
+                    .items
+                    .iter()
+                    .filter(|item| {
+                        item.declared_names()
+                            .first()
+                            .is_some_and(|name| kept.contains(*name))
+                    })
+                    .cloned(),
+            );
+
+            (items, false)
+        }
+    };
     let declared = items
         .iter()
         .flat_map(Item::declared_names)
@@ -2282,5 +2288,103 @@ fn assembled(
             .collect(),
     };
 
-    (module, standing)
+    (module, ordered)
+}
+
+/// The items of a module compiled over a baseline in the order a module is stored in ([`Module::ordered`]), kept from the baseline's where the edit moved no item's place in it: each item `made` in the place of the baseline's item it replaces, where it reaches the declarations of the unit that one reached; each item `kept` where the baseline holds it; and each item new to the unit, which no other item reaches, where the sort puts it.
+///
+/// **The sort, not repeated.** The order is the one a sort gives that takes, of the items waiting on nothing, the one named least: a function of what the items declare and reach. An item made that reaches what the one it replaces reached leaves every item waiting on what it waited on. An item new to the unit that nothing reaches waits on what it reaches and holds back nothing, so it is taken at the first place after everything it reaches where the item the baseline's order takes is named after it, and every other item is taken as before; one taken away that nothing reaches leaves the rest as they were. A kept item reaches only what the baseline held, and what it read of a declaration taken away its elaboration answers otherwise, so it is made, not kept.
+///
+/// `None` where an item made reaches otherwise than the one it replaces, declares other names than it, or is new and reaches another new item, and the module is sorted again.
+fn kept_order(
+    recompile: &Recompile<'_>,
+    kept: &BTreeSet<Global>,
+    made: &[Item],
+) -> Option<Vec<Item>> {
+    let (baseline, places) = (recompile.baseline, recompile.places);
+    let made_names = made
+        .iter()
+        .flat_map(Item::declared_names)
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let held_now = |name: &Global| kept.contains(name) || made_names.contains(name);
+    let held_then = |name: &Global| places.place(name).is_some();
+    // What `item` reaches of the declarations a unit holds, its own names left out.
+    let reach = |item: &Item, held: &dyn Fn(&Global) -> bool| {
+        let own = item.declared_names();
+        baseline
+            .reaches(item)
+            .into_iter()
+            .filter(|name| held(name) && !own.contains(&name))
+            .collect::<BTreeSet<_>>()
+    };
+
+    let mut replacing = vec![None; baseline.items.len()];
+    let mut added = Vec::new();
+    for (index, item) in made.iter().enumerate() {
+        let names = item.declared_names();
+        match places.place(names.first()?) {
+            Some(place) => {
+                let held = &baseline.items[place.item()];
+                if held.declared_names() != names
+                    || reach(item, &held_now) != reach(held, &held_then)
+                {
+                    return None;
+                }
+                replacing[place.item()] = Some(index);
+            }
+            None if names.iter().all(|name| !held_then(name)) => added.push(index),
+            None => return None,
+        }
+    }
+
+    let mut order = Vec::with_capacity(baseline.items.len() + added.len());
+    for (place, replaced) in replacing.into_iter().enumerate() {
+        match replaced {
+            Some(index) => order.push(made[index].clone()),
+            None if baseline
+                .items
+                .names(place)
+                .first()
+                .is_some_and(|first| kept.contains(*first)) =>
+            {
+                order.push(baseline.items[place].clone());
+            }
+            // Taken away, which no item kept or made reaches.
+            None => {}
+        }
+    }
+
+    let new_names = added
+        .iter()
+        .flat_map(|index| made[*index].declared_names())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    for index in added {
+        let item = &made[index];
+        let reaches = reach(item, &held_now);
+        if reaches.iter().any(|name| new_names.contains(name)) {
+            return None;
+        }
+        let first = **item.declared_names().first()?;
+        let after = order
+            .iter()
+            .rposition(|held| {
+                held.declared_names()
+                    .iter()
+                    .any(|name| reaches.contains(*name))
+            })
+            .map_or(0, |at| at + 1);
+        let at = (after..order.len())
+            .find(|at| {
+                order[*at]
+                    .declared_names()
+                    .first()
+                    .is_some_and(|name| first < **name)
+            })
+            .unwrap_or(order.len());
+        order.insert(at, item.clone());
+    }
+
+    Some(order)
 }
