@@ -528,7 +528,7 @@ fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
             });
 
             Some(MatrixArm {
-                pattern: written_pattern(&pattern, &mut names),
+                pattern: written_pattern(&pattern, &mut names)?,
                 body,
                 span: None,
             })
@@ -538,26 +538,26 @@ fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
     Some(Subterm::Match(Match { head, motive, arms }).into())
 }
 
-/// A row's pattern as a program writes it, each binder under the next of `names`.
+/// A row's pattern as a program writes it, each binder under the next of `names`, or `None` where no text spells it: a packed pattern at the bit grain.
 fn written_pattern(
     pattern: &curios_core::Pattern,
     names: &mut dyn Iterator<Item = Label>,
-) -> MatchPattern {
+) -> Option<MatchPattern> {
     let name = next_name;
 
-    match pattern {
+    Some(match pattern {
         curios_core::Pattern::Binder => MatchPattern::Binder(name(names)),
         curios_core::Pattern::Variant { tag, args } => MatchPattern::Variant {
             tag: tag.as_string(),
             args: args
                 .iter()
-                .map(|(plicity, arg)| (*plicity, written_pattern(arg, names)))
-                .collect(),
+                .map(|(plicity, arg)| Some((*plicity, written_pattern(arg, names)?)))
+                .collect::<Option<_>>()?,
         },
-        curios_core::Pattern::Tuple(fields) => MatchPattern::Tuple(written_fields(fields, names)),
+        curios_core::Pattern::Tuple(fields) => MatchPattern::Tuple(written_fields(fields, names)?),
         curios_core::Pattern::Struct { head, fields, .. } => MatchPattern::Struct {
             head: name_of(head),
-            fields: written_fields(fields, names),
+            fields: written_fields(fields, names)?,
         },
         curios_core::Pattern::Bool(value) => MatchPattern::Bool(*value),
         curios_core::Pattern::Zero => MatchPattern::Nat(NatPattern::Zero),
@@ -584,19 +584,21 @@ fn written_pattern(
                 ih: hypothesis.as_ref().map(|bind| written_bind(bind, names)),
             })
         }
-        curios_core::Pattern::End(grain) => MatchPattern::Bin(BinPattern::End(*grain)),
-        curios_core::Pattern::Atom(grain, hypothesis) => {
+        curios_core::Pattern::End(Grain::X) => MatchPattern::Bin(BinPattern::End),
+        curios_core::Pattern::Atom(Grain::X, hypothesis) => {
             let head_label = name(names);
             let tail_label = name(names);
 
             MatchPattern::Bin(BinPattern::Atom {
-                grain: *grain,
                 head_label,
                 tail_label,
                 ih: hypothesis.as_ref().map(|bind| written_bind(bind, names)),
             })
         }
-    }
+        curios_core::Pattern::End(Grain::B) | curios_core::Pattern::Atom(Grain::B, _) => {
+            return None;
+        }
+    })
 }
 
 /// The next of a row's names, or `_` past the last: a row's body binds one name for each binder its pattern writes.
@@ -607,12 +609,14 @@ fn next_name(names: &mut dyn Iterator<Item = Label>) -> Label {
 fn written_fields(
     fields: &[(Option<String>, curios_core::Pattern)],
     names: &mut dyn Iterator<Item = Label>,
-) -> Vec<MatchPatternField> {
+) -> Option<Vec<MatchPatternField>> {
     fields
         .iter()
-        .map(|(label, field)| MatchPatternField {
-            label: label.clone(),
-            value: written_pattern(field, names),
+        .map(|(label, field)| {
+            Some(MatchPatternField {
+                label: label.clone(),
+                value: written_pattern(field, names)?,
+            })
         })
         .collect()
 }
@@ -924,13 +928,15 @@ pub(crate) fn written_intrinsic<T>(
             numeral(value.magnitude(), sign)
         }
         Form::Flt(value) => written_flt(value, writer)?,
-        Form::Packed(grain, entries) => {
+        // A bit-grain run has no literal the surface writes.
+        Form::Packed(Grain::B, _) => return None,
+        Form::Packed(Grain::X, entries) => {
             let segments = entries
                 .into_iter()
                 .map(|entry| written_segment(entry, writer))
                 .collect::<Option<Vec<_>>>()?;
 
-            Subterm::Literal(Literal::Bin(grain, segments)).into()
+            Subterm::Literal(Literal::Bin(segments)).into()
         }
         Form::List(entries) => {
             let entries = entries
@@ -1005,7 +1011,7 @@ fn written_flt<T>(value: Floating, writer: &impl Writer<T>) -> Option<Term> {
         writer.sys("Flt/of_le_bytes")?,
         vec![argument(
             Plicity::Explicit,
-            Subterm::Literal(Literal::Bin(Grain::X, bytes)).into(),
+            Subterm::Literal(Literal::Bin(bytes)).into(),
         )],
     ))
 }
@@ -1314,7 +1320,10 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                 ]
             }
             Carrier::Bin {
-                grain,
+                grain: Grain::B, ..
+            } => return None,
+            Carrier::Bin {
+                grain: Grain::X,
                 empty_case,
                 cons_case,
             } => {
@@ -1327,17 +1336,13 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                 };
                 let body = cons_case.open(&[peeled, remaining, hypothesized]);
                 let atom = BinPattern::Atom {
-                    grain,
                     head_label: binder(first, &body, frame),
                     tail_label: binder(rest, &body, frame),
                     ih: hypothesis(ih, &body, frame),
                 };
 
                 vec![
-                    arm(
-                        MatchPattern::Bin(BinPattern::End(grain)),
-                        sub(empty_case, frame)?,
-                    ),
+                    arm(MatchPattern::Bin(BinPattern::End), sub(empty_case, frame)?),
                     arm(MatchPattern::Bin(atom), sub(body, frame)?),
                 ]
             }

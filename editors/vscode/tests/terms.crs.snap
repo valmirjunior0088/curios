@@ -265,24 +265,6 @@
 >    """;
 #^^^^^^^ source.curios string.quoted.triple.curios
 #       ^ source.curios punctuation.separator.curios
->let packed = b[0, 1, ..rest];
-#^^^ source.curios keyword.control.curios
-#   ^ source.curios
-#    ^^^^^^ source.curios entity.name.function.curios
-#          ^ source.curios
-#           ^ source.curios keyword.operator.assignment.curios
-#            ^ source.curios
-#             ^^ source.curios punctuation.definition.packed.curios
-#               ^ source.curios constant.numeric.decimal.curios
-#                ^ source.curios punctuation.separator.curios
-#                 ^ source.curios
-#                  ^ source.curios constant.numeric.decimal.curios
-#                   ^ source.curios punctuation.separator.curios
-#                    ^ source.curios
-#                     ^^ source.curios keyword.operator.spread.curios
-#                       ^^^^ source.curios variable.other.curios
-#                           ^ source.curios punctuation.bracket.curios
-#                            ^ source.curios punctuation.separator.curios
 >let bytes = x[0x48, ..suffix];
 #^^^ source.curios keyword.control.curios
 #   ^ source.curios

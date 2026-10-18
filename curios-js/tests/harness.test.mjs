@@ -73,8 +73,8 @@ main()
 
 const TAKE = `
 foreign token() -> Handle;
-foreign take(Nat, Int, Bool, Byte, Flt, Bytes, Bits, List(Nat), List(Int), List(Bool), List(Bytes), List(Handle)) -> {};
-/std/Io/bind(token(), (h) => take(18446744073709551615, -5, true, 200, 1.5, x[1, 2], b[1, 0, 1], [1, 2], [-1, 3], [true, false], [x[7], x[]], [h]))
+foreign take(Nat, Int, Bool, Byte, Flt, Bytes, List(Nat), List(Int), List(Bool), List(Bytes), List(Handle)) -> {};
+/std/Io/bind(token(), (h) => take(18446744073709551615, -5, true, 200, 1.5, x[1, 2], [1, 2], [-1, 3], [true, false], [x[7], x[]], [h]))
 `;
 
 const LISTS = `
@@ -338,7 +338,6 @@ test("a hook is handed each operand as the JavaScript value its type names, then
     200,
     1.5,
     Uint8Array.of(1, 2),
-    Uint8Array.of(0b101),
     [1n, 2n],
     [-1n, 3n],
     [true, false],

@@ -13,7 +13,7 @@ use {
     },
     crate::{Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
-    curios_num::{Floating, Grain, Natural},
+    curios_num::{Floating, Natural},
     curios_parse::unseen,
     curios_print::{
         FillItem, Printer, ends, fill, flat, flow, group, hard_line, if_break, indent, line, named,
@@ -64,7 +64,7 @@ fn wrapped_list(open: &'static str, entries: Vec<ListEntry>) -> Printer {
                     let compact = is_atom(&term)
                         || match term.as_subterm() {
                             Subterm::Literal(Literal::List(entries)) => entries.is_empty(),
-                            Subterm::Literal(Literal::Bin(_, segments)) => segments.is_empty(),
+                            Subterm::Literal(Literal::Bin(segments)) => segments.is_empty(),
                             Subterm::Tuple(Tuple { fields }) => fields.is_empty(),
                             _ => false,
                         };
@@ -181,7 +181,7 @@ fn is_atom(term: &Term) -> bool {
 fn carries_its_own_break(term: &Term) -> bool {
     match term.as_subterm() {
         Subterm::Literal(Literal::List(entries)) => !entries.is_empty(),
-        Subterm::Literal(Literal::Bin(_, segments)) => !segments.is_empty(),
+        Subterm::Literal(Literal::Bin(segments)) => !segments.is_empty(),
         Subterm::Tuple(Tuple { fields }) => fields.len() >= 2,
         Subterm::Func(_) => true,
         _ => false,
@@ -590,20 +590,13 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
             pure("]"),
             print_cons_ih(ih),
         ]),
-        MatchPattern::Bin(BinPattern::End(grain)) => pure(match grain {
-            Grain::B => "b[]",
-            Grain::X => "x[]",
-        }),
+        MatchPattern::Bin(BinPattern::End) => pure("x[]"),
         MatchPattern::Bin(BinPattern::Atom {
-            grain,
             head_label,
             tail_label,
             ih,
         }) => flat([
-            pure(match grain {
-                Grain::B => "b[",
-                Grain::X => "x[",
-            }),
+            pure("x["),
             pure(head_label),
             pure(", .."),
             pure(tail_label),
@@ -667,12 +660,8 @@ fn print_literal(literal: Literal) -> Printer {
         Literal::Bool(false) => pure("false"),
         Literal::Bool(true) => pure("true"),
         Literal::Flt(value) => print_flt(value),
-        // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `b[]`/`x[]` on its own.
-        Literal::Bin(grain, segments) => {
-            let open = match grain {
-                Grain::B => "b[",
-                Grain::X => "x[",
-            };
+        // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `x[]` on its own.
+        Literal::Bin(segments) => {
             let entries = segments
                 .into_iter()
                 .map(|segment| match segment {
@@ -680,7 +669,7 @@ fn print_literal(literal: Literal) -> Printer {
                     BinSegment::Spread(operand) => ListEntry::Spread(operand),
                 })
                 .collect();
-            wrapped_list(open, entries)
+            wrapped_list("x[", entries)
         }
         Literal::List(entries) => wrapped_list("[", entries),
     }
@@ -877,7 +866,7 @@ fn print_term_inner(term: Term, suffix: Printer) -> Printer {
                 "}",
             ),
         ]),
-        // An arm ladder is width-adaptive: `match carry | true => b[\\1] | false => b[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
+        // An arm ladder is width-adaptive: `match carry | true => x[\\1] | false => x[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
         //
         // Two ladders are broken regardless of width, by [`is_ladder`]. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
         Subterm::Choose(Choose { arms, default }) => {

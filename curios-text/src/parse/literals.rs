@@ -4,7 +4,7 @@ use {
         BinSegment, ListEntry, Literal, NatLiteral, NumLit, ProofLiteral, Radix, StrLit, Subterm,
         Term, parse_term, parse_whitespace,
     },
-    curios_num::{Floating, Grain, Natural},
+    curios_num::{Floating, Natural},
     curios_parse::{
         Mark, Parsed, Parser, ParserState, commit, expecting, fail, fail_from, look_ahead, many0,
         mark, not_ahead, pure, sep_by0_trailing, take_exact, take_n, take_while,
@@ -511,7 +511,7 @@ fn common_prefix<'s>(a: &'s str, b: &str) -> &'s str {
     &a[..shared]
 }
 
-// One entry of a `Bits`/`Bytes` literal, mirroring `parse_list_entry`: a `..` spread contributing a whole packed value, or a plain term contributing a single atom. A constant atom has no spelling of its own — `1` in a `Bits` literal and `0x48` in a `Bytes` literal are ordinary numeral terms realized at `Bool` and `Byte` by elaboration, and lowering folds adjacent constants into a packed run rather than a chain of appends (see `into_core`'s `lower_bin_literal`).
+// One entry of a `Bytes` literal, mirroring `parse_list_entry`: a `..` spread contributing a whole packed value, or a plain term contributing a single atom. A constant atom has no spelling of its own — `0x48` is an ordinary numeral term realized at `Byte` by elaboration, and lowering folds adjacent constants into a packed run rather than a chain of appends (see `into_core`'s `lower_bin_literal`).
 fn parse_bin_entry<'a>(state: ParserState<'a>) -> Parsed<'a, BinSegment> {
     parse_literal("..")
         .and_keep(parse_term)
@@ -520,28 +520,19 @@ fn parse_bin_entry<'a>(state: ParserState<'a>) -> Parsed<'a, BinSegment> {
         .parse(state)
 }
 
-// A `Bits`/`Bytes` literal `b[1, flag, ..rest]` (empty `b[]`) — the packed siblings of the `List` literal, told apart by the grain letter glued to the bracket. Only that junction is tight: past the `[` the literal lexes like any other bracketed list, so whitespace, a trailing comma, and arbitrary (unparenthesized) element and spread terms are all free. The glue is what keeps `b` and `x` usable as ordinary binders — `b [1]` is the binder `b` followed by a list, not a `Bits` literal — and an identifier merely ending in the grain letter never starts one, since the name parser reaches `nb[…]` first.
+// A `Bytes` literal `x[0x48, b, ..rest]` (empty `x[]`) — the packed sibling of the `List` literal, told apart by the letter glued to the bracket. Only that junction is tight: past the `[` the literal lexes like any other bracketed list, so whitespace, a trailing comma, and arbitrary (unparenthesized) element and spread terms are all free. The glue is what keeps `x` usable as an ordinary binder — `x [1]` is the binder `x` followed by a list, not a `Bytes` literal — and an identifier merely ending in the letter never starts one, since the name parser reaches `nx[…]` first.
 pub(super) fn parse_bin_literal<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
-    parse_bin_literal_grain(Grain::B, "b[")
-        .or(parse_bin_literal_grain(Grain::X, "x["))
+    parse_literal("x[")
+        // The glued letter and bracket are the discriminating prefix — `x [1]` is a binder and a list, `x[1]` can be nothing but this — so what follows is the diagnosis. Left to backtrack, a bad entry would send the grammar back to reading the letter as a bare name, which succeeds and throws the entry's report away: the enclosing form's own complaint would then stand at the bracket, asking for the `;` or `)` that follows the literal rather than naming the entry or the missing `]`. The `List` sibling below needs none of this only because nothing else consumes a bare `[`.
+        .and_keep(commit(
+            sep_by0_trailing(parse_bin_entry, || parse_literal(",")).and_drop(parse_literal("]")),
+        ))
+        .map(|segments| Subterm::Literal(Literal::Bin(segments)))
+        .map(Into::into)
         .parse(state)
 }
 
-fn parse_bin_literal_grain<'a>(grain: Grain, prefix: &'static str) -> impl Parser<'a, Term> {
-    move |state: ParserState<'a>| {
-        parse_literal(prefix)
-            // The glued grain letter and bracket are the discriminating prefix — `b [1]` is a binder and a list, `b[1]` can be nothing but this — so what follows is the diagnosis. Left to backtrack, a bad entry would send the grammar back to reading the letter as a bare name, which succeeds and throws the entry's report away: the enclosing form's own complaint would then stand at the bracket, asking for the `;` or `)` that follows the literal rather than naming the entry or the missing `]`. The `List` sibling below needs none of this only because nothing else consumes a bare `[`.
-            .and_keep(commit(
-                sep_by0_trailing(parse_bin_entry, || parse_literal(","))
-                    .and_drop(parse_literal("]")),
-            ))
-            .map(move |segments| Subterm::Literal(Literal::Bin(grain, segments)))
-            .map(Into::into)
-            .parse(state)
-    }
-}
-
-// One entry of a `List` literal: a `..` spread contributing a whole list, or a plain element. Unlike a `Bits`/`Bytes` literal, brackets and commas delimit, so spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
+// One entry of a `List` literal: a `..` spread contributing a whole list, or a plain element. Unlike a `Bytes` literal, brackets and commas delimit, so spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
 pub(super) fn parse_list_entry<'a>(state: ParserState<'a>) -> Parsed<'a, ListEntry> {
     parse_literal("..")
         .and_keep(parse_term)

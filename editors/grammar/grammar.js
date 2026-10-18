@@ -527,13 +527,8 @@ module.exports = grammar({
 
     list_literal: ($) => seq("[", commaList(choice($.spread, $._term)), "]"),
 
-    // The grain letter is glued to the bracket: `b[` and `x[` are single tokens, so `b [1]` stays the binder `b` before a list.
-    packed_literal: ($) =>
-      seq(
-        field("grain", choice("b[", "x[")),
-        commaList(choice($.spread, $._term)),
-        "]",
-      ),
+    // The letter is glued to the bracket: `x[` is a single token, so `x [1]` stays the binder `x` before a list.
+    packed_literal: ($) => seq("x[", commaList(choice($.spread, $._term)), "]"),
 
     tuple_type: ($) => seq("{", commaList($.field_declaration), "}"),
 
@@ -679,9 +674,9 @@ module.exports = grammar({
 
     packed_pattern: ($) =>
       choice(
-        seq(field("grain", choice("b[", "x[")), "]"),
+        seq("x[", "]"),
         seq(
-          field("grain", choice("b[", "x[")),
+          "x[",
           field("head", $._name),
           ",",
           "..",

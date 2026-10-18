@@ -1,11 +1,6 @@
 //! Numeric, character, string, list and binary literals, and the spread segments inside them.
 
-use {
-    super::test_support::*,
-    crate::*,
-    curios_num::{Floating, Grain},
-    curios_utilities::Sign,
-};
+use {super::test_support::*, crate::*, curios_num::Floating, curios_utilities::Sign};
 
 #[test]
 fn integer_literals_are_polymorphic_num_lits() {
@@ -248,7 +243,6 @@ fn a_padded_numeral_keeps_the_width_it_was_written_at() {
         "0b0001",
         "007",
         "x[0x00, 0x48, 0x69, 0x0A]",
-        "b[0, 1, 1]",
     ] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
     }
@@ -467,48 +461,39 @@ fn bin_literal_spread_segments() {
     // Constant atoms are ordinary numeral terms around the spread segments: the surface keeps what was written, and lowering folds adjacent constants into packed runs.
     assert_eq!(
         r"x[0, ..xs, 1]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(
-            Grain::X,
-            vec![
-                BinSegment::Atom(num_lit(0, Sign::Unmarked)),
-                BinSegment::Spread(name("xs")),
-                BinSegment::Atom(num_lit(1, Sign::Unmarked)),
-            ]
-        ))
+        Subterm::Literal(Literal::Bin(vec![
+            BinSegment::Atom(num_lit(0, Sign::Unmarked)),
+            BinSegment::Spread(name("xs")),
+            BinSegment::Atom(num_lit(1, Sign::Unmarked)),
+        ]))
         .into()
     );
     assert_eq!(
         r"x[0, 1, ..x, 2, 3]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(
-            Grain::X,
-            vec![
-                BinSegment::Atom(num_lit(0, Sign::Unmarked)),
-                BinSegment::Atom(num_lit(1, Sign::Unmarked)),
-                BinSegment::Spread(name("x")),
-                BinSegment::Atom(num_lit(2, Sign::Unmarked)),
-                BinSegment::Atom(num_lit(3, Sign::Unmarked)),
-            ]
-        ))
+        Subterm::Literal(Literal::Bin(vec![
+            BinSegment::Atom(num_lit(0, Sign::Unmarked)),
+            BinSegment::Atom(num_lit(1, Sign::Unmarked)),
+            BinSegment::Spread(name("x")),
+            BinSegment::Atom(num_lit(2, Sign::Unmarked)),
+            BinSegment::Atom(num_lit(3, Sign::Unmarked)),
+        ]))
         .into()
     );
 
     // A spread operand is an ordinary term: projections and absolute paths need no special grammar.
     assert_eq!(
         r"x[..hdr.bytes]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(
-            Grain::X,
-            vec![BinSegment::Spread(
-                Subterm::Proj(Proj {
-                    head: name("hdr"),
-                    field: Field::Label("bytes".to_string()),
-                })
-                .into()
-            )]
-        ))
+        Subterm::Literal(Literal::Bin(vec![BinSegment::Spread(
+            Subterm::Proj(Proj {
+                head: name("hdr"),
+                field: Field::Label("bytes".to_string()),
+            })
+            .into()
+        )]))
         .into()
     );
     let term = r"x[../std/x]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     let BinSegment::Spread(operand) = &segments[0] else {
@@ -518,7 +503,7 @@ fn bin_literal_spread_segments() {
 
     // Commas delimit, so an operand that a tight grammar could only take parenthesized — an infix chain — is written bare.
     let term = r"x[..x + y, 0x01]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -528,21 +513,17 @@ fn bin_literal_spread_segments() {
         matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
     let term = r"x[..read()!, 0x01]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
         matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Bang(_)))
     );
 
-    // Each grain has an empty literal, spelled like `[]` behind its grain letter.
+    // The empty literal is spelled like `[]` behind its letter.
     assert_eq!(
         "x[]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(Grain::X, vec![])).into()
-    );
-    assert_eq!(
-        "b[]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(Grain::B, vec![])).into()
+        Subterm::Literal(Literal::Bin(vec![])).into()
     );
 
     // Past the `[` the literal lexes like any other bracketed list: interior whitespace is invisible and one trailing comma is admitted.
@@ -555,30 +536,21 @@ fn bin_literal_spread_segments() {
         r"x[0x00]".parse::<Term>().unwrap()
     );
 
-    // Only the prefix-to-bracket junction is tight. Spaced, `b` is an ordinary binder followed by a list (leaving trailing junk here), and an identifier merely ending in the grain letter never starts a literal.
-    assert!(r"b [1]".parse::<Term>().is_err());
-    assert!(r"nb[1]".parse::<Term>().is_err());
+    // Only the prefix-to-bracket junction is tight. Spaced, `x` is an ordinary binder followed by a list (leaving trailing junk here), an identifier merely ending in the letter never starts a literal, and `b` is a name like any other.
+    assert!(r"x [1]".parse::<Term>().is_err());
+    assert!(r"nx[1]".parse::<Term>().is_err());
+    assert!(r"b[1]".parse::<Term>().is_err());
 
     // The tight spelling and the escaped atom are both gone rather than deprecated.
-    for gone in [
-        r"x\00",
-        r"b\1",
-        r"x\",
-        r"b\",
-        r"x\..xs",
-        r"b\.h\..t",
-        r"x[\00]",
-        r"b[\1]",
-        r"x[\48, 0x69]",
-    ] {
+    for gone in [r"x\00", r"x\", r"x\..xs", r"x[\00]", r"x[\48, 0x69]"] {
         assert!(gone.parse::<Term>().is_err());
     }
 }
 
 #[test]
 fn a_packed_literal_reports_its_own_entry_rather_than_the_form_around_it() {
-    // The glued grain letter and bracket commit, so a bad entry or a missing `]` is the diagnosis. Left to backtrack, the letter read as a bare name and the enclosing form complained at the bracket about the `;` that follows the literal.
-    for source in ["x[0x48, )]", "b[0, ,]", "x[0x48, 0x69"] {
+    // The glued letter and bracket commit, so a bad entry or a missing `]` is the diagnosis. Left to backtrack, the letter read as a bare name and the enclosing form complained at the bracket about the `;` that follows the literal.
+    for source in ["x[0x48, )]", "x[0, ,]", "x[0x48, 0x69"] {
         let report = source.parse::<Term>().unwrap_err().format();
         assert!(
             !report.contains("Expected ';'"),
@@ -591,49 +563,34 @@ fn a_packed_literal_reports_its_own_entry_rather_than_the_form_around_it() {
 fn bin_literal_atom_segments() {
     let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
 
-    // A bare term entry splices one generator; constant and non-constant atoms alike stay entries, in either grain.
+    // A bare term entry splices one generator; constant and non-constant atoms alike stay entries.
     assert_eq!(
         r"x[72, b, 0]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(
-            Grain::X,
-            vec![
-                BinSegment::Atom(num_lit(72, Sign::Unmarked)),
-                BinSegment::Atom(name("b")),
-                BinSegment::Atom(num_lit(0, Sign::Unmarked)),
-            ]
-        ))
-        .into()
-    );
-    assert_eq!(
-        r"b[1, flag, 0]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(
-            Grain::B,
-            vec![
-                BinSegment::Atom(num_lit(1, Sign::Unmarked)),
-                BinSegment::Atom(name("flag")),
-                BinSegment::Atom(num_lit(0, Sign::Unmarked)),
-            ]
-        ))
+        Subterm::Literal(Literal::Bin(vec![
+            BinSegment::Atom(num_lit(72, Sign::Unmarked)),
+            BinSegment::Atom(name("b")),
+            BinSegment::Atom(num_lit(0, Sign::Unmarked)),
+        ]))
         .into()
     );
     assert_eq!(
         r"x[b]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(Grain::X, vec![BinSegment::Atom(name("b"))])).into()
+        Subterm::Literal(Literal::Bin(vec![BinSegment::Atom(name("b"))])).into()
     );
 
     // `..` marks the spread; without it the same operand contributes a single atom.
     assert_eq!(
         r"x[..xs, b]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(
-            Grain::X,
-            vec![BinSegment::Spread(name("xs")), BinSegment::Atom(name("b")),]
-        ))
+        Subterm::Literal(Literal::Bin(vec![
+            BinSegment::Spread(name("xs")),
+            BinSegment::Atom(name("b")),
+        ]))
         .into()
     );
 
     // An atom operand is an ordinary term, exactly as a spread operand is.
     let term = r"x[hdr.byte, 0x01]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -643,7 +600,7 @@ fn bin_literal_atom_segments() {
         matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
     let term = r"x[f( x , y ), 0x01]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -652,7 +609,7 @@ fn bin_literal_atom_segments() {
 
     // A numeral is the only constant spelling, and it stays an `Atom` here: the surface keeps what was written — radix included — and `into_core` folds constants into packed runs.
     let term = r"x[0x48, 0x69]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(Grain::X, segments)) = term.as_subterm() else {
+    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
@@ -663,16 +620,14 @@ fn bin_literal_atom_segments() {
     );
 
     // `\` spells nothing — in an atom position or anywhere else.
-    for malformed in [
-        r"x[\]", r"x[\0]", r"x[\000]", r"b[\2]", r"b[\00]", r"x[\48]", r"b[\1]",
-    ] {
+    for malformed in [r"x[\]", r"x[\0]", r"x[\000]", r"x[\48]"] {
         assert!(malformed.parse::<Term>().is_err());
     }
 }
 
 #[test]
-fn list_bits_and_bytes_spreads_round_trip() {
-    // String equality pins the printer's canonical bracketed form for all three carriers, including their distinct empty literals. A constant atom prints back as a numeral in its written radix, in the numeral printer's canonical width and case. Operands print in the ordinary term style — projection and bang heads bare, parenthesized only where the grammar demands it.
+fn list_and_bytes_spreads_round_trip() {
+    // String equality pins the printer's canonical bracketed form for both carriers, including their distinct empty literals. A constant atom prints back as a numeral in its written radix, in the numeral printer's canonical width and case. Operands print in the ordinary term style — projection and bang heads bare, parenthesized only where the grammar demands it.
     for source in [
         "[1, ..xs, 2]",
         "[..xs]",
@@ -683,16 +638,12 @@ fn list_bits_and_bytes_spreads_round_trip() {
         "x[..Io/read!.bytes]",
         r"x[..x + y]",
         "x[]",
-        "b[0, ..xs, 1]",
-        r"b[..bits]",
-        "b[]",
         "x[0x48, b, 0x0]",
         "x[b]",
         r"x[..acc, b]",
         "x[hdr.byte]",
         "x[pick(f, a, b)]",
-        "b[1, flag, 0]",
-        "b[h, ..t]",
+        "x[h, ..t]",
         "x[0x48, 0x69]",
     ] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);

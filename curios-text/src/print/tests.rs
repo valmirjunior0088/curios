@@ -116,7 +116,7 @@ fn nested_lists_and_spreads_retain_their_structure_when_wrapping() {
 
 #[test]
 fn every_list_form_packs_atoms_and_separates_spreads_and_calls() {
-    for open in ["[", "b[", "x["] {
+    for open in ["[", "x["] {
         let source = format!("{open}1, 2, ..tail, 3, 4, build(alpha, bravo, charlie), 5, 6]");
         let output = render(&source, 24);
         assert!(
@@ -143,10 +143,10 @@ fn every_list_form_packs_atoms_and_separates_spreads_and_calls() {
 
 #[test]
 fn compact_literal_and_projection_entries_pack_together() {
-    for open in ["[", "b[", "x["] {
+    for open in ["[", "x["] {
         assert_eq!(
-            render(&format!("{open}'a', \"b\", c.d, [], x[], b[], ()]"), 80),
-            format!("{open}'a', \"b\", c.d, [], x[], b[], ()]")
+            render(&format!("{open}'a', \"b\", c.d, [], x[], ()]"), 80),
+            format!("{open}'a', \"b\", c.d, [], x[], ()]")
         );
     }
 }

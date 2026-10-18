@@ -159,7 +159,7 @@ Match with a motive and every leaf shape
 ================================================================================
 
 match (n, xs, bs): (_) => Nat
-| (0, [], b[]) => 0
+| (0, [], x[]) => 0
 | (p + 1; ih, [h, ..t]; (a, b), x[y, ..ys]) => ih
 | (some(@k, v), Point { x, y = z }, true) => v
 | _ => 1

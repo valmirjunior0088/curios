@@ -24,7 +24,6 @@ let page =
       one \u{20} "two" ""three\"""
     </p>
     """;
-let packed = b[0, 1, ..rest];
 let bytes = x[0x48, ..suffix];
 let list = [1, ..more];
 let proj = pair.0 + pair.fst;

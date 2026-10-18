@@ -3,7 +3,7 @@ use {
         Intrinsic, Label, Literal, Name, NatLiteral, Radix, parse_term, parse_whitespace,
         print_term,
     },
-    curios_num::{Grain, Natural},
+    curios_num::Natural,
     curios_parse::{Parser, ParserError, run_parser, take_eof},
     curios_print::run_printer,
     curios_utilities::{InfixOp, Plicity, Sign, Source, Span},
@@ -325,7 +325,7 @@ pub enum MatchPattern {
     Nat(NatPattern),
     /// A nested `List` literal leaf — the `[]`/`[head,..tail][; ih]` shapes a headed `List` match takes.
     List(ListPattern),
-    /// A nested `Bits`/`Bytes` literal leaf — the prefixed empty and `\head\..tail[; ih]` shapes a headed packed-sequence match takes.
+    /// A nested `Bytes` literal leaf — the `x[]` and `x[head, ..tail][; ih]` shapes a headed packed-sequence match takes.
     Bin(BinPattern),
 }
 
@@ -370,14 +370,13 @@ pub enum ListPattern {
     },
 }
 
-/// The two shapes a nested `Bits`/`Bytes` leaf can take — see [`MatchPattern::Bin`].
+/// The two shapes a nested `Bytes` leaf can take — see [`MatchPattern::Bin`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinPattern {
-    /// The `b[]`/`x[]` leaf.
-    End(Grain),
-    /// The `\head\..tail[; ih]` leaf; `ih` is optional (and an irrefutable [`Pattern`]) exactly as on the `List` cons leaf.
+    /// The `x[]` leaf.
+    End,
+    /// The `x[head, ..tail][; ih]` leaf; `ih` is optional (and an irrefutable [`Pattern`]) exactly as on the `List` cons leaf.
     Atom {
-        grain: Grain,
         head_label: Label,
         tail_label: Label,
         ih: Option<Pattern>,

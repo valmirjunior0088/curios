@@ -1,6 +1,6 @@
 use {
     super::{Subterm, Term},
-    curios_num::{Floating, Grain},
+    curios_num::Floating,
 };
 
 /// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `List` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `ListConcat` intrinsic; a spread-free literal lowers to a plain `List`.
@@ -13,7 +13,7 @@ pub enum ListEntry {
 /// One entry of a `Bytes` literal `x[\00, byte, ..bytes, \01]` — a run of escaped literal bytes, a term contributing one atom, or a `..`-spread whose term contributes a whole `Bytes` run. Entries are comma-delimited, so an atom or spread operand is an arbitrary term.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinSegment {
-    /// A single atom given by a term: a `Bool` under `Grain::B`, a `Byte` under `Grain::X`. The free monoid's generator, where [`BinSegment::Spread`] carries a whole element. A constant atom is an ordinary numeral term — `Byte` and `Bool` both realize numerals — and lowering folds adjacent constant atoms into one packed run, so the AST needs no constant-run variant of its own.
+    /// A single atom given by a term, a `Byte`: the free monoid's generator, where [`BinSegment::Spread`] carries a whole element. A constant atom is an ordinary numeral term, which `Byte` realizes, and lowering folds adjacent constant atoms into one packed run, so the AST needs no constant-run variant of its own.
     Atom(Term),
     Spread(Term),
 }
@@ -23,7 +23,7 @@ pub enum BinSegment {
 pub enum Literal {
     Bool(bool),
     Flt(Floating),
-    Bin(Grain, Vec<BinSegment>),
+    Bin(Vec<BinSegment>),
     List(Vec<ListEntry>),
 }
 

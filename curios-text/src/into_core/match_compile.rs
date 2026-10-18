@@ -4,6 +4,7 @@ use {
         BinPattern, Choose, ChooseArm, ChooseTest, Error, ListPattern, Match, MatchPattern,
         MatchPatternField, MatrixArm, NatLiteral, NatPattern, Pattern, PatternField, Term,
     },
+    curios_num::Grain,
     curios_utilities::Span,
     std::mem,
 };
@@ -242,9 +243,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
                 curios_core::Pattern::Cons(self.hypothesis(ih, binders)?)
             }
-            MatchPattern::Bin(BinPattern::End(grain)) => curios_core::Pattern::End(*grain),
+            MatchPattern::Bin(BinPattern::End) => curios_core::Pattern::End(Grain::X),
             MatchPattern::Bin(BinPattern::Atom {
-                grain,
                 head_label,
                 tail_label,
                 ih,
@@ -252,7 +252,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 binders.push(self.pattern_binder(head_label));
                 binders.push(self.pattern_binder(tail_label));
 
-                curios_core::Pattern::Atom(*grain, self.hypothesis(ih, binders)?)
+                curios_core::Pattern::Atom(Grain::X, self.hypothesis(ih, binders)?)
             }
         })
     }

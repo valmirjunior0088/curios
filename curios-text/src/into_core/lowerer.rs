@@ -985,9 +985,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Literal(Literal::List(entries)) => curios_core::Term::intrinsic(
                 self.lower_list_literal(term.span(), entries, |term| self.collect(term, binds))?,
             ),
-            // A `Bits`/`Bytes` literal's spread operands hoist likewise (a spread-free literal has no subterms and lowers unchanged).
-            Subterm::Literal(Literal::Bin(grain, segments)) => {
-                curios_core::Term::intrinsic(Self::lower_bin_literal(*grain, segments, |term| {
+            // A `Bytes` literal's spread operands hoist likewise (a spread-free literal has no subterms and lowers unchanged).
+            Subterm::Literal(Literal::Bin(segments)) => {
+                curios_core::Term::intrinsic(Self::lower_bin_literal(segments, |term| {
                     self.collect(term, binds)
                 })?)
             }
@@ -1424,55 +1424,37 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// A constant element folded back into the literal's byte run. Escaped as `\48`/`\1` it is already a run; written as a term (`0x48`, `true`) the parser cannot tell it from a computed one, and left as an atom it would build an append chain where the escaped spelling builds a single packed value. `core::spine` decodes a concrete appended atom as a length-1 literal run, so conversion equates the two spellings either way — this is compaction, not meaning.
+    /// A constant element folded back into the literal's byte run. Escaped as `\48` it is already a run; written as a term (`0x48`) the parser cannot tell it from a computed one, and left as an atom it would build an append chain where the escaped spelling builds a single packed value. `core::spine` decodes a concrete appended atom as a length-1 literal run, so conversion equates the two spellings either way — this is compaction, not meaning.
     ///
     /// A written sign excludes `Byte` (see `syntax.md`), and a magnitude past `255` is a type error elaboration should report against the expected element type rather than one this fold silently truncates; both stay atoms.
-    fn bin_constant_atom(grain: Grain, term: &Term) -> Option<u8> {
-        match (grain, term.as_subterm()) {
-            (Grain::B, Subterm::Literal(Literal::Bool(bit))) => Some(u8::from(*bit)),
-            // Only `0` and `1` are bits; anything else stays an atom term, so elaboration owns the range refusal exactly as it does for an out-of-range byte below.
-            (
-                Grain::B,
-                Subterm::NumLit(NumLit {
-                    magnitude, sign, ..
-                }),
-            ) => match sign.is_marked() {
-                true => None,
-                false => u8::try_from(magnitude).ok().filter(|bit| *bit <= 1),
-            },
-            (Grain::X, Subterm::Intrinsic(Intrinsic::Byte(byte))) => Some(*byte),
-            (
-                Grain::X,
-                Subterm::NumLit(NumLit {
-                    magnitude, sign, ..
-                }),
-            ) => match sign.is_marked() {
+    fn bin_constant_atom(term: &Term) -> Option<u8> {
+        match term.as_subterm() {
+            Subterm::Intrinsic(Intrinsic::Byte(byte)) => Some(*byte),
+            Subterm::NumLit(NumLit {
+                magnitude, sign, ..
+            }) => match sign.is_marked() {
                 true => None,
                 false => u8::try_from(magnitude).ok(),
             },
             // A character-spelled atom folds as its code point when it fits the byte; past that it stays an atom term and elaboration refuses the range exactly as for a numeral.
-            (Grain::X, Subterm::ProofLiteral(ProofLiteral::Char(character))) => {
+            Subterm::ProofLiteral(ProofLiteral::Char(character)) => {
                 u8::try_from(*character as u32).ok()
             }
             _ => None,
         }
     }
 
-    /// The `Bits`/`Bytes` sibling of [`Self::lower_list_literal`]: a constant literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal intrinsic has no element-type slot). Adjacent constant atoms — the values [`Self::bin_constant_atom`] recognizes — fold into packed runs as they are met, so `x[0x48, 0x69]` is the one packed value it is rather than a chain of appends.
+    /// The `Bytes` sibling of [`Self::lower_list_literal`]: a constant literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal intrinsic has no element-type slot). Adjacent constant atoms — the values [`Self::bin_constant_atom`] recognizes — fold into packed runs as they are met, so `x[0x48, 0x69]` is the one packed value it is rather than a chain of appends.
     ///
-    /// A non-constant atom is the free monoid's generator at a value lowering cannot know, so it lowers to a `BinAppend` onto whatever precedes it, with no carve-out: `x[0x48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `b[h, ..t]` meets a refined motive without unfolding anything.
+    /// A non-constant atom is the free monoid's generator at a value lowering cannot know, so it lowers to a `BinAppend` onto whatever precedes it, with no carve-out: `x[0x48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `x[h, ..t]` meets a refined motive without unfolding anything.
     pub(super) fn lower_bin_literal(
-        grain: Grain,
         segments: &[BinSegment],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Intrinsic, Error> {
-        let packed = |run: Vec<u8>| match grain {
-            Grain::B => Binary::from_bits(run.into_iter().map(|atom| atom != 0)),
-            Grain::X => Binary::from_bytes(run),
-        };
+        let grain = Grain::X;
         let flush = |operands: &mut Vec<curios_core::Term>, run: &mut Vec<u8>| {
             if !run.is_empty() {
-                let value = packed(std::mem::take(run));
+                let value = Binary::from_bytes(std::mem::take(run));
                 operands.push(curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(
                     grain, value,
                 )));
@@ -1484,7 +1466,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         for segment in segments {
             match segment {
                 BinSegment::Atom(term) => {
-                    if let Some(atom) = Self::bin_constant_atom(grain, term) {
+                    if let Some(atom) = Self::bin_constant_atom(term) {
                         run.push(atom);
                         continue;
                     }
@@ -1509,7 +1491,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
         // A literal of constants alone — the empty literal included — is the packed value itself.
         if operands.is_empty() {
-            return Ok(curios_core::Intrinsic::Bin(grain, packed(run)));
+            return Ok(curios_core::Intrinsic::Bin(grain, Binary::from_bytes(run)));
         }
         flush(&mut operands, &mut run);
 
@@ -1540,9 +1522,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Literal::Bool(b) => curios_core::Intrinsic::Bool(*b),
             Literal::Flt(flt) => curios_core::Intrinsic::Flt(*flt),
             // `\hex` is a raw byte sequence; `\..` segments splice other `Bin`s.
-            Literal::Bin(grain, segments) => {
-                Self::lower_bin_literal(*grain, segments, |term| self.term(term))?
-            }
+            Literal::Bin(segments) => Self::lower_bin_literal(segments, |term| self.term(term))?,
             Literal::List(entries) => {
                 self.lower_list_literal(span, entries, |term| self.term(term))?
             }

@@ -185,21 +185,19 @@ Spreads may appear in any position and may be repeated. Every element and spread
 
 ### Packed literals
 
-Packed literals are bracketed like [list literals](#list-literals) and selected by a grain letter glued to the bracket: `b[…]` builds `Bits`, `x[…]` builds `Bytes`. A bare `[…]` remains `List`.
+A packed literal builds `Bytes`. It is bracketed like a [list literal](#list-literals), with the letter `x` glued to the bracket: `x[…]`. A bare `[…]` remains `List`.
 
-An entry is a term contributing one atom — a `Bool` in a `Bits` literal, a `Byte` in a `Bytes` literal — or a `..` spread contributing a whole packed value of the same kind. A constant atom is a [numeric literal](#numeric-literals) realized at the grain's element type: `0` or `1` for `Bits`, `0` through `255` in any radix for `Bytes`. A [character literal](#character-and-string-literals) is a constant `Bytes` atom when its code point fits the byte — `x['H', 'i']` — and no character is a bit.
+An entry is a term contributing one atom, a `Byte`, or a `..` spread contributing a whole `Bytes` value. A constant atom is a [numeric literal](#numeric-literals) realized as a `Byte`, `0` through `255` in any radix, or a [character literal](#character-and-string-literals) whose code point fits the byte — `x['H', 'i']`.
 
 ```crs
-b[]                -- empty Bits
-b[0, 1, 1]
 x[]                -- empty Bytes
 x[0x48, 0x69]
 ```
 
-Packed atoms are written least-significant first. The first bit written occupies the least-significant available packed bit.
+Packed atoms are written least-significant first: the first byte written is the run's first.
 
 ```crs
-b[head, ..tail]
+x[head, ..tail]
 x[0x48, ..suffix, 0x00]
 x[..header.bytes]
 x[..make_bytes(n)]
@@ -207,9 +205,9 @@ x[..prefix, b]
 x[pick(flag, a, b)]
 ```
 
-`b[h, ..t]` is the cons of `h` onto `t`, and `x[..acc, b]` appends `b` to `acc`; neither operation has a separate named form.
+`x[h, ..t]` is the cons of `h` onto `t`, and `x[..acc, b]` appends `b` to `acc`; neither operation has a separate named form.
 
-Only the grain letter's junction with `[` is tight, which is what keeps `b` and `x` usable as ordinary binders: in `b [1]` the term ends at `b`, and an identifier merely ending in the grain letter never begins a packed literal. Past the `[` the literal lexes like any other bracketed list — whitespace is free, one trailing comma is admitted, and operands are arbitrary terms needing no parentheses. `Bits` and `Bytes` cannot be mixed.
+Only the letter's junction with `[` is tight, which is what keeps `x` usable as an ordinary binder: in `x [1]` the term ends at `x`, and an identifier merely ending in `x` never begins a packed literal. Past the `[` the literal lexes like any other bracketed list — whitespace is free, one trailing comma is admitted, and operands are arbitrary terms needing no parentheses.
 
 Adjacent constant atoms lower to a single packed constant rather than a chain of appends, so a literal written entirely from numerals is compile-time constant data with no marker needed to say so.
 
@@ -415,7 +413,7 @@ Because a binding is in scope of its own value, `let n: Nat = n + 1;` names the 
 
 ### Irrefutable binder patterns
 
-The binders of `let`, lambdas, function-definition sugar, and the `;` fold-hypothesis position of `Nat`/`List`/`Bits`/`Bytes` match arms accept nested tuple and struct patterns.
+The binders of `let`, lambdas, function-definition sugar, and the `;` fold-hypothesis position of `Nat`/`List`/`Bytes` match arms accept nested tuple and struct patterns.
 
 ```crs
 let (x, (_, y)) = value;
@@ -592,9 +590,9 @@ A binder may be written bare, as `_`, or annotated. An annotation is an ordinary
 match p: (s, t, q: Eq()(s, t)) => Eq()(t, s)
 ```
 
-Omitting the motive asks the elaborator to infer it. In a position with an expected type, the result is that expected type as written, and each arm is checked against it with the scrutinee standing for the arm's case: a variable scrutinee and its variable indices are substituted for, an expression scrutinee's written occurrences are replaced, and inside the arm the scrutinee reduces to the case wherever else it is met — so a hypothesis whose type mentions the scrutinee needs no convoy to ride along. A fold over `Nat`, `List`, `Bits` or `Bytes` whose arm reads its induction hypothesis — names it, or holds a goal `?` that could — is the exception, twice over. The hypothesis is typed at the result at the tail, so its motive is abstracted over the scrutinee instead. And its arms learn nothing of the scrutinee: the fold takes each arm again at every tail, where the scrutinee is not that arm's case, so a hypothesis about the scrutinee rides in the motive — `match n: (m) => (h: P(m)) -> Q(m) | … end(h)` — and is restated at each tail. A case split — the same match with no `; ih` read — is not. Prefer omission wherever inference succeeds. A motive has to be written where the result depends on the scrutinee and nothing states it — an elimination in inference position whose arms are of different types — and where it must depend on the scrutinee beyond its written occurrences. A type-level match needs none, in a signature or in another match's motive: its arms decide the sort it lands in.
+Omitting the motive asks the elaborator to infer it. In a position with an expected type, the result is that expected type as written, and each arm is checked against it with the scrutinee standing for the arm's case: a variable scrutinee and its variable indices are substituted for, an expression scrutinee's written occurrences are replaced, and inside the arm the scrutinee reduces to the case wherever else it is met — so a hypothesis whose type mentions the scrutinee needs no convoy to ride along. A fold over `Nat`, `List` or `Bytes` whose arm reads its induction hypothesis — names it, or holds a goal `?` that could — is the exception, twice over. The hypothesis is typed at the result at the tail, so its motive is abstracted over the scrutinee instead. And its arms learn nothing of the scrutinee: the fold takes each arm again at every tail, where the scrutinee is not that arm's case, so a hypothesis about the scrutinee rides in the motive — `match n: (m) => (h: P(m)) -> Q(m) | … end(h)` — and is restated at each tail. A case split — the same match with no `; ih` read — is not. Prefer omission wherever inference succeeds. A motive has to be written where the result depends on the scrutinee and nothing states it — an elimination in inference position whose arms are of different types — and where it must depend on the scrutinee beyond its written occurrences. A type-level match needs none, in a signature or in another match's motive: its arms decide the sort it lands in.
 
-A fold's motive (`Nat`, `List`, `Bits`, `Bytes`, with an arm reading its hypothesis) states its result per tail through the binder it declares: the `; ih` hypothesis is typed at the motive opened at the tail. `match n: (m) => P(m)` asks its arms for `P(0)` and `P(k + 1)`, the hypothesis standing at `P(k)`. A motive that names the scrutinee instead, `match n: (_) => P(n)`, states `P(n)` at every tail, and its arms inhabit that as it is written.
+A fold's motive (`Nat`, `List`, `Bytes`, with an arm reading its hypothesis) states its result per tail through the binder it declares: the `; ih` hypothesis is typed at the motive opened at the tail. `match n: (m) => P(m)` asks its arms for `P(0)` and `P(k + 1)`, the hypothesis standing at `P(k)`. A motive that names the scrutinee instead, `match n: (_) => P(n)`, states `P(n)` at every tail, and its arms inhabit that as it is written.
 
 A motive may only be written where the head dispatches directly: every arm's top-level pattern must be the same dispatchable shape. A tuple-scrutinee matrix, a struct-headed match, or a plain-binder match builds no core eliminator for the motive to attach to, and rejects one.
 
@@ -623,7 +621,7 @@ match vector
 end
 ```
 
-A pattern may nest *inside* a constructor, tuple, or struct field, and parentheses group one as they group an irrefutable pattern. The operands of the `Nat`, `List`, `Bits` and `Bytes` leaves are plain binder names rather than patterns — `[some(x), ..tail]` is not a pattern — while the `; ih` binding takes a full irrefutable pattern.
+A pattern may nest *inside* a constructor, tuple, or struct field, and parentheses group one as they group an irrefutable pattern. The operands of the `Nat`, `List` and `Bytes` leaves are plain binder names rather than patterns — `[some(x), ..tail]` is not a pattern — while the `; ih` binding takes a full irrefutable pattern.
 
 ```crs
 match value
@@ -661,7 +659,7 @@ match option
 end
 ```
 
-It states no case, so its body is typed where the match stands and at the match's own type, however deep the patterns before it nest. After arms that each dispatch on the scrutinee itself — inductive constructors, `true`/`false`, `Nat` shapes, `[]`/`[head, ..tail]`, `b[]`/`x[]` — it is written `_`: a final arm binding a name there is refused, the scrutinee being in scope under the name it already has. A lone `_` with no concrete arm is an irrefutable binder match rather than a default.
+It states no case, so its body is typed where the match stands and at the match's own type, however deep the patterns before it nest. After arms that each dispatch on the scrutinee itself — inductive constructors, `true`/`false`, `Nat` shapes, `[]`/`[head, ..tail]`, `x[]` — it is written `_`: a final arm binding a name there is refused, the scrutinee being in scope under the name it already has. A lone `_` with no concrete arm is an irrefutable binder match rather than a default.
 
 ### Multiple scrutinees
 
@@ -749,12 +747,12 @@ end
 
 ### Packed folds
 
-`Bits` and `Bytes` arms are a [list fold](#list-fold-and-case-split) under the grain letter that selects the carrier, with every rule of one: both cases required, the `;` binding optional, a trailing `| _ =>` standing in for a missing case. A `Bits` head has type `Bool`; a `Bytes` head has type `Byte`.
+`Bytes` arms are a [list fold](#list-fold-and-case-split) under the bracket `x[`, with every rule of one: both cases required, the `;` binding optional, a trailing `| _ =>` standing in for a missing case. A head has type `Byte`.
 
 ```crs
-match bits
-| b[] => base
-| b[head, ..tail]; hypothesis => step(head, hypothesis)
+match bytes
+| x[] => base
+| x[head, ..tail]; hypothesis => step(head, hypothesis)
 end
 
 match bytes
@@ -1344,7 +1342,7 @@ A bound the facts do not imply is refused. The report names the facts considered
 | `?` | Written goal — reports scope, type and fits, then fails compilation |
 | `term!` | Monadic bind through `Monad`, lifting a cross-monad action through `Monad/Lift` |
 | `"""` … `"""` | Block string literal — the lines between the delimiters, their shared indentation removed |
-| `b[...]` / `x[...]` | `Bits` / `Bytes` literal — grain letter glued to the bracket |
+| `x[...]` | `Bytes` literal — the letter glued to the bracket |
 | `Name { ... }` | Structure or concept literal |
 | `Name { ..base, ... }` | Structure update |
 | `struct Slot(K: Type, use Key(K)): …` | A type declared under a premise — the dictionary is an argument of the type |

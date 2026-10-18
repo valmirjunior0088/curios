@@ -266,7 +266,7 @@ fn parse_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
     move |state: ParserState<'a>| take_exact(expected).and_drop(parse_whitespace).parse(state)
 }
 
-// The identifier characters alone, consuming no whitespace — the building block of the tight (whitespace-free) positions like a `Bits`/`Bytes` literal's `\..` spread operand.
+// The identifier characters alone, consuming no whitespace — the building block of the tight (whitespace-free) positions like a `Bytes` literal's `\..` spread operand.
 pub(super) fn parse_identifier_raw<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
     take_while(is_identifier_char)
         .flat_map(|identifier| match identifier.is_empty() {

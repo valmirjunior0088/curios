@@ -1128,7 +1128,7 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
         ),
         SysModule::carrier(
             "Bits",
-            &["A packed run of bits, written `b[…]`."],
+            &["A packed run of bits."],
             operation("Bits", &[], syntax, Intrinsic::BinType(Grain::B)),
             [
                 items(bin_ops(Grain::B, syntax)),

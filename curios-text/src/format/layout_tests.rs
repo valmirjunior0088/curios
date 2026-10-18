@@ -33,7 +33,7 @@ fn a_wire_literal_packs_byte_runs_and_separates_every_spread() {
 
 #[test]
 fn spread_calls_and_nested_packed_literals_remain_breakable() {
-    for open in ["[", "b[", "x["] {
+    for open in ["[", "x["] {
         let source = format!(
             "let out: Shape = f({open}1, 2, ..build(long_argument_one, long_argument_two, long_argument_three, long_argument_four, long_argument_five), x[3, 4, ..tail], 5, ..rest], another_argument);\n"
         );

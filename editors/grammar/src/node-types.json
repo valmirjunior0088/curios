@@ -3655,22 +3655,7 @@
   {
     "type": "packed_literal",
     "named": true,
-    "fields": {
-      "grain": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "b[",
-            "named": false
-          },
-          {
-            "type": "x[",
-            "named": false
-          }
-        ]
-      }
-    },
+    "fields": {},
     "children": {
       "multiple": true,
       "required": false,
@@ -3782,20 +3767,6 @@
     "type": "packed_pattern",
     "named": true,
     "fields": {
-      "grain": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "b[",
-            "named": false
-          },
-          {
-            "type": "x[",
-            "named": false
-          }
-        ]
-      },
       "head": {
         "multiple": false,
         "required": false,
@@ -5896,10 +5867,6 @@
   },
   {
     "type": "and",
-    "named": false
-  },
-  {
-    "type": "b[",
     "named": false
   },
   {

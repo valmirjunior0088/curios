@@ -24,7 +24,7 @@ pub(super) enum Tag {
     Struct(Global),
     /// An anonymous tuple.
     Tuple,
-    /// A free-monoid carrier's identity: zero, `b[]`, `[]`.
+    /// A free-monoid carrier's identity: zero, `x[]`, `[]`.
     Empty(Carriers),
     /// A boolean literal.
     Bool(bool),

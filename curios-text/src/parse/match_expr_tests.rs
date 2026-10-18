@@ -184,9 +184,9 @@ fn matrix_match_round_trips() {
         // List literal leaves nested inside a tuple field, with and without the optional induction hypothesis.
         "match p | (x, []) => x | (x, [h, ..t]) => h end",
         "match p | (x, [h, ..t]; ih) => h | (x, []) => x end",
-        // Bits and Bytes literal leaves nested inside a constructor payload.
+        // Bytes literal leaves nested inside a constructor payload.
         "match o | some(x[]) => y | some(x[h, ..t]) => y | none() => y end",
-        "match o | some(b[h, ..t]; ih) => y | some(b[]) => y | none() => y end",
+        "match o | some(x[h, ..t]; ih) => y | some(x[]) => y | none() => y end",
         // Bool literal leaves nested inside a constructor payload.
         "match p | pair(true, y) => y | pair(false, y) => y end",
         // The four hardcoded carriers as *headed* matches — no separate surface variants, just matrices over that carrier's own leaves. Each must survive print → re-parse identically to prove the collapse preserves their surface syntax.
@@ -197,12 +197,10 @@ fn matrix_match_round_trips() {
         "match d | 0 => a | 5 => b | _ => c end",
         "match a | [] => b | [h, ..t]; ih => c end",
         "match a | x[] => b | x[h, ..t]; ih => c end",
-        "match a | b[] => b | b[h, ..t]; ih => c end",
         // The `;` fold-hypothesis position takes any irrefutable pattern — a destructuring binds the fold result's fields directly and round-trips as a plain name does.
         "match n | 0 => a | m + 1; (count, live) => count end",
         "match a | [] => b | [h, ..t]; (x, (y, z)) => x end",
         "match a | x[] => b | x[h, ..t]; (seen = s, rest = r) => s end",
-        "match a | b[] => b | b[h, ..t]; (x, y) => x end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
