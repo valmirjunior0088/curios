@@ -1913,6 +1913,23 @@ impl Zonked<Module> {
         self.0
     }
 
+    /// `value` taken as evidence by asking `made` alone, every other item of it being an item of a module already finished: a recompile's, whose kept items are its baseline's own. The claim is the caller's; debug builds re-validate the whole.
+    pub fn revised<'a>(
+        value: &Module,
+        made: impl IntoIterator<Item = &'a Item>,
+    ) -> Result<Self, ZonkedRefusal> {
+        let made = made.into_iter().collect::<Vec<_>>();
+        if let Some(place) = items_refusal(&made) {
+            return Err(ZonkedRefusal { place });
+        }
+        debug_assert!(
+            zonked_refusal(value).is_none(),
+            "a module whose items but the ones made are a finished module's is finished where those are"
+        );
+
+        Ok(Self(value.clone()))
+    }
+
     /// The carried module rewritten by a transform that preserves meta-freedom. The preservation claim is the caller's; debug builds re-validate it.
     pub fn map(self, rewrite: impl FnOnce(Module) -> Module) -> Self {
         let rewritten = rewrite(self.0);
@@ -1959,51 +1976,80 @@ impl fmt::Display for ZonkedRefusal {
 
 /// The term-bearing places of a module elaboration and zonk are answerable for — a definition's type and body and the telescopes of the entry a former carries — walked with the cached `has_metavar`, `has_transient` and `has_universe_meta` bits, first offender wins.
 fn zonked_refusal(module: &Module) -> Option<String> {
-    fn unfinished(term: &Term) -> bool {
-        term.has_metavar() || term.has_transient() || term.has_universe_meta()
-    }
-    fn unfinished_bound<B: Bound>(value: &B) -> bool {
-        value.has_metavar() || value.has_transient() || value.has_universe_meta()
-    }
-
     for item in &module.items {
-        let survives = match item {
-            Item::Let(definition) => unfinished(&definition.type_) || unfinished(&definition.body),
-            Item::Rec(rec) => rec
-                .group
-                .iter()
-                .any(|member| unfinished(member.type_.body()) || unfinished(member.body.body())),
-        };
-        if survives {
-            return Some(format!(
-                "elaboration-only syntax survives in {}",
-                item.describe()
-            ));
+        if unfinished_item(item) {
+            return Some(item_refusal(item));
         }
     }
     for (name, decl) in module.induct_decls() {
-        if unfinished_bound(&decl.arity)
-            || unfinished(&decl.result_sort)
-            || decl
-                .constructors
-                .iter()
-                .any(|(_, param)| unfinished_bound(&param.telescope))
-        {
-            return Some(format!(
-                "elaboration-only syntax survives in the registry entry for {}",
-                name.faithful()
-            ));
+        if unfinished_inductive(decl) {
+            return Some(entry_refusal(&name));
         }
     }
     for (name, decl) in module.struct_decls() {
-        if unfinished_bound(&decl.arity) || unfinished(&decl.result_sort) {
-            return Some(format!(
-                "elaboration-only syntax survives in the registry entry for {}",
-                name.faithful()
-            ));
+        if unfinished_record(decl) {
+            return Some(entry_refusal(&name));
         }
     }
     None
+}
+
+/// [`zonked_refusal`] asked of `items` alone: their terms, then the entries they carry.
+fn items_refusal(items: &[&Item]) -> Option<String> {
+    if let Some(item) = items.iter().find(|item| unfinished_item(item)) {
+        return Some(item_refusal(item));
+    }
+    items
+        .iter()
+        .flat_map(|item| item.nominals())
+        .find(|(_, nominal)| {
+            nominal.inductive().is_some_and(unfinished_inductive)
+                || nominal.record().is_some_and(unfinished_record)
+        })
+        .map(|(name, _)| entry_refusal(name))
+}
+
+fn unfinished(term: &Term) -> bool {
+    term.has_metavar() || term.has_transient() || term.has_universe_meta()
+}
+
+fn unfinished_bound<B: Bound>(value: &B) -> bool {
+    value.has_metavar() || value.has_transient() || value.has_universe_meta()
+}
+
+/// Whether elaboration-only syntax survives in a definition's type or body of `item`.
+fn unfinished_item(item: &Item) -> bool {
+    match item {
+        Item::Let(definition) => unfinished(&definition.type_) || unfinished(&definition.body),
+        Item::Rec(rec) => rec
+            .group
+            .iter()
+            .any(|member| unfinished(member.type_.body()) || unfinished(member.body.body())),
+    }
+}
+
+fn unfinished_inductive(decl: &InductDecl) -> bool {
+    unfinished_bound(&decl.arity)
+        || unfinished(&decl.result_sort)
+        || decl
+            .constructors
+            .iter()
+            .any(|(_, param)| unfinished_bound(&param.telescope))
+}
+
+fn unfinished_record(decl: &StructDecl) -> bool {
+    unfinished_bound(&decl.arity) || unfinished(&decl.result_sort)
+}
+
+fn item_refusal(item: &Item) -> String {
+    format!("elaboration-only syntax survives in {}", item.describe())
+}
+
+fn entry_refusal(name: &Global) -> String {
+    format!(
+        "elaboration-only syntax survives in the registry entry for {}",
+        name.faithful()
+    )
 }
 
 #[cfg(test)]

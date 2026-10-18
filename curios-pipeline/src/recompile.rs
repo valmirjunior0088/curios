@@ -17,6 +17,7 @@ use {
     curios_text::{PreparedText, UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::SyntaxRegistry,
+    std::collections::BTreeSet,
 };
 
 /// Compile one unit against `predecessors` over `baseline`: lower whole, then elaborate, judge and erase what does not stand.
@@ -175,10 +176,16 @@ pub(crate) fn compile_lowered_over(
         elaborated(&core, entry);
     }
 
-    let core = Zonked::project(&core)
-        .map_err(|refusal| refuse(&lowered, CompileError::failure(refusal.to_string())))?;
     // Where the module holds each name: its baseline's with what elaboration changed placed again, or made now where its items were put in order anew.
-    let places = places.unwrap_or_else(|| Places::of(core.as_module()));
+    let places = places.unwrap_or_else(|| Places::of(&core));
+    // Every item but the ones made is the baseline's, which was finished where it was made.
+    let made_items = made
+        .iter()
+        .filter_map(|name| places.place(name))
+        .map(|place| place.item())
+        .collect::<BTreeSet<_>>();
+    let core = Zonked::revised(&core, made_items.iter().map(|item| &core.items[*item]))
+        .map_err(|refusal| refuse(&lowered, CompileError::failure(refusal.to_string())))?;
 
     // The kernel is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped.
     let rechecked = recheck_over(

@@ -301,6 +301,20 @@ fn a_surviving_universe_metavariable_refuses_the_zonked_projection() {
     }
 }
 
+/// A recompile's module is held to being finished by the items it made, every other being a finished baseline's: a hole in an item made refuses it, and a module whose items made are finished projects.
+#[test]
+fn a_revised_module_is_asked_of_its_items_made() {
+    let plain = Item::Let(definition("plain", UniverseContext::empty()));
+    let mut holed = definition("holed", UniverseContext::empty());
+    holed.body = Term::hole(0);
+    let holed = Item::Let(holed);
+
+    let refusal = Zonked::revised(&over(vec![plain.clone(), holed.clone()]), [&holed])
+        .expect_err("the hole must refuse the projection");
+    assert!(refusal.to_string().contains("holed"), "{refusal}");
+    assert!(Zonked::revised(&over(vec![plain.clone()]), [&plain]).is_ok());
+}
+
 /// A module with no registry and no entry, over `items`.
 fn over(items: Vec<Item>) -> Module {
     Module {
