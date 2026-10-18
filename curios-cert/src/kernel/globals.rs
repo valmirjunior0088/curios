@@ -14,7 +14,9 @@
 //!
 //! # What a walk reads is three layers
 //!
-//! An [`Environment`] is what one walk reads a top-level name from: what the walk has written itself, then the declarations of a baseline whose verdict it adopted, each read where the baseline holds it, then the units it was seeded with. Only the first is written, and a write is refused for a name any of the three holds.
+//! An [`Environment`] is what one walk reads a top-level name from: what the walk has written itself, then the declarations of a baseline whose verdict it adopted or that it does not visit, each read where the baseline holds it, then the units it was seeded with. Only the first is written, and a write is refused for a name any of the three holds.
+//!
+//! **A declaration the walk does not visit is read once the walk has passed it.** Over a baseline a walk visits what an edit could reach and no other declaration ([`Unvisited`]): each other is the baseline's, which a walk over every declaration would adopt where it stands, so it is read where the baseline holds it from the place it stands at on, its registry entries, which every judgment of the module may read, from the start. A judgment reading one stored after the declaration being judged finds it unbound, as it would in a walk that adopted each declaration in its turn.
 
 use {
     super::Error,
@@ -343,13 +345,50 @@ struct Definition {
     universes: UniverseContext,
 }
 
-/// What one walk reads a top-level name from: what it has written, then the declarations of a baseline it adopted, then the units it was seeded with.
+/// The declarations of the module a walk judges over a baseline that the walk does not visit: each the baseline's, and reached by no edit, so a walk over every declaration would adopt each in its turn. See the module documentation.
+pub(crate) struct Unvisited<'s> {
+    /// Where the module being judged holds each name.
+    places: &'s Places,
+    /// The names of the declarations the walk visits, judging each or asking its reads: it answers for each once settled.
+    visited: HashSet<Global>,
+    /// The place in the module the walk has come to: a declaration stored there or after it is not read yet.
+    at: usize,
+}
+
+impl<'s> Unvisited<'s> {
+    /// The declarations of the module held at `places` but those declaring `visited`, none read yet.
+    pub(crate) fn new(places: &'s Places, visited: HashSet<Global>) -> Self {
+        Self {
+            places,
+            visited,
+            at: 0,
+        }
+    }
+
+    /// Whether `name` is a declaration the walk does not visit.
+    fn holds(&self, name: &Global) -> bool {
+        !self.visited.contains(name) && self.places.place(name).is_some()
+    }
+
+    /// Whether `name` is a declaration the walk does not visit and has passed.
+    fn passed(&self, name: &Global) -> bool {
+        !self.visited.contains(name)
+            && self
+                .places
+                .place(name)
+                .is_some_and(|place| place.item() < self.at)
+    }
+}
+
+/// What one walk reads a top-level name from: what it has written, then the declarations of a baseline it adopted or does not visit, then the units it was seeded with.
 #[derive(Default)]
 pub(super) struct Environment<'s> {
     /// The units in scope when the walk began, which it reads and never writes.
     scope: Option<&'s Globals<'s>>,
     /// The baseline whose verdicts the walk adopts, where it walks over one.
     baseline: Option<Baseline<'s>>,
+    /// The declarations of the module the walk does not visit, where it walks over a baseline.
+    unvisited: Option<Unvisited<'s>>,
     /// The names whose verdict the walk adopted: each is read where the baseline holds it, which is the declaration the walk was handed under that name, term for term.
     adopted: HashSet<Global>,
     definitions: HashMap<Free, Definition>,
@@ -367,9 +406,41 @@ impl<'s> Environment<'s> {
         self.scope = Some(scope);
     }
 
-    /// Read the declarations this walk adopts where `baseline` holds them.
-    pub(super) fn over(&mut self, baseline: Baseline<'s>) {
+    /// Read the declarations this walk adopts, and the ones of `unvisited` once it has passed them, where `baseline` holds them.
+    pub(super) fn over(&mut self, baseline: Baseline<'s>, unvisited: Unvisited<'s>) {
         self.baseline = Some(baseline);
+        self.unvisited = Some(unvisited);
+    }
+
+    /// Stand at `place` in the module being judged: every declaration the walk does not visit stored before it is read from here on.
+    pub(super) fn at(&mut self, place: usize) {
+        if let Some(unvisited) = &mut self.unvisited {
+            unvisited.at = place;
+        }
+    }
+
+    /// Whether `name` is a declaration the walk does not visit and has passed.
+    pub(super) fn passed(&self, name: &Global) -> bool {
+        self.unvisited
+            .as_ref()
+            .is_some_and(|unvisited| unvisited.passed(name))
+    }
+
+    /// The baseline, where `name` is a declaration of the module the walk does not visit.
+    fn unvisited_holding(&self, name: &Global) -> Option<Baseline<'s>> {
+        self.baseline.filter(|_| {
+            self.unvisited
+                .as_ref()
+                .is_some_and(|unvisited| unvisited.holds(name))
+        })
+    }
+
+    /// Whether the baseline's record calls `name` not known to terminate, where `name` is a declaration the walk does not visit and has passed.
+    pub(super) fn passed_partial(&self, name: &Global) -> bool {
+        self.passed(name)
+            && self.baseline.is_some_and(|baseline| {
+                baseline.certification.totality(name) == Some(Totality::Partial)
+            })
     }
 
     /// What `name` is held at: as the walk wrote it, as the baseline it adopted it from holds it, or as a unit in scope does.
@@ -385,7 +456,7 @@ impl<'s> Environment<'s> {
         let name = name.as_global()?;
         let adopted = self
             .baseline
-            .filter(|_| self.adopted.contains(name))
+            .filter(|_| self.adopted.contains(name) || self.passed(name))
             .and_then(|baseline| held(baseline.module, baseline.places, name));
 
         adopted.or_else(|| self.scope.and_then(|scope| scope.held(name)))
@@ -491,6 +562,10 @@ impl<'s> Environment<'s> {
         self.variances
             .get(name)
             .map(Vec::as_slice)
+            .or_else(|| {
+                self.passed_vectors(name)
+                    .and_then(|baseline| baseline.certification.variances(name))
+            })
             .or_else(|| self.scope.and_then(|scope| scope.variances(name)))
             .and_then(|vector| vector.get(index).copied())
             .unwrap_or(Variance::Invariant)
@@ -506,15 +581,28 @@ impl<'s> Environment<'s> {
         self.vectors
             .get(name)
             .map(Vec::as_slice)
+            .or_else(|| {
+                self.passed_vectors(name)
+                    .and_then(|baseline| baseline.certification.polarities(name))
+            })
             .or_else(|| self.scope.and_then(|scope| scope.polarities(name)))
             .and_then(|vector| vector.get(index).copied())
             .unwrap_or(Polarity::Mixed)
+    }
+
+    /// The baseline, where `name` is a declaration the walk does not visit and has passed: whose filed vectors are read from there on, as they are filed where a walk adopts the declaration.
+    fn passed_vectors(&self, name: &Global) -> Option<Baseline<'s>> {
+        self.baseline.filter(|_| self.passed(name))
     }
 
     /// An `induct` registry entry, as data. See the module documentation on why a typing rule wants the checked handle instead.
     pub(super) fn induct_decl(&self, name: &Global) -> Option<&InductDecl> {
         self.inducts
             .get(name)
+            .or_else(|| {
+                self.unvisited_holding(name)
+                    .and_then(|baseline| baseline.module.induct_decl(baseline.places, name))
+            })
             .or_else(|| self.scope.and_then(|scope| scope.induct_decl(name)))
     }
 
@@ -522,6 +610,10 @@ impl<'s> Environment<'s> {
     pub(super) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         self.structs
             .get(name)
+            .or_else(|| {
+                self.unvisited_holding(name)
+                    .and_then(|baseline| baseline.module.struct_decl(baseline.places, name))
+            })
             .or_else(|| self.scope.and_then(|scope| scope.struct_decl(name)))
     }
 

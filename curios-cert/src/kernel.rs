@@ -636,9 +636,24 @@ impl<'s> Kernel<'s> {
         self.globals.seed(globals);
     }
 
-    /// Read the declarations this walk adopts where `baseline` holds them ([`Kernel::adopt`]).
-    pub(crate) fn over(&mut self, baseline: Baseline<'s>) {
-        self.globals.over(baseline);
+    /// Read the declarations this walk adopts ([`Kernel::adopt`]), and those of `unvisited` once it has passed them ([`Kernel::at`]), where `baseline` holds them.
+    pub(crate) fn over(&mut self, baseline: Baseline<'s>, unvisited: Unvisited<'s>) {
+        self.globals.over(baseline, unvisited);
+    }
+
+    /// Stand at `place` in the module being judged over a baseline: every declaration the walk does not visit stored before it is read from here on.
+    pub(crate) fn at(&mut self, place: usize) {
+        self.globals.at(place);
+    }
+
+    /// Whether `name` is a declaration of the module the walk does not visit, over a baseline, and has passed: one the baseline answers for, as it would for one the walk adopted.
+    pub(crate) fn passed(&self, name: &Global) -> bool {
+        self.globals.passed(name)
+    }
+
+    /// Whether the baseline's record calls `name` not known to terminate, where `name` is a declaration the walk does not visit and has passed: what the walk's own classification is read beside.
+    pub(crate) fn passed_partial(&self, name: &Global) -> bool {
+        self.globals.passed_partial(name)
     }
 
     /// Take the definition `name` as the baseline this walk is over holds it, unjudged, as [`Kernel::define`] records one. Refused as [`Error::Redeclared`] where a definition already stands under `name`, and where the baseline holds none.
@@ -994,7 +1009,7 @@ impl<'s> Kernel<'s> {
     ///
     /// Locals are a stack, and closing them is `Kernel::scoped`'s job rather than the caller's — it is the only bracket there is, so a binder opened here is closed on every path out of the walk that opened it.
     ///
-    /// **Nothing the kernel mints afterwards can be `name`.** A local a caller hands in was minted by a counter the kernel never saw, so the kernel's own is raised past it here, where it enters the context, rather than to a floor the caller computes. A binder the kernel minted itself is already below its counter, so raising it for one changes nothing. A local that is never assumed is refused before any judgment meets it (`curios_core::free_locals_outside`).
+    /// **Nothing the kernel mints afterwards can be `name`.** A local a caller hands in was minted by a counter the kernel never saw, so the kernel's own is raised past it here, where it enters the context, rather than to a floor the caller computes. A binder the kernel minted itself is already below its counter, so raising it for one changes nothing. A local that is never assumed is refused before any judgment meets it (`curios_core::free_locals_of`).
     pub fn assume(&mut self, name: &Free, type_: &Term) {
         if let Some(index) = name.local_index() {
             self.spend.reserve(index);

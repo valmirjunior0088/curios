@@ -51,21 +51,22 @@ mod universes_tests;
 
 use {
     super::{
-        Adopting, Baseline, Error, Globals, Kernel, Totals, check_definition, check_entrypoint,
-        check_induct_decl, check_positions, check_rec_group, check_struct_decl, define_as_stated,
-        free_locals_outside, open_quality, positivity_vectors, read_digest,
+        Adopting, Baseline, Error, Globals, Kernel, Totals, Unvisited, check_definition,
+        check_entrypoint, check_induct_decl, check_positions, check_rec_group, check_struct_decl,
+        define_as_stated, free_locals_of, open_quality, positivity_vectors, read_digest,
         rewrite_universe_levels_scoped_shared, satisfiable, universe_metas, variance_vectors,
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
     curios_core::{
-        Abroad, Bound, Certification, Certified, Entrypoint, Free, Global, InductDecl, Item, Level,
-        Lexicon, MetavarId, Module, Polarity, Program, Reads, StructDecl, Term, Totality,
-        UniverseContext, Variance, Zonked,
+        Abroad, Bound, Certification, Certified, Changes, Entrypoint, Free, Global, InductDecl,
+        Item, Level, Lexicon, MetavarId, Module, Places, Polarity, Program, Reads, StructDecl,
+        Term, Totality, UniverseContext, Variance, Zonked,
     },
     curios_utilities::{SyntaxRegistry, grown},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        mem,
     },
 };
 
@@ -176,12 +177,13 @@ pub fn certify_module(
     )
 }
 
-/// [`certify_module`] for a unit compiled over a baseline: the walk is handed the earlier walk's module and record whole and adopts each of its verdicts that still stands, judging every other declaration — see [`Baseline`]. Which declarations those are is this walk's to decide, from the reads the earlier one filed, and no caller's.
+/// [`certify_module`] for a unit compiled over a baseline: the walk is handed the earlier walk's module and record whole and adopts each of its verdicts that still stands, judging every other declaration — see [`Baseline`]. Which declarations those are is this walk's to decide, from the reads the earlier one filed, and no caller's. `places` is where `module` holds each name.
 pub fn certify_module_over(
     module: &Zonked<Module>,
     budget: u64,
     globals: &Globals,
     baseline: Baseline<'_>,
+    places: &Places,
     syntax: SyntaxRegistry,
 ) -> Rechecked {
     let mut kernel = Kernel::new(budget, syntax);
@@ -191,7 +193,7 @@ pub fn certify_module_over(
         module.as_module(),
         None,
         globals,
-        Some(baseline),
+        Some(Over { baseline, places }),
     )
 }
 
@@ -439,73 +441,87 @@ fn verdicts_into<'s>(
     module: &Module,
     entry: Option<&Entrypoint>,
     globals: &'s Globals<'s>,
-    baseline: Option<Baseline<'s>>,
+    over: Option<Over<'s>>,
 ) -> Rechecked {
-    grown(|| verdicts_within(kernel, module, entry, globals, baseline))
+    grown(|| verdicts_within(kernel, module, entry, globals, over))
 }
 
-/// The walk: `module`'s items, then — for a program — the term `entry` closes it with. Over a `baseline`, each item whose verdict stands is adopted in its turn and every other is judged ([`Baseline`]).
+/// A walk over a baseline: the earlier walk, handed over whole, and where the module being judged holds each name.
+#[derive(Clone, Copy)]
+pub(crate) struct Over<'s> {
+    pub(crate) baseline: Baseline<'s>,
+    pub(crate) places: &'s Places,
+}
+
+/// The walk: `module`'s items, then — for a program — the term `entry` closes it with. Over a baseline, the walk visits the items whose terms or registry entries are not the baseline's and the declarations whose filed reads could reach them ([`Changed`]): it judges the first, and of the others adopts each verdict that stands in its turn and judges the rest ([`Baseline`]); every other declaration is the baseline's, read where the baseline holds it once the walk has passed it, as a walk that adopted it there would read it.
 fn verdicts_within<'s>(
     kernel: &mut Kernel<'s>,
     module: &Module,
     entry: Option<&Entrypoint>,
     globals: &'s Globals<'s>,
-    baseline: Option<Baseline<'s>>,
+    over: Option<Over<'s>>,
 ) -> Rechecked {
     curios_profile::profile!("recheck_module");
-    // A module that declares a name twice, its environment's among them, is refused here, whole, before anything of it is judged.
-    let redeclared = redeclarations(module, globals);
-    if !redeclared.is_empty() {
-        return Rechecked {
-            verdicts: redeclared,
-            certification: Certification::default(),
-        };
+    // Whether each part the baseline's walk read of a unit that moved is the part in scope now: asked once, a part being read by every declaration that names it.
+    let abroad = RefCell::new(HashMap::<(Global, bool), bool>::new());
+    let mut changed = over.map(|over| Changed::of(module, globals, over, &abroad));
+    // A module that declares a name twice, its environment's among them, is refused here, whole, before anything of it is judged. Over a baseline every item is asked only where an item it changed may have declared a held name.
+    if changed.as_ref().is_none_or(|changed| changed.redeclares) {
+        let redeclared = redeclarations(module, globals);
+        if !redeclared.is_empty() {
+            return Rechecked {
+                verdicts: redeclared,
+                certification: Certification::default(),
+            };
+        }
     }
     let mut verdicts = Vec::new();
 
-    // The declarations whose terms are the baseline's: which of the module's items they are, by place, and the names they declare. The walk that filed the baseline held those terms to every rule a declaration's own terms decide — its universe contexts, the levels and binders it mentions, elaboration's residue — so the boundary passes below judge the rest, whether or not a verdict is adopted.
-    let mut adopting = baseline.map(Adopting::over);
-    // The registry entries the module's formers carry, each under the name that declares it: read off the items once, for the walk.
-    let (inducts, structs) = (module.induct_decls(), module.struct_decls());
-    let mut kept = vec![false; module.items.len()];
-    let mut unchanged: HashSet<Global> = HashSet::new();
-    if let Some(baseline) = baseline {
-        for (index, item) in module.items.iter().enumerate() {
-            if baseline.holds(item) {
-                kept[index] = true;
-                unchanged.extend(item.declared_names().into_iter().copied());
+    // The items the walk visits, by place, in the order the module stores them: every item, where it walks over no baseline.
+    let walk = match &changed {
+        Some(changed) => changed.visited.iter().copied().collect::<Vec<_>>(),
+        None => module.items.places().collect(),
+    };
+    let visited = changed
+        .as_mut()
+        .map(|changed| mem::take(&mut changed.visited_names));
+    // Whether the walk holds the terms of the item at a place to the rules a declaration's own terms decide — its universe contexts, the levels and binders it mentions, elaboration's residue: every item's over no baseline, and over one the items whose terms are not the baseline's, the walk that filed the baseline having held its own to them.
+    let own_terms = |place: &usize| {
+        changed
+            .as_ref()
+            .is_none_or(|changed| changed.items.contains(place))
+    };
+    let judged_items = || {
+        walk.iter()
+            .filter(|place| own_terms(place))
+            .map(|place| &module.items[*place])
+    };
+    let mut adopting = over.map(|over| Adopting::over(over.baseline));
+    // The registry entries the visited items' formers carry, each under the name that declares it, and those whose terms the walk holds to their rules.
+    let (mut inducts, mut structs) = (BTreeMap::new(), BTreeMap::new());
+    let mut checked = BTreeSet::new();
+    for place in &walk {
+        for (name, nominal) in module.items[*place].nominals() {
+            if let Some(declaration) = nominal.inductive() {
+                inducts.insert(*name, declaration);
+            }
+            if let Some(record) = nominal.record() {
+                structs.insert(*name, record);
+            }
+            if own_terms(place) {
+                checked.insert(*name);
             }
         }
     }
-    let changed = || {
-        module
-            .items
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| !kept[*index])
-            .map(|(_, item)| item)
-    };
-    let changed_entries = |names: &mut dyn Iterator<Item = &Global>| {
-        names
-            .filter(|name| !unchanged.contains(*name))
-            .copied()
-            .collect::<BTreeSet<_>>()
-    };
-    let changed_inducts = changed_entries(&mut inducts.keys());
-    let changed_structs = changed_entries(&mut structs.keys());
-    // Whether each part the baseline's walk read of a unit that moved is the part in scope now: asked once, a part being read by every declaration that names it.
-    let abroad = RefCell::new(HashMap::<(Global, bool), bool>::new());
-    // What an edit could have reached, by the baseline's record read backwards: the walk asks the reads of these declarations alone.
-    let reached = baseline.map(|baseline| Reached::of(module, globals, baseline, &kept, &abroad));
 
-    // The environment is the kernel's starting scope, not something consulted beside it: an item already in scope stands exactly as a refused item does — at its declared type, with its real body — so every judged item downstream sees what a walk that judged everything would have shown it. A baseline is beneath the walk as the scope is, answering for the declarations whose verdict the walk adopts.
+    // The environment is the kernel's starting scope, not something consulted beside it: an item already in scope stands exactly as a refused item does — at its declared type, with its real body — so every judged item downstream sees what a walk that judged everything would have shown it. A baseline is beneath the walk as the scope is, answering for the declarations whose verdict the walk adopts, and for every declaration it does not visit once it has passed it.
     kernel.seed(globals);
-    if let Some(baseline) = baseline {
-        kernel.over(baseline);
+    if let (Some(over), Some(visited)) = (over, visited) {
+        kernel.over(over.baseline, Unvisited::new(over.places, visited));
     }
 
     // The kernel mints its binders from zero, so a free local in a term it judges is one it could mint again while comparing under a telescope or eta-contracting — a capture, after which the judgment sees a bound variable and never an unbound one. So a local is refused here, at the boundary, over every position a term can sit in but those of the declarations the baseline holds term for term, which the walk that filed the baseline held to this rule.
-    for (owner, local) in free_locals_outside(module, |name| unchanged.contains(name)) {
+    for (owner, local) in free_locals_of(judged_items()) {
         verdicts.push(Verdict {
             name: owner,
             error: Error::Unbound(local),
@@ -521,10 +537,10 @@ fn verdicts_within<'s>(
     }
 
     // Every universe context this walk will assume, decided before any of it is assumed. An unsatisfiable set makes `entails` answer anything, so a later refusal would be reported against whichever item happened to ask a level question first rather than against the declaration that carries the contradiction.
-    let contexts = entries_among(&inducts, &changed_inducts)
+    let contexts = entries_among(&inducts, &checked)
         .map(|(name, declaration)| (*name, &declaration.universe_context))
         .chain(
-            entries_among(&structs, &changed_structs)
+            entries_among(&structs, &checked)
                 .map(|(name, declaration)| (*name, &declaration.universe_context)),
         )
         .collect::<Vec<_>>();
@@ -536,7 +552,7 @@ fn verdicts_within<'s>(
             });
         }
     }
-    for item in changed() {
+    for item in judged_items() {
         for definition in item.definitions() {
             if let Some(error) = universe_verdict(&definition.universe_context) {
                 verdicts.push(Verdict {
@@ -548,7 +564,7 @@ fn verdicts_within<'s>(
     }
 
     // A registry entry is data; what it declares — a literal result sort, sized constructors, and each index target typed against the arity at the constructor's own parameters — is `check_induct_decl`'s to check, below. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
-    for (name, declaration) in entries_among(&inducts, &changed_inducts) {
+    for (name, declaration) in entries_among(&inducts, &checked) {
         if let Some(error) = induct_residue(declaration) {
             verdicts.push(Verdict {
                 name: Some(*name),
@@ -556,7 +572,7 @@ fn verdicts_within<'s>(
             });
         }
     }
-    for (name, declaration) in entries_among(&structs, &changed_structs) {
+    for (name, declaration) in entries_among(&structs, &checked) {
         if let Some(error) = struct_residue(declaration) {
             verdicts.push(Verdict {
                 name: Some(*name),
@@ -565,7 +581,7 @@ fn verdicts_within<'s>(
         }
     }
     // An item's own terms are walked, so a `Metavar` node in one is refused where a judgment meets it. A level is not: the walk types `Type(?u)` without objecting, so the same boundary decides it here.
-    for item in changed() {
+    for item in judged_items() {
         for definition in item.definitions() {
             let count = definition.universe_context.parameter_count;
             let sorts = definition.universe_context.quality_count;
@@ -599,7 +615,7 @@ fn verdicts_within<'s>(
         verdicts.push(Verdict { name: None, error });
     }
 
-    // The nominal registry first: a definition's type may name any declaration in the module, including one whose own definitions come later. The environment refuses a name it holds, which the refusal above rules out for every write this walk makes; a refusal is reported all the same, being the one thing a walk makes of a write it cannot perform.
+    // The nominal registry first: a definition's type may name any declaration in the module, including one whose own definitions come later. The environment refuses a name it holds, which the refusal above rules out for every write this walk makes; a refusal is reported all the same, being the one thing a walk makes of a write it cannot perform. Over a baseline the entries of the declarations the walk does not visit are the baseline's, which answers for each from the start.
     for (name, declaration) in &inducts {
         if let Err(error) = kernel.declare_induct(name, declaration) {
             verdicts.push(Verdict {
@@ -634,19 +650,18 @@ fn verdicts_within<'s>(
     let mut judged = Vec::new();
 
     // The items as the module stores them, which is every item after the items it reaches where the module was made by the elaborator (`Module::ordered`). The walk sorts nothing: an item that names one stored after it finds the name unbound, and a family it stores in one accepted after it finds no vector filed, each of which refuses.
-    for (index, item) in module.items.iter().enumerate() {
+    for place in &walk {
+        let item = &module.items[*place];
         let item_name = item.declared_names().first().map(|&name| *name);
+        kernel.at(*place);
 
-        // A declaration whose terms are the baseline's and whose every recorded read stands takes the baseline's verdict, and stands as the walk leaves any item it does not judge. One no edit can have reached reads nothing that moved, and takes it unasked.
+        // A declaration whose terms are the baseline's and whose every recorded read stands takes the baseline's verdict, and stands as the walk leaves any item it does not judge. A read of a declaration the walk does not visit stands where the walk has passed it.
         if let Some(adopting) = &mut adopting
-            && kept[index]
-            && let Some(certified) =
-                match reached.as_ref().is_some_and(|reached| reached.holds(item)) {
-                    true => adopting.adopts(item, |name, body| {
-                        read_stands(globals, adopting.baseline(), &abroad, name, body)
-                    }),
-                    false => adopting.recorded(item),
-                }
+            && !own_terms(place)
+            && let Some(certified) = adopting.adopts(item, |name, body| {
+                kernel.passed(name)
+                    || read_stands(globals, adopting.baseline(), &abroad, name, body)
+            })
         {
             let adopted = adopt(kernel, adopting.baseline(), item, &certified);
             verdicts.extend(adopted.refusals);
@@ -760,7 +775,7 @@ fn verdicts_within<'s>(
                 error,
             });
         }
-        if let Err(error) = check_positions(&drained, &totals, &mut local_memo) {
+        if let Err(error) = check_positions(kernel, &drained, &totals, &mut local_memo) {
             verdicts.push(Verdict {
                 name: item_name,
                 error,
@@ -781,9 +796,16 @@ fn verdicts_within<'s>(
 
         // How the item came out against the baseline's, for the declarations that read it.
         if let Some(adopting) = &mut adopting {
-            adopting.judged(item, |name| totals.partial(name), &polarities, &variances);
+            adopting.judged(
+                item,
+                |name| totals.partial(kernel, name),
+                &polarities,
+                &variances,
+            );
         }
     }
+    // Past every item: the entry reads them all.
+    kernel.at(usize::MAX);
 
     // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it.
     if let Some(entry) = entry {
@@ -802,73 +824,69 @@ fn verdicts_within<'s>(
     if let Some(error) = failure {
         verdicts.push(Verdict { name: None, error });
     }
-    if let Err(error) = check_positions(&drained, &totals, &mut local_memo) {
+    if let Err(error) = check_positions(kernel, &drained, &totals, &mut local_memo) {
         verdicts.push(Verdict { name: None, error });
     }
 
-    // What the walk read of each declaration of another unit, by the digest of the part read: the baseline's own where the unit is the one its walk read, and digested here otherwise.
-    let read_abroad = {
-        let mut read_abroad = BTreeMap::<Global, Abroad>::new();
-        for read in reads.values() {
-            for (names, body) in [(&read.signatures, false), (&read.bodies, true)] {
-                for name in names {
-                    if !globals.in_scope(name) || !globals.recorded(name) {
-                        continue;
+    let totality = |name: &Global| match totals.partial(kernel, name) {
+        true => Totality::Partial,
+        false => Totality::Total,
+    };
+    let certification = match (over, changed) {
+        (Some(over), Some(changed)) => revised(
+            globals,
+            over.baseline,
+            &changed,
+            Judged {
+                names: &judged,
+                reads: &reads,
+                totality: &totality,
+                polarities: &polarities,
+                variances: &variances,
+            },
+        ),
+        _ => {
+            // What the walk read of each declaration of another unit, by the digest of the part read.
+            let mut read_abroad = BTreeMap::<Global, Abroad>::new();
+            for read in reads.values() {
+                for (names, body) in [(&read.signatures, false), (&read.bodies, true)] {
+                    for name in names {
+                        if !globals.in_scope(name) || !globals.recorded(name) {
+                            continue;
+                        }
+                        let entry = read_abroad.entry(*name).or_default();
+                        let part = match body {
+                            true => &mut entry.body,
+                            false => &mut entry.signature,
+                        };
+                        if part.is_none() {
+                            *part = read_digest(globals, name, body).ok().flatten();
+                        }
                     }
-                    let entry = read_abroad.entry(*name).or_default();
-                    let part = match body {
-                        true => &mut entry.body,
-                        false => &mut entry.signature,
-                    };
-                    if part.is_some() {
-                        continue;
-                    }
-                    let kept = baseline
-                        .and_then(|baseline| baseline.certification.abroad(name))
-                        .filter(|_| globals.unmoved(name))
-                        .and_then(|kept| match body {
-                            true => kept.body.clone(),
-                            false => kept.signature.clone(),
-                        });
-                    *part = kept.or_else(|| read_digest(globals, name, body).ok().flatten());
                 }
             }
+
+            // The record of what this walk concluded: every judged definition's totality, from the set each was classified into, with what its judgment read, and every accepted entry's polarity vector — so a later walk reading it needs nothing of this one's.
+            Certification::of(
+                module
+                    .items
+                    .iter()
+                    .flat_map(Item::declared_names)
+                    .map(|name| {
+                        let reads = reads.remove(name).unwrap_or_default();
+                        (
+                            *name,
+                            Certified {
+                                totality: totality(name),
+                                reads,
+                            },
+                        )
+                    }),
+                polarities,
+                variances,
+                read_abroad,
+            )
         }
-
-        read_abroad
-    };
-
-    // Who read what of the record this walk files: the baseline's, with the edges of every declaration judged, or no longer held, replaced.
-    let read_by = baseline.zip(reached).map(|(baseline, reached)| {
-        let mut read_by = baseline.certification.read_by().clone();
-        for name in judged.iter().chain(&reached.lost) {
-            read_by.replace(*name, baseline.certification.reads(name), reads.get(name));
-        }
-
-        read_by
-    });
-
-    // The record of what this walk concluded: every judged definition's totality, from the set each was classified into, with what its judgment read, and every accepted entry's polarity vector — so a later walk reading it needs nothing of this one's.
-    let certification = Certification::of(
-        module
-            .items
-            .iter()
-            .flat_map(Item::declared_names)
-            .map(|name| {
-                let totality = match totals.partial(name) {
-                    true => Totality::Partial,
-                    false => Totality::Total,
-                };
-                let reads = reads.remove(name).unwrap_or_default();
-                (*name, Certified { totality, reads })
-            }),
-        polarities,
-        variances,
-        read_abroad,
-    );
-    let certification = match read_by {
-        Some(read_by) => certification.reading(read_by),
-        None => certification,
     };
 
     Rechecked {
@@ -877,69 +895,187 @@ fn verdicts_within<'s>(
     }
 }
 
-/// What an edit could have reached, of a module walked over a baseline, by the baseline's record read backwards ([`ReadBy`](curios_core::ReadBy)).
-///
-/// **Found from the edit, by the certifier's own record.** A declaration whose terms or registry entries are not the baseline's ([`Baseline::holds`]), a name the baseline declared and the module does not, and, of a unit in scope that moved, each part read whose digest moved ([`read_stands`]) are where what was read can have moved. A declaration whose filed reads name one of them is reached, and so is one whose reads name a declaration reached. A declaration none reaches reads only what stands, so asking its reads would adopt it: nothing another component computed decides that, and the record is the one this crate filed.
-struct Reached {
-    /// The names of the module's declarations reached, each declaration whole.
-    names: HashSet<Global>,
-    /// The names the baseline declared and the module does not.
-    lost: Vec<Global>,
+/// What a walk over a baseline concluded of the declarations it judged: their names, what each read, how each is classified, and the vectors of the entries it accepted.
+struct Judged<'w> {
+    names: &'w [Global],
+    reads: &'w BTreeMap<Global, Reads>,
+    totality: &'w dyn Fn(&Global) -> Totality,
+    polarities: &'w BTreeMap<Global, Vec<Polarity>>,
+    variances: &'w BTreeMap<Global, Vec<Variance>>,
 }
 
-impl Reached {
+/// The record a walk over `baseline` files: the baseline's, revised where the walk judged a declaration or the module no longer holds one ([`Certification::revised`]), with who read what of it.
+///
+/// **What was read of other units, kept by its changes.** The baseline's record holds a digest of each part its walk read of a declaration of another unit, and what reads each changed only where a declaration was judged or dropped: a part a judged declaration reads is recorded, digested again where nothing was recorded of it or the unit declaring it moved; a part a declaration judged or dropped read, which no declaration reads now, is taken out. A part an adopted or unvisited declaration reads of a unit that moved digests to what it did, or the declaration would have been judged, so its record stands.
+fn revised(
+    globals: &Globals,
+    baseline: Baseline<'_>,
+    changed: &Changed,
+    judged: Judged<'_>,
+) -> Certification {
+    let mut revision = baseline.certification.revised();
+    for name in judged.names {
+        revision.judged(
+            *name,
+            Certified {
+                totality: (judged.totality)(name),
+                reads: judged.reads.get(name).cloned().unwrap_or_default(),
+            },
+        );
+        let vectors = judged
+            .polarities
+            .get(name)
+            .zip(judged.variances.get(name))
+            .map(|(polarities, variances)| (polarities.clone(), variances.clone()));
+        revision.vectors(*name, vectors);
+    }
+    for name in &changed.lost {
+        revision.dropped(name);
+    }
+
+    // Who read what of the record this walk files: the baseline's, with the edges of every declaration judged, or no longer held, replaced.
+    let mut read_by = baseline.certification.read_by().clone();
+    for name in judged.names.iter().chain(&changed.lost) {
+        read_by.replace(
+            *name,
+            baseline.certification.reads(name),
+            judged.reads.get(name),
+        );
+    }
+
+    let recorded = |name: &Global| globals.in_scope(name) && globals.recorded(name);
+    for name in judged.names {
+        let Some(read) = judged.reads.get(name) else {
+            continue;
+        };
+        for (names, body) in [(&read.signatures, false), (&read.bodies, true)] {
+            for read in names.iter().filter(|read| recorded(read)) {
+                let mut entry = revision.abroad(read).cloned().unwrap_or_default();
+                let part = match body {
+                    true => &mut entry.body,
+                    false => &mut entry.signature,
+                };
+                if part.is_none() || !globals.unmoved(read) {
+                    *part = read_digest(globals, read, body).ok().flatten();
+                }
+                revision.read_abroad(*read, Some(entry));
+            }
+        }
+    }
+    for name in judged.names.iter().chain(&changed.lost) {
+        let Some(earlier) = baseline.certification.reads(name) else {
+            continue;
+        };
+        for (names, body) in [(&earlier.signatures, false), (&earlier.bodies, true)] {
+            for read in names.iter().filter(|read| recorded(read)) {
+                let readers = match body {
+                    true => read_by.body(read),
+                    false => read_by.signature(read),
+                };
+                let Some(mut entry) = revision
+                    .abroad(read)
+                    .cloned()
+                    .filter(|_| readers.is_empty())
+                else {
+                    continue;
+                };
+                match body {
+                    true => entry.body = None,
+                    false => entry.signature = None,
+                }
+                let still = !read_by.signature(read).is_empty() || !read_by.body(read).is_empty();
+                revision.read_abroad(*read, still.then_some(entry));
+            }
+        }
+    }
+
+    revision.filed().reading(read_by)
+}
+
+/// What a walk over a baseline finds changed of the module it judges, and what that could reach: by its own comparison of the two modules ([`Baseline::holds`]) and its own record read backwards ([`ReadBy`](curios_core::ReadBy)).
+///
+/// **Found from the edit, by the certifier's own record.** Where the module is a version of the baseline's, the two are compared by what they do not share ([`Items::changed_since`](curios_core::Items::changed_since)), and only the items held where the baseline held another or none are asked whether they are the baseline's; otherwise every item is. An item that is not, a name the baseline declared and the module does not, and, of a unit in scope that moved, each part read whose digest moved ([`read_stands`]) are where what was read can have moved. A declaration whose filed reads name one of them is reached, and so is one whose reads name a declaration reached. A declaration none reaches reads only what stands, so asking its reads would adopt it: nothing another component computed decides that, and the record is the one this crate filed.
+struct Changed {
+    /// The places of the items whose terms or registry entries are not the baseline's.
+    items: BTreeSet<usize>,
+    /// The names the baseline declared and the module does not.
+    lost: Vec<Global>,
+    /// The places of the declarations the walk visits: the items above, every declaration an edit could reach, and every item held where the baseline held another.
+    visited: BTreeSet<usize>,
+    /// The names the visited declarations declare.
+    visited_names: HashSet<Global>,
+    /// Whether an item the module holds where the baseline held another or none declares a name another item or a unit in scope declares, or nothing says which items those are: then every item is asked whether it redeclares a name.
+    redeclares: bool,
+}
+
+impl Changed {
     fn of(
         module: &Module,
         globals: &Globals,
-        baseline: Baseline<'_>,
-        kept: &[bool],
+        over: Over<'_>,
         abroad: &RefCell<HashMap<(Global, bool), bool>>,
     ) -> Self {
+        let (baseline, places) = (over.baseline, over.places);
         let read_by = baseline.certification.read_by();
-        // Where the module holds each name, so a declaration is reached whole.
-        let item_of = module
-            .items
+        // The places the module holds another item at than the baseline does, the names the baseline held at the places that changed, and whether an item at one of those places may have declared a held name: every place and every name, where the two modules are not one a version of the other.
+        let (touched, earlier, redeclares) =
+            match module.items.changed_since(&baseline.module.items) {
+                Some(changes) => {
+                    let earlier = changes
+                        .replaced
+                        .iter()
+                        .chain(&changes.removed)
+                        .flat_map(|place| baseline.module.items.names(*place))
+                        .copied()
+                        .collect::<Vec<_>>();
+                    let touched = changes
+                        .replaced
+                        .iter()
+                        .chain(&changes.inserted)
+                        .copied()
+                        .collect::<BTreeSet<_>>();
+                    let redeclares = !globals.settled()
+                        || declares_a_held_name(module, globals, baseline, &touched, &changes);
+                    (touched, earlier, redeclares)
+                }
+                None => (
+                    module.items.places().collect::<BTreeSet<_>>(),
+                    baseline
+                        .module
+                        .items
+                        .places()
+                        .flat_map(|place| baseline.module.items.names(place))
+                        .copied()
+                        .collect(),
+                    true,
+                ),
+            };
+        let items = touched
             .iter()
-            .enumerate()
-            .flat_map(|(index, item)| {
-                item.declared_names()
-                    .into_iter()
-                    .map(move |name| (*name, index))
-            })
-            .collect::<HashMap<_, _>>();
-        let mut reached = Reached {
-            names: HashSet::new(),
-            lost: Vec::new(),
-        };
-        let mut frontier = Vec::new();
-        // The place of each item, by the number the walk gives it.
-        let places = module.items.places().collect::<Vec<_>>();
-        let reach = |index: usize, names: &mut HashSet<Global>, frontier: &mut Vec<Global>| {
-            for name in module.items[places[index]].declared_names() {
-                if names.insert(*name) {
-                    frontier.push(*name);
-                }
-            }
-        };
+            .copied()
+            .filter(|place| !baseline.holds(&module.items[*place]))
+            .collect::<BTreeSet<_>>();
+        let lost = earlier
+            .into_iter()
+            .filter(|name| places.place(name).is_none())
+            .collect::<Vec<_>>();
 
-        for (index, held) in kept.iter().enumerate() {
-            if !held {
-                reach(index, &mut reached.names, &mut frontier);
-            }
-        }
-        for place in baseline.module.items.places() {
-            for name in baseline.module.items.names(place) {
-                if !item_of.contains_key(name) {
-                    reached.lost.push(*name);
-                    frontier.push(*name);
-                }
-            }
+        let mut changed = Changed {
+            visited: BTreeSet::new(),
+            visited_names: HashSet::new(),
+            items,
+            lost,
+            redeclares,
+        };
+        let mut frontier = changed.lost.clone();
+        for place in changed.items.clone() {
+            changed.visit(module, place, &mut frontier);
         }
         if !globals.settled() {
             let foreign = read_by
                 .names()
                 .filter(|name| {
-                    !item_of.contains_key(*name) && baseline.places.place(name).is_none()
+                    places.place(name).is_none() && baseline.places.place(name).is_none()
                 })
                 .copied()
                 .collect::<Vec<_>>();
@@ -952,8 +1088,8 @@ impl Reached {
                         continue;
                     }
                     for reader in readers {
-                        if let Some(&index) = item_of.get(reader) {
-                            reach(index, &mut reached.names, &mut frontier);
+                        if let Some(place) = places.place(reader) {
+                            changed.visit(module, place.item(), &mut frontier);
                         }
                     }
                 }
@@ -961,21 +1097,61 @@ impl Reached {
         }
         while let Some(name) = frontier.pop() {
             for reader in read_by.signature(&name).iter().chain(read_by.body(&name)) {
-                if let Some(&index) = item_of.get(reader) {
-                    reach(index, &mut reached.names, &mut frontier);
+                if let Some(place) = places.place(reader) {
+                    changed.visit(module, place.item(), &mut frontier);
                 }
             }
         }
+        // An item held where the baseline held another that is the baseline's, made again to what it was: visited, so its stamp is held to the verdict it adopts as a walk over every item holds it, and reaching no declaration that read it, its verdict being the baseline's.
+        for place in touched {
+            if changed.visited.insert(place) {
+                changed
+                    .visited_names
+                    .extend(module.items.names(place).into_iter().copied());
+            }
+        }
 
-        reached
+        changed
     }
 
-    /// Whether an edit could have reached `item`.
-    fn holds(&self, item: &Item) -> bool {
-        item.declared_names()
-            .iter()
-            .any(|name| self.names.contains(*name))
+    /// Visit the declaration at `place`, whole, and hand each of its names on to `frontier`, where it is not visited yet.
+    fn visit(&mut self, module: &Module, place: usize, frontier: &mut Vec<Global>) {
+        if !self.visited.insert(place) {
+            return;
+        }
+        for name in module.items.names(place) {
+            self.visited_names.insert(*name);
+            frontier.push(*name);
+        }
     }
+}
+
+/// Whether an item at one of `touched`, the places `module` holds another item at than `baseline` does, declares a name a unit in scope declares, or another item of the module does: another of those, or one the baseline holds at a place `changes` leaves as it was.
+fn declares_a_held_name(
+    module: &Module,
+    globals: &Globals,
+    baseline: Baseline<'_>,
+    touched: &BTreeSet<usize>,
+    changes: &Changes,
+) -> bool {
+    let changed = changes
+        .replaced
+        .iter()
+        .chain(&changes.removed)
+        .copied()
+        .collect::<HashSet<_>>();
+    let mut declared = HashSet::new();
+
+    touched.iter().any(|place| {
+        module.items.names(*place).into_iter().any(|name| {
+            !declared.insert(*name)
+                || globals.in_scope(name)
+                || baseline
+                    .places
+                    .place(name)
+                    .is_some_and(|held| !changed.contains(&held.item()))
+        })
+    })
 }
 
 /// Whether what the baseline's walk read of `name`, which the unit being judged does not declare, stands: a unit in scope declares it, and that unit is the one the walk read, or the part read, its body where `body` and its signature otherwise, digests now to what the baseline's record holds of it (`read_digest`). Nothing digests where nothing is archived, so there a read of a unit that moved does not stand. `asked` keeps each answer for the walk.

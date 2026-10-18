@@ -74,7 +74,7 @@ fn walked(module: &Module) -> Rechecked {
 
 /// `module` walked over `baseline` as `certification` records it.
 fn walked_over(module: &Module, baseline: &Module, certification: &Certification) -> Rechecked {
-    let places = Places::of(baseline);
+    let (places, now) = (Places::of(baseline), Places::of(module));
     let globals = Globals::default();
 
     super::verdicts_into(
@@ -82,10 +82,13 @@ fn walked_over(module: &Module, baseline: &Module, certification: &Certification
         module,
         None,
         &globals,
-        Some(Baseline {
-            module: baseline,
-            places: &places,
-            certification,
+        Some(super::Over {
+            baseline: Baseline {
+                module: baseline,
+                places: &places,
+                certification,
+            },
+            places: &now,
         }),
     )
 }
@@ -147,6 +150,85 @@ fn a_declaration_presented_unchanged_is_judged_again_where_what_it_read_has_chan
             .collect::<Vec<_>>(),
         vec![Some(global("three"))],
     );
+}
+
+/// `module` with its items held as a version's: a module made of it by replacing an item shares every other item with it, as a recompile's module shares the ones it kept with its baseline's.
+fn versioned(module: Module) -> Module {
+    Module {
+        items: module.items.version(),
+        ..module
+    }
+}
+
+/// `module`, a version, with the item declaring `name` replaced by `item`.
+fn replaced(module: &Module, name: &str, item: Item) -> Module {
+    let place = Places::of(module)
+        .place(&global(name))
+        .expect("the module declares the name")
+        .item();
+    let mut items = module.items.clone();
+    items.replace(place, item);
+
+    Module {
+        items,
+        ..module.clone()
+    }
+}
+
+/// Over a baseline the walked module is a version of, the walk compares the two by what they do not share, judges the item that changed and asks what read it, and files the record a walk over every declaration of the module files: `identity` returns `7`.
+#[test]
+fn a_walk_over_a_version_files_what_a_walk_over_every_declaration_files() {
+    let baseline = versioned(written());
+    let certification = walked(&baseline).certification;
+    let x = Free::local(10, Some("x"));
+    let identity = authored(
+        &global("identity"),
+        Term::func_type([(x, nat())], nat()),
+        Term::func([(x, nat())], literal(7)),
+    );
+
+    let rechecked = walked_over(
+        &replaced(&baseline, "identity", identity),
+        &baseline,
+        &certification,
+    );
+
+    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(
+        rechecked.certification,
+        walked(&reading_module(nat(), |_| literal(7))).certification
+    );
+}
+
+/// A declaration the walk does not visit is read once the walk has passed its place: `alias` respelled to name `five`, stored after it, finds it unbound, as a walk over every declaration does, though nothing `five` read moved and the walk adopts `five` without visiting it.
+///
+/// Mutation-checked: with a declaration the walk does not visit read wherever it stands, `alias` finds `five` and is refused for its type instead.
+#[test]
+fn a_declaration_the_walk_does_not_visit_is_unbound_before_its_place() {
+    let baseline = versioned(written());
+    let certification = walked(&baseline).certification;
+    let edited = replaced(
+        &baseline,
+        "alias",
+        authored(
+            &global("alias"),
+            Term::type_ground(),
+            Term::free_var(&Free::from(&global("five"))),
+        ),
+    );
+
+    let whole = fixture_certified(&edited, BUDGET, &Globals::default(), SYNTAX);
+    let over = walked_over(&edited, &baseline, &certification);
+
+    assert!(
+        whole
+            .verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::Unbound(_))),
+        "a walk over every declaration finds `five` unbound at `alias`: {:?}",
+        whole.verdicts
+    );
+    assert_eq!(over.verdicts, whole.verdicts);
 }
 
 /// A module that is the baseline's is adopted whole: every entry comes back as the baseline's record holds it, the mark with it.

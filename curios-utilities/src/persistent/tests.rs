@@ -2,7 +2,11 @@
 
 use {
     super::*,
-    std::collections::{BTreeMap, HashMap},
+    std::{
+        cell::Cell,
+        collections::{BTreeMap, BTreeSet, HashMap},
+        rc::Rc,
+    },
 };
 
 /// A seeded sequence of draws, so every run of a test meets the same operations.
@@ -221,4 +225,86 @@ fn a_sorted_map_is_restored_from_its_archive_in_key_order() {
             .collect::<Vec<_>>(),
         [1, 3, 5, 9].map(|key| (key, key.to_string())),
     );
+}
+
+/// A diff of two versions of an ordered map reports every position at which they differ, as comparing the two entry by entry does, whatever was inserted, replaced or taken out of either.
+#[test]
+fn a_diff_reports_what_two_versions_hold_otherwise() {
+    for seed in 0..8 {
+        let mut draws = Draws(seed);
+        let mut earlier = Ordered::new();
+        for position in 0..400 {
+            earlier.insert(position * 8, Rc::new(position));
+        }
+        let mut later = earlier.clone();
+        for step in 0..40 {
+            let position = draws.next(3_400) as i64;
+            match draws.next(3) {
+                0 => {
+                    later.remove(position);
+                }
+                _ => later.insert(position, Rc::new(10_000 + step)),
+            }
+        }
+
+        let mut reported = Vec::new();
+        later.diff(&earlier, Rc::ptr_eq, |position, then, now| {
+            reported.push((position, then.cloned(), now.cloned()));
+        });
+        let (then, now) = (
+            earlier
+                .iter()
+                .map(|(position, value)| (position, Rc::clone(value)))
+                .collect::<BTreeMap<_, _>>(),
+            later
+                .iter()
+                .map(|(position, value)| (position, Rc::clone(value)))
+                .collect::<BTreeMap<_, _>>(),
+        );
+        let expected = then
+            .keys()
+            .chain(now.keys())
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .filter(|position| match (then.get(position), now.get(position)) {
+                (Some(then), Some(now)) => !Rc::ptr_eq(then, now),
+                _ => true,
+            })
+            .map(|position| {
+                (
+                    position,
+                    then.get(&position).cloned(),
+                    now.get(&position).cloned(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(reported, expected, "seed {seed}");
+    }
+}
+
+/// A diff passes over what two versions share: one value replaced among ten thousand compares a path's worth of values, not every one.
+#[test]
+fn a_diff_reads_only_what_two_versions_do_not_share() {
+    let mut earlier = Ordered::new();
+    for position in 0..10_000 {
+        earlier.insert(position, Rc::new(position));
+    }
+    let mut later = earlier.clone();
+    later.insert(5_000, Rc::new(-1));
+
+    let compared = Cell::new(0);
+    let mut reported = Vec::new();
+    later.diff(
+        &earlier,
+        |then, now| {
+            compared.set(compared.get() + 1);
+            Rc::ptr_eq(then, now)
+        },
+        |position, _, _| reported.push(position),
+    );
+
+    assert_eq!(reported, [5_000]);
+    assert!(compared.get() < 100, "{} values compared", compared.get());
 }

@@ -9,7 +9,7 @@ use {
         Closing, CompileError, elaborator_refusal, globals_after, kernel_refusal, with_broken,
     },
     curios_cert::{Baseline, Rechecked, certify_module_over},
-    curios_core::{Entrypoint, Module, Zonked},
+    curios_core::{Entrypoint, Module, Places, Zonked},
     curios_elab::{
         Context, ErasedBaseline, Erasures, Established, Recompile, Recompiled,
         elaborate_and_zonk_entry_over, elaborate_and_zonk_unit_over, erase_unit_over,
@@ -171,9 +171,19 @@ pub(crate) fn compile_lowered_over(
 
     let core = Zonked::project(&core)
         .map_err(|refusal| refuse(&lowered, CompileError::failure(refusal.to_string())))?;
+    // Where the module holds each name: its baseline's with what elaboration changed placed again, or made now where its items were put in order anew.
+    let places = places.unwrap_or_else(|| Places::of(core.as_module()));
 
     // The kernel is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped.
-    let rechecked = recheck_over(&core, budget, predecessors, baseline, moved, syntax);
+    let rechecked = recheck_over(
+        &core,
+        &places,
+        budget,
+        predecessors,
+        baseline,
+        moved,
+        syntax,
+    );
     if let Some(verdict) = rechecked.verdicts.first() {
         let refusal = kernel_refusal(verdict, core.as_module(), &predecessors.lexicons(), syntax);
         return Err(refuse(&lowered, refusal));
@@ -214,7 +224,7 @@ pub(crate) fn compile_lowered_over(
     Ok((
         Uncertified::new(lowered, core.into_module(), ersd, traces)
             .reading(readers)
-            .placing(places)
+            .placing(Some(places))
             .certified(certification),
         entry,
     ))
@@ -225,6 +235,7 @@ pub(crate) fn compile_lowered_over(
 /// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the kernel's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, which of these `predecessors` are the units `baseline` was compiled after, `moved` naming the others ([`Cache::baseline`](crate::Cache::baseline)).
 pub(crate) fn recheck_over(
     module: &Zonked<Module>,
+    places: &Places,
     budget: u64,
     predecessors: Predecessors<'_>,
     baseline: &Unit,
@@ -240,6 +251,7 @@ pub(crate) fn recheck_over(
             places: baseline.places(),
             certification: baseline.certification(),
         },
+        places,
         *syntax,
     )
 }

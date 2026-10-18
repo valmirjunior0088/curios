@@ -10,7 +10,7 @@ use {
     },
     curios_core::{
         Anchors, Certification, Definition, DefinitionKind, Global, Imports, Item, Module, Nominal,
-        ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
+        Places, ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
     },
     curios_elab::{
         Context, ErasedUnit, Error, Established, Reading, Recompile, Recompiled, Traces,
@@ -1437,8 +1437,13 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         // The kernel's own walk: a declaration the source wrote stands on the verdict filed with the archive, and each one written beside it is judged.
         let finished = Zonked::project(&recompiled.module)
             .unwrap_or_else(|refusal| panic!("what elaboration finished is finished: {refusal}"));
+        let places = recompiled
+            .places
+            .clone()
+            .unwrap_or_else(|| Places::of(finished.as_module()));
         let judged = recheck_over(
             &finished,
+            &places,
             DEFAULT_STEP_BUDGET,
             predecessors,
             std,

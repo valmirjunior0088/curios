@@ -18,7 +18,7 @@ pub(crate) use {
         scrutinee_solution, solve_indices, spine, variance_vectors, wholly_pinned, yields_a_sort,
     },
     curios_core::{
-        accelerable, foreign_signature, free_locals_outside, instantiate_qualities,
+        accelerable, foreign_signature, free_locals_of, instantiate_qualities,
         instantiate_universes_scoped, open_quality, probe_spellings, reduce_closed,
         reduce_intrinsic, rewrite_universe_levels_scoped_shared, universe_metas,
     },

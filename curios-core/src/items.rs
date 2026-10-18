@@ -78,6 +78,17 @@ enum Entry {
 }
 
 impl Entry {
+    /// Whether this is `other`, the one item: an item in hand shared between the two, or one stored module's item at one place. Two items alike in every term but made apart are two.
+    fn is(&self, other: &Entry) -> bool {
+        match (self, other) {
+            (Entry::Made(this), Entry::Made(that)) => Rc::ptr_eq(this, that),
+            (Entry::Stored(this, at), Entry::Stored(that, there)) => {
+                Rc::ptr_eq(this, that) && at == there
+            }
+            _ => false,
+        }
+    }
+
     fn first_name(&self) -> Option<&Global> {
         match self {
             Entry::Made(item) => first_name(item),
@@ -162,6 +173,17 @@ impl DoubleEndedIterator for ItemPlaces {
 
 impl ExactSizeIterator for ItemPlaces {}
 
+/// What a version changed of the items it was made from, by place ([`Items::changed_since`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Changes {
+    /// The places the version holds another item at than the earlier items hold there, in order.
+    pub replaced: Vec<usize>,
+    /// The places the version holds an item at and the earlier items hold none at, in order.
+    pub inserted: Vec<usize>,
+    /// The places the earlier items hold an item at and the version holds none at, in order.
+    pub removed: Vec<usize>,
+}
+
 /// A module's items, in the order it stores them — see the module documentation.
 #[derive(Clone)]
 pub struct Items(Held);
@@ -197,6 +219,24 @@ impl Items {
                     .into_iter(),
             ),
         }
+    }
+
+    /// What these items changed of `earlier`, where both are versions and so hold each item by place: every place at which they hold another item than `earlier` holds there, or one where it holds none, and every place `earlier` holds an item at and these do not. An item both share is passed over unread, so two versions are compared at the cost of what they do not share. `None` where either is no version, and nothing says which items they share.
+    pub fn changed_since(&self, earlier: &Items) -> Option<Changes> {
+        let (Held::Placed(now), Held::Placed(then)) = (&self.0, &earlier.0) else {
+            return None;
+        };
+        let mut changes = Changes::default();
+        now.diff(then, Entry::is, |position, earlier, held| {
+            let place = place_of(position);
+            match (earlier, held) {
+                (Some(_), Some(_)) => changes.replaced.push(place),
+                (None, _) => changes.inserted.push(place),
+                (Some(_), None) => changes.removed.push(place),
+            }
+        });
+
+        Some(changes)
     }
 
     /// Whether these items are a version's, held at places a version made of them keeps.

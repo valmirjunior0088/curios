@@ -127,3 +127,28 @@ fn a_version_takes_an_item_before_its_first() {
     assert!(first.is_some(), "a place before the first item");
     assert_eq!(first, items.places().next());
 }
+
+/// What a version changed of the items it was made from is what it replaced, put between two others and took out, and nothing it shares with them; items that are no version say nothing of what they share.
+#[test]
+fn a_version_says_what_it_changed_of_its_items() {
+    let module = module(vec![
+        Item::Let(definition("first")),
+        Item::Let(definition("second")),
+        Item::Let(definition("third")),
+    ]);
+    let earlier = module.items.version();
+    let places = earlier.places().collect::<Vec<_>>();
+    let mut later = earlier.clone();
+    later.replace(places[1], Item::Let(definition("second")));
+    later.remove(places[2]);
+    let between = later
+        .insert_after(Some(places[0]), Item::Let(definition("between")))
+        .expect("a place between two");
+
+    let changes = later.changed_since(&earlier).expect("two versions");
+
+    assert_eq!(changes.replaced, [places[1]]);
+    assert_eq!(changes.inserted, [between]);
+    assert_eq!(changes.removed, [places[2]]);
+    assert_eq!(module.items.changed_since(&earlier), None);
+}

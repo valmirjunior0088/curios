@@ -85,14 +85,14 @@ impl<'g> Totals<'g> {
         for item in globals.unclassified() {
             totals.locally(kernel, item, false, &mut mentions);
         }
-        totals.close(&mentions);
+        totals.close(kernel, &mentions);
 
         totals
     }
 
-    /// Whether `name` is not known to terminate, as far as the walk has come: by its own classification, or by the record of the unit in scope that defines it.
-    pub(crate) fn partial(&self, name: &Global) -> bool {
-        self.partial.contains(name) || self.scope.partial(name)
+    /// Whether `name` is not known to terminate, as far as the walk has come: by its own classification, by the baseline's record where `kernel` reads `name` as a declaration it does not visit, or by the record of the unit in scope that defines it.
+    pub(crate) fn partial(&self, kernel: &Kernel, name: &Global) -> bool {
+        self.partial.contains(name) || kernel.passed_partial(name) || self.scope.partial(name)
     }
 
     /// Put `name` into the set on the word of an earlier walk's record: a definition whose verdict this walk adopts, which that walk classified as not known to terminate.
@@ -108,15 +108,17 @@ impl<'g> Totals<'g> {
     pub(crate) fn classify(&mut self, kernel: &Kernel, item: &Item) -> Vec<(Global, Error)> {
         let mut mentions = BTreeMap::new();
         self.locally(kernel, item, true, &mut mentions);
-        self.close(&mentions);
+        self.close(kernel, &mentions);
 
         item.definitions()
             .into_iter()
-            .filter(|definition| definition.totality.is_total() && self.partial(&definition.name))
+            .filter(|definition| {
+                definition.totality.is_total() && self.partial(kernel, &definition.name)
+            })
             .map(|definition| {
                 let reached = mentions
                     .get(&definition.name)
-                    .and_then(|reached| reached.iter().find(|other| self.partial(other)))
+                    .and_then(|reached| reached.iter().find(|other| self.partial(kernel, other)))
                     .cloned();
                 (
                     definition.name,
@@ -163,14 +165,14 @@ impl<'g> Totals<'g> {
     }
 
     /// Close the set over `mentions`: a definition that mentions a partial one is partial, iterated until nothing joins.
-    fn close(&mut self, mentions: &BTreeMap<Global, BTreeSet<Global>>) {
+    fn close(&mut self, kernel: &Kernel, mentions: &BTreeMap<Global, BTreeSet<Global>>) {
         loop {
             let mut changed = false;
             for (name, reached) in mentions {
                 if self.partial.contains(name) {
                     continue;
                 }
-                if reached.iter().any(|other| self.partial(other)) {
+                if reached.iter().any(|other| self.partial(kernel, other)) {
                     self.partial.insert(*name);
                     changed = true;
                 }
@@ -184,6 +186,7 @@ impl<'g> Totals<'g> {
 
 /// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself — enclose no group that does not descend, as the walk noted where it typed one, and call no host row that diverges.
 pub(crate) fn check_positions(
+    kernel: &Kernel,
     positions: &[Position],
     totals: &Totals<'_>,
     memo: &mut HashMap<Term, bool>,
@@ -195,7 +198,7 @@ pub(crate) fn check_positions(
             .free_vars()
             .iter()
             .filter_map(|free| free.as_global())
-            .find(|name| totals.partial(name))
+            .find(|name| totals.partial(kernel, name))
         {
             return Err(Error::NotTotal {
                 erased: position.erased,

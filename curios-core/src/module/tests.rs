@@ -66,9 +66,9 @@ fn recursive_members_cannot_silently_discard_different_universe_contexts() {
     );
 }
 
-/// Every local a module's terms mention is found, with the name owning the position — and nothing in an item the caller already answers for.
+/// Every local the terms of the items handed in mention is found, with the name owning the position — and nothing of an item not handed in.
 ///
-/// What the kernel refuses before it mints a binder of its own, since a binder aliasing a free local silently identifies two terms that differ. The skip is the control: an item whose names `in_scope` holds was refused by the walk that answered for it.
+/// What the kernel refuses before it mints a binder of its own, since a binder aliasing a free local silently identifies two terms that differ. Leaving an item out is the control: a walk over a baseline hands in the items whose terms are not the baseline's, and the walk that filed the baseline refused a local of its own in the others.
 #[test]
 fn every_local_a_term_mentions_is_found() {
     let mentioned = Free::local(4_242, Some("y"));
@@ -93,10 +93,10 @@ fn every_local_a_term_mentions_is_found() {
     };
 
     assert_eq!(
-        free_locals_outside(&module, |_| false),
+        free_locals_of(module.items.iter()),
         BTreeSet::from([(Some(Global::Authored(Qualifier::from(["held"]))), mentioned)])
     );
-    assert_eq!(free_locals_outside(&module, |_| true), BTreeSet::new());
+    assert_eq!(free_locals_of([]), BTreeSet::new());
 }
 
 /// A module carrying `body` in its one definition.

@@ -13,7 +13,7 @@ use {
         Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
         UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
     },
-    curios_utilities::{Mount, Persistent, Plicity, Qualifier},
+    curios_utilities::{InKeyOrder, Mount, Persistent, Plicity, Qualifier, Sorted},
     std::{
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -43,16 +43,21 @@ impl Totality {
 
 /// What the certifier concluded about the declarations one of its walks judged: each definition's totality, closed over everything it mentions, with what judging it read of other items, and each `induct` and `struct` entry's polarity vector.
 ///
+/// **A version of its baseline's where its walk was over one.** Its tables are persistent and read back in the order of their names, so a walk over the unit as a baseline starts from the record it adopts verdicts from and changes it at the declarations it judges or drops alone ([`Certification::revised`]).
+///
 /// Only the certifier's walk makes one — `curios_cert::certify_module` — and a later walk reads it as the verdicts on the definitions it covers, rather than the stamp elaboration writes onto each [`Definition`]. It is filed with the unit whose definitions it covers, and that unit's address is its identity: a stored unit is found only under the compiler that judged it, and the fixed prelude's record is a constant of the build that certified it. It is read only where it [covers](Certification::covers) its unit, never one name at a time — one naming fewer definitions than its unit holds was not made by a walk over that unit, so none of its entries is known to be the closure it claims — and a unit without a covering record is one the reading walk classifies for itself, never one it takes elaboration's word for.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Certification {
     /// Each judged definition's totality, closed over everything it mentions.
-    totalities: BTreeMap<Global, Totality>,
+    #[archived_with(InKeyOrder)]
+    totalities: Sorted<Global, Totality>,
     /// How each `induct` and `struct` entry the walk accepted uses its parameters, as the walk computed it: what a later walk composes through where a family it judges mentions this one. The vector the entry itself carries is elaboration's, which no walk reads.
-    polarities: BTreeMap<Global, Vec<Polarity>>,
+    #[archived_with(InKeyOrder)]
+    polarities: Sorted<Global, Vec<Polarity>>,
     /// How two instances of each `induct` and `struct` entry the walk accepted compare in each of its universe parameters, as the walk computed it: what a later walk compares two instances of the family by. The vector the entry itself carries is elaboration's, which the walk holds to this one and no judgment reads.
-    variances: BTreeMap<Global, Vec<Variance>>,
+    #[archived_with(InKeyOrder)]
+    variances: Sorted<Global, Vec<Variance>>,
     /// What judging each definition read of other items: what a later walk over the unit decides by which of these verdicts stand, and what nothing compiled after the unit reads.
     ///
     /// **Of the unit's baseline half**, as its traces are: skipped where the record is stored, stored beside it ([`Certification::reads_bytes`]), handed back as bytes where it is restored ([`Certification::with_reads`]), and read out of them when a walk over the unit first asks.
@@ -76,13 +81,13 @@ pub struct ReadBy {
 
 impl ReadBy {
     /// Who read what, of what judging each definition of `by` read.
-    fn of(by: &BTreeMap<Global, Reads>) -> Self {
+    fn of(by: &Sorted<Global, Reads>) -> Self {
         // Gathered whole first, so each name's list is built once and not copied at every reader a persistent insert would add.
         let (mut signatures, mut bodies) = (
             BTreeMap::<Global, Vec<Global>>::new(),
             BTreeMap::<Global, Vec<Global>>::new(),
         );
-        for (reader, reads) in by {
+        for (reader, reads) in by.iter() {
             for name in &reads.signatures {
                 signatures.entry(*name).or_default().push(*reader);
             }
@@ -166,9 +171,11 @@ impl ReadBy {
 #[curios_archive::archived]
 pub struct Read {
     /// What judging each definition read of other items.
-    by: BTreeMap<Global, Reads>,
+    #[archived_with(InKeyOrder)]
+    by: Sorted<Global, Reads>,
     /// What the walk read of each declaration its unit does not hold, another unit's. See [`Abroad`].
-    abroad: BTreeMap<Global, Abroad>,
+    #[archived_with(InKeyOrder)]
+    abroad: Sorted<Global, Abroad>,
 }
 
 /// What a walk read of one declaration of another unit: the digest of what a signature read reads of it, and of what a body read does, each where some judgment read it. The certifier makes both, from the terms in its scope and its own verdict on them, and compares them where a walk over a baseline meets a unit that is not the one the baseline's walk read.
@@ -231,21 +238,33 @@ impl Certification {
         variances: impl IntoIterator<Item = (Global, Vec<Variance>)>,
         abroad: impl IntoIterator<Item = (Global, Abroad)>,
     ) -> Self {
-        let (mut totalities, mut by) = (BTreeMap::new(), BTreeMap::new());
+        let mut revision = Certification::default().revised();
         for (name, certified) in definitions {
-            totalities.insert(name, certified.totality);
-            by.insert(name, certified.reads);
+            revision.judged(name, certified);
+        }
+        for (name, vector) in polarities {
+            revision.polarities.insert(name, vector);
+        }
+        for (name, vector) in variances {
+            revision.variances.insert(name, vector);
+        }
+        for (name, read) in abroad {
+            revision.abroad.insert(name, read);
         }
 
-        Self {
-            totalities,
-            polarities: polarities.into_iter().collect(),
-            variances: variances.into_iter().collect(),
-            reads: curios_archive::Deferred::held(Read {
-                by,
-                abroad: abroad.into_iter().collect(),
-            }),
-            read_by: OnceCell::new(),
+        revision.filed()
+    }
+
+    /// This record as the start of a later walk's over its unit as a baseline: every table shared, to be changed where that walk judges or drops a declaration ([`Revision`]).
+    pub fn revised(&self) -> Revision {
+        let read = self.read();
+
+        Revision {
+            totalities: self.totalities.clone(),
+            polarities: self.polarities.clone(),
+            variances: self.variances.clone(),
+            by: read.by.clone(),
+            abroad: read.abroad.clone(),
         }
     }
 
@@ -313,7 +332,7 @@ impl Certification {
 
     /// The declarations of other units the walk recorded a read of.
     pub fn read_abroad(&self) -> impl Iterator<Item = &Global> {
-        self.read().abroad.keys()
+        self.read().abroad.iter().map(|(name, _)| name)
     }
 
     /// Whether this record classifies every definition `module` holds.
@@ -331,6 +350,75 @@ impl Certification {
         self.totalities
             .iter()
             .map(|(name, totality)| (name, *totality))
+    }
+}
+
+/// A certifier's record being revised by a walk over its unit as a baseline: the record's tables, shared with it, changed where the walk judges or drops a declaration ([`Certification::revised`]), and filed as a record of its own.
+#[derive(Debug, Clone)]
+pub struct Revision {
+    totalities: Sorted<Global, Totality>,
+    polarities: Sorted<Global, Vec<Polarity>>,
+    variances: Sorted<Global, Vec<Variance>>,
+    by: Sorted<Global, Reads>,
+    abroad: Sorted<Global, Abroad>,
+}
+
+impl Revision {
+    /// Record what the walk concluded of `name`, which it judged.
+    pub fn judged(&mut self, name: Global, certified: Certified) {
+        self.totalities.insert(name, certified.totality);
+        self.by.insert(name, certified.reads);
+    }
+
+    /// Take out everything recorded of `name`, which the unit no longer declares.
+    pub fn dropped(&mut self, name: &Global) {
+        self.totalities.remove(name);
+        self.by.remove(name);
+        self.polarities.remove(name);
+        self.variances.remove(name);
+    }
+
+    /// File the vectors of the registry entry the walk accepted under `name`, or take out the ones filed under it where it accepted none there.
+    pub fn vectors(&mut self, name: Global, vectors: Option<(Vec<Polarity>, Vec<Variance>)>) {
+        match vectors {
+            Some((polarities, variances)) => {
+                self.polarities.insert(name, polarities);
+                self.variances.insert(name, variances);
+            }
+            None => {
+                self.polarities.remove(&name);
+                self.variances.remove(&name);
+            }
+        }
+    }
+
+    /// What the record holds of what was read of `name`, a declaration of another unit.
+    pub fn abroad(&self, name: &Global) -> Option<&Abroad> {
+        self.abroad.get(name)
+    }
+
+    /// Record `read` as what was read of `name`, a declaration of another unit, or take out what was recorded of it where nothing reads it now.
+    pub fn read_abroad(&mut self, name: Global, read: Option<Abroad>) {
+        match read {
+            Some(read) => self.abroad.insert(name, read),
+            None => {
+                self.abroad.remove(&name);
+            }
+        }
+    }
+
+    /// The revised record, with who read what of it unmade until something asks.
+    pub fn filed(self) -> Certification {
+        Certification {
+            totalities: self.totalities,
+            polarities: self.polarities,
+            variances: self.variances,
+            reads: curios_archive::Deferred::held(Read {
+                by: self.by,
+                abroad: self.abroad,
+            }),
+            read_by: OnceCell::new(),
+        }
     }
 }
 
@@ -1377,7 +1465,7 @@ impl Term {
 }
 
 impl Entrypoint {
-    /// Every free local the entry's body or stated type mentions — what a walk judging the entry beside its module refuses, as [`free_locals_outside`] is for the module.
+    /// Every free local the entry's body or stated type mentions — what a walk judging the entry beside its module refuses, as [`free_locals_of`] is for the module.
     pub fn free_locals(&self) -> BTreeSet<Free> {
         std::iter::once(&self.body)
             .chain(&self.type_)
@@ -1679,7 +1767,7 @@ impl fmt::Display for Positional {
 ///
 /// The two witness classes are asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns and named by what it witnesses, which are questions about `Module::witnesses` rather than about any position — so they are asked over the declarations and not through the walk.
 ///
-/// It refuses the free locals [`free_locals_outside`] reports, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
+/// It refuses the free locals [`free_locals_of`] reports, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
 pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
     let mut found: Option<Positional> = None;
 
@@ -1729,20 +1817,18 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
     found.map_or(Ok(()), Err)
 }
 
-/// Every free local `module`'s terms mention outside what `in_scope` already answers for, each with the top-level name owning the position it was found in.
+/// Every free local the terms of `items` mention, each with the top-level name owning the position it was found in.
 ///
 /// **What a checker refuses before it mints a binder of its own.** Both checkers mint from a counter no predecessor raised — the kernel's from zero, the elaborator's from its own unit's lowering count — because no term a walk is handed from elsewhere carries a local ([`validate_stored_identities`]). A free local reaching a walk is therefore one its counter could hand out again, and the binder it mints while comparing under a telescope or eta-contracting would silently identify two terms that differ. The judgment could not see it: by the time it looks the local up, the local is bound. So the refusal is taken at the boundary, over every position a term can sit in, rather than where a judgment meets it.
 ///
 /// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Whether a variable is local asks nothing of a kernel — no reduction, no conversion, no `Env` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
 ///
-/// The predicate is over *names* rather than over a position, which is what lets one answer cover four namespaces at once: a name is one declaration, and the walk handing the predicate in answers for the declarations it does not judge, the ones a baseline holds term for term. An item is skipped only when *every* name it declares is already answered for, since the walk that answered for it refused a local of its own.
-pub fn free_locals_outside(
-    module: &Module,
-    in_scope: impl Fn(&Global) -> bool,
+/// A walk hands in the items it judges the terms of: over a baseline, the ones whose terms are not the baseline's, the walk that filed the baseline having refused a local of its own in each of the others.
+pub fn free_locals_of<'a>(
+    items: impl IntoIterator<Item = &'a Item>,
 ) -> BTreeSet<(Option<Global>, Free)> {
     let mut found = BTreeSet::new();
-
-    module_positions(module, in_scope, |owner, carried| {
+    let mut visit = |owner: Option<&Global>, carried: &dyn Carried| {
         found.extend(
             carried
                 .free_vars()
@@ -1750,7 +1836,10 @@ pub fn free_locals_outside(
                 .filter(Free::is_local)
                 .map(|local| (owner.copied(), local)),
         );
-    });
+    };
+    for item in items {
+        item_positions(item, &|_| false, &mut visit);
+    }
 
     found
 }

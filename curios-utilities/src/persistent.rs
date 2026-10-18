@@ -109,6 +109,95 @@ impl<K: Ord + Clone, T: Clone> Tree<K, T> {
     }
 }
 
+/// One step of a walk that compares two trees in key order: a subtree still to be taken apart, or a node whose own entry comes next.
+enum Pending<'t, K, T> {
+    Subtree(&'t Node<K, T>),
+    Entry(&'t Node<K, T>),
+}
+
+/// The top of a walk, a subtree taken apart into its left subtree, its own entry and its right subtree, the left on top.
+fn take_apart<'t, K, T>(stack: &mut Vec<Pending<'t, K, T>>) {
+    let Some(Pending::Subtree(node)) = stack.pop() else {
+        unreachable!("a subtree is taken apart where one is on top");
+    };
+    if let Some(right) = node.right.as_deref() {
+        stack.push(Pending::Subtree(right));
+    }
+    stack.push(Pending::Entry(node));
+    if let Some(left) = node.left.as_deref() {
+        stack.push(Pending::Subtree(left));
+    }
+}
+
+impl<K: Ord, T> Tree<K, T> {
+    /// A walk that compares this tree with another, standing at its root.
+    fn pending(&self) -> Vec<Pending<'_, K, T>> {
+        self.root
+            .as_deref()
+            .map(Pending::Subtree)
+            .into_iter()
+            .collect()
+    }
+
+    /// Every key at which this tree and `earlier` differ, in key order, each `report`ed with what `earlier` holds there and what this tree does, `None` where one holds nothing: a key both hold is reported where `same` says the two payloads differ. A subtree the two share is passed over whole, so two versions of one map are compared at the cost of what they do not share.
+    ///
+    /// **The higher subtree is taken apart first.** Where the two walks stand at subtrees that are not one, the one whose root stands higher, by priority, is taken apart, so a subtree shared below it is met whole rather than taken apart from the other side. Which is taken apart decides what the walk costs and never what it reports: entries are compared in key order either way.
+    fn diff(
+        &self,
+        earlier: &Tree<K, T>,
+        same: impl Fn(&T, &T) -> bool,
+        mut report: impl FnMut(&K, Option<&T>, Option<&T>),
+    ) {
+        let (mut now, mut then) = (self.pending(), earlier.pending());
+        loop {
+            match (now.last(), then.last()) {
+                (None, None) => return,
+                (Some(Pending::Subtree(this)), Some(Pending::Subtree(that)))
+                    if std::ptr::eq(*this, *that) =>
+                {
+                    now.pop();
+                    then.pop();
+                }
+                (Some(Pending::Subtree(this)), Some(Pending::Subtree(that))) => {
+                    match this.priority >= that.priority {
+                        true => take_apart(&mut now),
+                        false => take_apart(&mut then),
+                    }
+                }
+                (Some(Pending::Subtree(_)), _) => take_apart(&mut now),
+                (_, Some(Pending::Subtree(_))) => take_apart(&mut then),
+                (Some(Pending::Entry(this)), Some(Pending::Entry(that))) => {
+                    match this.key.cmp(&that.key) {
+                        std::cmp::Ordering::Equal => {
+                            if !same(&that.payload, &this.payload) {
+                                report(&this.key, Some(&that.payload), Some(&this.payload));
+                            }
+                            now.pop();
+                            then.pop();
+                        }
+                        std::cmp::Ordering::Less => {
+                            report(&this.key, None, Some(&this.payload));
+                            now.pop();
+                        }
+                        std::cmp::Ordering::Greater => {
+                            report(&that.key, Some(&that.payload), None);
+                            then.pop();
+                        }
+                    }
+                }
+                (Some(Pending::Entry(this)), None) => {
+                    report(&this.key, None, Some(&this.payload));
+                    now.pop();
+                }
+                (None, Some(Pending::Entry(that))) => {
+                    report(&that.key, Some(&that.payload), None);
+                    then.pop();
+                }
+            }
+        }
+    }
+}
+
 /// A node's priority: its key mixed, so the tree's shape is a function of its keys.
 fn priority(key: u64) -> u64 {
     let mut mixed = key.wrapping_add(0x9e37_79b9_7f4a_7c15);
@@ -438,6 +527,18 @@ impl<V: Clone> Ordered<V> {
     pub fn iter(&self) -> impl Iterator<Item = (i64, &V)> {
         positioned(&self.tree)
     }
+
+    /// Every position at which this map and `earlier` differ, the least first, each `report`ed with what `earlier` holds there and what this map does, `None` where one holds nothing: a position both hold is reported where `same` says the two values differ. What two versions of one map share is passed over unread, so comparing them costs what they do not share.
+    pub fn diff(
+        &self,
+        earlier: &Ordered<V>,
+        same: impl Fn(&V, &V) -> bool,
+        mut report: impl FnMut(i64, Option<&V>, Option<&V>),
+    ) {
+        self.tree.diff(&earlier.tree, same, |key, then, now| {
+            report(position_of(*key), then, now);
+        });
+    }
 }
 
 /// Every value of a position-keyed tree with its position, the least first.
@@ -521,6 +622,15 @@ impl<K: Ord + Hash + Clone, V: Clone> Sorted<K, V> {
         self.tree.iter()
     }
 }
+
+/// Two maps read in key order are one where they hold the same entries, whatever versions they are.
+impl<K: PartialEq, V: PartialEq> PartialEq for Sorted<K, V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.len == other.len && self.tree.iter().eq(other.tree.iter())
+    }
+}
+
+impl<K: Eq, V: Eq> Eq for Sorted<K, V> {}
 
 impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for Sorted<K, V> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
