@@ -2479,7 +2479,7 @@ impl Term {
     ///
     /// The alternative is a fresh `Rc` whose caches start empty, discarding every `hash`, `frees` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case: `project_erased_universes` hands back an equal term on nearly every call over a web of definitions each naming the one before it twice.
     ///
-    /// No caller can tell the difference, because two of them already receive the original node: [`Visit::universes_only`] and [`Visit::passes_over`] both short-circuit to `self.clone()`. An extent lives on this wrapper rather than on the node, so sharing one node across occurrences is representable. A consing visit is the one that can tell, and does not come here ([`Term::consed`]): the node handed back holds the children it had, where consing is the replacing of them.
+    /// No caller can tell the difference, because two of them already receive the original node: `Visit::universes_only` and `Visit::passes_over` both short-circuit to `self.clone()`. An extent lives on this wrapper rather than on the node, so sharing one node across occurrences is representable. A consing visit is the one that can tell, and does not come here (`Term::consed`): the node handed back holds the children it had, where consing is the replacing of them.
     pub fn rebuilt(&self, subterm: Subterm) -> Self {
         if subterm == **self {
             return self.clone();
