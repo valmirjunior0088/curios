@@ -10,7 +10,7 @@ use {
     curios_text::{Entrypoint, LintKind, RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
     curios_utilities::{RootKind, test_support::Temporary},
-    std::fs,
+    std::{fs, rc::Rc},
 };
 
 /// A fixture's entrypoint. Every fixture is a program, so its final term describes doing something and yielding nothing: one whose subject is a term binds it in a `let` at the type under test and closes with `Io/pure(())`.
@@ -248,11 +248,12 @@ fn elaborated(
 ) -> Module {
     let lowered = curios_text::into_core_unit(source, &predecessors.text(), &SYNTAX)
         .expect("the unit lowers");
-    let mut minted = lowered.minted().clone();
-    for declaration in &mut minted.declarations {
+    let mut minted = Rc::clone(lowered.minted());
+    let raised = Rc::make_mut(&mut minted);
+    for declaration in &mut raised.declarations {
         declaration.binders += floor;
     }
-    minted.entry.binders += floor;
+    raised.entry.binders += floor;
 
     let placed = predecessors.placed();
     let fixed = predecessors.fixed();

@@ -7,7 +7,10 @@ use {
         UniverseContext, UniverseMetaId, UniverseRole, WitnessKey,
     },
     curios_utilities::Qualifier,
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
 fn context() -> Context<'static> {
@@ -433,11 +436,11 @@ fn an_attempt_mints_above_what_its_own_declaration_lowered() {
         binders,
         ..Mints::default()
     };
-    context.seed(&Minted {
+    context.seed(&Rc::new(Minted {
         declarations: vec![lowered(2), lowered(5)],
         from: BTreeMap::from([(a, 0), (b, 1)]),
         entry: lowered(9),
-    });
+    }));
     let minted = |context: &mut Context, names: &[&Global]| {
         context.attempt(names);
         [context.fresh(None), context.fresh(None)]

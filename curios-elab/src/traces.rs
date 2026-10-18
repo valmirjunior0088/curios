@@ -2,7 +2,7 @@
 //!
 //! **One trace for each declaration, under the name it is written as.** A declaration is an item with every item the lowering generated from it, attempted together in one state, so what the attempt that stood asked is the declaration's. It is filed under the first name its written item declares, which a later lowering of the same text gives it again.
 //!
-//! **Held by pointer.** A unit compiled over a baseline keeps the trace of every declaration it keeps, and that is a copy of a handle ([`Traces::share`]).
+//! **A version of the baseline's.** A unit compiled over a baseline holds its baseline's traces with the trace of each declaration it made filed in place of the one it replaces and each declaration it dropped taken out: the table is persistent and read back in the order of its names ([`Sorted`]), so a trace kept is shared, never copied, and nothing is visited to keep it.
 //!
 //! **Stored with each name written once.** A trace names the same few declarations its neighbours do: the library's traces hold some forty names each, drawn from the few thousand the library and its scope declare. A name is archived as its segments, and read back through the process's table at an allocation a segment, so the stored form holds a table of the names and of the witness keys, each once, and a question holds its place there.
 
@@ -12,7 +12,7 @@ mod tests;
 use {
     crate::{Answered, Question},
     curios_core::{Global, Trace, WitnessKey},
-    curios_utilities::Persistent,
+    curios_utilities::{Persistent, Sorted},
     std::{
         borrow::Borrow,
         cell::OnceCell,
@@ -28,13 +28,14 @@ use {
 #[curios_archive::archived]
 pub struct Traces {
     #[archived_with(TraceTabled)]
-    declarations: BTreeMap<Global, Rc<Trace<Question, Answered>>>,
+    declarations: Sorted<Global, Rc<Trace<Question, Answered>>>,
     /// What the declarations read of declarations the unit does not hold. See [`Foreign`].
     foreign: Rc<Foreign>,
     /// The declarations settled before the unit's lemmas were offered to a proof the elaborator writes: the prover's vocabulary and everything it reads, by the names they are written as.
     ///
     /// **What a recompile keeps the offer by.** Where an edit reaches none of them, the vocabulary reads what it read, so each declaration stands on the side of the offer it was elaborated on, and the walk over the unit asks none of them again to learn it.
-    before: BTreeSet<Global>,
+    #[archived_with(curios_archive::Shared)]
+    before: Rc<BTreeSet<Global>>,
 }
 
 /// What a unit's declarations read of declarations the unit does not hold, another unit's or no one's: each part asked of one, with the digest it had (`part_digest`), none where the name declared no such part.
@@ -85,7 +86,7 @@ impl Foreign {
 }
 
 impl Traces {
-    /// File `trace` as what the declaration written as `name` asked.
+    /// File `trace` as what the declaration written as `name` asked, in place of any trace held under the name.
     pub(crate) fn file(&mut self, name: Global, trace: Trace<Question, Answered>) {
         self.declarations.insert(name, Rc::new(trace));
     }
@@ -93,6 +94,11 @@ impl Traces {
     /// File `trace` as what the declaration written as `name` asked: another unit's trace of it, held where that unit holds it.
     pub(crate) fn share(&mut self, name: Global, trace: Rc<Trace<Question, Answered>>) {
         self.declarations.insert(name, trace);
+    }
+
+    /// Take out the trace held under `name`, where one is: a declaration no longer written as it.
+    pub(crate) fn forget(&mut self, name: &Global) {
+        self.declarations.remove(name);
     }
 
     /// What the declaration written as `name` asked, where the unit holds one.
@@ -122,12 +128,12 @@ impl Traces {
 
     /// Hold `before` as the declarations settled before the unit's lemmas were offered.
     pub(crate) fn settle_before(&mut self, before: BTreeSet<Global>) {
-        self.before = before;
+        self.before = Rc::new(before);
     }
 
     /// Every declaration's trace, in the order of the names the declarations are written as.
     pub(crate) fn each(&self) -> impl Iterator<Item = &Trace<Question, Answered>> {
-        self.declarations.values().map(Rc::as_ref)
+        self.declarations.iter().map(|(_, trace)| trace.as_ref())
     }
 
     /// How many declarations hold a trace.
@@ -319,7 +325,7 @@ impl Readers {
         let mut parts = BTreeMap::<Global, Vec<(Global, Parts)>>::new();
         let mut keys = BTreeMap::<(Global, WitnessKey), Keyed>::new();
         let mut readers = Readers::default();
-        for (reader, trace) in &traces.declarations {
+        for (reader, trace) in traces.declarations.iter() {
             let edges = Edges::of(trace);
             for (name, read) in edges.parts {
                 parts.entry(name).or_default().push((*reader, read));
@@ -499,11 +505,11 @@ pub struct TraceTabling;
 /// The field adapter: `#[archived_with(TraceTabled)]`.
 pub type TraceTabled = curios_archive::Via<TraceTabling>;
 
-impl curios_archive::Proxy<BTreeMap<Global, Rc<Trace<Question, Answered>>>> for TraceTabling {
+impl curios_archive::Proxy<Sorted<Global, Rc<Trace<Question, Answered>>>> for TraceTabling {
     type Archivable = TraceTable;
 
     fn to_archivable(
-        declarations: &BTreeMap<Global, Rc<Trace<Question, Answered>>>,
+        declarations: &Sorted<Global, Rc<Trace<Question, Answered>>>,
     ) -> impl Borrow<TraceTable> {
         let mut names = Placing::new();
         let mut keys = Placing::new();
@@ -537,29 +543,28 @@ impl curios_archive::Proxy<BTreeMap<Global, Rc<Trace<Question, Answered>>>> for 
 
     fn from_archivable(
         table: TraceTable,
-    ) -> Result<BTreeMap<Global, Rc<Trace<Question, Answered>>>, String> {
+    ) -> Result<Sorted<Global, Rc<Trace<Question, Answered>>>, String> {
         let TraceTable {
             names,
             keys,
             declarations,
         } = table;
 
-        declarations
-            .into_iter()
-            .map(|TabledTrace { name, asked }| {
-                let mut trace = Trace::default();
-                for (question, answered) in asked.asked() {
-                    trace.record(
-                        question.spelled(
-                            |place| placed(&names, place, "name"),
-                            |place| placed(&keys, place, "witness key"),
-                        )?,
-                        answered.spelled(|place| placed(&names, place, "name"))?,
-                    );
-                }
+        let mut traces = Sorted::new();
+        for TabledTrace { name, asked } in declarations {
+            let mut trace = Trace::default();
+            for (question, answered) in asked.asked() {
+                trace.record(
+                    question.spelled(
+                        |place| placed(&names, place, "name"),
+                        |place| placed(&keys, place, "witness key"),
+                    )?,
+                    answered.spelled(|place| placed(&names, place, "name"))?,
+                );
+            }
+            traces.insert(placed(&names, name, "name")?, Rc::new(trace));
+        }
 
-                Ok((placed(&names, name, "name")?, Rc::new(trace)))
-            })
-            .collect()
+        Ok(traces)
     }
 }

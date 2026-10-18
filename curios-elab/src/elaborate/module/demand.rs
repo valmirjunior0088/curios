@@ -92,7 +92,7 @@ pub(super) struct Demand<'a> {
     demanded: Vec<usize>,
     pub(super) poison: Poison,
     pub(super) survivors: Survivors,
-    /// What each declaration's standing attempt asked of the declarations around it, and what each kept declaration's did where the baseline elaborated it.
+    /// What each declaration's standing attempt asked of the declarations around it, and what each kept declaration's did where the baseline elaborated it: over a baseline, the baseline's traces with each declaration made filed in place of the one it replaces, and each the unit no longer declares taken out.
     pub(super) traces: Traces,
     /// The baseline the unit is compiled over, where it is compiled over one.
     over: Option<Over<'a>>,
@@ -194,7 +194,7 @@ impl<'a> Demand<'a> {
             demanded: Vec::new(),
             poison,
             survivors,
-            traces: Traces::default(),
+            traces: over.map(|over| over.traces.clone()).unwrap_or_default(),
             over,
             same: HashMap::new(),
             read: RefCell::new(HashMap::new()),
@@ -207,15 +207,14 @@ impl<'a> Demand<'a> {
 
     /// Record what the unit's declarations read of the declarations it does not hold, each part by the digest it has in `scope`: what a later compile over this unit asks a read of another unit again by ([`Foreign`]).
     ///
-    /// Taken where the walk ends, off the traces that stood. A part a kept declaration read of a unit that did not move is the baseline's, digest and all, so nothing of that unit is read to record it; and a walk that kept every declaration of its baseline in a scope that did not move holds the baseline's table.
+    /// Taken where the walk ends, off the traces that stood. A part a kept declaration read of a unit that did not move is the baseline's, digest and all, so nothing of that unit is read to record it; and a walk that kept every declaration of its baseline and dropped none, in a scope that did not move, holds the baseline's table, which its traces began with.
     pub(super) fn note_foreign(&mut self, scope: &Established<'_>) {
         let earlier = self.over.map(|over| over.traces);
-        if let Some(earlier) = earlier
+        if earlier.is_some()
             && scope.settled()
             && self.kept.iter().all(|kept| *kept)
-            && self.traces.len() == earlier.len()
+            && self.lost.is_empty()
         {
-            self.traces.read(Rc::clone(earlier.foreign()));
             return;
         }
 
@@ -320,27 +319,25 @@ impl<'a> Demand<'a> {
                     .get(name)
                     .is_none_or(|declaration| self.is_marked(*declaration))
             });
-        match vocabulary_reached {
-            true => {
-                self.asking = true;
-                for declaration in owners {
-                    self.ask_for(context, declaration);
-                }
-                self.asking = false;
-                let before = self.finished();
-                // Settled before the offer where the baseline elaborated it, and no longer: it is answered otherwise whether lemmas are on offer.
-                for name in over.traces.before() {
-                    if !before.contains(name)
-                        && over.readers.lemmas(name).is_some()
-                        && let Some(&declaration) = self.owner.get(name)
-                    {
-                        self.seed(declaration);
-                    }
-                }
-                self.mark();
-                self.traces.settle_before(before);
+        // Where the vocabulary was not reached, the declarations settled before the offer are the baseline's, which the traces began with.
+        if vocabulary_reached {
+            self.asking = true;
+            for declaration in owners {
+                self.ask_for(context, declaration);
             }
-            false => self.traces.settle_before(over.traces.before().clone()),
+            self.asking = false;
+            let before = self.finished();
+            // Settled before the offer where the baseline elaborated it, and no longer: it is answered otherwise whether lemmas are on offer.
+            for name in over.traces.before() {
+                if !before.contains(name)
+                    && over.readers.lemmas(name).is_some()
+                    && let Some(&declaration) = self.owner.get(name)
+                {
+                    self.seed(declaration);
+                }
+            }
+            self.mark();
+            self.traces.settle_before(before);
         }
         // Every declaration no seed reaches is kept before anything is made after the offer: a read some door notes no need for — a lemma a proof applies, a method a derivation writes — finds it standing, as a walk in the order the declarations are written finds every declaration kept ahead of the ones after it.
         for declaration in self.in_written_order() {
@@ -433,12 +430,11 @@ impl<'a> Demand<'a> {
         for name in gained.iter().chain(&lost) {
             self.flag_readers(name, Parts::ALL);
         }
-        if let Some(readers) = &mut self.readers {
-            for name in &lost {
-                if let Some(trace) = over.traces.of(name) {
-                    readers.replace(*name, Some(trace), None);
-                }
+        for name in &lost {
+            if let (Some(readers), Some(trace)) = (&mut self.readers, over.traces.of(name)) {
+                readers.replace(*name, Some(trace), None);
             }
+            self.traces.forget(name);
         }
         self.lost = lost;
         // A key at which the unit declares other witnesses than the baseline did.
@@ -876,13 +872,8 @@ impl<'a> Demand<'a> {
         }
     }
 
-    /// Keep `declaration` as the baseline holds it: what the unit seeded for it is taken out, so a read of it falls through to the baseline, which answers for it from here on, and its trace is the baseline's own. No item is made for it: the unit takes the baseline's where it is assembled.
-    fn keep(
-        &mut self,
-        context: &mut Context,
-        declaration: usize,
-        trace: Rc<Trace<Question, Answered>>,
-    ) {
+    /// Keep `declaration` as the baseline holds it: what the unit seeded for it is taken out, so a read of it falls through to the baseline, which answers for it from here on, and its trace is the baseline's own, which the walk's traces began with. No item is made for it: the unit takes the baseline's where it is assembled.
+    fn keep(&mut self, context: &mut Context, declaration: usize) {
         let over = self.over.expect("a declaration is kept over a baseline");
         let names = self.names(declaration);
         for name in &names {
@@ -891,8 +882,24 @@ impl<'a> Demand<'a> {
             context.remove_concept(name);
         }
         over.established.keep(&names);
-        self.traces.share(*names[0], trace);
         self.kept[declaration] = true;
+    }
+
+    /// File `trace` as what the declaration declaring `names` asked, under the first: in place of the baseline's trace of it, and of any trace the baseline held under another of its names, which was a declaration this one now holds the name of.
+    fn file(&mut self, names: &[&Global], trace: Trace<Question, Answered>) {
+        let (first, others) = names.split_first().expect("a declaration declares a name");
+        if let Some(over) = self.over {
+            for name in others {
+                if let (Some(readers), Some(held)) = (&mut self.readers, over.traces.of(name)) {
+                    readers.replace(**name, Some(held), None);
+                }
+                self.traces.forget(name);
+            }
+            if let Some(readers) = &mut self.readers {
+                readers.replace(**first, over.traces.of(first), Some(&trace));
+            }
+        }
+        self.traces.file(**first, trace);
     }
 
     /// Note which parts of `made`, an item elaborated again over a baseline, came out as the baseline holds them.
@@ -936,10 +943,8 @@ impl<'a> Demand<'a> {
         let items = self.declarations[declaration].clone();
         let names = self.names(declaration);
         let unasked = self.unasked(declaration);
-        if unasked == Some(true)
-            && let Some(trace) = self.recorded(context, declaration)
-        {
-            self.keep(context, declaration, trace);
+        if unasked == Some(true) && self.recorded(context, declaration).is_some() {
+            self.keep(context, declaration);
             return Ok(());
         }
         // A declaration asked again by its trace asks for each declaration its elaboration waited for as its questions come to it, so what its lowered forms reach is asked for ahead of it only where that could be told apart: ahead of the offer of the unit's lemmas, which side of the offer a declaration is first asked for on being what one of its questions is answered by.
@@ -953,7 +958,7 @@ impl<'a> Demand<'a> {
             && self.stands(context, declaration, &trace)?
         {
             curios_profile::sample!("demand::kept", trace.len());
-            self.keep(context, declaration, trace);
+            self.keep(context, declaration);
             return Ok(());
         }
         if traced {
@@ -1014,10 +1019,7 @@ impl<'a> Demand<'a> {
                 // What the attempt that stands asked of the declarations around it is its declaration's.
                 let trace = context.take_trace();
                 curios_profile::sample!("demand::asked", trace.len());
-                if let (Some(readers), Some(over)) = (&mut self.readers, self.over) {
-                    readers.replace(*names[0], over.traces.of(names[0]), Some(&trace));
-                }
-                self.traces.file(*names[0], trace);
+                self.file(&names, trace);
                 self.poison = poison;
                 let mut holding = Vec::new();
                 for (position, outcome) in items.iter().zip(outcomes) {

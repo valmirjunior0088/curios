@@ -725,8 +725,8 @@ impl<'s> Context<'s> {
     /// Take what a unit's lowering minted, declaration by declaration. Each attempt at a declaration begins its state above what that declaration's lowering minted, and the entry's above the entry's ([`Context::begin_state`]), so no identity either mints is one the other already holds.
     ///
     /// `into_core` mints the binders of every lowered scope, a metavariable for every hole and a level for every written type, and elaboration mints more of each; both draw from one identity space per declaration, so the second source starts above the first. Nothing from another declaration or another unit is in that space: no term the scope replays or the context publishes carries a local or a metavariable.
-    pub(crate) fn seed(&mut self, minted: &Minted) {
-        self.underway.minted = Rc::new(minted.clone());
+    pub(crate) fn seed(&mut self, minted: &Rc<Minted>) {
+        self.underway.minted = Rc::clone(minted);
     }
 
     /// [`Spend::spend`].

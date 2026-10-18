@@ -1569,7 +1569,7 @@ fn elaborate_module_suffix<'s>(
     established: Option<&'s Established<'_>>,
     over: Option<Over<'_>>,
     module: &Module,
-    minted: &Minted,
+    minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<ElaboratedSuffix, Error> {
     curios_profile::profile!("elaborate_module_suffix");
@@ -1978,7 +1978,7 @@ fn refused(refusals: Vec<Error>, finalized: Result<Finalized, Error>) -> Error {
 pub fn elaborate_and_zonk_module(
     context: &mut Context,
     module: &Module,
-    minted: &Minted,
+    minted: &Rc<Minted>,
 ) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
     grown(|| {
@@ -2020,7 +2020,7 @@ pub fn elaborate_and_zonk_unit<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     module: &Module,
-    minted: &Minted,
+    minted: &Rc<Minted>,
 ) -> Result<(Module, Traces), Error> {
     let (finalized, traces) = elaborate_and_zonk(context, established, module, minted, None)?;
     raise(finalized).map(|(module, _)| (module, traces))
@@ -2033,7 +2033,7 @@ pub fn elaborate_and_zonk_program<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     module: &Module,
-    minted: &Minted,
+    minted: &Rc<Minted>,
     tail: Tail<'_>,
 ) -> Result<(Module, Option<Entrypoint>), Error> {
     elaborate_and_zonk_entry(context, established, module, minted, tail)
@@ -2047,7 +2047,7 @@ pub fn elaborate_and_zonk_entry<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     module: &Module,
-    minted: &Minted,
+    minted: &Rc<Minted>,
     tail: Tail<'_>,
 ) -> Result<(Module, Option<Entrypoint>, Traces), Error> {
     let (finalized, traces) = elaborate_and_zonk(context, established, module, minted, Some(tail))?;
@@ -2061,7 +2061,7 @@ pub fn elaborate_and_zonk_program_reporting<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     module: &Module,
-    minted: &Minted,
+    minted: &Rc<Minted>,
     tail: Tail<'_>,
 ) -> Result<FinalizedProgram, Error> {
     let (
@@ -2085,7 +2085,7 @@ fn elaborate_and_zonk<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,
     module: &Module,
-    minted: &Minted,
+    minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<(Finalized, Traces), Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
@@ -2149,7 +2149,7 @@ pub fn elaborate_and_zonk_unit_over<'s>(
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
     module: &Module,
-    minted: &Minted,
+    minted: &Rc<Minted>,
 ) -> Result<Recompiled, Error> {
     elaborate_and_zonk_over(context, established, recompile, module, minted, None)
         .map(|(recompiled, _)| recompiled)
@@ -2161,7 +2161,7 @@ pub fn elaborate_and_zonk_entry_over<'s>(
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
     module: &Module,
-    minted: &Minted,
+    minted: &Rc<Minted>,
     tail: Tail<'_>,
 ) -> Result<(Recompiled, Option<Entrypoint>), Error> {
     elaborate_and_zonk_over(context, established, recompile, module, minted, Some(tail))
@@ -2173,7 +2173,7 @@ fn elaborate_and_zonk_over<'s>(
     established: &'s Established<'_>,
     recompile: Recompile<'_>,
     module: &Module,
-    minted: &Minted,
+    minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<(Recompiled, Option<Entrypoint>), Error> {
     curios_profile::profile!("elaborate_and_zonk_unit_over");

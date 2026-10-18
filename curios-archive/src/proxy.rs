@@ -8,7 +8,7 @@ use {
         rancor::{Fallible, Source},
         with::{ArchiveWith, DeserializeWith, SerializeWith},
     },
-    std::{borrow::Borrow, io, marker::PhantomData},
+    std::{borrow::Borrow, io, marker::PhantomData, rc::Rc},
 };
 
 /// How a `Value` rkyv cannot archive is represented by an [`Archivable`](Proxy::Archivable) it can.
@@ -71,5 +71,23 @@ where
         let archivable = archived.deserialize(deserializer)?;
 
         P::from_archivable(archivable).map_err(|error| D::Error::new(io::Error::other(error)))
+    }
+}
+
+/// A value held behind an `Rc`, archived as the value itself: holders that share one in hand each store it as one held alone would be, so sharing it changes nothing a reader of the bytes sees.
+pub struct Sharing;
+
+/// The field adapter: `#[archived_with(Shared)]`.
+pub type Shared = Via<Sharing>;
+
+impl<T> Proxy<Rc<T>> for Sharing {
+    type Archivable = T;
+
+    fn to_archivable(value: &Rc<T>) -> impl Borrow<T> {
+        &**value
+    }
+
+    fn from_archivable(archivable: T) -> Result<Rc<T>, String> {
+        Ok(Rc::new(archivable))
     }
 }

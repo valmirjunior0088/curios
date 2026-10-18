@@ -401,8 +401,9 @@ pub struct PreparedText {
     /// The bytes a baseline stored an item as, for each item this unit took from one whole ([`PreparedText::taken_from`]), by the item's place: what the item is stored as again, since it is the baseline's. Empty for a unit lowered over none.
     #[archived_with(curios_archive::Skip)]
     carried: Vec<Option<curios_archive::Bytes>>,
-    /// What this unit's lowering minted, which its elaboration's counters start above, with the names of each declaration that resolved to nothing. A count within the unit: nothing here resumes above a predecessor.
-    minted: curios_core::Minted,
+    /// What this unit's lowering minted, which its elaboration's counters start above, with the names of each declaration that resolved to nothing. A count within the unit: nothing here resumes above a predecessor. Shared with the elaboration that seeds from it.
+    #[archived_with(curios_archive::Shared)]
+    minted: Rc<curios_core::Minted>,
     /// Every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and half of what a report spells a name by ([`PreparedText::spellings`]).
     ///
     /// **Stored apart from the unit** ([`PreparedText::imports_bytes`]): they are read by the unit's own reports and its documentation, and by nothing compiled after it.
@@ -614,7 +615,7 @@ impl PreparedText {
     }
 
     /// What this unit's lowering minted — see the field.
-    pub fn minted(&self) -> &curios_core::Minted {
+    pub fn minted(&self) -> &Rc<curios_core::Minted> {
         &self.minted
     }
 
@@ -2609,10 +2610,10 @@ fn into_core_unit_within(
             witnesses,
             tests,
         },
-        minted: curios_core::Minted {
+        minted: Rc::new(curios_core::Minted {
             entry: entry_mints,
             ..shared.minted.into_inner()
-        },
+        }),
         imports: curios_archive::Deferred::held(shared.imports.into_inner()),
         visible: visible_mounts,
         broken,
@@ -2645,7 +2646,7 @@ pub fn into_core(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     syntax: &SyntaxRegistry,
-) -> Result<(curios_core::Program, curios_core::Minted, ForeignStore), Error> {
+) -> Result<(curios_core::Program, Rc<curios_core::Minted>, ForeignStore), Error> {
     let (unit, entry) = lower_unit(&UnitSource::entry(entrypoint, loader), &[], syntax, None)?;
 
     Ok((
@@ -2755,7 +2756,7 @@ pub fn prepare_prelude(
 /// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, and its lints. A name that resolved to nothing is among what its declaration minted (`curios_core::Mints::unbound`).
 pub struct LoweredEntry {
     pub program: curios_core::Program,
-    pub minted: curios_core::Minted,
+    pub minted: Rc<curios_core::Minted>,
     pub foreigns: ForeignStore,
     /// How the entry's names can be written, where — see [`EntryNames`].
     pub names: EntryNames,

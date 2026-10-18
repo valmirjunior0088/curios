@@ -4,12 +4,12 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item, Level, Minted,
-        Module, Nat, Telescope, Term, Totality, UniverseContext, UniverseParam, Universes,
+        Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item, Level, Module, Nat,
+        Telescope, Term, Totality, UniverseContext, UniverseParam, Universes,
         test_support::declaring,
     },
     curios_utilities::Qualifier,
-    std::collections::BTreeSet,
+    std::{collections::BTreeSet, rc::Rc},
 };
 
 fn context() -> Context<'static> {
@@ -83,7 +83,7 @@ fn module(items: Vec<Item>) -> Module {
 
 /// Every refusal one elaboration reports, rendered.
 fn refusals(context: &mut Context, module: &Module) -> Vec<String> {
-    match elaborate_and_zonk_module(context, module, &Minted::default()) {
+    match elaborate_and_zonk_module(context, module, &Rc::default()) {
         Ok(_) => Vec::new(),
         Err(error) => error.each().map(Error::to_string).collect(),
     }
@@ -139,7 +139,7 @@ fn a_name_reported_broken_before_elaboration_withholds_its_dependents_from_the_s
         let_item("c", nat(), nat_lit(2)),
     ]);
 
-    let elaborated = elaborate_and_zonk_module(&mut context, &module, &Minted::default())
+    let elaborated = elaborate_and_zonk_module(&mut context, &module, &Rc::default())
         .expect("nothing was refused");
 
     assert_eq!(
@@ -174,7 +174,7 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
     };
     let module = declaring(module, [(nominal("T"), entry)], [], []);
 
-    let elaborated = elaborate_and_zonk_module(&mut context, &module, &Minted::default())
+    let elaborated = elaborate_and_zonk_module(&mut context, &module, &Rc::default())
         .expect("nothing was refused");
 
     assert!(elaborated.items.is_empty());
@@ -190,7 +190,7 @@ fn an_item_written_before_what_it_reads_elaborates_and_is_stored_after_it() {
         let_item("a", nat(), nat_lit(1)),
     ]);
 
-    let elaborated = elaborate_and_zonk_module(&mut context(), &module, &Minted::default())
+    let elaborated = elaborate_and_zonk_module(&mut context(), &module, &Rc::default())
         .expect("nothing was refused");
 
     assert_eq!(
@@ -227,7 +227,7 @@ fn a_refused_item_leaves_no_binding_parked_work_need_or_constraint_behind() {
     let mut context = context();
     let module = module(vec![let_item("a", nat(), boolean(true))]);
 
-    elaborate_and_zonk_module(&mut context, &module, &Minted::default()).expect_err("refused");
+    elaborate_and_zonk_module(&mut context, &module, &Rc::default()).expect_err("refused");
 
     assert!(context.assumption(&Free::from(&nominal("a"))).is_none());
     assert_eq!(context.parked_len(), 0);
@@ -254,7 +254,7 @@ fn a_published_proof_is_marked_and_unfolds_to_nothing() {
         let_item("two", nat(), nat_lit(2)),
     ]);
 
-    let elaborated = elaborate_and_zonk_module(&mut context, &module, &Minted::default())
+    let elaborated = elaborate_and_zonk_module(&mut context, &module, &Rc::default())
         .expect("nothing was refused");
 
     let marked = elaborated
