@@ -55,8 +55,14 @@ pub(crate) fn compile_unit_over_told(
     told: &dyn Fn(&PreparedText),
 ) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit_over");
-    let lowered = into_core_unit_over(source, &predecessors.text(), syntax, baseline.text())
-        .map_err(|error| CompileError::Failure(vec![error.report()]))?;
+    let lowered = into_core_unit_over(
+        source,
+        &predecessors.text(),
+        syntax,
+        baseline.text(),
+        moved.iter().all(|moved| !moved),
+    )
+    .map_err(|error| CompileError::Failure(vec![error.report()]))?;
     told(&lowered);
 
     compile_lowered_over(budget, predecessors, syntax, lowered, baseline, moved, None)

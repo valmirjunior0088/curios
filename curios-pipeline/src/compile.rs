@@ -871,13 +871,19 @@ where
     observe(Stage::Text(entrypoint));
 
     let (hit, baseline) = held(source, None, cache);
-    let (lowered, mut written) = lower_program(
-        predecessors,
-        syntax,
-        source,
-        hit.as_ref()
-            .or(baseline.as_ref().map(|earlier| &earlier.unit)),
-    )?;
+    // A hit was compiled after the units in scope, which is what made it one; a baseline after the ones its offer names.
+    let earlier = hit
+        .as_ref()
+        .map(|unit| (unit, true))
+        .or(baseline.as_ref().map(|earlier| {
+            let settled = predecessors
+                .units()
+                .iter()
+                .all(|unit| !earlier.after.moved(unit));
+
+            (&earlier.unit, settled)
+        }));
+    let (lowered, mut written) = lower_program(predecessors, syntax, source, earlier)?;
     if let Some(read) = read {
         read(predecessors.units(), &lowered, Some(&written));
     }
@@ -1457,18 +1463,18 @@ fn held(
     (hit, baseline)
 }
 
-/// The program `source` is, lowered over `earlier`, the unit [`held`] of its declarations: on every compile, over whatever earlier unit there is, the final term being no part of a unit and a declaration whose text and resolutions stand being the earlier one's.
+/// The program `source` is, lowered over `earlier`, the unit [`held`] of its declarations with whether the units in scope are the ones it was compiled after: on every compile, over whatever earlier unit there is, the final term being no part of a unit and a declaration whose text and resolutions stand being the earlier one's.
 fn lower_program(
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
-    earlier: Option<&Unit>,
+    earlier: Option<(&Unit, bool)>,
 ) -> Result<(PreparedText, curios_core::Entrypoint), CompileError> {
     into_core_entry(
         source,
         &predecessors.text(),
         syntax,
-        earlier.map(Unit::text),
+        earlier.map(|(unit, settled)| (unit.text(), settled)),
     )
     .map_err(|error| CompileError::Failure(vec![error.report()]))
 }
@@ -1485,10 +1491,18 @@ pub(crate) fn lower_subject<T>(
     then: impl FnOnce(&PreparedText, Option<&curios_core::Entrypoint>) -> T,
 ) -> Result<T, CompileError> {
     let (hit, baseline) = held(source, offered, cache);
+    // Whether the units in scope are the ones `earlier` was compiled after.
+    let settled = |earlier: &Earlier| {
+        predecessors
+            .units()
+            .iter()
+            .all(|unit| !earlier.after.moved(unit))
+    };
     if source.is_entry() {
-        let earlier = hit
+        // A hit was compiled after the units in scope, which is what made it one.
+        let earlier = hit.as_ref().map(|unit| (unit, true)).or(baseline
             .as_ref()
-            .or(baseline.as_ref().map(|earlier| &earlier.unit));
+            .map(|earlier| (&earlier.unit, settled(earlier))));
         let (lowered, entry) = lower_program(predecessors, syntax, source, earlier)?;
 
         return Ok(then(&lowered, Some(&entry)));
@@ -1498,8 +1512,14 @@ pub(crate) fn lower_subject<T>(
     Ok(match (hit, baseline) {
         (Some(unit), _) => then(unit.text(), None),
         (None, Some(earlier)) => then(
-            &into_core_unit_over(source, &text, syntax, earlier.unit.text())
-                .map_err(|error| CompileError::Failure(vec![error.report()]))?,
+            &into_core_unit_over(
+                source,
+                &text,
+                syntax,
+                earlier.unit.text(),
+                settled(&earlier),
+            )
+            .map_err(|error| CompileError::Failure(vec![error.report()]))?,
             None,
         ),
         (None, None) => then(

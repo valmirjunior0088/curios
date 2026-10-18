@@ -299,6 +299,11 @@ impl Loaded {
         Ok(Self::parsed(*module, tree, Some(text)))
     }
 
+    /// Whether the module's text is other than the one a baseline's scan holds: parsed already, where its scan would have stood in for it.
+    fn touched(&self) -> bool {
+        self.tree.get().is_some() || self.source.is_none()
+    }
+
     /// The module's tree, parsed now where its heads were a scan's.
     fn tree(&self) -> Result<&Module, Error> {
         if let Some(tree) = self.tree.get() {
@@ -423,6 +428,9 @@ pub struct PreparedText {
     /// **The unit's baseline half: what a later lowering of the same sources reads, and nothing compiled after this unit does.** So it is no part of what the unit is stored as for its successors. It is stored beside that ([`PreparedText::baseline_bytes`]), handed back as bytes where the unit is restored ([`PreparedText::with_baseline`]), and read out of them when a lowering first asks.
     #[archived_with(curios_archive::Skip)]
     baseline: curios_archive::Deferred<BaselineHalf>,
+    /// Who read each binding, of the unit's lowered declarations read backwards: made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`LookupReaders`]).
+    #[archived_with(curios_archive::Skip)]
+    lookups: OnceCell<LookupReaders>,
 }
 
 /// Where a unit's lowered items hold a name it declares, and the kind it declares it as.
@@ -618,6 +626,12 @@ impl PreparedText {
     /// What each file of this unit declared, by the module it backs — see [`Scan`].
     fn scans(&self) -> &BTreeMap<Qualifier, Scan> {
         &self.half().scans
+    }
+
+    /// Who read each binding, of the unit's lowered declarations read backwards. See the field.
+    fn lookup_readers(&self) -> &LookupReaders {
+        self.lookups
+            .get_or_init(|| LookupReaders::of(self.lowerings()))
     }
 
     /// The unit's baseline half, read out of its bytes now where the unit was restored and nothing has asked before.
@@ -1020,6 +1034,8 @@ struct Lowering<'a> {
     tests: Vec<curios_core::Global>,
     foreigns: ForeignStore,
     broken: Vec<BrokenItem>,
+    /// What the `use` declarations of each module body read, by the module ([`BaselineHalf::uses`]).
+    uses: BTreeMap<Qualifier, Vec<Consulted>>,
 }
 
 impl Lowering<'_> {
@@ -1137,9 +1153,11 @@ fn process_items(
             if let (Some(anchored), Some(span)) = (anchored(&headed.head, context), &headed.own) {
                 context.anchor(anchored, span);
             }
-            // A declaration the baseline lowered from this text, every name it resolved standing, is the baseline's.
+            // A declaration the baseline lowered from this text, every name it resolved standing, is the baseline's: unasked where no edit can have reached it, and asked otherwise.
             if let Some(baseline) = lowered.baseline
-                && let Some(standing) = baseline.standing(context)
+                && let Some(standing) = baseline
+                    .unasked(context)
+                    .or_else(|| baseline.standing(context))
             {
                 baseline.kept(standing, context, lowered);
                 continue;
@@ -1183,6 +1201,11 @@ fn process_items(
             }
             Head::Use(use_item) => {
                 curios_profile::profile!("resolve_use");
+                // What a body whose scope stands reads is the baseline's record of it, carried where the body ends.
+                let standing = lowered
+                    .baseline
+                    .is_some_and(|baseline| baseline.stands(&context.prefix()));
+                let quiet = context.hush(standing);
                 // The lexical import effect of `use`/`pub use`: source-ordered, point-of-use scoping. The interface (export) effect of `pub use` is precomputed by the `pub use` fixed point (`interface::resolve_unit`), not here.
                 match &use_item.group {
                     UseGroup::Named(items) => {
@@ -1219,6 +1242,16 @@ fn process_items(
                         context.resolve_glob(&use_item.name)?;
                         context.close_site();
                     }
+                }
+                context.hush(quiet);
+                // What resolving it read is the scope's, which every declaration after it in the body stands in.
+                if !standing {
+                    let read = context.journal().consulted;
+                    lowered
+                        .uses
+                        .entry(context.prefix())
+                        .or_default()
+                        .extend(read);
                 }
                 continue;
             }
@@ -2018,6 +2051,15 @@ fn process_items(
             lowered.note(context, lowered_from);
         }
     }
+    // What the declarations of this body kept unasked read of its scope marks the `use` sites asking them would have.
+    if let Some(baseline) = lowered.baseline {
+        baseline.mark_uses(context);
+        if baseline.stands(&context.prefix())
+            && let Some(read) = baseline.uses_of(&context.prefix())
+        {
+            lowered.uses.insert(context.prefix(), read.clone());
+        }
+    }
 
     Ok(())
 }
@@ -2201,23 +2243,26 @@ pub fn into_core_unit(
 }
 
 /// [`into_core_unit`] over `baseline`, the unit an earlier text of the same sources lowered to: a declaration the baseline lowered from the text it is written in now, every name it resolved resolving as it did, is the baseline's and is not lowered again. The unit is the one lowering the whole of it gives.
+///
+/// `settled` says that `predecessors` are the units `baseline` was lowered against: what an edit moved is then found from the edit, and a declaration no edit can have reached is kept unasked. Where it is false, every declaration is asked.
 pub fn into_core_unit_over(
     source: &UnitSource<'_>,
     predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
     baseline: &PreparedText,
+    settled: bool,
 ) -> Result<PreparedText, Error> {
-    lower_unit(source, predecessors, syntax, Some(baseline)).map(|(unit, _)| unit)
+    lower_unit(source, predecessors, syntax, Some((baseline, settled))).map(|(unit, _)| unit)
 }
 
-/// Lower the entry program `source` is, against the units already lowered and over `baseline` where there is one: its declarations as the unit they are ([`into_core_unit`], [`into_core_unit_over`]), and the term it closes with beside them.
+/// Lower the entry program `source` is, against the units already lowered and over `baseline` where there is one, with whether `predecessors` are the units it was lowered against: its declarations as the unit they are ([`into_core_unit`], [`into_core_unit_over`]), and the term it closes with beside them.
 ///
 /// The term is lowered on every compile: it is no declaration, and nothing of a unit holds it.
 pub fn into_core_entry(
     source: &UnitSource<'_>,
     predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
-    baseline: Option<&PreparedText>,
+    baseline: Option<(&PreparedText, bool)>,
 ) -> Result<(PreparedText, curios_core::Entrypoint), Error> {
     let (unit, entry) = lower_unit(source, predecessors, syntax, baseline)?;
 
@@ -2232,7 +2277,7 @@ fn lower_unit(
     source: &UnitSource<'_>,
     predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
-    baseline: Option<&PreparedText>,
+    baseline: Option<(&PreparedText, bool)>,
 ) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
     curios_profile::profile!("into_core_unit");
     grown(|| into_core_unit_within(source, predecessors, syntax, baseline))
@@ -2242,8 +2287,9 @@ fn into_core_unit_within(
     source: &UnitSource<'_>,
     predecessors: &[&PreparedText],
     syntax: &SyntaxRegistry,
-    baseline: Option<&PreparedText>,
+    over: Option<(&PreparedText, bool)>,
 ) -> Result<(PreparedText, Option<curios_core::Entrypoint>), Error> {
+    let baseline = over.map(|(baseline, _)| baseline);
     // Every predecessor, in every reading but one. Per-dependency visibility narrows nothing here: a prefix this unit did not declare stays discoverable and its names stay resolvable, and what refuses is the reference itself — see `Reach::guard`. Hiding the tables instead would turn an undeclared dependency into an unbound name, which is the one diagnostic an undeclared dependency must not produce.
     let predecessor_tables = predecessors
         .iter()
@@ -2329,7 +2375,31 @@ fn into_core_unit_within(
         }
     }
 
-    let baseline = baseline.map(Baseline::of);
+    // What the edit moved of what the lowering reads, found from the edit, where the units in scope are the ones the baseline was lowered against: the modules whose text it touched, which every module whose file's text the baseline holds is not, and the bindings whose entries are not the baseline's.
+    let moved = over.filter(|(_, settled)| *settled).map(|(baseline, _)| {
+        // The file a module's body is written in: its own, or the one of the nearest module above it that has one, an inline module's.
+        let file_of = |module: &Qualifier| {
+            let mut ancestor = *module;
+            loop {
+                if let Some(loaded) = modules.get(&ancestor) {
+                    return Some(loaded);
+                }
+                if ancestor.is_root() {
+                    return None;
+                }
+                ancestor = ancestor.without_last();
+            }
+        };
+        let touched = table
+            .own()
+            .keys()
+            .filter(|module| file_of(module).is_none_or(|loaded| loaded.touched()))
+            .copied()
+            .collect();
+
+        Moved::of(baseline, table.own(), public.own(), touched)
+    });
+    let baseline = baseline.map(|baseline| Baseline::of(baseline).moving(moved));
     let mut lowered = Lowering {
         baseline: baseline.as_ref(),
         ..Lowering::default()
@@ -2373,7 +2443,15 @@ fn into_core_unit_within(
         tests,
         foreigns,
         broken,
+        uses,
     } = lowered;
+    // The mounts the declarations kept unasked wrote a name under are reached, as asking their lookups would have reached them.
+    if let Some(baseline) = &baseline {
+        baseline.mark_mounts(&mounts, &shared);
+    }
+    let lookups = baseline
+        .as_ref()
+        .map(|baseline| baseline.readers_of(&declarations));
     // What each file declared, kept for the lowering that reads the same text again.
     let scans = modules
         .iter()
@@ -2551,7 +2629,9 @@ fn into_core_unit_within(
         baseline: curios_archive::Deferred::held(BaselineHalf {
             declarations,
             scans,
+            uses,
         }),
+        lookups: lookups.map(OnceCell::from).unwrap_or_default(),
     };
     if let Some(baseline) = &baseline {
         unit.carry(baseline.unit());

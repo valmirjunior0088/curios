@@ -2,19 +2,177 @@
 //!
 //! **A lowering is a function of its declaration's text and the names it resolved.** Every counter a lowering mints from starts at zero for each declaration, and a declaration reads its scope through two doors alone: `Context::resolve_term_name` for a name written as a path, `Context::resolve_bare` for a bare one no binder of its own binds. So a declaration whose text is the one a baseline lowered, and whose every resolution answers as it did, lowers to what it lowered to, and is not lowered: its items, its registry entries, what it minted, its import scopes and its lints are taken from the baseline ([`Baseline::kept`]).
 //!
+//! **Asked only where an edit could have reached** ([`Moved`]): a declaration of a file the edit did not touch, none of whose lookups read a binding that moved, is kept with nothing compared or asked, and what asking its lookups would have marked is marked from the bindings its record says they read ([`Consulted`]).
+//!
 //! **Decided by asking again, through the same doors.** A resolution marks the `use` it came through as used and the mount it was spelled under as reached, so a trace asked again leaves the unit's tables as lowering the declaration would have. An answer that differs, or a resolution the scope now refuses, lowers the declaration from its text, where the refusal is raised as it always was.
 //!
 //! **Found by its text, confirmed by its text.** A lowered declaration is held under its anchor and the stamp of the text it was lowered from, which is how a position finds its declaration too; a stamp is thirty-two bits, so the text itself is compared before a lowering is believed.
 
 use {
-    super::{Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Scan},
+    super::{
+        Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, ModuleInfo, PublicInterface,
+        Scan, Shared,
+    },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
-    curios_utilities::{Qualifier, Report},
+    curios_utilities::{Mount, Persistent, Qualifier, Report},
     std::{
-        collections::{BTreeMap, HashMap},
+        cell::RefCell,
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
     },
 };
+
+/// A lowered declaration as a later lowering finds it: by its anchor and the stamp of its text.
+type Key = (curios_core::Anchor, u32);
+
+/// Who read each binding, of a unit's lowered declarations read backwards: what a lowering over the unit finds the declarations an edit could reach by, from the bindings it moved ([`Consulted`]).
+///
+/// **Read off the records, never stored.** Made the first time a lowering over the unit asks, and kept with the unit; the unit lowered over it holds it with the edges of every declaration lowered again or taken away replaced, so a session reads no record backwards twice.
+///
+/// **Looked up, never walked**: its map is persistent and keyed by hash.
+#[derive(Clone, Default)]
+pub(crate) struct LookupReaders {
+    by: Persistent<Consulted, Vec<Key>>,
+}
+
+impl LookupReaders {
+    /// Who read what, of `declarations`.
+    pub(super) fn of(declarations: &[Rc<LoweredDeclaration>]) -> Self {
+        curios_profile::profile!("lookup_readers::of", declarations = declarations.len());
+        // Gathered whole first, so each binding's list is built once.
+        let mut gathered = BTreeMap::<Consulted, Vec<Key>>::new();
+        for declaration in declarations {
+            if let Some(key) = declaration.key {
+                for consulted in &declaration.consulted {
+                    gathered.entry(*consulted).or_default().push(key);
+                }
+            }
+        }
+        let mut readers = LookupReaders::default();
+        for (consulted, keys) in gathered {
+            readers.by.insert(consulted, keys);
+        }
+
+        readers
+    }
+
+    /// The declarations whose lookups read `consulted`.
+    fn of_binding(&self, consulted: &Consulted) -> &[Key] {
+        self.by.get(consulted).map_or(&[], Vec::as_slice)
+    }
+
+    /// Replace the edges of the declaration found by `key`: those `earlier`, what its lookups read, added are taken out, and those `now` adds are put in.
+    pub(super) fn replace(&mut self, key: Key, earlier: &[Consulted], now: &[Consulted]) {
+        for consulted in earlier {
+            let Some(held) = self.by.get(consulted) else {
+                continue;
+            };
+            let kept = held
+                .iter()
+                .filter(|held| **held != key)
+                .copied()
+                .collect::<Vec<_>>();
+            match kept.is_empty() {
+                true => {
+                    self.by.remove(consulted);
+                }
+                false => self.by.insert(*consulted, kept),
+            }
+        }
+        for consulted in now {
+            let mut held = self.by.get(consulted).cloned().unwrap_or_default();
+            held.push(key);
+            self.by.insert(*consulted, held);
+        }
+    }
+}
+
+/// What an edit to a unit's sources moved of what its lowering reads, found from the edit: the modules whose every declaration is asked, and the declarations of the others whose lookups read a binding that moved.
+pub(super) struct Moved {
+    touched: HashSet<Qualifier>,
+    reached: HashSet<Key>,
+}
+
+impl Moved {
+    /// What moved between `baseline`'s tables and the unit's, `table` and `public` being what the unit's own modules declare and export now. `touched` holds the modules whose text the edit touched or that `baseline` does not hold.
+    ///
+    /// **A binding moved where its entry did.** A step of a path reads one module's entry for one label, its export's target and representation and how the module declares it; a glob reads which labels a module exports. So the bindings that moved are read off the modules whose tables are not the baseline's, a label at a time, and every module whose `use` declarations read one of them has its scope moved with it, and is touched.
+    pub(super) fn of(
+        baseline: &PreparedText,
+        table: &HashMap<Qualifier, ModuleInfo>,
+        public: &HashMap<Qualifier, PublicInterface>,
+        mut touched: HashSet<Qualifier>,
+    ) -> Self {
+        let mut moved = HashSet::new();
+        let modules = table
+            .keys()
+            .chain(public.keys())
+            .chain(baseline.table.keys())
+            .chain(baseline.public.keys())
+            .copied()
+            .collect::<BTreeSet<_>>();
+        for module in modules {
+            let (table_now, table_then) = (table.get(&module), baseline.table.get(&module));
+            let (public_now, public_then) = (public.get(&module), baseline.public.get(&module));
+            if table_now == table_then && public_now == public_then {
+                continue;
+            }
+            let labels = |table: Option<&ModuleInfo>, public: Option<&PublicInterface>| {
+                let children = table
+                    .into_iter()
+                    .flat_map(|info| info.children().map(|(label, _)| (label.to_string(), false)))
+                    .chain(public.into_iter().flat_map(|interface| {
+                        interface
+                            .children
+                            .keys()
+                            .map(|label| (label.clone(), false))
+                    }));
+                let bindings = table
+                    .into_iter()
+                    .flat_map(|info| info.bindings().map(|(label, _)| (label.to_string(), true)))
+                    .chain(public.into_iter().flat_map(|interface| {
+                        interface.bindings.keys().map(|label| (label.clone(), true))
+                    }));
+                children.chain(bindings).collect::<BTreeSet<_>>()
+            };
+            let mut all = labels(table_now, public_now);
+            all.extend(labels(table_then, public_then));
+            for (label, binding) in all {
+                let entry = |table: Option<&ModuleInfo>, public: Option<&PublicInterface>| {
+                    let exported = public.and_then(|interface| match binding {
+                        true => interface.bindings.get(&label),
+                        false => interface.children.get(&label),
+                    });
+                    let declared = table.and_then(|info| info.declares(&label, binding));
+                    (exported.cloned(), declared)
+                };
+                if entry(table_now, public_now) != entry(table_then, public_then) {
+                    moved.insert(Consulted::Member {
+                        at: module.with(&label),
+                        binding,
+                    });
+                }
+            }
+            if exported(public_now) != exported(public_then) {
+                moved.insert(Consulted::Members(module));
+            }
+        }
+
+        for (module, read) in &baseline.half().uses {
+            if read.iter().any(|consulted| moved.contains(consulted)) {
+                touched.insert(*module);
+            }
+        }
+        let readers = baseline.lookup_readers();
+        let reached = moved
+            .iter()
+            .flat_map(|consulted| readers.of_binding(consulted))
+            .copied()
+            .collect();
+
+        Self { touched, reached }
+    }
+}
 
 /// A name a declaration's lowering resolved through its scope, as it was written: a path of several segments or an absolute one through the modules it may see, a bare one through the bindings in scope where it stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,6 +180,32 @@ use {
 pub(crate) struct Lookup {
     pub absolute: bool,
     pub path: Qualifier,
+}
+
+/// The labels `public` exports, children and bindings: what a glob reads of a module.
+fn exported(public: Option<&PublicInterface>) -> Option<(BTreeSet<&String>, BTreeSet<&String>)> {
+    public.map(|interface| {
+        (
+            interface.children.keys().collect(),
+            interface.bindings.keys().collect(),
+        )
+    })
+}
+
+/// A binding the lowering read to resolve a name, found or not: what an answer to a lookup can move with. Each is a label of one table, named by the path the label extends.
+///
+/// **Read where the resolution reads it.** A bare name and the head of a relative path are read off the lexical scope of the module body they are written in, a binding or a module; every further step, and a path's last segment, off the table and the interface of the module the step stands in; a glob off the whole of a module's interface. So a lookup answers as it did wherever every binding it read is the entry it was, and a declaration whose lookups all do lowers to what it lowered to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[curios_archive::archived]
+pub(crate) enum Consulted {
+    /// The label `at` names of the lexical scope of the module body its parent names: a binding, where `binding`, and a module otherwise.
+    Scope { at: Qualifier, binding: bool },
+    /// The label `at` names of the table and interface of the module its parent names: a binding, where `binding`, and a child module otherwise.
+    Member { at: Qualifier, binding: bool },
+    /// Every label the interface of the module offers, as a glob reads them.
+    Members(Qualifier),
+    /// The mount a name was written under, which the name reached.
+    Mount(Qualifier),
 }
 
 /// An `unused-binder` lint as a lowered declaration holds it: placed in the declaration's text, and naming the definition it is about by its place among the declaration's, since a witness's name is given anew by every lowering.
@@ -47,6 +231,8 @@ pub(crate) struct LoweredDeclaration {
     lints: Vec<Unused>,
     /// Every name it resolved through its scope, with what each resolved to.
     trace: curios_core::Trace<Lookup, Qualifier>,
+    /// Every binding resolving those names read, each once, in order: what an answer can move with ([`Consulted`]).
+    consulted: Vec<Consulted>,
 }
 
 impl LoweredDeclaration {
@@ -54,6 +240,7 @@ impl LoweredDeclaration {
     pub(super) fn made(context: &Context, items: &[FlatItem], facts: Vec<LoweredItem>) -> Self {
         let Journal {
             trace,
+            consulted,
             scoped,
             lints,
             unbound,
@@ -96,6 +283,11 @@ impl LoweredDeclaration {
             scoped: scoped.unwrap_or_default(),
             lints: lints.unwrap_or_default(),
             trace,
+            consulted: consulted
+                .into_iter()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
         }
     }
 
@@ -113,6 +305,8 @@ pub(crate) struct BaselineHalf {
     pub declarations: Vec<Rc<LoweredDeclaration>>,
     /// Each file-backed module's scan, by the module.
     pub scans: BTreeMap<Qualifier, Scan>,
+    /// Every binding the `use` declarations of each module body read, by the module: what the scope of its body can move with.
+    pub uses: BTreeMap<Qualifier, Vec<Consulted>>,
 }
 
 /// A unit an earlier text of the same sources lowered to, as a later one is lowered over it: its declarations by the text each was lowered from, and where each one's items lie in its module.
@@ -123,6 +317,10 @@ pub(super) struct Baseline<'a> {
     first: Vec<usize>,
     /// Whether the unit declares a foreign function at all, which the prelude does not: a row is looked up by its import name, spelled for the asking.
     foreign: bool,
+    /// What the edit moved of what the lowering reads ([`Moved`]): `None` where a unit in scope moved, and every declaration is asked.
+    moved: Option<Moved>,
+    /// The declarations kept without asking, by their keys: what marks the `use` sites and the mounts their lookups read, where asking would have.
+    unasked: RefCell<HashSet<Key>>,
 }
 
 impl<'a> Baseline<'a> {
@@ -143,7 +341,112 @@ impl<'a> Baseline<'a> {
             by_text,
             first,
             foreign: unit.foreigns.iter().next().is_some(),
+            moved: None,
+            unasked: RefCell::new(HashSet::new()),
         }
+    }
+
+    /// This baseline with `moved` as what the edit moved of what the lowering reads.
+    pub(super) fn moving(self, moved: Option<Moved>) -> Self {
+        Self { moved, ..self }
+    }
+
+    /// The declaration of this unit the one `context` stands at was lowered as, by its place, kept without asking: its module's text is the one the baseline lowered, so its own is, and no binding its lookups read moved. `None` where either may have, and the declaration is asked ([`Baseline::standing`]).
+    pub(super) fn unasked(&self, context: &Context) -> Option<usize> {
+        let moved = self.moved.as_ref()?;
+        if !self.stands(&context.prefix()) {
+            return None;
+        }
+        let (key, index) = context.sited(|key, _| Some((key, *self.by_text.get(&key)?)))??;
+        if moved.reached.contains(&key) {
+            return None;
+        }
+        self.unasked.borrow_mut().insert(key);
+
+        Some(index)
+    }
+
+    /// Whether what the module body `module` is read off stands: its text the one the baseline lowered and nothing its `use` declarations read moved, so its scope is the baseline's.
+    pub(super) fn stands(&self, module: &Qualifier) -> bool {
+        self.moved
+            .as_ref()
+            .is_some_and(|moved| !moved.touched.contains(module))
+    }
+
+    /// What the `use` declarations of the module body `module` read, as the baseline records it.
+    pub(super) fn uses_of(&self, module: &Qualifier) -> Option<&'a Vec<Consulted>> {
+        self.unit.half().uses.get(module)
+    }
+
+    /// Mark used each `use` site of the module body `context` is whose label a declaration kept unasked read: what asking its lookups again would have marked.
+    pub(super) fn mark_uses(&self, context: &Context) {
+        let unasked = self.unasked.borrow();
+        if unasked.is_empty() {
+            return;
+        }
+        let readers = self.unit.lookup_readers();
+        let used = context
+            .imported()
+            .filter(|(label, binding)| {
+                readers
+                    .of_binding(&Consulted::Scope {
+                        at: context.prefix().with(label),
+                        binding: *binding,
+                    })
+                    .iter()
+                    .any(|key| unasked.contains(key))
+            })
+            .filter_map(|(label, binding)| context.site_of(label, binding))
+            .collect::<Vec<_>>();
+        for site in used {
+            context.use_site(site);
+        }
+    }
+
+    /// Note reached each of `mounts` a declaration kept unasked wrote a name under.
+    pub(super) fn mark_mounts(&self, mounts: &[Mount], shared: &Shared) {
+        let unasked = self.unasked.borrow();
+        if unasked.is_empty() {
+            return;
+        }
+        let readers = self.unit.lookup_readers();
+        for mount in mounts {
+            let reached = readers
+                .of_binding(&Consulted::Mount(mount.prefix))
+                .iter()
+                .any(|key| unasked.contains(key));
+            if reached {
+                shared.reached.borrow_mut().insert(mount.prefix);
+            }
+        }
+    }
+
+    /// Who read what of the unit lowered over this baseline, `declarations` being its records: the baseline's, with the edges of every declaration lowered again or taken away replaced.
+    pub(super) fn readers_of(&self, declarations: &[Rc<LoweredDeclaration>]) -> LookupReaders {
+        let mut readers = self.unit.lookup_readers().clone();
+        let now = declarations.iter().map(Rc::as_ptr).collect::<HashSet<_>>();
+        let then = self
+            .unit
+            .lowerings()
+            .iter()
+            .map(Rc::as_ptr)
+            .collect::<HashSet<_>>();
+        for declaration in self.unit.lowerings() {
+            if !now.contains(&Rc::as_ptr(declaration))
+                && let Some(key) = declaration.key
+            {
+                readers.replace(key, &declaration.consulted, &[]);
+            }
+        }
+        for declaration in declarations {
+            if !then.contains(&Rc::as_ptr(declaration))
+                && let Some(key) = declaration.key
+            {
+                readers.replace(key, &[], &declaration.consulted);
+            }
+        }
+
+        readers
     }
 
     /// The unit lowered over.

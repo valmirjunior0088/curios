@@ -115,7 +115,7 @@ fn answers(marked: &str, baseline: Option<&PreparedText>) -> PreparedText {
         &UnitSource::entry(&entrypoint, &loader),
         &[],
         syntax(),
-        baseline,
+        baseline.map(|baseline| (baseline, true)),
     )
     .unwrap();
     let minted = unit.minted();

@@ -171,6 +171,7 @@ fn a_standing_file_is_parsed_where_a_declaration_of_it_is_lowered_again() {
         &[],
         syntax(),
         &baseline,
+        true,
     )
     .unwrap();
     let whole = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();

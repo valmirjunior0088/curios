@@ -897,6 +897,35 @@ fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_
     assert_stored_alike(&whole, &incremental);
 }
 
+/// A file no edit reached keeps every lowering it holds without asking any, and still says what its declarations read: `d` respelled moves no binding anything reads, so `y` and `z` are kept unasked, the import of `Nat` they read is used, the import of `Bool` nothing reads is the one finding, and the unit is stored as the whole compile stores it.
+///
+/// Mutation-checked: with what the declarations kept unasked read not marking the imports they read, `Nat`'s import is reported as unused.
+#[test]
+fn a_file_no_edit_reached_keeps_what_its_declarations_read_without_asking_them() {
+    let (directory, modules) = written_files("unreached-file", &FILES);
+    let compiled = compile_modules(&modules).expect("the unit compiles");
+    let baseline = Unit::restored(&compiled.stored().expect("a unit serializes"))
+        .expect("a stored unit restores");
+
+    fs::write(directory.join("d.crs"), "pub let x: /std/Nat = 3;\n")
+        .expect("a fixture is rewritten");
+    let incremental = recompile_modules(&read_from("lib", &directory), &baseline).unwrap();
+    let whole = compile_modules(&read_from("lib", &directory)).unwrap();
+
+    for name in ["y", "z"] {
+        assert!(
+            keeps_lowered(&baseline, &incremental, name),
+            "{name} was lowered again"
+        );
+    }
+    assert_eq!(
+        incremental.text().lints().len(),
+        1,
+        "the import nothing reads is the one finding"
+    );
+    assert_stored_alike(&whole, &incremental);
+}
+
 /// A unit `/dep` and a unit `/lib` after it: `twice` and `bound` read a signature of `/dep`, `two` unfolds `double`, and `unrelated` reads nothing of it.
 const DEPENDENCY: &str = "use /std/{Nat};
 

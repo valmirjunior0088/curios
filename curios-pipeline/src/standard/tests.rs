@@ -130,8 +130,9 @@ fn std_recompile_census() {
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
             let start = Instant::now();
-            let lowered = into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text())
-                .expect("the edited library lowers");
+            let lowered =
+                into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text(), true)
+                    .expect("the edited library lowers");
             let lowered_in = start.elapsed();
             let kept = lowered.kept_from(std.text());
             let start = Instant::now();
@@ -1327,13 +1328,14 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
 
             let source = std_from_its_tree().with_overlay(Overlay::of(overlay));
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
-            let lowered = into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text())
-                .unwrap_or_else(|error| {
-                    panic!(
-                        "the library lowers with its printed terms beside it:\n{}",
-                        error.format()
-                    )
-                });
+            let lowered =
+                into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text(), true)
+                    .unwrap_or_else(|error| {
+                        panic!(
+                            "the library lowers with its printed terms beside it:\n{}",
+                            error.format()
+                        )
+                    });
             let kept = lowered.kept_from(std.text());
             let elaborated = elaborated_over(predecessors, std, &lowered, &kept);
 

@@ -9,7 +9,7 @@ use {
 };
 
 // The export view of a module: public names only, each pointing at the canonical declaration site. Built to a fixed point before any body is elaborated.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 #[curios_archive::archived]
 pub(crate) struct PublicInterface {
     #[archived_with(OrderedMap)]
@@ -27,7 +27,7 @@ impl PublicInterface {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 #[curios_archive::archived]
 pub(crate) struct Entry {
     pub target: Qualifier,

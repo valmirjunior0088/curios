@@ -1,7 +1,7 @@
 use {
     super::{
-        Lookup, PublicInterface, Reach, Scoped, carriers, named, out_of_reach, unresolved,
-        visible_binding, visible_child,
+        Consulted, Lookup, PublicInterface, Reach, Scoped, carriers, named, out_of_reach,
+        unresolved, visible_binding, visible_child,
     },
     crate::{Error, Label, Lint, Name, OrderedMap},
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry, nearest},
@@ -34,6 +34,8 @@ pub(super) struct Anchoring {
     within: RefCell<Option<curios_core::Within>>,
     /// What the declaration being lowered has asked of its scope and reported so far.
     journal: RefCell<Journal>,
+    /// Whether the bindings a resolution reads are recorded: not while a trace is asked again, whose declaration keeps its record or is lowered and records anew, nor while the `use` declarations of a module whose record stands are resolved.
+    quiet: Cell<bool>,
 }
 
 impl Anchoring {
@@ -43,6 +45,7 @@ impl Anchoring {
             anchors: _,
             within,
             journal,
+            quiet: _,
         } = self;
 
         *within.borrow_mut() = None;
@@ -109,6 +112,8 @@ impl WrittenSorts {
 pub(super) struct Journal {
     /// Every name it resolved through its scope, with what each resolved to, in the order it asked.
     pub trace: curios_core::Trace<Lookup, Qualifier>,
+    /// Every binding resolving those names read, as each was read — see [`Consulted`]. What a `use` declaration's resolution read too, where it is the one being resolved.
+    pub consulted: Vec<Consulted>,
     /// The names it recorded an import scope for.
     pub scoped: Vec<curios_core::Global>,
     /// The lints its lowerers reported.
@@ -250,9 +255,9 @@ impl FlatItem {
 }
 
 // The direct interface of a module: every declared label (public *and* private) in each namespace, with its visibility. This is the per-module body view used for lexical scope during elaboration, and to tell private from absent when a public lookup misses.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
-enum ChildInfo {
+pub(super) enum ChildInfo {
     Ordinary { vis_pub: bool },
     InductConstructors { vis_pub: bool, rep_pub: bool },
 }
@@ -270,7 +275,7 @@ impl ChildInfo {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 #[curios_archive::archived]
 pub(crate) struct ModuleInfo {
     #[archived_with(OrderedMap)]
@@ -279,7 +284,22 @@ pub(crate) struct ModuleInfo {
     bindings: HashMap<String, bool>,
 }
 
+/// How a module declares a label, as a step of a path reads it: a child module, or a binding, each with its visibility.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Declares {
+    Child(ChildInfo),
+    Binding(bool),
+}
+
 impl ModuleInfo {
+    /// How this module declares `label`: a binding where `binding`, and a child module otherwise.
+    pub(super) fn declares(&self, label: &str, binding: bool) -> Option<Declares> {
+        match binding {
+            true => self.bindings.get(label).copied().map(Declares::Binding),
+            false => self.children.get(label).copied().map(Declares::Child),
+        }
+    }
+
     pub(super) fn new() -> Self {
         Self {
             children: HashMap::new(),
@@ -567,8 +587,66 @@ impl<'a> Context<'a> {
     /// **The path the reader wrote, never the one it resolved to.** A re-export means the two differ: `/std/Nat` is `pub use /sys/{Nat}`, so resolving `use /std/{Nat}` lands on `/sys/Nat` and a record of the *target* would say every program reached `/sys`. What a declared dependency is answerable to is what the reader spelled, which is also the only thing they can change.
     fn note_spelled(&self, spelled: &Qualifier) {
         if let Some(mount) = Mount::owning(self.reach.mounts(), spelled) {
+            self.consult(|| Consulted::Mount(mount.prefix));
             self.shared.reached.borrow_mut().insert(mount.prefix);
         }
+    }
+
+    /// Note that resolving a name read what `consulted` makes, found or not: made only where it is recorded, a path being interned to name it.
+    fn consult(&self, consulted: impl FnOnce() -> Consulted) {
+        if self.shared.anchoring.quiet.get() {
+            return;
+        }
+        self.shared
+            .anchoring
+            .journal
+            .borrow_mut()
+            .consulted
+            .push(consulted());
+    }
+
+    /// Record nothing a resolution reads from here, where `quiet`, or everything: what was asked before, handed back.
+    pub(super) fn hush(&self, quiet: bool) -> bool {
+        self.shared.anchoring.quiet.replace(quiet)
+    }
+
+    /// Run `resolve` recording nothing it reads ([`Anchoring`]'s `quiet`).
+    pub(super) fn quietly<T>(&self, resolve: impl FnOnce() -> T) -> T {
+        let quiet = self.shared.anchoring.quiet.replace(true);
+        let resolved = resolve();
+        self.shared.anchoring.quiet.set(quiet);
+
+        resolved
+    }
+
+    /// The `use` site of this scope that brought in the binding `label`, where one did: a binding where `binding`, and a module otherwise.
+    pub(super) fn site_of(&self, label: &str, binding: bool) -> Option<usize> {
+        match binding {
+            true => self.binding_sites.get(label).copied(),
+            false => self.qualifier_sites.get(label).copied(),
+        }
+    }
+
+    /// Every label of this scope a `use` brought in, with whether it is a binding: what a `use` site is used by.
+    pub(super) fn imported(&self) -> impl Iterator<Item = (&str, bool)> {
+        self.binding_sites
+            .keys()
+            .map(|label| (label.as_str(), true))
+            .chain(
+                self.qualifier_sites
+                    .keys()
+                    .map(|label| (label.as_str(), false)),
+            )
+    }
+
+    /// Mark the `use` site `site` used.
+    pub(super) fn use_site(&self, site: usize) {
+        self.shared.sites.borrow_mut()[site].used = true;
+    }
+
+    /// The module whose body this scope is.
+    pub(super) fn prefix(&self) -> Qualifier {
+        self.prefix
     }
 
     /// Begin lowering a source declaration: every identity it mints counts from zero, and a written type is one level across the items the declaration lowers to and no further. What a declaration's lowered form holds then depends on nothing written before it.
@@ -957,6 +1035,10 @@ impl<'a> Context<'a> {
         let mut current = start;
 
         for segment in segments {
+            self.consult(|| Consulted::Member {
+                at: current.with(segment),
+                binding: false,
+            });
             match visible_child(self.public, self.table, &self.prefix, &current, segment) {
                 Some(target) => current = target,
                 None => {
@@ -985,6 +1067,10 @@ impl<'a> Context<'a> {
             resolved
         } else {
             let head = name.head();
+            self.consult(|| Consulted::Scope {
+                at: self.prefix.with(head),
+                binding: false,
+            });
             let start = *self
                 .qualifiers
                 .get(head)
@@ -1045,6 +1131,10 @@ impl<'a> Context<'a> {
 
     // Import the module child `label` out of `parent`, registering it as a qualifier in the current lexical scope.
     fn import_module_label(&mut self, parent: &Qualifier, label: &str) -> Result<Qualifier, Error> {
+        self.consult(|| Consulted::Member {
+            at: parent.with(label),
+            binding: false,
+        });
         match visible_child(self.public, self.table, &self.prefix, parent, label) {
             Some(target) => {
                 self.insert_scope(label.to_string(), self.site_span().as_ref(), target)?;
@@ -1065,6 +1155,10 @@ impl<'a> Context<'a> {
         parent: &Qualifier,
         label: &str,
     ) -> Result<Qualifier, Error> {
+        self.consult(|| Consulted::Member {
+            at: parent.with(label),
+            binding: true,
+        });
         match visible_binding(self.public, self.table, &self.prefix, parent, label) {
             Some(target) => {
                 self.insert_binding(label.to_string(), self.site_span().as_ref(), target)?;
@@ -1081,6 +1175,12 @@ impl<'a> Context<'a> {
 
     // Import both the module and binding slots of `label` — used by glob and the `Both` group item. Either or both may be absent.
     fn import_dual_label(&mut self, parent: &Qualifier, label: &str) -> Result<UseResolved, Error> {
+        for binding in [false, true] {
+            self.consult(|| Consulted::Member {
+                at: parent.with(label),
+                binding,
+            });
+        }
         let module = visible_child(self.public, self.table, &self.prefix, parent, label);
 
         let binding = visible_binding(self.public, self.table, &self.prefix, parent, label);
@@ -1173,6 +1273,12 @@ impl<'a> Context<'a> {
     pub(super) fn resolve_both_use(&mut self, name: &Name) -> Result<UseResolved, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
+            for binding in [false, true] {
+                self.consult(|| Consulted::Member {
+                    at: parent.with(&label),
+                    binding,
+                });
+            }
 
             let has_module =
                 visible_child(self.public, self.table, &self.prefix, &parent, &label).is_some();
@@ -1200,6 +1306,7 @@ impl<'a> Context<'a> {
     ) -> Result<Vec<(String, UseResolved)>, Error> {
         let result = (|| {
             let module = self.resolve_module_prefix(name, name.qualifier().segments().len())?;
+            self.consult(|| Consulted::Members(module));
 
             let interface = self
                 .public
@@ -1232,6 +1339,10 @@ impl<'a> Context<'a> {
     pub(super) fn resolve_term_name(&self, name: &Name) -> Result<Qualifier, Error> {
         let result = (|| {
             let (parent, label) = self.resolve_parent_path(name)?;
+            self.consult(|| Consulted::Member {
+                at: parent.with(&label),
+                binding: true,
+            });
 
             match visible_binding(self.public, self.table, &self.prefix, &parent, &label) {
                 Some(target) => {
@@ -1249,6 +1360,10 @@ impl<'a> Context<'a> {
 
     /// What the bare name `name` is bound to in this module's scope, where it is: a declaration of the module or a label a `use` brought in, whose `use` is then used. A binder of the declaration itself is the lowerer's to find first.
     pub(super) fn resolve_bare(&self, name: &Name) -> Option<Qualifier> {
+        self.consult(|| Consulted::Scope {
+            at: self.prefix.with(name.head()),
+            binding: true,
+        });
         let target = *self.bindings.get(name.head())?;
         self.note_binding_use(name.head());
         self.asked(name, target);
@@ -1273,10 +1388,10 @@ impl<'a> Context<'a> {
     /// Whether `lookup` resolves to `found` where this context stands, asked through the door the lowerer asked it through: a bare name of this module's scope, any other of the modules it may see. A resolution the scope now refuses answers no.
     pub(super) fn answers(&self, lookup: &Lookup, found: &Qualifier) -> bool {
         let name = Name::new(lookup.absolute, lookup.path);
-        let answer = match name.is_abs() || !name.is_single() {
+        let answer = self.quietly(|| match name.is_abs() || !name.is_single() {
             true => self.resolve_term_name(&name).ok(),
             false => self.resolve_bare(&name),
-        };
+        });
 
         answer.as_ref() == Some(found)
     }
