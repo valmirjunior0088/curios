@@ -19,23 +19,32 @@ pub(crate) struct CallAnalysis {
     /// The functions each function's body may name: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry — the scope `verify_lexical_scopes` walks, recorded per function so a pass that forwards a function reference into a body can ask whether that body may name it. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
     pub(crate) lexical_scope: BTreeMap<FunctionId, InScope<FunctionId>>,
 }
-/// Function strongly-connected components of the known-callee call graph, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its functions in `FunctionId` order.
+/// Strongly-connected components of a graph, the known-callee call graph's by default, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its nodes in their order.
 pub(crate) type SccId = usize;
-#[derive(Default)]
-pub(crate) struct SccAnalysis {
-    pub(crate) component_of: BTreeMap<FunctionId, SccId>,
-    pub(crate) members: Vec<Vec<FunctionId>>,
+pub(crate) struct SccAnalysis<K = FunctionId> {
+    pub(crate) component_of: BTreeMap<K, SccId>,
+    pub(crate) members: Vec<Vec<K>>,
 }
-/// Deterministic iterative Tarjan over the known-callee call graph. Uses an explicit frame stack rather than recursion so it stays within the default test-thread stack on deep call graphs. Components are numbered in the order their roots pop, and members are sorted, so the output is a pure function of the graph.
-pub(crate) fn analyze_sccs(call_graph: &BTreeMap<FunctionId, BTreeSet<FunctionId>>) -> SccAnalysis {
+
+impl<K> Default for SccAnalysis<K> {
+    fn default() -> Self {
+        Self {
+            component_of: BTreeMap::new(),
+            members: Vec::new(),
+        }
+    }
+}
+
+/// Deterministic iterative Tarjan over `call_graph`. Uses an explicit frame stack rather than recursion so it stays within the default test-thread stack on deep call graphs. Components are numbered in the order their roots pop, and members are sorted, so the output is a pure function of the graph.
+pub(crate) fn analyze_sccs<K: Ord + Copy>(call_graph: &BTreeMap<K, BTreeSet<K>>) -> SccAnalysis<K> {
     let mut analysis = SccAnalysis::default();
-    let mut index_of: BTreeMap<FunctionId, u32> = BTreeMap::new();
-    let mut lowlink: BTreeMap<FunctionId, u32> = BTreeMap::new();
-    let mut on_stack: BTreeSet<FunctionId> = BTreeSet::new();
-    let mut stack: Vec<FunctionId> = Vec::new();
+    let mut index_of: BTreeMap<K, u32> = BTreeMap::new();
+    let mut lowlink: BTreeMap<K, u32> = BTreeMap::new();
+    let mut on_stack: BTreeSet<K> = BTreeSet::new();
+    let mut stack: Vec<K> = Vec::new();
     let mut next_index: u32 = 0;
 
-    let successors = |function: FunctionId| -> Vec<FunctionId> {
+    let successors = |function: K| -> Vec<K> {
         call_graph
             .get(&function)
             .map(|edges| edges.iter().copied().collect())
@@ -51,7 +60,7 @@ pub(crate) fn analyze_sccs(call_graph: &BTreeMap<FunctionId, BTreeSet<FunctionId
         next_index += 1;
         stack.push(root);
         on_stack.insert(root);
-        let mut work: Vec<(FunctionId, Vec<FunctionId>, usize)> = vec![(root, successors(root), 0)];
+        let mut work: Vec<(K, Vec<K>, usize)> = vec![(root, successors(root), 0)];
 
         while let Some(&(node, _, _)) = work.last() {
             let position = work.last().unwrap().2;
@@ -101,6 +110,13 @@ pub(crate) fn analyze_sccs(call_graph: &BTreeMap<FunctionId, BTreeSet<FunctionId
     }
     analysis
 }
+/// A node of the graph the recursion verdict is read on ([`analyze_calls`]): a function, or the definitions it heads — itself and every function defined within it, transitively.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Within {
+    Function(FunctionId),
+    Definitions(FunctionId),
+}
+
 pub(crate) fn analyze_calls(module: &Module) -> CallAnalysis {
     let mut analysis = CallAnalysis::default();
     for (function, _) in module.live_functions() {
@@ -154,7 +170,7 @@ pub(crate) fn analyze_calls(module: &Module) -> CallAnalysis {
     //
     // The edge is conditional on the naming body *applying* a closure, because that is precisely what the rewrite needs: `map_callee` turns a reference into a call only where a substituted parameter stood in a `Callee::Closure`. A body that merely hands a reference onward — an initializer returning the closure it built, which is the shape beside this one — cannot devirtualize anything, and reading its reference as a call would make the closure it defines recursive on a cycle no inline can travel.
     //
-    // The body-only graph and its components stay what specialization and contification read, since to them a nested closure is a function of its own, and folding it into its definer's component would let an escaping closure disqualify a component it merely sits in. That is why the reference edges are seeded into `closed` alone and never into `call_graph`.
+    // The body-only graph and its components stay what specialization and contification read, since to them a nested closure is a function of its own, and folding it into its definer's component would let an escaping closure disqualify a component it merely sits in. That is why the reference edges are seeded into `reaches` alone and never into `call_graph`.
     let mut nested_in: BTreeMap<FunctionId, Vec<FunctionId>> = BTreeMap::new();
     for (&node_id, &owner) in &analysis.node_owners {
         if let Some(Node::LetFun { functions, .. }) = module.node(node_id) {
@@ -164,39 +180,43 @@ pub(crate) fn analyze_calls(module: &Module) -> CallAnalysis {
                 .extend(functions.iter().copied());
         }
     }
-    let mut closed = analysis.call_graph.clone();
+    //
+    // The closed graph is read without being built. Closed outright, an owner holds the calls of every function nested in it, which is the square of a nesting in size. Instead the definitions a function heads are a node of their own ([`Within`]): the function reaches them, and they reach what each function defined among them calls or names and the definitions nested in them. A path from a function through its definitions to a callee is an edge of the closed graph and nothing else is, so a function lies on a cycle of the closed graph exactly where it lies on a cycle here, and a self-edge of the closed graph is a cycle of two nodes.
+    let mut reaches: BTreeMap<Within, BTreeSet<Within>> = module
+        .function_ids()
+        .map(|function| {
+            (
+                Within::Function(function),
+                BTreeSet::from([Within::Definitions(function)]),
+            )
+        })
+        .collect();
+    for (owner, callees) in &analysis.call_graph {
+        reaches
+            .entry(Within::Definitions(*owner))
+            .or_default()
+            .extend(callees.iter().copied().map(Within::Function));
+    }
     for (owner, referenced) in &named_in {
         if applies_a_closure.contains(owner) {
-            closed
-                .entry(*owner)
+            reaches
+                .entry(Within::Definitions(*owner))
                 .or_default()
-                .extend(referenced.iter().copied());
+                .extend(referenced.iter().copied().map(Within::Function));
         }
     }
-    // Nesting is a forest, so this settles in as many rounds as it is deep.
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for (owner, nested) in &nested_in {
-            for function in nested {
-                let Some(edges) = closed.get(function).cloned() else {
-                    continue;
-                };
-                let own = closed.entry(*owner).or_default();
-                let before = own.len();
-                own.extend(edges);
-                changed |= own.len() != before;
-            }
-        }
+    for (owner, nested) in &nested_in {
+        reaches
+            .entry(Within::Definitions(*owner))
+            .or_default()
+            .extend(nested.iter().copied().map(Within::Definitions));
     }
-    let closed_sccs = analyze_sccs(&closed);
-    for (&function, &component) in &closed_sccs.component_of {
-        let multi_member = closed_sccs.members[component].len() > 1;
-        let self_edge = closed
-            .get(&function)
-            .is_some_and(|edges| edges.contains(&function));
-        if multi_member || self_edge {
-            analysis.recursive.insert(function);
+    let closed_sccs = analyze_sccs(&reaches);
+    for (node, &component) in &closed_sccs.component_of {
+        if let Within::Function(function) = node
+            && closed_sccs.members[component].len() > 1
+        {
+            analysis.recursive.insert(*function);
         }
     }
     analysis.sccs = analyze_sccs(&analysis.call_graph);
