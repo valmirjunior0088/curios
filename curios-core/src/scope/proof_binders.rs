@@ -18,6 +18,7 @@ use {
     std::{
         cell::RefCell,
         collections::{HashMap, VecDeque},
+        ops::Range,
         rc::Rc,
     },
 };
@@ -52,6 +53,7 @@ impl Term {
         Marking {
             asked,
             entered: binders.iter().rev().cloned().collect(),
+            blocks: Vec::new(),
             closed: HashMap::new(),
         }
         .term(self)
@@ -60,8 +62,10 @@ impl Term {
 
 struct Marking<'a, E> {
     asked: &'a mut E,
-    /// The variables standing for the binders entered, outermost first: a loose index `k` names the `k`th from the end.
+    /// The variables standing for the binders entered, outermost first: a loose index `k` names the `k`th from the end, a `let` block's run excepted ([`Marking::blocks`]).
     entered: Vec<Term>,
+    /// The runs of `entered` each `let` block being walked entered its binders as, which a loose index reads in the block's own order, its first binder innermost. A block's binders are entered as each is minted and stay entered, so a binding is walked under the ones before it without entering them again.
+    blocks: Vec<Range<usize>>,
     /// What a term with no loose index came back as, by node. Its binders' types name nothing outside it, so one answer serves every occurrence, and a type shared across a web of definitions is walked once.
     closed: HashMap<usize, Term>,
 }
@@ -122,14 +126,23 @@ impl<E: ProofBinders> Marking<'_, E> {
         Ok(marked)
     }
 
-    /// `value` as it stands under the binders entered, with `inner` standing for the binders of a scope it sits under that the walk has not entered: `inner[k]` for index `k`, and the entered binders beyond them, innermost first.
-    fn released<B: Bound>(&self, value: &B, inner: &[Term]) -> B {
-        let terms = inner
-            .iter()
-            .chain(self.entered.iter().rev())
-            .collect::<Vec<_>>();
+    /// `value` as it stands under the binders entered, each loose index it reaches read off them, and no more of them read than it reaches.
+    fn released<B: Bound>(&self, value: &B) -> B {
+        value.release(&self.loose(value.reach()))
+    }
 
-        value.release(&terms)
+    /// The variables standing for the first `count` loose indices, innermost first: from the end of `entered`, with a `let` block's run read in the block's order.
+    fn loose(&self, count: usize) -> Vec<&Term> {
+        let mut loose = Vec::with_capacity(count);
+        let mut end = self.entered.len();
+        for block in self.blocks.iter().rev() {
+            let past = &self.entered[block.end..end];
+            loose.extend(past.iter().rev().take(count - loose.len()));
+            loose.extend(self.entered[block.clone()].iter().take(count - loose.len()));
+            end = block.start;
+        }
+        loose.extend(self.entered[..end].iter().rev().take(count - loose.len()));
+        loose
     }
 
     /// A telescope's entries entered in order, each type walked and, where `asked`, each binder stating whether it binds a proof; `payload` walks what the telescope ends in, under every binder, and says whether that changed. `None` where nothing did.
@@ -152,7 +165,7 @@ impl<E: ProofBinders> Marking<'_, E> {
                         Ok(walked) => walked,
                         Err(refusal) => break Err(refusal),
                     };
-                    let opened = self.released(type_, &[]);
+                    let opened = self.released(type_);
                     let proof = match asked {
                         true => match self.asked.proves(&opened) {
                             Ok(proof) => proof,
@@ -195,25 +208,19 @@ impl<E: ProofBinders> Marking<'_, E> {
     /// A `let`: each binding walked under the bindings before it, its binder asked at its type and entered, and the tail walked under all of them.
     fn let_(&mut self, term: &Term, Let { bindings, tail }: &Let) -> Result<Term, E::Refusal> {
         let before = self.entered.len();
-        let mut binders: Vec<Term> = Vec::with_capacity(bindings.len());
+        self.blocks.push(before..before);
         let mut walked = Vec::with_capacity(bindings.len());
         let mut proofs = Vec::with_capacity(bindings.len());
         let mut changed = false;
 
         let outcome = 'walk: {
             for (index, binding) in bindings.iter().enumerate() {
-                let under = |marking: &mut Self, value: &Term| {
-                    marking.entered.extend(binders.iter().rev().cloned());
-                    let walked = marking.term(value);
-                    marking.entered.truncate(before);
-                    walked
+                let (type_, value) = match (self.term(binding.type_()), self.term(binding.value()))
+                {
+                    (Ok(type_), Ok(value)) => (type_, value),
+                    (Err(refusal), _) | (_, Err(refusal)) => break 'walk Err(refusal),
                 };
-                let (type_, value) =
-                    match (under(self, binding.type_()), under(self, binding.value())) {
-                        (Ok(type_), Ok(value)) => (type_, value),
-                        (Err(refusal), _) | (_, Err(refusal)) => break 'walk Err(refusal),
-                    };
-                let opened = self.released(binding.type_(), &binders);
+                let opened = self.released(binding.type_());
                 let proof = match self.asked.proves(&opened) {
                     Ok(proof) => proof,
                     Err(refusal) => break 'walk Err(refusal),
@@ -223,18 +230,21 @@ impl<E: ProofBinders> Marking<'_, E> {
                     || proof != tail.binds_proof(index);
 
                 let binder = self.asked.enter(tail.hint(index), Some(&opened));
-                binders.push(Term::free_var(&binder));
+                self.entered.push(Term::free_var(&binder));
+                self.blocks
+                    .last_mut()
+                    .expect("the block this walk pushed")
+                    .end += 1;
                 walked.push(LetBinding::new(type_, value));
                 proofs.push(proof);
             }
 
-            self.entered.extend(binders.iter().rev().cloned());
-            let body = self.term(tail.body());
-            self.entered.truncate(before);
-            body
+            self.term(tail.body())
         };
 
-        self.asked.leave(binders.len());
+        self.asked.leave(self.entered.len() - before);
+        self.entered.truncate(before);
+        self.blocks.pop();
         let body = outcome?;
         if !changed && body.identity() == tail.body().identity() {
             return Ok(term.clone());

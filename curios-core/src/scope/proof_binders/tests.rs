@@ -113,6 +113,32 @@ fn a_lets_binders_are_asked() {
     assert_eq!(proofs(tail.body()), [false]);
 }
 
+/// A scope inside a `let` reads the block's binders in the block's order: a literal in a binding's value and one in the tail each bind at the block's first binder, a proposition, and are asked at the variable standing for it, a binding of another type between them.
+#[test]
+fn a_scope_inside_a_let_reads_the_blocks_binders_in_its_order() {
+    let [p, n, f, h, k] =
+        [(0, "P"), (1, "n"), (2, "f"), (3, "h"), (4, "k")].map(|(index, hint)| binder(index, hint));
+    let reads_p = |bound: Free| Term::func([(bound, Term::free_var(&p))], Term::free_var(&bound));
+    let block = Term::let_block(
+        vec![
+            (p, Term::prop(), Term::prop()),
+            (n, nat_type(), nat_type()),
+            (f, Term::type_ground(), reads_p(h)),
+        ],
+        reads_p(k),
+    );
+    let mut sorts = Sorts::default();
+
+    let stated = block.stating_proofs(&mut sorts).expect("answers");
+
+    let Subterm::Let(Let { bindings, tail }) = &*stated else {
+        panic!("not a `let`: {stated:?}");
+    };
+    assert_eq!(proofs(bindings[2].value()), [true]);
+    assert_eq!(proofs(tail.body()), [true]);
+    assert!(sorts.entered.is_empty(), "every binder entered was left");
+}
+
 /// A function type's binders are entered and not asked: nothing substitutes at one, but a literal further in may name them, and is asked under the variable that stands for each.
 #[test]
 fn a_function_types_binders_are_entered_and_not_asked() {
