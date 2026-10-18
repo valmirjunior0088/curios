@@ -73,7 +73,7 @@ use {
     },
     std::{
         borrow::Cow,
-        cell::OnceCell,
+        cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
         sync::Arc,
@@ -244,6 +244,82 @@ fn revised_paths(
     }
 
     paths
+}
+
+/// Every absolute path a unit gives a global, made where a report first asks and kept ([`PreparedText::paths`]): whole, off the unit's tables and audiences ([`writable_paths`]), or as the paths of the unit it was lowered over revised at the names whose audience or exports its lowering read again ([`revised_paths`]).
+///
+/// **Shared with the units lowered over it.** A unit lowered over another holds that one's cell, so a report over any of them makes the earlier unit's paths once, kept where that unit is, and each later unit revises them: a session that reports at every keystroke over one baseline makes its paths once. A unit whose earlier one made no paths holds what that one would have revised from, with both units' names, so a cell holds at most one earlier cell, and lets it go once its own paths are made.
+struct PathsCell {
+    table: Table<ModuleInfo>,
+    public: Table<PublicInterface>,
+    audiences: Audiences,
+    /// What these paths revise: `None` for paths made whole, and once they are made.
+    earlier: RefCell<Option<Revising>>,
+    made: OnceCell<Rc<curios_core::Paths>>,
+}
+
+/// What a unit's paths revise: the cell of the unit it was lowered over, and the names whose paths are read again.
+struct Revising {
+    cell: Rc<PathsCell>,
+    names: Rc<BTreeSet<Qualifier>>,
+}
+
+impl PathsCell {
+    /// The paths of a unit of `table`, `public` and `audiences`, made whole.
+    fn whole(
+        table: Table<ModuleInfo>,
+        public: Table<PublicInterface>,
+        audiences: Audiences,
+    ) -> Self {
+        Self {
+            table,
+            public,
+            audiences,
+            earlier: RefCell::new(None),
+            made: OnceCell::new(),
+        }
+    }
+
+    /// The paths of a unit of `table`, `public` and `audiences`, lowered over the unit whose cell `earlier` is, made as its paths revised at `names`.
+    fn over(
+        earlier: &Rc<PathsCell>,
+        names: &BTreeSet<Qualifier>,
+        table: Table<ModuleInfo>,
+        public: Table<PublicInterface>,
+        audiences: Audiences,
+    ) -> Self {
+        // An earlier cell that made nothing and revises another is passed over, its names taken with these.
+        let link = match (earlier.made.get(), &*earlier.earlier.borrow()) {
+            (None, Some(before)) => Revising {
+                cell: Rc::clone(&before.cell),
+                names: Rc::new(before.names.union(names).copied().collect()),
+            },
+            _ => Revising {
+                cell: Rc::clone(earlier),
+                names: Rc::new(names.clone()),
+            },
+        };
+
+        Self {
+            earlier: RefCell::new(Some(link)),
+            ..Self::whole(table, public, audiences)
+        }
+    }
+
+    /// The paths, made now where nothing asked before.
+    fn paths(&self) -> Rc<curios_core::Paths> {
+        let made = self.made.get_or_init(|| {
+            let earlier = self.earlier.borrow_mut().take();
+            Rc::new(match earlier {
+                Some(Revising { cell, names }) => {
+                    revised_paths(&cell.paths(), &names, &self.table, &self.audiences)
+                }
+                None => writable_paths(&self.table, &self.public, &self.audiences),
+            })
+        });
+
+        Rc::clone(made)
+    }
 }
 
 /// `written`, the paths of `global`, put in the order a reader takes them: its own path, then each path it is exported at, by path. A module's bindings are walked in a hash's order, which differs from one compilation to the next, and a reader takes the first of two spellings equally short.
@@ -453,9 +529,9 @@ pub struct PreparedText {
     /// The unit's aliases, made the first time an audit asks and kept: a unit lowered over this one that changes no alias holds the same. Never stored, being read off the records.
     #[archived_with(curios_archive::Skip)]
     aliases: OnceCell<Rc<Aliases>>,
-    /// Every absolute path this unit gives a global, made the first time a report spells a name over it and kept — see [`PreparedText::paths`]. Never stored, being read off `table`, `public` and `audiences`.
+    /// Every absolute path this unit gives a global, made the first time a report spells a name over it or a unit lowered over it and kept — see [`PathsCell`]. Never stored, being read off `table`, `public` and `audiences`.
     #[archived_with(curios_archive::Skip)]
-    paths: OnceCell<Rc<curios_core::Paths>>,
+    paths: OnceCell<Rc<PathsCell>>,
     /// The lowered module: what its elaboration reads, each item in hand where the unit was lowered in this process and read out of the bytes it was stored as where it was restored.
     ///
     /// **Stored without its items.** What every unit lowered after this one reads of it is what each item declares and the registry entries its lowering wrote, so that is what a unit is restored with; an item is read by a later lowering of the same sources, and by a unit whose witness names its declaration ([`PreparedText::written`]), so each is stored on its own, beside the unit, and read by whoever asks for it ([`PreparedText::lowered_item`]).
@@ -849,11 +925,18 @@ impl PreparedText {
 
     /// Every absolute path this unit gives a global, with who may write it — see [`writable_paths`]. Made once for the unit: every report of every compilation it is in scope of reads the one table.
     fn paths(&self) -> Rc<curios_core::Paths> {
-        let paths = self
-            .paths
-            .get_or_init(|| Rc::new(writable_paths(&self.table, &self.public, self.audiences())));
+        self.paths_cell().paths()
+    }
 
-        Rc::clone(paths)
+    /// Where this unit's paths are made and kept. See the field.
+    fn paths_cell(&self) -> &Rc<PathsCell> {
+        self.paths.get_or_init(|| {
+            Rc::new(PathsCell::whole(
+                self.table.clone(),
+                self.public.clone(),
+                self.audiences().clone(),
+            ))
+        })
     }
 
     /// How this unit's names can be written, where — what every report spells a name by: its imports, and the absolute paths each unit of its scope gives a global, `predecessors` being the units it was lowered against.
@@ -3362,18 +3445,15 @@ fn into_core_unit_within(
         }
         None => (OnceCell::new(), whole_dead),
     };
-    // Over a baseline a report spelled by, its paths with those of every name whose audience or exports were read again revised; otherwise made where a report first asks.
+    // Over a baseline, its paths with those of every name whose audience or exports were read again revised; otherwise made whole. Either where a report first asks.
     let paths = match (settled, &reread) {
-        (Some(baseline), Some(names)) => {
-            baseline.paths.get().map_or_else(OnceCell::new, |earlier| {
-                OnceCell::from(Rc::new(revised_paths(
-                    earlier,
-                    names,
-                    table.own(),
-                    &audiences,
-                )))
-            })
-        }
+        (Some(baseline), Some(names)) => OnceCell::from(Rc::new(PathsCell::over(
+            baseline.paths_cell(),
+            names,
+            table.own().clone(),
+            public.own().clone(),
+            audiences.clone(),
+        ))),
         _ => OnceCell::new(),
     };
 

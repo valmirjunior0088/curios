@@ -581,3 +581,62 @@ fn the_paths_a_report_spells_by_are_revised_where_audiences_moved() {
     same_unit(&reexported, &whole);
     assert_ne!(reexported.paths(), private.paths());
 }
+
+/// `path` under `root` written as `text`, and the unit lowered over `baseline`, its baseline's paths made by nothing, and lowered whole.
+fn lowered_over(
+    root: &Path,
+    path: &str,
+    text: &str,
+    baseline: &PreparedText,
+) -> (PreparedText, PreparedText) {
+    fs::write(root.join(path), text).unwrap();
+    let source = library(root);
+    let over =
+        into_core_unit_over(&UnitSource::mounted(&source), &[], syntax(), baseline, true).unwrap();
+    let whole = into_core_unit(&UnitSource::mounted(&source), &[], syntax()).unwrap();
+
+    (over, whole)
+}
+
+/// A unit lowered over a baseline no report spelled by makes the baseline's paths once, where a report over the unit first asks, and revises them, as does every unit lowered over that baseline after it; a unit lowered over one that made no paths revises the paths of the one before that, with the names both read again.
+#[test]
+fn paths_no_report_asked_for_are_made_once_and_revised_after() {
+    let root = files(
+        "paths-deferred",
+        &[
+            ("lib.crs", "pub mod a;\npub mod b;\n"),
+            ("a.crs", "pub let x: Type = Type;\n"),
+            ("b.crs", "pub let z: Type = Type;\n"),
+        ],
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+    let made = |unit: &PreparedText| {
+        unit.paths
+            .get()
+            .is_some_and(|cell| cell.made.get().is_some())
+    };
+
+    let (first, whole) = lowered_over(&root, "a.crs", "let x: Type = Type;\n", &baseline);
+    assert!(!made(&baseline), "nothing asked for the baseline's paths");
+    assert_eq!(first.paths(), whole.paths());
+    assert!(
+        made(&baseline),
+        "a report over the unit made the baseline's paths"
+    );
+
+    let (second, whole) = lowered_over(
+        &root,
+        "a.crs",
+        "pub let x: Type = Type;\n\npub let w: Type = Type;\n",
+        &baseline,
+    );
+    let (third, third_whole) = lowered_over(
+        &root,
+        "b.crs",
+        "pub use /lib/a/{w};\n\npub let z: Type = Type;\n",
+        &second,
+    );
+    assert!(!made(&second), "nothing asked for the second unit's paths");
+    assert_eq!(third.paths(), third_whole.paths());
+    assert_eq!(second.paths(), whole.paths());
+}
