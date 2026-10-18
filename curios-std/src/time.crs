@@ -38,5 +38,8 @@ pub use Offset/{let Offset};
 pub mod OffsetDateTime;
 pub use OffsetDateTime/{let OffsetDateTime};
 
---- RFC 3339's profile of ISO 8601: the evidence its text needs of a date and an offset.
+--- ISO 8601's extended format: the readers and writers every type's text goes through.
+pub mod iso8601;
+
+--- RFC 3339's profile of ISO 8601: four-digit years and whole-minute offsets, the evidence its text needs, and its readers and writers.
 pub mod rfc3339;

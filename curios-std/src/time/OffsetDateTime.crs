@@ -1,6 +1,6 @@
-use /std/{Nat, Int, Ord, Hash, Spell};
+use /std/{Nat, Int, Ord, Hash, Spell, Str, Option, Show};
 use /std/ops/{Eql};
-use /std/time/{Date, Time, DateTime, Offset, Timestamp};
+use /std/time/{Date, Time, DateTime, Offset, Timestamp, iso8601};
 
 --- A date and a time of day at an offset from UTC: RFC 3339's `date-time`, a moment that keeps the offset it was written with.
 pub struct OffsetDateTime: pub Type {
@@ -49,3 +49,15 @@ pub let of_timestamp(t: Timestamp, o: Offset) -> OffsetDateTime =
                 date = Date/of_days(day.quotient),
                 time = Time/of_seconds(day.remainder, local.remainder) },
         offset = o };
+
+--- The moment as ISO 8601's extended format writes it, at the offset it holds: `2024-02-29T08:49:37+05:30`.
+pub let to_str(odt: OffsetDateTime) -> Str =
+    iso8601/write_offset_date_time(odt);
+
+--- The OffsetDateTime ISO 8601's extended format writes as `s`, or `none` for text that writes none.
+pub let of_str(s: Str) -> Option(OffsetDateTime) =
+    iso8601/whole(iso8601/offset_date_time, s);
+
+satisfy Show(OffsetDateTime) {
+    show = to_str,
+}

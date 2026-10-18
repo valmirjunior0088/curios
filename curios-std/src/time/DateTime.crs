@@ -1,6 +1,6 @@
-use /std/{Ord, Hash, Spell};
+use /std/{Ord, Hash, Spell, Str, Option, Show};
 use /std/ops/{Eql};
-use /std/time/{Date, Time};
+use /std/time/{Date, Time, iso8601};
 
 --- A date and a time of day, at no offset: a civil date-time, as TOML's local date-time and java.time's `LocalDateTime` are. It names no moment by itself; `OffsetDateTime` places one on the timeline.
 pub struct DateTime: pub Type {
@@ -22,4 +22,16 @@ satisfy Hash(DateTime) {
 
 satisfy Spell(DateTime) {
     ..
+}
+
+--- The date-time as ISO 8601's extended format writes it: `2024-02-29T08:49:37`.
+pub let to_str(dt: DateTime) -> Str =
+    iso8601/write_date_time(dt);
+
+--- The DateTime ISO 8601's extended format writes as `s`, or `none` for text that writes none.
+pub let of_str(s: Str) -> Option(DateTime) =
+    iso8601/whole(iso8601/date_time, s);
+
+satisfy Show(DateTime) {
+    show = to_str,
 }

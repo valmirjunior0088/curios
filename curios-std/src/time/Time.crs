@@ -1,6 +1,7 @@
-use /std/{Nat, Bool, Option, Ord, Hash, Spell};
+use /std/{Nat, Bool, Option, Ord, Hash, Spell, Str, Show};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql};
+use /std/time/{iso8601};
 
 let sound(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Bool =
     hour <= 23 && minute <= 59 && second <= 60 && nanosecond <= 999999999;
@@ -76,3 +77,15 @@ pub let of_seconds(
                     Bool/and/both(hour <= 23, minute <= 59, True/proved(), True/proved()),
                     True/proved()),
                 True/proved()) };
+
+--- The time of day as ISO 8601's extended format writes it: `08:49:37`, and the fraction where there is one, trimmed of trailing zeros.
+pub let to_str(t: Time) -> Str =
+    iso8601/write_time(t);
+
+--- The Time ISO 8601's extended format writes as `s`, or `none` for text that writes none.
+pub let of_str(s: Str) -> Option(Time) =
+    iso8601/whole(iso8601/time, s);
+
+satisfy Show(Time) {
+    show = to_str,
+}

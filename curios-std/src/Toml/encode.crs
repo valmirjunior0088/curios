@@ -1,6 +1,5 @@
 use /std/{Nat, Int, Flt, Bool, Char, Str, List, Map, Option, Toml, Fmt};
-use /std/time/{Date, Time, Month, Offset};
-use /std/time/rfc3339/{FourDigits};
+use /std/time/{rfc3339};
 use /std/Toml/scan/{is_bare_char};
 
 let bare_ok(s: Str) -> Bool =
@@ -35,47 +34,6 @@ let quote_str(s: Str) -> Str =
 let spell_key(k: Str) -> Str =
     match bare_ok(k) | true => k | false => quote_str(k) end;
 
-let pad(n: Nat, width: Nat) -> Str =
-    let s = Nat/to_str(n);
-    Str/concat(Str/repeat("0", width - Str/len(s)), s);
-
---- `ns` nanoseconds as the fraction after a time's point: its nine digits with the trailing zeros dropped and one kept at least, or nothing at all for none.
-let ns_str(ns: Nat) -> Str =
-    match ns == 0
-    | true => ""
-    | false =>
-        let trimmed(n: Nat, width: Nat) -> {Nat, Nat} =
-            match width
-            | 0 => (n, 0)
-            | w + 1 =>
-                match w == 0 || n % 10 != 0 | true => (n, width) | false => trimmed(n / 10, w) end
-            end;
-        let (digits, width) = trimmed(ns, 9);
-        Str/concat(".", pad(digits, width))
-    end;
-
-let date_str(d: Date, @_: FourDigits(d)) -> Str =
-    Fmt/render("%-%-%")(pad(Int/abs(d.year), 4))(pad(Month/to_nat(d.month), 2))(pad(d.day, 2));
-
-let time_str(t: Time) -> Str =
-    Str/flatten([
-        pad(t.hour, 2),
-        ":",
-        pad(t.minute, 2),
-        ":",
-        pad(t.second, 2),
-        ns_str(t.nanosecond)]);
-
--- The offset as RFC 3339 writes it: `Z` where the local offset is unknown, and the hours and minutes east of UTC otherwise, `+00:00` among them; a value's offset is whole minutes, so no second is dropped.
-let offset_str(o: Offset) -> Str =
-    match o
-    | unknown() => "Z"
-    | known(seconds) =>
-        let mag = Int/abs(seconds);
-        let sign = match seconds < +0 | true => "-" | false => "+" end;
-        Str/flatten([sign, pad(mag / 3600, 2), ":", pad(mag % 3600 / 60, 2)])
-    end;
-
 let int_str(n: Int) -> Str =
     match n >= +0
     | true => Nat/to_str(Int/to_nat(n))
@@ -108,13 +66,14 @@ let value_str(v: Toml) -> Str =
     | bool(x) => Bool/to_str(x)
     | offset_date_time(odt) =>
         Str/flatten([
-            date_str(odt.date_time.date),
+            rfc3339/write_date(odt.date_time.date),
             "T",
-            time_str(odt.date_time.time),
-            offset_str(odt.offset)])
-    | local_date_time(ldt) => Str/flatten([date_str(ldt.date), "T", time_str(ldt.time)])
-    | local_date(d) => date_str(d)
-    | local_time(t) => time_str(t)
+            rfc3339/write_time(odt.date_time.time),
+            rfc3339/write_offset(odt.offset)])
+    | local_date_time(ldt) =>
+        Str/flatten([rfc3339/write_date(ldt.date), "T", rfc3339/write_time(ldt.time)])
+    | local_date(d) => rfc3339/write_date(d)
+    | local_time(t) => rfc3339/write_time(t)
     | arr(items) =>
         let start: List(Str) = [];
         let parts = List/fold(items, start, (item, parts) => [..parts, value_str(item)]);

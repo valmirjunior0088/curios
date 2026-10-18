@@ -1,6 +1,6 @@
-use /std/{Bool, Option};
+use /std/{Nat, Bool, Str, Option, Parse};
 use /std/Bool/{Holds};
-use /std/time/{Date, Offset};
+use /std/time/{Date, Time, Offset, iso8601};
 
 --- That `d`'s year has the four digits RFC 3339 writes, 0000 to 9999: what a format that writes a date by RFC 3339 carries of every date it holds.
 pub let FourDigits(d: Date) -> Prop =
@@ -17,3 +17,38 @@ pub let four_digits(d: Date) -> Option(FourDigits(d)) =
 --- The procedure that decides `WholeMinutes(o)`.
 pub let whole_minutes(o: Offset) -> Option(WholeMinutes(o)) =
     Bool/decide(Offset/ahead(o) % 60 == +0);
+
+--- A date as RFC 3339 reads one: four digits of year, a month and a day.
+pub let date: Parse(Str, Date) =
+    let y = iso8601/digits(4)!;
+    iso8601/date_after(Nat/to_int(y));
+
+--- A time of day as RFC 3339 reads one: ISO 8601's own.
+pub let time: Parse(Str, Time) =
+    iso8601/time;
+
+--- An offset as RFC 3339 reads one: `Z`, `z` or whole minutes east of UTC.
+pub let offset: Parse(Str, Offset) =
+    let o = iso8601/offset!;
+    match whole_minutes(o)
+    | some(_) => Parse/pure(o)
+    | none() => Parse/fail("RFC 3339 writes an offset in whole minutes")
+    end;
+
+--- The separator between a date and a time: `T`, or the lowercase `t` or a space §5.6 admits.
+pub let separator: Parse(Str, {}) =
+    Parse/label(
+        Parse/map(Parse/str/char_if((c) => c == 'T' || c == 't' || c == ' '), (_) => ()),
+        "expected T");
+
+--- A date as RFC 3339 writes it, the four digits its evidence holds.
+pub let write_date(d: Date, @_: FourDigits(d)) -> Str =
+    iso8601/write_date(d);
+
+--- A time of day as RFC 3339 writes it.
+pub let write_time(t: Time) -> Str =
+    iso8601/write_time(t);
+
+--- An offset as RFC 3339 writes it: `Z` for the unknown local offset, the whole minutes its evidence holds otherwise.
+pub let write_offset(o: Offset, @_: WholeMinutes(o)) -> Str =
+    iso8601/write_offset(o);

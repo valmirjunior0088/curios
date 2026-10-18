@@ -1,6 +1,7 @@
-use /std/{Int, Bool, Option, Ord, Hash, Spell};
+use /std/{Int, Bool, Option, Ord, Hash, Spell, Str, Show};
 use /std/Bool/{Holds};
 use /std/ops/{Eql};
+use /std/time/{iso8601};
 
 --- An offset from UTC, as RFC 3339's `time-offset` states one and RFC 9557 §2 reads it: the local offset unknown, the time being stated in UTC, which `Z` writes and `-00:00` was written for; or so many seconds east of UTC, `+00:00` among them, which names UTC as the time's reference.
 pub induct Offset: pub Type
@@ -42,3 +43,15 @@ pub let try_of_seconds(seconds: Int) -> Option(Offset) =
 --- How far ahead of UTC a time stated at `o` is: none for `unknown()`, which states its time in UTC.
 pub let ahead(o: Offset) -> Int =
     match o | unknown() => +0 | known(seconds) => seconds end;
+
+--- The offset as ISO 8601 writes it: `Z` where the local offset is unknown, `+05:30` otherwise, and `+05:30:15` past ISO 8601, as java.time writes one with seconds.
+pub let to_str(o: Offset) -> Str =
+    iso8601/write_offset(o);
+
+--- The Offset ISO 8601's extended format writes as `s`, or `none` for text that writes none.
+pub let of_str(s: Str) -> Option(Offset) =
+    iso8601/whole(iso8601/offset, s);
+
+satisfy Show(Offset) {
+    show = to_str,
+}

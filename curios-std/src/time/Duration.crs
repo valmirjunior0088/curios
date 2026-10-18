@@ -1,5 +1,6 @@
-use /std/{Int, Ord, Hash, Spell, Fmt};
+use /std/{Int, Ord, Hash, Spell, Fmt, Str, Option, Show};
 use /std/ops/{Eql, Cmp, Add, Sub};
+use /std/time/{iso8601};
 
 --- A length of time, signed: one count of nanoseconds, so a sum and a difference are the count's own and a length below zero is one too.
 pub struct Duration: Type {
@@ -69,3 +70,15 @@ pub let to_millis(d: Duration) -> Int =
 --- The nanoseconds, exactly.
 pub let to_nanos(d: Duration) -> Int =
     d.nanos;
+
+--- The length as ISO 8601 writes a duration: `PT1H30M`, `PT1.5S`, `-PT1.5S`, and `PT0S` for none.
+pub let to_str(d: Duration) -> Str =
+    iso8601/write_duration(d);
+
+--- The length ISO 8601's extended format writes as `s`, or `none` for text that writes none.
+pub let of_str(s: Str) -> Option(Duration) =
+    iso8601/whole(iso8601/duration, s);
+
+satisfy Show(Duration) {
+    show = to_str,
+}

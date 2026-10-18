@@ -1,120 +1,8 @@
-use /std/{Nat, Int, Bool, Char, Str, Parse, Toml};
-use /std/time/{Date, Time, DateTime, Month, Offset, OffsetDateTime, rfc3339};
+use /std/{Str, Parse, Toml};
+use /std/time/{Date, Time, DateTime, OffsetDateTime, rfc3339};
 use /std/time/rfc3339/{FourDigits};
 
-let digit: Parse(Str, Nat) =
-    Parse/label(
-        Parse/map(Parse/str/char_if(Char/is_digit), (c) => Char/to_nat(c) - '0'),
-        "expected digit");
-
-let fixed(count: Nat, acc: Nat) -> Parse(Str, Nat) =
-    match count
-    | 0 => Parse/pure(acc)
-    | pred + 1 =>
-        let d = digit!;
-        fixed(pred, acc * 10 + d)
-    end;
-
-let expect(want: Char) -> Parse(Str, {}) =
-    Parse/label(Parse/map(Parse/str/expect(want), (_) => ()), "malformed date-time");
-
-let nat_pow10(n: Nat) -> Nat =
-    match n | 0 => 1 | _ + 1; ih => ih * 10 end;
-
-let frac_stop(taken: Nat, acc: Nat, seen: Bool) -> Parse(Str, Nat) =
-    match seen
-    | true => Parse/pure(acc * nat_pow10(9 - taken))
-    | false => Parse/fail("expected digit")
-    end;
-
-let frac_digits(taken: Nat, acc: Nat, seen: Bool) -> Parse(Str, Nat) =
-    let next = Parse/str/peek!;
-    match next
-    | none() => frac_stop(taken, acc, seen)
-    | some(c) =>
-        match Char/is_digit(c)
-        | false => frac_stop(taken, acc, seen)
-        | true =>
-            let _ = Parse/str/char!;
-            match taken < 9
-            | true => frac_digits(taken + 1, acc * 10 + (Char/to_nat(c) - '0'), true)
-            | false => frac_digits(taken, acc, true)
-            end
-        end
-    end;
-
-let frac_part() -> Parse(Str, Nat) =
-    let dot = Parse/optional(Parse/str/expect('.'))!;
-    match dot | some(_) => frac_digits(0, 0, false) | none() => Parse/pure(0) end;
-
-let date_fields(y: Nat) -> Parse(Str, Date) =
-    let mo = fixed(2, 0)!;
-    let _ = expect('-')!;
-    let d = fixed(2, 0)!;
-    match Month/try_of_nat(mo)
-    | some(month) =>
-        match Date/try_of(Nat/to_int(y), month, d)
-        | some(date) => Parse/pure(date)
-        | none() => Parse/fail("invalid date")
-        end
-    | none() => Parse/fail("invalid date")
-    end;
-
-let date_parse() -> Parse(Str, Date) =
-    let y = fixed(4, 0)!;
-    let _ = expect('-')!;
-    Parse/commit(date_fields(y));
-
-let time_fields(h: Nat) -> Parse(Str, Time) =
-    let mi = fixed(2, 0)!;
-    let _ = expect(':')!;
-    let s = fixed(2, 0)!;
-    let ns = frac_part()!;
-    match Time/try_of(h, mi, s, ns)
-    | some(time) => Parse/pure(time)
-    | none() => Parse/fail("invalid time")
-    end;
-
-let time_parse() -> Parse(Str, Time) =
-    let h = fixed(2, 0)!;
-    let _ = expect(':')!;
-    Parse/commit(time_fields(h));
-
-let offset_fields(sign: Char) -> Parse(Str, Offset) =
-    let oh = fixed(2, 0)!;
-    let _ = expect(':')!;
-    let om = fixed(2, 0)!;
-    match oh <= 23 && om <= 59
-    | true =>
-        let seconds = Nat/to_int(oh * 3600 + om * 60);
-        -- `-00:00` states UTC with the local offset unknown (RFC 3339 §4.3), which RFC 9557 writes `Z`.
-        match sign == '-'
-        | true =>
-            match seconds == +0
-            | true => Parse/pure(Offset/unknown())
-            | false => offset_of(+0 - seconds)
-            end
-        | false => offset_of(seconds)
-        end
-    | false => Parse/fail("invalid offset")
-    end;
-
-let offset_of(seconds: Int) -> Parse(Str, Offset) =
-    match Offset/try_of_seconds(seconds)
-    | some(o) => Parse/pure(o)
-    | none() => Parse/fail("invalid offset")
-    end;
-
-let offset_parse() -> Parse(Str, Offset) =
-    let zulu = Parse/optional(Parse/str/char_if((c) => c == 'Z' || c == 'z'))!;
-    match zulu
-    | some(_) => Parse/pure(Offset/unknown())
-    | none() =>
-        let sign = Parse/label(Parse/str/char_if((c) => c == '+' || c == '-'), "expected offset")!;
-        Parse/commit(offset_fields(sign))
-    end;
-
--- `built` over the evidence that `d`'s year has the four digits TOML writes, or the refusal of a date with more.
+-- `built` over the evidence that `d`'s year has the four digits TOML writes. `rfc3339/date` reads no other, so the decision answers `some`, and its refusal is the one a date past them would have.
 let dated(d: Date, built: (ok: FourDigits(d)) -> Toml) -> Parse(Str, Toml) =
     match rfc3339/four_digits(d)
     | some(ok) => Parse/pure(built(ok))
@@ -122,7 +10,7 @@ let dated(d: Date, built: (ok: FourDigits(d)) -> Toml) -> Parse(Str, Toml) =
     end;
 
 let offset_tail(date: Date, time: Time) -> Parse(Str, Toml) =
-    let offset = offset_parse()!;
+    let offset = rfc3339/offset!;
     let odt = OffsetDateTime { date_time = DateTime { date = date, time = time }, offset = offset };
     match rfc3339/whole_minutes(offset)
     | some(minutes) => dated(date, (ok) => Toml/offset_date_time(odt, @ok, @minutes))
@@ -130,16 +18,16 @@ let offset_tail(date: Date, time: Time) -> Parse(Str, Toml) =
     end;
 
 let date_time_tail(date: Date) -> Parse(Str, Toml) =
-    let _ = Parse/str/char_if((c) => c == 'T' || c == 't' || c == ' ')!;
-    let time = time_parse()!;
+    let _ = rfc3339/separator!;
+    let time = rfc3339/time!;
     Parse/or(
         offset_tail(date, time),
         dated(date, (ok) => Toml/local_date_time(DateTime { date = date, time = time }, @ok)));
 
 let date_led() -> Parse(Str, Toml) =
-    let date = date_parse()!;
+    let date = rfc3339/date!;
     Parse/or(date_time_tail(date), dated(date, (ok) => Toml/local_date(date, @ok)));
 
---- A date, a time, or the two together, with or without an offset.
+--- A date, a time, or the two together, with or without an offset, as RFC 3339 writes them.
 pub let date_time_value: Parse(Str, Toml) =
-    Parse/or(date_led(), Parse/map(time_parse(), (time) => Toml/local_time(time)));
+    Parse/or(date_led(), Parse/map(rfc3339/time, (time) => Toml/local_time(time)));

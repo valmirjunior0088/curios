@@ -1,0 +1,316 @@
+use /std/{Nat, Int, Char, Str, Option, Result, Parse};
+use /std/time/{Date, Time, DateTime, Month, Offset, OffsetDateTime, Duration};
+
+-- One decimal digit.
+let digit: Parse(Str, Nat) =
+    Parse/label(
+        Parse/map(Parse/str/char_if(Char/is_digit), (c) => Char/to_nat(c) - '0'),
+        "expected digit");
+
+-- Exactly `count` digits, read onto `acc`.
+let fixed(count: Nat, acc: Nat) -> Parse(Str, Nat) =
+    match count
+    | 0 => Parse/pure(acc)
+    | pred + 1 =>
+        let d = digit!;
+        fixed(pred, acc * 10 + d)
+    end;
+
+-- Every digit from here on, read onto `acc`, `taken` of them so far.
+let more_digits(acc: Nat, taken: Nat) -> Parse(Str, {value: Nat, taken: Nat}) =
+    let next = Parse/str/peek!;
+    match next
+    | some(c) =>
+        match Char/is_digit(c)
+        | true =>
+            let _ = Parse/str/char!;
+            more_digits(acc * 10 + (Char/to_nat(c) - '0'), taken + 1)
+        | false => Parse/pure((value = acc, taken = taken))
+        end
+    | none() => Parse/pure((value = acc, taken = taken))
+    end;
+
+--- Exactly `count` decimal digits, as the number they write.
+pub let digits(count: Nat) -> Parse(Str, Nat) =
+    fixed(count, 0);
+
+let expect(want: Char, what: Str) -> Parse(Str, {}) =
+    Parse/label(Parse/map(Parse/str/expect(want), (_) => ()), what);
+
+-- `n` in `width` digits at least, zeros ahead.
+let padded(n: Nat, width: Nat) -> Str =
+    Str/pad_start(Nat/to_str(n), width, '0');
+
+-- `n` nanoseconds as the fraction after a second's point: its nine digits with the trailing zeros dropped, or nothing at all for none.
+let fraction(n: Nat) -> Str =
+    match n == 0
+    | true => ""
+    | false =>
+        let trimmed(m: Nat, width: Nat) -> {Nat, Nat} =
+            match width
+            | 0 => (m, 0)
+            | w + 1 =>
+                match w == 0 || m % 10 != 0 | true => (m, width) | false => trimmed(m / 10, w) end
+            end;
+        let (digits, width) = trimmed(n, 9);
+        Str/concat(".", padded(digits, width))
+    end;
+
+-- The nanoseconds a fraction's digits name: nine at most are read and the rest dropped, as a clock to the nanosecond reads them.
+let fraction_digits(taken: Nat, acc: Nat) -> Parse(Str, Nat) =
+    let next = Parse/str/peek!;
+    match next
+    | some(c) =>
+        match Char/is_digit(c)
+        | true =>
+            let _ = Parse/str/char!;
+            match taken < 9
+            | true => fraction_digits(taken + 1, acc * 10 + (Char/to_nat(c) - '0'))
+            | false => fraction_digits(taken, acc)
+            end
+        | false => Parse/pure(acc * Nat/pow(10, 9 - taken))
+        end
+    | none() => Parse/pure(acc * Nat/pow(10, 9 - taken))
+    end;
+
+-- A fraction: a point and one digit at least, or nothing for none.
+let fraction_part: Parse(Str, Nat) =
+    let point = Parse/optional(Parse/str/expect('.'))!;
+    match point
+    | some(_) =>
+        let first = digit!;
+        fraction_digits(1, first)
+    | none() => Parse/pure(0)
+    end;
+
+--- A year as the extended format writes one: four digits from 0000 to 9999, and past them a sign and the digits it takes, `+10000` and `-0001`.
+pub let write_year(year: Int) -> Str =
+    match +0 <= year && year <= 9999
+    | true => padded(Int/abs(year), 4)
+    | false =>
+        let sign = match year < +0 | true => "-" | false => "+" end;
+        Str/concat(sign, padded(Int/abs(year), 4))
+    end;
+
+--- A year: four digits, or a sign and four digits at least.
+pub let year: Parse(Str, Int) =
+    let sign = Parse/optional(Parse/str/char_if((c) => c == '+' || c == '-'))!;
+    match sign
+    | none() =>
+        let n = fixed(4, 0)!;
+        Parse/pure(Nat/to_int(n))
+    | some(s) =>
+        let read = more_digits(0, 0)!;
+        match read.taken >= 4
+        | true =>
+            match s == '-'
+            | true => Parse/pure(+0 - Nat/to_int(read.value))
+            | false => Parse/pure(Nat/to_int(read.value))
+            end
+        | false => Parse/fail("an expanded year has four digits at least")
+        end
+    end;
+
+--- `2024-02-29`: the year, the month and the day.
+pub let write_date(d: Date) -> Str =
+    Str/flatten([write_year(d.year), "-", padded(Month/to_nat(d.month), 2), "-", padded(d.day, 2)]);
+
+--- A date after its year: a `-`, past which the reader is committed to a date, then the month and the day, and the date they spell or a refusal.
+pub let date_after(year: Int) -> Parse(Str, Date) =
+    let _ = expect('-', "malformed date-time")!;
+    Parse/commit(month_and_day(year));
+
+-- A date after its year and the `-` that follows it: the month and the day, and the date they spell or a refusal. Read once the `-` has said a date is what follows, so a refusal here is the date's.
+let month_and_day(year: Int) -> Parse(Str, Date) =
+    let m = fixed(2, 0)!;
+    let _ = expect('-', "malformed date-time")!;
+    let d = fixed(2, 0)!;
+    match Month/try_of_nat(m)
+    | some(month) =>
+        match Date/try_of(year, month, d)
+        | some(date) => Parse/pure(date)
+        | none() => Parse/fail("invalid date")
+        end
+    | none() => Parse/fail("invalid date")
+    end;
+
+--- A date.
+pub let date: Parse(Str, Date) =
+    let y = year!;
+    date_after(y);
+
+--- `08:49:37.5`: the hour, the minute and the second, and the fraction where there is one.
+pub let write_time(t: Time) -> Str =
+    Str/flatten([
+        padded(t.hour, 2),
+        ":",
+        padded(t.minute, 2),
+        ":",
+        padded(t.second, 2),
+        fraction(t.nanosecond)]);
+
+--- A time of day, the reader committed to one past the `:` after its hour; a second of 60 is a leap second, and a fraction past nine digits is read to the nanosecond.
+pub let time: Parse(Str, Time) =
+    let h = fixed(2, 0)!;
+    let _ = expect(':', "malformed date-time")!;
+    Parse/commit(time_after(h));
+
+-- A time of day after its hour and the `:` that follows it, read once the `:` has said a time is what follows.
+let time_after(h: Nat) -> Parse(Str, Time) =
+    let m = fixed(2, 0)!;
+    let _ = expect(':', "malformed date-time")!;
+    let s = fixed(2, 0)!;
+    let n = fraction_part!;
+    match Time/try_of(h, m, s, n)
+    | some(t) => Parse/pure(t)
+    | none() => Parse/fail("invalid time")
+    end;
+
+--- `Z`, `+05:30` or, past ISO 8601 as java.time writes it, `+05:30:15`: the unknown local offset, and the hours and minutes east of UTC with the seconds where there are some.
+pub let write_offset(o: Offset) -> Str =
+    match o
+    | unknown() => "Z"
+    | known(seconds) =>
+        let mag = Int/abs(seconds);
+        let sign = match seconds < +0 | true => "-" | false => "+" end;
+        let rest =
+            match mag % 60 == 0 | true => "" | false => Str/concat(":", padded(mag % 60, 2)) end;
+        Str/flatten([sign, padded(mag / 3600, 2), ":", padded(mag % 3600 / 60, 2), rest])
+    end;
+
+-- The offset `seconds` east of UTC, or the refusal of one a day or more off.
+let known_offset(seconds: Int) -> Parse(Str, Offset) =
+    match Offset/try_of_seconds(seconds)
+    | some(o) => Parse/pure(o)
+    | none() => Parse/fail("invalid offset")
+    end;
+
+-- The offset a sign, hours, minutes and seconds spell; `-00:00` is UTC with the local offset unknown (RFC 3339 §4.3), which RFC 9557 writes `Z`.
+let offset_of(sign: Char, h: Nat, m: Nat, s: Nat) -> Parse(Str, Offset) =
+    match h <= 23 && m <= 59 && s <= 59
+    | true =>
+        let seconds = Nat/to_int(h * 3600 + m * 60 + s);
+        choose
+        | sign == '-' && seconds == +0 => Parse/pure(Offset/unknown())
+        | sign == '-' => known_offset(+0 - seconds)
+        | _ => known_offset(seconds)
+        end
+    | false => Parse/fail("invalid offset")
+    end;
+
+-- An offset after its sign: hours and minutes, and the seconds where there are some.
+let offset_after(sign: Char) -> Parse(Str, Offset) =
+    let h = fixed(2, 0)!;
+    let _ = expect(':', "malformed date-time")!;
+    let m = fixed(2, 0)!;
+    let colon = Parse/optional(Parse/str/expect(':'))!;
+    match colon
+    | some(_) =>
+        let s = fixed(2, 0)!;
+        offset_of(sign, h, m, s)
+    | none() => offset_of(sign, h, m, 0)
+    end;
+
+--- An offset: `Z` or `z`, or a sign and hours and minutes.
+pub let offset: Parse(Str, Offset) =
+    let zulu = Parse/optional(Parse/str/char_if((c) => c == 'Z' || c == 'z'))!;
+    match zulu
+    | some(_) => Parse/pure(Offset/unknown())
+    | none() =>
+        let sign = Parse/label(Parse/str/char_if((c) => c == '+' || c == '-'), "expected offset")!;
+        Parse/commit(offset_after(sign))
+    end;
+
+--- `2024-02-29T08:49:37`.
+pub let write_date_time(dt: DateTime) -> Str =
+    Str/flatten([write_date(dt.date), "T", write_time(dt.time)]);
+
+--- A date and a time, `T` between them, or the lowercase `t` or a space RFC 3339 §5.6 admits.
+pub let date_time: Parse(Str, DateTime) =
+    let d = date!;
+    let _ = Parse/label(Parse/str/char_if((c) => c == 'T' || c == 't' || c == ' '), "expected T")!;
+    let t = time!;
+    Parse/pure(DateTime { date = d, time = t });
+
+--- `2024-02-29T08:49:37+05:30`.
+pub let write_offset_date_time(odt: OffsetDateTime) -> Str =
+    Str/concat(write_date_time(odt.date_time), write_offset(odt.offset));
+
+--- A date and a time at an offset.
+pub let offset_date_time: Parse(Str, OffsetDateTime) =
+    let dt = date_time!;
+    let o = offset!;
+    Parse/pure(OffsetDateTime { date_time = dt, offset = o });
+
+--- `PT1H30M`, `PT1.5S`, `-PT1.5S`, `PT0S`: a duration in hours, minutes and seconds, the parts that are zero left out.
+pub let write_duration(d: Duration) -> Str =
+    let n = Duration/to_nanos(d);
+    let sign = match n < +0 | true => "-" | false => "" end;
+    let mag = Int/abs(n);
+    let seconds = mag / 1000000000;
+    let nanos = mag % 1000000000;
+    let hours = seconds / 3600;
+    let minutes = seconds % 3600 / 60;
+    let rest = seconds % 60;
+    let part(value: Nat, unit: Str) -> Str =
+        match value == 0 | true => "" | false => Str/concat(Nat/to_str(value), unit) end;
+    let secs =
+        match rest == 0 && nanos == 0
+        | true => ""
+        | false => Str/flatten([Nat/to_str(rest), fraction(nanos), "S"])
+        end;
+    match mag == 0
+    | true => "PT0S"
+    | false => Str/flatten([sign, "PT", part(hours, "H"), part(minutes, "M"), secs])
+    end;
+
+-- The nanoseconds so many hours, minutes, seconds and nanoseconds make.
+let total(hours: Nat, minutes: Nat, seconds: Nat, nanos: Nat) -> Parse(Str, Int) =
+    Parse/pure(Nat/to_int(((hours * 60 + minutes) * 60 + seconds) * 1000000000 + nanos));
+
+-- A duration's parts after its `PT`: hours, minutes and seconds, each optional and in that order, `last` the one read last, one at least.
+let duration_parts(hours: Nat, minutes: Nat, last: Nat) -> Parse(Str, Int) =
+    let next = Parse/str/peek!;
+    let digits = match next | some(c) => Char/is_digit(c) | none() => false end;
+    match digits
+    | true =>
+        let read = more_digits(0, 0)!;
+        let unit = Parse/str/char!;
+        choose
+        | unit == 'H' && last < 1 => duration_parts(read.value, minutes, 1)
+        | unit == 'M' && last < 2 => duration_parts(hours, read.value, 2)
+        | unit == 'S' => total(hours, minutes, read.value, 0)
+        | unit == '.' =>
+            let first = digit!;
+            let n = fraction_digits(1, first)!;
+            let _ = expect('S', "expected S")!;
+            total(hours, minutes, read.value, n)
+        | _ => Parse/fail("malformed duration")
+        end
+    | false =>
+        match last == 0
+        | true => Parse/fail("a duration states a part")
+        | false => total(hours, minutes, 0, 0)
+        end
+    end;
+
+--- A duration: an optional `-`, then `PT` and its parts.
+pub let duration: Parse(Str, Duration) =
+    let minus = Parse/optional(Parse/str/expect('-'))!;
+    let _ = expect('P', "expected P")!;
+    let _ = expect('T', "expected T")!;
+    let n = duration_parts(0, 0, 0)!;
+    match minus
+    | some(_) => Parse/pure(Duration/of_nanos(+0 - n))
+    | none() => Parse/pure(Duration/of_nanos(n))
+    end;
+
+-- `p`, and then the end of the input.
+let completely(@A: Type, p: Parse(Str, A)) -> Parse(Str, A) =
+    let a = p!;
+    let _ = Parse/eof()!;
+    Parse/pure(a);
+
+--- What `p` reads of the whole of `s`, or `none` where it reads less or refuses.
+pub let whole(@A: Type, p: Parse(Str, A), s: Str) -> Option(A) =
+    Result/to_option(Parse/run(completely(p), s));

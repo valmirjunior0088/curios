@@ -1,6 +1,6 @@
 -- The calendar under its proofs: a day count and a date are one, leap days fall where the Gregorian calendar puts them, a date outside it is no date, and a moment crosses to its date and time at an offset and back.
-use /std/{Str, Nat, Int, List, Option, Test};
-use /std/time/{Timestamp, Date, Time, DateTime, Month, Weekday, Offset, OffsetDateTime};
+use /std/{Nat, Int, List, Option, Test};
+use /std/time/{Timestamp, Duration, Date, Time, DateTime, Month, Weekday, Offset, OffsetDateTime};
 
 -- The date a day count names, as its fields.
 let fields(n: Int) -> {Int, Nat, Nat} =
@@ -78,3 +78,35 @@ test a_moment_crosses_to_its_calendar_at_an_offset_and_back =
                         Timestamp/of_unix_nanos(-1),
                         Offset/utc).date_time.date)),
             (+1969, 12, 31))]);
+
+-- Every form reads back as it was written: a year past four digits with its sign, the leap second, a fraction trimmed, an offset with seconds past ISO 8601, `-00:00` read as the `Z` RFC 9557 writes it, a moment at any offset as its UTC instant, and durations of both signs.
+test every_time_reads_back_as_it_was_written =
+    Test/all([
+        Test/equal(Option/map(Date/of_str("2024-02-29"), Date/to_str), Option/some("2024-02-29")),
+        Test/equal(
+            Option/map(Date/of_str("+10000-01-01"), Date/to_str),
+            Option/some("+10000-01-01")),
+        Test/equal(Option/map(Date/of_str("-0001-12-31"), Date/to_str), Option/some("-0001-12-31")),
+        Test/equal(Option/map(Time/of_str("23:59:60.50"), Time/to_str), Option/some("23:59:60.5")),
+        Test/equal(
+            Option/map(
+                OffsetDateTime/of_str("1979-05-27T00:32:00.999999-07:00"),
+                OffsetDateTime/to_str),
+            Option/some("1979-05-27T00:32:00.999999-07:00")),
+        Test/equal(
+            Option/map(OffsetDateTime/of_str("1979-05-27T07:32:00-00:00"), OffsetDateTime/to_str),
+            Option/some("1979-05-27T07:32:00Z")),
+        Test/equal(
+            Option/map(
+                OffsetDateTime/of_str("1979-05-27T07:32:00+05:30:15"),
+                OffsetDateTime/to_str),
+            Option/some("1979-05-27T07:32:00+05:30:15")),
+        Test/equal(
+            Option/map(Timestamp/of_str("1969-12-31T23:00:00-01:00"), Timestamp/to_str),
+            Option/some("1970-01-01T00:00:00Z")),
+        Test/equal(Option/map(Duration/of_str("PT90M"), Duration/to_str), Option/some("PT1H30M")),
+        Test/equal(Option/map(Duration/of_str("-PT1.5S"), Duration/to_str), Option/some("-PT1.5S")),
+        Test/equal(Duration/to_str(Duration/zero), "PT0S"),
+        Test/equal(Date/of_str("2023-02-29"), Option/none()),
+        Test/equal(Date/of_str("+999-01-01"), Option/none()),
+        Test/equal(Duration/of_str("PT"), Option/none())]);

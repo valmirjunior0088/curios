@@ -114,9 +114,9 @@ fn clock_diff_of_two_distinct_now_readings() {
     assert_eq!(io.output(), b"+30");
 }
 
-// `Timestamp` is the moment with a meaning: it reads the wall clock into one count of nanoseconds, compares and subtracts as that count, and shows as the Unix second it lies in with nine digits of the nanoseconds past it.
+// `Timestamp` is the moment with a meaning: it reads the wall clock into one count of nanoseconds, compares and subtracts as that count, and shows as ISO 8601 writes it in UTC with the local offset unknown, `Z`, the fraction trimmed and a moment before 1970 as itself.
 #[test]
-fn a_timestamp_reads_the_wall_clock_into_one_count_and_shows_as_epoch_seconds() {
+fn a_timestamp_reads_the_wall_clock_into_one_count_and_shows_in_utc() {
     let (system, io) = MockHost::builder()
         .wall([(1_000_000_100, 500), (1_000_000_130, 900)])
         .build();
@@ -143,7 +143,7 @@ fn a_timestamp_reads_the_wall_clock_into_one_count_and_shows_as_epoch_seconds() 
 
     assert_eq!(
         io.output(),
-        b"+30 +1000000100.000000500 +1000000001.500000000 -1.500000000 true true"
+        b"+30 2001-09-09T01:48:20.0000005Z 2001-09-09T01:46:41.5Z 1969-12-31T23:59:59.5Z true true"
     );
 }
 

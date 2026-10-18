@@ -1,7 +1,7 @@
-use /std/{Nat, Int, Bool, List, Option, Ord, Hash, Spell};
+use /std/{Nat, Int, Bool, List, Option, Ord, Hash, Spell, Str, Show};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql};
-use /std/time/{Month, Weekday};
+use /std/time/{Month, Weekday, iso8601};
 
 --- Whether `year` is a leap year of the proleptic Gregorian calendar: four divides it, and a hundred does not unless four hundred does.
 pub let is_leap(year: Int) -> Bool =
@@ -190,3 +190,15 @@ pub let days_between(a: Date, b: Date) -> Int =
 pub let weekday(d: Date) -> Weekday =
     let split = Int/DivMod/of(to_days(d) + 3, 7);
     Weekday/of_days_from_monday(split.remainder);
+
+--- The date as ISO 8601's extended format writes it: `2024-02-29`, and a year past four digits with its sign, `+10000-01-01`.
+pub let to_str(d: Date) -> Str =
+    iso8601/write_date(d);
+
+--- The Date ISO 8601's extended format writes as `s`, or `none` for text that writes none.
+pub let of_str(s: Str) -> Option(Date) =
+    iso8601/whole(iso8601/date, s);
+
+satisfy Show(Date) {
+    show = to_str,
+}
