@@ -1139,7 +1139,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::witness_scope`].
-    pub(crate) fn witness_scope(&self) -> impl DoubleEndedIterator<Item = &(Free, Term)> + Clone {
+    pub(crate) fn witness_scope(&self) -> impl Iterator<Item = &(Free, Term)> {
         self.typing.frames.witness_scope()
     }
 
@@ -1426,12 +1426,12 @@ impl<'s> Context<'s> {
     /// [`Frames::locals`].
     /// Every frame's locals, the base's among them: what a test reads of a declaration forgotten everywhere, where every judgment reads [`Context::local_binders`].
     #[cfg(test)]
-    pub(crate) fn locals(&self) -> impl DoubleEndedIterator<Item = &(Free, Term)> + Clone {
+    pub(crate) fn locals(&self) -> impl Iterator<Item = &(Free, Term)> {
         self.typing.frames.locals()
     }
 
     /// [`Frames::local_binders`].
-    pub(crate) fn local_binders(&self) -> impl DoubleEndedIterator<Item = &(Free, Term)> + Clone {
+    pub(crate) fn local_binders(&self) -> impl Iterator<Item = &(Free, Term)> {
         self.typing.frames.local_binders()
     }
 
@@ -2950,11 +2950,11 @@ impl<'s> Context<'s> {
         // What the frames held define that the frames in view do not, or define otherwise.
         let mut fresh = Vec::new();
         let mut redefined = false;
-        for (name, entry) in held.definitions() {
-            match self.typing.frames.definition(name) {
+        for (name, entry) in self.typing.frames.held_definitions_apart(held) {
+            match self.typing.frames.definition(&name) {
                 Some(live) if live.body() == entry.body() && live.kind() == entry.kind() => {}
                 Some(_) => redefined = true,
-                None => fresh.push(*name),
+                None => fresh.push(name),
             }
         }
 

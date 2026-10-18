@@ -626,18 +626,23 @@ fn a_frames_definitions_are_read_back_in_the_order_they_were_defined() {
         .map(|n| context.fresh(Some(&format!("d{n}"))))
         .collect::<Vec<_>>();
 
-    context.with_frame(|context| {
+    let held = context.with_frame(|context| {
         for (n, name) in names.iter().enumerate() {
             context.define(name, &Term::intrinsic(Intrinsic::Nat(Nat::new(n))), None);
         }
 
-        let held = context.hold_frames();
-        let defined = held
-            .definitions()
-            .map(|(name, _)| *name)
-            .collect::<Vec<_>>();
-        assert_eq!(defined, names);
+        context.hold_frames()
     });
+
+    // Where the frame has left, no frame in view defines any of them, so a judgment standing on it reads every one.
+    let defined = context
+        .typing
+        .frames
+        .held_definitions_apart(&held)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect::<Vec<_>>();
+    assert_eq!(defined, names);
 }
 
 /// A metavariable born in a retry is born in the problem's context: its telescope holds the locals of the frames the problem holds, and none of the live context's, which its spine would otherwise carry into a term that never bound them.
