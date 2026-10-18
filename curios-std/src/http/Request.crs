@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Spell};
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result, Spell, Fmt};
 use /std/Bool/{Holds};
 use /std/ops/{Eql};
 use /std/http/{Method, Url, Field, Version, Limits, Refusal, Framing, read, syntax};
@@ -46,12 +46,12 @@ pub let header(r: Request, name: Str) -> Option(Value) =
 let host_header(u: Url) -> Str =
     match u.port == Url/default_port(u.scheme)
     | true => u.host
-    | false => Str/flatten([u.host, ":", Nat/to_str(u.port)])
+    | false => Fmt/render("%:%")(u.host)(u.port)
     end;
 
 --- The request target: the path, and the query after it when there is one.
 pub let target(u: Url) -> Str =
-    match u.query | some(q) => Str/flatten([u.path, "?", q]) | none() => u.path end;
+    match u.query | some(q) => Fmt/render("%?%")(u.path)(q) | none() => u.path end;
 
 --- Whether a request's renderer writes the field named `name` itself: `Host`, the framing fields and `Connection`. A caller's own field of one of these names is not sent.
 pub let owned(name: Name) -> Bool =
@@ -69,7 +69,7 @@ let states_length(m: Method) -> Bool =
 
 let length_line(r: Request) -> Bytes =
     match Bytes/len(r.body) != 0 || states_length(r.method)
-    | true => Str/to_bytes(Str/flatten(["Content-Length: ", Nat/to_str(Bytes/len(r.body)), "\r\n"]))
+    | true => Str/to_bytes(Fmt/render("Content-Length: %\r\n")(Bytes/len(r.body)))
     | false => x[]
     end;
 

@@ -1,4 +1,4 @@
-use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Spell,
+use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Spell, Fmt,
     Process, print, print_err};
 use /std/Bool/{True, False};
 use /std/ops/{Eql};
@@ -40,8 +40,7 @@ pub let nat: Value =
             (s) =>
                 match Nat/of_str(s)
                 | some(n) => Result/success(n)
-                | none() =>
-                    Result/failure(Str/flatten(["expected a natural number, found '", s, "'"]))
+                | none() => Result/failure(Fmt/render("expected a natural number, found '%'")(s))
                 end,
         show = Nat/to_str,
         choices = [] };
@@ -55,7 +54,7 @@ pub let int: Value =
             (s) =>
                 match Int/of_str(s)
                 | some(n) => Result/success(n)
-                | none() => Result/failure(Str/flatten(["expected an integer, found '", s, "'"]))
+                | none() => Result/failure(Fmt/render("expected an integer, found '%'")(s))
                 end,
         show = Show/show,
         choices = [] };
@@ -69,7 +68,7 @@ pub let flt: Value =
             (s) =>
                 match Flt/of_str(s)
                 | some(x) => Result/success(x)
-                | none() => Result/failure(Str/flatten(["expected a number, found '", s, "'"]))
+                | none() => Result/failure(Fmt/render("expected a number, found '%'")(s))
                 end,
         show = Show/show,
         choices = [] };
@@ -90,10 +89,7 @@ pub let one_of(@A: Type, use Eql(A), metavar: Str, named: List({Str, A})) -> Val
                 | some(entry) => Result/success(entry.1)
                 | none() =>
                     Result/failure(
-                        Str/flatten([
-                            "expected one of ",
-                            Str/join(", ", names),
-                            ", found '", s, "'"]))
+                        Fmt/render("expected one of %, found '%'")(Str/join(", ", names))(s))
                 end,
         show =
             (a) =>
@@ -265,11 +261,11 @@ end
 let described(p: Problem) -> Str =
     match p
     | invalid_name(n) => Str/concat("invalid name ", Spell/spell(n))
-    | invalid_short(c) => Str/flatten(["invalid short name '", Str/of_char(c), "'"])
+    | invalid_short(c) => Fmt/render("invalid short name '%'")(c)
     | duplicate_name(n) => Str/concat("duplicate name ", text_of(n))
     | duplicate_slot(n) => Str/concat("two arguments read by ", Spell/spell(n))
     | duplicate_command(n) => Str/concat("duplicate command ", Spell/spell(n))
-    | within(c, inner) => Str/flatten(["in command ", Spell/spell(c), ": ", described(inner)])
+    | within(c, inner) => Fmt/render("in command #: %")(c)(described(inner))
     end;
 
 satisfy Show(Problem) {
@@ -876,12 +872,9 @@ pub let main(cli: Cli, run: (Parsed(cli.command)) -> Io({})) -> Io({}) =
     match decode(dropped)
     | failure(at) =>
         refuse(
-            Str/flatten([
-                "error: argument ",
-                Nat/to_str(at + 1),
-                " is not valid UTF-8\n\n",
-                usage(cli, [name(cli.command)]),
-                "\n\nFor more information, try '--help'.\n"]))
+            Fmt/render(
+                "error: argument % is not valid UTF-8\n\n%\n\nFor more information, try '--help'.\n")(
+                at + 1)(usage(cli, [name(cli.command)])))
     | success(argv) =>
         let env = environment(variables(cli.command))!;
         match parse(cli, argv, env)
@@ -904,10 +897,7 @@ pub let main_checked(
     | [p, ..more] =>
         (_) =>
             let _ =
-                print_err(
-                    Str/flatten([
-                        "error: invalid command line declaration: ",
-                        Str/join("; ", List/map([p, ..more], described)),
-                        "\n"]))!;
+                Fmt/print_err("error: invalid command line declaration: %\n")(
+                    Str/join("; ", List/map([p, ..more], described)))!;
             Process/exit(1)
     end((ok) => main(Cli { command = command, version = version, @ok = ok }, run));

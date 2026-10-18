@@ -1,11 +1,11 @@
-use /std/{Str, Nat, Bool, List, Option, Cli};
+use /std/{Str, Nat, Bool, List, Option, Cli, Fmt};
 use /std/Cli/{Command, Field, Positional, Positionals, Failure, shouted};
 
 let words(parts: List(Str)) -> Str =
     Str/join(" ", List/filter(parts, (part) => part != ""));
 
 let bracket(s: Str) -> Str =
-    match s == "" | true => "" | false => Str/flatten(["[", s, "]"]) end;
+    match s == "" | true => "" | false => Fmt/render("[%]")(s) end;
 
 -- The command `path` names, the root's own name first: the deepest one the path reaches.
 let at(c: Command, path: List(Str)) -> Command =
@@ -34,16 +34,16 @@ let field_synopsis(f: Field) -> Str =
     | count() => Str/concat(bracket(long), "...")
     | toggle(_) => bracket(Str/concat("--[no-]", f.long))
     | option(v, presence) =>
-        let given = Str/flatten([long, " <", v.metavar, ">"]);
+        let given = Fmt/render("% <%>")(long)(v.metavar);
         match presence | required() => given | _ => bracket(given) end
-    | many(v) => Str/concat(bracket(Str/flatten([long, " <", v.metavar, ">"])), "...")
+    | many(v) => Str/concat(bracket(Fmt/render("% <%>")(long)(v.metavar)), "...")
     | choice(_, alternatives, presence) =>
         let spelled = Str/join(" | ", List/map(alternatives, (a) => Str/concat("--", a.long)));
-        match presence | required() => Str/flatten(["(", spelled, ")"]) | _ => bracket(spelled) end
+        match presence | required() => Fmt/render("(%)")(spelled) | _ => bracket(spelled) end
     end;
 
 let required_synopsis(p: Positional) -> Str =
-    Str/flatten(["<", shouted(p.name), ">"]);
+    Fmt/render("<%>")(shouted(p.name));
 
 let optional_synopsis(p: Positional) -> Str =
     bracket(shouted(p.name));
@@ -74,7 +74,7 @@ let section(heading: Str, rows: List({Str, Str})) -> Str =
         Str/flatten([
             heading, "\n",
             ..List/map(rows, ((left, right)) =>
-                Str/flatten(["  ", Str/pad_end(left, width, ' '), "  ", right, "\n"])),
+                Fmt/render("  %  %\n")(Str/pad_end(left, width, ' '))(right)),
             "\n"])
     end;
 
@@ -85,42 +85,39 @@ let notes(f: Field) -> List(Str) =
         | option(v, presence) =>
             [
                 ..match presence
-                | default(a) => [Str/flatten(["[default: ", v.show(a), "]"])]
+                | default(a) => [Fmt/render("[default: %]")(v.show(a))]
                 | _ => []
                 end,
                 ..match v.choices
                 | [] => []
-                | _ => [Str/flatten(["[possible values: ", Str/join(", ", v.choices), "]"])]
+                | _ => [Fmt/render("[possible values: %]")(Str/join(", ", v.choices))]
                 end]
         | many(v) =>
             match v.choices
             | [] => []
-            | _ => [Str/flatten(["[possible values: ", Str/join(", ", v.choices), "]"])]
+            | _ => [Fmt/render("[possible values: %]")(Str/join(", ", v.choices))]
             end
         | _ => []
         end,
-        ..match f.env | none() => [] | some(n) => [Str/flatten(["[env: ", n, "]"])] end,
+        ..match f.env | none() => [] | some(n) => [Fmt/render("[env: %]")(n)] end,
         ..match f.aliases
         | [] => []
         | _ =>
             [
-                Str/flatten([
-                    "[aliases: ",
-                    Str/join(", ", List/map(f.aliases, (n) => Str/concat("--", n))),
-                    "]"])]
+                Fmt/render("[aliases: %]")(
+                    Str/join(", ", List/map(f.aliases, (n) => Str/concat("--", n))))]
         end];
 
 let field_rows(f: Field) -> List({Str, Str}) =
-    let short =
-        match f.short | none() => "    " | some(c) => Str/flatten(["-", Str/of_char(c), ", "]) end;
+    let short = match f.short | none() => "    " | some(c) => Fmt/render("-%, ")(c) end;
     let described = words([f.help, ..notes(f)]);
     match f.kind
-    | option(v, _) => [(Str/flatten([short, "--", f.long, " <", v.metavar, ">"]), described)]
-    | many(v) => [(Str/flatten([short, "--", f.long, " <", v.metavar, ">"]), described)]
-    | toggle(_) => [(Str/flatten([short, "--[no-]", f.long]), described)]
+    | option(v, _) => [(Fmt/render("%--% <%>")(short)(f.long)(v.metavar), described)]
+    | many(v) => [(Fmt/render("%--% <%>")(short)(f.long)(v.metavar), described)]
+    | toggle(_) => [(Fmt/render("%--[no-]%")(short)(f.long), described)]
     | choice(_, alternatives, _) =>
         List/map(alternatives, (a) => (Str/concat("    --", a.long), a.help))
-    | _ => [(Str/flatten([short, "--", f.long]), described)]
+    | _ => [(Fmt/render("%--%")(short)(f.long), described)]
     end;
 
 let builtin_rows(version: Option(Str)) -> List({Str, Str}) =
@@ -156,38 +153,30 @@ pub let help(c: Command, version: Option(Str), path: List(Str)) -> Str =
                             match child | leaf(_, a, _, _) => a | group(_, a, _, _) => a end))))
         end;
     let about = match target | leaf(_, a, _, _) => a | group(_, a, _, _) => a end;
-    Str/flatten([about, "\n\n", usage(c, path), "\n\n", sections]);
+    Fmt/render("%\n\n%\n\n%")(about)(usage(c, path))(sections);
 
 let tip(near: Option(Str), what: Str) -> Str =
     match near
     | none() => ""
-    | some(n) => Str/flatten(["\n\n  tip: a similar ", what, " exists: '", n, "'"])
+    | some(n) => Fmt/render("\n\n  tip: a similar % exists: '%'")(what)(n)
     end;
 
 let complaint(f: Failure) -> Str =
     match f
-    | unknown_option(t, near) =>
-        Str/flatten(["unexpected argument '", t, "'", tip(near, "argument")])
-    | missing_value(n) => Str/flatten(["a value is required for '", n, "'"])
-    | missing_required(n) => Str/flatten(["the argument '", n, "' is required"])
-    | unexpected(t) => Str/flatten(["unexpected argument '", t, "'"])
-    | bad_value(n, r) => Str/flatten(["invalid value for '", n, "': ", r])
+    | unknown_option(t, near) => Fmt/render("unexpected argument '%'%")(t)(tip(near, "argument"))
+    | missing_value(n) => Fmt/render("a value is required for '%'")(n)
+    | missing_required(n) => Fmt/render("the argument '%' is required")(n)
+    | unexpected(t) => Fmt/render("unexpected argument '%'")(t)
+    | bad_value(n, r) => Fmt/render("invalid value for '%': %")(n)(r)
     | conflict(names) => Str/concat("conflicting arguments: ", Str/join(", ", names))
     | unknown_command(n, near, known) =>
-        Str/flatten([
-            "unrecognized subcommand '", n, "'",
-            tip(near, "subcommand"),
-            "\n  available: ",
-            Str/join(", ", known)])
+        Fmt/render("unrecognized subcommand '%'%\n  available: %")(n)(tip(near, "subcommand"))(
+            Str/join(", ", known))
     | missing_command(known) =>
         Str/flatten(["a subcommand is required\n  available: ", Str/join(", ", known)])
     end;
 
 --- A refusal: what the line got wrong, the usage line of the command `path` names, and where help is.
 pub let report(c: Command, path: List(Str), f: Failure) -> Str =
-    Str/flatten([
-        "error: ",
-        complaint(f),
-        "\n\n",
-        usage(c, path),
-        "\n\nFor more information, try '--help'.\n"]);
+    Fmt/render("error: %\n\n%\n\nFor more information, try '--help'.\n")(complaint(f))(
+        usage(c, path));

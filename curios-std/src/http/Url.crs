@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell};
+use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell, Fmt};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql};
 use /std/http/Field/{Value};
@@ -65,7 +65,7 @@ let scheme() -> Parse(Str, Scheme) =
     choose
     | Str/eql_ascii_ci(name, "http") => Parse/pure(Scheme/http())
     | Str/eql_ascii_ci(name, "https") => Parse/pure(Scheme/https())
-    | _ => Parse/fail(Str/flatten(["unknown scheme '", name, "'"]))
+    | _ => Parse/fail(Fmt/render("unknown scheme '%'")(name))
     end;
 
 let is_digit(c: Char) -> Bool =
@@ -334,5 +334,5 @@ pub let with_query(u: Url, pairs: List({Str, Str})) -> Url =
                     Str/join(
                         "&",
                         List/map(pairs, ((name, value)) =>
-                            Str/flatten([encode(name), "=", encode(value)])))) }
+                            Fmt/render("%=%")(encode(name))(encode(value))))) }
     end;

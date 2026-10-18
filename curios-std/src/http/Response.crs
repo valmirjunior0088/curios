@@ -1,4 +1,4 @@
-use /std/{Bytes, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Spell};
+use /std/{Bytes, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Spell, Fmt};
 use /std/Bool/{Holds};
 use /std/ops/{Eql};
 use /std/http/{Method, Url, Field, Status, Version, Limits, Refusal, Framing, read, syntax};
@@ -27,12 +27,12 @@ pub let owned(name: Name) -> Bool =
         || Name/is(name, "Connection");
 
 let length_line(n: Nat) -> Bytes =
-    Str/to_bytes(Str/flatten(["Content-Length: ", Nat/to_str(n), "\r\n"]));
+    Str/to_bytes(Fmt/render("Content-Length: %\r\n")(n));
 
 --- The reply's head as the bytes sent on the wire, stating the length of `body`: the status line as HTTP/1.1, `Connection: close`, since a server keeps no connection, `Content-Length` unless the status is 1xx, 204 or 304, then the headers the renderer does not own, and the blank line.
 pub let render_head(r: Response, body: Bytes) -> Bytes =
     x[
-        ..Str/to_bytes(Str/flatten(["HTTP/1.1 ", Nat/to_str(r.status.code), " "])),
+        ..Str/to_bytes(Fmt/render("HTTP/1.1 % ")(r.status.code)),
         ..r.status.reason.bytes,
         ..Str/to_bytes("\r\nConnection: close\r\n"),
         ..match Status/bodiless(r.status.code)
