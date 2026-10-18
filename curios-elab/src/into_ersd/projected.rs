@@ -110,7 +110,7 @@ fn project_struct(declaration: &StructDecl) -> StructDecl {
 ///
 /// **Kept with the unit, as where it holds each name is.** A unit in scope of many compilations is asked for the same declarations by each, so what one projected the next finds, and making the cells is paid once for a unit and not once for a compile. It holds no reference to the module it is of: every read hands it the module, which is its unit's.
 ///
-/// **A version of its baseline's where its unit was erased over one.** The cells are shared and held in persistent maps, so the projection of a module that is a version of its baseline's is the baseline's with a cell made anew at each place the version changed ([`Projection::revised`]), what was read of every other item standing.
+/// **A version of its baseline's where its unit was erased over one.** The cells are shared and held in persistent maps, so the projection of a module that is a version of its baseline's is the baseline's with a cell made anew at each place the version changed (`Projection::revised`), what was read of every other item standing.
 #[derive(Debug, Clone, Default)]
 pub struct Projection {
     /// By the item's place ([`curios_core::Items::places`]).

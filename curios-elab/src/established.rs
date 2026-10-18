@@ -292,7 +292,7 @@ impl<'a> Established<'a> {
         self
     }
 
-    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, answering for none of its declarations until the walk over the unit says which it answers for ([`Established::answer_but`]) or keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
+    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, answering for none of its declarations until the walk over the unit says which it answers for (`Established::answer_but`) or keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
     pub fn keeping(mut self, baseline: &'a Module, places: &'a Places) -> Self {
         self.units.push(Standing {
             module: baseline,
