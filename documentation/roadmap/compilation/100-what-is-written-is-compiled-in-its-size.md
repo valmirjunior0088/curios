@@ -76,13 +76,12 @@ A Binaryen `version_130` replay of the module `curios` hands `BinaryenModuleRead
 
 ### The counted slopes reach every stage
 
-`growth_slopes`' reading over the compiler of `65741c434`, printed in its documentation, holds five growths linear in every stage: definitions, strings, a list literal, parentheses and a string literal. The others reach a stage that grows as its square or steeper. Besides the elaboration, erasure and Binaryen costs above:
+`growth_slopes`' reading over the compiler of `ca0e3d02c`, printed in its documentation, holds nine growths linear in every stage: definitions, strings, a list literal, a family's constructors, parentheses, nested list literals, `let`s, an arrow and a string literal. The others reach a stage that grows as its square or steeper. Besides the Binaryen costs above:
 
-- **Lowering**: a structure's fields, a telescope's parameters, and nested matches, `let`s and lambdas (slopes 3.4 to 4.0 in `lower`).
-- **Erasure**: nested list literals (3.8 in `erase`), besides the constructors above.
-- **The Cont lowering**: a list built at run time, a match's arms, nested calls and a chain of operators either way (3.7 to 4.0 in `cont`).
-- **The Cont optimizer**: a match's arms, a telescope's parameters, a tuple, a structure's fields, an `Io` block and nested lambdas (3.3 to 4.6 in `cont-optm`).
-- **Cranelift**: a long function's bytes (3.1 to 4.1 in `cranelift`).
+- **The Cont lowering**: a list built at run time, a tuple, a structure's fields, a telescope's parameters summed, nested calls and a chain of operators either way (slopes 3.4 to 4.0 in `cont`).
+- **The Cont optimizer**: a match's arms, a telescope's parameters, an `Io` block, a concept's methods and nested lambdas (3.1 to 4.3 in `cont-optm`).
+- **Emission**: nested matches (3.4 in `emit`).
+- **Cranelift**: a long function's bytes (3.6 in `cranelift`).
 
 ## Goal
 

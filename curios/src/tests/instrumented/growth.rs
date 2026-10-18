@@ -163,7 +163,11 @@ const HELD: &[Growth] = &[
     Growth::Definitions,
     Growth::Strings,
     Growth::List,
+    Growth::Constructors,
     Growth::Parentheses,
+    Growth::Lists,
+    Growth::Lets,
+    Growth::Arrow,
     Growth::StringLiteral,
 ];
 
@@ -182,36 +186,37 @@ const HELD_SLOPE: f64 = 3.0;
 ///
 /// # What it last printed
 ///
-/// Over the compiler of `65741c434`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
+/// Over the compiler of `ca0e3d02c`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
 ///
 /// | growth | n | instructions | looks | allocations | bytes |
 /// | --- | --- | --- | --- | --- | --- |
-/// | LetPlus | 25 | 3.63 elaborate | 2.67 elaborate | 3.24 elaborate | 3.63 elaborate |
-/// | LetCall | 25 | 3.61 binaryen | 2.00 erase | 2.81 cont | 2.82 cont |
-/// | Statements | 25 | 4.74 elaborate | 3.03 elaborate | 3.94 cont-optm | 3.72 cont-optm |
-/// | Definitions | 250 | 2.21 parse | 2.00 erase | 2.03 lower | 2.29 parse |
-/// | Functions | 250 | 3.96 binaryen | 2.00 erase | 2.95 cont | 3.58 cranelift |
-/// | Strings | 250 | 2.02 elaborate | 2.00 lower | 2.07 lower | 2.01 lower |
-/// | List | 1000 | 2.29 parse | 2.00 erase | 2.09 parse | 2.85 parse |
-/// | ListOpen | 100 | 3.74 emit | 2.00 erase | 3.02 cont | 3.90 cont |
-/// | Arms | 250 | 3.81 cont | 2.00 erase | 3.94 cont-optm | 4.00 cont |
-/// | Parameters | 100 | 4.80 lower | 2.00 erase | 3.78 lower | 3.95 cont |
-/// | ParametersSummed | 25 | 3.33 cont | 2.93 elaborate | 3.28 lower | 3.51 elaborate |
-/// | Tuple | 250 | 4.05 cont-optm | 2.00 erase | 2.20 cont | 3.99 cont-optm |
-/// | Fields | 250 | 4.23 cont-optm | 2.00 erase | 3.91 lower | 3.99 cont-optm |
-/// | Constructors | 250 | 3.94 erase | 2.00 erase | 3.95 erase | 3.92 erase |
-/// | Calls | 250 | 3.73 cont | 2.00 erase | 3.75 cont | 3.85 cont |
-/// | Parentheses | 1000 | 2.54 lower | - | 2.00 parse | 2.00 parse |
-/// | RightPlus | 250 | 4.54 cranelift | 2.00 erase | 3.75 cont | 3.85 cont |
-/// | LeftPlus | 250 | 3.98 cont | 2.00 erase | 3.75 cont | 3.85 cont |
-/// | Matches | 25 | 3.76 lower | 3.55 lower | 3.43 lower | 3.74 lower |
-/// | Lambdas | 25 | 3.68 lower | 3.29 erase | 3.41 lower | 3.55 lower |
-/// | Lists | 100 | 3.82 erase | 3.77 erase | 3.77 erase | 3.81 erase |
-/// | Lets | 25 | 4.03 lower | 3.80 lower | 3.54 lower | 3.71 lower |
-/// | Arrow | 1000 | 2.78 elaborate | 2.00 erase | 2.00 lower | 3.10 elaborate |
-/// | StringLiteral | 2000 | 2.98 parse | 2.00 erase | 2.00 erase | 2.02 lower |
+/// | LetPlus | 25 | 3.61 binaryen | 2.00 erase | 2.78 cont | 2.79 cont |
+/// | LetCall | 25 | 3.61 binaryen | 2.00 erase | 2.78 cont | 2.79 cont |
+/// | Statements | 25 | 4.28 cont-optm | 2.00 erase | 3.93 cont-optm | 3.74 cont-optm |
+/// | Definitions | 250 | 2.02 elaborate | 2.00 erase | 2.00 elaborate | 2.00 binaryen |
+/// | Functions | 250 | 3.96 binaryen | 2.00 erase | 2.95 cont | 3.56 cranelift |
+/// | Strings | 250 | 2.04 lower | 2.00 lower | 2.00 parse | 2.00 binaryen |
+/// | List | 1000 | 2.00 erase | 2.00 erase | 2.02 erase | 2.02 erase |
+/// | ListOpen | 100 | 3.85 cont | 2.00 erase | 3.00 cont | 3.89 cont |
+/// | Arms | 250 | 3.81 cont-optm | 2.00 erase | 3.93 cont-optm | 3.99 cont |
+/// | Parameters | 100 | 4.19 cont-optm | 2.00 erase | 2.19 cont | 3.95 cont |
+/// | ParametersSummed | 25 | 3.41 cont | 2.00 erase | 2.75 cont | 3.21 cont |
+/// | Tuple | 250 | 3.97 cont | 2.00 erase | 2.20 cont | 3.99 cont-optm |
+/// | Fields | 250 | 3.96 cont | 2.00 erase | 2.20 cont | 3.99 cont-optm |
+/// | Constructors | 250 | 2.35 erase | 2.00 erase | 2.01 ersd-optm | 2.44 ersd-optm |
+/// | Methods | 250 | 3.15 cont-optm | 2.00 erase | 3.26 cont-optm | 3.15 cont-optm |
+/// | Calls | 250 | 3.76 cont | 2.00 erase | 3.75 cont | 3.85 cont |
+/// | Parentheses | 1000 | 1.96 parse | - | 2.00 parse | 2.00 parse |
+/// | RightPlus | 250 | 3.75 cont | 2.00 erase | 3.74 cont | 3.84 cont |
+/// | LeftPlus | 250 | 3.89 cont | 2.00 erase | 3.74 cont | 3.84 cont |
+/// | Matches | 25 | 3.44 emit | 2.00 erase | 3.24 emit | 3.72 cont |
+/// | Lambdas | 25 | 3.27 cont-optm | 2.11 elaborate | 3.04 cont-optm | 2.94 cont-optm |
+/// | Lists | 100 | 2.60 cont | 2.00 erase | 2.05 cranelift | 2.92 cont |
+/// | Lets | 25 | 2.07 parse | 2.00 erase | 2.00 parse | 2.25 erase |
+/// | Arrow | 1000 | 2.03 elaborate | 2.00 erase | 2.06 elaborate | 2.03 elaborate |
+/// | StringLiteral | 2000 | 2.00 erase | 2.00 erase | 2.00 elaborate | 2.00 lower |
 ///
-/// **Five growths are linear in every stage**: definitions, strings, a list literal, parentheses and a string literal, the ones [`HELD`] lists. Every other reaches a stage that grows as its square or steeper, and the stage each names is where `documentation/roadmap/compilation/100-what-is-written-is-compiled-in-its-size.md` takes it up.
+/// **Nine growths are linear in every stage**: definitions, strings, a list literal, a family's constructors, parentheses, nested list literals, `let`s, an arrow and a string literal, the ones [`HELD`] lists. Every other reaches a stage that grows as its square or steeper, and the stage each names is where `documentation/roadmap/compilation/100-what-is-written-is-compiled-in-its-size.md` takes it up.
 #[test]
 #[ignore = "measurement, counted: run by hand, alone in its invocation"]
 fn growth_slopes() {
