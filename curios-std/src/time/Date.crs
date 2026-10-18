@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Option, Spell};
-use /std/Bool/{True, Holds};
+use /std/Bool/{Holds};
 use /std/ops/{Eql};
 
 let leap(year: Nat) -> Bool =
@@ -56,10 +56,7 @@ pub let of(year: Nat, month: Nat, day: Nat, @ok: Valid(year, month, day)) -> Dat
     Date { year = year, month = month, day = day };
 
 let try_valid(year: Nat, month: Nat, day: Nat) -> Option(Valid(year, month, day)) =
-    match sound(year, month, day): (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
-    end;
+    Bool/decide(sound(year, month, day));
 
 --- The date, decided: `none` where the three spell no day.
 pub let try_of(year: Nat, month: Nat, day: Nat) -> Option(Date) =

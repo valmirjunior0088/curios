@@ -19,10 +19,7 @@ pub let refl(n: Int) -> Holds(n <= n) =
 
 --- The procedure that decides `a <= b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Int, b: Int) -> Option(Holds(a <= b)) =
-    match a <= b: (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
-    end;
+    Bool/decide(a <= b);
 
 --- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
 pub let of_not_lt(a: Int, b: Int, p: Holds(Bool/not(a < b))) -> Holds(b <= a) =

@@ -1138,7 +1138,9 @@ const DECLINED: [&str; 14] = [
 ];
 
 /// The `let`s of the library that are refused as a report prints them, under their reason.
-const REFUSED: [&str; 1] = [
+const REFUSED: [&str; 2] = [
+    // Its proof's terms hold `of(n, d)` opened to the match on `Int/view(n)` it is stuck on, which as printed elaborates at another type (`documentation/roadmap/tools/000-findings.md`).
+    "/std/Int/DivMod/unique",
     // Its guard's fact proves a proof field over a recursive call, and the call written with its implicit argument, as a report prints it, is no guard the field's statement meets (`documentation/roadmap/theory/000-findings.md`).
     "/std/Tui/Glyph/of_cluster",
 ];

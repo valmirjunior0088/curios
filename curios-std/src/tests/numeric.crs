@@ -9,7 +9,7 @@ mod scale;
 
 mod int;
 
-use /std/{Nat, Int, Bool, Flt, Option, Test};
+use /std/{Nat, Int, Bool, Flt, List, Option, Test};
 
 test nat_powers_divisors_logarithms_and_roots_compute =
     Test/equal(
@@ -55,6 +55,15 @@ test parity_and_the_int_extrema_and_sign =
         Test/equal(
             [Int/abs(-18446744073709551616), Int/abs(+18446744073709551616)],
             [18446744073709551616, 18446744073709551616])]);
+
+-- Floored division at both signs, each split rejoined: the quotient's multiple of the divisor and the remainder are the dividend, and the remainder is below the divisor, where `/` and `%` leave a negative remainder.
+test floored_division_rejoins_every_dividend_with_a_remainder_below_its_divisor =
+    Test/assert(
+        List/all(
+            [-7, -6, -5, -1, +0, +1, +5, +6, +7],
+            (n: Int) =>
+                let split = Int/DivMod/of(n, 3);
+                split.quotient * +3 + Nat/to_int(split.remainder) == n && split.remainder < 3));
 
 -- `Flt/to_nat` and `Flt/to_int` carry the decided bounds `NonNeg` and `Finite`, and the `try_` forms are the procedures that decide them: `none` where the bound fails, the raw operation under its evidence where it holds.
 --

@@ -1,5 +1,5 @@
 use /std/{Int, Bool, Option, Spell};
-use /std/Bool/{True, Holds};
+use /std/Bool/{Holds};
 use /std/ops/{Eql};
 use /std/time/{Date, Time};
 
@@ -36,10 +36,7 @@ pub let of(
     OffsetDateTime { date = date, time = time, offset_minutes = offset_minutes };
 
 let try_valid(offset_minutes: Int) -> Option(Valid(offset_minutes)) =
-    match sound(offset_minutes): (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
-    end;
+    Bool/decide(sound(offset_minutes));
 
 --- The moment, decided: `none` where the offset is not one.
 pub let try_of(date: Date, time: Time, offset_minutes: Int) -> Option(OffsetDateTime) =

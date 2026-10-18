@@ -5,10 +5,7 @@ use /std/Bool/{True, Holds};
 
 --- The procedure that decides `a < b`: the evidence when it holds, `none` otherwise.
 pub let try(a: Nat, b: Nat) -> Option(Holds(a < b)) =
-    match a < b: (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
-    end;
+    Bool/decide(a < b);
 
 --- A comparison that came back `false` is the other one: `a <= b` failing gives `b < a`.
 ---

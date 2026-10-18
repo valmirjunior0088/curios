@@ -45,8 +45,12 @@ pub use shl/{let shl};
 pub mod ord;
 pub use ord/{let ord};
 
+--- Division with remainder rounded toward negative infinity, certified: `of` hands back the quotient and a remainder from zero to below the divisor, with Euclid's identity and the remainder's bound, where `/` and `%` round toward zero.
+pub mod DivMod;
+pub use DivMod/{let DivMod};
+
 use /std/{Nat, Bool, Str, Option, Show, Spell, Ord, Eq};
-use /std/Bool/{True, Holds};
+use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
@@ -142,10 +146,7 @@ pub let of_str(s: Str) -> Option(Int) =
 
 --- The procedure that decides `0 <= n`: the evidence when it holds, `none` otherwise.
 pub let non_neg(n: Int) -> Option(NonNeg(n)) =
-    match n >= +0: (r) => Option(Holds(r))
-    | true => Option/some(True/qed())
-    | false => Option/none()
-    end;
+    Bool/decide(n >= +0);
 
 satisfy Eql(Int) {
     eql = eql,

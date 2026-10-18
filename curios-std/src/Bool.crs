@@ -51,6 +51,10 @@ pub let eq_of_holds(b: Bool, h: Holds(b)) -> Eq()(b, true) =
 pub let holds_of_eq(b: Bool, p: Eq()(b, true)) -> Holds(b) =
     Eq/subst((x: Bool) => Holds(x), Eq/sym(p), True/qed());
 
+--- The decision as its evidence: `some` of the proof where `b` holds, `none` where it does not. What every procedure deciding a bound answers, `Int/non_neg` and `Date/try_of`'s among them.
+pub let decide(b: Bool) -> Option(Holds(b)) =
+    match b: (r) => Option(Holds(r)) | true => Option/some(True/qed()) | false => Option/none() end;
+
 satisfy Eql(Bool) {
     eql = eql,
     neq = xor,

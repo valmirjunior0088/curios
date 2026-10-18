@@ -79,3 +79,21 @@ let _two_odd_mantissas_of_one_value_are_one(
     e: Eq()(Int/shl(m, k), Int/shl(-3, 4)),
 ) -> {count: Eq()(k, 4), value: Eq()(m, -3)} =
     Int/shl/unique(m, k, -3, 4, odd, True/qed(), e);
+
+-- Floored division, where `/` and `%` truncate: a negative dividend's quotient is the next one down where a remainder is left, the remainder lies from zero to below the divisor, a natural divides as truncation does, and `unique` names the split a caller states.
+let _a_negative_dividend_floors_its_quotient: Holds(
+    Int/DivMod/of(-7, 2).quotient == -4 && Int/DivMod/of(-7, 2).remainder == 1) =
+    True/qed();
+
+let _an_exact_negative_multiple_leaves_no_remainder: Holds(
+    Int/DivMod/of(-8, 2).quotient == -4 && Int/DivMod/of(-8, 2).remainder == 0) =
+    True/qed();
+
+let _a_natural_dividend_divides_as_truncation_does: Holds(
+    Int/DivMod/of(+7, 2).quotient == +7 / +2 && Int/DivMod/of(+7, 2).remainder == 1) =
+    True/qed();
+
+let _a_stated_split_is_the_computed_one: {
+    quotient: Eq()(-4, Int/DivMod/of(-7, 2).quotient),
+    remainder: Eq()(1, Int/DivMod/of(-7, 2).remainder)} =
+    Int/DivMod/unique(-7, 2, -4, 1, Eq/refl(), True/qed());
