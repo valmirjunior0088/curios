@@ -3,9 +3,14 @@
 use {
     crate::{
         Bound, Field, Free, Global, Label, MetavarId, One, Proj, Scope, Subterm, Term, Var, Visit,
+        capture_placed, oldest_local,
     },
     curios_utilities::Plicity,
-    std::{collections::BTreeSet, fmt, hash::Hash},
+    std::{
+        collections::{BTreeSet, HashMap},
+        fmt,
+        hash::Hash,
+    },
 };
 
 /// A dependent context: a chain of entries, each a type under a mark, where each `Cons` tail is a one-binder [`Scope`], so every later entry — and the final `Done` payload — may mention the binders before it. Function types, function literals, and tuple types all reuse it and differ only in the payload: a `Term` (the return type or body) for Π/λ, `()` for Σ, where the fields themselves are the point.
@@ -52,20 +57,42 @@ impl<B: Bound> Telescope<B> {
             .into_iter()
             .map(|(mark, binder, ty)| (mark, binder, ty.into()))
             .collect::<Vec<(Plicity, Free, Term)>>();
-        // Beneath `j` one-binder scopes the nearest binder is index 0, so an entry closes over the binders before it innermost first: the last `j` of this list.
-        let innermost_first = entries
-            .iter()
-            .rev()
-            .map(|(_, binder, _)| binder)
-            .collect::<Vec<_>>();
-        let before = |count: usize| &innermost_first[entries.len() - count..];
+        // Each entry closes over the binders before it, a prefix of one list, so a name's places in it are looked up once for all of them where a capture would search each prefix at each occurrence. Beneath `count` one-binder scopes the nearest binder is index 0, so a name stands for the last of its places before the entry, at that many binders from it.
+        let mut places = HashMap::<Free, Vec<usize>>::new();
+        for (place, (_, binder, _)) in entries.iter().enumerate() {
+            places.entry(*binder).or_default().push(place);
+        }
+        let place = |count: usize| {
+            let places = &places;
+            move |name: &Free| {
+                let places = places.get(name)?;
+                let nearest = places[..places.partition_point(|&place| place < count)].last()?;
+                Some(count - 1 - nearest)
+            }
+        };
+        let mut oldest = vec![Some(u64::MAX)];
+        for (_, binder, _) in &entries {
+            let before = *oldest.last().expect("seeded with the oldest of no binder");
+            oldest.push(
+                oldest_local(&[binder])
+                    .zip(before)
+                    .map(|(this, before)| this.min(before)),
+            );
+        }
+        let closed =
+            |value: &Term, count: usize| capture_placed(value, count, oldest[count], place(count));
 
-        let mut telescope = Telescope::done(body.capture(before(entries.len())));
+        let mut telescope = Telescope::done(capture_placed(
+            &body,
+            entries.len(),
+            oldest[entries.len()],
+            place(entries.len()),
+        ));
 
         for (index, (mark, binder, ty)) in entries.iter().enumerate().rev() {
             let ty = match index {
                 0 => ty.clone(),
-                _ => ty.capture(before(index)),
+                _ => closed(ty, index),
             };
 
             telescope = Telescope::Cons(
