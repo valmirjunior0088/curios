@@ -141,3 +141,57 @@ fn a_version_is_untouched_by_what_another_writes() {
     assert_eq!(positions.iter().next(), Some((0, &0)));
     assert_eq!(later.iter().next(), Some((-150, &50)));
 }
+
+#[test]
+fn a_sorted_map_answers_as_a_btree_map_does_in_its_order() {
+    for seed in 0..8 {
+        let mut draws = Draws(seed);
+        let mut sorted = Sorted::new();
+        let mut standard = BTreeMap::new();
+        for step in 0..2_000 {
+            let key = format!("k{}", draws.next(300));
+            match draws.next(4) {
+                0 => assert_eq!(sorted.remove(&key), standard.remove(&key), "seed {seed}"),
+                _ => {
+                    sorted.insert(key.clone(), step);
+                    standard.insert(key, step);
+                }
+            }
+        }
+        assert_eq!(sorted.len(), standard.len());
+        assert!(
+            sorted.iter().eq(standard.iter()),
+            "seed {seed}: the entries in the keys' order"
+        );
+    }
+}
+
+#[test]
+fn a_sorted_version_is_untouched_by_what_another_takes() {
+    let mut first = Sorted::new();
+    for key in ["a", "b", "c"] {
+        first.insert(key, key.len());
+    }
+    let mut second = first.clone();
+    second.insert("d", 1);
+    second.remove(&"a");
+
+    assert!(first.iter().map(|(key, _)| *key).eq(["a", "b", "c"]));
+    assert!(second.iter().map(|(key, _)| *key).eq(["b", "c", "d"]));
+}
+
+#[test]
+fn an_ordered_map_names_the_positions_on_either_side_of_one() {
+    let mut ordered = Ordered::new();
+    for position in [-40, 0, 10, 30] {
+        ordered.insert(position, position);
+    }
+
+    assert_eq!(ordered.before(10), Some((0, &0)));
+    assert_eq!(ordered.after(10), Some((30, &30)));
+    assert_eq!(ordered.before(5), Some((0, &0)));
+    assert_eq!(ordered.after(5), Some((10, &10)));
+    assert_eq!(ordered.before(-40), None);
+    assert_eq!(ordered.after(30), None);
+    assert_eq!(ordered.before(i64::MAX), Some((30, &30)));
+}

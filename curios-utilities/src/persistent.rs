@@ -1,8 +1,8 @@
 //! Persistent maps: a map cloned in constant time that shares its structure with the map it was cloned from, so a state extended a step at a time costs the logarithm of what stands at each step and copies nothing.
 //!
-//! **One tree under two faces.** Both are a treap ordered by a `u64` key. An insert copies the nodes on the path to its key and shares every other node with the version it was made from; a node no other version holds is changed in place, so a map nothing else holds is extended as an owned one is. [`Persistent`] orders its keys by their hash, and [`Ordered`] its `i64` positions as numbers.
+//! **One tree under three faces.** Each is a treap. An insert copies the nodes on the path to its key and shares every other node with the version it was made from; a node no other version holds is changed in place, so a map nothing else holds is extended as an owned one is. [`Persistent`] orders its keys by their hash, [`Ordered`] its `i64` positions as numbers, and [`Sorted`] its keys as they order themselves.
 //!
-//! **A tree's shape is a function of the keys it holds.** A node's priority is its key mixed (splitmix64's finalizer), so two versions that hold one set of keys are one tree whatever order the keys arrived in, and a run of consecutive positions is balanced as keys drawn at random are.
+//! **A tree's shape is a function of the keys it holds.** A node's priority is its key mixed (splitmix64's finalizer), a [`Sorted`] key's hash mixed, so two versions that hold one set of keys are one tree whatever order the keys arrived in, and a run of consecutive positions is balanced as keys drawn at random are.
 //!
 //! **A hash is drawn as every table's is.** [`Persistent`] hashes a key with a `RandomState` the map draws where it is made and carries into every version, so which keys stand side by side follows the process, as the standard maps' do, and no answer reads that order: iteration is for a reader that takes every entry. Keys of one hash are held together and told apart by `Eq`.
 
@@ -10,34 +10,45 @@
 mod tests;
 
 use std::{
-    collections::hash_map::RandomState,
-    hash::{BuildHasher, Hash},
+    collections::hash_map::{DefaultHasher, RandomState},
+    hash::{BuildHasher, BuildHasherDefault, Hash},
     rc::Rc,
 };
 
 /// A node of the treap: its key, its priority, what it holds, and the two subtrees it orders.
 #[derive(Clone)]
-struct Node<T> {
-    key: u64,
+struct Node<K, T> {
+    key: K,
     priority: u64,
     payload: T,
-    left: Option<Rc<Node<T>>>,
-    right: Option<Rc<Node<T>>>,
+    left: Option<Rc<Node<K, T>>>,
+    right: Option<Rc<Node<K, T>>>,
 }
 
-/// A treap by `u64` key, every node shared between the versions that hold it.
+/// A treap by key, every node shared between the versions that hold it.
 #[derive(Clone)]
-struct Tree<T> {
-    root: Option<Rc<Node<T>>>,
+struct Tree<K, T> {
+    root: Option<Rc<Node<K, T>>>,
 }
 
-impl<T> Tree<T> {
+impl<K, T> Tree<K, T> {
     const fn new() -> Self {
         Self { root: None }
     }
 
+    /// Every entry, in the order of its key.
+    fn iter(&self) -> InOrder<'_, K, T> {
+        let mut walk = InOrder {
+            pending: Vec::new(),
+        };
+        walk.descend(self.root.as_deref());
+        walk
+    }
+}
+
+impl<K: Ord, T> Tree<K, T> {
     /// What `key` holds.
-    fn get(&self, key: u64) -> Option<&T> {
+    fn get(&self, key: &K) -> Option<&T> {
         let mut node = self.root.as_deref();
         while let Some(current) = node {
             node = match key.cmp(&current.key) {
@@ -49,24 +60,50 @@ impl<T> Tree<T> {
         None
     }
 
-    /// Every payload, in the order of its key.
-    fn iter(&self) -> InOrder<'_, T> {
-        let mut walk = InOrder {
-            pending: Vec::new(),
-        };
-        walk.descend(self.root.as_deref());
-        walk
+    /// The entry of the greatest key below `key`.
+    fn before(&self, key: &K) -> Option<(&K, &T)> {
+        let (mut node, mut found) = (self.root.as_deref(), None);
+        while let Some(current) = node {
+            node = match current.key < *key {
+                true => {
+                    found = Some((&current.key, &current.payload));
+                    current.right.as_deref()
+                }
+                false => current.left.as_deref(),
+            };
+        }
+        found
+    }
+
+    /// The entry of the least key above `key`.
+    fn after(&self, key: &K) -> Option<(&K, &T)> {
+        let (mut node, mut found) = (self.root.as_deref(), None);
+        while let Some(current) = node {
+            node = match current.key > *key {
+                true => {
+                    found = Some((&current.key, &current.payload));
+                    current.left.as_deref()
+                }
+                false => current.right.as_deref(),
+            };
+        }
+        found
     }
 }
 
-impl<T: Clone> Tree<T> {
-    /// `key`'s payload changed by `update`, which is handed the payload `key` holds and answers the payload to place where it held none; `true` where `key` held none.
-    fn upsert(&mut self, key: u64, update: impl FnOnce(Option<&mut T>) -> Option<T>) -> bool {
-        upsert(&mut self.root, key, update)
+impl<K: Ord + Clone, T: Clone> Tree<K, T> {
+    /// `key`'s payload changed by `update`, which is handed the payload `key` holds and answers the payload to place where it held none, a node of `priority`; `true` where `key` held none.
+    fn upsert(
+        &mut self,
+        key: K,
+        priority: u64,
+        update: impl FnOnce(Option<&mut T>) -> Option<T>,
+    ) -> bool {
+        upsert(&mut self.root, key, priority, update)
     }
 
     /// The payload `key` held, taken out. A key the tree does not hold copies no node.
-    fn remove(&mut self, key: u64) -> Option<T> {
+    fn remove(&mut self, key: &K) -> Option<T> {
         self.get(key)?;
         remove(&mut self.root, key)
     }
@@ -80,16 +117,17 @@ fn priority(key: u64) -> u64 {
     mixed ^ (mixed >> 31)
 }
 
-fn upsert<T: Clone>(
-    link: &mut Option<Rc<Node<T>>>,
-    key: u64,
+fn upsert<K: Ord + Clone, T: Clone>(
+    link: &mut Option<Rc<Node<K, T>>>,
+    key: K,
+    priority: u64,
     update: impl FnOnce(Option<&mut T>) -> Option<T>,
 ) -> bool {
     let Some(node) = link else {
         if let Some(payload) = update(None) {
             *link = Some(Rc::new(Node {
                 key,
-                priority: priority(key),
+                priority,
                 payload,
                 left: None,
                 right: None,
@@ -105,7 +143,7 @@ fn upsert<T: Clone>(
             false
         }
         std::cmp::Ordering::Less => {
-            let placed = upsert(&mut node.left, key, update);
+            let placed = upsert(&mut node.left, key, priority, update);
             if node
                 .left
                 .as_ref()
@@ -116,7 +154,7 @@ fn upsert<T: Clone>(
             placed
         }
         std::cmp::Ordering::Greater => {
-            let placed = upsert(&mut node.right, key, update);
+            let placed = upsert(&mut node.right, key, priority, update);
             if node
                 .right
                 .as_ref()
@@ -130,7 +168,7 @@ fn upsert<T: Clone>(
 }
 
 /// The payload at `key`, taken out of the tree under `link`, its node's two subtrees merged where it stood.
-fn remove<T: Clone>(link: &mut Option<Rc<Node<T>>>, key: u64) -> Option<T> {
+fn remove<K: Ord + Clone, T: Clone>(link: &mut Option<Rc<Node<K, T>>>, key: &K) -> Option<T> {
     let node = Rc::make_mut(link.as_mut()?);
     match key.cmp(&node.key) {
         std::cmp::Ordering::Less => remove(&mut node.left, key),
@@ -145,7 +183,10 @@ fn remove<T: Clone>(link: &mut Option<Rc<Node<T>>>, key: u64) -> Option<T> {
 }
 
 /// Two subtrees, every key of `left` below every key of `right`, as one: the root of higher priority stands over the merge of the rest.
-fn merge<T: Clone>(left: Option<Rc<Node<T>>>, right: Option<Rc<Node<T>>>) -> Option<Rc<Node<T>>> {
+fn merge<K: Clone, T: Clone>(
+    left: Option<Rc<Node<K, T>>>,
+    right: Option<Rc<Node<K, T>>>,
+) -> Option<Rc<Node<K, T>>> {
     match (left, right) {
         (None, right) => right,
         (left, None) => left,
@@ -165,7 +206,7 @@ fn merge<T: Clone>(left: Option<Rc<Node<T>>>, right: Option<Rc<Node<T>>>) -> Opt
 }
 
 /// The node at `link` under its left child, which takes its place.
-fn rotate_right<T: Clone>(link: &mut Option<Rc<Node<T>>>) {
+fn rotate_right<K: Clone, T: Clone>(link: &mut Option<Rc<Node<K, T>>>) {
     let mut node = link.take().expect("a node to rotate");
     let mut left = Rc::make_mut(&mut node)
         .left
@@ -177,7 +218,7 @@ fn rotate_right<T: Clone>(link: &mut Option<Rc<Node<T>>>) {
 }
 
 /// The node at `link` under its right child, which takes its place.
-fn rotate_left<T: Clone>(link: &mut Option<Rc<Node<T>>>) {
+fn rotate_left<K: Clone, T: Clone>(link: &mut Option<Rc<Node<K, T>>>) {
     let mut node = link.take().expect("a node to rotate");
     let mut right = Rc::make_mut(&mut node)
         .right
@@ -189,12 +230,12 @@ fn rotate_left<T: Clone>(link: &mut Option<Rc<Node<T>>>) {
 }
 
 /// A walk of a tree in key order, on a stack of the nodes whose right subtrees are still to come.
-struct InOrder<'t, T> {
-    pending: Vec<&'t Node<T>>,
+struct InOrder<'t, K, T> {
+    pending: Vec<&'t Node<K, T>>,
 }
 
-impl<'t, T> InOrder<'t, T> {
-    fn descend(&mut self, mut node: Option<&'t Node<T>>) {
+impl<'t, K, T> InOrder<'t, K, T> {
+    fn descend(&mut self, mut node: Option<&'t Node<K, T>>) {
         while let Some(current) = node {
             self.pending.push(current);
             node = current.left.as_deref();
@@ -202,20 +243,20 @@ impl<'t, T> InOrder<'t, T> {
     }
 }
 
-impl<'t, T> Iterator for InOrder<'t, T> {
-    type Item = (u64, &'t T);
+impl<'t, K, T> Iterator for InOrder<'t, K, T> {
+    type Item = (&'t K, &'t T);
 
     fn next(&mut self) -> Option<Self::Item> {
         let node = self.pending.pop()?;
         self.descend(node.right.as_deref());
-        Some((node.key, &node.payload))
+        Some((&node.key, &node.payload))
     }
 }
 
 /// A map from keys to values, persistent: a clone is a version that shares every node with the map, and an insert into either leaves the other as it was.
 #[derive(Clone)]
 pub struct Persistent<K, V> {
-    tree: Tree<Vec<(K, V)>>,
+    tree: Tree<u64, Vec<(K, V)>>,
     len: usize,
     hasher: RandomState,
 }
@@ -245,7 +286,7 @@ impl<K: Hash + Eq + Clone, V: Clone> Persistent<K, V> {
 
     pub fn get(&self, key: &K) -> Option<&V> {
         self.tree
-            .get(self.hasher.hash_one(key))?
+            .get(&self.hasher.hash_one(key))?
             .iter()
             .find(|(held, _)| held == key)
             .map(|(_, value)| value)
@@ -258,37 +299,40 @@ impl<K: Hash + Eq + Clone, V: Clone> Persistent<K, V> {
     /// `value` at `key`, in place of what `key` held.
     pub fn insert(&mut self, key: K, value: V) {
         let mut added = false;
-        self.tree
-            .upsert(self.hasher.hash_one(&key), |held| match held {
-                None => {
-                    added = true;
-                    Some(vec![(key, value)])
-                }
-                Some(bucket) => {
-                    match bucket.iter_mut().find(|(held, _)| *held == key) {
-                        Some((_, held)) => *held = value,
-                        None => {
-                            added = true;
-                            bucket.push((key, value));
-                        }
+        let hash = self.hasher.hash_one(&key);
+        self.tree.upsert(hash, priority(hash), |held| match held {
+            None => {
+                added = true;
+                Some(vec![(key, value)])
+            }
+            Some(bucket) => {
+                match bucket.iter_mut().find(|(held, _)| *held == key) {
+                    Some((_, held)) => *held = value,
+                    None => {
+                        added = true;
+                        bucket.push((key, value));
                     }
-                    None
                 }
-            });
+                None
+            }
+        });
         self.len += usize::from(added);
     }
 
     /// The value `key` held, taken out.
     pub fn remove(&mut self, key: &K) -> Option<V> {
         let hash = self.hasher.hash_one(key);
-        let bucket = self.tree.get(hash)?;
+        let bucket = self.tree.get(&hash)?;
         let at = bucket.iter().position(|(held, _)| held == key)?;
         self.len -= 1;
         if bucket.len() == 1 {
-            return self.tree.remove(hash).map(|mut bucket| bucket.remove(at).1);
+            return self
+                .tree
+                .remove(&hash)
+                .map(|mut bucket| bucket.remove(at).1);
         }
         let mut removed = None;
-        self.tree.upsert(hash, |held| {
+        self.tree.upsert(hash, priority(hash), |held| {
             removed = held.map(|bucket| bucket.remove(at).1);
             None
         });
@@ -302,7 +346,7 @@ impl<K: Hash + Eq + Clone, V: Clone> Persistent<K, V> {
 }
 
 /// Every entry of a hash-keyed tree, bucket by bucket.
-fn entries<K, V>(tree: &Tree<Vec<(K, V)>>) -> impl Iterator<Item = (&K, &V)> {
+fn entries<K, V>(tree: &Tree<u64, Vec<(K, V)>>) -> impl Iterator<Item = (&K, &V)> {
     tree.iter()
         .flat_map(|(_, bucket)| bucket.iter().map(|(key, value)| (key, value)))
 }
@@ -316,7 +360,7 @@ impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for Persistent<K, V
 /// Values at `i64` positions, persistent as [`Persistent`] is, read back in the order of their positions.
 #[derive(Clone)]
 pub struct Ordered<V> {
-    tree: Tree<V>,
+    tree: Tree<u64, V>,
     len: usize,
 }
 
@@ -353,12 +397,27 @@ impl<V: Clone> Ordered<V> {
     }
 
     pub fn get(&self, position: i64) -> Option<&V> {
-        self.tree.get(order_key(position))
+        self.tree.get(&order_key(position))
+    }
+
+    /// The greatest position below `position` that holds a value, with the value.
+    pub fn before(&self, position: i64) -> Option<(i64, &V)> {
+        self.tree
+            .before(&order_key(position))
+            .map(|(key, value)| (position_of(*key), value))
+    }
+
+    /// The least position above `position` that holds a value, with the value.
+    pub fn after(&self, position: i64) -> Option<(i64, &V)> {
+        self.tree
+            .after(&order_key(position))
+            .map(|(key, value)| (position_of(*key), value))
     }
 
     /// `value` at `position`, in place of what `position` held.
     pub fn insert(&mut self, position: i64, value: V) {
-        let placed = self.tree.upsert(order_key(position), |held| match held {
+        let key = order_key(position);
+        let placed = self.tree.upsert(key, priority(key), |held| match held {
             None => Some(value),
             Some(held) => {
                 *held = value;
@@ -370,7 +429,7 @@ impl<V: Clone> Ordered<V> {
 
     /// The value `position` held, taken out.
     pub fn remove(&mut self, position: i64) -> Option<V> {
-        let removed = self.tree.remove(order_key(position))?;
+        let removed = self.tree.remove(&order_key(position))?;
         self.len -= 1;
         Some(removed)
     }
@@ -382,8 +441,8 @@ impl<V: Clone> Ordered<V> {
 }
 
 /// Every value of a position-keyed tree with its position, the least first.
-fn positioned<V>(tree: &Tree<V>) -> impl Iterator<Item = (i64, &V)> {
-    tree.iter().map(|(key, value)| (position_of(key), value))
+fn positioned<V>(tree: &Tree<u64, V>) -> impl Iterator<Item = (i64, &V)> {
+    tree.iter().map(|(key, value)| (position_of(*key), value))
 }
 
 impl<V: std::fmt::Debug> std::fmt::Debug for Ordered<V> {
@@ -392,5 +451,79 @@ impl<V: std::fmt::Debug> std::fmt::Debug for Ordered<V> {
             .debug_map()
             .entries(positioned(&self.tree))
             .finish()
+    }
+}
+
+/// Values by key, persistent as [`Persistent`] is, read back in the order of their keys: what a table a unit stores by name is kept in, the order it is written in being the keys' own.
+#[derive(Clone)]
+pub struct Sorted<K, V> {
+    tree: Tree<K, V>,
+    len: usize,
+}
+
+impl<K, V> Default for Sorted<K, V> {
+    fn default() -> Self {
+        Self {
+            tree: Tree::new(),
+            len: 0,
+        }
+    }
+}
+
+/// A key's priority: its hash under a hasher every map shares, mixed, so a tree's shape is a function of its keys.
+fn sorted_priority<K: Hash>(key: &K) -> u64 {
+    priority(BuildHasherDefault::<DefaultHasher>::default().hash_one(key))
+}
+
+impl<K: Ord + Hash + Clone, V: Clone> Sorted<K, V> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn get(&self, key: &K) -> Option<&V> {
+        self.tree.get(key)
+    }
+
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.get(key).is_some()
+    }
+
+    /// `value` at `key`, in place of what `key` held.
+    pub fn insert(&mut self, key: K, value: V) {
+        let priority = sorted_priority(&key);
+        let placed = self.tree.upsert(key, priority, |held| match held {
+            None => Some(value),
+            Some(held) => {
+                *held = value;
+                None
+            }
+        });
+        self.len += usize::from(placed);
+    }
+
+    /// The value `key` held, taken out.
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        let removed = self.tree.remove(key)?;
+        self.len -= 1;
+        Some(removed)
+    }
+
+    /// Every entry, the least key first.
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+        self.tree.iter()
+    }
+}
+
+impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for Sorted<K, V> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_map().entries(self.tree.iter()).finish()
     }
 }
