@@ -11,7 +11,7 @@ use {
     curios_utilities::{Plicity, Span, recurse},
     std::{
         cell::{Cell, RefCell},
-        collections::HashSet,
+        collections::{HashMap, HashSet},
         sync::Arc,
     },
 };
@@ -23,6 +23,54 @@ type LoweredParams = Vec<(Plicity, curios_core::Free, curios_core::Term)>;
 ///
 /// Minted once, where the binder is introduced, and reused everywhere that binder is in scope — a progressively-extended parameter list re-enters the same identities rather than re-minting them, or an earlier domain and the body would disagree about which binder a name meant.
 pub(super) type Binder = (String, curios_core::Free);
+
+/// The binders in lexical scope, innermost last, beside the places each written name stands at among them: a name resolves to its innermost binder by one lookup, where a search would read every binder above it — a parameter list reads each annotation under all the parameters before it.
+#[derive(Default)]
+struct LexicalScope {
+    binders: Vec<Binder>,
+    places: HashMap<String, Vec<usize>>,
+}
+
+impl LexicalScope {
+    fn len(&self) -> usize {
+        self.binders.len()
+    }
+
+    fn extend(&mut self, binders: impl IntoIterator<Item = Binder>) {
+        for binder in binders {
+            self.places
+                .entry(binder.0.clone())
+                .or_default()
+                .push(self.binders.len());
+            self.binders.push(binder);
+        }
+    }
+
+    /// Leave every binder entered past `mark`.
+    fn truncate(&mut self, mark: usize) {
+        for (name, _) in self.binders.drain(mark..) {
+            let places = self
+                .places
+                .get_mut(&name)
+                .expect("a binder in scope has its place");
+            places.pop();
+            if places.is_empty() {
+                self.places.remove(&name);
+            }
+        }
+    }
+
+    /// The innermost binder written `name`.
+    fn innermost(&self, name: &str) -> Option<&curios_core::Free> {
+        let place = self.places.get(name)?.last()?;
+        Some(&self.binders[*place].1)
+    }
+
+    /// The names in scope, outermost first.
+    fn names(&self) -> impl Iterator<Item = &str> {
+        self.binders.iter().map(|(name, _)| name.as_str())
+    }
+}
 
 /// A region's ordered lexical and sequencing context. Keeping bindings beside bangs lets a nested expression contribute its entire continuation without losing the scope of its local names or inventing a new monadic region. Each frame closes over the frames after it; adjacent ordinary bindings are emitted as one flat Core block.
 pub(super) enum RegionFrame {
@@ -69,7 +117,7 @@ pub(super) struct Lowerer<'a, 'b> {
     /// The declaration this lowers, which a lint names its binders by: the one identity a later lowering of the declaration unchanged gives them too. `None` for an entry's final term.
     declaration: Option<curios_core::Global>,
     /// The enclosing local binders (function and `let` binders, match-arm patterns, motive labels), innermost last. A bare reference whose spelling appears here resolves to the innermost such binder rather than a like-named module binding — see [`Self::resolve_name`]. Compiler-minted binders are never registered: nothing can write their name.
-    scope: RefCell<Vec<Binder>>,
+    scope: RefCell<LexicalScope>,
     /// Every written binder a reference could reach, with where it was written — the `unused-binder` lint's candidates, decided by [`Self::flush`] once the whole declaration is lowered, since a goal anywhere in it or a mention in its declared type is decided after the binder's scope closes.
     candidates: RefCell<Vec<Candidate>>,
     /// The binder identities some reference resolved to.
@@ -98,7 +146,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Self {
             context,
             declaration,
-            scope: RefCell::new(Vec::new()),
+            scope: RefCell::default(),
             candidates: RefCell::new(Vec::new()),
             used: RefCell::new(HashSet::new()),
             saw_goal: Cell::new(false),
@@ -238,7 +286,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Lower `body` with already-minted `binders` in scope, then restore the previous scope.
     ///
-    /// The scope is a stack, so a shadowing inner binder simply sits above the outer one and [`Self::resolve_name`]'s innermost-first scan finds it. A flat `let` block holds one mark around its loop instead, restoring it on either success or refusal.
+    /// The scope is a stack, so a shadowing inner binder simply sits above the outer one, and [`Self::resolve_name`] reads the innermost binder of a name. A flat `let` block holds one mark around its loop instead, restoring it on either success or refusal.
     pub(super) fn bound<T>(
         &self,
         binders: &[Binder],
@@ -393,15 +441,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             };
         }
         // A local binder shadows any like-named module binding, and the innermost one wins. Resolving here — rather than emitting the spelling for a later stage to re-resolve — is what makes shadowing exact: two binders written `go` are two identities from the start.
-        if let Some((_, id)) = self
-            .scope
-            .borrow()
-            .iter()
-            .rev()
-            .find(|(bound, _)| bound == name.head())
-        {
-            self.used.borrow_mut().insert(*id);
-            return Ok(*id);
+        if let Some(id) = self.scope.borrow().innermost(name.head()).copied() {
+            self.used.borrow_mut().insert(id);
+            return Ok(id);
         }
         match self.context.resolve_bare(name) {
             Some(full) => Ok(curios_core::Free::global(full)),
@@ -1067,7 +1109,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// Why the bare name `label` resolved to nothing where this lowerer stands, sought as `sought`: the binders in scope here and the bindings of the module's scope are what the nearest name is chosen among.
     fn unbound_here(&self, label: &str, sought: curios_core::Sought) -> curios_core::Unresolved {
         let scope = self.scope.borrow();
-        let locals = scope.iter().map(|(bound, _)| bound.as_str());
+        let locals = scope.names();
 
         self.context.unresolved_bare(label, sought, locals)
     }
