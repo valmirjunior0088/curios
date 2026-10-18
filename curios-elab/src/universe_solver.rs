@@ -1812,26 +1812,28 @@ impl UniverseSolver {
     }
 
     /// The unsolved metas that carry `metas`, following each solution to the metas it names. Following one link is not enough, because the meta a link lands on may itself be solved; a level solved to a constant carries no meta and needs no parameter.
+    ///
+    /// Each meta is followed once, whichever meta led to it: a chain of solutions followed a link a round over every meta still in hand costs its length at each of its links.
     pub fn representatives(
         &self,
         metas: impl IntoIterator<Item = UniverseMetaId>,
     ) -> BTreeSet<UniverseMetaId> {
-        let mut metas = metas.into_iter().collect::<BTreeSet<_>>();
-        loop {
-            let mut followed = BTreeSet::new();
-            for meta in &metas {
-                match self.solution(*meta) {
-                    Some(level) => followed.extend(level.metas()),
-                    None => {
-                        followed.insert(*meta);
-                    }
+        let mut carrying = BTreeSet::new();
+        let mut followed = BTreeSet::new();
+        let mut pending = metas.into_iter().collect::<Vec<_>>();
+        while let Some(meta) = pending.pop() {
+            if !followed.insert(meta) {
+                continue;
+            }
+            match self.solution(meta) {
+                Some(level) => pending.extend(level.metas()),
+                None => {
+                    carrying.insert(meta);
                 }
             }
-            if followed == metas {
-                return metas;
-            }
-            metas = followed;
         }
+
+        carrying
     }
 
     /// Settle `metas` at their least solutions, round after round until one settles nothing.
