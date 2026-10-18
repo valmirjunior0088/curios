@@ -4,7 +4,7 @@
 //!
 //! **Nothing of a scope is brought in.** A context is handed the scope and reads through to it where its own stores miss, so what a compile costs of its scope is what its declarations read: no definition is defined again, no registry entry cloned, no witness registered again by reducing a signature its own unit already keyed. A unit in scope answers for its names by the places its own unit keeps for it (`curios_core::Places`), made once for as long as the unit is held.
 //!
-//! **A baseline is one more layer.** A unit compiled over a baseline reads the declarations it keeps where the baseline holds them, above its scope and beneath its own stores. Which it keeps is decided as its declarations are asked for, so the layer answers for none of them at first and for each from where the walk keeps it ([`Established::keeping`], [`Established::keep`]).
+//! **A baseline is one more layer.** A unit compiled over a baseline reads the declarations it keeps where the baseline holds them, above its scope and beneath its own stores. Which it keeps is its walk's to say: the layer answers for none of them at first, then for every declaration but the ones the walk holds to decide, and for each of those from where the walk keeps it ([`Established::keeping`], [`Established::answer_but`], [`Established::keep`]). A walk that holds every declaration leaves it answering for each from where it keeps it.
 //!
 //! **A witness in scope is found by its name**, which states its concept and its key (`curios_core::WitnessId`): a unit's witnesses are an ordered set of names, so the witnesses at a concept and a key are the names from there on.
 
@@ -12,7 +12,7 @@ use {
     super::{Defined, Error, InScope, Question, part_digest},
     curios_core::{
         ConceptDecl, Global, InductDecl, Item, Module, Place, Places, RecGroup, RecItem,
-        StructDecl, WitnessId, WitnessKey,
+        StructDecl, WitnessKey,
     },
     curios_utilities::Qualifier,
     std::{
@@ -33,12 +33,21 @@ enum Placed<'a> {
 struct Standing<'a> {
     module: &'a Module,
     places: Placed<'a>,
-    /// Which of its items this unit answers for, by each one's place among them: the items of a baseline that a walk has kept so far. `None` for a unit in scope, which answers for every name it holds.
-    kept: Option<RefCell<HashSet<usize>>>,
+    /// Which of its items this unit answers for, where it is a baseline ([`Answering`]). `None` for a unit in scope, which answers for every name it holds.
+    answering: Option<RefCell<Answering>>,
     /// Whether this unit is other than the one the baseline was compiled after ([`Established::after`]).
     moved: bool,
     /// Whether this unit is the compiler's own ([`Established::fixed`]).
     fixed: bool,
+}
+
+/// Which of its items a baseline answers for, by each one's place among them.
+#[derive(Debug)]
+enum Answering {
+    /// These alone: the items a walk has kept so far.
+    Kept(HashSet<usize>),
+    /// Every item but these: those of the declarations a walk holds and has not kept, and of the names the unit no longer declares.
+    Withheld(HashSet<usize>),
 }
 
 impl<'a> Standing<'a> {
@@ -51,19 +60,29 @@ impl<'a> Standing<'a> {
 
     /// Whether this unit answers for `name`, where it holds it.
     fn answers(&self, name: &Global) -> bool {
-        let Some(kept) = &self.kept else {
+        let Some(answering) = &self.answering else {
             return true;
         };
 
         self.places()
             .place(name)
-            .is_some_and(|place| kept.borrow().contains(&place.item()))
+            .is_some_and(|place| match &*answering.borrow() {
+                Answering::Kept(kept) => kept.contains(&place.item()),
+                Answering::Withheld(withheld) => !withheld.contains(&place.item()),
+            })
     }
 
     /// Answer for the item declaring `name` from here on.
     fn keep(&self, name: &Global) {
-        if let (Some(kept), Some(place)) = (&self.kept, self.places().place(name)) {
-            kept.borrow_mut().insert(place.item());
+        if let (Some(answering), Some(place)) = (&self.answering, self.places().place(name)) {
+            match &mut *answering.borrow_mut() {
+                Answering::Kept(kept) => {
+                    kept.insert(place.item());
+                }
+                Answering::Withheld(withheld) => {
+                    withheld.remove(&place.item());
+                }
+            }
         }
     }
 
@@ -144,19 +163,10 @@ impl<'a> Standing<'a> {
             .filter(|name| self.answers(name))
     }
 
-    /// The first witness this unit answers for at `(concept, key)`: its names are ordered by concept and key, so the ones declared there are the names from there on.
+    /// The first witness this unit answers for at `(concept, key)` ([`Module::witnesses_at`]).
     fn witness(&self, concept: &Qualifier, key: &WitnessKey) -> Option<Global> {
-        let from = Global::Witness(WitnessId::Spelled {
-            concept: *concept,
-            key: *key,
-            module: Qualifier::empty(),
-            place: 0,
-        });
-
         self.module
-            .witnesses
-            .range(from..)
-            .take_while(|name| spelled_at(name) == Some((Global::Authored(*concept), *key)))
+            .witnesses_at(concept, key)
             .find(|name| self.answers(name))
             .copied()
     }
@@ -196,14 +206,6 @@ fn member_names(rec: &RecItem) -> Vec<Global> {
         .collect()
 }
 
-/// The concept and the key a witness's name states.
-fn spelled_at(name: &Global) -> Option<(Global, WitnessKey)> {
-    match name {
-        Global::Witness(id) => id.spelled(),
-        Global::Authored(_) => None,
-    }
-}
-
 /// The modules already elaborated, as scope for elaborating another.
 #[derive(Debug, Default)]
 pub struct Established<'a> {
@@ -229,7 +231,7 @@ impl<'a> Established<'a> {
                 .map(|module| Standing {
                     module,
                     places: Placed::Made(Places::of(module)),
-                    kept: None,
+                    answering: None,
                     moved: false,
                     fixed: false,
                 })
@@ -247,7 +249,7 @@ impl<'a> Established<'a> {
                 .map(|(module, places)| Standing {
                     module,
                     places: Placed::Kept(places),
-                    kept: None,
+                    answering: None,
                     moved: false,
                     fixed: false,
                 })
@@ -290,17 +292,32 @@ impl<'a> Established<'a> {
         self
     }
 
-    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, answering for the declarations a walk keeps of it and for none until it keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
+    /// This scope with `baseline` above it: the unit being compiled, as an earlier text of it elaborated, answering for none of its declarations until the walk over the unit says which it answers for ([`Established::answer_but`]) or keeps one (`Established::keep`). Nothing of it is brought in: a kept declaration is read where the baseline holds it, as a scope's is.
     pub fn keeping(mut self, baseline: &'a Module, places: &'a Places) -> Self {
         self.units.push(Standing {
             module: baseline,
             places: Placed::Kept(places),
-            kept: Some(RefCell::new(HashSet::new())),
+            answering: Some(RefCell::new(Answering::Kept(HashSet::new()))),
             moved: false,
             fixed: false,
         });
 
         self
+    }
+
+    /// Answer, of the baseline, for every declaration but those declaring `withheld`, from here on: the ones the walk holds to decide, and the ones of names the unit no longer declares. Asked by the walk once it knows what its edit could reach, before anything is asked of the unit.
+    pub(crate) fn answer_but<'n>(&self, withheld: impl Iterator<Item = &'n Global>) {
+        let Some(baseline) = self.units.iter().find(|unit| unit.answering.is_some()) else {
+            return;
+        };
+        let places = baseline.places();
+        let withheld = withheld
+            .filter_map(|name| places.place(name))
+            .map(|place| place.item())
+            .collect();
+        if let Some(answering) = &baseline.answering {
+            *answering.borrow_mut() = Answering::Withheld(withheld);
+        }
     }
 
     /// Keep the baseline's declaration declaring `names`: the baseline answers for them from here on. Asked by the walk, where it finds that everything the declaration read stands.
@@ -321,7 +338,7 @@ impl<'a> Established<'a> {
     fn declaring(&self, name: &Global) -> Option<&Standing<'a>> {
         self.units
             .iter()
-            .filter(|unit| unit.kept.is_none())
+            .filter(|unit| unit.answering.is_none())
             .find(|unit| unit.places().place(name).is_some())
     }
 
@@ -356,7 +373,7 @@ impl<'a> Established<'a> {
         let mut declared = HashMap::<(Global, WitnessKey), (Global, Qualifier)>::new();
         for unit in &self.units {
             for name in unit.witnesses() {
-                let (Some((concept, key)), Global::Witness(id)) = (spelled_at(name), name) else {
+                let (Some((concept, key)), Global::Witness(id)) = (name.witness_key(), name) else {
                     continue;
                 };
                 if let Some(first) = declared.insert((concept, key), (*name, *id.module()))
@@ -404,7 +421,7 @@ impl InScope for Established<'_> {
             .iter()
             .flat_map(Standing::witnesses)
             .filter_map(|name| {
-                let (concept, key) = spelled_at(name)?;
+                let (concept, key) = name.witness_key()?;
 
                 Some((concept, key, *name))
             })

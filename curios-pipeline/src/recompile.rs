@@ -1,6 +1,6 @@
-//! One unit compiled over a baseline: lowered whole, walked whole, and each declaration kept as the baseline holds it where everything its elaboration asked there is answered as it was, with every other elaborated and judged; and each erased form kept where what its erasure asked is.
+//! One unit compiled over a baseline: lowered whole, and each declaration kept as the baseline holds it where nothing its elaboration asked there moved, with every other elaborated and judged; and each erased form kept where what its erasure asked is.
 //!
-//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand (`PreparedText::kept_from`). The elaborator keeps one of those where every question its elaboration put to the declarations around it is answered as it was, asked again in order as the unit is walked (`curios_elab::Traces`), so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). Erasure keeps the erased form of a declaration the elaborator kept where every question its erasure put is answered as it was, of the declarations around it and of the erased forms it read a binding in (`curios_elab::ErasedBaseline`).
+//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand, and says which it lowered anew (`PreparedText::lowered_anew`). The elaborator walks what those could reach, through who asked what of the baseline's traces (`curios_elab::Traces`), keeps every declaration none of them reached without asking it, and keeps a reached one where nothing it asked moved, so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). Erasure keeps the erased form of a declaration the elaborator kept where every question its erasure put is answered as it was, of the declarations around it and of the erased forms it read a binding in (`curios_elab::ErasedBaseline`).
 //!
 //! **A declaration lowered again is elaborated again.** Nothing compares two lowerings: an edit that leaves a declaration's meaning alone costs that declaration's elaboration, and what it comes to is compared part by part with what the baseline holds, by whatever read it.
 
@@ -17,7 +17,6 @@ use {
     curios_text::{PreparedText, UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::SyntaxRegistry,
-    std::collections::BTreeSet,
 };
 
 /// Compile one unit against `predecessors` over `baseline`: lower whole, then elaborate, judge and erase what does not stand.
@@ -90,10 +89,11 @@ pub(crate) fn compile_lowered_over(
     };
 
     // A mount says how every name of the unit is spelled, so a unit whose mounts moved keeps nothing.
-    let kept = match baseline.core().mounts == lowered.core().mounts {
-        true => lowered.kept_from(baseline.text()),
-        false => BTreeSet::new(),
+    let relowered = match baseline.core().mounts == lowered.core().mounts {
+        true => lowered.lowered_anew(baseline.text()),
+        false => lowered.declarations().names().copied().collect(),
     };
+    let dropped = lowered.dropped_from(baseline.text());
 
     // The baseline is the scope's last layer, answering for each declaration from where the walk keeps it.
     let fixed = predecessors.fixed();
@@ -109,7 +109,9 @@ pub(crate) fn compile_lowered_over(
         places: baseline.places(),
         traces: baseline.traces(),
         readers: baseline.readers(),
-        lowered: &kept,
+        declarations: lowered.declarations(),
+        relowered: &relowered,
+        dropped: &dropped,
     };
     let walked = match tail {
         Some(tail) => elaborate_and_zonk_entry_over(
@@ -157,12 +159,12 @@ pub(crate) fn compile_lowered_over(
             places,
             traces,
             readers,
-            kept,
+            made,
         },
         entry,
     ) = walked.map_err(|error| refuse(&lowered, error))?;
     // And what the baseline's read in the declarations kept from it.
-    lowered.credit_reused(baseline.text(), |name| kept.contains(name));
+    lowered.credit_reused(baseline.text(), |name| !made.contains(name));
     if let (Some(elaborated), Some(entry)) = (&mut elaborated, &entry) {
         elaborated(&core, entry);
     }
@@ -193,7 +195,7 @@ pub(crate) fn compile_lowered_over(
             core: baseline.core(),
             places: baseline.places(),
             erased: baseline.erased(),
-            kept: &kept,
+            made: &made,
         },
     )
     .map_err(|error| {

@@ -17,6 +17,9 @@ pub use concept::*;
 mod items;
 pub use items::*;
 
+mod declarations;
+pub use declarations::*;
+
 mod module;
 pub use module::*;
 

@@ -544,7 +544,7 @@ pub fn erase_unit_over(
     grown(|| {
         let module = module.as_module();
         validate_universes_of(module, &|name| {
-            !baseline.kept.contains(name) || baseline.erased.held(name).is_none()
+            baseline.made.contains(name) || baseline.erased.held(name).is_none()
         })?;
         let view = Projected::over(scope, module);
         let context = &mut Retyping::over(budget, syntax, &view);

@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{UniverseConstraintOrigin, UniverseSeed, Unresolved, WitnessId},
+    crate::{UniverseConstraintOrigin, UniverseSeed, Unresolved, WitnessId, WitnessKey},
     curios_utilities::{InfixOp, Qualifier, Symbol, name},
     std::{cmp::Ordering, collections::BTreeMap, fmt, hash, rc::Rc},
 };
@@ -100,6 +100,14 @@ impl Global {
     /// This name as the compiler holds it, in full: what a dump, a kernel refusal and an erased program's debug name print, being read about the compiler. A report names a declaration through its reader's [`Spelling`](crate::Spelling), which is why a `Global` has no `Display` and this is asked for by name.
     pub fn faithful(&self) -> Faithful<'_, Self> {
         Faithful(self)
+    }
+
+    /// The concept and the key this name states, where it is a witness's that spells them ([`WitnessId::spelled`]).
+    pub fn witness_key(&self) -> Option<(Global, WitnessKey)> {
+        match self {
+            Global::Witness(id) => id.spelled(),
+            Global::Authored(_) => None,
+        }
     }
 
     /// The module path a programmer wrote this name at, if they wrote one.

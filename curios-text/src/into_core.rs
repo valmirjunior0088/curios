@@ -67,7 +67,7 @@ use {
     std::{
         borrow::Cow,
         cell::OnceCell,
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
         sync::Arc,
     },
@@ -395,6 +395,9 @@ pub struct PreparedText {
     core: curios_core::Module,
     /// Where the unit's lowered items hold each name it declares, with the kind it declares it as: what finds a declaration's lowered form by its name, and says what it is with nothing read.
     declared: BTreeMap<curios_core::Global, LoweredAt>,
+    /// The declarations the unit's lowered items make, made the first time something asks: what its elaboration asks a declaration for by name.
+    #[archived_with(curios_archive::Skip)]
+    declarations: OnceCell<curios_core::Declarations>,
     /// The unit's lowered items where it was restored, each the bytes it was stored as until something reads it: `core` holds them where the unit was lowered in this process.
     #[archived_with(curios_archive::Skip)]
     items: Option<Vec<curios_archive::Deferred<curios_core::Item>>>,
@@ -722,13 +725,35 @@ impl PreparedText {
         Ok(self)
     }
 
-    /// The names this unit declares by a lowering it took from `baseline` whole: each one's item is the baseline's own under the same name, with the registry entries the baseline holds for it. What a recompile has no need to compare.
+    /// The declarations this unit's lowered module makes ([`curios_core::Declarations`]), made the first time something asks: a unit lowered in this process holds its module whole.
+    pub fn declarations(&self) -> &curios_core::Declarations {
+        self.declarations
+            .get_or_init(|| curios_core::Declarations::of(self.core()))
+    }
+
+    /// The names this unit declares by a lowering it did not take from `baseline` whole: each one's item is new to the unit, or lowered again. What a recompile over `baseline` makes again, every other declaration's item being the baseline's own under the same name, with the registry entries the baseline holds for it.
     ///
     /// **By the record, never by the text.** A declaration is the baseline's where this unit holds the very record the baseline does, which only a kept lowering leaves behind; and under the same name, since a kept witness is named anew and may take the name another held.
-    pub fn kept_from(&self, baseline: &PreparedText) -> BTreeSet<curios_core::Global> {
-        self.taken_from(baseline)
+    pub fn lowered_anew(&self, baseline: &PreparedText) -> BTreeSet<curios_core::Global> {
+        let taken = self
+            .taken_from(baseline)
             .into_iter()
-            .flat_map(|(ours, _)| self.lowered_item(ours).declared_names())
+            .map(|(ours, _)| ours)
+            .collect::<HashSet<_>>();
+
+        self.declared
+            .iter()
+            .filter(|(_, at)| !taken.contains(&(at.item as usize)))
+            .map(|(name, _)| *name)
+            .collect()
+    }
+
+    /// The names `baseline` declares and this unit does not.
+    pub fn dropped_from(&self, baseline: &PreparedText) -> BTreeSet<curios_core::Global> {
+        baseline
+            .declared
+            .keys()
+            .filter(|name| !self.declared.contains_key(*name))
             .copied()
             .collect()
     }
@@ -2602,6 +2627,7 @@ fn into_core_unit_within(
         audiences: OnceCell::from(audiences),
         paths: OnceCell::new(),
         declared: declared_in(&items),
+        declarations: OnceCell::new(),
         items: None,
         carried: Vec::new(),
         core: curios_core::Module {

@@ -11,7 +11,7 @@ use {
         Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
         Members, Outline, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
         Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
-        UniverseError, Variance, WitnessId, build_shorten,
+        UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
     },
     curios_utilities::{Mount, Persistent, Plicity, Qualifier},
     std::{
@@ -1001,6 +1001,28 @@ impl Module {
     /// Every entry the module's formers carry, each under the name that declares it, in the order the module stores its items. Reads every item: for a module in hand, never for a unit in scope, which is asked by name.
     pub fn nominals(&self) -> impl Iterator<Item = (&Global, &Nominal)> {
         self.items.iter().flat_map(Item::nominals)
+    }
+
+    /// The witnesses the module declares at `concept` and `key`, in the order of their names: a witness's name states its concept and its key first ([`WitnessId`]), so the ones declared at one key are neighbours among the module's witnesses, and reading them reads no other.
+    pub fn witnesses_at(
+        &self,
+        concept: &Qualifier,
+        key: &WitnessKey,
+    ) -> impl Iterator<Item = &Global> {
+        let from = Global::Witness(WitnessId::Spelled {
+            concept: *concept,
+            key: *key,
+            module: Qualifier::empty(),
+            place: 0,
+        });
+        let at = (Global::Authored(*concept), *key);
+
+        self.witnesses
+            .range(from..)
+            .take_while(move |name| match name {
+                Global::Witness(id) => id.spelled() == Some(at),
+                Global::Authored(_) => false,
+            })
     }
 
     /// Every inductive family the module declares, by name — see [`Module::nominals`].

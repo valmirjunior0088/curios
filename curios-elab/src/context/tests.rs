@@ -2,9 +2,10 @@ use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        ConceptDecl, Free, Global, HeadKey, InductDecl, Intrinsic, Level, MetavarId, Minted, Mints,
-        Nat, StructDecl, Telescope, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseMetaId, UniverseRole, WitnessKey,
+        ConceptDecl, Declarations, Definition, DefinitionKind, Free, Global, HeadKey, InductDecl,
+        Intrinsic, Item, Level, MetavarId, Minted, Mints, Module, Nat, StructDecl, Telescope, Term,
+        Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseMetaId, UniverseRole, WitnessKey,
     },
     curios_utilities::Qualifier,
     std::{
@@ -103,10 +104,36 @@ fn named(path: &str) -> Global {
     Global::Authored(Qualifier::from([path]))
 }
 
+/// The declarations of a unit that writes `names` in order, each a definition of its own.
+fn written(names: &[Global]) -> Declarations {
+    let items = names
+        .iter()
+        .map(|name| {
+            Item::Let(Definition {
+                name: *name,
+                kind: DefinitionKind::Authored,
+                universe_context: UniverseContext::empty(),
+                island: Qualifier::empty(),
+                totality: Totality::default(),
+                proof: false,
+                variances: Vec::new(),
+                field_variances: Vec::new(),
+                type_: Term::type_ground(),
+                body: Term::type_ground(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Declarations::of(&Module {
+        items: items.into(),
+        ..Module::default()
+    })
+}
+
 /// A unit that writes `a` and then `b`, neither elaborated.
 fn unit_of_two(context: &mut Context) -> [Global; 2] {
     let [a, b] = [named("a"), named("b")];
-    context.begin_unit(BTreeMap::from([(a, 0), (b, 1)]), BTreeSet::from([a, b]));
+    context.begin_unit(written(&[a, b]), BTreeSet::from([a, b]));
 
     [a, b]
 }
@@ -131,14 +158,7 @@ fn unit_of_entries(context: &mut Context) -> [Global; 4] {
         named("reader"),
     ];
     let [family, record, concept, _] = names;
-    context.begin_unit(
-        names
-            .iter()
-            .enumerate()
-            .map(|(place, name)| (*name, place))
-            .collect(),
-        BTreeSet::from(names),
-    );
+    context.begin_unit(written(&names), BTreeSet::from(names));
     context
         .register_induct(
             &family,

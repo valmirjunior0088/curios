@@ -20,13 +20,13 @@ use {
     },
 };
 
-/// The baseline a unit is erased over: an earlier text of the unit as it elaborated and as it erased, with every name of a declaration the new text's elaboration kept as the baseline holds it.
+/// The baseline a unit is erased over: an earlier text of the unit as it elaborated and as it erased, with every name of a declaration the new text's elaboration made again: every other the unit declares it kept as the baseline holds it.
 #[derive(Clone, Copy)]
 pub struct ErasedBaseline<'a> {
     pub core: &'a Module,
     pub places: &'a Places,
     pub erased: &'a ErasedUnit,
-    pub kept: &'a BTreeSet<Global>,
+    pub made: &'a BTreeSet<Global>,
 }
 
 /// An erased form the unit keeps of its baseline, with what erasing it asked.
@@ -112,7 +112,7 @@ impl<'a> ErasedOver<'a> {
         for (item, declared) in module.items.iter().enumerate() {
             let names = declared.declared_names();
             let keepable = names.first().is_some_and(|first| {
-                names.iter().all(|name| baseline.kept.contains(*name))
+                names.iter().all(|name| !baseline.made.contains(*name))
                     && baseline.erased.held(first).is_some()
                     && baseline.erased.asked(first).is_some()
             });
@@ -225,7 +225,7 @@ impl<'a> ErasedOver<'a> {
     fn standing(&mut self, item: &Item, unit: &ErasedUnit) -> Option<Kept> {
         let names = item.declared_names();
         let first = names.first()?;
-        if !names.iter().all(|name| self.baseline.kept.contains(*name)) {
+        if names.iter().any(|name| self.baseline.made.contains(*name)) {
             return None;
         }
         let erased = self.baseline.erased.held(first)?;
@@ -299,7 +299,7 @@ impl<'a> ErasedOver<'a> {
         let Some(&(item, member)) = self.declared.get(name) else {
             return self.baseline.places.place(name).is_none() && self.read_stands(name, question);
         };
-        if self.baseline.kept.contains(name) {
+        if !self.baseline.made.contains(name) {
             return true;
         }
         let (module, baseline) = (self.module, self.baseline.core);

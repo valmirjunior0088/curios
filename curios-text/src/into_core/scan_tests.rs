@@ -178,11 +178,11 @@ fn a_standing_file_is_parsed_where_a_declaration_of_it_is_lowered_again() {
 
     assert_eq!(over.core(), whole.core());
     assert_eq!(
-        over.kept_from(&baseline)
+        over.lowered_anew(&baseline)
             .iter()
             .map(|name| name.faithful().to_string())
             .collect::<Vec<_>>(),
-        ["/lib/a/z", "/lib/c/x", "/lib/d/x"],
+        ["/lib/a/y"],
         "every declaration but the one whose name moved is the baseline's"
     );
 }

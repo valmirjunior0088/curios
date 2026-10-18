@@ -72,10 +72,10 @@ use {
     },
     curios_analysis::{Classification, Unfolding, records_case_equation},
     curios_core::{
-        Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Definition, DefinitionKind,
-        Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports, InductDecl,
-        Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, NumLit, Quality, RecGroup,
-        ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
+        Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Declarations, Definition,
+        DefinitionKind, Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
+        InductDecl, Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, NumLit, Quality,
+        RecGroup, ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         Universes, Variance, WitnessKey, WitnessOrigin, instantiate_universes_scoped,
     },
@@ -339,14 +339,10 @@ impl<'s> Context<'s> {
         self.underway.checked.truncate(mark);
     }
 
-    /// Begin a unit's items: where each of its names is written, and the names its own items declare, none finished yet. No lemma of the unit is on offer until its walk says so ([`Context::offer_lemmas`]).
-    pub(crate) fn begin_unit(
-        &mut self,
-        order: BTreeMap<Global, usize>,
-        declared: BTreeSet<Global>,
-    ) {
-        self.underway.order = order;
-        self.underway.needs.begin(declared);
+    /// Begin a unit's items: the declarations they make, which place each of its names, and the names of those its walk is to decide, none finished yet; every other declaration of the unit is a baseline's, and finished. No lemma of the unit is on offer until its walk says so ([`Context::offer_lemmas`]).
+    pub(crate) fn begin_unit(&mut self, declarations: Declarations, unfinished: BTreeSet<Global>) {
+        self.underway.declarations = declarations;
+        self.underway.needs.begin(unfinished);
         self.underway.offering = false;
     }
 
@@ -434,7 +430,7 @@ impl<'s> Context<'s> {
 
     /// Where `name` is written among the unit's items, where a declaration of the unit declares it.
     pub(crate) fn written_at(&self, name: &Global) -> Option<usize> {
-        self.underway.order.get(name).copied()
+        self.underway.declarations.item(name)
     }
 
     /// Whether the declaration being elaborated wrote a goal ([`Attempt::holds_goals`]).
@@ -583,7 +579,7 @@ impl<'s> Context<'s> {
     ///
     /// **A lemma of the unit is read only where the unit's lemmas are on offer.** Before that the answer is no whatever the lemma is, so what is noted is that none was on offer and nothing of the lemma: a trace asked again then waits for no lemma its elaboration did not read.
     pub(crate) fn proof_may_apply(&self, name: &Global) -> bool {
-        if self.underway.order.contains_key(name) {
+        if self.underway.declarations.item(name).is_some() {
             self.typing
                 .traced
                 .note(Question::Lemmas, Answered::Whether(self.underway.offering));

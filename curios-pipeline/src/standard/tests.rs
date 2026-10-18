@@ -84,12 +84,12 @@ fn edits() -> [Edit; 2] {
     ]
 }
 
-/// `lowered`, the library's sources lowered over the archived unit `std`, elaborated over it: every declaration of `kept` is offered to the walk as one the lowering kept, and the walk keeps each whose trace stands.
+/// `lowered`, the library's sources lowered over the archived unit `std`, elaborated over it: every name of `relowered` is offered to the walk as one the lowering made anew, and the walk keeps each declaration whose reads stand.
 fn elaborated_over(
     predecessors: Predecessors<'_>,
     std: &Unit,
     lowered: &PreparedText,
-    kept: &BTreeSet<Global>,
+    relowered: &BTreeSet<Global>,
 ) -> Result<Recompiled, Error> {
     let established = Established::placed(&predecessors.placed()).keeping(std.core(), std.places());
     let mut context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
@@ -104,7 +104,9 @@ fn elaborated_over(
             places: std.places(),
             traces: std.traces(),
             readers: std.readers(),
-            lowered: kept,
+            declarations: lowered.declarations(),
+            relowered,
+            dropped: &lowered.dropped_from(std.text()),
         },
         lowered.core(),
         lowered.minted(),
@@ -136,9 +138,9 @@ fn std_recompile_census() {
                 into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text(), true)
                     .expect("the edited library lowers");
             let lowered_in = start.elapsed();
-            let kept = lowered.kept_from(std.text());
+            let relowered = lowered.lowered_anew(std.text());
             let start = Instant::now();
-            let elaborated = elaborated_over(predecessors, std, &lowered, &kept)
+            let elaborated = elaborated_over(predecessors, std, &lowered, &relowered)
                 .unwrap_or_else(|error| panic!("the edited library elaborates: {error}"));
             let elaborated_in = start.elapsed();
             let start = Instant::now();
@@ -162,11 +164,11 @@ fn std_recompile_census() {
             println!("{label}");
             println!(
                 "  lowered     {:>6} names again of {names}",
-                names - kept.len()
+                relowered.len()
             );
             println!(
                 "  elaborated  {:>6} names again of {names}",
-                names - elaborated.kept.len()
+                elaborated.made.len()
             );
             println!("  lower       {lowered_in:>10.1?}");
             println!("  elaborate   {elaborated_in:>10.1?}");
@@ -728,7 +730,6 @@ fn std_replay_census() {
                     .map(move |name| (*name, index))
             })
             .collect::<BTreeMap<_, _>>();
-        let every = position.keys().copied().collect::<BTreeSet<_>>();
 
         println!("\n=== elaborating each declaration of /std again, alone, over the archive ===");
         let declarations = declarations(lowered_core);
@@ -775,8 +776,7 @@ fn std_replay_census() {
                         .take(padding),
                 );
 
-                let kept = every.difference(&again).copied().collect::<BTreeSet<_>>();
-                match elaborated_over(predecessors, std, &lowered, &kept) {
+                match elaborated_over(predecessors, std, &lowered, &again) {
                     Err(error) => {
                         refused += 1;
                         let refusal = error.to_string().replace('\n', " | ");
@@ -797,7 +797,7 @@ fn std_replay_census() {
                             println!("  beside {padding}: {}: what it asked", own.describe());
                         }
                         // What the walk elaborated again beyond what it was handed: a declaration that asked a part which came out another way.
-                        let others = every.len() - replayed.kept.len() - again.len();
+                        let others = replayed.made.difference(&again).count();
                         if others != 0 {
                             beside += 1;
                             println!(
@@ -1370,8 +1370,12 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                             error.format()
                         )
                     });
-            let kept = lowered.kept_from(std.text());
-            let elaborated = elaborated_over(predecessors, std, &lowered, &kept);
+            let elaborated = elaborated_over(
+                predecessors,
+                std,
+                &lowered,
+                &lowered.lowered_anew(std.text()),
+            );
 
             (elaborated, beside, declined)
         };

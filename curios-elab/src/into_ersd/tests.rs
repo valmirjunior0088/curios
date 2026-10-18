@@ -509,7 +509,7 @@ fn a_value_is_computed_again_where_a_form_its_evaluation_ran_is_another() {
             core: before.as_module(),
             places: &Places::of(before.as_module()),
             erased: &baseline,
-            kept: &BTreeSet::from([nominal("stepped")]),
+            made: &BTreeSet::from([nominal("step")]),
         },
     )
     .expect("the unit erases over its baseline");
@@ -533,7 +533,7 @@ fn a_computed_value_is_kept_where_what_it_ran_was_erased_again_to_what_it_was() 
             core: before.as_module(),
             places: &Places::of(before.as_module()),
             erased: &baseline,
-            kept: &BTreeSet::from([nominal("stepped")]),
+            made: &BTreeSet::from([nominal("step")]),
         },
     )
     .expect("the unit erases over its baseline");
@@ -676,7 +676,7 @@ fn form(unit: &ErasedUnit, name: &str) -> String {
     )
 }
 
-/// A unit erased over a baseline erases the items the elaborator did not keep and keeps the others. `kept` is given another body since the baseline was erased and is named among the kept, so what the unit holds for it is still what the baseline erased it to: an item erased again would show the new body.
+/// A unit erased over a baseline erases the items the elaborator made again and keeps the others. `kept` is given another body since the baseline was erased and is not named among the made, so what the unit holds for it is still what the baseline erased it to: an item erased again would show the new body.
 #[test]
 fn a_unit_erased_over_a_baseline_erases_what_was_elaborated_again_and_no_other() {
     let nat = Term::intrinsic(Intrinsic::NatType);
@@ -708,7 +708,7 @@ fn a_unit_erased_over_a_baseline_erases_what_was_elaborated_again_and_no_other()
             core: before.as_module(),
             places: &Places::of(before.as_module()),
             erased: &baseline,
-            kept: &BTreeSet::from([nominal("kept")]),
+            made: &BTreeSet::from([nominal("redone")]),
         },
     )
     .expect("the unit erases over its baseline");
@@ -735,7 +735,7 @@ fn an_erased_form_is_erased_again_where_a_name_it_uses_is_bound_another_way() {
             core: before.as_module(),
             places: &Places::of(before.as_module()),
             erased: &baseline,
-            kept: &BTreeSet::from([nominal("caller")]),
+            made: &BTreeSet::from([nominal("callee")]),
         },
     )
     .expect("the unit erases over its baseline");
@@ -759,7 +759,7 @@ fn an_erased_form_is_kept_where_what_it_read_came_out_as_it_was() {
             core: before.as_module(),
             places: &Places::of(before.as_module()),
             erased: &baseline,
-            kept: &BTreeSet::from([nominal("caller")]),
+            made: &BTreeSet::from([nominal("callee")]),
         },
     )
     .expect("the unit erases over its baseline");

@@ -4,11 +4,8 @@
 
 use {
     super::{Attempt, CheckedTerms, Credits, DeclaredWitnesses, EmbeddingSite, Needs, Posture},
-    curios_core::{Extent, Global, Imports, Minted},
-    std::{
-        collections::{BTreeMap, BTreeSet},
-        rc::Rc,
-    },
+    curios_core::{Declarations, Extent, Global, Imports, Minted},
+    std::{collections::BTreeSet, rc::Rc},
 };
 
 /// The half of a context that exists because a unit is being elaborated.
@@ -26,8 +23,8 @@ pub(crate) struct Underway {
     pub(super) checked: CheckedTerms,
     // Where surface elaboration stands: the module whose item is being elaborated, and whether the prover is running; see [`Posture`].
     pub(super) posture: Posture,
-    /// Where each name the unit declares is written, as its place among the unit's items as the lowering hands them on — every item's, the ones a recompile reuses among them: which names are the unit's own (`Context::proof_may_apply`), and where a goal's report is placed (`Context::written_at`).
-    pub(super) order: BTreeMap<Global, usize>,
+    /// The declarations the unit's items make, as the lowering hands them on, by which each name the unit declares is placed among its items — every item's, the ones a recompile keeps among them: which names are the unit's own (`Context::proof_may_apply`), and where a goal's report is placed (`Context::written_at`).
+    pub(super) declarations: Declarations,
     /// Whether the lemmas the unit being elaborated declares are on offer to the proofs the elaborator writes: not while its walk elaborates the prover's vocabulary, and from then on (`Context::offer_lemmas`). A context no unit was begun in offers whatever is in scope.
     pub(super) offering: bool,
     /// What the unit's lowering minted, declaration by declaration: what each declaration's state starts above (`Context::begin_state`).
@@ -56,7 +53,7 @@ impl Default for Underway {
             credits: Credits::default(),
             checked: CheckedTerms::default(),
             posture: Posture::default(),
-            order: BTreeMap::new(),
+            declarations: Declarations::default(),
             offering: true,
             minted: Rc::default(),
             broken: BTreeSet::new(),

@@ -24,18 +24,14 @@ use {
     },
     curios_analysis::group_totality,
     curios_core::{
-        Advance, Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType,
-        Global, InductDecl, InductParam, Intrinsic, Item, Items, Level, Minted, Module, Nominal,
-        Places, Quality, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term, Totality,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
-        Universes, Visit, stamp_declaration_instance, universe_metas,
+        Advance, Bound, ConceptDecl, Declarations, Definition, DefinitionKind, Entrypoint, Free,
+        FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Items, Level, Minted, Module,
+        Nominal, Places, Quality, RecItem, SelfReference, StructDecl, Subterm, Telescope, Term,
+        Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseMetaId, Universes, Visit, stamp_declaration_instance, universe_metas,
     },
     curios_utilities::{Plicity, Qualifier, grown},
-    std::{
-        cell::RefCell,
-        collections::{BTreeMap, BTreeSet},
-        rc::Rc,
-    },
+    std::{cell::RefCell, collections::BTreeSet, rc::Rc},
 };
 
 /// The universe arguments `value` applies to `name`'s declaration, at the first occurrence that carries them.
@@ -1512,22 +1508,23 @@ fn carrying(context: &Context, item: Item) -> Item {
     })
 }
 
-/// Each witness `module` declares, under the concept and the key its name states ([`WitnessId`](curios_core::WitnessId)), at the place `order` gives its name. The lowering read both off how the signature is spelled, over every item of the unit, so a whole compile and a recompile hold one key.
-fn declared_witnesses(module: &Module, order: &BTreeMap<Global, usize>) -> Vec<(Global, Declared)> {
-    module
-        .items
+/// Each witness `module` declares among `items`, under the concept and the key its name states ([`WitnessId`](curios_core::WitnessId)), at the place `declarations` gives its name. The lowering read both off how the signature is spelled, over every item of the unit, so a whole compile and a recompile hold one key.
+fn declared_witnesses(
+    module: &Module,
+    items: &[&Item],
+    declarations: &Declarations,
+) -> Vec<(Global, Declared)> {
+    items
         .iter()
-        .flat_map(Item::definitions)
+        .flat_map(|item| item.definitions())
         .filter(|definition| module.witnesses.contains(&definition.name))
         .map(|definition| {
-            let spelled = match &definition.name {
-                Global::Witness(id) => id.spelled(),
-                Global::Authored(_) => None,
-            };
             let declared = Declared {
-                spelled,
+                spelled: definition.name.witness_key(),
                 module: definition.island,
-                position: order[&definition.name],
+                position: declarations
+                    .item(&definition.name)
+                    .expect("a name an item declares is placed"),
             };
 
             (definition.name, declared)
@@ -1549,12 +1546,10 @@ struct ElaboratedSuffix {
     held: Vec<Holding>,
     /// What each declaration asked of the declarations around it: in the attempt that stood, or where the baseline elaborated it for one kept.
     traces: Traces,
-    /// Every name of a declaration kept as the baseline holds it. Empty for a unit compiled whole.
-    kept: BTreeSet<Global>,
+    /// Every name of a declaration elaborated again over a baseline: every other the unit declares is kept as the baseline holds it. Empty for a unit compiled whole.
+    made: BTreeSet<Global>,
     /// Who asked what, of `traces`, where the unit was compiled over a baseline: the baseline's readers with the edges of what the walk made or dropped replaced.
     readers: Option<Readers>,
-    /// The names the baseline declared and the unit does not. Empty for a unit compiled whole.
-    lost: Vec<Global>,
 }
 
 /// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint's body and the type it states. Returns the rebuilt suffix, its entry stating the type its body was judged at, reduced through the accumulated definitions.
@@ -1563,12 +1558,13 @@ struct ElaboratedSuffix {
 ///
 /// **One protocol serves both entry points**, and that is the point. `established` is [`Established::nothing`] for a from-scratch elaboration and the units in scope otherwise; every step below degenerates to the whole-module reading when it is empty, so there is no second implementation to keep in agreement by reading — the shape of a configuration-dependent defect, a rule correct in the configuration its author was looking at and wrong in the other one.
 ///
-/// A scope is read through where it stands and nothing of it is elaborated or brought in ([`Context::read_through`]), and so are the declarations a unit compiled `over` a baseline keeps of it: `established` holds the baseline as its last layer ([`Established::keeping`]), answering for each declaration from where the walk keeps it.
+/// A scope is read through where it stands and nothing of it is elaborated or brought in ([`Context::read_through`]), and so are the declarations a unit compiled `over` a baseline keeps of it: `established` holds the baseline as its last layer ([`Established::keeping`]), answering for every declaration the walk does not hold, and for each it holds from where the walk keeps it. `declarations` are the ones `module`'s items make, by which the walk asks for one.
 fn elaborate_module_suffix<'s>(
     context: &mut Context<'s>,
     established: Option<&'s Established<'_>>,
     over: Option<Over<'_>>,
     module: &Module,
+    declarations: &Declarations,
     minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<ElaboratedSuffix, Error> {
@@ -1584,86 +1580,74 @@ fn elaborate_module_suffix<'s>(
     // The unit's own mounts, after its scope's. Mount sets are pairwise disjoint, so the order only fixes which entry a lookup finds first among equals, and there are none.
     context.mount(&module.mounts);
 
-    // The entries the lowered formers carry, each registered under its former's name: every family, then every record, then every concept, with the witness markers alongside — witness *table* entries register per item (`elaborate_module_let`), once the elaborated head exists.
-    for (name, nominal) in module.nominals() {
-        if let Some(declaration) = nominal.inductive() {
-            context.register_induct(name, declaration.clone())?;
-        }
-    }
-    for (name, nominal) in module.nominals() {
-        if let Some(record) = nominal.record() {
-            context.register_struct(name, record.clone())?;
-        }
-    }
-    for (name, nominal) in module.nominals() {
-        if let Some(concept) = nominal.concept() {
-            context.register_concept(name, concept.clone())?;
-        }
-    }
-    for name in &module.witnesses {
-        context.mark_witness_declaration(name);
-    }
-    check_concept_registry(context)?;
-
     // Elaboration goes on minting in the spaces the unit's lowering minted in, so each counter starts above the lowering's count: a lowered hole and an inserted implicit are distinct metavariables, and an unbound name — a free local the lowering minted — is never an elaborated binder, which would find it bound instead of reporting it. The scope's terms carry neither, so nothing a predecessor minted can meet these.
     context.seed(minted);
 
-    // Where each name of the unit is written, and which of them its items declare: what an item reads of a declaration that has not elaborated is then a need, never an absence. Every witness among them goes in under the key its name states, which is what a question about its concept is answered by until it elaborates.
-    let order = module
-        .items
-        .iter()
-        .enumerate()
-        .flat_map(|(position, item)| {
-            item.declared_names()
-                .into_iter()
-                .map(move |name| (*name, position))
-        })
-        .collect::<BTreeMap<_, _>>();
-    for (name, declared) in declared_witnesses(module, &order) {
-        context.declare_witness(name, declared);
-    }
     // The prover's vocabulary, as far as the unit declares it: asked for first, each member bringing in what it reads.
     let vocabulary = context
         .syntax()
         .entailment
         .targets()
         .map(|name| Global::Authored(name.qualifier()))
-        .filter(|name| order.contains_key(name))
+        .filter(|name| declarations.item(name).is_some())
         .collect::<BTreeSet<_>>();
-    context.begin_unit(
-        order,
-        module
-            .items
-            .iter()
-            .flat_map(Item::declared_names)
-            .copied()
-            .collect(),
-    );
 
-    // Every item, because `module` carries only its own: the prefix arrived as scope through the replay above rather than as a run of leading items to skip. Each elaborates when it is asked for, after what it reads, which is `demand`'s.
+    // Every item, because `module` carries only its own: the prefix arrived as scope through the replay above rather than as a run of leading items to skip. Each elaborates when it is asked for, after what it reads, which is `demand`'s; over a baseline, the walk holds what the edit could reach, and the baseline answers for every other declaration from here on.
     //
     // A refused item is reported, undone and poisoned, and the other items are elaborated as if it had never been written; an item that reaches a poisoned name is withheld and reports nothing of its own. What is undone, what is left and why a dependent is silent is `recovery`'s.
     let entry_stamp = ItemStamp(module.items.len());
     let mut demand = Demand::new(
         module,
+        declarations,
         Poison::seeded(context.take_broken()),
         Survivors::default(),
         over,
     );
+    demand.reach(context, &vocabulary);
+    let held_items = demand.held_items().collect::<Vec<_>>();
+
+    // The entries the lowered formers of the declarations the walk holds carry, each registered under its former's name: every family, then every record, then every concept, with the witness markers alongside — witness *table* entries register per item (`elaborate_module_let`), once the elaborated head exists. The baseline answers for every other declaration's.
+    let nominals = || held_items.iter().flat_map(|item| item.nominals());
+    for (name, nominal) in nominals() {
+        if let Some(declaration) = nominal.inductive() {
+            context.register_induct(name, declaration.clone())?;
+        }
+    }
+    for (name, nominal) in nominals() {
+        if let Some(record) = nominal.record() {
+            context.register_struct(name, record.clone())?;
+        }
+    }
+    for (name, nominal) in nominals() {
+        if let Some(concept) = nominal.concept() {
+            context.register_concept(name, concept.clone())?;
+        }
+    }
+    for name in held_items.iter().flat_map(|item| item.declared_names()) {
+        if module.witnesses.contains(name) {
+            context.mark_witness_declaration(name);
+        }
+    }
+    check_concept_registry(context)?;
+
+    // Where each name of the unit is written, and which of them the walk holds: what an item reads of a declaration that has not elaborated is then a need, never an absence. Every witness among them goes in under the key its name states, which is what a question about its concept is answered by until it elaborates.
+    for (name, declared) in declared_witnesses(module, &held_items, declarations) {
+        context.declare_witness(name, declared);
+    }
+    context.begin_unit(declarations.clone(), demand.held_names());
     {
         curios_profile::profile!("demand::all");
-        demand.all(context, vocabulary);
+        demand.all(context, &vocabulary);
     }
     if let Some(established) = established {
         demand.note_foreign(established);
     }
-    let kept = demand.kept_names();
+    let made = demand.made_names();
     let Demand {
         poison,
         mut survivors,
         traces,
         readers,
-        lost,
         ..
     } = demand;
 
@@ -1733,11 +1717,10 @@ fn elaborate_module_suffix<'s>(
 
     // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `erase` sees elaborated telescopes, zonked where their declarations were published. An entry the context no longer holds was a refused or withheld item's, taken out with it: the module carries the survivors' entries and no other, since an entry whose declaring item is absent would reach the kernel and erasure in its lowered form, which nothing zonked.
     let names = survivors.names();
-    let witnesses = module
-        .witnesses
+    let witnesses = names
         .iter()
-        .filter(|name| names.contains(*name))
-        .cloned()
+        .filter(|name| module.witnesses.contains(*name))
+        .copied()
         .collect();
     let tests = module
         .tests
@@ -1771,9 +1754,8 @@ fn elaborate_module_suffix<'s>(
         obligations,
         held,
         traces,
-        kept,
+        made,
         readers,
-        lost,
     })
 }
 
@@ -1982,7 +1964,9 @@ pub fn elaborate_and_zonk_module(
 ) -> Result<Module, Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
     grown(|| {
-        let suffix = elaborate_module_suffix(context, None, None, module, minted, None)?;
+        let declarations = Declarations::of(module);
+        let suffix =
+            elaborate_module_suffix(context, None, None, module, &declarations, minted, None)?;
         let finalized = finalize_and_check(
             context,
             suffix.module,
@@ -2090,8 +2074,16 @@ fn elaborate_and_zonk<'s>(
 ) -> Result<(Finalized, Traces), Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     grown(|| {
-        let elaborated =
-            elaborate_module_suffix(context, Some(established), None, module, minted, tail)?;
+        let declarations = Declarations::of(module);
+        let elaborated = elaborate_module_suffix(
+            context,
+            Some(established),
+            None,
+            module,
+            &declarations,
+            minted,
+            tail,
+        )?;
         let finalized = finalize_and_check(
             context,
             elaborated.module,
@@ -2120,7 +2112,7 @@ fn elaborate_and_zonk<'s>(
     })
 }
 
-/// What a unit compiled over a baseline hands elaboration: the baseline, as an earlier text of the unit elaborated, with the places of its names; what each of its declarations asked as it elaborated, and who asked what of those traces; and the names the new text's lowering kept, each one's lowered item being the baseline's own.
+/// What a unit compiled over a baseline hands elaboration: the baseline, as an earlier text of the unit elaborated, with the places of its names; what each of its declarations asked as it elaborated, and who asked what of those traces; and what the new text's lowering made of it: the declarations its items make, the names it lowered anew, and the names it no longer declares.
 ///
 /// The scope elaboration is handed holds the baseline as its last layer ([`Established::keeping`]), which is the caller's to arrange, as it is that the baseline was compiled after the units this one is.
 pub struct Recompile<'a> {
@@ -2128,20 +2120,26 @@ pub struct Recompile<'a> {
     pub places: &'a Places,
     pub traces: &'a Traces,
     pub readers: &'a Readers,
-    pub lowered: &'a BTreeSet<Global>,
+    /// The declarations the new text's lowered items make.
+    pub declarations: &'a Declarations,
+    /// The names whose lowered item is not the baseline's own: new to the unit, or lowered again.
+    pub relowered: &'a BTreeSet<Global>,
+    /// The names the baseline declares and the new text's lowering does not.
+    pub dropped: &'a BTreeSet<Global>,
 }
 
-/// A unit elaborated over a baseline: its module, what each of its declarations asked and who asked what of that, and every name of a declaration kept as the baseline holds it.
+/// A unit elaborated over a baseline: its module, what each of its declarations asked and who asked what of that, and every name of a declaration elaborated again.
 pub struct Recompiled {
     pub module: Module,
     /// Where `module` holds each name, where its baseline's places were handed on with the names of what the walk changed placed again: `None` where they are made the first time something asks.
     pub places: Option<Places>,
     pub traces: Traces,
     pub readers: Readers,
-    pub kept: BTreeSet<Global>,
+    /// Every name of a declaration elaborated again: every other the unit declares is kept as the baseline holds it.
+    pub made: BTreeSet<Global>,
 }
 
-/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the unit is walked whole, a declaration is kept as the baseline holds it where everything it asked there is answered as it was, read where the baseline holds it, and every other is elaborated (`demand`). The module holds every item, the baseline's own for a declaration kept, in the order a whole compile stores it in (`Module::ordered`).
+/// [`elaborate_and_zonk_unit`] for a unit compiled over a baseline: the walk visits what the edit could reach, a declaration is kept as the baseline holds it where nothing it asked moved, read where the baseline holds it, and every other is elaborated (`demand`). The module holds every item, the baseline's own for a declaration kept, in the order a whole compile stores it in (`Module::ordered`).
 ///
 /// Everything decided of a declaration is decided of the ones elaborated: each decides its own vectors, totality and erasure obligations as it is published, reading a kept declaration's as the baseline left them, and a kept item is zonked and stamped already, so what is finalized is what was elaborated.
 pub fn elaborate_and_zonk_unit_over<'s>(
@@ -2182,12 +2180,20 @@ fn elaborate_and_zonk_over<'s>(
             baseline: recompile.baseline,
             places: recompile.places,
             traces: recompile.traces,
-            lowered: recompile.lowered,
+            relowered: recompile.relowered,
+            dropped: recompile.dropped,
             readers: recompile.readers,
             established,
         };
-        let elaborated =
-            elaborate_module_suffix(context, Some(established), Some(over), module, minted, tail)?;
+        let elaborated = elaborate_module_suffix(
+            context,
+            Some(established),
+            Some(over),
+            module,
+            recompile.declarations,
+            minted,
+            tail,
+        )?;
         let finalized = finalize_and_check(
             context,
             elaborated.module,
@@ -2203,14 +2209,15 @@ fn elaborate_and_zonk_over<'s>(
             entry,
             obligations,
         } = finalized?;
-        let (traces, kept, readers) = (elaborated.traces, elaborated.kept, elaborated.readers);
+        let (traces, made_names, readers) =
+            (elaborated.traces, elaborated.made, elaborated.readers);
         let Assembled {
             module,
             ordered,
             places,
         } = {
             curios_profile::profile!("assemble_unit_over");
-            assembled(&recompile, module, &kept, &elaborated.lost, made)
+            assembled(&recompile, module, &made_names, made)
         };
         // A module whose items reach what the baseline's reached is in the order the baseline was given, every item new to it where that order puts it: the order is a function of what the items declare and name.
         let module = match ordered {
@@ -2238,7 +2245,7 @@ fn elaborate_and_zonk_over<'s>(
                     places,
                     traces,
                     readers: readers.expect("a walk over a baseline keeps who asked what"),
-                    kept,
+                    made: made_names,
                 },
                 entry,
             )
@@ -2253,18 +2260,17 @@ struct Assembled {
     places: Option<Places>,
 }
 
-/// The declarations elaborated and the ones kept as one module: `made`, with the baseline's own item and registry entries for every declaration of `lowered` the walk `kept`, and no item of the names `lost`. Where the edit moved no item's place in the order a module is stored in, the module is a version of the baseline's ([`kept_order`]); the caller puts the items in that order otherwise.
+/// The declarations elaborated and the ones kept as one module: `made`, the items of the declarations named in `made_names`, with the baseline's own item and registry entries for every other declaration of `lowered`, and no item of a name the recompile dropped. Where the edit moved no item's place in the order a module is stored in, the module is a version of the baseline's ([`kept_order`]); the caller puts the items in that order otherwise.
 ///
 /// The markers are the lowering's: every run that produces a unit dropped nothing, so every item a marker names is there.
 fn assembled(
     recompile: &Recompile<'_>,
     lowered: &Module,
-    kept: &BTreeSet<Global>,
-    lost: &[Global],
+    made_names: &BTreeSet<Global>,
     made: Module,
 ) -> Assembled {
     let made = made.items.into_iter().collect::<Vec<_>>();
-    let (items, ordered, places) = match kept_order(recompile, kept, lost, &made) {
+    let (items, ordered, places) = match kept_order(recompile, made_names, &made) {
         Some((items, places)) => (items, true, places),
         None => {
             let mut items = Items::from(made);
@@ -2274,9 +2280,9 @@ fn assembled(
                     .items
                     .iter()
                     .filter(|item| {
-                        item.declared_names()
-                            .first()
-                            .is_some_and(|name| kept.contains(*name))
+                        item.declared_names().first().is_some_and(|name| {
+                            !made_names.contains(*name) && !recompile.dropped.contains(*name)
+                        })
                     })
                     .cloned(),
             );
@@ -2297,7 +2303,7 @@ fn assembled(
     }
 }
 
-/// The items of a module compiled over a baseline in the order a module is stored in ([`Module::ordered`]), as a version of the baseline's where the edit moved no item's place in it: each item `made` in the place of the baseline's item it replaces, where it reaches the declarations of the unit that one reached; each item `kept` where the baseline holds it; no item of the names `lost`; and each item new to the unit, which no other item reaches, where the sort puts it. With them, where the module holds each name: the baseline's places with the names of what changed placed again, where the baseline was a version itself, and `None` where they are to be made.
+/// The items of a module compiled over a baseline in the order a module is stored in ([`Module::ordered`]), as a version of the baseline's where the edit moved no item's place in it: each item `made` in the place of the baseline's item it replaces, where it reaches the declarations of the unit that one reached; each item kept where the baseline holds it; no item of a name the recompile dropped; and each item new to the unit, which no other item reaches, where the sort puts it. With them, where the module holds each name: the baseline's places with the names of what changed placed again, where the baseline was a version itself, and `None` where they are to be made.
 ///
 /// **The sort, not repeated.** The order is the one a sort gives that takes, of the items waiting on nothing, the one named least: a function of what the items declare and reach. An item made that reaches what the one it replaces reached leaves every item waiting on what it waited on. An item new to the unit that nothing reaches waits on what it reaches and holds back nothing, so it is taken at the first place after everything it reaches where the item the baseline's order takes is named after it, and every other item is taken as before; one taken away that nothing reaches leaves the rest as they were. A kept item reaches only what the baseline held, and what it read of a declaration taken away its elaboration answers otherwise, so it is made, not kept.
 ///
@@ -2306,17 +2312,14 @@ fn assembled(
 /// `None` where an item made reaches otherwise than the one it replaces, declares other names than it, or is new and reaches another new item, or no place is left between two items, and the module is sorted again.
 fn kept_order(
     recompile: &Recompile<'_>,
-    kept: &BTreeSet<Global>,
-    lost: &[Global],
+    made_names: &BTreeSet<Global>,
     made: &[Item],
 ) -> Option<(Items, Option<Places>)> {
-    let (baseline, places) = (recompile.baseline, recompile.places);
-    let made_names = made
-        .iter()
-        .flat_map(Item::declared_names)
-        .copied()
-        .collect::<BTreeSet<_>>();
-    let held_now = |name: &Global| kept.contains(name) || made_names.contains(name);
+    let (baseline, places, lost) = (recompile.baseline, recompile.places, recompile.dropped);
+    // Every name the baseline holds and the recompile did not drop is the unit's still, kept or made.
+    let held_now = |name: &Global| {
+        made_names.contains(name) || (places.place(name).is_some() && !lost.contains(name))
+    };
     let held_then = |name: &Global| places.place(name).is_some();
     // What `item` reaches of the declarations a unit holds, its own names left out.
     let reach = |item: &Item, held: &dyn Fn(&Global) -> bool| {

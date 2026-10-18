@@ -12,7 +12,7 @@ use {
 /// Which of a unit's declarations have not finished, and what the attempt under way needed of them.
 #[derive(Debug, Default)]
 pub(crate) struct Needs {
-    /// The names of the unit's declarations that have not finished elaborating.
+    /// The names of the unit's declarations that have not finished elaborating: a declaration a recompile keeps without its walk holding it is finished from the start.
     unfinished: BTreeSet<Global>,
     /// The names the attempt under way declares, which it reads as its own.
     attempting: BTreeSet<Global>,
@@ -21,9 +21,9 @@ pub(crate) struct Needs {
 }
 
 impl Needs {
-    /// Begin a unit's items: the names its own items declare, none finished yet.
-    pub(crate) fn begin(&mut self, declared: BTreeSet<Global>) {
-        self.unfinished = declared;
+    /// Begin a unit's items: the names of the declarations its walk is to decide, none finished yet.
+    pub(crate) fn begin(&mut self, unfinished: BTreeSet<Global>) {
+        self.unfinished = unfinished;
     }
 
     /// Begin an attempt at the declaration declaring `names`, with nothing needed yet.
