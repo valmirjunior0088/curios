@@ -5,8 +5,7 @@ use {
     curios_abi::HostOp,
     curios_std::{std_directory, std_source},
     curios_text::{
-        Formatted, GroupItem, Module, SYNTAX, TopItem, UseGroup, prepare_prelude, sys_module,
-        sys_source,
+        GroupItem, Module, SYNTAX, TopItem, UseGroup, prepare_prelude, sys_module, sys_source,
     },
     std::{
         collections::BTreeSet,
@@ -17,7 +16,7 @@ use {
 
 /// Every `.crs` file `/std` is authored in, in the one tree `curios-std` holds.
 ///
-/// Walked rather than listed, for the reason the build script discovers its inputs rather than naming them: a module added without being registered is a mistake `the_std_record_names_every_authored_source_and_no_other` catches against this walk, and one added without being formatted should not need a second list to catch it.
+/// Walked rather than listed, for the reason the build script discovers its inputs rather than naming them: a module added without being registered is a mistake `the_std_record_names_every_authored_source_and_no_other` catches against this walk.
 pub(crate) fn authored() -> Vec<PathBuf> {
     // The library's own tests sit inside its directory as units of their own, which no header of `/std` declares and `curios-std`'s suite holds.
     let tests = std_directory().join("tests");
@@ -39,31 +38,6 @@ pub(crate) fn authored() -> Vec<PathBuf> {
 
     sources.sort();
     sources
-}
-
-/// **The standard library is written in the canonical form `curios format` produces.**
-///
-/// `curios format --check` is only a guarantee where something checks it. A corpus drifted from canonical form hands anyone formatting the tree a diff that says nothing about their own change, and hides a formatter defect — a comment placed on the wrong arm — from the one corpus large enough to show it.
-///
-/// Formatting is syntax-only — no prelude, no elaboration, no compiler — so this belongs in the ordinary suite rather than behind `--ignored`, and it is this crate's rather than `curios-text`'s because these are the sources this crate authors. A failure names the file, and `curios format <file>` is the fix.
-#[test]
-fn every_authored_source_is_canonically_formatted() {
-    let mut wrong = Vec::new();
-
-    for path in authored() {
-        match Formatted::from_path(&path) {
-            Ok(Formatted::Unchanged(_)) => {}
-            Ok(Formatted::Changed(_)) => wrong.push(format!("{}: not canonical", path.display())),
-            Err(refusal) => wrong.push(format!("{}: {refusal}", path.display())),
-        }
-    }
-
-    assert!(
-        wrong.is_empty(),
-        "{} of these sources are not as `curios format` writes them:\n  {}\n\nrun `cargo run --package curios -- format <file>` on each",
-        wrong.len(),
-        wrong.join("\n  ")
-    );
 }
 
 /// **The standard library lints clean.**

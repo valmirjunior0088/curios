@@ -8,6 +8,7 @@ mod runner;
 use runner::*;
 
 use {
+    crate::std_directory,
     curios::run_wasm,
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_runtime::{ForeignBindings, MockHost},
@@ -104,12 +105,16 @@ fn sources_under(directory: PathBuf) -> Vec<PathBuf> {
     sources
 }
 
-/// **The corpus is written in the canonical form `curios format` produces**, as `curios-prelude-archive`'s `every_authored_source_is_canonically_formatted` holds `/std`: a tree nothing holds drifts, and a drifted file hands whoever formats it a diff that says nothing about their own change.
+/// **The library and its corpus are written in the canonical form `curios format` produces.**
+///
+/// `curios format --check` is only a guarantee where something checks it. A tree drifted from canonical form hands anyone formatting it a diff that says nothing about their own change, and hides a formatter defect — a comment placed on the wrong arm — from the one corpus large enough to show it.
+///
+/// Formatting is syntax-only — no prelude, no elaboration — so one walk holds every `.crs` file this crate authors, the library's modules and the corpus units alike. A failure names the file, and `curios format <file>` is the fix.
 #[test]
-fn every_corpus_source_is_canonically_formatted() {
+fn every_source_is_canonically_formatted() {
     let mut wrong = Vec::new();
 
-    for path in sources_under(root()) {
+    for path in sources_under(std_directory()) {
         match Formatted::from_path(&path) {
             Ok(Formatted::Unchanged(_)) => {}
             Ok(Formatted::Changed(_)) => wrong.push(format!("{}: not canonical", path.display())),

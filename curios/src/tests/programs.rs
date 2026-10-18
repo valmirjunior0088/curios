@@ -60,7 +60,7 @@ fn every_program_lints_clean() {
     );
 }
 
-/// **The programs are written in the canonical form `curios format` produces**, as `curios-prelude-archive`'s `every_authored_source_is_canonically_formatted` holds `/std`: a tree nothing holds drifts, and a drifted file hands whoever formats it a diff that says nothing about their own change.
+/// **The programs are written in the canonical form `curios format` produces**, as `curios-std`'s `every_source_is_canonically_formatted` holds `/std` and its corpus: a tree nothing holds drifts, and a drifted file hands whoever formats it a diff that says nothing about their own change.
 #[test]
 fn every_program_source_is_canonically_formatted() {
     let mut wrong = Vec::new();
