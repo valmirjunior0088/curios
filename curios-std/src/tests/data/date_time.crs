@@ -1,5 +1,5 @@
 -- The calendar under its proofs: a day count and a date are one, leap days fall where the Gregorian calendar puts them, a date outside it is no date, and a moment crosses to its date and time at an offset and back.
-use /std/{Nat, Int, List, Option, Test};
+use /std/{Bool, Nat, Int, List, Option, Eq, Test};
 use /std/time/{Timestamp, Duration, Date, Time, DateTime, Month, Weekday, Offset, OffsetDateTime};
 
 -- The date a day count names, as its fields.
@@ -110,3 +110,53 @@ test every_time_reads_back_as_it_was_written =
         Test/equal(Date/of_str("2023-02-29"), Option/none()),
         Test/equal(Date/of_str("+999-01-01"), Option/none()),
         Test/equal(Duration/of_str("PT"), Option/none())]);
+
+-- Every day of one 400-year era, walked a day at a time: each date is the next one's predecessor in the calendar, and the day count reads back from each.
+let follows(prev: Date, next: Date) -> Bool =
+    match prev.day < Date/days_in_month(prev.year, prev.month)
+    | true => next.year == prev.year && next.month == prev.month && next.day == prev.day + 1
+    | false =>
+        match Month/to_nat(prev.month) < 12
+        | true =>
+            next.year == prev.year && Month/to_nat(next.month) == Month/to_nat(prev.month) + 1
+                && next.day == 1
+        | false => next.year == prev.year + +1 && next.month == Month/january() && next.day == 1
+        end
+    end;
+
+let stray(n: Int, left: Nat, prev: Date, strays: Nat) -> Nat =
+    match left
+    | 0 => strays
+    | k + 1 =>
+        let d = Date/of_days(n);
+        let fits = Date/to_days(d) == n && follows(prev, d);
+        stray(n + +1, k, d, match fits | true => strays | false => strays + 1 end)
+    end;
+
+test every_day_of_an_era_follows_the_one_before_and_reads_back_its_count =
+    Test/equal(stray(+0, 146097, Date/of_days(-1), 0), 0);
+
+-- Claims the types hold: the absolute layer's laws are the count's own, and closed dates are decided where they are written.
+let _a_difference_undoes_an_addition(
+    t: Timestamp,
+    d: Duration,
+) -> Eq()(Timestamp/diff(Timestamp/add(t, d), t), d) =
+    Eq/refl();
+
+let _two_additions_are_one_of_their_sum(
+    t: Timestamp,
+    a: Duration,
+    b: Duration,
+) -> Eq()(Timestamp/add(Timestamp/add(t, a), b), Timestamp/add(t, a + b)) =
+    Eq/refl();
+
+let _a_length_added_and_taken_away_is_itself(a: Duration, b: Duration) -> Eq()(a + b - b, a) =
+    Eq/refl();
+
+let _the_leap_day_of_2000_is_a_tuesday: Eq()(
+    Option/map(Date/try_of(+2000, Month/february(), 29), Date/weekday),
+    Option/some(Weekday/tuesday())) =
+    Eq/refl();
+
+let _1900_has_no_leap_day: Eq()(Date/try_of(+1900, Month/february(), 29), Option/none()) =
+    Eq/refl();
