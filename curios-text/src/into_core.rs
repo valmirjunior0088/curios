@@ -3077,6 +3077,13 @@ fn into_core_unit_within(
             Vec::new(),
         ),
     };
+    // Over a baseline, the unit's rows are its declarations' in the order they stand: each lowered now the walk's, every other the baseline's, whether or not the walk entered its module.
+    let foreigns = match (&baseline, bodies.get()) {
+        (Some(baseline), Some(bodies)) => {
+            bodies.foreign_rows(&items, &foreigns, baseline.unit().foreigns())
+        }
+        _ => foreigns,
+    };
 
     // What each body's declarations and `use` declarations were found to leave unused: the baseline's, with each body the walk passed found again and each it no longer holds taken away.
     let mut body_lints = baseline

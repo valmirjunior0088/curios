@@ -520,3 +520,30 @@ fn a_witness_of_a_standing_file_whose_key_read_moved_is_named_again() {
     same_unit(&over, &whole);
     same_keys(&over, &whole);
 }
+
+/// The `foreign` rows of modules no edit reaches stand among the unit's rows where their declarations stand, with a row lowered again between them, the modules passed unentered.
+#[test]
+fn a_foreign_row_no_edit_reaches_stands_where_its_declaration_does() {
+    let root = files(
+        "foreign",
+        &[
+            ("lib.crs", "pub mod a;\npub mod b;\npub mod c;\n"),
+            ("a.crs", "foreign first_row(Nat) -> Nat;\n"),
+            ("b.crs", "foreign middle_row(Nat) -> Nat;\n"),
+            ("c.crs", "foreign last_row(Nat) -> Nat;\n"),
+        ],
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = rewritten(
+        &root,
+        "b.crs",
+        "foreign middle_row(Bytes) -> Nat;\n",
+        &baseline,
+    );
+
+    same_unit(&over, &whole);
+    let rows = |unit: &PreparedText| format!("{:?}", unit.foreigns().iter().collect::<Vec<_>>());
+    assert_eq!(rows(&over), rows(&whole));
+    assert_eq!(anew(&over), ["/lib/b/middle_row"]);
+}

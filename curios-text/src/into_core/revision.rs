@@ -9,7 +9,8 @@ mod tests;
 
 use {
     super::{Key, LoweredDeclaration, PreparedText, Records},
-    curios_utilities::{Persistent, Qualifier, Sorted},
+    curios_abi::ForeignStore,
+    curios_utilities::{Ordered, Persistent, Qualifier, Sorted},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
@@ -208,10 +209,11 @@ pub(super) fn texts_of(records: &Records) -> Persistent<Key, i64> {
     texts
 }
 
-/// Each module body's declarations, by the place of each one's first item, with how many of them no later lowering may keep: what a lowering over the unit finds a body's declarations by, and whether it may pass the body unwalked.
+/// Each module body's declarations, by the place of each one's first item, with how many of them no later lowering may keep: what a lowering over the unit finds a body's declarations by, and whether it may pass the body unwalked. And the declarations that registered a `foreign` row, by the same place: what the unit's rows are found by in the order its declarations stand.
 #[derive(Clone, Default)]
 pub(crate) struct Bodies {
     by: Sorted<Qualifier, Rc<Body>>,
+    foreign: Ordered<()>,
 }
 
 /// One module body's declarations ([`Bodies`]).
@@ -219,8 +221,6 @@ pub(crate) struct Bodies {
 pub(crate) struct Body {
     pub firsts: BTreeSet<i64>,
     pub unkeyable: usize,
-    /// How many of them registered a `foreign` row.
-    pub foreign: usize,
 }
 
 impl Bodies {
@@ -232,7 +232,9 @@ impl Bodies {
             let body = gathered.entry(record.body()).or_default();
             body.firsts.insert(first);
             body.unkeyable += usize::from(!record.keyable());
-            body.foreign += usize::from(record.foreign());
+            if record.foreign() {
+                bodies.foreign.insert(first, ());
+            }
         }
         for (module, body) in gathered {
             bodies.by.insert(module, Rc::new(body));
@@ -296,6 +298,28 @@ impl Bodies {
         last
     }
 
+    /// The `foreign` rows of the declarations this index holds, in the order they stand, `items` being the unit's: each one lowered now from `made`, every other from `kept`, a row being registered under the name its declaration binds.
+    pub(super) fn foreign_rows(
+        &self,
+        items: &curios_core::Items,
+        made: &ForeignStore,
+        kept: &ForeignStore,
+    ) -> ForeignStore {
+        let mut rows = ForeignStore::new();
+        for (first, ()) in self.foreign.iter() {
+            let named = usize::try_from(first)
+                .ok()
+                .and_then(|at| items.names(at).first().and_then(|name| name.qualifier()))
+                .map(|path| path.join());
+            let row = named.and_then(|name| made.get(&name).or_else(|| kept.get(&name)));
+            if let Some(row) = row {
+                rows.register((**row).clone());
+            }
+        }
+
+        rows
+    }
+
     /// `record`, whose first item stands at `first`, among its body's declarations.
     fn add(&mut self, first: i64, record: &LoweredDeclaration) {
         let mut body = self
@@ -305,7 +329,9 @@ impl Bodies {
             .unwrap_or_default();
         body.firsts.insert(first);
         body.unkeyable += usize::from(!record.keyable());
-        body.foreign += usize::from(record.foreign());
+        if record.foreign() {
+            self.foreign.insert(first, ());
+        }
         self.by.insert(record.body(), Rc::new(body));
     }
 
@@ -317,7 +343,7 @@ impl Bodies {
         let mut body = (**held).clone();
         body.firsts.remove(&first);
         body.unkeyable -= usize::from(!record.keyable());
-        body.foreign -= usize::from(record.foreign());
+        self.foreign.remove(first);
         match body.firsts.is_empty() {
             true => {
                 self.by.remove(&record.body());

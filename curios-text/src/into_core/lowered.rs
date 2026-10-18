@@ -425,8 +425,6 @@ pub(crate) struct BaselineHalf {
 pub(super) struct Baseline<'a> {
     unit: &'a PreparedText,
     by_text: &'a Persistent<Key, i64>,
-    /// Whether the unit declares a foreign function at all, which the prelude does not: a row is looked up by its import name, spelled for the asking.
-    foreign: bool,
     /// What the edit moved of what the lowering reads ([`Moved`]): `None` where a unit in scope moved, and every declaration is asked.
     moved: Option<Moved>,
     /// The declarations kept without asking, by their keys: what marks the `use` sites and the mounts their lookups read, where asking would have.
@@ -440,7 +438,6 @@ impl<'a> Baseline<'a> {
         Self {
             unit,
             by_text: unit.by_text(),
-            foreign: unit.foreigns.iter().next().is_some(),
             moved: None,
             unasked: RefCell::new(HashSet::new()),
             claimed: RefCell::new(HashSet::new()),
@@ -452,7 +449,7 @@ impl<'a> Baseline<'a> {
         Self { moved, ..self }
     }
 
-    /// The modules a walk over this baseline enters, every other being passed unentered with everything under it: each whose text the edit touched or whose scope a binding that moved is read in, each holding a declaration whose lookups read a binding that moved, each holding a kept witness whose key read a declaration of those, and each holding a declaration no later lowering may keep or a `foreign` row, with every module above each. `None` where a unit in scope moved, and every module is entered.
+    /// The modules a walk over this baseline enters, every other being passed unentered with everything under it: each whose text the edit touched or whose scope a binding that moved is read in, each holding a declaration whose lookups read a binding that moved, each holding a kept witness whose key read a declaration of those, and each holding a declaration no later lowering may keep, with every module above each. `None` where a unit in scope moved, and every module is entered.
     ///
     /// **A module passed unentered is the baseline's whole**: its text stands, its scope stands, and nothing any of its declarations read moved, so lowering it again would write what the baseline holds.
     pub(super) fn entered(&self) -> Option<HashSet<Qualifier>> {
@@ -494,7 +491,7 @@ impl<'a> Baseline<'a> {
         entered.extend(
             bodies
                 .iter()
-                .filter(|(_, body)| body.unkeyable > 0 || body.foreign > 0)
+                .filter(|(_, body)| body.unkeyable > 0)
                 .map(|(module, _)| *module),
         );
         let readers = self.unit.lookup_readers();
@@ -657,25 +654,20 @@ impl<'a> Baseline<'a> {
             let item = self.unit.lowered_item(at);
             let kept = match item {
                 curios_core::Item::Let(definition) => {
-                    FlatItem::Let(self.kept_let(definition, context, lowered))
+                    FlatItem::Let(kept_let(definition, context, lowered))
                 }
                 // A group of witnesses is closed again under the names this lowering gives its members, which the scope it was closed under spells.
                 curios_core::Item::Rec(rec) if rec.definitions.iter().any(is_witness) => {
                     FlatItem::Rec(
                         rec.definitions()
                             .iter()
-                            .map(|definition| self.kept_let(definition, context, lowered))
+                            .map(|definition| kept_let(definition, context, lowered))
                             .collect(),
                     )
                 }
                 curios_core::Item::Rec(rec) => {
                     for definition in &rec.definitions {
-                        self.keep_entries(
-                            &definition.name,
-                            definition.name,
-                            &definition.kind,
-                            lowered,
-                        );
+                        keep_entries(definition.name, &definition.kind, lowered);
                     }
 
                     FlatItem::Kept(rec.clone())
@@ -708,67 +700,58 @@ impl<'a> Baseline<'a> {
         });
         lowered.declarations.push(Rc::clone(declaration));
     }
+}
 
-    /// One definition of a kept item as the walk holds one it lowered: a witness under the next name of its module, as a lowering gives it before its signature is read.
-    fn kept_let(
-        &self,
-        definition: &curios_core::Definition,
-        context: &Context,
-        lowered: &mut Lowering,
-    ) -> FlatLet {
-        // A kept witness keeps the name the baseline gives it, which naming changes where its place or its key may have moved; it still takes its place among its module's, which a witness lowered after it counts.
-        if matches!(definition.kind, curios_core::DefinitionKind::Witness) {
-            context.fresh_witness();
-        }
-        let name = definition.name;
-        self.keep_entries(&definition.name, name, &definition.kind, lowered);
-
-        FlatLet {
-            name,
-            kind: definition.kind.clone(),
-            // What is read of where it was written was taken where it was lowered.
-            span: None,
-            island: definition.island,
-            type_: definition.type_.clone(),
-            body: definition.body.clone(),
-        }
+/// One definition of a kept item as the walk holds one it lowered: a witness under the next name of its module, as a lowering gives it before its signature is read.
+fn kept_let(
+    definition: &curios_core::Definition,
+    context: &Context,
+    lowered: &mut Lowering,
+) -> FlatLet {
+    // A kept witness keeps the name the baseline gives it, which naming changes where its place or its key may have moved; it still takes its place among its module's, which a witness lowered after it counts.
+    if matches!(definition.kind, curios_core::DefinitionKind::Witness) {
+        context.fresh_witness();
     }
+    let name = definition.name;
+    keep_entries(name, &definition.kind, lowered);
 
-    /// Take what the baseline's tables hold under `held`, a name one of its definitions declares, into `lowered` under `name`.
-    fn keep_entries(
-        &self,
-        held: &curios_core::Global,
-        name: curios_core::Global,
-        kind: &curios_core::DefinitionKind,
-        lowered: &mut Lowering,
-    ) {
-        // A kept former carries the entry the baseline lowered with it.
-        match kind.nominal() {
-            Some(curios_core::Nominal::Inductive(entry)) => {
-                lowered.induct_decls.insert(name, entry.clone());
-            }
-            Some(curios_core::Nominal::Struct(record)) => {
-                lowered.struct_decls.insert(name, record.clone());
-            }
-            Some(curios_core::Nominal::Concept { concept, record }) => {
-                lowered.struct_decls.insert(name, record.clone());
-                lowered.concepts.insert(name, concept.clone());
-            }
-            None => {}
+    FlatLet {
+        name,
+        kind: definition.kind.clone(),
+        // What is read of where it was written was taken where it was lowered.
+        span: None,
+        island: definition.island,
+        type_: definition.type_.clone(),
+        body: definition.body.clone(),
+    }
+}
+
+/// Take the entries the baseline lowered with its definition `name`, of kind `kind`, into `lowered`.
+fn keep_entries(
+    name: curios_core::Global,
+    kind: &curios_core::DefinitionKind,
+    lowered: &mut Lowering,
+) {
+    // A kept former carries the entry the baseline lowered with it.
+    match kind.nominal() {
+        Some(curios_core::Nominal::Inductive(entry)) => {
+            lowered.induct_decls.insert(name, entry.clone());
         }
-        match kind {
-            curios_core::DefinitionKind::Witness => {
-                lowered.witnesses.insert(name);
-            }
-            curios_core::DefinitionKind::Test => lowered.tests.push(name),
-            _ => {}
+        Some(curios_core::Nominal::Struct(record)) => {
+            lowered.struct_decls.insert(name, record.clone());
         }
-        if self.foreign
-            && let Some(path) = held.qualifier()
-            && let Some(row) = self.unit.foreigns.get(&path.join())
-        {
-            lowered.foreigns.register((**row).clone());
+        Some(curios_core::Nominal::Concept { concept, record }) => {
+            lowered.struct_decls.insert(name, record.clone());
+            lowered.concepts.insert(name, concept.clone());
         }
+        None => {}
+    }
+    match kind {
+        curios_core::DefinitionKind::Witness => {
+            lowered.witnesses.insert(name);
+        }
+        curios_core::DefinitionKind::Test => lowered.tests.push(name),
+        _ => {}
     }
 }
 
