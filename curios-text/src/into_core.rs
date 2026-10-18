@@ -1390,13 +1390,14 @@ fn process_items(
                             ));
                         let (param_binders, index_binders) = head_binders.split_at(u.params.len());
 
+                        let mut head_prefixes = lower.prefixes(&head_binders);
                         let param_tys = u
                             .params
                             .iter()
                             .enumerate()
                             .map(|(i, param)| {
-                                let ty = lower
-                                    .bound(&head_binders[..i], || lower.input_type(&param.type_))?;
+                                let ty =
+                                    head_prefixes.under(i, || lower.input_type(&param.type_))?;
                                 Ok((param.plicity, param_binders[i].1, ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
@@ -1418,11 +1419,11 @@ fn process_items(
                             .enumerate()
                             .map(|(i, (_, t))| {
                                 let seen = u.params.len() + i;
-                                let ty =
-                                    lower.bound(&head_binders[..seen], || lower.input_type(t))?;
+                                let ty = head_prefixes.under(seen, || lower.input_type(t))?;
                                 Ok((index_binders[i].1, ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
+                        drop(head_prefixes);
 
                         let index_vars = index_binders
                             .iter()
@@ -1439,26 +1440,28 @@ fn process_items(
                                         .iter()
                                         .map(|param| param.label.clone().unwrap_or_default()),
                                 );
-                                let mut scope = param_binders.to_vec();
+                                let scope = [param_binders, &payload_binders].concat();
+                                let mut prefixes = lower.prefixes(&scope);
                                 let fields = c
                                     .payload
                                     .iter()
                                     .enumerate()
                                     .map(|(i, param)| {
-                                        let ty = lower
-                                            .bound(&scope, || lower.input_type(&param.type_))?;
-                                        scope.push(payload_binders[i].clone());
+                                        let ty = prefixes.under(param_binders.len() + i, || {
+                                            lower.input_type(&param.type_)
+                                        })?;
                                         Ok((payload_binders[i].1, ty))
                                     })
                                     .collect::<Result<Vec<_>, Error>>()?;
 
-                                let target = lower.bound(&scope, || {
+                                let target = prefixes.under(scope.len(), || {
                                     c.target
                                         .iter()
                                         .flatten()
                                         .map(|t| lower.term(t))
                                         .collect::<Result<Vec<_>, Error>>()
                                 })?;
+                                drop(prefixes);
 
                                 // The signature terminates in the index targets alone: the family and its parameters are fixed by the declaration, so a terminal carries nothing else.
                                 let telescope = curios_core::Telescope::build(
@@ -1603,21 +1606,22 @@ fn process_items(
                             .map(|param| &param.type_)
                             .chain(c.payload.iter().map(|param| &param.type_))
                             .collect::<Vec<_>>();
+                        let mut prefixes = lower.prefixes(&binders);
                         let param_tys = written
                             .iter()
                             .enumerate()
                             .map(|(i, t)| {
-                                let ty = lower.bound(&binders[..i], || lower.input_type(t))?;
+                                let ty = prefixes.under(i, || lower.input_type(t))?;
                                 Ok((plicities[i], binders[i].1, ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
+                        let output = prefixes.under(binders.len(), || lower.term(&output_type))?;
+                        drop(prefixes);
                         let payload_binders = &binders[u.params.len()..];
                         let param_binders = &binders[..u.params.len()];
                         // Erasure is sort-driven: `erase_func` drops the same proof/type payload params that `erase_variant` drops from the tuple — the constructor function's arity and its injected variant's arity stay in lockstep.
-                        let ctor_type = curios_core::Term::func_type_marked(
-                            param_tys.clone(),
-                            lower.bound(&binders, || lower.term(&output_type))?,
-                        );
+                        let ctor_type =
+                            curios_core::Term::func_type_marked(param_tys.clone(), output);
                         // Constructor body: (params..., payload...) => the variant's injection, an intrinsic `Variant` normal form.
                         let args: Vec<curios_core::Term> = payload_binders
                             .iter()
@@ -1665,16 +1669,17 @@ fn process_items(
                     let module = context.prefixed(&s.label).without_last();
 
                     let param_binders = lower.mint(s.params.iter().map(param_name));
+                    let mut prefixes = lower.prefixes(&param_binders);
                     let param_tys = s
                         .params
                         .iter()
                         .enumerate()
                         .map(|(i, param)| {
-                            let ty = lower
-                                .bound(&param_binders[..i], || lower.input_type(&param.type_))?;
+                            let ty = prefixes.under(i, || lower.input_type(&param.type_))?;
                             Ok((param.plicity, param_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
+                    drop(prefixes);
                     let param_vars = param_binders
                         .iter()
                         .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
@@ -1699,19 +1704,20 @@ fn process_items(
                             .map(str::to_string)
                             .unwrap_or_default()
                     }));
-                    let mut field_scope = param_binders.clone();
+                    let field_scope = [&param_binders[..], &field_binders].concat();
+                    let mut prefixes = lower.prefixes(&field_scope);
                     let field_tys = s
                         .fields
                         .iter()
                         .enumerate()
                         .map(|(i, field)| {
-                            let ty = lower.bound(&field_scope, || {
+                            let ty = prefixes.under(param_binders.len() + i, || {
                                 lower.input_type(&field.param.desugared_type())
                             })?;
-                            field_scope.push(field_binders[i].clone());
                             Ok((field.plicity, field_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
+                    drop(prefixes);
 
                     // Registry entry: the parameter telescope, and the full field telescope (parameter binders first — field types may mention them — then field binders), as in `Inductive::indices`. The declared result sort (`Type`/`Prop`) — closed; both the registry entry's sort and the type-former's codomain.
                     let result_sort = lower.term(&s.result_sort)?;
@@ -1787,16 +1793,17 @@ fn process_items(
                     context.record_import_scope(Some(&name));
                     let lower = Lowerer::new(context, Some(name));
                     let param_binders = lower.mint(concept.params.iter().map(param_name));
+                    let mut prefixes = lower.prefixes(&param_binders);
                     let param_tys = concept
                         .params
                         .iter()
                         .enumerate()
                         .map(|(i, param)| {
-                            let ty = lower
-                                .bound(&param_binders[..i], || lower.input_type(&param.type_))?;
+                            let ty = prefixes.under(i, || lower.input_type(&param.type_))?;
                             Ok((param.plicity, param_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
+                    drop(prefixes);
                     let param_tys_unmarked = param_tys
                         .iter()
                         .map(|(_, n, t)| (*n, t.clone()))
@@ -1821,16 +1828,16 @@ fn process_items(
 
                     // Field types, lowered under the parameter scope (a method field's label is the binder for later fields; a superclass field binds nothing). The signature sugar `f(params) -> T` is undone here.
                     let field_binders = lower.mint(field_labels.iter().cloned());
-                    let mut field_scope = param_binders.clone();
+                    let field_scope = [&param_binders[..], &field_binders].concat();
+                    let mut prefixes = lower.prefixes(&field_scope);
                     let field_tys = concept
                         .fields
                         .iter()
                         .enumerate()
                         .map(|(i, field)| {
-                            let ty = lower.bound(&field_scope, || {
+                            let ty = prefixes.under(param_binders.len() + i, || {
                                 lower.input_type(&field.desugared_type())
                             })?;
-                            field_scope.push(field_binders[i].clone());
                             // A superclass edge is the field telescope's `use` member.
                             let mark = match field.is_super() {
                                 true => Plicity::Witness,
@@ -1839,6 +1846,7 @@ fn process_items(
                             Ok((mark, field_binders[i].1, ty))
                         })
                         .collect::<Result<Vec<_>, Error>>()?;
+                    drop(prefixes);
 
                     let result_sort = lower.term(&concept.result_sort)?;
 

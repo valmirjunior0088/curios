@@ -72,8 +72,9 @@ impl LexicalScope {
     }
 }
 
-/// The prefixes of one list of binders, lowered under in turn, each at least as long as the last: a telescope's annotations, each reading the parameters before it. The scope grows by the binders a prefix adds over the last and is restored once ([`Prefixes::leave`]), where binding each prefix afresh would enter it whole at every annotation.
-struct Prefixes<'p> {
+/// The prefixes of one list of binders, lowered under in turn, each at least as long as the last: a telescope's annotations, each reading the binders before it. The scope grows by the binders a prefix adds over the last and stands again as it did before the first once the prefixes are dropped, where binding each prefix afresh would enter it whole at every annotation.
+pub(super) struct Prefixes<'l, 'p> {
+    scope: &'l RefCell<LexicalScope>,
     binders: &'p [Binder],
     /// The scope's length before the first prefix.
     mark: usize,
@@ -81,15 +82,18 @@ struct Prefixes<'p> {
     entered: usize,
 }
 
-impl Prefixes<'_> {
+impl Prefixes<'_, '_> {
     /// `body` lowered with the first `count` binders in scope.
-    fn under<T>(
+    pub(super) fn under<T>(
         &mut self,
-        lowerer: &Lowerer,
         count: usize,
         body: impl FnOnce() -> Result<T, Error>,
     ) -> Result<T, Error> {
-        lowerer.scope.borrow_mut().extend(
+        assert!(
+            count >= self.entered,
+            "a prefix is at least as long as the last"
+        );
+        self.scope.borrow_mut().extend(
             self.binders[self.entered..count]
                 .iter()
                 .filter(|(name, _)| bindable(name))
@@ -98,10 +102,11 @@ impl Prefixes<'_> {
         self.entered = count;
         body()
     }
+}
 
-    /// Restore the scope as it stood before the first prefix.
-    fn leave(self, lowerer: &Lowerer) {
-        lowerer.scope.borrow_mut().truncate(self.mark);
+impl Drop for Prefixes<'_, '_> {
+    fn drop(&mut self) {
+        self.scope.borrow_mut().truncate(self.mark);
     }
 }
 
@@ -441,22 +446,19 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         output: impl FnOnce() -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
         let mut prefixes = self.prefixes(binders);
-        let lowered = (|| {
-            let mut lowered = Vec::with_capacity(params.len());
-            for (index, param) in params.iter().enumerate() {
-                let domain = prefixes.under(self, index, || self.input_type(&param.type_))?;
-                lowered.push((param.plicity, binders[index].1, domain));
-            }
-            let output = prefixes.under(self, binders.len(), output)?;
-            Ok(curios_core::Term::func_type_marked(lowered, output))
-        })();
-        prefixes.leave(self);
-        lowered
+        let mut lowered = Vec::with_capacity(params.len());
+        for (index, param) in params.iter().enumerate() {
+            let domain = prefixes.under(index, || self.input_type(&param.type_))?;
+            lowered.push((param.plicity, binders[index].1, domain));
+        }
+        let output = prefixes.under(binders.len(), output)?;
+        Ok(curios_core::Term::func_type_marked(lowered, output))
     }
 
     /// The prefixes of `binders`, each to be lowered under in turn ([`Prefixes`]).
-    fn prefixes<'p>(&self, binders: &'p [Binder]) -> Prefixes<'p> {
+    pub(super) fn prefixes<'p>(&self, binders: &'p [Binder]) -> Prefixes<'_, 'p> {
         Prefixes {
+            scope: &self.scope,
             binders,
             mark: self.scope.borrow().len(),
             entered: 0,
@@ -591,10 +593,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         .iter()
                         .map(|f| f.label.as_deref().unwrap_or_default().to_string()),
                 );
+                let mut prefixes = self.prefixes(&binders);
                 let mut fields = Vec::with_capacity(tt.fields.len());
                 for (index, param) in tt.fields.iter().enumerate() {
                     let type_ = param.desugared_type();
-                    let lowered = self.bound(&binders[..index], || self.term(&type_))?;
+                    let lowered = prefixes.under(index, || self.term(&type_))?;
                     fields.push((binders[index].1, lowered));
                 }
                 curios_core::Term::tuple_type(fields)
@@ -1034,40 +1037,36 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let mut heads: Vec<(&Name, curios_core::Free)> = Vec::new();
 
         let mut prefixes = self.prefixes(binders);
-        let walked: Result<(), Error> = (|| {
-            for param in params {
-                let FuncParam {
-                    plicity,
-                    pattern,
-                    annotation,
-                } = param;
-                let domain = match annotation {
-                    Some(annotation) => {
-                        let annotation =
-                            prefixes.under(self, seen, || self.input_type(annotation))?;
-                        self.wrap_pattern_chains(&chains, annotation)?
-                    }
-                    None => curios_core::Term::hole(self.context.fresh_metavar()),
-                };
-                // The mark applies to the outer function slot the parameter occupies, whatever the pattern shape: a compound pattern's fresh core binder still claims a slot of the written plicity.
-                let leaves = &binders[seen..seen + pattern_names(pattern).len()];
-                match pattern {
-                    Pattern::Binder(_) => lowered.push((*plicity, leaves[0].1, domain)),
-                    Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
-                        let synthetic = self.context.fresh_binder(None);
-                        if let Pattern::Struct { head, .. } = pattern {
-                            heads.push((head, synthetic));
-                        }
-                        chains.push((fields, synthetic, leaves));
-                        lowered.push((*plicity, synthetic, domain));
-                    }
+        for param in params {
+            let FuncParam {
+                plicity,
+                pattern,
+                annotation,
+            } = param;
+            let domain = match annotation {
+                Some(annotation) => {
+                    let annotation = prefixes.under(seen, || self.input_type(annotation))?;
+                    self.wrap_pattern_chains(&chains, annotation)?
                 }
-                seen += leaves.len();
+                None => curios_core::Term::hole(self.context.fresh_metavar()),
+            };
+            // The mark applies to the outer function slot the parameter occupies, whatever the pattern shape: a compound pattern's fresh core binder still claims a slot of the written plicity.
+            let leaves = &binders[seen..seen + pattern_names(pattern).len()];
+            match pattern {
+                Pattern::Binder(_) => lowered.push((*plicity, leaves[0].1, domain)),
+                Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
+                    let synthetic = self.context.fresh_binder(None);
+                    if let Pattern::Struct { head, .. } = pattern {
+                        heads.push((head, synthetic));
+                    }
+                    chains.push((fields, synthetic, leaves));
+                    lowered.push((*plicity, synthetic, domain));
+                }
             }
-            Ok(())
-        })();
-        prefixes.leave(self);
-        walked?;
+            seen += leaves.len();
+        }
+        // The chains below are lowered outside the parameters' scope, as the body they wrap was.
+        drop(prefixes);
 
         let body = chains
             .iter()
