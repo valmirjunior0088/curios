@@ -137,19 +137,14 @@ fn steepest(
         .max_by(|left, right| left.0.total_cmp(&right.0))
 }
 
-/// The size each growth is counted at, doubled twice: large enough that its own work outgrows the prelude's, small enough that a growth whose stage is quadratic or worse today is counted in seconds, and its depth shapes inside a test thread's stack until the parser buys its depth.
+/// The size each growth is counted at, doubled twice: large enough that its own work outgrows the prelude's and a quadratic term shows past the linear one, small enough that a growth whose stage is quadratic or worse today is counted in seconds.
 fn base(growth: Growth) -> usize {
     match growth {
         Growth::LetPlus | Growth::LetCall | Growth::Statements | Growth::ParametersSummed => 25,
-        Growth::Calls
-        | Growth::Parentheses
-        | Growth::RightPlus
-        | Growth::Matches
-        | Growth::Lambdas
-        | Growth::Lists
-        | Growth::Lets
-        | Growth::Arrow => 25,
-        Growth::ListOpen | Growth::Parameters | Growth::LeftPlus => 100,
+        Growth::Matches | Growth::Lambdas | Growth::Lets => 25,
+        Growth::Lists => 100,
+        Growth::ListOpen | Growth::Parameters => 100,
+        Growth::Calls | Growth::RightPlus | Growth::LeftPlus => 250,
         Growth::Definitions
         | Growth::Functions
         | Growth::Strings
@@ -157,7 +152,7 @@ fn base(growth: Growth) -> usize {
         | Growth::Tuple
         | Growth::Fields
         | Growth::Constructors => 250,
-        Growth::List => 500,
+        Growth::List | Growth::Parentheses | Growth::Arrow => 1000,
         Growth::StringLiteral => 2000,
     }
 }
@@ -167,9 +162,7 @@ const HELD: &[Growth] = &[
     Growth::Definitions,
     Growth::Strings,
     Growth::List,
-    Growth::Calls,
     Growth::Parentheses,
-    Growth::Arrow,
     Growth::StringLiteral,
 ];
 
@@ -188,36 +181,36 @@ const HELD_SLOPE: f64 = 3.0;
 ///
 /// # What it last printed
 ///
-/// Over the compiler of `b45135353`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
+/// Over the compiler of `65741c434`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
 ///
 /// | growth | n | instructions | looks | allocations | bytes |
 /// | --- | --- | --- | --- | --- | --- |
-/// | LetPlus | 25 | 3.67 elaborate | 3.36 elaborate | 3.45 elaborate | 4.08 cranelift |
-/// | LetCall | 25 | 3.61 binaryen | 2.00 erase | 2.81 cont | 3.12 cranelift |
-/// | Statements | 25 | 5.39 elaborate | 3.35 elaborate | 3.94 cont-optm | 5.50 elaborate |
-/// | Definitions | 250 | 2.22 parse | 2.00 erase | 2.03 lower | 2.29 parse |
+/// | LetPlus | 25 | 3.63 elaborate | 2.67 elaborate | 3.24 elaborate | 3.63 elaborate |
+/// | LetCall | 25 | 3.61 binaryen | 2.00 erase | 2.81 cont | 2.82 cont |
+/// | Statements | 25 | 4.74 elaborate | 3.03 elaborate | 3.94 cont-optm | 3.72 cont-optm |
+/// | Definitions | 250 | 2.21 parse | 2.00 erase | 2.03 lower | 2.29 parse |
 /// | Functions | 250 | 3.96 binaryen | 2.00 erase | 2.95 cont | 3.58 cranelift |
-/// | Strings | 250 | 2.03 lower | 2.00 lower | 2.07 lower | 2.01 lower |
-/// | List | 500 | 2.02 lower | 2.00 erase | 2.09 parse | 2.00 lower |
-/// | ListOpen | 100 | 3.87 cont | 2.00 erase | 3.02 cont | 3.90 cont |
-/// | Arms | 250 | 3.83 cont-optm | 2.00 erase | 3.94 cont-optm | 4.00 cont |
-/// | Parameters | 100 | 4.55 cont-optm | 2.00 erase | 3.78 lower | 3.95 cont |
-/// | ParametersSummed | 25 | 4.18 elaborate | 3.65 elaborate | 3.46 elaborate | 4.43 elaborate |
-/// | Tuple | 250 | 3.97 cont-optm | 2.00 erase | 2.20 cont | 3.99 cont-optm |
-/// | Fields | 250 | 3.98 lower | 2.00 erase | 3.91 lower | 3.99 cont-optm |
+/// | Strings | 250 | 2.02 elaborate | 2.00 lower | 2.07 lower | 2.01 lower |
+/// | List | 1000 | 2.29 parse | 2.00 erase | 2.09 parse | 2.85 parse |
+/// | ListOpen | 100 | 3.74 emit | 2.00 erase | 3.02 cont | 3.90 cont |
+/// | Arms | 250 | 3.81 cont | 2.00 erase | 3.94 cont-optm | 4.00 cont |
+/// | Parameters | 100 | 4.80 lower | 2.00 erase | 3.78 lower | 3.95 cont |
+/// | ParametersSummed | 25 | 3.33 cont | 2.93 elaborate | 3.28 lower | 3.51 elaborate |
+/// | Tuple | 250 | 4.05 cont-optm | 2.00 erase | 2.20 cont | 3.99 cont-optm |
+/// | Fields | 250 | 4.23 cont-optm | 2.00 erase | 3.91 lower | 3.99 cont-optm |
 /// | Constructors | 250 | 3.94 erase | 2.00 erase | 3.95 erase | 3.92 erase |
-/// | Calls | 25 | 2.51 erase | 2.00 erase | 2.00 parse | 2.20 lower |
-/// | Parentheses | 25 | 2.05 parse | - | 2.00 parse | 2.00 parse |
-/// | RightPlus | 25 | 2.63 elaborate | 2.37 elaborate | 2.47 elaborate | 2.83 elaborate |
-/// | LeftPlus | 100 | 3.37 cont | 2.96 elaborate | 3.40 cont | 3.42 elaborate |
-/// | Matches | 25 | 3.73 lower | 3.55 lower | 3.43 lower | 3.74 lower |
-/// | Lambdas | 25 | 3.30 cont-optm | 3.29 erase | 3.41 lower | 3.55 lower |
-/// | Lists | 25 | 5.21 elaborate | 3.32 erase | 5.01 elaborate | 5.86 elaborate |
-/// | Lets | 25 | 3.55 lower | 3.80 lower | 3.54 lower | 3.71 lower |
-/// | Arrow | 25 | 2.44 erase | 2.00 erase | 2.02 lower | 2.22 erase |
-/// | StringLiteral | 2000 | 2.02 erase | 2.00 erase | 2.00 erase | 2.02 lower |
+/// | Calls | 250 | 3.73 cont | 2.00 erase | 3.75 cont | 3.85 cont |
+/// | Parentheses | 1000 | 2.54 lower | - | 2.00 parse | 2.00 parse |
+/// | RightPlus | 250 | 4.54 cranelift | 2.00 erase | 3.75 cont | 3.85 cont |
+/// | LeftPlus | 250 | 3.98 cont | 2.00 erase | 3.75 cont | 3.85 cont |
+/// | Matches | 25 | 3.76 lower | 3.55 lower | 3.43 lower | 3.74 lower |
+/// | Lambdas | 25 | 3.68 lower | 3.29 erase | 3.41 lower | 3.55 lower |
+/// | Lists | 100 | 3.82 erase | 3.77 erase | 3.77 erase | 3.81 erase |
+/// | Lets | 25 | 4.03 lower | 3.80 lower | 3.54 lower | 3.71 lower |
+/// | Arrow | 1000 | 2.78 elaborate | 2.00 erase | 2.00 lower | 3.10 elaborate |
+/// | StringLiteral | 2000 | 2.98 parse | 2.00 erase | 2.00 erase | 2.02 lower |
 ///
-/// **Seven growths are linear in every stage**: definitions, strings, a list literal, calls, parentheses, an arrow and a string literal, the ones [`HELD`] lists. Every other reaches a stage that grows as its square or steeper, and the stage each names is where `documentation/roadmap/compilation/100-what-is-written-is-compiled-in-its-size.md` takes it up.
+/// **Five growths are linear in every stage**: definitions, strings, a list literal, parentheses and a string literal, the ones [`HELD`] lists. Every other reaches a stage that grows as its square or steeper, and the stage each names is where `documentation/roadmap/compilation/100-what-is-written-is-compiled-in-its-size.md` takes it up.
 #[test]
 #[ignore = "measurement, counted: run by hand, alone in its invocation"]
 fn growth_slopes() {

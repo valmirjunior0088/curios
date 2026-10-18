@@ -76,10 +76,11 @@ A Binaryen `version_130` replay of the module `curios` hands `BinaryenModuleRead
 
 ### The counted slopes reach every stage
 
-`growth_slopes`' first reading, over the compiler of `b45135353` and printed in its documentation, holds seven growths linear in every stage: definitions, strings, a list literal, calls, parentheses, an arrow and a string literal. The others reach a stage that grows as its square or steeper. Besides the elaboration, erasure and Binaryen costs above:
+`growth_slopes`' reading over the compiler of `65741c434`, printed in its documentation, holds five growths linear in every stage: definitions, strings, a list literal, parentheses and a string literal. The others reach a stage that grows as its square or steeper. Besides the elaboration, erasure and Binaryen costs above:
 
 - **Lowering**: a structure's fields, a telescope's parameters, and nested matches, `let`s and lambdas (slopes 3.4 to 4.0 in `lower`).
-- **The Cont lowering**: a list built at run time, a match's arms and a left-leaning chain (3.4 to 4.0 in `cont`).
+- **Erasure**: nested list literals (3.8 in `erase`), besides the constructors above.
+- **The Cont lowering**: a list built at run time, a match's arms, nested calls and a chain of operators either way (3.7 to 4.0 in `cont`).
 - **The Cont optimizer**: a match's arms, a telescope's parameters, a tuple, a structure's fields, an `Io` block and nested lambdas (3.3 to 4.6 in `cont-optm`).
 - **Cranelift**: a long function's bytes (3.1 to 4.1 in `cranelift`).
 
@@ -121,7 +122,7 @@ Each stage begins by attributing the growths its slopes name, by a debugger's sa
 3. **One rebuild per pass.** The settle's `Zonk`, the totality obligations' memo, the spine read where it is used, solved metavariables substituted before a close, and the universe zonk's memo. Check: a left-leaning and a right-nested `+` of 10 000 operators and 1 000 nested lists elaborate in `tests::growth`; their elaboration rows held, the stages after it being stage 7's and stage 10's.
 4. **A fact read alone.** The facet reader, through every caller of a declaration's instantiation, the kernel's included where it does the same. Check: 4 000 constructors; the row held.
 5. **The scope by reference.** The persistent frames first, then the spine, prototyped on a scratch copy and measured before it lands. Check: a 6 000-binding `let` chain, a 2 000-statement `Io` block, 1 000 parameters summed and 2 000 nested lambdas in `tests::growth`; their rows held.
-6. **Lowering.** A telescope, a structure's fields and nested matches, `let`s and lambdas lowered in their size. Check: their rows held.
+6. **Lowering and erasure.** A telescope, a structure's fields and nested matches, `let`s and lambdas lowered in their size, and nested list literals erased in theirs. Check: their rows held.
 7. **The Cont lowering and its optimizer.** A function's lexical scope shared with the one it is nested in, where `lexical_scopes` (`curios-cont/src/verify.rs`) copies it, so every function holds the set of every function above it; a match's arms, a list built at run time, a tuple, a structure's fields, a telescope and a chain lowered and optimized in their size. Check: their rows held; nested calls at 10 000 levels join the depth fixture.
 8. **Locals by liveness.** The coloring pass over each emitted function. Check: 10 100 `+` in one function compiles and runs; `curios-std`'s corpus.
 9. **Wide shapes.** The envelope fixtures, then the spill. Check: each crossing runs.
