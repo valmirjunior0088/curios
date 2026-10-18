@@ -74,10 +74,11 @@ use {
     curios_core::{
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Declarations, Definition,
         DefinitionKind, Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
-        InductDecl, Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints, NumLit, Quality,
-        RecGroup, ReduceError, StructDecl, Subterm, Term, Totality, Trace, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
-        Universes, Variance, WitnessKey, WitnessOrigin, instantiate_universes_scoped,
+        InductDecl, InductInstance, Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints,
+        NumLit, Quality, RecGroup, ReduceError, StructDecl, Subterm, Term, Totality, Trace,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMetaId, UniverseRole, Universes, Variance, WitnessKey, WitnessOrigin,
+        instantiate_universes_scoped,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -1345,16 +1346,29 @@ impl<'s> Context<'s> {
         }
         self.universes_mut()
             .instantiate_at(&induct_decl.universe_context, universes, None)?;
-        let mut instantiated = induct_decl.clone();
-        instantiated.arity = instantiate_universes_scoped(&instantiated.arity, universes)?;
-        instantiated.result_sort =
-            instantiate_universes_scoped(&instantiated.result_sort, universes)?;
-        for constructor in instantiated.signatures_mut() {
-            constructor.telescope =
-                instantiate_universes_scoped(&constructor.telescope, universes)?;
-        }
-        instantiated.universe_context = UniverseContext::empty();
-        Ok(instantiated)
+        induct_decl.at(universes).whole()
+    }
+
+    /// What `read` takes of the inductive declaration `name` at the occurrence `universes`, the declaration's constraints instantiated where the occurrence stands, or `None` where `name` declares no inductive: a read instantiates the facet it takes — the sort, the arity, one constructor — and pays for no other, where [`Context::instantiate_induct_decl_at`] instantiates every constructor.
+    pub(crate) fn induct_facet<T>(
+        &mut self,
+        name: &Global,
+        universes: &Universes,
+        read: impl FnOnce(InductInstance<'_>) -> Result<T, UniverseError>,
+    ) -> Option<Result<T, UniverseError>> {
+        let (universe_context, read) = {
+            let induct_decl = self.induct_decl(name)?;
+            (
+                induct_decl.universe_context.clone(),
+                read(induct_decl.at(universes)),
+            )
+        };
+
+        Some(
+            self.universes_mut()
+                .instantiate_at(&universe_context, universes, None)
+                .and(read),
+        )
     }
 
     pub(crate) fn instantiate_struct_decl_at(
@@ -1410,8 +1424,15 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::locals`].
+    /// Every frame's locals, the base's among them: what a test reads of a declaration forgotten everywhere, where every judgment reads [`Context::local_binders`].
+    #[cfg(test)]
     pub(crate) fn locals(&self) -> impl DoubleEndedIterator<Item = &(Free, Term)> + Clone {
         self.typing.frames.locals()
+    }
+
+    /// [`Frames::local_binders`].
+    pub(crate) fn local_binders(&self) -> impl DoubleEndedIterator<Item = &(Free, Term)> + Clone {
+        self.typing.frames.local_binders()
     }
 
     fn define_entry(&mut self, name: Free, entry: DefEntry) {

@@ -62,13 +62,13 @@ pub(super) fn check_induct_arms(
     }
 
     // Coverage: an absent arm must justify its absence. With no catch-all, every constructor with no arm must be *impossible* at the scrutinee's indices — its targets must clash with the actuals, decided by the call of the shared unifier that specializes the present arms, both its directions, so an arm may be absent exactly where one written is typed by no rule. A case the unifier merely cannot decide is a refusal, not a pass: undecided is not absent.
-    for (tag, _) in &at.declaration().constructors {
+    for tag in &at.tags(kernel) {
         if cases.iter().any(|(present, _)| present == tag) {
             continue;
         }
 
         let signature = at
-            .signature(tag)
+            .signature(kernel, tag)?
             .ok_or_else(|| Error::Undeclared(family.name))?;
 
         let outcome = kernel.scoped(|kernel| {
@@ -99,7 +99,7 @@ fn check_arm(
     arm: &InductArm,
 ) -> Result<(), Error> {
     let signature = at
-        .signature(tag)
+        .signature(kernel, tag)?
         .ok_or_else(|| Error::Undeclared(family.name))?;
 
     if signature.len() != arm.arity() {
@@ -368,13 +368,13 @@ pub(super) fn guard_large_elimination(
         return Ok(());
     }
 
-    match at.declaration().constructors.as_slice() {
+    match at.tags(kernel).as_slice() {
         // Empty: there is nothing to have received, so nothing to extract.
         [] => Ok(()),
         // One constructor: allowed exactly where the indices determine every payload component, so knowing the value tells a program nothing its type had not said. A component that is a proof is not excused: the arm would be handed the proof this match was given.
-        [(tag, _)] => {
+        [tag] => {
             let signature = at
-                .signature(tag)
+                .signature(kernel, tag)?
                 .ok_or_else(|| Error::Undeclared(family.name))?;
 
             let pinned = kernel.scoped(|kernel| {

@@ -328,7 +328,9 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             // The handle checks the universe instance and the parameter count before any of the declaration is read at them. `open_params` is tolerant — too few parameters leaves the declaration's own parameter binders unopened, so they read as payload slots and the arity check below would compare against the wrong number.
             let at = kernel.induct_at_params(name, universes, params)?;
             check_along(kernel, at.parameters(), params)?;
-            let signature = at.signature(tag).ok_or_else(|| Error::Undeclared(*name))?;
+            let signature = at
+                .signature(kernel, tag)?
+                .ok_or_else(|| Error::Undeclared(*name))?;
 
             if signature.len() != payload.len() {
                 return Err(Error::Arity {

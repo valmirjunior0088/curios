@@ -289,7 +289,14 @@ pub(super) fn elaborate_induct_type(
         indices,
     } = ut;
 
-    let Some(induct_decl) = context.induct_decl(name).cloned() else {
+    // The facets a family's type reads, and no constructor: a family of many cases is typed in its arity's size.
+    let Some((universe_context, arity, result_sort)) = context.induct_decl(name).map(|decl| {
+        (
+            decl.universe_context.clone(),
+            decl.arity.clone(),
+            decl.result_sort.clone(),
+        )
+    }) else {
         return Err(Error::unknown_declaration(*name));
     };
     let (arity, result_sort, universes) = if written_universes.is_empty() {
@@ -297,21 +304,18 @@ pub(super) fn elaborate_induct_type(
             instantiated: *name,
             extent,
         };
-        let (arity, universes) = context.instantiate_universe_bound(
-            &induct_decl.universe_context,
-            &induct_decl.arity,
-            Some(occurrence),
-        )?;
-        let result_sort = instantiate_universes_scoped(&induct_decl.result_sort, &universes)
-            .map_err(Error::from)?;
+        let (arity, universes) =
+            context.instantiate_universe_bound(&universe_context, &arity, Some(occurrence))?;
+        let result_sort =
+            instantiate_universes_scoped(&result_sort, &universes).map_err(Error::from)?;
         (arity, result_sort, universes)
     } else {
-        let induct_decl = context.instantiate_induct_decl_at(&induct_decl, written_universes)?;
-        (
-            induct_decl.arity,
-            induct_decl.result_sort,
-            written_universes.clone(),
-        )
+        let (arity, result_sort) = context
+            .induct_facet(name, written_universes, |at| {
+                Ok((at.arity()?, at.result_sort()?))
+            })
+            .expect("the declaration was read above")?;
+        (arity, result_sort, written_universes.clone())
     };
 
     if params.len() != arity.len() {
@@ -350,40 +354,45 @@ pub(super) fn elaborate_variant(
         payload,
     } = uc;
 
-    let Some(induct_decl) = context.induct_decl(name).cloned() else {
+    // The facets a construction reads — who may construct, and its one constructor — and none of the family's other cases.
+    let Some((rep_public, module, universe_context, signature)) =
+        context.induct_decl(name).map(|decl| {
+            (
+                decl.rep_public,
+                decl.module,
+                decl.universe_context.clone(),
+                decl.constructor(tag).map(|c| c.telescope.clone()),
+            )
+        })
+    else {
         return Err(Error::unknown_declaration(*name));
     };
 
-    if !induct_decl.rep_public
+    if !rep_public
         && context
             .island()
-            .is_some_and(|island| !island.is_within(&induct_decl.module))
+            .is_some_and(|island| !island.is_within(&module))
     {
         return Err(Error::private_representation(*name));
     }
 
+    let Some(signature) = signature else {
+        return Err(Error::match_case_missing(*name, tag.to_string()));
+    };
     let (signature, universes) = if written_universes.is_empty() {
-        let Some(signature) = induct_decl.constructor(tag).map(|c| c.telescope.clone()) else {
-            return Err(Error::match_case_missing(*name, tag.to_string()));
-        };
         let occurrence = Occurrence {
             instantiated: *name,
             extent,
         };
-        let (signature, universes) = context.instantiate_universe_bound(
-            &induct_decl.universe_context,
-            &signature,
-            Some(occurrence),
-        )?;
-        (signature, universes)
+        context.instantiate_universe_bound(&universe_context, &signature, Some(occurrence))?
     } else {
-        let induct_decl = context.instantiate_induct_decl_at(&induct_decl, written_universes)?;
-        let Some(signature) = induct_decl
-            .constructor(tag)
-            .map(|constructor| constructor.telescope.clone())
-        else {
-            return Err(Error::match_case_missing(*name, tag.to_string()));
-        };
+        let signature = context
+            .induct_facet(name, written_universes, |at| {
+                at.constructor(tag)
+                    .expect("the constructor was read above")
+                    .map(|param| param.telescope)
+            })
+            .expect("the declaration was read above")?;
         (signature, written_universes.clone())
     };
 

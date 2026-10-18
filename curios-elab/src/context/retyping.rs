@@ -13,8 +13,8 @@ use {
         sort_term, synth_neutral,
     },
     curios_core::{
-        Advance, Atom, Cost, DefinitionKind, Free, Global, InductDecl, ReduceError, StructDecl,
-        Telescope, Term, Trace, UniverseContext, UniverseError, Universes,
+        Advance, Atom, Cost, DefinitionKind, Free, Global, InductDecl, InductInstance, ReduceError,
+        StructDecl, Telescope, Term, Trace, UniverseContext, UniverseError, Universes,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -165,6 +165,16 @@ impl<'s> Retyping<'s> {
     ) -> Result<InductDecl, UniverseError> {
         self.context
             .instantiate_induct_decl_at(induct_decl, universes)
+    }
+
+    /// [`Context::induct_facet`].
+    pub(crate) fn induct_facet<T>(
+        &mut self,
+        name: &Global,
+        universes: &Universes,
+        read: impl FnOnce(InductInstance<'_>) -> Result<T, UniverseError>,
+    ) -> Option<Result<T, UniverseError>> {
+        self.context.induct_facet(name, universes, read)
     }
 
     /// [`Context::struct_decl`].

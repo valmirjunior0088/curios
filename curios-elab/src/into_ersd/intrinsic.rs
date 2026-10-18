@@ -72,13 +72,12 @@ impl Lowering<'_> {
         constructor: SyntaxName,
     ) -> Result<curios_ersd::ConstructorId, Error> {
         let name = Global::Authored(family.qualifier());
-        let row = self.induct_row(context, &name)?;
         let index = context
             .induct_decl(&name)
             .expect("erase: registered outcome family")
             .constructor_index(&constructor.last().into())
             .expect("erase: registered outcome constructor");
-        Ok(row.constructors[index].id)
+        Ok(self.induct_constructor(context, &name, index)?.id)
     }
 
     /// Erase a constant to its interned atom, as the outcome of erasing a term.

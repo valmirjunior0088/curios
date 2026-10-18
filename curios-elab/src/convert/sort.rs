@@ -116,12 +116,10 @@ impl Sort {
         Ok(match &*reduced {
             Subterm::InductType(InductType {
                 name, universes, ..
-            }) => match context.induct_decl(name).cloned() {
-                Some(induct_decl) => {
-                    let induct_decl = context
-                        .instantiate_induct_decl_at(&induct_decl, universes)
-                        .map_err(ReduceError::Universe)?;
-                    Sort::from_universe(context, &induct_decl.result_sort)?
+            }) => match context.induct_facet(name, universes, |at| at.result_sort()) {
+                Some(result_sort) => {
+                    let result_sort = result_sort.map_err(ReduceError::Universe)?;
+                    Sort::from_universe(context, &result_sort)?
                 }
                 None => {
                     probe_level_fallback("induct decl missing", &reduced);

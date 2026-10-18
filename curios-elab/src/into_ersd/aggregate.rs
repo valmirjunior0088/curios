@@ -74,12 +74,50 @@ impl Lowering<'_> {
         context: &mut Retyping,
         name: &curios_core::Global,
     ) -> Result<FamilyRow, Error> {
-        if let Some(row) = self.environment.induct_row(name) {
-            return Ok(row.clone());
+        Ok(self.registered_induct_row(context, name)?.clone())
+    }
+
+    /// The family `name`'s row is erased into, its row registered where it is not yet: a read of the family alone, which copies none of its constructors.
+    pub(super) fn induct_family(
+        &mut self,
+        context: &mut Retyping,
+        name: &curios_core::Global,
+    ) -> Result<curios_ersd::FamilyId, Error> {
+        Ok(self.registered_induct_row(context, name)?.family)
+    }
+
+    /// The row of `name`'s constructor at `index`, the family's row registered where it is not yet: a read of the one constructor, where [`Self::induct_row`] copies every one.
+    pub(super) fn induct_constructor(
+        &mut self,
+        context: &mut Retyping,
+        name: &curios_core::Global,
+        index: usize,
+    ) -> Result<ConstructorRow, Error> {
+        Ok(self.registered_induct_row(context, name)?.constructors[index].clone())
+    }
+
+    /// `name`'s row as registered, built from its declaration or imported from the item that declares it where it is not registered yet.
+    fn registered_induct_row(
+        &mut self,
+        context: &mut Retyping,
+        name: &curios_core::Global,
+    ) -> Result<&FamilyRow, Error> {
+        if self.environment.induct_row(name).is_none() && self.imported_induct_row(name).is_none() {
+            self.build_induct_row(context, name)?;
         }
-        if let Some(row) = self.imported_induct_row(name) {
-            return Ok(row);
-        }
+
+        Ok(self
+            .environment
+            .induct_row(name)
+            .expect("erase: a registered row"))
+    }
+
+    /// Build and register `name`'s row from its declaration, each constructor read where the walk over them stands.
+    fn build_induct_row(
+        &mut self,
+        context: &mut Retyping,
+        name: &curios_core::Global,
+    ) -> Result<(), Error> {
         let induct_decl = context
             .induct_decl(name)
             .cloned()
@@ -93,12 +131,11 @@ impl Lowering<'_> {
             Subterm::Sort(Quality::Prop, _)
         );
         let mut constructors = Vec::new();
-        for tag in induct_decl.constructor_order() {
+        // In declaration order, which is runtime-tag order, each constructor read where the walk stands rather than looked up by its tag again.
+        for (tag, param) in &induct_decl.constructors {
             let entries = context.with_frame(|context| {
                 let params = open_opaque(context, induct_decl.arity.clone());
-                let telescope = induct_decl
-                    .instantiate(tag, &params)
-                    .expect("erase: constructor instantiates at its inductive's parameters");
+                let telescope = param.telescope.clone().open_params(&params);
                 constructor_entries(self, context, telescope)
             })?;
             let entries: Vec<(Option<String>, bool, curios_ersd::FieldShape)> = entries
@@ -123,8 +160,8 @@ impl Lowering<'_> {
             family,
             constructors,
         };
-        self.environment.register_induct_row(name, row.clone());
-        Ok(row)
+        self.environment.register_induct_row(name, row);
+        Ok(())
     }
 
     /// The row the item declaring the structure `name` registered, held here as an import: its mask, and a schema of its width whose fields say nothing, since what a field is is the declaration's to say and the row a program holds is the declaration's. `None` where no item in reach declares the row, which is this item declaring it.
@@ -302,19 +339,21 @@ impl Lowering<'_> {
         variant: &Variant,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let row = self.induct_row(context, &variant.name)?;
-        let induct_decl = context
+        let index = context
             .induct_decl(&variant.name)
-            .cloned()
-            .expect("erase: a registered inductive");
-        let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &variant.universes)?;
-        let index = induct_decl
+            .expect("erase: a registered inductive")
             .constructor_index(&variant.tag)
             .expect("erase: constructor tag registered with its inductive");
-        let constructor = &row.constructors[index];
-        let telescope = induct_decl
-            .instantiate(&variant.tag, &variant.params)
-            .expect("erase: constructor instantiates at its inductive's parameters");
+        let constructor = self.induct_constructor(context, &variant.name, index)?;
+        // The one constructor this value is built with, instantiated alone: a family of many cases is erased a construction at a time in its constructor's size.
+        let telescope = context
+            .induct_facet(&variant.name, &variant.universes, |at| {
+                at.constructor(&variant.tag)
+                    .expect("erase: constructor tag registered with its inductive")
+            })
+            .expect("erase: a registered inductive")?
+            .telescope
+            .open_params(&variant.params);
         let mask = constructor.mask.clone();
         let id = constructor.id;
         let atoms = match self.masked_fields(context, &mask, telescope, &variant.payload)? {

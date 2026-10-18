@@ -1496,7 +1496,8 @@ fn retype_locals(
         solutions.push(solution);
     }
 
-    let locals = context.locals().cloned().collect::<Vec<_>>();
+    // The binders past the base frame alone: a declaration's type is closed, so no solution of an arm's locals retypes one, and reading them all would cost every arm the program's size.
+    let locals = context.local_binders().cloned().collect::<Vec<_>>();
     for (name, type_) in retyped(&*context, &locals, &solutions) {
         context.assume(&name, &type_);
     }

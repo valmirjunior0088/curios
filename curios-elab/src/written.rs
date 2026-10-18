@@ -927,15 +927,12 @@ fn enter_case_of(
     else {
         return false;
     };
-    let Some(declaration) = context.induct_decl(name).cloned() else {
+    let Some(Ok(Some(constructor))) =
+        context.induct_facet(name, universes, |at| at.constructor(tag).transpose())
+    else {
         return false;
     };
-    let Ok(declaration) = context.instantiate_induct_decl_at(&declaration, universes) else {
-        return false;
-    };
-    let Some(telescope) = declaration.instantiate(tag, params) else {
-        return false;
-    };
+    let telescope = constructor.telescope.open_params(params);
     let family = InductCase {
         name,
         universes,

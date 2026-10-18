@@ -107,14 +107,14 @@ impl Lowering<'_> {
                 tag,
                 payload,
             }) => {
-                let declaration = context
-                    .induct_decl(name)
-                    .cloned()
-                    .expect("erase: a registered inductive");
                 let indices = context
-                    .instantiate_induct_decl_at(&declaration, universes)?
-                    .instantiate(tag, params)
-                    .expect("erase: constructor instantiates at its inductive's parameters")
+                    .induct_facet(name, universes, |at| {
+                        at.constructor(tag)
+                            .expect("erase: constructor instantiates at its inductive's parameters")
+                    })
+                    .expect("erase: a registered inductive")?
+                    .telescope
+                    .open_params(params)
                     .open(&payload.iter().collect::<Vec<_>>());
 
                 Ok(Subterm::InductType(InductType {

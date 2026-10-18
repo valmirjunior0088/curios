@@ -14,6 +14,7 @@ use {
     curios_analysis::{case_target_indices, pinned_by_targets},
     curios_core::{Free, MatchResult, Universes},
     curios_num::{Binary, Grain, Natural},
+    std::collections::HashMap,
 };
 
 /// The `List`/`Bin` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
@@ -673,15 +674,17 @@ impl Lowering<'_> {
         let row = self.induct_row(context, &name)?;
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
+        // Each arm found by its tag once, rather than the arms searched again at every constructor: a match of many cases erases in its size.
+        let by_tag = cases
+            .iter()
+            .rev()
+            .map(|(tag, arm)| (tag, arm))
+            .collect::<HashMap<_, _>>();
         let mut arms = Vec::new();
         for (index, tag) in induct_decl.constructor_order().enumerate() {
             let constructor = row.constructors[index].id;
             let mask = row.constructors[index].mask.clone();
-            match cases
-                .iter()
-                .find(|(candidate, _)| candidate == tag)
-                .map(|(_, arm)| arm)
-            {
+            match by_tag.get(tag).copied() {
                 Some(arm) => {
                     let telescope = induct_decl
                         .instantiate(tag, m.params)

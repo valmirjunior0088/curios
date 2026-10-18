@@ -1,5 +1,8 @@
 use {
-    super::{Atom, Polarity, Telescope, Term, UniverseContext, Variance},
+    super::{
+        Atom, Polarity, Telescope, Term, UniverseContext, UniverseError, Universes, Variance,
+        instantiate_universes_scoped,
+    },
     crate::Sharing,
     curios_utilities::{Plicity, Qualifier},
 };
@@ -165,5 +168,66 @@ impl InductDecl {
     pub fn constructor_index(&self, tag: &Atom) -> Option<usize> {
         self.constructor_order()
             .position(|candidate| candidate == tag)
+    }
+}
+
+/// An inductive declaration read at one occurrence's universes: each facet is instantiated where it is read, so a read of the sort, the arity or one constructor pays for that facet and never for every constructor the declaration has. What [`InductDecl::at`] hands back.
+#[derive(Clone, Copy)]
+pub struct InductInstance<'d> {
+    declaration: &'d InductDecl,
+    universes: &'d Universes,
+}
+
+impl InductDecl {
+    /// This declaration at `universes`, read a facet at a time.
+    pub fn at<'d>(&'d self, universes: &'d Universes) -> InductInstance<'d> {
+        InductInstance {
+            declaration: self,
+            universes,
+        }
+    }
+}
+
+impl<'d> InductInstance<'d> {
+    /// The declaration as declared: what no universe instance changes — its module, its constructors' order, its counts, its vectors.
+    pub fn declaration(&self) -> &'d InductDecl {
+        self.declaration
+    }
+
+    /// The parameter telescope ending in the index telescope, at these universes.
+    pub fn arity(&self) -> Result<Telescope<Telescope<()>>, UniverseError> {
+        instantiate_universes_scoped(&self.declaration.arity, self.universes)
+    }
+
+    /// The index telescope at `params`, at these universes ([`InductDecl::indices_at`]).
+    pub fn indices_at(&self, params: &[Term]) -> Result<Telescope<()>, UniverseError> {
+        Ok(self.arity()?.open(&params.iter().collect::<Vec<_>>()))
+    }
+
+    /// The declared result sort, at these universes.
+    pub fn result_sort(&self) -> Result<Term, UniverseError> {
+        instantiate_universes_scoped(&self.declaration.result_sort, self.universes)
+    }
+
+    /// `tag`'s signature at these universes, or `None` where `tag` is no case of the declaration.
+    pub fn constructor(&self, tag: &Atom) -> Option<Result<InductParam, UniverseError>> {
+        let param = self.declaration.constructor(tag)?;
+        Some(
+            instantiate_universes_scoped(&param.telescope, self.universes)
+                .map(|telescope| InductParam { telescope }),
+        )
+    }
+
+    /// Every facet at these universes: what a reader of every constructor — a match, an elimination, a derivation — takes.
+    pub fn whole(&self) -> Result<InductDecl, UniverseError> {
+        let mut instantiated = self.declaration.clone();
+        instantiated.arity = self.arity()?;
+        instantiated.result_sort = self.result_sort()?;
+        for constructor in instantiated.signatures_mut() {
+            constructor.telescope =
+                instantiate_universes_scoped(&constructor.telescope, self.universes)?;
+        }
+        instantiated.universe_context = UniverseContext::empty();
+        Ok(instantiated)
     }
 }

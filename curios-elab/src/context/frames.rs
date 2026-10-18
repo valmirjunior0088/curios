@@ -329,9 +329,15 @@ impl<'s> Frames<'s> {
             .any(|frame| frame.definitions.contains_key(name))
             || self.in_scope(name).is_some()
     }
-    /// The local assumption context in binding order (outermost first), the base frame's top-level names first. The dependent-match generalizer (`elaborate_match`) walks this to find the hypotheses whose type depends on a scrutinee index being abstracted: they must ride into the motive as Π-binders, or the synthesized motive is ill-typed. Binding order matters — a hypothesis's type can only mention earlier binders, so the telescope it yields is already well-ordered.
+    /// Every frame's locals in binding order (outermost first), the base frame's top-level names first: what a test reads of a declaration forgotten everywhere, where a judgment reads [`Frames::local_binders`].
+    #[cfg(test)]
     pub(crate) fn locals(&self) -> impl DoubleEndedIterator<Item = &(Free, Term)> + Clone {
         self.frames.iter().flat_map(|frame| &frame.locals)
+    }
+
+    /// The locals of the frames past the base, in scope order: the binders a term stands under, without the declarations of every unit in scope the base frame holds, so a question about them costs the scope a judgment stands in and not the program's size.
+    pub(crate) fn local_binders(&self) -> impl DoubleEndedIterator<Item = &(Free, Term)> + Clone {
+        self.local_frames().iter().flat_map(|frame| &frame.locals)
     }
 
     /// Insert `name`'s definition into the innermost frame. The façade decides the cache protocol from [`Frames::is_defined`] first.

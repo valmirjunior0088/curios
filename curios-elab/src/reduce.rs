@@ -536,23 +536,25 @@ fn stated(context: &mut Context, instance: &Term, tag: &Atom) -> Result<Said, Re
     let Subterm::InductType(family) = &*type_ else {
         return Ok(Said::Silent);
     };
-    let Some(declaration) = context.induct_decl(&family.name).cloned() else {
-        return Ok(Said::Silent);
-    };
-    let Ok(declaration) = context.instantiate_induct_decl_at(&declaration, &family.universes)
+    // The two facets the rule reads — the family's sort, and the one constructor it is asked about — and no other case.
+    let Some(Ok((result_sort, constructor))) =
+        context.induct_facet(&family.name, &family.universes, |at| {
+            Ok((at.result_sort()?, at.constructor(tag).transpose()?))
+        })
     else {
         return Ok(Said::Silent);
     };
-    if !matches!(&*declaration.result_sort, Subterm::Sort(Quality::Prop, _)) {
+    if !matches!(&*result_sort, Subterm::Sort(Quality::Prop, _)) {
         return Ok(Said::Silent);
     }
     // Left to the ordinary rule, such a match would have its proof reduced to a constructor, which no judgment reads.
     if type_.has_metavar() {
         return Ok(Said::Open);
     }
-    let Some(signature) = declaration.instantiate(tag, &family.params) else {
+    let Some(constructor) = constructor else {
         return Ok(Said::Silent);
     };
+    let signature = constructor.telescope.open_params(&family.params);
 
     let binders = (0..signature.len())
         .map(|_| context.fresh(None))

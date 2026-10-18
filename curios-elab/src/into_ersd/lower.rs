@@ -842,7 +842,7 @@ fn erase_item(
             lowering.struct_row(context, name)?;
         }
         if context.induct_decl(name).is_some() {
-            lowering.induct_row(context, name)?;
+            lowering.induct_family(context, name)?;
         }
     }
 

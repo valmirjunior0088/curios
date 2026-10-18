@@ -1667,10 +1667,10 @@ fn solved(context: &mut Context, term: &Term) -> Result<Term, Error> {
 }
 
 /// The goal's negation, a fact of the refuting form's false arm, where a split on the goal's decision refined it to `false`: `a < b` failing is `b <= a`, `a <= b` failing is `b < a`. Read by the same reader, after the facts, proved by `qed` there, and lifted by `lifts` as they were. `None` where the vocabulary is not in scope.
-/// The hole's own binders, in scope order: a global of every mounted unit is an assumption in the base frame too, and none is a fact about this scope.
+/// The hole's own binders, in scope order: the frames past the base, since a global of every mounted unit is an assumption in the base frame and none is a fact about this scope.
 pub(super) fn binders(context: &Context) -> Vec<(Free, Term)> {
     context
-        .locals()
+        .local_binders()
         .filter(|(name, _)| name.as_global().is_none())
         .cloned()
         .collect()

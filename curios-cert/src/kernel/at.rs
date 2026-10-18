@@ -23,39 +23,65 @@ use {
 };
 
 /// An `induct` declaration at one occurrence's universes and parameters.
+///
+/// The arity and the sort are instantiated where the handle is made, for every rule reads them; a constructor is instantiated where one is read, so a family of many cases is read at an occurrence in its arity's size and not in all of its cases' ([`InductInstance`](curios_core::InductInstance)).
 pub(crate) struct InductAt {
-    declaration: InductDecl,
+    name: Global,
+    universes: Universes,
     params: Vec<Term>,
+    arity: Telescope<Telescope<()>>,
+    result_sort: Term,
 }
 
 impl InductAt {
-    /// The declaration itself, instantiated at the occurrence's universes.
-    ///
-    /// The arm rules and the elimination guard need the whole entry — its constructor list, its tags — and having reached it through this handle is what says the occurrence it belongs to was checked.
-    pub(crate) fn declaration(&self) -> &InductDecl {
-        &self.declaration
-    }
-
     /// The family's declared result sort, at these universes.
     pub(crate) fn result_sort(&self) -> &Term {
-        &self.declaration.result_sort
+        &self.result_sort
     }
 
     /// The declaration's own parameter telescope, at this occurrence's universes.
     ///
     /// What [`InductAt::indices`] and [`StructAt::fields`] hand back is the *terminal*, already opened at the parameters this handle holds. This is the telescope those parameters were declared at, which is what a rule needs to type the arguments the constructor above only counted.
     pub(crate) fn parameters(&self) -> Telescope<Telescope<()>> {
-        self.declaration.arity.clone()
+        self.arity.clone()
     }
 
-    /// `tag`'s signature at this occurrence's parameters, or `None` when the family has no such constructor.
-    pub(crate) fn signature(&self, tag: &Atom) -> Option<Telescope<Vec<Term>>> {
-        self.declaration.instantiate(tag, &self.params)
+    /// `tag`'s signature at this occurrence's universes and parameters, instantiated alone, or `None` when the family has no such constructor.
+    pub(crate) fn signature(
+        &self,
+        kernel: &Kernel<'_>,
+        tag: &Atom,
+    ) -> Result<Option<Telescope<Vec<Term>>>, Error> {
+        let Some(constructor) = self
+            .declaration(kernel)
+            .at(&self.universes)
+            .constructor(tag)
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(constructor?.telescope.open_params(&self.params)))
+    }
+
+    /// The family's constructor tags, in declaration order: what the arm rules and the elimination guard walk, having reached the family through this handle, which is what says the occurrence they belong to was checked.
+    pub(crate) fn tags(&self, kernel: &Kernel<'_>) -> Vec<Atom> {
+        self.declaration(kernel)
+            .constructor_order()
+            .cloned()
+            .collect()
     }
 
     /// The family's index telescope at this occurrence's parameters.
     pub(crate) fn indices(&self) -> Telescope<()> {
-        self.declaration.indices_at(&self.params)
+        self.arity.open(&self.params.iter().collect::<Vec<_>>())
+    }
+
+    /// The declaration as declared, read again without being noted: the read was noted where this handle was made.
+    fn declaration<'k>(&self, kernel: &'k Kernel<'_>) -> &'k InductDecl {
+        kernel
+            .globals
+            .induct_decl(&self.name)
+            .expect("a handle is made only for a declared family")
     }
 }
 
@@ -88,7 +114,10 @@ impl Kernel<'_> {
         let at = self.induct_at_params(&family.name, &family.universes, &family.params)?;
         arity_matches(
             Counted::Indices,
-            at.declaration.index_count(),
+            self.globals
+                .induct_decl(&family.name)
+                .expect("a handle is made only for a declared family")
+                .index_count(),
             family.indices.len(),
         )?;
 
@@ -108,9 +137,14 @@ impl Kernel<'_> {
         self.check_instance(&declaration.universe_context, universes)?;
         arity_matches(Counted::Parameters, declaration.param_count(), params.len())?;
 
+        let instance = declaration.at(universes);
+
         Ok(InductAt {
-            declaration: instantiate_induct_decl(declaration, universes)?,
+            name: *name,
+            universes: universes.clone(),
             params: params.to_vec(),
+            arity: instance.arity()?,
+            result_sort: instance.result_sort()?,
         })
     }
 
@@ -138,21 +172,4 @@ impl Kernel<'_> {
             params: params.to_vec(),
         })
     }
-}
-
-/// A declaration with its universe parameters replaced by this occurrence's instance, so its constructor signatures speak of the right levels.
-fn instantiate_induct_decl(
-    declaration: &InductDecl,
-    universes: &Universes,
-) -> Result<InductDecl, Error> {
-    let mut instantiated = declaration.clone();
-
-    instantiated.arity = instantiate_universes_scoped(&instantiated.arity, universes)?;
-    instantiated.result_sort = instantiate_universes_scoped(&instantiated.result_sort, universes)?;
-    for constructor in instantiated.signatures_mut() {
-        constructor.telescope = instantiate_universes_scoped(&constructor.telescope, universes)?;
-    }
-    instantiated.universe_context = curios_core::UniverseContext::empty();
-
-    Ok(instantiated)
 }

@@ -254,7 +254,7 @@ fn looked_up(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, Error> {
             let Ok(at) = kernel.induct_at_params(name, universes, params) else {
                 return Ok(None);
             };
-            let Some(signature) = at.signature(tag) else {
+            let Ok(Some(signature)) = at.signature(kernel, tag) else {
                 return Ok(None);
             };
             if signature.len() != payload.len() {
@@ -635,7 +635,7 @@ fn structural(
             let telescope = kernel
                 .induct_at_params(&left.name, &left.universes, &left.params)
                 .ok()
-                .and_then(|at| at.signature(&left.tag));
+                .and_then(|at| at.signature(kernel, &left.tag).ok().flatten());
             compare_fields_at(kernel, pairs, telescope, &left.payload, &right.payload)
         }
 
@@ -1295,7 +1295,7 @@ fn ground_cases(
                 }
                 let signature = family
                     .as_ref()
-                    .and_then(|at| at.signature(this_tag))
+                    .and_then(|at| at.signature(kernel, this_tag).ok().flatten())
                     .filter(|signature| signature.len() == this_arm.body.arity());
                 let converge = match signature {
                     Some(signature) => kernel.scoped(|kernel| {
@@ -1608,7 +1608,7 @@ fn stated(kernel: &mut Kernel, stated: &Term, tag: &Atom) -> Result<Option<State
     if !matches!(&**at.result_sort(), Subterm::Sort(Quality::Prop, _)) {
         return Ok(None);
     }
-    let Some(signature) = at.signature(tag) else {
+    let Ok(Some(signature)) = at.signature(kernel, tag) else {
         return Ok(None);
     };
 

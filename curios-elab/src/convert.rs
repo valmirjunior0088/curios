@@ -43,11 +43,11 @@ use {
     curios_analysis::{Classes, foreign_congruence},
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
-        Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Level,
-        Lockstep, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin, Probe, Proj,
-        Quality, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        Universes, Variance, Variant, past_bool_cap,
+        Func, FuncType, Global, InductDecl, InductInstance, InductType, Instance, InstanceHead,
+        Intrinsic, Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin,
+        Probe, Proj, Quality, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseError, Universes, Variance, Variant, past_bool_cap,
     },
     curios_utilities::{Keyed, Plicity, recurse},
     std::{
@@ -635,10 +635,11 @@ impl Convert {
                     ..
                 }),
             )) => {
-                let Some(declaration) = declared_at(context, name, universes, params)? else {
+                let Some(indices) =
+                    declared_facet(context, name, universes, params, |at| at.indices_at(params))?
+                else {
                     return Ok(untyped(self, context));
                 };
-                let indices = declaration.indices_at(params);
                 if indices.len() + 1 != arity {
                     return Ok(untyped(self, context));
                 }
@@ -3553,12 +3554,13 @@ fn looked_up(
     else {
         return synth_neutral(context, binders, &[], term);
     };
-    let Some(declaration) = declared_at(context, name, universes, params)? else {
+    let Some(Some(constructor)) = declared_facet(context, name, universes, params, |at| {
+        at.constructor(tag).transpose()
+    })?
+    else {
         return Ok(None);
     };
-    let Some(signature) = declaration.instantiate(tag, params) else {
-        return Ok(None);
-    };
+    let signature = constructor.telescope.open_params(params);
     if signature.len() != payload.len() {
         return Ok(None);
     }
@@ -3570,6 +3572,27 @@ fn looked_up(
         params.clone(),
         targets,
     )))
+}
+
+/// What `read` takes of `name`'s declaration at one occurrence's universes, where the occurrence states as many parameters as it declares: one facet instantiated, as [`declared_at`] instantiates them all.
+fn declared_facet<T>(
+    context: &mut Context,
+    name: &Global,
+    universes: &Universes,
+    params: &[Term],
+    read: impl FnOnce(InductInstance<'_>) -> Result<T, UniverseError>,
+) -> Result<Option<T>, ReduceError> {
+    if context
+        .induct_decl(name)
+        .is_none_or(|declaration| declaration.param_count() != params.len())
+    {
+        return Ok(None);
+    }
+
+    context
+        .induct_facet(name, universes, read)
+        .transpose()
+        .map_err(ReduceError::Universe)
 }
 
 /// `name`'s declaration at one occurrence's universes, where the occurrence states as many parameters as it declares.

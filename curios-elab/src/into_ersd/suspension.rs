@@ -170,9 +170,7 @@ impl Lowering<'_> {
     pub(super) fn polled(&mut self, context: &mut Retyping) -> Result<Polled, Error> {
         let syntax = context.syntax().option;
         Ok(Polled {
-            family: self
-                .induct_row(context, &Global::Authored(syntax.family.qualifier()))?
-                .family,
+            family: self.induct_family(context, &Global::Authored(syntax.family.qualifier()))?,
             some: self.outcome_constructor(context, syntax.family, syntax.some)?,
             none: self.outcome_constructor(context, syntax.family, syntax.none)?,
         })
