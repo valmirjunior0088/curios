@@ -46,9 +46,9 @@ pub let handle(@A: Type, l: Listing(A), k: Key, rows: Nat) -> Listing(A) =
                     cursor = Option/some(next),
                     first = kept(l.first, i, rows) }
             end;
-        choose
-        | k.shift || k.alt || k.ctrl || k.super => l
-        | _ =>
+        match k.shift || k.alt || k.ctrl || k.super
+        | true => l
+        | false =>
             match k.code
             | up() => match c.i | 0 => l | p + 1 => to(p) end
             | down() => to(c.i + 1)

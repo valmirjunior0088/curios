@@ -75,21 +75,21 @@ let offset_str(mins: Int) -> Str =
     end;
 
 let int_str(n: Int) -> Str =
-    choose
-    | n >= +0 => Nat/to_str(Int/to_nat(n))
-    | _ => Str/concat("-", Nat/to_str(Int/abs(n)))
+    match n >= +0
+    | true => Nat/to_str(Int/to_nat(n))
+    | false => Str/concat("-", Nat/to_str(Int/abs(n)))
     end;
 
 let flt_str(f: Flt) -> Str =
-    choose
-    | Bool/not(Flt/is_finite(f)) =>
+    match Flt/is_finite(f)
+    | false =>
         choose
         | f > +0.0 => "inf"
         | f < +0.0 => "-inf"
         | Flt/is_sign_minus(f) => "-nan"
         | _ => "nan"
         end
-    | _ =>
+    | true =>
         let raw = Flt/to_str(f);
         let unsigned = match Str/strip_prefix(raw, "+") | some(bare) => bare | none() => raw end;
         match Str/contains(unsigned, '.') || Str/contains(unsigned, 'e')

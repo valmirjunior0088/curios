@@ -196,8 +196,8 @@ let augmented(v: Dyadic) -> {Flt, Flt} =
 --- IEEE's `augmentedAddition` (§9.5): `x + y` as the pair `(a, b)` of its value rounded ties toward zero and the error that rounding made, so that `a + b` is the exact sum whenever `b` does not underflow. An exact zero sum answers the zero `x + y` does, twice; a NaN or an infinity answers the sum twice.
 pub let augmented_add(x: Flt, y: Flt) -> {Flt, Flt} =
     let s = x + y;
-    choose
-    | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
+    match (Dyadic/try_of(x), Dyadic/try_of(y))
+    | (some(a), some(b)) =>
         let v = a + b;
         match v.mantissa == +0 | true => (s, s) | false => augmented(v) end
     | _ => (s, s)
@@ -210,8 +210,8 @@ pub let augmented_sub(x: Flt, y: Flt) -> {Flt, Flt} =
 --- IEEE's `augmentedMultiplication` (§9.5): `x · y` as the pair `augmented_add` answers for a sum, a zero product signed as the operands are.
 pub let augmented_mul(x: Flt, y: Flt) -> {Flt, Flt} =
     let p = x * y;
-    choose
-    | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
+    match (Dyadic/try_of(x), Dyadic/try_of(y))
+    | (some(a), some(b)) =>
         let v = a * b;
         match v.mantissa == +0 | true => (p, p) | false => augmented(v) end
     | _ => (p, p)
@@ -1019,8 +1019,8 @@ satisfy Show(Flt) {
 --- A finite value spells as a literal, the sign dropped and a point added where `to_str` wrote none; the infinities and the default NaN of either sign spell as their literals, and any other NaN as the eight bytes that build it, so what reads back is the same pattern.
 satisfy Spell(Flt) {
     spell(f) =
-        choose
-        | Bool/not(is_finite(f)) =>
+        match is_finite(f)
+        | false =>
             choose
             | f > +0.0 => "+inf.0"
             | f < +0.0 => "-inf.0"
@@ -1041,7 +1041,7 @@ satisfy Spell(Flt) {
                     Str/concat("/std/Flt/of_le_bytes(x[", atoms),
                     "], @/std/Bool/True/qed())")
             end
-        | _ =>
+        | true =>
             let raw = to_str(f);
             let unsigned =
                 match Str/strip_prefix(raw, "+") | some(bare) => bare | none() => raw end;
