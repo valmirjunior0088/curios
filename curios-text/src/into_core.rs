@@ -164,7 +164,7 @@ fn writable_paths(
     table: &Table<ModuleInfo>,
     public: &Table<PublicInterface>,
     audiences: &Audiences,
-) -> BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>> {
+) -> curios_core::Paths {
     curios_profile::profile!("writable_paths");
     let mut paths: BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>> = BTreeMap::new();
     let mut record = |target: &Qualifier, path: Qualifier, audience: Vec<Qualifier>| {
@@ -193,16 +193,66 @@ fn writable_paths(
         }
     }
 
-    // A declaration's own path, then each path it is exported at, by path: a module's bindings are walked in a hash's order, which differs from one compilation to the next, and a reader takes the first of two spellings equally short.
-    for (global, written) in &mut paths {
-        written.sort_by(|left, right| {
-            let exported = |path: &Qualifier| curios_core::Global::Authored(*path) != *global;
+    let mut sorted = curios_core::Paths::new();
+    for (global, mut written) in paths {
+        in_reading_order(&global, &mut written);
+        sorted.insert(global, Rc::new(written));
+    }
 
-            (exported(&left.path), &left.path).cmp(&(exported(&right.path), &right.path))
-        });
+    sorted
+}
+
+/// `earlier`, the paths of a unit whose audiences were revised into `audiences`, with the paths of each of `names` read again of `table` and `audiences`: what a unit lowered over that one holds, where its revision read again the audience and the exports of `names` alone ([`Audiences::revised`]). A path is a binding of a module or an export of one, so a module whose table and export view stand gives every name the paths it gave.
+fn revised_paths(
+    earlier: &curios_core::Paths,
+    names: &BTreeSet<Qualifier>,
+    table: &Table<ModuleInfo>,
+    audiences: &Audiences,
+) -> curios_core::Paths {
+    let mut paths = earlier.clone();
+    for name in names {
+        let global = curios_core::Global::Authored(*name);
+        let mut written = Vec::new();
+        let module = name.without_last();
+        if table
+            .get(&module)
+            .is_some_and(|info| info.get_binding(name.last()).is_some())
+        {
+            written.push(curios_core::WritablePath {
+                path: *name,
+                audience: audiences.binding(name),
+            });
+        }
+        for (exporter, label) in audiences.exported_at(name) {
+            let path = exporter.with(&label);
+            if path != *name {
+                written.push(curios_core::WritablePath {
+                    path,
+                    audience: audiences.module(&exporter),
+                });
+            }
+        }
+        match written.is_empty() {
+            true => {
+                paths.remove(&global);
+            }
+            false => {
+                in_reading_order(&global, &mut written);
+                paths.insert(global, Rc::new(written));
+            }
+        }
     }
 
     paths
+}
+
+/// `written`, the paths of `global`, put in the order a reader takes them: its own path, then each path it is exported at, by path. A module's bindings are walked in a hash's order, which differs from one compilation to the next, and a reader takes the first of two spellings equally short.
+fn in_reading_order(global: &curios_core::Global, written: &mut [curios_core::WritablePath]) {
+    written.sort_by(|left, right| {
+        let exported = |path: &Qualifier| curios_core::Global::Authored(*path) != *global;
+
+        (exported(&left.path), &left.path).cmp(&(exported(&right.path), &right.path))
+    });
 }
 
 // Whether `label` names an internal root: discoverable so the unit that declares it can resolve it by absolute path, and refused to every other. Asked of the mount itself rather than of the name it owns, because only a whole mount is internal — a module inside one is reachable exactly as far as its mount is.
@@ -405,7 +455,7 @@ pub struct PreparedText {
     aliases: OnceCell<Rc<Aliases>>,
     /// Every absolute path this unit gives a global, made the first time a report spells a name over it and kept — see [`PreparedText::paths`]. Never stored, being read off `table`, `public` and `audiences`.
     #[archived_with(curios_archive::Skip)]
-    paths: OnceCell<Rc<BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>>>>,
+    paths: OnceCell<Rc<curios_core::Paths>>,
     /// The lowered module: what its elaboration reads, each item in hand where the unit was lowered in this process and read out of the bytes it was stored as where it was restored.
     ///
     /// **Stored without its items.** What every unit lowered after this one reads of it is what each item declares and the registry entries its lowering wrote, so that is what a unit is restored with; an item is read by a later lowering of the same sources, and by a unit whose witness names its declaration ([`PreparedText::written`]), so each is stored on its own, beside the unit, and read by whoever asks for it ([`PreparedText::lowered_item`]).
@@ -798,7 +848,7 @@ impl PreparedText {
     }
 
     /// Every absolute path this unit gives a global, with who may write it — see [`writable_paths`]. Made once for the unit: every report of every compilation it is in scope of reads the one table.
-    fn paths(&self) -> Rc<BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>>> {
+    fn paths(&self) -> Rc<curios_core::Paths> {
         let paths = self
             .paths
             .get_or_init(|| Rc::new(writable_paths(&self.table, &self.public, self.audiences())));
@@ -3312,6 +3362,20 @@ fn into_core_unit_within(
         }
         None => (OnceCell::new(), whole_dead),
     };
+    // Over a baseline a report spelled by, its paths with those of every name whose audience or exports were read again revised; otherwise made where a report first asks.
+    let paths = match (settled, &reread) {
+        (Some(baseline), Some(names)) => {
+            baseline.paths.get().map_or_else(OnceCell::new, |earlier| {
+                OnceCell::from(Rc::new(revised_paths(
+                    earlier,
+                    names,
+                    table.own(),
+                    &audiences,
+                )))
+            })
+        }
+        _ => OnceCell::new(),
+    };
 
     let unit = PreparedText {
         mounts: own.clone(),
@@ -3320,7 +3384,7 @@ fn into_core_unit_within(
         public: public.into_own(),
         audiences: OnceCell::from(audiences),
         aliases: OnceCell::from(aliases),
-        paths: OnceCell::new(),
+        paths,
         places,
         declarations: declared,
         bodies,
@@ -3531,7 +3595,7 @@ impl EntryNames {
 /// `imports` as a lowering recorded them, beside the paths each unit in scope gives a global — `predecessors`' and then `paths`, the asking unit's own — with the prefixes in scope that unit may not name, `own` being the ones it claims and `visible` the ones it may name: what [`PreparedText::spellings`] and [`EntryNames::spellings`] answer.
 fn spellings_over(
     imports: &curios_core::Imports,
-    paths: Rc<BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>>>,
+    paths: Rc<curios_core::Paths>,
     own: &[Mount],
     visible: &[Mount],
     predecessors: &[&PreparedText],

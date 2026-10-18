@@ -24,10 +24,11 @@ fn library(root: &Path) -> RootSource {
     RootSource::mounted("lib", RootKind::Ordinary, root.join("lib.crs"), root)
 }
 
-/// `a.crs` written as `text`, the unit lowered over `baseline`, and lowered whole.
+/// `a.crs` written as `text`, the unit lowered over `baseline`, and lowered whole. The baseline's paths are made first, as a report over it makes them, so the unit lowered over it revises them.
 fn edited(root: &Path, text: &str, baseline: &PreparedText) -> (PreparedText, PreparedText) {
     fs::write(root.join("a.crs"), text).unwrap();
     let source = library(root);
+    baseline.paths();
     let over =
         into_core_unit_over(&UnitSource::mounted(&source), &[], syntax(), baseline, true).unwrap();
     let whole = into_core_unit(&UnitSource::mounted(&source), &[], syntax()).unwrap();
@@ -134,7 +135,7 @@ fn files(name: &str, files: &[(&str, &str)]) -> Temporary {
     root
 }
 
-/// The file `path` under `root` written as `text`, the unit lowered over `baseline` and lowered whole, each with the tables a lowering over it reads.
+/// The file `path` under `root` written as `text`, the unit lowered over `baseline` and lowered whole, each with the tables a lowering over it reads. The baseline's paths are made first, as [`edited`] makes them.
 fn rewritten(
     root: &Path,
     path: &str,
@@ -143,6 +144,7 @@ fn rewritten(
 ) -> (PreparedText, PreparedText) {
     fs::write(root.join(path), text).unwrap();
     let source = library(root);
+    baseline.paths();
     let over =
         into_core_unit_over(&UnitSource::mounted(&source), &[], syntax(), baseline, true).unwrap();
     let whole = into_core_unit(&UnitSource::mounted(&source), &[], syntax()).unwrap();
@@ -546,4 +548,36 @@ fn a_foreign_row_no_edit_reaches_stands_where_its_declaration_does() {
     let rows = |unit: &PreparedText| format!("{:?}", unit.foreigns().iter().collect::<Vec<_>>());
     assert_eq!(rows(&over), rows(&whole));
     assert_eq!(anew(&over), ["/lib/b/middle_row"]);
+}
+
+/// A binding made private is spelled by its own module alone, and a binding a module starts to re-export is spelled at the new path too: the baseline's paths revised where the audiences were read again are the ones a whole lowering makes.
+#[test]
+fn the_paths_a_report_spells_by_are_revised_where_audiences_moved() {
+    let root = files(
+        "paths",
+        &[
+            ("lib.crs", "pub mod a;\npub mod b;\n"),
+            ("a.crs", "pub let x: Type = Type;\n\npub let y: Type = x;\n"),
+            ("b.crs", "pub let z: Type = Type;\n"),
+        ],
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (private, whole) = rewritten(
+        &root,
+        "a.crs",
+        "let x: Type = Type;\n\npub let y: Type = x;\n",
+        &baseline,
+    );
+    same_unit(&private, &whole);
+    assert_ne!(private.paths(), baseline.paths());
+
+    let (reexported, whole) = rewritten(
+        &root,
+        "b.crs",
+        "pub use /lib/a/{y};\n\npub let z: Type = Type;\n",
+        &private,
+    );
+    same_unit(&reexported, &whole);
+    assert_ne!(reexported.paths(), private.paths());
 }

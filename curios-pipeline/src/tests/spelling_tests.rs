@@ -97,14 +97,19 @@ fn held(reader: &Reader, under: Option<&Qualifier>) -> Counted {
             spellings
                 .units
                 .iter()
-                .flat_map(|unit| unit.paths.get(global).into_iter().flatten())
+                .flat_map(|unit| {
+                    unit.paths
+                        .get(global)
+                        .into_iter()
+                        .flat_map(|paths| paths.iter())
+                })
                 .map(|written| written.path)
                 .collect::<Vec<_>>()
         };
         let spelled = spellings
             .units
             .iter()
-            .flat_map(|unit| unit.paths.keys().copied())
+            .flat_map(|unit| unit.paths.iter().map(|(global, _)| *global))
             .collect::<BTreeSet<_>>()
             .into_iter()
             .filter(|global| {
@@ -196,7 +201,7 @@ fn library_modules() -> BTreeSet<String> {
                 spellings
                     .units
                     .iter()
-                    .flat_map(|unit| unit.paths.values().flatten())
+                    .flat_map(|unit| unit.paths.iter().flat_map(|(_, paths)| paths.iter()))
                     .filter(|written| {
                         written
                             .audience

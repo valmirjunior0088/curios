@@ -15,7 +15,11 @@ pub fn spell(
         .units
         .iter()
         .flat_map(|unit| {
-            let paths = unit.paths.get(global).into_iter().flatten();
+            let paths = unit
+                .paths
+                .get(global)
+                .into_iter()
+                .flat_map(|paths| paths.iter());
 
             paths.map(move |written| (written, unit.own))
         })

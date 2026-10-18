@@ -647,11 +647,14 @@ pub struct Spellings {
     pub closed: Vec<Qualifier>,
 }
 
+/// Each global's paths in one unit — a declaration of the unit's own at its own path first, then each path a module of the unit exports it at, by path: persistent, so a unit compiled over another holds the other's with the paths of what changed replaced.
+pub type Paths = Sorted<Global, Rc<Vec<WritablePath>>>;
+
 /// The absolute paths one unit gives each global, as a reader's unit holds them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnitPaths {
-    /// Each global's paths in the unit — a declaration of the unit's own at its own path first, then each path a module of the unit exports it at, by path. Made once for the unit and shared by every reader, so nothing in it is a reader's.
-    pub paths: Rc<BTreeMap<Global, Vec<WritablePath>>>,
+    /// Each global's paths in the unit ([`Paths`]). Made once for the unit and shared by every reader, so nothing in it is a reader's.
+    pub paths: Rc<Paths>,
     /// Whether the unit is the reader's own, where a module may also reach a path relatively, through its own declarations.
     pub own: bool,
 }

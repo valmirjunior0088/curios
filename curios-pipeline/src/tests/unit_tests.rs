@@ -262,7 +262,8 @@ fn a_name_exported_along_several_paths_is_listed_the_same_every_time() {
         let own = spellings.units.last().expect("the unit's own paths");
         let written = own
             .paths
-            .values()
+            .iter()
+            .map(|(_, written)| written)
             .find(|written| written.len() > 1)
             .expect("a name written several ways")
             .iter()
