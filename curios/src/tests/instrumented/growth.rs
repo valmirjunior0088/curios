@@ -221,6 +221,8 @@ fn growth_slopes() {
     println!("| --- | --- | --- | --- | --- | --- |");
     for growth in Growth::ALL {
         let base = base(growth);
+        // Compiled once uncounted first: the prelude's modules are restored where a compile first reads them, once a process, so the smallest size would otherwise carry its growth's first restores and steepen its slope.
+        counted(&grown(growth, base), None);
         let counts =
             [base, base * 2, base * 4].map(|size| counted(&grown(growth, size), counter.as_ref()));
         let shown = |steepest: Option<(f64, &str)>| match steepest {
