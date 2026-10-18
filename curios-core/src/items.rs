@@ -43,6 +43,14 @@ impl Outline {
     }
 }
 
+/// The first name `item` declares.
+fn first_name(item: &Item) -> Option<&Global> {
+    match item {
+        Item::Let(definition) => Some(&definition.name),
+        Item::Rec(rec) => rec.definitions.first().map(|definition| &definition.name),
+    }
+}
+
 /// What `item` declares each of its names as, in the order it declares them.
 fn declared_by(item: &Item) -> Vec<Declared> {
     match item {
@@ -70,6 +78,13 @@ enum Entry {
 }
 
 impl Entry {
+    fn first_name(&self) -> Option<&Global> {
+        match self {
+            Entry::Made(item) => first_name(item),
+            Entry::Stored(stored, index) => stored.declared[*index].names.first(),
+        }
+    }
+
     fn item(&self) -> &Item {
         match self {
             Entry::Made(item) => item,
@@ -184,6 +199,41 @@ impl Items {
         }
     }
 
+    /// Whether these items are a version's, held at places a version made of them keeps.
+    pub fn is_version(&self) -> bool {
+        matches!(self.0, Held::Placed(_))
+    }
+
+    /// The place a version made of these items ([`Items::version`]) holds the item at `place` at.
+    pub fn place_in_version(&self, place: usize) -> usize {
+        match &self.0 {
+            Held::Placed(_) => place,
+            Held::Made(_) | Held::Stored(_) => spaced(place),
+        }
+    }
+
+    /// The place of the item after the one at `place`, or of the first where it is `None`.
+    pub fn place_after(&self, place: Option<usize>) -> Option<usize> {
+        match &self.0 {
+            Held::Placed(placed) => placed
+                .after(place.map_or(-1, position))
+                .map(|(next, _)| place_of(next)),
+            Held::Made(_) | Held::Stored(_) => {
+                let next = place.map_or(0, |place| place + 1);
+                (next < self.len()).then_some(next)
+            }
+        }
+    }
+
+    /// The first name the item at `place` declares, with nothing restored.
+    pub fn first_name(&self, place: usize) -> Option<&Global> {
+        match &self.0 {
+            Held::Made(items) => first_name(&items[place]),
+            Held::Stored(stored) => stored.declared[place].names.first(),
+            Held::Placed(placed) => entry(placed, place).first_name(),
+        }
+    }
+
     /// These items as a version to change, sharing every item with them: their own places where they are a version, and their indices spaced apart otherwise, so an item new to the version has a place between any two.
     pub fn version(&self) -> Items {
         let placed = match &self.0 {
@@ -191,10 +241,7 @@ impl Items {
             Held::Made(items) => {
                 let mut placed = Ordered::new();
                 for (index, item) in items.iter().enumerate() {
-                    placed.insert(
-                        position(index * SPACING),
-                        Entry::Made(Rc::new(item.clone())),
-                    );
+                    placed.insert(position(spaced(index)), Entry::Made(Rc::new(item.clone())));
                 }
                 placed
             }
@@ -202,7 +249,7 @@ impl Items {
                 let mut placed = Ordered::new();
                 for index in 0..stored.cells.len() {
                     placed.insert(
-                        position(index * SPACING),
+                        position(spaced(index)),
                         Entry::Stored(Rc::clone(stored), index),
                     );
                 }
@@ -315,6 +362,11 @@ impl Items {
             _ => unreachable!("made above"),
         }
     }
+}
+
+/// The place a version made of a module that placed its items at their indices holds the item at `index` at: spaced apart, with room before the first.
+fn spaced(index: usize) -> usize {
+    (index + 1) * SPACING
 }
 
 /// A place as a version's position.

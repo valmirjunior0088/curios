@@ -97,6 +97,27 @@ pub let zeta: Nat = beta + 1;
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
+/// A unit compiled over a unit that was itself compiled over a baseline holds each name where its module does: its places are its baseline's with the names of what it changed placed again, a declaration added among them and one respelled, and every place agrees with the module it is of. The units are stored as the whole compiles of their texts store them.
+#[test]
+fn a_recompile_over_a_recompile_holds_each_name_where_its_module_does() {
+    let edited = BASE.replace("n + n", "n + n + 0");
+    let again = fill!("${edited}\npub let zero: Nat = 0;\n", edited);
+    let baseline = unit_of(BASE);
+    let first = recompile_over(&edited, &baseline).unwrap();
+
+    let second = recompile_over(&again, &first).unwrap();
+
+    let module = second.core();
+    let fresh = curios_core::Places::of(module);
+    for place in module.items.places() {
+        for name in module.items.names(place) {
+            assert_eq!(second.places().place(name), fresh.place(name), "{name:?}");
+        }
+    }
+    assert_stored_alike(&unit_of(&edited), &first);
+    assert_stored_alike(&unit_of(&again), &second);
+}
+
 /// An edited value reaches a value computed over one computed over it: `b` is computed from `a` where the unit is erased, and `c` from `b`, so `a` respelled is erased again, `b` with it, and `c`, which ran what `b` erased to, with that. Each reads the one before it by its signature alone, so each is the declaration it was.
 ///
 /// Mutation-checked: with the items that read an item erased again marked and theirs not, `c` is stored as the value it computed over `b`'s old form.

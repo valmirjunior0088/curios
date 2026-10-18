@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    super::{Global, Item, Module, RecGroup, RecItem, Term},
+    super::{Global, Item, Items, Module, RecGroup, RecItem, Term},
     curios_utilities::{Keyed, Persistent},
     std::{cell::OnceCell, collections::HashMap, rc::Rc},
 };
@@ -54,18 +54,18 @@ impl Places {
         let mut places = Self::default();
         // Asked of what each place declares, which a stored module knows without its item: placing a unit's names reads none of its declarations.
         for place in module.items.places() {
-            places.place_item(module, place);
+            places.place_item(&module.items, place);
         }
 
         places
     }
 
-    /// Place the names the item at `place` of `module` declares there: what a version of a module's places is made with, of the items the version changed.
-    pub fn place_item(&mut self, module: &Module, place: usize) {
+    /// Place the names the item at `place` of `items` declares there: what a version of a module's places is made with, of the items the version changed.
+    pub fn place_item(&mut self, items: &Items, place: usize) {
         const TWICE: &str = "a module declares one name twice";
         let item = u64::try_from(place).expect("a place is counted in a u64");
-        let group = module.items.is_group(place);
-        for (member, name) in module.items.names(place).into_iter().enumerate() {
+        let group = items.is_group(place);
+        for (member, name) in items.names(place).into_iter().enumerate() {
             let held = match group {
                 false => Held {
                     place: Place::Let(item),

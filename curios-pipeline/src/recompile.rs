@@ -154,6 +154,7 @@ pub(crate) fn compile_lowered_over(
     let (
         Recompiled {
             module: core,
+            places,
             traces,
             readers,
             kept,
@@ -211,6 +212,7 @@ pub(crate) fn compile_lowered_over(
     Ok((
         Uncertified::new(lowered, core.into_module(), ersd, traces)
             .reading(readers)
+            .placing(places)
             .certified(certification),
         entry,
     ))

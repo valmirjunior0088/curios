@@ -912,8 +912,10 @@ impl Reached {
             lost: Vec::new(),
         };
         let mut frontier = Vec::new();
+        // The place of each item, by the number the walk gives it.
+        let places = module.items.places().collect::<Vec<_>>();
         let reach = |index: usize, names: &mut HashSet<Global>, frontier: &mut Vec<Global>| {
-            for name in module.items[index].declared_names() {
+            for name in module.items[places[index]].declared_names() {
                 if names.insert(*name) {
                     frontier.push(*name);
                 }

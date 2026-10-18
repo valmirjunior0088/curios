@@ -75,6 +75,14 @@ impl Uncertified {
         self
     }
 
+    /// This unit, holding `places` as where its module holds each name, where they were handed on: what the recompile that made it carries over from its baseline, with the names of what it changed placed again, in place of placing every name again.
+    pub fn placing(mut self, places: Option<Places>) -> Self {
+        if let Some(places) = places {
+            self.places = Rc::new(OnceCell::from(places));
+        }
+        self
+    }
+
     /// Whether the unit is the compiler's own. See the field.
     pub fn fixed(&self) -> bool {
         self.fixed

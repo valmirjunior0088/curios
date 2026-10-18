@@ -15,7 +15,10 @@ use {
         StructDecl, WitnessId, WitnessKey,
     },
     curios_utilities::Qualifier,
-    std::{cell::RefCell, collections::HashMap},
+    std::{
+        cell::RefCell,
+        collections::{HashMap, HashSet},
+    },
 };
 
 /// The places of one unit's names: its unit's own, or made here for a module nothing keeps them with.
@@ -31,7 +34,7 @@ struct Standing<'a> {
     module: &'a Module,
     places: Placed<'a>,
     /// Which of its items this unit answers for, by each one's place among them: the items of a baseline that a walk has kept so far. `None` for a unit in scope, which answers for every name it holds.
-    kept: Option<RefCell<Vec<bool>>>,
+    kept: Option<RefCell<HashSet<usize>>>,
     /// Whether this unit is other than the one the baseline was compiled after ([`Established::after`]).
     moved: bool,
     /// Whether this unit is the compiler's own ([`Established::fixed`]).
@@ -54,13 +57,13 @@ impl<'a> Standing<'a> {
 
         self.places()
             .place(name)
-            .is_some_and(|place| kept.borrow()[place.item()])
+            .is_some_and(|place| kept.borrow().contains(&place.item()))
     }
 
     /// Answer for the item declaring `name` from here on.
     fn keep(&self, name: &Global) {
         if let (Some(kept), Some(place)) = (&self.kept, self.places().place(name)) {
-            kept.borrow_mut()[place.item()] = true;
+            kept.borrow_mut().insert(place.item());
         }
     }
 
@@ -292,7 +295,7 @@ impl<'a> Established<'a> {
         self.units.push(Standing {
             module: baseline,
             places: Placed::Kept(places),
-            kept: Some(RefCell::new(vec![false; baseline.items.len()])),
+            kept: Some(RefCell::new(HashSet::new())),
             moved: false,
             fixed: false,
         });

@@ -115,3 +115,15 @@ fn a_version_keeps_the_places_of_what_it_did_not_change() {
         held.place(&name("third"))
     );
 }
+
+/// A version made of a module that placed its items at their indices has room before its first item, where an item named before every other goes.
+#[test]
+fn a_version_takes_an_item_before_its_first() {
+    let module = module(vec![Item::Let(definition("b")), Item::Let(definition("c"))]);
+    let mut items = module.items.version();
+
+    let first = items.insert_after(None, Item::Let(definition("a")));
+
+    assert!(first.is_some(), "a place before the first item");
+    assert_eq!(first, items.places().next());
+}

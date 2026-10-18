@@ -108,6 +108,8 @@ pub(super) struct Demand<'a> {
     asking: bool,
     /// Who asked what, of the unit's traces as the walk files them: the baseline's, with the edges of each declaration made or dropped replaced. `None` for a unit compiled whole, whose readers are made where a recompile over it first asks.
     pub(super) readers: Option<Readers>,
+    /// The names the baseline declared and the unit does not.
+    pub(super) lost: Vec<Global>,
 }
 
 /// Whether the part `question` asks, of a declaration the unit does not hold, digests now to what the baseline recorded of it. A part the baseline recorded nothing of does not stand, and neither does one that will not digest.
@@ -199,6 +201,7 @@ impl<'a> Demand<'a> {
             reached: None,
             asking: false,
             readers: over.map(|over| over.readers.clone()),
+            lost: Vec::new(),
         }
     }
 
@@ -437,6 +440,7 @@ impl<'a> Demand<'a> {
                 }
             }
         }
+        self.lost = lost;
         // A key at which the unit declares other witnesses than the baseline did.
         let keys = |names: &BTreeSet<Global>| {
             names

@@ -48,6 +48,8 @@ pub(super) struct ErasedOver<'a> {
     read: HashMap<Global, Vec<(Question, bool)>>,
     /// Whether an edit could have reached each item, by the baseline's traces read backwards: an item not reached keeps its erased form unasked.
     reached: Vec<bool>,
+    /// The place each item walked is at, in the order the walk takes them: what an item numbered by the walk is read at.
+    places: Vec<usize>,
     /// The first names of the baseline's items the unit no longer declares.
     lost: Vec<Global>,
 }
@@ -75,6 +77,7 @@ impl<'a> ErasedOver<'a> {
             baseline,
             module,
             declared,
+            places: module.items.places().collect(),
             kept: Vec::with_capacity(module.items.len()),
             same: HashMap::new(),
             scope,
@@ -92,10 +95,16 @@ impl<'a> ErasedOver<'a> {
         let (module, baseline) = (self.module, self.baseline);
         let readers = baseline.erased.readers();
         let mut frontier = Vec::new();
+        let places = std::mem::take(&mut self.places);
         let mark = |item: usize, reached: &mut Vec<bool>, frontier: &mut Vec<Global>| {
             if !reached[item] {
                 reached[item] = true;
-                frontier.extend(module.items[item].declared_names().into_iter().copied());
+                frontier.extend(
+                    module.items[places[item]]
+                        .declared_names()
+                        .into_iter()
+                        .copied(),
+                );
             }
         };
 
@@ -158,6 +167,7 @@ impl<'a> ErasedOver<'a> {
                 }
             }
         }
+        self.places = places;
     }
 
     /// The first names of the baseline's items the unit no longer declares.
@@ -299,7 +309,10 @@ impl<'a> ErasedOver<'a> {
                 return Same::default();
             };
 
-            let (made, held) = (&module.items[item], &baseline.items[place.item()]);
+            let (made, held) = (
+                &module.items[self.places[item]],
+                &baseline.items[place.item()],
+            );
             // An entry rides in the former that declares it, so the two items hold what is compared.
             let (this, that) = (made.nominal(name), held.nominal(name));
 

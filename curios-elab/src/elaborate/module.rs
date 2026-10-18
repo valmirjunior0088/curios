@@ -1553,6 +1553,8 @@ struct ElaboratedSuffix {
     kept: BTreeSet<Global>,
     /// Who asked what, of `traces`, where the unit was compiled over a baseline: the baseline's readers with the edges of what the walk made or dropped replaced.
     readers: Option<Readers>,
+    /// The names the baseline declared and the unit does not. Empty for a unit compiled whole.
+    lost: Vec<Global>,
 }
 
 /// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint's body and the type it states. Returns the rebuilt suffix, its entry stating the type its body was judged at, reduced through the accumulated definitions.
@@ -1661,6 +1663,7 @@ fn elaborate_module_suffix<'s>(
         mut survivors,
         traces,
         readers,
+        lost,
         ..
     } = demand;
 
@@ -1770,6 +1773,7 @@ fn elaborate_module_suffix<'s>(
         traces,
         kept,
         readers,
+        lost,
     })
 }
 
@@ -2130,6 +2134,8 @@ pub struct Recompile<'a> {
 /// A unit elaborated over a baseline: its module, what each of its declarations asked and who asked what of that, and every name of a declaration kept as the baseline holds it.
 pub struct Recompiled {
     pub module: Module,
+    /// Where `module` holds each name, where its baseline's places were handed on with the names of what the walk changed placed again: `None` where they are made the first time something asks.
+    pub places: Option<Places>,
     pub traces: Traces,
     pub readers: Readers,
     pub kept: BTreeSet<Global>,
@@ -2198,9 +2204,13 @@ fn elaborate_and_zonk_over<'s>(
             obligations,
         } = finalized?;
         let (traces, kept, readers) = (elaborated.traces, elaborated.kept, elaborated.readers);
-        let (module, ordered) = {
+        let Assembled {
+            module,
+            ordered,
+            places,
+        } = {
             curios_profile::profile!("assemble_unit_over");
-            assembled(&recompile, module, &kept, made)
+            assembled(&recompile, module, &kept, &elaborated.lost, made)
         };
         // A module whose items reach what the baseline's reached is in the order the baseline was given, every item new to it where that order puts it: the order is a function of what the items declare and name.
         let module = match ordered {
@@ -2225,6 +2235,7 @@ fn elaborate_and_zonk_over<'s>(
             (
                 Recompiled {
                     module,
+                    places,
                     traces,
                     readers: readers.expect("a walk over a baseline keeps who asked what"),
                     kept,
@@ -2235,18 +2246,26 @@ fn elaborate_and_zonk_over<'s>(
     })
 }
 
-/// The declarations elaborated and the ones kept as one module: `made`, with the baseline's own item and registry entries for every declaration of `lowered` the walk `kept`. The items are in the order a module is stored in where the edit moved no item's place in it ([`kept_order`]), the second answer; the caller puts them in it otherwise.
+/// What [`assembled`] makes of a recompile's declarations: the module, whether its items are in the order a module is stored in, and where it holds each name, where that was handed on.
+struct Assembled {
+    module: Module,
+    ordered: bool,
+    places: Option<Places>,
+}
+
+/// The declarations elaborated and the ones kept as one module: `made`, with the baseline's own item and registry entries for every declaration of `lowered` the walk `kept`, and no item of the names `lost`. Where the edit moved no item's place in the order a module is stored in, the module is a version of the baseline's ([`kept_order`]); the caller puts the items in that order otherwise.
 ///
-/// The markers follow the items, as a whole compile's do: a witness or a test naming an item that is not there would reach erasure as a marker for nothing. On a run that dropped nothing every one is admitted, which is every run that produces a unit.
+/// The markers are the lowering's: every run that produces a unit dropped nothing, so every item a marker names is there.
 fn assembled(
     recompile: &Recompile<'_>,
     lowered: &Module,
     kept: &BTreeSet<Global>,
+    lost: &[Global],
     made: Module,
-) -> (Module, bool) {
+) -> Assembled {
     let made = made.items.into_iter().collect::<Vec<_>>();
-    let (items, ordered) = match kept_order(recompile, kept, &made) {
-        Some(items) => (Items::from(items), true),
+    let (items, ordered, places) = match kept_order(recompile, kept, lost, &made) {
+        Some((items, places)) => (items, true, places),
         None => {
             let mut items = Items::from(made);
             items.extend(
@@ -2262,45 +2281,35 @@ fn assembled(
                     .cloned(),
             );
 
-            (items, false)
+            (items, false, None)
         }
     };
-    let declared = items
-        .iter()
-        .flat_map(Item::declared_names)
-        .copied()
-        .collect::<BTreeSet<_>>();
 
-    let module = Module {
-        items,
-        mounts: lowered.mounts.clone(),
-        witnesses: lowered
-            .witnesses
-            .iter()
-            .filter(|name| declared.contains(*name))
-            .copied()
-            .collect(),
-        tests: lowered
-            .tests
-            .iter()
-            .filter(|name| declared.contains(*name))
-            .copied()
-            .collect(),
-    };
-
-    (module, ordered)
+    Assembled {
+        module: Module {
+            items,
+            mounts: lowered.mounts.clone(),
+            witnesses: lowered.witnesses.clone(),
+            tests: lowered.tests.clone(),
+        },
+        ordered,
+        places,
+    }
 }
 
-/// The items of a module compiled over a baseline in the order a module is stored in ([`Module::ordered`]), kept from the baseline's where the edit moved no item's place in it: each item `made` in the place of the baseline's item it replaces, where it reaches the declarations of the unit that one reached; each item `kept` where the baseline holds it; and each item new to the unit, which no other item reaches, where the sort puts it.
+/// The items of a module compiled over a baseline in the order a module is stored in ([`Module::ordered`]), as a version of the baseline's where the edit moved no item's place in it: each item `made` in the place of the baseline's item it replaces, where it reaches the declarations of the unit that one reached; each item `kept` where the baseline holds it; no item of the names `lost`; and each item new to the unit, which no other item reaches, where the sort puts it. With them, where the module holds each name: the baseline's places with the names of what changed placed again, where the baseline was a version itself, and `None` where they are to be made.
 ///
 /// **The sort, not repeated.** The order is the one a sort gives that takes, of the items waiting on nothing, the one named least: a function of what the items declare and reach. An item made that reaches what the one it replaces reached leaves every item waiting on what it waited on. An item new to the unit that nothing reaches waits on what it reaches and holds back nothing, so it is taken at the first place after everything it reaches where the item the baseline's order takes is named after it, and every other item is taken as before; one taken away that nothing reaches leaves the rest as they were. A kept item reaches only what the baseline held, and what it read of a declaration taken away its elaboration answers otherwise, so it is made, not kept.
 ///
-/// `None` where an item made reaches otherwise than the one it replaces, declares other names than it, or is new and reaches another new item, and the module is sorted again.
+/// **Nothing kept is copied.** A version shares every item it does not change with the baseline's ([`Items::version`]), so only the items made and the places they take are written. Where an item new to the unit goes is found by stepping from what it reaches to the first item named after it, which reads each name it passes and nothing else.
+///
+/// `None` where an item made reaches otherwise than the one it replaces, declares other names than it, or is new and reaches another new item, or no place is left between two items, and the module is sorted again.
 fn kept_order(
     recompile: &Recompile<'_>,
     kept: &BTreeSet<Global>,
+    lost: &[Global],
     made: &[Item],
-) -> Option<Vec<Item>> {
+) -> Option<(Items, Option<Places>)> {
     let (baseline, places) = (recompile.baseline, recompile.places);
     let made_names = made
         .iter()
@@ -2319,7 +2328,7 @@ fn kept_order(
             .collect::<BTreeSet<_>>()
     };
 
-    let mut replacing = vec![None; baseline.items.len()];
+    let mut replacing = Vec::new();
     let mut added = Vec::new();
     for (index, item) in made.iter().enumerate() {
         let names = item.declared_names();
@@ -2331,60 +2340,68 @@ fn kept_order(
                 {
                     return None;
                 }
-                replacing[place.item()] = Some(index);
+                replacing.push((place.item(), index));
             }
             None if names.iter().all(|name| !held_then(name)) => added.push(index),
             None => return None,
         }
     }
-
-    let mut order = Vec::with_capacity(baseline.items.len() + added.len());
-    for (place, replaced) in replacing.into_iter().enumerate() {
-        match replaced {
-            Some(index) => order.push(made[index].clone()),
-            None if baseline
-                .items
-                .names(place)
-                .first()
-                .is_some_and(|first| kept.contains(*first)) =>
-            {
-                order.push(baseline.items[place].clone());
-            }
-            // Taken away, which no item kept or made reaches.
-            None => {}
-        }
-    }
-
     let new_names = added
         .iter()
         .flat_map(|index| made[*index].declared_names())
         .copied()
         .collect::<BTreeSet<_>>();
-    for index in added {
-        let item = &made[index];
-        let reaches = reach(item, &held_now);
-        if reaches.iter().any(|name| new_names.contains(name)) {
+    let mut reaches = Vec::with_capacity(added.len());
+    for index in &added {
+        let reached = reach(&made[*index], &held_now);
+        if reached.iter().any(|name| new_names.contains(name)) {
             return None;
         }
-        let first = **item.declared_names().first()?;
-        let after = order
-            .iter()
-            .rposition(|held| {
-                held.declared_names()
-                    .iter()
-                    .any(|name| reaches.contains(*name))
-            })
-            .map_or(0, |at| at + 1);
-        let at = (after..order.len())
-            .find(|at| {
-                order[*at]
-                    .declared_names()
-                    .first()
-                    .is_some_and(|name| first < **name)
-            })
-            .unwrap_or(order.len());
-        order.insert(at, item.clone());
+        reaches.push(reached);
     }
 
-    Some(order)
+    // A version of a baseline that is one keeps its places, and so where it holds each name; one made of a baseline that is not places its items apart first.
+    let carried = baseline.items.is_version();
+    let in_version = |place: usize| baseline.items.place_in_version(place);
+    let mut items = baseline.items.version();
+    let mut placing = carried.then(|| places.clone());
+    for (place, index) in replacing {
+        let place = in_version(place);
+        items.replace(place, made[index].clone());
+        if let Some(placing) = &mut placing {
+            placing.place_item(&items, place);
+        }
+    }
+    let mut taken = BTreeSet::new();
+    for name in lost {
+        if let Some(place) = places.place(name)
+            && taken.insert(place.item())
+        {
+            items.remove(in_version(place.item()));
+        }
+        if let Some(placing) = &mut placing {
+            placing.forget(name);
+        }
+    }
+    for (index, reached) in added.into_iter().zip(reaches) {
+        let item = &made[index];
+        let first = **item.declared_names().first()?;
+        // After everything it reaches, then past every item named before it.
+        let mut after = reached
+            .iter()
+            .filter_map(|name| places.place(name))
+            .map(|place| in_version(place.item()))
+            .max();
+        while let Some(next) = items.place_after(after)
+            && items.first_name(next).is_some_and(|name| *name < first)
+        {
+            after = Some(next);
+        }
+        let place = items.insert_after(after, item.clone())?;
+        if let Some(placing) = &mut placing {
+            placing.place_item(&items, place);
+        }
+    }
+
+    Some((items, placing))
 }
