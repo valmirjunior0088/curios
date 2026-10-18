@@ -44,6 +44,15 @@ impl<K, T> Tree<K, T> {
         walk.descend(self.root.as_deref());
         walk
     }
+
+    /// The entry of the greatest key.
+    fn last(&self) -> Option<(&K, &T)> {
+        let mut node = self.root.as_deref()?;
+        while let Some(right) = node.right.as_deref() {
+            node = right;
+        }
+        Some((&node.key, &node.payload))
+    }
 }
 
 impl<K: Ord, T> Tree<K, T> {
@@ -657,6 +666,11 @@ impl<K: Ord + Hash + Clone, V: Clone> Sorted<K, V> {
     /// The entry of the least key above `key`.
     pub fn after(&self, key: &K) -> Option<(&K, &V)> {
         self.tree.after(key)
+    }
+
+    /// The entry of the greatest key.
+    pub fn last(&self) -> Option<(&K, &V)> {
+        self.tree.last()
     }
 
     /// Every entry, the least key first.

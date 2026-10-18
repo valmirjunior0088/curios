@@ -250,6 +250,37 @@ impl Anchors {
         self.labels.iter()
     }
 
+    /// Where `name` was written in its declaration's text, where a name was written for it.
+    pub fn label_of(&self, name: &Global) -> Option<&Extent> {
+        self.labels.get(name)
+    }
+
+    /// The span the text `key` lies on, by its anchor and stamp, where this table holds it.
+    pub fn text_of(&self, key: (Anchor, u32)) -> Option<Span> {
+        let sited = self.texts.get(&key)?;
+
+        Some(Span::new(sited.source.clone(), sited.start, sited.end))
+    }
+
+    /// Every text of `anchor` this table holds, by its stamp, with the span it lies on.
+    pub fn texts_of(&self, anchor: Anchor) -> Vec<(u32, Span)> {
+        let mut texts = Vec::new();
+        let mut at = (anchor, u32::MIN);
+        let mut sited = self.texts.get(&at).map(|sited| (at, sited));
+        if sited.is_none() {
+            sited = self.texts.after(&at).map(|(key, sited)| (*key, sited));
+        }
+        while let Some(((held, stamp), text)) = sited
+            && held == anchor
+        {
+            texts.push((stamp, Span::new(text.source.clone(), text.start, text.end)));
+            at = (held, stamp);
+            sited = self.texts.after(&at).map(|(key, sited)| (*key, sited));
+        }
+
+        texts
+    }
+
     /// Every text this table holds, by its anchor and stamp, with the span it lies on: in the table's order, which is no source's.
     pub fn texts(&self) -> impl Iterator<Item = ((Anchor, u32), Span)> {
         self.texts.iter().map(|(key, sited)| {

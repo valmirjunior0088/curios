@@ -251,6 +251,36 @@ impl Bodies {
         self.by.iter().map(|(module, body)| (module, &**body))
     }
 
+    /// The bodies that hold a declaration and lie in no module a file backs, `files` being those modules in their order: a program's own, a module supplied as a tree, and the ones each writes inline. Read without visiting a body a file holds.
+    pub(super) fn unfiled<'a>(&self, files: impl Iterator<Item = &'a Qualifier>) -> Vec<Qualifier> {
+        // A module's subtree is contiguous in the modules' order, so what no file holds lies between the subtrees of the outermost file modules: each gap is read backwards from the body before the file that ends it.
+        let mut outermost = Vec::<Qualifier>::new();
+        for file in files {
+            if !outermost.last().is_some_and(|last| file.is_within(last)) {
+                outermost.push(*file);
+            }
+        }
+        let mut unfiled = Vec::new();
+        let mut previous = None::<&Qualifier>;
+        for end in outermost.iter().map(Some).chain([None]) {
+            let mut at = match end {
+                Some(file) => self.by.before(file),
+                None => self.by.last(),
+            };
+            let gap = unfiled.len();
+            while let Some((module, _)) = at
+                && !previous.is_some_and(|file| module <= file || module.is_within(file))
+            {
+                unfiled.push(*module);
+                at = self.by.before(module);
+            }
+            unfiled[gap..].reverse();
+            previous = end;
+        }
+
+        unfiled
+    }
+
     /// The first item's place of the last declaration `root` or a module under it holds, where they hold any: what a walk that passes them unentered places what follows after.
     pub(super) fn last_within(&self, root: &Qualifier) -> Option<i64> {
         let mut last = self.get(root).and_then(|body| body.firsts.last().copied());

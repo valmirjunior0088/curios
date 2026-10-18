@@ -12,9 +12,10 @@
 mod tests;
 
 use {
+    super::{Head, Headed},
     crate::PreparedText,
-    curios_utilities::{Source, Span},
-    std::collections::{BTreeMap, BTreeSet, HashSet},
+    curios_utilities::{Qualifier, Source, Span},
+    std::collections::{BTreeSet, HashSet},
 };
 
 /// One name a text writes: where, and the declaration it names.
@@ -39,35 +40,82 @@ pub struct Text<'a> {
 
 impl PreparedText {
     /// The texts this unit was lowered from that lie in a source `lies` holds of, in the order they are written. `entry` is the term the unit's program closes with, where it is one: no unit holds it, and its text names nothing without it.
+    ///
+    /// **Read off the declarations written in those sources**, and no other's: each file `lies` holds of gives its module's body and the ones its text writes inline, by its heads, and a module no file backs — a program's own, or one supplied as a tree — gives its body wherever it is asked, its texts then held to `lies` one by one. Each body's declarations are found by the body (`Bodies`), each one's labels by the names its items declare.
     pub fn texts<'a>(
         &'a self,
         entry: Option<&'a curios_core::Entrypoint>,
         lies: impl Fn(&Source) -> bool,
     ) -> Vec<Text<'a>> {
         let anchors = self.anchors();
-        let mut labels = BTreeMap::<_, Vec<_>>::new();
-        for (name, label) in anchors.labels() {
-            labels
-                .entry((label.anchor, label.stamp))
-                .or_default()
-                .push((*name, *label));
-        }
+        let items = &self.core().items;
+        let scans = self.scans();
+        let bodies = self.bodies();
 
-        let mut texts = anchors
-            .texts()
-            .filter(|(_, span)| lies(&span.source))
-            .map(|(key, span)| {
-                let mut labels = labels.remove(&key).unwrap_or_default();
+        // The module bodies written in the sources asked about: each file's own with the ones its text writes inline, and each no file backs.
+        let mut written = Vec::new();
+        for (module, scan) in scans.iter().filter(|(_, scan)| lies(&scan.source)) {
+            inline_bodies(*module, &scan.heads, &mut written);
+        }
+        written.extend(bodies.unfiled(scans.keys()));
+
+        // Each declaration written in them, with the names its items declare, and the program's closing term.
+        let mut keys = Vec::new();
+        for module in &written {
+            let Some(body) = bodies.get(module) else {
+                continue;
+            };
+            for &first in &body.firsts {
+                let Some(record) = self.lowerings().get(first) else {
+                    continue;
+                };
+                let Some(key) = record.text() else {
+                    continue;
+                };
+                let mut names = Vec::new();
+                let mut place = usize::try_from(first).ok();
+                for _ in 0..record.facts().len() {
+                    let Some(at) = place else {
+                        break;
+                    };
+                    names.extend(items.names(at).into_iter().copied());
+                    place = items.place_after(Some(at));
+                }
+                keys.push((key, names));
+            }
+        }
+        let closing = curios_core::Anchor::of(curios_core::Anchored::Entry);
+        keys.extend(
+            anchors
+                .texts_of(closing)
+                .into_iter()
+                .map(|(stamp, _)| ((closing, stamp), Vec::new())),
+        );
+
+        let mut texts = keys
+            .into_iter()
+            .filter_map(|(key, names)| {
+                let span = anchors.text_of(key)?;
+                if !lies(&span.source) {
+                    return None;
+                }
+                let mut labels = names
+                    .into_iter()
+                    .filter_map(|name| {
+                        let label = anchors.label_of(&name)?;
+                        ((label.anchor, label.stamp) == key).then_some((name, *label))
+                    })
+                    .collect::<Vec<_>>();
                 labels.sort_by_key(|(_, label)| (label.start, label.end));
 
-                Text {
+                Some(Text {
                     unit: self,
                     entry: entry
                         .filter(|_| matches!(key.0.anchored(), curios_core::Anchored::Entry)),
                     key,
                     span,
                     labels,
-                }
+                })
             })
             .collect::<Vec<_>>();
         texts.sort_by(|one, other| {
@@ -79,6 +127,21 @@ impl PreparedText {
         });
 
         texts
+    }
+}
+
+/// Push `module` and each module written inline in its text, `heads` being its items' heads.
+fn inline_bodies(module: Qualifier, heads: &[Headed], written: &mut Vec<Qualifier>) {
+    written.push(module);
+    for headed in heads {
+        if let Head::Mod {
+            label,
+            inline: Some(heads),
+            ..
+        } = &headed.head
+        {
+            inline_bodies(module.with(label), heads, written);
+        }
     }
 }
 

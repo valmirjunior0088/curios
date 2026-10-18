@@ -167,6 +167,11 @@ fn a_sorted_map_answers_as_a_btree_map_does_in_its_order() {
             sorted.iter().eq(standard.iter()),
             "seed {seed}: the entries in the keys' order"
         );
+        assert_eq!(
+            sorted.last(),
+            standard.last_key_value(),
+            "seed {seed}: the greatest key"
+        );
     }
 }
 
