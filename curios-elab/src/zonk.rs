@@ -21,6 +21,7 @@ use {
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
+        convert::Infallible,
         mem,
         rc::Rc,
         sync::Arc,
@@ -1700,7 +1701,7 @@ pub(crate) fn settle_qualities<B: Bound>(context: &Context, value: &B) -> B {
         return value.clone();
     }
     let table = context.universes().quality_table(true);
-    let settled: Result<B, std::convert::Infallible> =
+    let settled: Result<B, Infallible> =
         rewrite_universe_qualities(value, move |quality| Ok(tabled_quality(&table, quality)));
 
     match settled {
@@ -1712,20 +1713,34 @@ pub(crate) fn settle_qualities<B: Bound>(context: &Context, value: &B) -> B {
 /// Replace every solved universe metavariable under `value`'s binders by its recursively zonked solution, shifting each solution past the binders it crosses.
 ///
 /// Lives here rather than beside the scoped-rewrite traversals it calls: those are representation, while [`UniverseSolver`] is elaboration state.
+/// The level metavariables `value` holds, read by the walk [`substitute_universe_metas_scoped`] substitutes them by, which visits a node many terms share once.
+fn held_universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
+    let metas = Rc::new(RefCell::new(BTreeSet::new()));
+    let found = Rc::clone(&metas);
+    let _: Result<_, Infallible> = rewrite_universe_levels_scoped_shared(value, move |_, level| {
+        found.borrow_mut().extend(level.metas());
+        Ok(level.clone())
+    });
+    Rc::try_unwrap(metas)
+        .expect("the collector releases its traversal closure")
+        .into_inner()
+}
+
 pub(crate) fn zonk_universe_levels_scoped<B: Bound>(
     value: &B,
     solver: &UniverseSolver,
 ) -> Result<B, UniverseError> {
     // A sort's quality as far as it is solved, read with the levels: one walk where no quality was minted, which is every declaration that leaves no sort to inference.
     let qualities = solver.has_qualities().then(|| solver.quality_table(false));
-    let solver = solver.clone();
-    // Each solved metavariable through the solver's own zonk, which keeps a chain's zonked solution: followed afresh at every occurrence, a chain of levels each solved to the next — a nesting of list literals, each its own `List` — costs its length at each of its links.
-    let levelled = substitute_universe_metas_scoped(value, move |meta| {
-        solver
-            .solution(meta)
-            .map(|_| solver.zonk(&Level::meta(meta)))
-            .transpose()
-    })?;
+    // Each solved metavariable `value` holds through the solver's own zonk, which keeps a chain's zonked solution: followed afresh at every occurrence, a chain of levels each solved to the next — a nesting of list literals, each its own `List` — costs its length at each of its links. Read before the substitution, whose closure outlives this borrow of the solver: a copy of the solver for it would cost every level the solver holds at every zonk.
+    let mut zonked = BTreeMap::new();
+    for meta in held_universe_metas(value) {
+        if solver.solution(meta).is_some() {
+            zonked.insert(meta, solver.zonk(&Level::meta(meta))?);
+        }
+    }
+    let levelled =
+        substitute_universe_metas_scoped(value, move |meta| Ok(zonked.get(&meta).cloned()))?;
 
     match qualities {
         Some(table) => rewrite_universe_qualities(&levelled, move |quality| {

@@ -2931,10 +2931,10 @@ impl<'s> Context<'s> {
         self.universes_mut().default(metas).map_err(Error::from)?;
         self.universes_mut().default_qualities();
         self.underway.scheme_open = false;
-        let solver = self.underway.attempt.universe_solver.clone();
+        let solver = &self.underway.attempt.universe_solver;
         let terms = terms
             .iter()
-            .map(|term| zonk_universe_levels_scoped(*term, &solver).map_err(Error::from))
+            .map(|term| zonk_universe_levels_scoped(*term, solver).map_err(Error::from))
             .collect::<Result<Vec<_>, _>>()?;
         self.typing.caches.invalidate_for_universe_rewrite();
         Ok(terms)
