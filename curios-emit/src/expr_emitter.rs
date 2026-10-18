@@ -4,7 +4,7 @@ use {
         EmissionData, EmissionValue, EmissionValueName, Frame, ImmediateLayout, LayoutItem, LoadAs,
         LocalData, region_layout, slot_zero_instrs,
     },
-    curios_num::{Grain, Natural},
+    curios_num::Natural,
     curios_utilities::recurse,
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -138,11 +138,11 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: family_type,
                 });
             }
-            EmissionData::Bin(grain, value) => {
+            EmissionData::Bytes(value) => {
                 // A small packed literal is its canonical immediate, computed here at compile time rather than through the `norm` helper the emitted code would call.
-                let layout = ImmediateLayout::of(*grain);
-                if layout.holds(value.len(*grain)) {
-                    let packed = layout.pack(value.len(*grain), &value.to_packed_bytes());
+                let layout = ImmediateLayout::new();
+                if layout.holds(value.len()) {
+                    let packed = layout.pack(value.len(), value.as_bytes());
                     self.emit_instrs([
                         curios_wasm::Instr::I32Const { value: packed },
                         curios_wasm::Instr::RefI31,
@@ -150,14 +150,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     return;
                 }
 
-                let rope = self.context.table().bin_rope();
-                let bytes = match grain {
-                    Grain::X => value
-                        .to_bytes()
-                        .expect("X literals are always byte-aligned"),
-                };
+                let rope = self.context.table().bytes_rope();
+                let bytes = value.to_bytes();
                 let payload_length = bytes.len() as i32;
-                let length = value.len(*grain) as i32;
+                let length = value.len() as i32;
                 let data_name = curios_wasm::DataName::from(format!(
                     "{}${}",
                     value_name.as_string(),

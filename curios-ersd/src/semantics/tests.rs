@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_num::{Binary, Grain, Integer, Natural},
+    curios_num::{Binary, Integer, Natural},
 };
 
 #[test]
@@ -41,11 +41,8 @@ fn traps_and_effects_classify_by_operation() {
 #[test]
 fn a_decode_that_folds_to_a_trap_is_classified_as_one() {
     // The classifier and the folder have to name the same set, and `FltOfLeBytes` is where they can disagree: `TrapKind::MalformedInput` exists for this operation alone, and a classifier reporting it pure would let `prune` drop a top-level item whose only observable effect is the malformed decode.
-    let eight = Constant::Bin(
-        Grain::X,
-        Binary::from_bytes(vec![0, 0, 0, 0, 0, 0, 0xf0, 0x3f]),
-    );
-    let four = Constant::Bin(Grain::X, Binary::from_bytes(vec![0, 0, 0x80, 0x3f]));
+    let eight = Constant::Bytes(Binary::from_bytes(vec![0, 0, 0, 0, 0, 0, 0xf0, 0x3f]));
+    let four = Constant::Bytes(Binary::from_bytes(vec![0, 0, 0x80, 0x3f]));
 
     assert!(matches!(
         Semantics::fold_operation(Operation::FltOfLeBytes, &[four], u64::MAX),
@@ -265,21 +262,21 @@ fn every_monoid_the_oracle_names_keeps_its_laws_under_its_fold() {
     }
 }
 
-/// Every sequence operation, at the packed grain.
+/// Every sequence operation.
 fn every_sequence_operation() -> Vec<SequenceOp> {
-    use {SequenceOp::*, curios_num::Grain::X};
+    use SequenceOp::*;
     listed![
         SequenceOp;
-        BinLen(X) => BinLen(X),
-        BinEql(X) => BinEql(X),
-        BinGet(X) => BinGet(X),
-        BinSlice(X) => BinSlice(X),
-        BinAppend(X) => BinAppend(X),
-        BinConcat(X) => BinConcat(X),
-        BinReplicate(X) => BinReplicate(X),
-        BinAnd(X) => BinAnd(X),
-        BinOr(X) => BinOr(X),
-        BinXor(X) => BinXor(X),
+        BytesLen => BytesLen,
+        BytesEql => BytesEql,
+        BytesGet => BytesGet,
+        BytesSlice => BytesSlice,
+        BytesAppend => BytesAppend,
+        BytesConcat => BytesConcat,
+        BytesReplicate => BytesReplicate,
+        BytesAnd => BytesAnd,
+        BytesOr => BytesOr,
+        BytesXor => BytesXor,
         ListBuild => ListBuild,
         ListLen => ListLen,
         ListGet => ListGet,
@@ -289,32 +286,28 @@ fn every_sequence_operation() -> Vec<SequenceOp> {
     ]
 }
 
-/// Runs of `grain` around the points where a packed run's representation changes: empty, within a byte, and across one.
-fn runs_of(grain: Grain) -> Vec<Constant> {
-    match grain {
-        Grain::X => [&[][..], &[0x00], &[0x61, 0x62], &[0xff, 0x00, 0x7f]]
-            .into_iter()
-            .map(|bytes| Constant::Bin(grain, Binary::from_bytes(bytes.to_vec())))
-            .collect(),
-    }
+/// Runs around the points where a packed run's representation changes: empty, within a byte, and across one.
+fn runs_of() -> Vec<Constant> {
+    [&[][..], &[0x00], &[0x61, 0x62], &[0xff, 0x00, 0x7f]]
+        .into_iter()
+        .map(|bytes| Constant::Bytes(Binary::from_bytes(bytes.to_vec())))
+        .collect()
 }
 
-/// The generators of `grain`, each with the one-element run that is it.
-fn generators_of(grain: Grain) -> Vec<(Constant, Constant)> {
-    match grain {
-        Grain::X => [0x00, 0x61, 0xff]
-            .into_iter()
-            .map(|byte| {
-                (
-                    Constant::Byte(byte),
-                    Constant::Bin(grain, Binary::from_bytes(vec![byte])),
-                )
-            })
-            .collect(),
-    }
+/// The generators, each with the one-element run that is it.
+fn generators_of() -> Vec<(Constant, Constant)> {
+    [0x00, 0x61, 0xff]
+        .into_iter()
+        .map(|byte| {
+            (
+                Constant::Byte(byte),
+                Constant::Bytes(Binary::from_bytes(vec![byte])),
+            )
+        })
+        .collect()
 }
 
-/// Every sequence operation the oracle names a part of a packed grain's free monoid is that part, by its own fold: the empty run leaves every sample unchanged on both sides of a concatenation, every three samples associate, and an append is the concatenation of its run and the run of its one generator. A list has no constant to fold; conversion decides its free monoid in both checkers ([The carriers' algebra stays in conversion](../../../documentation/design/arithmetic/the-carriers-algebra-stays-in-conversion.md)).
+/// Every sequence operation the oracle names a part of `Bytes`'s free monoid is that part, by its own fold: the empty run leaves every sample unchanged on both sides of a concatenation, every three samples associate, and an append is the concatenation of its run and the run of its one generator. A list has no constant to fold; conversion decides its free monoid in both checkers ([The carriers' algebra stays in conversion](../../../documentation/design/arithmetic/the-carriers-algebra-stays-in-conversion.md)).
 #[test]
 fn every_free_monoid_part_the_oracle_names_keeps_its_laws_under_its_fold() {
     let fold = |operation: SequenceOp, operands: &[Constant]| match Semantics::fold_sequence(
@@ -325,14 +318,14 @@ fn every_free_monoid_part_the_oracle_names_keeps_its_laws_under_its_fold() {
     };
     let mut parts = Vec::new();
     for operation in every_sequence_operation() {
-        let Some((SequenceGrain::Bin(grain), part)) = Semantics::free_monoid_part(operation) else {
+        let Some((SequenceGrain::Bytes, part)) = Semantics::free_monoid_part(operation) else {
             continue;
         };
         parts.push(part);
-        let runs = runs_of(grain);
+        let runs = runs_of();
         match part {
             FreeMonoidPart::Product => {
-                let empty = Constant::Bin(grain, Binary::empty());
+                let empty = Constant::Bytes(Binary::empty());
                 for a in &runs {
                     assert_eq!(fold(operation, &[empty.clone(), a.clone()]), *a);
                     assert_eq!(fold(operation, &[a.clone(), empty.clone()]), *a);
@@ -351,10 +344,10 @@ fn every_free_monoid_part_the_oracle_names_keeps_its_laws_under_its_fold() {
             }
             FreeMonoidPart::Append => {
                 for run in &runs {
-                    for (generator, single) in generators_of(grain) {
+                    for (generator, single) in generators_of() {
                         assert_eq!(
                             fold(operation, &[run.clone(), generator.clone()]),
-                            fold(SequenceOp::BinConcat(grain), &[run.clone(), single]),
+                            fold(SequenceOp::BytesConcat, &[run.clone(), single]),
                             "{operation:?} of {generator:?} to {run:?}"
                         );
                     }

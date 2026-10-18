@@ -4,7 +4,7 @@
 
 use {
     crate::{Constant, ConstructorId, FunctionId, Module, ProductId, ValueId},
-    curios_num::{Binary, Floating, Grain, Integer, Natural},
+    curios_num::{Binary, Floating, Integer, Natural},
     std::{cell::RefCell, ops::Deref, rc::Rc},
 };
 
@@ -19,7 +19,7 @@ pub(super) enum Value {
     Int(Integer),
     Flt(Floating),
     Handle(u32),
-    Bin(Grain, Rc<Binary>),
+    Bytes(Rc<Binary>),
     List(ListWindow),
     /// A product value, in the schema's field order.
     Product(ProductId, Rc<Vec<Value>>),
@@ -84,7 +84,7 @@ impl Value {
             | Value::Int(_)
             | Value::Flt(_)
             | Value::Handle(_)
-            | Value::Bin(..) => false,
+            | Value::Bytes(_) => false,
             Value::List(items) => items.iter().any(|item| item.contains_description(module)),
             Value::Product(_, fields) | Value::Construct(_, fields) => fields
                 .iter()
@@ -112,7 +112,7 @@ impl Value {
             Value::Int(value) => Constant::Int(value.clone()),
             Value::Flt(value) => Constant::Flt(*value),
             Value::Handle(value) => Constant::Handle(*value),
-            Value::Bin(grain, value) => Constant::Bin(*grain, value.as_ref().clone()),
+            Value::Bytes(value) => Constant::Bytes(value.as_ref().clone()),
             Value::List(_) | Value::Product(..) | Value::Construct(..) | Value::Closure(_) => {
                 return None;
             }
@@ -129,7 +129,7 @@ impl Value {
             Constant::Int(value) => Value::Int(value.clone()),
             Constant::Flt(value) => Value::Flt(*value),
             Constant::Handle(value) => Value::Handle(*value),
-            Constant::Bin(grain, value) => Value::Bin(*grain, Rc::new(value.clone())),
+            Constant::Bytes(value) => Value::Bytes(Rc::new(value.clone())),
         }
     }
 

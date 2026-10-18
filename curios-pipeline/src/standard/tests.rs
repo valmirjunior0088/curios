@@ -1591,7 +1591,7 @@ fn family_slot_probe() {
                     .as_deref()
                     .filter(|name| family_typed && always_a_row(name))
                     .map(|name| format!("family/{name}")),
-                FieldShape::Number | FieldShape::Packed(_) | FieldShape::Opaque => None,
+                FieldShape::Number | FieldShape::Bytes | FieldShape::Opaque => None,
             }
         };
 

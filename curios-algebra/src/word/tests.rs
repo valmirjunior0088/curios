@@ -5,7 +5,7 @@ use {
         Packed, Run, Segment, Stripped, Window, Word, same_position,
         test_support::{Number, Toy, n},
     },
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
 };
 
 fn run(elements: &[u32]) -> Segment<Toy> {
@@ -205,8 +205,7 @@ fn a_position_inside_an_operand_is_its_position_in_the_concatenation() {
 #[test]
 fn packed_runs_share_the_prefix_where_their_bytes_agree() {
     let bytes = |values: &[u8]| Packed {
-        grain: Grain::X,
-        bits: Binary::from_bytes(values.to_vec()),
+        bytes: Binary::from_bytes(values.to_vec()),
     };
     assert_eq!(bytes(&[1, 2, 3]).shared_prefix(&bytes(&[1, 2, 4])), 2);
 }

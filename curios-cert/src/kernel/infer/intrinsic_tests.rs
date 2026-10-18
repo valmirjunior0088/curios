@@ -260,7 +260,7 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
 
 /// A case form names the carrier it eliminates, and that claim needs establishing like any other.
 ///
-/// `check_free_monoid` establishes it — `Carrier::Nat` matches the scrutinee's type against `NatType`, `Carrier::Bin` against its own grain, and `Carrier::List` converts its carried element type against the scrutinee's — and `Cases::Induct` gets it from needing an `InductType` to read a declaration off at all. The boolean and dispatch forms establish it against `Bool` and `Nat`: no typing rule looks at a case form otherwise, so no ordering discipline would catch a claim left unchecked.
+/// `check_free_monoid` establishes it — `Carrier::Nat` matches the scrutinee's type against `NatType`, `Carrier::Bytes` against `BytesType`, and `Carrier::List` converts its carried element type against the scrutinee's — and `Cases::Induct` gets it from needing an `InductType` to read a declaration off at all. The boolean and dispatch forms establish it against `Bool` and `Nat`: no typing rule looks at a case form otherwise, so no ordering discipline would catch a claim left unchecked.
 ///
 /// What it costs is the discipline the free-monoid rule states for itself: the arms are typed at the *case values* — `false` and `true`, or the enumerated literals — while the result is typed at `motive(scrutinee)` and a value flowing through the match carries the scrutinee's type, so a disagreement types the arms at one carrier and runs them at another. `curios-elab` refuses both spellings at `check_intrinsic_head`, so no surface program reaches them.
 #[test]

@@ -8,13 +8,13 @@ use {
         Atom, Exhaustion, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId, ReduceError,
         Subterm, Telescope, Term, UniverseContext, UniverseMetaId, UniverseRole,
     },
-    curios_num::{Binary, Grain, Integer},
+    curios_num::{Binary, Integer},
     curios_utilities::{Plicity, Qualifier},
 };
 
 /// The value fast path's sound population, pinned together with the license that makes it sound.
 ///
-/// One partial computation at two fresh instances — `bin_get` past the end of an empty `Bin`, whose evaluation refuses — must convert *without being evaluated*: deciding that two spellings of one computation agree may not cost the computation. That is the verdict-and-method half, and any rewrite of `identify_universe_levels` that starts reducing here turns the `Ok(true)` below into an error.
+/// One partial computation at two fresh instances — `bytes_get` past the end of an empty `Bytes`, whose evaluation refuses — must convert *without being evaluated*: deciding that two spellings of one computation agree may not cost the computation. That is the verdict-and-method half, and any rewrite of `identify_universe_levels` that starts reducing here turns the `Ok(true)` below into an error.
 ///
 /// The second assertion is the license, and it is what separates the sound mechanism from a projection comparison, which `value_conversion_does_not_identify_distinct_type_payloads` records the cost of: acceptance must come *with* the level identification that justifies it — after the call the two metas are one level, so the accepted goal is literally reflexive. A projection comparison accepts while leaving the metas untouched, acceptance with no residue, and fails this assertion (mutation-checked). A deliberately more complete future rule — say, accepting rigid-distinct instances on a head whose levels provably never reach a value — would also fail this assertion, and revisiting it then is a deliberate expectation change, not a regression.
 #[test]
@@ -26,12 +26,8 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
         &partial,
         &Term::func(
             [(ignored, Term::intrinsic(Intrinsic::NatType))],
-            Term::intrinsic(Intrinsic::bin_get(
-                Grain::X,
-                Term::intrinsic(Intrinsic::Bin(
-                    Grain::X,
-                    Binary::from_bytes(Vec::<u8>::new()),
-                )),
+            Term::intrinsic(Intrinsic::bytes_get(
+                Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(Vec::<u8>::new()))),
                 nat(0),
                 qed(),
             )),

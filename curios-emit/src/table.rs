@@ -39,7 +39,7 @@ impl FieldData {
     }
 }
 
-/// The name bundle for one internal rope carrier (`$rope/bin` or `$rope/list`): the base struct the emitter casts carrier refs to, its `leaf`/`node`/`view` subtypes, the flat payload array, the room record both carriers share, and every field name — one handle to thread through the op emitters so packed `Bytes` and `List` share their lowering code.
+/// The name bundle for one internal rope carrier (`$rope/bytes` or `$rope/list`): the base struct the emitter casts carrier refs to, its `leaf`/`node`/`view` subtypes, the flat payload array, the room record both carriers share, and every field name — one handle to thread through the op emitters so packed `Bytes` and `List` share their lowering code.
 #[derive(Debug, Clone)]
 pub(crate) struct RopeData {
     pub base: curios_wasm::TypeName,
@@ -363,13 +363,13 @@ pub(crate) struct Table<'a> {
     big_type: curios_wasm::TypeName,
     words_type: curios_wasm::TypeName,
     longs_type: curios_wasm::TypeName,
-    bin_rope_type: curios_wasm::TypeName,
+    bytes_rope_type: curios_wasm::TypeName,
     list_rope_type: curios_wasm::TypeName,
     bytes_type: curios_wasm::TypeName,
     elems_type: curios_wasm::TypeName,
-    bin_rope_leaf_type: curios_wasm::TypeName,
-    bin_rope_node_type: curios_wasm::TypeName,
-    bin_rope_view_type: curios_wasm::TypeName,
+    bytes_rope_leaf_type: curios_wasm::TypeName,
+    bytes_rope_node_type: curios_wasm::TypeName,
+    bytes_rope_view_type: curios_wasm::TypeName,
     list_rope_leaf_type: curios_wasm::TypeName,
     list_rope_node_type: curios_wasm::TypeName,
     list_rope_view_type: curios_wasm::TypeName,
@@ -405,9 +405,9 @@ pub(crate) struct Table<'a> {
     list_read: OnceCell<curios_wasm::FuncName>,
     bytes_eql: OnceCell<curios_wasm::FuncName>,
     // The pointwise trio takes forced payloads.
-    bin_and: OnceCell<curios_wasm::FuncName>,
-    bin_or: OnceCell<curios_wasm::FuncName>,
-    bin_xor: OnceCell<curios_wasm::FuncName>,
+    bytes_and: OnceCell<curios_wasm::FuncName>,
+    bytes_or: OnceCell<curios_wasm::FuncName>,
+    bytes_xor: OnceCell<curios_wasm::FuncName>,
     bytes_replicate: OnceCell<curios_wasm::FuncName>,
     list_map: OnceCell<curios_wasm::FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Lazy used-tracking: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
@@ -455,13 +455,13 @@ impl<'a> Table<'a> {
             big_type: curios_wasm::TypeName::from("big"),
             words_type: curios_wasm::TypeName::from("words"),
             longs_type: curios_wasm::TypeName::from("longs"),
-            bin_rope_type: curios_wasm::TypeName::from("rope/bin"),
+            bytes_rope_type: curios_wasm::TypeName::from("rope/bytes"),
             list_rope_type: curios_wasm::TypeName::from("rope/list"),
             bytes_type: curios_wasm::TypeName::from("bytes"),
             elems_type: curios_wasm::TypeName::from("elems"),
-            bin_rope_leaf_type: curios_wasm::TypeName::from("rope/bin/leaf"),
-            bin_rope_node_type: curios_wasm::TypeName::from("rope/bin/node"),
-            bin_rope_view_type: curios_wasm::TypeName::from("rope/bin/view"),
+            bytes_rope_leaf_type: curios_wasm::TypeName::from("rope/bytes/leaf"),
+            bytes_rope_node_type: curios_wasm::TypeName::from("rope/bytes/node"),
+            bytes_rope_view_type: curios_wasm::TypeName::from("rope/bytes/view"),
             list_rope_leaf_type: curios_wasm::TypeName::from("rope/list/leaf"),
             list_rope_node_type: curios_wasm::TypeName::from("rope/list/node"),
             list_rope_view_type: curios_wasm::TypeName::from("rope/list/view"),
@@ -489,9 +489,9 @@ impl<'a> Table<'a> {
             bytes_read: OnceCell::new(),
             list_read: OnceCell::new(),
             bytes_eql: OnceCell::new(),
-            bin_and: OnceCell::new(),
-            bin_or: OnceCell::new(),
-            bin_xor: OnceCell::new(),
+            bytes_and: OnceCell::new(),
+            bytes_or: OnceCell::new(),
+            bytes_xor: OnceCell::new(),
             bytes_replicate: OnceCell::new(),
             list_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
@@ -748,12 +748,12 @@ impl<'a> Table<'a> {
     }
 
     /// The packed `Bytes` rope's name bundle.
-    pub(crate) fn bin_rope(&self) -> RopeData {
+    pub(crate) fn bytes_rope(&self) -> RopeData {
         RopeData {
-            base: self.bin_rope_type.clone(),
-            leaf: self.bin_rope_leaf_type.clone(),
-            node: self.bin_rope_node_type.clone(),
-            view: self.bin_rope_view_type.clone(),
+            base: self.bytes_rope_type.clone(),
+            leaf: self.bytes_rope_leaf_type.clone(),
+            node: self.bytes_rope_node_type.clone(),
+            view: self.bytes_rope_view_type.clone(),
             payload: self.bytes_type.clone(),
             room: self.rope_room_type.clone(),
             tag_field: curios_wasm::FieldName::from("tag"),
@@ -903,7 +903,7 @@ impl<'a> Table<'a> {
             .collect()
     }
 
-    /// `$bytes/force (ref $rope/bin) -> (ref $bytes)`: flatten a `Bytes` rope to its payload, memoizing in the entry node; the payload holds the run in its first `len` slots and may hold room past them. First use marks it for emission.
+    /// `$bytes/force (ref $rope/bytes) -> (ref $bytes)`: flatten a `Bytes` rope to its payload, memoizing in the entry node; the payload holds the run in its first `len` slots and may hold room past them. First use marks it for emission.
     pub(crate) fn bytes_force_func(&self) -> curios_wasm::FuncName {
         self.bytes_force
             .get_or_init(|| curios_wasm::FuncName::from("bytes/force"))
@@ -925,7 +925,7 @@ impl<'a> Table<'a> {
         self.list_force.get().is_some()
     }
 
-    /// `$bytes/exact (ref $rope/bin) -> (ref $bytes)`: a `Bytes` run as a payload exactly its length — the forced payload where its array is the run's, a copy of the run where it holds room past it. What leaves the rope as a flat array takes this: a leaf made of a forced payload, and a host operand.
+    /// `$bytes/exact (ref $rope/bytes) -> (ref $bytes)`: a `Bytes` run as a payload exactly its length — the forced payload where its array is the run's, a copy of the run where it holds room past it. What leaves the rope as a flat array takes this: a leaf made of a forced payload, and a host operand.
     pub(crate) fn bytes_exact_func(&self) -> curios_wasm::FuncName {
         self.bytes_exact
             .get_or_init(|| curios_wasm::FuncName::from("bytes/exact"))
@@ -969,7 +969,7 @@ impl<'a> Table<'a> {
         self.list_empty.get().is_some()
     }
 
-    /// `$bytes/embed (ref $bytes) -> (ref $rope/bin)`: embed a host-built flat payload into a fresh leaf on re-entry.
+    /// `$bytes/embed (ref $bytes) -> (ref $rope/bytes)`: embed a host-built flat payload into a fresh leaf on re-entry.
     pub(crate) fn bytes_embed_func(&self) -> curios_wasm::FuncName {
         self.bytes_embed
             .get_or_init(|| curios_wasm::FuncName::from("bytes/embed"))
@@ -980,7 +980,7 @@ impl<'a> Table<'a> {
         self.bytes_embed.get().is_some()
     }
 
-    /// `$bytes/box (ref null any) -> (ref $rope/bin)`: a small-canonical `Bytes` as a rope — an immediate is materialised into a fresh leaf, a rope passes through. The entry every rope-shaped consumer pays where a bare `ref.cast` would reject the immediate form.
+    /// `$bytes/box (ref null any) -> (ref $rope/bytes)`: a small-canonical `Bytes` as a rope — an immediate is materialised into a fresh leaf, a rope passes through. The entry every rope-shaped consumer pays where a bare `ref.cast` would reject the immediate form.
     pub(crate) fn bytes_box_func(&self) -> curios_wasm::FuncName {
         self.bytes_box
             .get_or_init(|| curios_wasm::FuncName::from("bytes/box"))
@@ -991,7 +991,7 @@ impl<'a> Table<'a> {
         self.bytes_box.get().is_some()
     }
 
-    /// `$bytes/norm (ref $rope/bin) -> (ref any)`: the canonical form of a byte rope — at most 3 bytes becomes the i31 (length in the top 2 payload bits, bytes LSB-first below), anything longer passes through. Every byte-grain producer answers through this, which is what makes a mixed-representation pair unrepresentable.
+    /// `$bytes/norm (ref $rope/bytes) -> (ref any)`: the canonical form of a byte rope — at most 3 bytes becomes the i31 (length in the top 2 payload bits, bytes LSB-first below), anything longer passes through. Every `Bytes` producer answers through this, which is what makes a mixed-representation pair unrepresentable.
     pub(crate) fn bytes_norm_func(&self) -> curios_wasm::FuncName {
         self.bytes_norm
             .get_or_init(|| curios_wasm::FuncName::from("bytes/norm"))
@@ -1064,7 +1064,7 @@ impl<'a> Table<'a> {
         self.list_bytes_embed.get().is_some()
     }
 
-    /// `$bytes/slice (ref $rope/bin, i32, i32) -> (ref $rope/bin)`, taking a start and a *count*: the `Bytes` O(1) view constructor — bounds-check, answer the empty leaf or the whole rope on the trivial windows, collapse a view-of-view, and force an uncached node base so every `view` it builds reads through in O(1).
+    /// `$bytes/slice (ref $rope/bytes, i32, i32) -> (ref $rope/bytes)`, taking a start and a *count*: the `Bytes` O(1) view constructor — bounds-check, answer the empty leaf or the whole rope on the trivial windows, collapse a view-of-view, and force an uncached node base so every `view` it builds reads through in O(1).
     pub(crate) fn bytes_slice_func(&self) -> curios_wasm::FuncName {
         self.bytes_slice
             .get_or_init(|| curios_wasm::FuncName::from("bytes/slice"))
@@ -1086,7 +1086,7 @@ impl<'a> Table<'a> {
         self.list_slice.get().is_some()
     }
 
-    /// `$bytes/read (ref $rope/bin, i32) -> i32`: one byte read — straight off a leaf payload, through a `view`'s window without forcing, off a node's cache, and at an uncached node from the child that holds the byte where that child is flat-available, with `$bytes/force` (memoized) only where it is not.
+    /// `$bytes/read (ref $rope/bytes, i32) -> i32`: one byte read — straight off a leaf payload, through a `view`'s window without forcing, off a node's cache, and at an uncached node from the child that holds the byte where that child is flat-available, with `$bytes/force` (memoized) only where it is not.
     pub(crate) fn bytes_read_func(&self) -> curios_wasm::FuncName {
         self.bytes_read
             .get_or_init(|| curios_wasm::FuncName::from("bytes/read"))
@@ -1108,7 +1108,7 @@ impl<'a> Table<'a> {
         self.list_read.get().is_some()
     }
 
-    /// `$bytes/eql (ref $rope/bin, ref $rope/bin) -> i32`: whole-value byte equality — unequal rope lengths answer without forcing, equal lengths force both payloads once and compare bytewise.
+    /// `$bytes/eql (ref $rope/bytes, ref $rope/bytes) -> i32`: whole-value byte equality — unequal rope lengths answer without forcing, equal lengths force both payloads once and compare bytewise.
     pub(crate) fn bytes_eql_func(&self) -> curios_wasm::FuncName {
         self.bytes_eql
             .get_or_init(|| curios_wasm::FuncName::from("bytes/eql"))
@@ -1119,42 +1119,42 @@ impl<'a> Table<'a> {
         self.bytes_eql.get().is_some()
     }
 
-    /// `$bin/and (ref $payload, ref $payload, i32) -> (ref $rope/bin)`: two forced payloads combined byte for byte, sealed at the logical length the caller supplies.
+    /// `$bytes/and (ref $payload, ref $payload, i32) -> (ref $rope/bytes)`: two forced payloads combined byte for byte, sealed at the logical length the caller supplies.
     ///
-    /// Grain-free, unlike the `eql` and `replicate` pairs either side of it: the operands arrive forced, and a walk over two byte arrays is the same walk whichever generators packed them.
-    pub(crate) fn bin_and_func(&self) -> curios_wasm::FuncName {
-        self.bin_and
-            .get_or_init(|| curios_wasm::FuncName::from("bin/and"))
+    /// The operands arrive forced, so this is a walk over two byte arrays.
+    pub(crate) fn bytes_and_func(&self) -> curios_wasm::FuncName {
+        self.bytes_and
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/and"))
             .clone()
     }
 
-    pub(crate) fn bin_and_used(&self) -> bool {
-        self.bin_and.get().is_some()
+    pub(crate) fn bytes_and_used(&self) -> bool {
+        self.bytes_and.get().is_some()
     }
 
-    /// The disjunction, as [`bin_and_func`](Self::bin_and_func).
-    pub(crate) fn bin_or_func(&self) -> curios_wasm::FuncName {
-        self.bin_or
-            .get_or_init(|| curios_wasm::FuncName::from("bin/or"))
+    /// The disjunction, as [`bytes_and_func`](Self::bytes_and_func).
+    pub(crate) fn bytes_or_func(&self) -> curios_wasm::FuncName {
+        self.bytes_or
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/or"))
             .clone()
     }
 
-    pub(crate) fn bin_or_used(&self) -> bool {
-        self.bin_or.get().is_some()
+    pub(crate) fn bytes_or_used(&self) -> bool {
+        self.bytes_or.get().is_some()
     }
 
-    /// The difference, as [`bin_and_func`](Self::bin_and_func).
-    pub(crate) fn bin_xor_func(&self) -> curios_wasm::FuncName {
-        self.bin_xor
-            .get_or_init(|| curios_wasm::FuncName::from("bin/xor"))
+    /// The difference, as [`bytes_and_func`](Self::bytes_and_func).
+    pub(crate) fn bytes_xor_func(&self) -> curios_wasm::FuncName {
+        self.bytes_xor
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/xor"))
             .clone()
     }
 
-    pub(crate) fn bin_xor_used(&self) -> bool {
-        self.bin_xor.get().is_some()
+    pub(crate) fn bytes_xor_used(&self) -> bool {
+        self.bytes_xor.get().is_some()
     }
 
-    /// `$bytes/replicate (i32 count, i32 atom) -> (ref $rope/bin)`: `count` copies of one byte, as one flat leaf.
+    /// `$bytes/replicate (i32 count, i32 atom) -> (ref $rope/bytes)`: `count` copies of one byte, as one flat leaf.
     pub(crate) fn bytes_replicate_func(&self) -> curios_wasm::FuncName {
         self.bytes_replicate
             .get_or_init(|| curios_wasm::FuncName::from("bytes/replicate"))
@@ -1310,7 +1310,7 @@ impl<'a> Table<'a> {
             Some(curios_cont::Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
             Some(
                 curios_cont::Repr::Number
-                | curios_cont::Repr::Bin(_)
+                | curios_cont::Repr::Bytes
                 | curios_cont::Repr::List
                 | curios_cont::Repr::Ref,
             )

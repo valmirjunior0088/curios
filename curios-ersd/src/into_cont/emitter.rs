@@ -10,7 +10,7 @@ use {
         StatementId, Terminator, ValueId, edge, sequence_get_op, sequence_rest_op,
     },
     curios_abi::Handle,
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Natural},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -103,12 +103,11 @@ impl<'a> Emitter<'a> {
             Constant::Byte(value) => curios_cont::Literal::Nat(Natural::from(u32::from(*value))),
             Constant::Int(value) => curios_cont::Literal::Int(value.clone()),
             Constant::Flt(value) => curios_cont::Literal::Flt(*value),
-            Constant::Bin(grain, value) => curios_cont::Literal::Bin(*grain, value.clone()),
-            // A Handle descriptor token rides the packed-binary carrier at byte grain, spelled by the one encoding the host reads back.
-            Constant::Handle(token) => curios_cont::Literal::Bin(
-                Grain::X,
-                Binary::from_bytes(Handle::encode(&Natural::from(*token))),
-            ),
+            Constant::Bytes(value) => curios_cont::Literal::Bytes(value.clone()),
+            // A Handle descriptor token rides the packed-binary carrier, spelled by the one encoding the host reads back.
+            Constant::Handle(token) => curios_cont::Literal::Bytes(Binary::from_bytes(
+                Handle::encode(&Natural::from(*token)),
+            )),
         }
     }
 

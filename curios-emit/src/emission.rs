@@ -3,7 +3,7 @@
 use {
     super::{EmissionBlockName, EmissionClosureName, EmissionFunctionName, EmissionValueName},
     curios_abi::ForeignFunction,
-    curios_num::{Binary, Grain, Integer, Natural},
+    curios_num::{Binary, Integer, Natural},
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::Arc,
@@ -16,7 +16,7 @@ pub(crate) enum EmissionData {
     Nat(Natural),
     Int(Integer),
     Flt(f64),
-    Bin(Grain, Binary),
+    Bytes(Binary),
     List(Vec<EmissionValueName>),
     Tuple(Vec<EmissionValueName>),
     /// A nominal row's construction, at that row's full width. Emitted as the row's own final struct type rather than an arity-keyed `$tuple/N`, which is what makes every read of it an exact cast.
@@ -27,7 +27,7 @@ pub(crate) enum EmissionData {
 /// One pure intrinsic computation over already-bound values: every variant produces exactly one value and has no effects, anything stateful being an [`EmissionTail`].
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCode {
-    /// One [`curios_cont::Intrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar rows (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bin*`/`List*` rows are rope operations codegen services through shared helper functions.
+    /// One [`curios_cont::Intrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar rows (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bytes*`/`List*` rows are rope operations codegen services through shared helper functions.
     Intrinsic(curios_cont::Intrinsic, Vec<EmissionValueName>),
     // `ListMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$list/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_indirect`.
     /// The list-map runtime helper call: list first, mapper second. Not an [`Intrinsic`](Self::Intrinsic) member because it is no [`curios_cont::Intrinsic`] upstream — it runs a closure, so CPS carries it as the call-shaped `curios_cont::IntrinsicCall` with a return continuation, and only structurization collapses it to a pure helper call.

@@ -336,7 +336,7 @@ pub(crate) fn sort_of_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> R
         | Intrinsic::ByteType
         | Intrinsic::IntType
         | Intrinsic::FltType
-        | Intrinsic::BinType(_)
+        | Intrinsic::BytesType
         | Intrinsic::HandleType => Ok(Sort::Type(Level::zero())),
 
         // A list, cell, or description *of* proofs is not itself a proposition: it has a length, an identity, or an effect, so its inhabitants are distinguishable and irrelevance does not apply. It lands in `Type`, and `Prop : Type 0`.

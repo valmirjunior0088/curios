@@ -124,7 +124,7 @@ impl InductDecl {
         }
     }
 
-    /// Instantiate `tag`'s signature at the given type parameters, yielding the payload-only telescope: `success` at `[Nat, Bin]` becomes `(Nat) -> InductType { Result, [Nat, Bin] }`.
+    /// Instantiate `tag`'s signature at the given type parameters, yielding the payload-only telescope: `success` at `[Nat, Bytes]` becomes `(Nat) -> InductType { Result, [Nat, Bytes] }`.
     pub fn instantiate(&self, tag: &Atom, params: &[Term]) -> Option<Telescope<Vec<Term>>> {
         Some(self.constructor(tag)?.telescope.clone().open_params(params))
     }

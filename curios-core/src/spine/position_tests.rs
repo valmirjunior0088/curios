@@ -3,7 +3,6 @@
 use {
     super::{test_support::*, *},
     crate::{Free, InstanceHead, Level, Var},
-    curios_num::Grain,
 };
 
 fn list_window(base: Term, start: Term, count: Term) -> Term {
@@ -25,10 +24,9 @@ fn list_get(list: Term, index: Term) -> Intrinsic {
     }
 }
 
-fn bin_get(grain: Grain, bin: Term, index: Term) -> Intrinsic {
-    Intrinsic::BinGet {
-        grain,
-        bin,
+fn bytes_get(bytes: Term, index: Term) -> Intrinsic {
+    Intrinsic::BytesGet {
+        bytes,
         index,
         in_range: sym(9_998, "in_range"),
     }
@@ -60,8 +58,7 @@ fn peel_position_decides_a_position_through_a_window_equal() {
         "a window of a window adds both starts"
     );
 
-    let bytes_window = Term::intrinsic(Intrinsic::bin_slice(
-        Grain::X,
+    let bytes_window = Term::intrinsic(Intrinsic::bytes_slice(
         xs.clone(),
         s.clone(),
         l,
@@ -70,8 +67,8 @@ fn peel_position_decides_a_position_through_a_window_equal() {
     assert!(
         matches!(
             peel_position(
-                &bin_get(Grain::X, bytes_window, i.clone()),
-                &bin_get(Grain::X, xs, add(s, i)),
+                &bytes_get(bytes_window, i.clone()),
+                &bytes_get(xs, add(s, i)),
             ),
             Some(Deduction::Equal)
         ),
@@ -173,15 +170,14 @@ fn peel_position_decides_a_position_inside_an_operand_of_a_concatenation_equal()
         "`get(ys, i)` is `get(xs ++ ys ++ zs, i + len(xs))`, whichever side the concatenation is on"
     );
 
-    let packed = Term::intrinsic(Intrinsic::BinConcat {
-        grain: Grain::X,
+    let packed = Term::intrinsic(Intrinsic::BytesConcat {
         operands: vec![xs.clone(), sym(4, "b")],
     });
     assert!(
         matches!(
             peel_position(
-                &bin_get(Grain::X, packed, i.clone()),
-                &bin_get(Grain::X, xs.clone(), i.clone())
+                &bytes_get(packed, i.clone()),
+                &bytes_get(xs.clone(), i.clone())
             ),
             Some(Deduction::Equal)
         ),

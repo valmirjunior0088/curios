@@ -6,7 +6,7 @@
 
 use {
     crate::{Carrier, Operation},
-    curios_num::{Grain, Rounding},
+    curios_num::Rounding,
 };
 
 /// A constant a family is stated with, read at the carrier its operand has.
@@ -534,19 +534,19 @@ pub const TABLE: &[Declared] = &[
     Declared {
         carrier: Carrier::Float,
         operation: Operation::Conversion {
-            from: Carrier::Packed(Grain::X),
+            from: Carrier::Bytes,
         },
         families: &[Family::InversePair],
     },
     Declared {
-        carrier: Carrier::Packed(Grain::X),
+        carrier: Carrier::Bytes,
         operation: Operation::Conversion {
             from: Carrier::Float,
         },
         families: &[Family::InversePair],
     },
     Declared {
-        carrier: Carrier::Packed(Grain::X),
+        carrier: Carrier::Bytes,
         operation: Operation::Concat,
         families: &[
             Family::Unit(Position::Both, Constant::Empty),
@@ -554,7 +554,7 @@ pub const TABLE: &[Declared] = &[
         ],
     },
     Declared {
-        carrier: Carrier::Packed(Grain::X),
+        carrier: Carrier::Bytes,
         operation: Operation::Length,
         families: &[Family::Homomorphism],
     },
@@ -572,7 +572,7 @@ pub const TABLE: &[Declared] = &[
         families: &[Family::Homomorphism],
     },
     Declared {
-        carrier: Carrier::Packed(Grain::X),
+        carrier: Carrier::Bytes,
         operation: Operation::Equal,
         families: &[
             Family::SelfCancellation(Constant::True),
@@ -847,7 +847,7 @@ fn result_carrier(carrier: Carrier, operation: Operation) -> Carrier {
 /// The carrier a word's elements are of, and `None` for a carrier that is no word.
 fn element_carrier(carrier: Carrier) -> Option<Carrier> {
     match carrier {
-        Carrier::Packed(Grain::X) => Some(Carrier::Byte),
+        Carrier::Bytes => Some(Carrier::Byte),
         Carrier::List => Some(Carrier::Natural),
         _ => None,
     }

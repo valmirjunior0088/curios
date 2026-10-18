@@ -239,8 +239,8 @@ fn spine_key(value: &Value, out: &mut String) {
         Value::Handle(token) => {
             let _ = write!(out, "o{token}");
         }
-        Value::Bin(grain, packed) => {
-            let _ = write!(out, "d{grain:?}:{:?}", packed.to_packed_bytes());
+        Value::Bytes(packed) => {
+            let _ = write!(out, "d{:?}", packed.as_bytes());
         }
         Value::List(elements) => {
             out.push('[');

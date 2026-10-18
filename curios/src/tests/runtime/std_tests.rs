@@ -7,7 +7,7 @@ use {
 
 // A struct type is nominal: it never converts with a structural tuple type of the same fields.
 #[test]
-fn random_bin_returns_requested_length() {
+fn random_bytes_returns_requested_length() {
     let output = run(r#"
 let entry() -> /std/Io({}) =
     let _ = /std/Try/run(std/Io/write(std/Process/stdout, /std/rand/bytes(8)!))!;

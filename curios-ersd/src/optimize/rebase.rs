@@ -149,8 +149,8 @@ impl Row {
             Row::Scalar { identity, .. } => {
                 Atom::Constant(module.intern_constant(identity.clone()))
             }
-            Row::Sequence(SequenceGrain::Bin(grain)) => {
-                Atom::Constant(module.intern_constant(Constant::Bin(*grain, Binary::empty())))
+            Row::Sequence(SequenceGrain::Bytes) => {
+                Atom::Constant(module.intern_constant(Constant::Bytes(Binary::empty())))
             }
             Row::Sequence(SequenceGrain::List) => {
                 sequence(module, statements, SequenceOp::ListBuild, Vec::new())
@@ -164,9 +164,9 @@ impl Row {
             (Row::Scalar { identity, .. }, Atom::Constant(constant)) => {
                 module.constant(constant) == Some(identity)
             }
-            (Row::Sequence(SequenceGrain::Bin(grain)), Atom::Constant(constant)) => matches!(
+            (Row::Sequence(SequenceGrain::Bytes), Atom::Constant(constant)) => matches!(
                 module.constant(constant),
-                Some(Constant::Bin(found, run)) if found == grain && *run == Binary::empty()
+                Some(Constant::Bytes( run)) if *run == Binary::empty()
             ),
             (Row::Sequence(SequenceGrain::List), Atom::Value(value)) => {
                 block.statements.iter().any(|&statement| {
@@ -208,15 +208,15 @@ impl Row {
                             SequenceOp::ListBuild,
                             elements.collect(),
                         ),
-                        Row::Sequence(SequenceGrain::Bin(grain)) => elements.fold(
+                        Row::Sequence(SequenceGrain::Bytes) => elements.fold(
                             Atom::Constant(
-                                module.intern_constant(Constant::Bin(*grain, Binary::empty())),
+                                module.intern_constant(Constant::Bytes(Binary::empty())),
                             ),
                             |run, element| {
                                 sequence(
                                     module,
                                     statements,
-                                    SequenceOp::BinAppend(*grain),
+                                    SequenceOp::BytesAppend,
                                     vec![run, element],
                                 )
                             },
@@ -259,8 +259,8 @@ impl Row {
             Row::Sequence(SequenceGrain::List) => {
                 sequence(module, statements, SequenceOp::ListConcat, operands)
             }
-            Row::Sequence(SequenceGrain::Bin(grain)) => {
-                sequence(module, statements, SequenceOp::BinConcat(*grain), operands)
+            Row::Sequence(SequenceGrain::Bytes) => {
+                sequence(module, statements, SequenceOp::BytesConcat, operands)
             }
         }
     }

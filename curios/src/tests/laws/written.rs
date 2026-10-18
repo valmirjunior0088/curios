@@ -986,13 +986,13 @@ const CARRIERS: &[Carrier] = &[
         name: "Bytes, through a window",
         binders: "bs: Bytes, cs: Bytes, s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Holds(s + l <= Bytes/len(bs)), first: Holds(0 < l), at: Holds(s < Bytes/len(bs)), inside: Holds(i < l), deep: Holds(s + i < Bytes/len(bs)), next: Holds(s + 1 < Bytes/len(bs)), other: Holds(s < Bytes/len(cs)), inner: Holds(t + m <= l), whole: Holds(s + t + m <= Bytes/len(bs))",
         held: &[
-            // The `List` rows, at the byte grain.
+            // The `List` rows, over `Bytes`.
             "Eq()(Bytes/get(Bytes/slice(bs, s, l, @ok), 0, @first), Bytes/get(bs, s, @at))",
             "Eq()(Bytes/get(Bytes/slice(bs, s, l, @ok), i, @inside), Bytes/get(bs, s + i, @deep))",
             "Eq()(Bytes/slice(Bytes/slice(bs, s, l, @ok), t, m, @inner), Bytes/slice(bs, s + t, m, @whole))",
         ],
         refused: &[
-            // The `List` controls, at the byte grain.
+            // The `List` controls, over `Bytes`.
             "Eq()(Bytes/get(Bytes/slice(bs, s, l, @ok), 0, @first), Bytes/get(bs, s + 1, @next))",
             "Eq()(Bytes/get(Bytes/slice(bs, s, l, @ok), 0, @first), Bytes/get(cs, s, @other))",
         ],
@@ -1014,12 +1014,12 @@ const CARRIERS: &[Carrier] = &[
         name: "Bytes, through a concatenation",
         binders: "bs: Bytes, cs: Bytes, i: Nat, s: Nat, l: Nat, joined: Holds(i < Bytes/len(x[..bs, ..cs])), left: Holds(i < Bytes/len(bs)), right: Holds(i < Bytes/len(cs)), spans: Holds(s + l <= Bytes/len(x[..bs, ..cs])), inside: Holds(s + l <= Bytes/len(bs))",
         held: &[
-            // The `List` rows, at the byte grain.
+            // The `List` rows, over `Bytes`.
             "Eq()(Bytes/get(x[..bs, ..cs], i, @joined), Bytes/get(bs, i, @left))",
             "Eq()(Bytes/slice(x[..bs, ..cs], s, l, @spans), Bytes/slice(bs, s, l, @inside))",
         ],
         refused: &[
-            // The `List` control, at the byte grain.
+            // The `List` control, over `Bytes`.
             "Eq()(Bytes/get(x[..bs, ..cs], i, @joined), Bytes/get(cs, i, @right))",
         ],
     },

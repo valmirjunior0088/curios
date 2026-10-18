@@ -43,7 +43,7 @@ use {
     },
     curios_abi::ForeignFunction,
     curios_algebra::Rank,
-    curios_num::{Grain, Natural},
+    curios_num::Natural,
     curios_print::{run_printer, run_printer_within},
     curios_utilities::{Plicity, recurse},
     std::{
@@ -458,9 +458,8 @@ impl Term {
         }
     }
 
-    /// Build the structural `Bin` eliminator ([`Carrier::Bin`]) over an already-built motive scope: an empty arm plus a cons arm closed over `cons_binders`, `(head, tail, ih)` — the induction hypothesis at the tail.
-    pub fn bin_match_scoped<H, EC, CC>(
-        grain: Grain,
+    /// Build the structural `Bytes` eliminator ([`Carrier::Bytes`]) over an already-built motive scope: an empty arm plus a cons arm closed over `cons_binders`, `(head, tail, ih)` — the induction hypothesis at the tail.
+    pub fn bytes_match_scoped<H, EC, CC>(
         head: H,
         motive: Scope<Many>,
         empty_case: EC,
@@ -476,8 +475,7 @@ impl Term {
             head.into(),
             motive,
             Cases::FreeMonoid {
-                carrier: Carrier::Bin {
-                    grain,
+                carrier: Carrier::Bytes {
                     empty_case: empty_case.into(),
                     cons_case: Scope::close(Three, cons_binders, cons_case.into()),
                 },
@@ -687,7 +685,7 @@ impl Term {
                 Intrinsic::FltNeq(..) => Some(HeadTag::Intrinsic("intrinsic:FltNeq")),
                 Intrinsic::FltLt(..) => Some(HeadTag::Intrinsic("intrinsic:FltLt")),
                 Intrinsic::FltLe(..) => Some(HeadTag::Intrinsic("intrinsic:FltLe")),
-                Intrinsic::BinEql(..) => Some(HeadTag::Intrinsic("intrinsic:BinEql")),
+                Intrinsic::BytesEql(..) => Some(HeadTag::Intrinsic("intrinsic:BytesEql")),
                 _ => None,
             },
             _ => None,
@@ -1198,7 +1196,7 @@ impl Term {
         )
     }
 
-    /// Build the structural `Nat` eliminator ([`Carrier::Nat`]): a zero arm plus a successor arm closed over `(pred, ih)` — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bin`/`List`'s.
+    /// Build the structural `Nat` eliminator ([`Carrier::Nat`]): a zero arm plus a successor arm closed over `(pred, ih)` — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bytes`/`List`'s.
     pub fn nat_match<H, M, ZC, SC>(
         head: H,
         motive_binder: Option<&Free>,

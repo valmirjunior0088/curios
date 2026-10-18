@@ -8,7 +8,6 @@ use {
         concrete_val, get, set,
     },
     curios_abi::{ForeignFunction, WireLeaf, WireReference, WireShape, WireType},
-    curios_num::Grain,
     curios_utilities::Entropy,
     std::{
         collections::{BTreeMap, HashMap},
@@ -300,10 +299,8 @@ impl<'a, 'b> Context<'a, 'b> {
                 ]
             }
             // A packed value is small-canonical — an immediate inside its envelope, a rope past it — so a position demanding the rope goes through the box helper, which materialises an immediate and casts (trapping on null) as a bare cast would.
-            LoadAs::Bin(grain) => {
-                let func_name = match grain {
-                    Grain::X => self.table().bytes_box_func(),
-                };
+            LoadAs::Bytes => {
+                let func_name = self.table().bytes_box_func();
                 vec![curios_wasm::Instr::Call { func_name }]
             }
             LoadAs::List => {
@@ -1162,7 +1159,7 @@ pub(crate) enum LoadAs {
     /// An `Int` narrowed to the host wire's `i64`, refusing one outside `[-2⁶³, 2⁶³)`.
     WireInt,
     Flt,
-    Bin(Grain),
+    Bytes,
     List,
 }
 
@@ -1194,7 +1191,7 @@ pub(crate) fn zero_instrs(carrier: curios_cont::Repr) -> Vec<curios_wasm::Instr>
     match carrier {
         curios_cont::Repr::Nat => vec![curios_wasm::Instr::I32Const { value: 0 }],
         curios_cont::Repr::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
-        curios_cont::Repr::Bin(_) => vec![
+        curios_cont::Repr::Bytes => vec![
             curios_wasm::Instr::I32Const { value: 0 },
             curios_wasm::Instr::RefI31,
         ],
@@ -1214,7 +1211,7 @@ pub(crate) fn box_instr(repr: &curios_cont::Repr, table: &Table) -> Option<curio
             type_name: table.flt_type(),
         }),
         curios_cont::Repr::Number
-        | curios_cont::Repr::Bin(_)
+        | curios_cont::Repr::Bytes
         | curios_cont::Repr::List
         | curios_cont::Repr::Ref => None,
     }
@@ -1230,7 +1227,7 @@ impl LoadAs {
         match repr {
             curios_cont::Repr::Nat => Self::Nat,
             curios_cont::Repr::Flt => Self::Flt,
-            curios_cont::Repr::Bin(grain) => Self::Bin(*grain),
+            curios_cont::Repr::Bytes => Self::Bytes,
             curios_cont::Repr::List => Self::List,
             // A `Nat` or `Int` operand is handed on as the reference it is; the lowering reading it tests and unboxes it itself, and takes a register-held word without this load.
             curios_cont::Repr::Number | curios_cont::Repr::Ref => Self::Null,
@@ -1246,7 +1243,7 @@ impl From<&WireType> for LoadAs {
             WireType::Nat => LoadAs::WireNat,
             WireType::Int => LoadAs::WireInt,
             WireType::Flt => LoadAs::Flt,
-            WireType::Bytes | WireType::Handle => LoadAs::Bin(Grain::X),
+            WireType::Bytes | WireType::Handle => LoadAs::Bytes,
             WireType::List(_) | WireType::Option(_) => LoadAs::List,
         }
     }

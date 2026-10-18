@@ -101,7 +101,7 @@ fn nested_list_pattern_dispatches_by_shape() {
 
 // A `Bytes` literal leaf (`x[]`/`x[h, ..t]`) nested inside a tuple field.
 #[test]
-fn nested_bin_pattern_dispatches_by_shape() {
+fn nested_bytes_pattern_dispatches_by_shape() {
     let source = r#"
         use /std/{Nat, Byte, Bytes, Str};
         let f(p : { Nat, Bytes }) -> Nat =

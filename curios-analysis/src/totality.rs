@@ -190,7 +190,7 @@ impl<E: Env> Walk<'_, E> {
         (binders, body)
     }
 
-    /// Open the `(head, tail, ih)` arm of the `Bin`/`List` eliminators.
+    /// Open the `(head, tail, ih)` arm of the `Bytes`/`List` eliminators.
     fn open_three(&mut self, scope: &Scope<Three>) -> (Vec<Free>, Term) {
         let binders = self.binders(scope);
         let terms = binders.iter().map(Term::free_var).collect::<Vec<_>>();
@@ -367,13 +367,13 @@ impl<E: Env> Walk<'_, E> {
                     let shape = Shape::unary_run(Natural::from(1usize), Shape::Atom(binders[0]));
                     self.scoped(refine(scrutinee, shape), None, Vec::new(), &body)?;
                 }
-                Carrier::Bin {
+                Carrier::Bytes {
                     empty_case,
                     cons_case,
                     ..
                 } => {
-                    self.empty_arm(&scrutinee, Carriers::Bin, empty_case)?;
-                    self.elem_cons(scrutinee, Carriers::Bin, cons_case)?;
+                    self.empty_arm(&scrutinee, Carriers::Bytes, empty_case)?;
+                    self.elem_cons(scrutinee, Carriers::Bytes, cons_case)?;
                 }
                 Carrier::List {
                     elem,
@@ -400,7 +400,7 @@ impl<E: Env> Walk<'_, E> {
         self.scoped(refine(*scrutinee, shape), None, Vec::new(), empty_case)
     }
 
-    /// The cons arm of a `Bin`/`List` eliminator, binding the generator, the tail, and the induction hypothesis.
+    /// The cons arm of a `Bytes`/`List` eliminator, binding the generator, the tail, and the induction hypothesis.
     fn elem_cons(
         &mut self,
         scrutinee: Option<Free>,

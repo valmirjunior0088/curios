@@ -6,7 +6,7 @@ use {
         optimize,
         test_support::{halt, halt_zero},
     },
-    curios_num::{Grain, Natural},
+    curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -902,7 +902,7 @@ fn define_walk(
     // A *suffix*, which is what `into_cont`'s peel emits: no count operand, so the fixture exercises the shape the compiler actually produces.
     let slice = module.add_node(Node::LetIntrinsic {
         result: tail,
-        op: Intrinsic::BinRest(Grain::X),
+        op: Intrinsic::BytesRest,
         args: vec![
             Atom::Value(window),
             Atom::Literal(Literal::Nat(Natural::from(1u32))),
@@ -911,7 +911,7 @@ fn define_walk(
     });
     let read = module.add_node(Node::LetIntrinsic {
         result: head,
-        op: Intrinsic::BinGet(Grain::X),
+        op: Intrinsic::BytesGet,
         args: vec![
             Atom::Value(window),
             Atom::Literal(Literal::Nat(Natural::from(0u32))),
@@ -920,7 +920,7 @@ fn define_walk(
     });
     let measure = module.add_node(Node::LetIntrinsic {
         result: length,
-        op: Intrinsic::BinLen(Grain::X),
+        op: Intrinsic::BytesLen,
         args: vec![Atom::Value(window)],
         next: read,
     });
@@ -1041,8 +1041,8 @@ fn a_suffix_walk_virtualizes_its_windows() {
     for node in module.nodes().iter().flatten() {
         if let Node::LetIntrinsic { op, .. } = node {
             match op {
-                Intrinsic::BinSlice(_)
-                | Intrinsic::BinRest(_)
+                Intrinsic::BytesSlice
+                | Intrinsic::BytesRest
                 | Intrinsic::ListSlice
                 | Intrinsic::ListRest => slices += 1,
                 Intrinsic::WindowExtent => extents += 1,
@@ -1089,8 +1089,8 @@ fn one_call_virtualizes_every_region_it_admits() {
             matches!(
                 node,
                 Node::LetIntrinsic {
-                    op: Intrinsic::BinSlice(_)
-                        | Intrinsic::BinRest(_)
+                    op: Intrinsic::BytesSlice
+                        | Intrinsic::BytesRest
                         | Intrinsic::ListSlice
                         | Intrinsic::ListRest,
                     ..

@@ -465,7 +465,7 @@ pub(crate) fn resolve_witness(
 
     let concept_app = as_concept_app(context, &goal_whnf);
 
-    // Step 4 gates steps 1–3 for concept goals: a flex parameter must park rather than match eagerly, or an in-scope binder of the same concept would overcommit the hole (`Show(?T)` grabbing a local `Show(Nat)` while `?T` was headed for `Bin`). Every parameter gates — a first-param-only gate would let `Into(Nat, ?B)` reach the table with an incomplete key and wrongly defer. A parameter stuck on a metavariable gates as one headed by it does: `Key(Pick(?b))`, over a `Pick` that matches on `?b`, has no head to key by until the argument that gives `b` is read, and going on to the table would refuse the goal one argument early.
+    // Step 4 gates steps 1–3 for concept goals: a flex parameter must park rather than match eagerly, or an in-scope binder of the same concept would overcommit the hole (`Show(?T)` grabbing a local `Show(Nat)` while `?T` was headed for `Bytes`). Every parameter gates — a first-param-only gate would let `Into(Nat, ?B)` reach the table with an incomplete key and wrongly defer. A parameter stuck on a metavariable gates as one headed by it does: `Key(Pick(?b))`, over a `Pick` that matches on `?b`, has no head to key by until the argument that gives `b` is read, and going on to the table would refuse the goal one argument early.
     if let Some((_, _, params)) = &concept_app {
         for param in params {
             let head = reduce_with(context, param)?;

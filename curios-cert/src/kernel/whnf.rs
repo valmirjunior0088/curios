@@ -693,11 +693,11 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
             })))
         }
 
-        // Structural induction over a native free-monoid carrier (`Nat`/`Bin`/`List`). `FreeMonoid::uncons` owns the carrier-specific one-step decode; this is the catamorphism over it. The cons arm binds the peeled generator (absent for the unary `Nat`), the tail, and an induction hypothesis that recurses symbolically on that tail.
+        // Structural induction over a native free-monoid carrier (`Nat`/`Bytes`/`List`). `FreeMonoid::uncons` owns the carrier-specific one-step decode; this is the catamorphism over it. The cons arm binds the peeled generator (absent for the unary `Nat`), the tail, and an induction hypothesis that recurses symbolically on that tail.
         Cases::FreeMonoid { carrier } => {
             let layer = match &carrier {
                 Carrier::Nat { .. } => FreeMonoid::Unary,
-                Carrier::Bin { grain, .. } => FreeMonoid::Bin(*grain),
+                Carrier::Bytes { .. } => FreeMonoid::Bytes,
                 Carrier::List { .. } => FreeMonoid::List,
             }
             .uncons(Term::unwrap_or_clone(forced));
@@ -705,7 +705,7 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
             match layer {
                 Layer::Empty => Step::Continue(match carrier {
                     Carrier::Nat { empty_case, .. }
-                    | Carrier::Bin { empty_case, .. }
+                    | Carrier::Bytes { empty_case, .. }
                     | Carrier::List { empty_case, .. } => empty_case,
                 }),
                 Layer::Cons { head: elem, tail } => {
@@ -720,9 +720,10 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
 
                     Step::Continue(match &carrier {
                         Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail, &hypothesis]),
-                        Carrier::Bin { cons_case, .. } | Carrier::List { cons_case, .. } => {
+                        Carrier::Bytes { cons_case, .. } | Carrier::List { cons_case, .. } => {
                             cons_case.open(&[
-                                elem.as_ref().expect("a Bin/List cons layer carries a head"),
+                                elem.as_ref()
+                                    .expect("a Bytes/List cons layer carries a head"),
                                 &tail,
                                 &hypothesis,
                             ])

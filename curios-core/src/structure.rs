@@ -75,7 +75,7 @@ impl StructDecl {
         }
     }
 
-    /// This structure's field telescope at known parameters: `fields_at([Nat, Bin])` for `Pair` is `(fst : Nat, snd : Bin)`. The fields are the arity's terminal, so this opens it rather than peeling a repeated prefix.
+    /// This structure's field telescope at known parameters: `fields_at([Nat, Bytes])` for `Pair` is `(fst : Nat, snd : Bytes)`. The fields are the arity's terminal, so this opens it rather than peeling a repeated prefix.
     pub fn fields_at(&self, params: &[Term]) -> Telescope<()> {
         self.arity.open(&params.iter().collect::<Vec<_>>())
     }

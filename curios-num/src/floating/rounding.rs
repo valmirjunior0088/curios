@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 
 /// Which representable value an inexact result becomes: IEEE 754's five rounding-direction attributes.
 ///
-/// Carried as static data on each rounded intrinsic, as a `Grain` is on a packed one, so a direction is fixed where the operation is written and a fold, a lowering and the emitted code all read the same one. `TiesToEven` is the default the plain operations use (§4.3.3); `TiesToAway` is optional for a binary format and provided because round-to-integer and conversion to an integer name it.
+/// Carried as static data on each rounded intrinsic, so a direction is fixed where the operation is written and a fold, a lowering and the emitted code all read the same one. `TiesToEven` is the default the plain operations use (§4.3.3); `TiesToAway` is optional for a binary format and provided because round-to-integer and conversion to an integer name it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub enum Rounding {

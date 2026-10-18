@@ -21,7 +21,7 @@ use {
         SuspensionOperation, Terminator, ValueId,
     },
     curios_abi::Namespace,
-    curios_num::{Grain, Rounding},
+    curios_num::Rounding,
     curios_utilities::{grown, recurse},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -795,7 +795,7 @@ fn fields(row: &[Field]) -> String {
                 FieldShape::Immediate => format!("{name}:immediate"),
                 FieldShape::Number => format!("{name}:number"),
                 FieldShape::Flt => format!("{name}:flt"),
-                FieldShape::Packed(Grain::X) => format!("{name}:bytes"),
+                FieldShape::Bytes => format!("{name}:bytes"),
                 FieldShape::List => format!("{name}:list"),
                 FieldShape::Closure(arity) => format!("{name}:closure/{arity}"),
                 FieldShape::Product(schema) => format!("{name}:product/{schema}"),
@@ -811,14 +811,7 @@ fn fields(row: &[Field]) -> String {
 fn grain_prefix(grain: &SequenceGrain) -> &'static str {
     match grain {
         SequenceGrain::List => "",
-        SequenceGrain::Bin(Grain::X) => "x",
-    }
-}
-
-/// The carrier a sequence operation belongs to, as `/sys` modules it.
-fn grain_carrier(grain: Grain) -> &'static str {
-    match grain {
-        Grain::X => "Bytes",
+        SequenceGrain::Bytes => "x",
     }
 }
 
@@ -916,16 +909,16 @@ fn flt_rounded(rounding: Rounding, operation: &str) -> String {
 
 fn sequence_name(operation: SequenceOp) -> String {
     let (carrier, name) = match operation {
-        SequenceOp::BinLen(grain) => (grain_carrier(grain), "len"),
-        SequenceOp::BinEql(grain) => (grain_carrier(grain), "eql"),
-        SequenceOp::BinGet(grain) => (grain_carrier(grain), "get"),
-        SequenceOp::BinSlice(grain) => (grain_carrier(grain), "slice"),
-        SequenceOp::BinAppend(grain) => (grain_carrier(grain), "append"),
-        SequenceOp::BinConcat(grain) => (grain_carrier(grain), "concat"),
-        SequenceOp::BinReplicate(grain) => (grain_carrier(grain), "replicate"),
-        SequenceOp::BinAnd(grain) => (grain_carrier(grain), "and"),
-        SequenceOp::BinOr(grain) => (grain_carrier(grain), "or"),
-        SequenceOp::BinXor(grain) => (grain_carrier(grain), "xor"),
+        SequenceOp::BytesLen => ("Bytes", "len"),
+        SequenceOp::BytesEql => ("Bytes", "eql"),
+        SequenceOp::BytesGet => ("Bytes", "get"),
+        SequenceOp::BytesSlice => ("Bytes", "slice"),
+        SequenceOp::BytesAppend => ("Bytes", "append"),
+        SequenceOp::BytesConcat => ("Bytes", "concat"),
+        SequenceOp::BytesReplicate => ("Bytes", "replicate"),
+        SequenceOp::BytesAnd => ("Bytes", "and"),
+        SequenceOp::BytesOr => ("Bytes", "or"),
+        SequenceOp::BytesXor => ("Bytes", "xor"),
         SequenceOp::ListBuild => ("List", "build"),
         SequenceOp::ListLen => ("List", "len"),
         SequenceOp::ListGet => ("List", "get"),
@@ -980,15 +973,13 @@ fn render_constant(constant: &Constant) -> String {
             }
         }
         Constant::Byte(value) => format!("{value}:byte"),
-        Constant::Bin(grain, bits) => {
-            let rendered = bits
-                .to_packed_bytes()
+        Constant::Bytes(bytes) => {
+            let rendered = bytes
+                .as_bytes()
                 .iter()
                 .map(|byte| format!("{byte:02x}"))
                 .collect::<String>();
-            match grain {
-                Grain::X => format!("x\"{rendered}\""),
-            }
+            format!("x\"{rendered}\"")
         }
         Constant::Handle(token) => format!("io:{token}"),
     }

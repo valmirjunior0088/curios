@@ -6,7 +6,7 @@ use {
     super::Intrinsic,
     crate::{Nat, Subterm, Term},
     curios_algebra::{Carrier, Family, Operation, declares},
-    curios_num::{Grain, Rounding},
+    curios_num::Rounding,
 };
 
 /// An intrinsic as the algebra reads it.
@@ -201,21 +201,21 @@ impl Intrinsic {
                 Operands::One([int]),
             ),
             Intrinsic::FltToLeBytes(operand) => declared(
-                Carrier::Packed(Grain::X),
+                Carrier::Bytes,
                 Operation::Conversion {
                     from: Carrier::Float,
                 },
                 Operands::One([operand]),
             ),
             Intrinsic::FltOfLeBytes {
-                bin,
+                bytes,
                 eight_bytes: _,
             } => declared(
                 Carrier::Float,
                 Operation::Conversion {
-                    from: Carrier::Packed(Grain::X),
+                    from: Carrier::Bytes,
                 },
-                Operands::One([bin]),
+                Operands::One([bytes]),
             ),
             Intrinsic::FltAdd(rounding, left, right) => declared(
                 Carrier::Float,
@@ -248,8 +248,8 @@ impl Intrinsic {
                 Operation::Unequal,
                 Operands::Two([left, right]),
             ),
-            Intrinsic::BinEql(grain, left, right) => declared(
-                Carrier::Packed(*grain),
+            Intrinsic::BytesEql(left, right) => declared(
+                Carrier::Bytes,
                 Operation::Equal,
                 Operands::Two([left, right]),
             ),
@@ -376,17 +376,17 @@ impl Intrinsic {
             | Intrinsic::FltToInt { .. }
             | Intrinsic::FltMantissa { .. }
             | Intrinsic::FltExponent { .. }
-            | Intrinsic::BinType { .. }
-            | Intrinsic::Bin { .. }
-            | Intrinsic::BinLen { .. }
-            | Intrinsic::BinGet { .. }
-            | Intrinsic::BinSlice { .. }
-            | Intrinsic::BinAppend { .. }
-            | Intrinsic::BinConcat { .. }
-            | Intrinsic::BinReplicate { .. }
-            | Intrinsic::BinAnd { .. }
-            | Intrinsic::BinOr { .. }
-            | Intrinsic::BinXor { .. }
+            | Intrinsic::BytesType
+            | Intrinsic::Bytes { .. }
+            | Intrinsic::BytesLen { .. }
+            | Intrinsic::BytesGet { .. }
+            | Intrinsic::BytesSlice { .. }
+            | Intrinsic::BytesAppend { .. }
+            | Intrinsic::BytesConcat { .. }
+            | Intrinsic::BytesReplicate { .. }
+            | Intrinsic::BytesAnd { .. }
+            | Intrinsic::BytesOr { .. }
+            | Intrinsic::BytesXor { .. }
             | Intrinsic::ListType { .. }
             | Intrinsic::List { .. }
             | Intrinsic::ListLen { .. }

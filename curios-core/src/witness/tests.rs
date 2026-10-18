@@ -1,7 +1,6 @@
 use {
     super::{HeadKey, WitnessId, WitnessKey},
     crate::{Free, Global, Term},
-    curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
 };
 
@@ -49,7 +48,7 @@ fn witness_key_displays_as_a_tuple_for_higher_arities() {
 #[test]
 fn witness_keys_differ_beyond_the_first_head() {
     let a = WitnessKey::from([HeadKey::Nat, HeadKey::Bool]);
-    let b = WitnessKey::from([HeadKey::Nat, HeadKey::Bin(Grain::X)]);
+    let b = WitnessKey::from([HeadKey::Nat, HeadKey::Bytes]);
     assert_ne!(a, b);
 }
 

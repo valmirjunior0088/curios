@@ -140,27 +140,27 @@ fn a_motive_on_a_head_that_does_not_dispatch_is_rejected() {
 
 #[test]
 fn constant_atoms_fold_into_the_packed_run() {
-    // A constant atom folds into the neighbouring run whatever radix spells it, so the literal stays one `Intrinsic::Bin` rather than an append onto one. Conversion equates the spellings either way — `core::spine` decodes a concrete appended atom as a length-1 literal run — so this pins the compaction, not the meaning. (Names need not resolve: lowering precedes name resolution.)
+    // A constant atom folds into the neighbouring run whatever radix spells it, so the literal stays one `Intrinsic::Bytes` rather than an append onto one. Conversion equates the spellings either way — `core::spine` decodes a concrete appended atom as a length-1 literal run — so this pins the compaction, not the meaning. (Names need not resolve: lowering precedes name resolution.)
     assert_eq!(run(r"x[0x48, 0x69]"), run(r"x[72, 105]"));
-    assert!(!format!("{:?}", run(r"x[0x48, 0x69]")).contains("BinAppend"));
+    assert!(!format!("{:?}", run(r"x[0x48, 0x69]")).contains("BytesAppend"));
 
     // A symbolic atom cannot fold, and keeps the append the fold exists to avoid.
-    assert!(format!("{:?}", run(r"x[0x48, b]")).contains("BinAppend"));
+    assert!(format!("{:?}", run(r"x[0x48, b]")).contains("BytesAppend"));
 
     // Past `Byte` range, or carrying a written sign, an entry stays an atom: elaboration reports it against the expected element type instead of the fold silently truncating it.
-    assert!(format!("{:?}", run(r"x[300]")).contains("BinAppend"));
-    assert!(format!("{:?}", run(r"x[+1]")).contains("BinAppend"));
+    assert!(format!("{:?}", run(r"x[300]")).contains("BytesAppend"));
+    assert!(format!("{:?}", run(r"x[+1]")).contains("BytesAppend"));
 }
 
 #[test]
 fn a_lone_non_sequence_spread_keeps_its_concat_wrapper() {
-    // `[..true]` must not collapse to the bare operand, which would lower the literal to `true` and typecheck it as `Bool`, never having been a list at all. Only the family the literal itself builds may collapse; anything else keeps its `ListConcat`/`BinConcat` wrapper so elaboration checks the spread against the sequence type. (Names need not resolve: lowering precedes name resolution.)
+    // `[..true]` must not collapse to the bare operand, which would lower the literal to `true` and typecheck it as `Bool`, never having been a list at all. Only the family the literal itself builds may collapse; anything else keeps its `ListConcat`/`BytesConcat` wrapper so elaboration checks the spread against the sequence type. (Names need not resolve: lowering precedes name resolution.)
     assert!(format!("{:?}", run("[..true]")).contains("ListConcat"));
-    assert!(format!("{:?}", run(r"x[..true]")).contains("BinConcat"));
+    assert!(format!("{:?}", run(r"x[..true]")).contains("BytesConcat"));
 
     // A lone sequence-shaped spread still collapses to the value it already is.
     assert_eq!(run("[..[1, 2]]"), run("[1, 2]"));
-    assert!(!format!("{:?}", run(r"x[..x[0x48]]")).contains("BinConcat"));
+    assert!(!format!("{:?}", run(r"x[..x[0x48]]")).contains("BytesConcat"));
 }
 
 /// The match lowering's refusals stand at what they are about: a named final arm and an irrefutable bind arm at the binder, and a motive no arm dispatches under at the motive.

@@ -8,7 +8,7 @@ use {
     super::{Bound, Free, Nat, Subterm, Term, Universes, Var, Visit},
     crate::Global,
     curios_abi::{ForeignFunction, ResultShape, WireResults, WireReturn, WireType},
-    curios_num::{Binary, Floating, Grain, Integer, Rounding},
+    curios_num::{Binary, Floating, Integer, Rounding},
     curios_utilities::SyntaxRegistry,
     std::collections::BTreeSet,
 };
@@ -23,7 +23,7 @@ pub fn wire_term(wire_type: &WireType, syntax: &SyntaxRegistry) -> Term {
         WireType::Bool => Intrinsic::BoolType,
         WireType::Byte => Intrinsic::ByteType,
         WireType::Flt => Intrinsic::FltType,
-        WireType::Bytes => Intrinsic::BinType(Grain::X),
+        WireType::Bytes => Intrinsic::BytesType,
         WireType::Handle => Intrinsic::HandleType,
         WireType::List(element) => Intrinsic::ListType(wire_term(&(*element).into(), syntax)),
         WireType::Option(element) => {
@@ -123,13 +123,13 @@ pub fn foreign_signature(
     }
 }
 
-/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `ListType`, `HandleType`, `CellType`, `ChannelType`, `IoType`), their literals, and the operator families over them. A host call is *not* here, exiting included: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full terms, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BytesType`, `ListType`, `HandleType`, `CellType`, `ChannelType`, `IoType`), their literals, and the operator families over them. A host call is *not* here, exiting included: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full terms, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
 ///
 /// An intrinsic that performs an effect returns an `Io`, including guest cell and channel operations. Its result is stated by `Intrinsic::signature` and checked by both drivers; a new effectful variant must be given an `IoType` result when it is added.
 ///
 /// **Generic over what an operand is**, which is [`Term`] in this crate and every stage below it. `curios-text` holds the same enum over the surface term, for the `/sys` roster to plant in a declaration's body, so the surface tree restates no variant and lowering one is [`try_map`](Self::try_map) over its operands. Everything that gives an intrinsic meaning — its signature, its reduction, its algebra — is stated at `Term` alone.
 ///
-/// The `impl` block's constructor helpers (`nat_add`, `bin_slice`, …) take `impl Into<Term>` operands, sparing reduction's neutral rebuilds the `.into()` noise.
+/// The `impl` block's constructor helpers (`nat_add`, `bytes_slice`, …) take `impl Into<Term>` operands, sparing reduction's neutral rebuilds the `.into()` noise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Intrinsic<T = Term> {
@@ -216,7 +216,7 @@ pub enum Intrinsic<T = Term> {
     IntShr(T, T),
     FltType,
     Flt(Floating),
-    /// The rounded operations carry their IEEE rounding direction as static data, as a packed operation carries its [`Grain`]: the direction is fixed where the operation is written, so every folder and the emitter read the same one.
+    /// The rounded operations carry their IEEE rounding direction as static data: the direction is fixed where the operation is written, so every folder and the emitter read the same one.
     FltAdd(Rounding, T, T),
     FltSub(Rounding, T, T),
     FltMul(Rounding, T, T),
@@ -250,9 +250,9 @@ pub enum Intrinsic<T = Term> {
         non_neg: T,
     },
     FltToLeBytes(T),
-    /// `eight_bytes` proves `len(bin) = 8`, which is the whole of what reinterpreting a binary64 needs.
+    /// `eight_bytes` proves `len(bytes) = 8`, which is the whole of what reinterpreting a binary64 needs.
     FltOfLeBytes {
-        bin: T,
+        bytes: T,
         eight_bytes: T,
     },
     /// `finite` proves the operand is a number — neither infinity, and not a NaN — which is the whole of what truncating toward zero needs.
@@ -270,59 +270,51 @@ pub enum Intrinsic<T = Term> {
         flt: T,
         finite: T,
     },
-    BinType(Grain),
-    Bin(Grain, Binary),
-    BinLen(Grain, T),
-    BinEql(Grain, T, T),
-    /// `in_range` proves `index < len(bin)`, carried for the reason [`Intrinsic::NatDiv`]'s bound is.
-    BinGet {
-        grain: Grain,
-        bin: T,
+    BytesType,
+    Bytes(Binary),
+    BytesLen(T),
+    BytesEql(T, T),
+    /// `in_range` proves `index < len(bytes)`, carried for the reason [`Intrinsic::NatDiv`]'s bound is.
+    BytesGet {
+        bytes: T,
         index: T,
         in_range: T,
     },
-    /// `within` proves `start + length <= len(bin)` — the one bound a window has, since a count cannot spell a reversed range.
-    BinSlice {
-        grain: Grain,
-        bin: T,
+    /// `within` proves `start + length <= len(bytes)` — the one bound a window has, since a count cannot spell a reversed range.
+    BytesSlice {
+        bytes: T,
         start: T,
         length: T,
         within: T,
     },
-    BinAppend {
-        grain: Grain,
-        bin: T,
+    BytesAppend {
+        bytes: T,
         element: T,
     },
-    BinConcat {
-        grain: Grain,
+    BytesConcat {
         operands: Vec<T>,
     },
     /// `count` copies of one generator — the only way to build a run of a length a program computes without one node per element.
-    BinReplicate {
-        grain: Grain,
+    BytesReplicate {
         count: T,
         atom: T,
     },
     /// `same_length` proves `len(left) == len(right)`, which is the one bound a pointwise operation has.
     ///
     /// Stated rather than extended, because no extension is forced: truncating to the shorter and padding to the longer are both total, and they disagree — a padded bit is absorbing for `and` where it is transparent for `or`, so the structure picks neither and a choice would be the author's. That is the test `documentation/design/arithmetic/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md` sets, and the same one that put `NatToByte`'s bound in its type rather than masking to eight bits.
-    BinAnd {
-        grain: Grain,
+    BytesAnd {
         left: T,
         right: T,
         same_length: T,
     },
-    /// See [`Intrinsic::BinAnd`] for why the length is a stated bound.
-    BinOr {
-        grain: Grain,
+    /// See [`Intrinsic::BytesAnd`] for why the length is a stated bound.
+    BytesOr {
         left: T,
         right: T,
         same_length: T,
     },
-    /// See [`Intrinsic::BinAnd`] for why the length is a stated bound.
-    BinXor {
-        grain: Grain,
+    /// See [`Intrinsic::BytesAnd`] for why the length is a stated bound.
+    BytesXor {
         left: T,
         right: T,
         same_length: T,
@@ -526,134 +518,126 @@ impl Intrinsic {
         Self::NatLt(left.into(), right.into())
     }
 
-    /// A `BinLen` node from anything term-shaped.
-    pub fn bin_len<B>(grain: Grain, bin: B) -> Self
+    /// A `BytesLen` node from anything term-shaped.
+    pub fn bytes_len<B>(bytes: B) -> Self
     where
         B: Into<Term>,
     {
-        Self::BinLen(grain, bin.into())
+        Self::BytesLen(bytes.into())
     }
 
-    /// A `BinEql` node from anything term-shaped.
-    pub fn bin_eql<F, S>(grain: Grain, left: F, right: S) -> Self
+    /// A `BytesEql` node from anything term-shaped.
+    pub fn bytes_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::BinEql(grain, left.into(), right.into())
+        Self::BytesEql(left.into(), right.into())
     }
 
-    /// A `BinGet` node from term-shaped bytes and index.
-    pub fn bin_get<B, I, P>(grain: Grain, bin: B, index: I, in_range: P) -> Self
+    /// A `BytesGet` node from term-shaped bytes and index.
+    pub fn bytes_get<B, I, P>(bytes: B, index: I, in_range: P) -> Self
     where
         B: Into<Term>,
         I: Into<Term>,
         P: Into<Term>,
     {
-        Self::BinGet {
-            grain,
-            bin: bin.into(),
+        Self::BytesGet {
+            bytes: bytes.into(),
             index: index.into(),
             in_range: in_range.into(),
         }
     }
 
-    /// A `BinSlice` node from term-shaped bytes, start, and length.
-    pub fn bin_slice<B, S, L, P>(grain: Grain, bin: B, start: S, length: L, within: P) -> Self
+    /// A `BytesSlice` node from term-shaped bytes, start, and length.
+    pub fn bytes_slice<B, S, L, P>(bytes: B, start: S, length: L, within: P) -> Self
     where
         B: Into<Term>,
         S: Into<Term>,
         L: Into<Term>,
         P: Into<Term>,
     {
-        Self::BinSlice {
-            grain,
-            bin: bin.into(),
+        Self::BytesSlice {
+            bytes: bytes.into(),
             start: start.into(),
             length: length.into(),
             within: within.into(),
         }
     }
 
-    /// A `BinAppend` node from term-shaped bytes and byte.
-    pub fn bin_append<B, E>(grain: Grain, bin: B, byte: E) -> Self
+    /// A `BytesAppend` node from term-shaped bytes and byte.
+    pub fn bytes_append<B, E>(bytes: B, byte: E) -> Self
     where
         B: Into<Term>,
         E: Into<Term>,
     {
-        Self::BinAppend {
-            grain,
-            bin: bin.into(),
+        Self::BytesAppend {
+            bytes: bytes.into(),
             element: byte.into(),
         }
     }
 
-    /// A `BinReplicate` node from a term-shaped count and generator.
-    pub fn bin_replicate<C, A>(grain: Grain, count: C, atom: A) -> Self
+    /// A `BytesReplicate` node from a term-shaped count and generator.
+    pub fn bytes_replicate<C, A>(count: C, atom: A) -> Self
     where
         C: Into<Term>,
         A: Into<Term>,
     {
-        Self::BinReplicate {
-            grain,
+        Self::BytesReplicate {
             count: count.into(),
             atom: atom.into(),
         }
     }
 
-    /// A `BinAnd` node from two term-shaped runs and the proof their lengths agree.
-    pub fn bin_and<L, R, P>(grain: Grain, left: L, right: R, same_length: P) -> Self
+    /// A `BytesAnd` node from two term-shaped runs and the proof their lengths agree.
+    pub fn bytes_and<L, R, P>(left: L, right: R, same_length: P) -> Self
     where
         L: Into<Term>,
         R: Into<Term>,
         P: Into<Term>,
     {
-        Self::BinAnd {
-            grain,
+        Self::BytesAnd {
             left: left.into(),
             right: right.into(),
             same_length: same_length.into(),
         }
     }
 
-    /// A `BinOr` node, as [`Intrinsic::bin_and`].
-    pub fn bin_or<L, R, P>(grain: Grain, left: L, right: R, same_length: P) -> Self
+    /// A `BytesOr` node, as [`Intrinsic::bytes_and`].
+    pub fn bytes_or<L, R, P>(left: L, right: R, same_length: P) -> Self
     where
         L: Into<Term>,
         R: Into<Term>,
         P: Into<Term>,
     {
-        Self::BinOr {
-            grain,
+        Self::BytesOr {
             left: left.into(),
             right: right.into(),
             same_length: same_length.into(),
         }
     }
 
-    /// A `BinXor` node, as [`Intrinsic::bin_and`].
-    pub fn bin_xor<L, R, P>(grain: Grain, left: L, right: R, same_length: P) -> Self
+    /// A `BytesXor` node, as [`Intrinsic::bytes_and`].
+    pub fn bytes_xor<L, R, P>(left: L, right: R, same_length: P) -> Self
     where
         L: Into<Term>,
         R: Into<Term>,
         P: Into<Term>,
     {
-        Self::BinXor {
-            grain,
+        Self::BytesXor {
             left: left.into(),
             right: right.into(),
             same_length: same_length.into(),
         }
     }
 
-    /// A `BinConcat` node from any iterator of term-shaped operands.
-    pub fn bin_concat<I>(grain: Grain, operands: I) -> Self
+    /// A `BytesConcat` node from any iterator of term-shaped operands.
+    pub fn bytes_concat<I>(operands: I) -> Self
     where
         I: IntoIterator,
         I::Item: Into<Term>,
     {
-        Self::BinConcat {
-            grain,
+        Self::BytesConcat {
             operands: operands.into_iter().map(|e| e.into()).collect(),
         }
     }
@@ -895,8 +879,8 @@ impl Intrinsic {
             | Intrinsic::Int(_)
             | Intrinsic::FltType
             | Intrinsic::Flt(_)
-            | Intrinsic::BinType(Grain::X)
-            | Intrinsic::Bin(Grain::X, _)
+            | Intrinsic::BytesType
+            | Intrinsic::Bytes(_)
             | Intrinsic::HandleType
             | Intrinsic::Handle(_) => {}
 
@@ -913,7 +897,7 @@ impl Intrinsic {
             | Intrinsic::FltAbs(t)
             | Intrinsic::FltSqrt(_, t)
             | Intrinsic::FltRoundIntegral(_, t)
-            | Intrinsic::BinLen(Grain::X, t)
+            | Intrinsic::BytesLen(t)
             | Intrinsic::ListType(t)
             | Intrinsic::IoType(t) => visit(t),
 
@@ -963,17 +947,12 @@ impl Intrinsic {
             | Intrinsic::FltMin(a, b)
             | Intrinsic::FltMax(a, b)
             | Intrinsic::FltCopysign(a, b)
-            | Intrinsic::BinEql(Grain::X, a, b)
-            | Intrinsic::BinAppend {
-                grain: Grain::X,
-                bin: a,
+            | Intrinsic::BytesEql(a, b)
+            | Intrinsic::BytesAppend {
+                bytes: a,
                 element: b,
             }
-            | Intrinsic::BinReplicate {
-                grain: _,
-                count: a,
-                atom: b,
-            }
+            | Intrinsic::BytesReplicate { count: a, atom: b }
             | Intrinsic::ListLen {
                 element: a,
                 list: b,
@@ -1077,7 +1056,7 @@ impl Intrinsic {
             }
 
             Intrinsic::FltOfLeBytes {
-                bin: a,
+                bytes: a,
                 eight_bytes: p,
             }
             | Intrinsic::IntToNat { int: a, non_neg: p }
@@ -1091,26 +1070,22 @@ impl Intrinsic {
             }
 
             // The four sequence accessors, beside the division family for the same reason. Their arity differs by carrier — a `List` operation leads with its element type — so they group by operand count rather than by which one is the proof, and the proof is last in every one of them, matching `signature`'s order.
-            Intrinsic::BinGet {
-                grain: _,
-                bin: a,
+            Intrinsic::BytesGet {
+                bytes: a,
                 index: b,
                 in_range: p,
             }
-            | Intrinsic::BinAnd {
-                grain: _,
+            | Intrinsic::BytesAnd {
                 left: a,
                 right: b,
                 same_length: p,
             }
-            | Intrinsic::BinOr {
-                grain: _,
+            | Intrinsic::BytesOr {
                 left: a,
                 right: b,
                 same_length: p,
             }
-            | Intrinsic::BinXor {
-                grain: _,
+            | Intrinsic::BytesXor {
                 left: a,
                 right: b,
                 same_length: p,
@@ -1120,9 +1095,8 @@ impl Intrinsic {
                 bound(visit, p);
             }
 
-            Intrinsic::BinSlice {
-                grain: _,
-                bin: a,
+            Intrinsic::BytesSlice {
+                bytes: a,
                 start: b,
                 length: c,
                 within: p,
@@ -1153,10 +1127,7 @@ impl Intrinsic {
                 bound(visit, p);
             }
 
-            Intrinsic::BinConcat {
-                grain: Grain::X,
-                operands: terms,
-            } => terms.iter().for_each(&mut *visit),
+            Intrinsic::BytesConcat { operands: terms } => terms.iter().for_each(&mut *visit),
 
             Intrinsic::List {
                 element: ty,
@@ -1394,8 +1365,8 @@ impl Intrinsic {
                 visit.visit_subterm(c),
             ),
             Intrinsic::FltToLeBytes(inner) => Intrinsic::FltToLeBytes(visit.visit_subterm(inner)),
-            Intrinsic::FltOfLeBytes { bin, eight_bytes } => Intrinsic::FltOfLeBytes {
-                bin: visit.visit_subterm(bin),
+            Intrinsic::FltOfLeBytes { bytes, eight_bytes } => Intrinsic::FltOfLeBytes {
+                bytes: visit.visit_subterm(bytes),
                 eight_bytes: visit.visit_subterm(eight_bytes),
             },
             Intrinsic::NatToInt(inner) => Intrinsic::NatToInt(visit.visit_subterm(inner)),
@@ -1427,85 +1398,68 @@ impl Intrinsic {
                 flt: visit.visit_subterm(flt),
                 finite: visit.visit_subterm(finite),
             },
-            Intrinsic::BinType(grain) => Intrinsic::BinType(*grain),
-            Intrinsic::Bin(grain, value) => Intrinsic::Bin(*grain, value.clone()),
-            Intrinsic::BinLen(grain, bin) => Intrinsic::BinLen(*grain, visit.visit_subterm(bin)),
-            Intrinsic::BinEql(grain, l, r) => {
-                traverse_binary(l, r, visit, |l, r| Intrinsic::BinEql(*grain, l, r))
-            }
-            Intrinsic::BinGet {
-                grain,
-                bin,
+            Intrinsic::BytesType => Intrinsic::BytesType,
+            Intrinsic::Bytes(value) => Intrinsic::Bytes(value.clone()),
+            Intrinsic::BytesLen(bytes) => Intrinsic::BytesLen(visit.visit_subterm(bytes)),
+            Intrinsic::BytesEql(l, r) => traverse_binary(l, r, visit, Intrinsic::BytesEql),
+            Intrinsic::BytesGet {
+                bytes,
                 index,
                 in_range,
-            } => Intrinsic::BinGet {
-                grain: *grain,
-                bin: visit.visit_subterm(bin),
+            } => Intrinsic::BytesGet {
+                bytes: visit.visit_subterm(bytes),
                 index: visit.visit_subterm(index),
                 in_range: visit.visit_subterm(in_range),
             },
-            Intrinsic::BinSlice {
-                grain,
-                bin,
+            Intrinsic::BytesSlice {
+                bytes,
                 start,
                 length,
                 within,
-            } => Intrinsic::BinSlice {
-                grain: *grain,
-                bin: visit.visit_subterm(bin),
+            } => Intrinsic::BytesSlice {
+                bytes: visit.visit_subterm(bytes),
                 start: visit.visit_subterm(start),
                 length: visit.visit_subterm(length),
                 within: visit.visit_subterm(within),
             },
-            Intrinsic::BinAppend {
-                grain,
-                bin: b,
+            Intrinsic::BytesAppend {
+                bytes: b,
                 element: atom,
-            } => traverse_binary(b, atom, visit, |b, atom| Intrinsic::BinAppend {
-                grain: *grain,
-                bin: b,
+            } => traverse_binary(b, atom, visit, |b, atom| Intrinsic::BytesAppend {
+                bytes: b,
                 element: atom,
             }),
-            Intrinsic::BinConcat { grain, operands } => Intrinsic::BinConcat {
-                grain: *grain,
+            Intrinsic::BytesConcat { operands } => Intrinsic::BytesConcat {
                 operands: operands.iter().map(|e| visit.visit_subterm(e)).collect(),
             },
-            Intrinsic::BinReplicate { grain, count, atom } => {
-                traverse_binary(count, atom, visit, |count, atom| Intrinsic::BinReplicate {
-                    grain: *grain,
-                    count,
-                    atom,
+            Intrinsic::BytesReplicate { count, atom } => {
+                traverse_binary(count, atom, visit, |count, atom| {
+                    Intrinsic::BytesReplicate { count, atom }
                 })
             }
-            Intrinsic::BinAnd {
-                grain,
+            Intrinsic::BytesAnd {
                 left,
                 right,
                 same_length,
-            } => Intrinsic::BinAnd {
-                grain: *grain,
+            } => Intrinsic::BytesAnd {
                 left: visit.visit_subterm(left),
                 right: visit.visit_subterm(right),
                 same_length: visit.visit_subterm(same_length),
             },
-            Intrinsic::BinOr {
-                grain,
+            Intrinsic::BytesOr {
                 left,
                 right,
                 same_length,
-            } => Intrinsic::BinOr {
-                grain: *grain,
+            } => Intrinsic::BytesOr {
                 left: visit.visit_subterm(left),
                 right: visit.visit_subterm(right),
                 same_length: visit.visit_subterm(same_length),
             },
-            Intrinsic::BinXor {
-                grain,
+            Intrinsic::BytesXor {
                 left,
                 right,
                 same_length,
-            } => Intrinsic::BinXor {
-                grain: *grain,
+            } => Intrinsic::BytesXor {
                 left: visit.visit_subterm(left),
                 right: visit.visit_subterm(right),
                 same_length: visit.visit_subterm(same_length),
@@ -1830,8 +1784,8 @@ impl<T> Intrinsic<T> {
                 Intrinsic::FltFma(*rounding, operand(a)?, operand(b)?, operand(c)?)
             }
             Intrinsic::FltToLeBytes(inner) => Intrinsic::FltToLeBytes(operand(inner)?),
-            Intrinsic::FltOfLeBytes { bin, eight_bytes } => Intrinsic::FltOfLeBytes {
-                bin: operand(bin)?,
+            Intrinsic::FltOfLeBytes { bytes, eight_bytes } => Intrinsic::FltOfLeBytes {
+                bytes: operand(bytes)?,
                 eight_bytes: operand(eight_bytes)?,
             },
             Intrinsic::NatToInt(inner) => Intrinsic::NatToInt(operand(inner)?),
@@ -1859,90 +1813,73 @@ impl<T> Intrinsic<T> {
                 flt: operand(flt)?,
                 finite: operand(finite)?,
             },
-            Intrinsic::BinType(grain) => Intrinsic::BinType(*grain),
-            Intrinsic::Bin(grain, value) => Intrinsic::Bin(*grain, value.clone()),
-            Intrinsic::BinLen(grain, bin) => Intrinsic::BinLen(*grain, operand(bin)?),
-            Intrinsic::BinEql(grain, l, r) => {
-                try_binary(l, r, operand, |l, r| Intrinsic::BinEql(*grain, l, r))?
+            Intrinsic::BytesType => Intrinsic::BytesType,
+            Intrinsic::Bytes(value) => Intrinsic::Bytes(value.clone()),
+            Intrinsic::BytesLen(bytes) => Intrinsic::BytesLen(operand(bytes)?),
+            Intrinsic::BytesEql(l, r) => {
+                try_binary(l, r, operand, |l, r| Intrinsic::BytesEql(l, r))?
             }
-            Intrinsic::BinGet {
-                grain,
-                bin,
+            Intrinsic::BytesGet {
+                bytes,
                 index,
                 in_range,
-            } => Intrinsic::BinGet {
-                grain: *grain,
-                bin: operand(bin)?,
+            } => Intrinsic::BytesGet {
+                bytes: operand(bytes)?,
                 index: operand(index)?,
                 in_range: operand(in_range)?,
             },
-            Intrinsic::BinSlice {
-                grain,
-                bin,
+            Intrinsic::BytesSlice {
+                bytes,
                 start,
                 length,
                 within,
-            } => Intrinsic::BinSlice {
-                grain: *grain,
-                bin: operand(bin)?,
+            } => Intrinsic::BytesSlice {
+                bytes: operand(bytes)?,
                 start: operand(start)?,
                 length: operand(length)?,
                 within: operand(within)?,
             },
-            Intrinsic::BinAppend {
-                grain,
-                bin: b,
+            Intrinsic::BytesAppend {
+                bytes: b,
                 element: atom,
-            } => try_binary(b, atom, operand, |b, atom| Intrinsic::BinAppend {
-                grain: *grain,
-                bin: b,
+            } => try_binary(b, atom, operand, |b, atom| Intrinsic::BytesAppend {
+                bytes: b,
                 element: atom,
             })?,
-            Intrinsic::BinConcat { grain, operands } => Intrinsic::BinConcat {
-                grain: *grain,
+            Intrinsic::BytesConcat { operands } => Intrinsic::BytesConcat {
                 operands: operands
                     .iter()
                     .map(&mut *operand)
                     .collect::<Result<_, _>>()?,
             },
-            Intrinsic::BinReplicate { grain, count, atom } => {
+            Intrinsic::BytesReplicate { count, atom } => {
                 try_binary(count, atom, operand, |count, atom| {
-                    Intrinsic::BinReplicate {
-                        grain: *grain,
-                        count,
-                        atom,
-                    }
+                    Intrinsic::BytesReplicate { count, atom }
                 })?
             }
-            Intrinsic::BinAnd {
-                grain,
+            Intrinsic::BytesAnd {
                 left,
                 right,
                 same_length,
-            } => Intrinsic::BinAnd {
-                grain: *grain,
+            } => Intrinsic::BytesAnd {
                 left: operand(left)?,
                 right: operand(right)?,
                 same_length: operand(same_length)?,
             },
-            Intrinsic::BinOr {
-                grain,
+            Intrinsic::BytesOr {
                 left,
                 right,
                 same_length,
-            } => Intrinsic::BinOr {
-                grain: *grain,
+            } => Intrinsic::BytesOr {
                 left: operand(left)?,
                 right: operand(right)?,
                 same_length: operand(same_length)?,
             },
-            Intrinsic::BinXor {
-                grain,
+            Intrinsic::BytesXor {
                 left,
                 right,
                 same_length,
-            } => Intrinsic::BinXor {
-                grain: *grain,
+            } => Intrinsic::BytesXor {
                 left: operand(left)?,
                 right: operand(right)?,
                 same_length: operand(same_length)?,
@@ -2172,7 +2109,7 @@ fn try_binary<T, U, E>(
 pub enum IntrinsicHead {
     Nat,
     Bool,
-    Bin(Grain),
+    Bytes,
 }
 
 /// Visit both operands of a binary intrinsic and rebuild it through `build`. The constructor is taken generically (not as a `fn` pointer) so every call site monomorphises to the same direct construction — this is the de Bruijn traversal hot path, so the indirection must vanish.

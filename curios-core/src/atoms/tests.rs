@@ -2,7 +2,6 @@ use {
     super::{Atoms, same_atom},
     crate::{Free, Level, Term},
     curios_algebra::Carrier,
-    curios_num::Grain,
 };
 
 /// One call of a universe-polymorphic name at two instances, and the call at another argument.
@@ -27,7 +26,7 @@ fn an_atom_of_a_carrier_that_holds_no_type_is_one_up_to_universe_instances() {
         Carrier::Boolean,
         Carrier::Byte,
         Carrier::Float,
-        Carrier::Packed(Grain::X),
+        Carrier::Bytes,
     ] {
         assert!(same_atom(carrier, &this, &that), "{carrier:?}");
         assert!(!same_atom(carrier, &this, &other), "{carrier:?}");

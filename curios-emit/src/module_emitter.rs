@@ -9,7 +9,7 @@ use {
         words_sub_type,
     },
     curios_abi::{ENTRY, Namespace, PANIC, WireType},
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
     std::iter,
 };
 
@@ -31,7 +31,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
     /// The room record both rope carriers' nodes reference, declared ahead of either, since a subtype may reference only an *earlier* group.
     fn emit_rope_room_type(&mut self) {
-        let rope = self.table.bin_rope();
+        let rope = self.table.bytes_rope();
         self.module
             .add_type(rope.room.clone(), rope_room_sub_type(&rope));
     }
@@ -50,8 +50,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     /// The binary rope row, over the flat `$bytes` payload — the host-boundary shape.
-    fn emit_bin_rope_types(&mut self) {
-        self.emit_rope_types(&self.table.bin_rope(), bytes_sub_type());
+    fn emit_bytes_rope_types(&mut self) {
+        self.emit_rope_types(&self.table.bytes_rope(), bytes_sub_type());
     }
 
     /// Declare a host import: a final func type plus a `(namespace, name)` import bound to `func_name`.
@@ -119,7 +119,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// The `List` mirror of [`emit_bin_rope_types`](Self::emit_bin_rope_types), over the flat `$elems` payload.
+    /// The `List` mirror of [`emit_bytes_rope_types`](Self::emit_bytes_rope_types), over the flat `$elems` payload.
     fn emit_list_rope_types(&mut self) {
         self.emit_rope_types(
             &self.table.list_rope(),
@@ -363,11 +363,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    fn emit_let_bin_data(&mut self, name: &'a EmissionValueName, grain: Grain, value: &Binary) {
+    fn emit_let_bytes_data(&mut self, name: &'a EmissionValueName, value: &Binary) {
         // A small packed constant is its canonical immediate — a self-contained constant initializer, no data segment, no start-function code — exactly as the inline literal path emits it. Leaving this path on the leaf would mint the one non-canonical small value in the program, and the immediate equality would answer false against it, which is why both paths pack through one layout.
-        let layout = ImmediateLayout::of(grain);
-        if layout.holds(value.len(grain)) {
-            let packed = layout.pack(value.len(grain), &value.to_packed_bytes());
+        let layout = ImmediateLayout::new();
+        if layout.holds(value.len()) {
+            let packed = layout.pack(value.len(), value.as_bytes());
             let mut init_expr: curios_wasm::Expr = Default::default();
             init_expr.push(curios_wasm::Instr::I32Const { value: packed });
             init_expr.push(curios_wasm::Instr::RefI31);
@@ -384,10 +384,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             return;
         }
 
-        let bytes = value.to_packed_bytes();
+        let bytes = value.to_bytes();
         let payload_length = bytes.len() as i32;
-        let length = value.len(grain) as i32;
-        let rope = self.table.bin_rope();
+        let length = value.len() as i32;
+        let rope = self.table.bytes_rope();
         let global_name = self.table.find_const(name);
         let data_name = curios_wasm::DataName::from(format!(
             "{}${}",
@@ -449,13 +449,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             .push(curios_wasm::Instr::GlobalSet { global_name });
     }
 
-    /// Emit a module-level const. Every global is declared mutable so that aggregate (`Tuple`/`List`/`EmissionClosure`) consts can `global.get` their dependencies inside the start function — wasm constant expressions can only read immutable globals. An `Flt` and a small `Nat` or `Int` keep a self-contained const initializer (mutability is harmless when the init is constant); a boxed `Nat` or `Int`, `Bin` and the aggregates declare a placeholder init and build the real value in the start function, the boxed value because its limbs come from a data segment, which no constant expression reads. `Bin` is special-cased via [`Self::emit_let_bin_data`] for its immediate form.
+    /// Emit a module-level const. Every global is declared mutable so that aggregate (`Tuple`/`List`/`EmissionClosure`) consts can `global.get` their dependencies inside the start function — wasm constant expressions can only read immutable globals. An `Flt` and a small `Nat` or `Int` keep a self-contained const initializer (mutability is harmless when the init is constant); a boxed `Nat` or `Int`, `Bytes` and the aggregates declare a placeholder init and build the real value in the start function, the boxed value because its limbs come from a data segment, which no constant expression reads. `Bytes` is special-cased via [`Self::emit_let_bytes_data`] for its immediate form.
     fn emit_let_data(&mut self, name: &'a EmissionValueName, value: &'a EmissionData) {
         let constant = match value {
             EmissionData::Nat(number) => curios_cont::nat_is_small(number),
             EmissionData::Int(number) => curios_cont::int_is_small(number),
             EmissionData::Flt(_) => true,
-            EmissionData::Bin(..)
+            EmissionData::Bytes(_)
             | EmissionData::Tuple(_)
             | EmissionData::Row(..)
             | EmissionData::List(_)
@@ -463,8 +463,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         };
 
         match value {
-            EmissionData::Bin(grain, value) => {
-                self.emit_let_bin_data(name, *grain, value);
+            EmissionData::Bytes(value) => {
+                self.emit_let_bytes_data(name, value);
             }
             EmissionData::Nat(_) | EmissionData::Int(_) | EmissionData::Flt(_) if constant => {
                 let mut expr = Default::default();
@@ -675,7 +675,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             expr.push(curios_wasm::Instr::I32Const { value: 0 });
             expr.push(curios_wasm::Instr::I32Const { value: length });
             expr.push(curios_wasm::Instr::ArrayNewData {
-                type_name: self.table.bin_rope().payload,
+                type_name: self.table.bytes_rope().payload,
                 data_name,
             });
             expr.push(curios_wasm::Instr::Call {
@@ -742,47 +742,43 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         if self.table.list_bytes_force_used() {
-            ropes.emit_list_bin_force_func(Grain::X, self.table.list_bytes_force_func());
+            ropes.emit_list_bytes_force_func(self.table.list_bytes_force_func());
         }
 
         if self.table.list_bytes_embed_used() {
-            ropes.emit_list_bin_embed_func(Grain::X, self.table.list_bytes_embed_func());
+            ropes.emit_list_bytes_embed_func(self.table.list_bytes_embed_func());
         }
 
         if self.table.bytes_norm_used() {
-            ropes.emit_norm_func(
-                Grain::X,
-                self.table.bytes_norm_func(),
-                self.table.bytes_force_func(),
-            );
+            ropes.emit_norm_func(self.table.bytes_norm_func(), self.table.bytes_force_func());
         }
 
         if self.table.bytes_box_used() {
-            ropes.emit_box_func(Grain::X, self.table.bytes_box_func());
+            ropes.emit_box_func(self.table.bytes_box_func());
         }
 
         if self.table.bytes_eql_used() {
             ropes.emit_eql_func(
-                &self.table.bin_rope(),
+                &self.table.bytes_rope(),
                 self.table.bytes_eql_func(),
                 self.table.bytes_force_func(),
             );
         }
 
-        if self.table.bin_and_used() {
-            ropes.emit_pointwise_func(self.table.bin_and_func(), curios_wasm::Instr::I32And);
+        if self.table.bytes_and_used() {
+            ropes.emit_pointwise_func(self.table.bytes_and_func(), curios_wasm::Instr::I32And);
         }
 
-        if self.table.bin_or_used() {
-            ropes.emit_pointwise_func(self.table.bin_or_func(), curios_wasm::Instr::I32Or);
+        if self.table.bytes_or_used() {
+            ropes.emit_pointwise_func(self.table.bytes_or_func(), curios_wasm::Instr::I32Or);
         }
 
-        if self.table.bin_xor_used() {
-            ropes.emit_pointwise_func(self.table.bin_xor_func(), curios_wasm::Instr::I32Xor);
+        if self.table.bytes_xor_used() {
+            ropes.emit_pointwise_func(self.table.bytes_xor_func(), curios_wasm::Instr::I32Xor);
         }
 
         if self.table.bytes_replicate_used() {
-            ropes.emit_replicate_func(Grain::X, self.table.bytes_replicate_func());
+            ropes.emit_replicate_func(self.table.bytes_replicate_func());
         }
 
         if self.table.list_map_used() {
@@ -791,7 +787,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         if self.table.bytes_slice_used() {
             ropes.emit_slice_func(
-                &self.table.bin_rope(),
+                &self.table.bytes_rope(),
                 self.table.bytes_slice_func(),
                 self.table.bytes_force_func(),
             );
@@ -807,7 +803,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         if self.table.bytes_read_used() {
             ropes.emit_read_func(
-                &self.table.bin_rope(),
+                &self.table.bytes_rope(),
                 self.table.bytes_read_func(),
                 self.table.bytes_force_func(),
             );
@@ -824,7 +820,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         // After everything that takes a run exact — a host operand, a settle, a host list's elements — and before `force`, which each calls.
         if self.table.bytes_exact_used() {
             ropes.emit_exact_func(
-                &self.table.bin_rope(),
+                &self.table.bytes_rope(),
                 self.table.bytes_exact_func(),
                 self.table.bytes_force_func(),
             );
@@ -839,7 +835,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         if self.table.bytes_force_used() {
-            ropes.emit_force_func(&self.table.bin_rope(), self.table.bytes_force_func());
+            ropes.emit_force_func(&self.table.bytes_rope(), self.table.bytes_force_func());
         }
 
         if self.table.list_force_used() {
@@ -847,7 +843,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         if self.table.bytes_embed_used() {
-            ropes.emit_embed_func(&self.table.bin_rope(), self.table.bytes_embed_func());
+            ropes.emit_embed_func(&self.table.bytes_rope(), self.table.bytes_embed_func());
         }
 
         if self.table.list_embed_used() {
@@ -882,7 +878,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_big_types();
         self.emit_longs_type();
         self.emit_rope_room_type();
-        self.emit_bin_rope_types();
+        self.emit_bytes_rope_types();
         self.emit_list_rope_types();
         self.emit_cell_type();
         self.emit_tuple_types();

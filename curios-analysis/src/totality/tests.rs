@@ -8,7 +8,7 @@ use {
         Atom, Free, Global, InductDecl, InstanceHead, Intrinsic, Polarity, Rec, StructDecl,
         Subterm, Term, Universes,
     },
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
 };
 
 /// An [`Env`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
@@ -107,7 +107,7 @@ fn join_keeps_the_strongest_of_two_routes() {
 fn shapes_are_compared_by_the_proper_subterm_order() {
     let head = Free::local(1, None);
     let tail = Free::local(2, None);
-    let whole = Shape::elem_run(Carriers::Bin, vec![Shape::Atom(head)], Shape::Atom(tail));
+    let whole = Shape::elem_run(Carriers::Bytes, vec![Shape::Atom(head)], Shape::Atom(tail));
 
     assert_eq!(whole.against(&whole), Size::Same);
     assert_eq!(Shape::Atom(tail).against(&whole), Size::Less);
@@ -128,8 +128,8 @@ fn a_rebuilt_constructor_is_smaller_than_the_binder_it_rebuilds() {
         Free::local(2, None),
         Free::local(3, None),
     );
-    let inner = Shape::elem_run(Carriers::Bin, vec![Shape::Atom(a2)], Shape::Atom(b2));
-    let whole = Shape::elem_run(Carriers::Bin, vec![Shape::Atom(outer)], inner.clone());
+    let inner = Shape::elem_run(Carriers::Bytes, vec![Shape::Atom(a2)], Shape::Atom(b2));
+    let whole = Shape::elem_run(Carriers::Bytes, vec![Shape::Atom(outer)], inner.clone());
 
     assert_eq!(inner.against(&whole), Size::Less);
 }
@@ -346,20 +346,18 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
     let context = SizeContext::default();
     let mut grader = Grader::new(&mut kernel, &context);
 
-    let single = Term::intrinsic(Intrinsic::BinAppend {
-        grain: Grain::X,
-        bin: Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::empty())),
+    let single = Term::intrinsic(Intrinsic::BytesAppend {
+        bytes: Term::intrinsic(Intrinsic::Bytes(Binary::empty())),
         element: Term::free_var(&h),
     });
-    let cons = Term::intrinsic(Intrinsic::BinConcat {
-        grain: Grain::X,
+    let cons = Term::intrinsic(Intrinsic::BytesConcat {
         operands: vec![single, Term::free_var(&t)],
     });
 
     let Ok(shape) = grader.shape_of(&cons);
     assert!(
         shape.same_as(&Shape::elem_run(
-            Carriers::Bin,
+            Carriers::Bytes,
             vec![Shape::Atom(h)],
             Shape::Atom(t),
         )),

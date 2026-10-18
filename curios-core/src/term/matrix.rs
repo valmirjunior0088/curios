@@ -4,7 +4,7 @@
 
 use {
     crate::{Atom, Free, Term},
-    curios_num::{Grain, Natural},
+    curios_num::Natural,
     curios_utilities::Plicity,
 };
 
@@ -86,9 +86,9 @@ pub enum Pattern {
     /// `[head, ..tail]`, with the hypothesis written beside it where one is.
     Cons(Option<Bind>),
     /// `x[]`.
-    End(Grain),
+    End,
     /// `x[head, ..tail]`, with the hypothesis written beside it where one is.
-    Atom(Grain, Option<Bind>),
+    Atom(Option<Bind>),
 }
 
 impl Pattern {
@@ -105,9 +105,9 @@ impl Pattern {
             | Pattern::Literal(_)
             | Pattern::Character(_)
             | Pattern::Nil
-            | Pattern::End(_) => 0,
+            | Pattern::End => 0,
             Pattern::Succ(hypothesis) => 1 + hypothesis.as_ref().map_or(0, Bind::binders),
-            Pattern::Cons(hypothesis) | Pattern::Atom(_, hypothesis) => {
+            Pattern::Cons(hypothesis) | Pattern::Atom(hypothesis) => {
                 2 + hypothesis.as_ref().map_or(0, Bind::binders)
             }
         }

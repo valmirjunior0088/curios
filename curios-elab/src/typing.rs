@@ -1542,7 +1542,7 @@ pub(crate) fn open_layer(context: &mut Context, term: &Term) -> Result<Option<Te
 
 /// What an eliminator's motive must abstract: the scrutinee's indices, then the scrutinee itself. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type.
 pub(crate) enum MotiveShape<'a> {
-    /// An intrinsic carrier (`Bool`, `Nat`, `List`, `Bin`): no indices, so the motive binds only the scrutinee, at the carrier's own type.
+    /// An intrinsic carrier (`Bool`, `Nat`, `List`, `Bytes`): no indices, so the motive binds only the scrutinee, at the carrier's own type.
     Intrinsic(&'a Term),
     /// A nominal inductive: `indices` is the declaration's index telescope already instantiated at the scrutinee's actual parameters (`InductDecl::indices_at`), and the scrutinee binder takes `I(p̄, ī)` at those index binders.
     Induct {

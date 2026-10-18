@@ -1,12 +1,12 @@
-//! The free-monoid peel shared by inversion (`invert`) and conversion (`convert`). An intrinsic whose values are a literal run of generators over a symbolic tail — a `Nat` count or sum, a `Bin` byte run, a `List` element run — reduces two values by stripping what they carry in common; the residual tails go back to the caller's own recursion. `Bool`/`Int` are the degenerate, zero-generator spines. The point of the seam: a new instance is one `peel_intrinsic` arm and nothing else — the drivers, the verdict vocabulary (`curios-algebra`'s `Deduction`), and the termination argument are shared, and `Bin`/`List` further share `curios-algebra`'s word strip itself (they differ only in their runs, and whether two runs whose heads differ are a clash).
+//! The free-monoid peel shared by inversion (`invert`) and conversion (`convert`). An intrinsic whose values are a literal run of generators over a symbolic tail — a `Nat` count or sum, a `Bytes` byte run, a `List` element run — reduces two values by stripping what they carry in common; the residual tails go back to the caller's own recursion. `Bool`/`Int` are the degenerate, zero-generator spines. The point of the seam: a new instance is one `peel_intrinsic` arm and nothing else — the drivers, the verdict vocabulary (`curios-algebra`'s `Deduction`), and the termination argument are shared, and `Bytes`/`List` further share `curios-algebra`'s word strip itself (they differ only in their runs, and whether two runs whose heads differ are a clash).
 //!
 //! `Nat` is the one whose gate is a *shape* rather than a carrier, because it is the one commutative member: its values are also spelled as `NatAdd` spines, which no `Intrinsic::Nat` arm can match. See [`peel_nat_terms`].
 
 use {
     super::{
-        Atoms, Declaration, Element, Extremum, Intrinsic, Nat, Operands, Sequence, Subterm, Term,
-        Words, bin_grain, int_cancellation, int_monomial, int_rebuild_cancelled, list_element,
-        same_atom,
+        Atoms, Bytes, Declaration, Element, Extremum, Intrinsic, Nat, Operands, Sequence, Subterm,
+        Term, Words, int_cancellation, int_monomial, int_rebuild_cancelled, is_bytes_word,
+        list_element, same_atom,
     },
     curios_algebra::{
         Carrier, Conclusion, Deduction, Operation, Stripped, pair_factors, same_leaves,
@@ -27,11 +27,11 @@ pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     }
 }
 
-/// The peels at [`Deduction`]'s strength, in the order they are asked: `Nat` the free commutative monoid on its summands, `Int` the group, `Bin` and `List` the free monoids on their bytes and elements, `&&` and `||` the semilattices on their leaves, a symmetric operation's two orders, and two reads of one position. Each answers `None` for a pair that is not its shape, so the seven are one set of alternatives.
+/// The peels at [`Deduction`]'s strength, in the order they are asked: `Nat` the free commutative monoid on its summands, `Int` the group, `Bytes` and `List` the free monoids on their bytes and elements, `&&` and `||` the semilattices on their leaves, a symmetric operation's two orders, and two reads of one position. Each answers `None` for a pair that is not its shape, so the seven are one set of alternatives.
 const PEELS: [fn(&Intrinsic, &Intrinsic) -> Option<Verdict>; 8] = [
     peel_nat_pair,
     peel_int_pair,
-    peel_bin,
+    peel_bytes,
     peel_list,
     peel_bool,
     peel_lattice,
@@ -331,7 +331,7 @@ pub fn peel_nat_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
 ///
 /// **The gate is a shape, not a carrier, and that is the whole of what floorless sums needed.** `Nat::decompose` reads a successor floor and `Nat::summands` reads a `NatAdd` spine; those two shapes are what the cancellation acts on, and a `Nat`-valued operation that is neither rides in as an opaque summand either way. Admitting a pair where *one* side is one of them is what reaches the mixed case — `(s + 1) + l` reduces to a floored `Succ(1, s + l)` while `s + l` stays a bare `NatAdd`, so a gate demanding both sides be `Intrinsic::Nat` sees neither the reassociation nor the shared floor and hands the pair to a shape congruence that refuses it.
 ///
-/// Sound at that width for the reason [`peel_bin`] and [`peel_list`] already rest on: conversion and inversion ask about pairs that inhabit one type, so a side carrying a floor or a sum spine makes both sides `Nat`s.
+/// Sound at that width for the reason [`peel_bytes`] and [`peel_list`] already rest on: conversion and inversion ask about pairs that inhabit one type, so a side carrying a floor or a sum spine makes both sides `Nat`s.
 ///
 /// `Nat` is the free commutative monoid on its symbolic summands: `k + a ~ k' + t` cancels everything the two sides carry in common and the leftover rides on whichever side kept it — `2 ~ ?n + 1` becomes `1 ~ ?n`, and `x + a ~ x + b` becomes `a ~ b`.
 ///
@@ -339,7 +339,7 @@ pub fn peel_nat_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
 ///
 /// Cancelling *summands* rather than only the successor spine is what lets a commuted sum decide equal here instead of being handed to a structural comparison that would refuse it.
 ///
-/// **A pass that changed nothing must decline, not carry.** Every `Equivalent` off a floored pair strips a shared floor, and that structural decrease is the termination argument; a floorless pair sharing no summand comes back from the cancellation *identically* — its no-progress arm returns the operands untouched on purpose — and handing that back as `Equivalent` re-enters the same congruence on the same terms and never settles. So a cancellation that took nothing off is `Undecided`, and the pair falls through to the caller's shape congruence, exactly as `Bin`'s and `List`'s peels do.
+/// **A pass that changed nothing must decline, not carry.** Every `Equivalent` off a floored pair strips a shared floor, and that structural decrease is the termination argument; a floorless pair sharing no summand comes back from the cancellation *identically* — its no-progress arm returns the operands untouched on purpose — and handing that back as `Equivalent` re-enters the same congruence on the same terms and never settles. So a cancellation that took nothing off is `Undecided`, and the pair falls through to the caller's shape congruence, exactly as `Bytes`'s and `List`'s peels do.
 ///
 /// `Undecided` therefore stays unreachable for a pair of `Nat` *carriers*: two `Nat`s that are not both zero and not zero-against-floored are both `Succ`-headed, so they share a positive floor and always progress.
 pub fn peel_nat_terms(left: &Term, right: &Term) -> Option<Verdict> {
@@ -366,7 +366,7 @@ fn int_shaped_intrinsic(intrinsic: &Intrinsic) -> bool {
     )
 }
 
-/// Two stuck `get`s are one value when they read one position of one root: `get(slice(xs, s, l), i)` is `xs`'s element at `s + i`, which is `get(xs, s + i)`, and `get(xs ++ ys, i)` is `get(xs, i)` where the second read's own bound places `i` inside `xs`. `Equal` when `curios-algebra`'s `same_position` finds the two positions one, `Undecided` otherwise and never `Impossible` — two unlike positions may still hold one element. `None` for a pair that is not two `get`s of one carrier and grain.
+/// Two stuck `get`s are one value when they read one position of one root: `get(slice(xs, s, l), i)` is `xs`'s element at `s + i`, which is `get(xs, s + i)`, and `get(xs ++ ys, i)` is `get(xs, i)` where the second read's own bound places `i` inside `xs`. `Equal` when `curios-algebra`'s `same_position` finds the two positions one, `Undecided` otherwise and never `Impossible` — two unlike positions may still hold one element. `None` for a pair that is not two `get`s of one carrier.
 ///
 /// Decided here, as a comparison, because reduction cannot take it: rewriting the node would owe `s + i < len(xs)`, which follows from the window's bound and the index's by transitivity and is convertible with neither, and a reducer that derives a proof is the defect window fusion was reparameterised to avoid. Comparing builds no term, so it owes no proof — the two bounds are never read, which is proof irrelevance, the line a window's proof already draws.
 pub fn peel_position(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
@@ -389,19 +389,17 @@ pub fn peel_position(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
             (that, there),
         ),
         (
-            Intrinsic::BinGet {
-                grain,
-                bin: this,
+            Intrinsic::BytesGet {
+                bytes: this,
                 index: here,
                 ..
             },
-            Intrinsic::BinGet {
-                grain: other,
-                bin: that,
+            Intrinsic::BytesGet {
+                bytes: that,
                 index: there,
                 ..
             },
-        ) if grain == other => same_position(&Words::new(*grain), (this, here), (that, there)),
+        ) => same_position(&Words::new(Bytes), (this, here), (that, there)),
         _ => return None,
     };
 
@@ -411,19 +409,18 @@ pub fn peel_position(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     })
 }
 
-/// `Bin` is the free monoid on its bits or bytes: two values reduce by stripping their longest common prefix — `curios-algebra`'s `Word::strip_common_prefix` over the words `crate::words` reads — and the residual tails ride back on `Equivalent`, so the inverter can solve a flex binder forced to equal a leftover suffix and conversion can enqueue the rest. A definite element disagreement, or a residual with a positive segment facing the empty value, is `Impossible`; a chunk or window facing an unlike one is `Undecided`, and so is a residual of nothing but those facing the empty value, whose lengths are unknown. `None` means the pair is not two `Bin` values at one grain, so the caller keeps its own handling.
+/// `Bytes` is the free monoid on its bytes: two values reduce by stripping their longest common prefix — `curios-algebra`'s `Word::strip_common_prefix` over the words `crate::words` reads — and the residual tails ride back on `Equivalent`, so the inverter can solve a flex binder forced to equal a leftover suffix and conversion can enqueue the rest. A definite element disagreement, or a residual with a positive segment facing the empty value, is `Impossible`; a chunk or window facing an unlike one is `Undecided`, and so is a residual of nothing but those facing the empty value, whose lengths are unknown. `None` means the pair is not two `Bytes` values, so the caller keeps its own handling.
 ///
 /// Prefix-only: a common *suffix* (`x ++ x[0x01] ~ y ++ x[0x01]`) is sound to cancel but not yet attempted. Chunks and single elements are matched as written, so two convertible-but-unequal elements (`append(x[], h1)` against `append(x[], h2)`) are left to the caller's structural comparison, and they reach it *flat*: see `regroup`.
-pub fn peel_bin(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
-    let grain = bin_grain(left)?;
-    if bin_grain(right) != Some(grain) {
+pub fn peel_bytes(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
+    if !is_bytes_word(left) || !is_bytes_word(right) {
         return None;
     }
 
-    Some(peel_words(&Words::new(grain), left, right))
+    Some(peel_words(&Words::new(Bytes), left, right))
 }
 
-/// `List` is the free monoid on its elements — [`peel_bin`]'s strip, with two differences. Its runs hold *terms*, not decided values, so two leading runs whose heads differ are not a clash (the elements may still be convertible): the peel defers, and the caller's element-wise comparison settles it. And every `List`-valued producer carries its element type, which residuals are rebuilt with. A leftover run against the empty list (`[x] ~ []`) is still a definite length clash.
+/// `List` is the free monoid on its elements — [`peel_bytes`]'s strip, with two differences. Its runs hold *terms*, not decided values, so two leading runs whose heads differ are not a clash (the elements may still be convertible): the peel defers, and the caller's element-wise comparison settles it. And every `List`-valued producer carries its element type, which residuals are rebuilt with. A leftover run against the empty list (`[x] ~ []`) is still a definite length clash.
 pub fn peel_list(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     let element = list_element(left)?;
     list_element(right)?;
@@ -431,7 +428,7 @@ pub fn peel_list(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     Some(peel_words(&Words::new(Element(element)), left, right))
 }
 
-/// The verdict [`peel_bin`] and [`peel_list`] share: what the strip decided, or its residuals rebuilt — handed back where a prefix came off, regrouped where none did.
+/// The verdict [`peel_bytes`] and [`peel_list`] share: what the strip decided, or its residuals rebuilt — handed back where a prefix came off, regrouped where none did.
 fn peel_words<S: Sequence>(words: &Words<S>, left: &Intrinsic, right: &Intrinsic) -> Verdict {
     let (mut this, mut that) = (words.read(left), words.read(right));
     match this.strip_common_prefix(words, &mut that) {

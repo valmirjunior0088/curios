@@ -17,7 +17,6 @@ use {
         Anchors, CalleeId, Free, Global, Level, Quality, ReaderPosition, Spelling, Subterm, Term,
         UniverseMetaId, WitnessKey,
     },
-    curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
     std::{collections::HashMap, fmt, rc::Rc},
 };
@@ -649,11 +648,9 @@ impl fmt::Display for Displayed<'_> {
                 let head_type = head_type.spelled(spelling);
                 write!(f, "expected List but got {head_type}")
             }
-            Error::NotBinType { grain, head_type } => {
+            Error::NotBytesType { head_type } => {
                 let head_type = head_type.spelled(spelling);
-                let expected = match grain {
-                    Grain::X => "Bytes",
-                };
+                let expected = "Bytes";
 
                 write!(f, "expected {expected} but got {head_type}")
             }
@@ -1742,13 +1739,13 @@ impl fmt::Display for Displayed<'_> {
                     "missing arm '{tag}': its index target is not provably impossible at the scrutinee's indices — write the arm"
                 )
             }
-            Error::BinGetOutOfBounds { len, index } => {
-                write!(f, "Bin.get index {index} out of bounds (length {len})")
+            Error::BytesGetOutOfBounds { len, index } => {
+                write!(f, "Bytes.get index {index} out of bounds (length {len})")
             }
-            Error::BinSliceOutOfRange { len, start, length } => {
+            Error::BytesSliceOutOfRange { len, start, length } => {
                 write!(
                     f,
-                    "Bin.slice window of {length} at {start} out of range (length {len})"
+                    "Bytes.slice window of {length} at {start} out of range (length {len})"
                 )
             }
             Error::ListGetOutOfBounds { len, index } => {

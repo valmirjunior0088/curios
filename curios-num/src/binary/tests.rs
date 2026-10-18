@@ -9,24 +9,26 @@ fn hash(value: &Binary) -> u64 {
     h.finish()
 }
 
+/// `model` with a byte on each side, and the window of it that holds `model` alone.
+fn framed(model: &[u8]) -> Binary {
+    let buffer = [0xA5]
+        .into_iter()
+        .chain(model.iter().copied())
+        .chain([0x5A, 0xC3])
+        .collect::<Vec<_>>();
+    Binary::from_bytes(buffer).window(1, model.len()).unwrap()
+}
+
 #[test]
-fn windows_compare_logically_and_ignore_padding() {
-    for length in 0..=12 {
-        for mask in 0..(1usize << length) {
-            let bits = (0..length)
-                .map(|i| mask & (1 << i) != 0)
-                .collect::<Vec<_>>();
-            let direct = Binary::from_bits(bits.iter().copied());
-            let framed = Binary::from_bits(
-                [true, false, true]
-                    .into_iter()
-                    .chain(bits.iter().copied())
-                    .chain([true, true]),
-            );
-            let window = framed.window(3, length).unwrap();
-            assert_eq!(direct, window);
-            assert_eq!(hash(&direct), hash(&window));
-        }
+fn a_window_equals_and_hashes_as_the_value_it_holds() {
+    for length in 0..=6 {
+        let model = (0..length)
+            .map(|index| index as u8 * 37)
+            .collect::<Vec<_>>();
+        let direct = Binary::from_bytes(model.clone());
+        let window = framed(&model);
+        assert_eq!(direct, window);
+        assert_eq!(hash(&direct), hash(&window));
     }
 }
 
@@ -57,144 +59,93 @@ fn a_value_past_the_sample_is_hashed_at_a_cost_its_length_does_not_move() {
     assert_eq!(sampled, read(1 << 10));
     assert_eq!(sampled, read(1 << 20));
     assert!(
-        sampled <= HASH_SAMPLE_BYTES + 2 * size_of::<usize>(),
-        "a hash read {sampled} bytes where the sample is {HASH_SAMPLE_BYTES} and two lengths",
+        sampled <= HASH_SAMPLE_BYTES + size_of::<usize>(),
+        "a hash read {sampled} bytes where the sample is {HASH_SAMPLE_BYTES} and the length",
     );
 }
 
-/// Equal values hash alike past the sample too, which is the obligation the sampling could most easily have broken: the two spellings are an unaligned window and a value built from the bytes directly, and both must read the same sampled bytes.
+/// Equal values hash alike past the sample too, which is the obligation the sampling could most easily have broken: the two spellings are a window of a larger buffer and a value built from the bytes directly, and both must read the same sampled bytes.
 #[test]
 fn a_window_past_the_sample_hashes_as_the_value_it_equals() {
     let bytes = (0..300u32)
         .map(|index| (index * 7 % 251) as u8)
         .collect::<Vec<_>>();
-    let direct = Binary::from_bytes(bytes);
-    let framed = Binary::from_bits(
-        [true, false, true]
-            .into_iter()
-            .chain((0..direct.bit_length).map(|index| direct.bit(index).unwrap()))
-            .chain([true, true]),
-    );
-    let window = framed.window(3, direct.bit_length).unwrap();
+    let direct = Binary::from_bytes(bytes.clone());
+    let window = framed(&bytes);
 
     assert_eq!(direct, window);
     assert_eq!(hash(&direct), hash(&window));
     // The sample reaches both ends, so a value differing only in its last byte is still told apart by the hash rather than by the comparison behind it.
-    let mut last = direct.to_bytes().unwrap();
+    let mut last = direct.to_bytes();
     *last.last_mut().unwrap() ^= 0xFF;
     assert_ne!(hash(&direct), hash(&Binary::from_bytes(last)));
 }
 
-/// The three arms of equality answer alike: a window against itself, an aligned window against a fresh buffer of the same bytes, and an aligned window against an unaligned window of the same bits — and a window against the same buffer one offset over is unequal when the bits say so.
+/// The two arms of equality answer alike: a window against itself, and a window against a fresh buffer or another buffer's window of the same bytes — and a window against the same buffer one offset over is unequal when the bytes say so.
 #[test]
 fn equality_agrees_across_its_arms() {
     let buffer = Binary::from_bytes(vec![0x61, 0x62, 0x63, 0x64, 0x61, 0x62]);
-    let tail = buffer.window(16, 32).unwrap();
+    let tail = buffer.window(2, 4).unwrap();
 
-    assert_eq!(tail, buffer.window(16, 32).unwrap());
+    assert_eq!(tail, buffer.window(2, 4).unwrap());
     assert_eq!(tail, Binary::from_bytes(vec![0x63, 0x64, 0x61, 0x62]));
-    let framed = Binary::from_bits(
-        [true, false, false]
-            .into_iter()
-            .chain((0..32).map(|i| tail.bit(i).unwrap())),
-    );
-    assert_eq!(tail, framed.window(3, 32).unwrap());
+    assert_eq!(tail, framed(&[0x63, 0x64, 0x61, 0x62]));
 
-    assert_ne!(tail, buffer.window(8, 32).unwrap());
-    assert_ne!(tail, buffer.window(16, 24).unwrap());
-    assert_eq!(
-        buffer.window(0, 16).unwrap(),
-        buffer.window(32, 16).unwrap()
-    );
+    assert_ne!(tail, buffer.window(1, 4).unwrap());
+    assert_ne!(tail, buffer.window(2, 3).unwrap());
+    assert_eq!(buffer.window(0, 2).unwrap(), buffer.window(4, 2).unwrap());
 }
 
 #[test]
-fn first_written_bit_is_least_significant() {
-    assert_eq!(
-        Binary::from_bits([true, false, true]).to_packed_bytes(),
-        vec![5]
-    );
-}
-
-#[test]
-fn byte_operations_preserve_alignment_and_match_vec_model() {
+fn byte_operations_match_the_vec_model() {
     let models = [vec![], vec![0], vec![0xff], vec![1, 2, 3, 4, 5, 6, 7, 8, 9]];
     for model in models {
         let value = Binary::from_bytes(model.clone());
-        assert!(value.is_x_aligned());
-        assert_eq!(value.len(Grain::X), model.len());
-        assert_eq!(value.to_bytes().unwrap(), model);
+        assert_eq!(value.len(), model.len());
+        assert_eq!(value.to_bytes(), model);
         for start in 0..=model.len() {
             for end in start..=model.len() {
-                let slice = value.slice(Grain::X, start, end).unwrap();
-                assert!(slice.is_x_aligned());
-                assert_eq!(slice.to_bytes().unwrap(), model[start..end]);
+                let slice = value.slice(start, end).unwrap();
+                assert_eq!(slice.to_bytes(), model[start..end]);
+                assert_eq!(slice.byte(0), model[start..end].first().copied());
             }
         }
+        assert!(value.slice(0, model.len() + 1).is_none());
         for byte in [0, 1, 0x7f, 0xff] {
             let mut expected = model.clone();
             expected.push(byte);
-            assert_eq!(
-                value.append_byte(byte).unwrap().to_bytes().unwrap(),
-                expected
-            );
+            assert_eq!(value.append_byte(byte).to_bytes(), expected);
         }
     }
-
-    let unaligned = Binary::from_bits([true, false, true]);
-    assert!(!unaligned.is_x_aligned());
-    assert!(unaligned.append_byte(0).is_none());
-    assert!(unaligned.to_bytes().is_none());
 }
 
 #[test]
-fn aligned_concat_matches_the_bit_path_and_stays_aligned() {
+fn concat_joins_windows_by_their_bytes() {
     let left = Binary::from_bytes(vec![1, 2, 3]);
-    let right = Binary::from_bytes(vec![4, 5]);
-    let unaligned_twin = Binary::from_bits(
-        [false; 3]
-            .into_iter()
-            .chain((0..right.bit_length()).map(|index| right.bit(index).unwrap())),
-    )
-    .window(3, right.bit_length())
-    .unwrap();
+    let right = framed(&[4, 5]);
 
-    let fast = Binary::concat([&left, &right]);
-    let slow = Binary::concat([&left, &unaligned_twin]);
-    assert!(fast.is_x_aligned());
-    assert_eq!(fast, slow);
-    assert_eq!(hash(&fast), hash(&slow));
-    assert_eq!(fast.to_bytes().unwrap(), vec![1, 2, 3, 4, 5]);
+    let joined = Binary::concat([&left, &right]);
+    assert_eq!(joined, Binary::from_bytes(vec![1, 2, 3, 4, 5]));
+    assert_eq!(
+        hash(&joined),
+        hash(&Binary::from_bytes(vec![1, 2, 3, 4, 5]))
+    );
+    assert_eq!(joined.offset(), 0);
 }
 
+/// The order agrees with equality on every short byte string over a small alphabet, a window and its fresh twin answering alike.
 #[test]
-fn concat_crosses_byte_boundaries_without_exposing_padding() {
-    let left = Binary::from_bits([true, false, true, true, false]);
-    let middle = Binary::from_bits([false, true, true, false, true, false]);
-    let right = Binary::from_bits([true, true, false]);
-    let actual = Binary::concat([&left, &middle, &right]);
-    let expected = Binary::from_bits([
-        true, false, true, true, false, false, true, true, false, true, false, true, true, false,
-    ]);
-    assert_eq!(actual, expected);
-    assert_eq!(actual.bit_length(), 14);
-    assert_eq!(actual.to_packed_bytes().last().unwrap() & 0b1100_0000, 0);
-}
-
-/// The order agrees with equality on every short bit string, and separates two values one packed byte cannot: `b[1]` and `b[1, 0]` pack alike and are ordered by length, shorter first.
-#[test]
-fn the_order_agrees_with_equality_and_separates_equal_packings() {
-    let short = Binary::from_bits([true]);
-    let long = Binary::from_bits([true, false]);
-    assert_eq!(short.to_packed_bytes(), long.to_packed_bytes());
-    assert!(short < long);
-
-    let values = (0..=9)
+fn the_order_agrees_with_equality() {
+    let alphabet = [0x00, 0x01, 0xFF];
+    let values = (0..=3)
         .flat_map(|length| {
-            (0..(1usize << length)).map(move |mask| {
-                Binary::from_bits((0..length).map(|index| mask & (1 << index) != 0))
+            (0..alphabet.len().pow(length)).map(move |code| {
+                (0..length)
+                    .map(|place| alphabet[code / alphabet.len().pow(place) % alphabet.len()])
+                    .collect::<Vec<u8>>()
             })
         })
+        .flat_map(|model| [Binary::from_bytes(model.clone()), framed(&model)])
         .collect::<Vec<_>>();
     for left in &values {
         for right in &values {
@@ -207,34 +158,9 @@ fn the_order_agrees_with_equality_and_separates_equal_packings() {
     }
 }
 
-/// The unaligned arm answers what the aligned one does: a window of a framed buffer orders against a directly built value exactly as two directly built values do.
+/// Bytes order as `/std/Bytes/cmp` orders them — bytewise, the shorter prefix first — so the compiler's order and the language's never disagree about a value both can see.
 #[test]
-fn the_order_answers_alike_across_its_arms() {
-    for length in 0..=8 {
-        for mask in 0..(1usize << length) {
-            let bits = (0..length)
-                .map(|index| mask & (1 << index) != 0)
-                .collect::<Vec<_>>();
-            let direct = Binary::from_bits(bits.iter().copied());
-            let framed = Binary::from_bits(
-                [true, false, true]
-                    .into_iter()
-                    .chain(bits.iter().copied())
-                    .chain([true, true]),
-            );
-            let window = framed.window(3, length).unwrap();
-            assert!(direct.cmp(&window).is_eq());
-            for other in [Binary::from_bits([true]), Binary::from_bytes(vec![7])] {
-                assert_eq!(direct.cmp(&other), window.cmp(&other));
-                assert_eq!(other.cmp(&direct), other.cmp(&window));
-            }
-        }
-    }
-}
-
-/// The byte grain orders as `/std/Bytes/cmp` does — bytewise, the shorter prefix first — so the compiler's order and the language's never disagree about a value both can see.
-#[test]
-fn the_byte_grain_orders_as_the_language_does() {
+fn bytes_order_as_the_language_orders_them() {
     let model = |bytes: Vec<u8>| Binary::from_bytes(bytes);
     assert!(model(vec![1, 2]) < model(vec![1, 3]));
     assert!(model(vec![1]) < model(vec![1, 0]));
@@ -242,23 +168,29 @@ fn the_byte_grain_orders_as_the_language_does() {
     assert!(model(vec![]) < model(vec![0]));
 }
 
-/// Pointwise combination agrees with the bit model at every length across a byte boundary and every pair of operands, including the lengths whose last byte is partial — where a dirty padding bit would be reported by both equality and the hash.
+/// Pointwise combination agrees with the byte model at every pair of short operands, a window among them.
 #[test]
-fn pointwise_operations_agree_with_the_bit_model() {
-    let bits = |length: usize, mask: usize| {
-        Binary::from_bits((0..length).map(move |index| mask & (1 << index) != 0))
-    };
+fn pointwise_operations_agree_with_the_byte_model() {
+    let alphabet = [0x00, 0x0F, 0xF0, 0xFF];
+    for left in alphabet {
+        for right in alphabet {
+            let (l, r) = (
+                framed(&[left, right]),
+                Binary::from_bytes(vec![right, left]),
+            );
 
-    for length in 0..=8 {
-        for left in 0..(1usize << length) {
-            for right in 0..(1usize << length) {
-                let (l, r) = (bits(length, left), bits(length, right));
-
-                assert_eq!(l.and(&r), bits(length, left & right));
-                assert_eq!(l.or(&r), bits(length, left | right));
-                assert_eq!(l.xor(&r), bits(length, left ^ right));
-                assert_eq!(hash(&l.xor(&r)), hash(&bits(length, left ^ right)));
-            }
+            assert_eq!(
+                l.and(&r),
+                Binary::from_bytes(vec![left & right, right & left])
+            );
+            assert_eq!(
+                l.or(&r),
+                Binary::from_bytes(vec![left | right, right | left])
+            );
+            assert_eq!(
+                l.xor(&r),
+                Binary::from_bytes(vec![left ^ right, right ^ left])
+            );
         }
     }
 }

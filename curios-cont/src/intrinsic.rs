@@ -2,7 +2,7 @@
 
 use {
     super::{Atom, Literal, RowId, nat_is_small},
-    curios_num::{Grain, Rounding},
+    curios_num::Rounding,
 };
 
 /// Intrinsic identity without operands. Operand order and arity live on the surrounding `LetIntrinsic`, so every analysis sees one uniform operand vector.
@@ -72,34 +72,34 @@ pub enum Intrinsic {
     FltToInt,
     FltMantissa,
     FltExponent,
-    BinLen(Grain),
-    BinEql(Grain),
-    BinGet(Grain),
-    BinSlice(Grain),
-    /// `(bin, start) -> bin`: the suffix from `start`, whose extent is the value's own — there is no count operand to supply, so the one thing a caller could get wrong about a suffix it cannot say. Every compiler-emitted window is a suffix (`into_cont`'s peel is the only producer), and this is what keeps two lowerings from having to agree about how a count is derived; the derivation happens once, against the rope's own length.
-    BinRest(Grain),
-    BinAppend(Grain),
-    BinConcat(Grain, usize),
-    /// `(count, element) -> bin`: one flat leaf of `count` copies of `element`. The size is an operand's value rather than an operand's extent, which is what separates it from every other construction here.
-    BinReplicate(Grain),
-    /// `(a, b) -> bin`: the element-wise conjunction of two binaries the type has already held to one length. Total — the bound is discharged above erasure and nothing here can fail it.
-    BinAnd(Grain),
-    /// `(a, b) -> bin`: the element-wise disjunction, as [`Intrinsic::BinAnd`].
-    BinOr(Grain),
-    /// `(a, b) -> bin`: the element-wise difference, as [`Intrinsic::BinAnd`].
-    BinXor(Grain),
-    /// `(element…) -> bin`: one flat leaf holding exactly these elements at the given grain — the fused form of an append chain, minted only by the optimizer's `fuse_append_chains` and never by the door. The arity is the element count, one per payload byte.
-    BinChunk(Grain, usize),
+    BytesLen,
+    BytesEql,
+    BytesGet,
+    BytesSlice,
+    /// `(bytes, start) -> bytes`: the suffix from `start`, whose extent is the value's own — there is no count operand to supply, so the one thing a caller could get wrong about a suffix it cannot say. Every compiler-emitted window is a suffix (`into_cont`'s peel is the only producer), and this is what keeps two lowerings from having to agree about how a count is derived; the derivation happens once, against the rope's own length.
+    BytesRest,
+    BytesAppend,
+    BytesConcat(usize),
+    /// `(count, element) -> bytes`: one flat leaf of `count` copies of `element`. The size is an operand's value rather than an operand's extent, which is what separates it from every other construction here.
+    BytesReplicate,
+    /// `(a, b) -> bytes`: the element-wise conjunction of two binaries the type has already held to one length. Total — the bound is discharged above erasure and nothing here can fail it.
+    BytesAnd,
+    /// `(a, b) -> bytes`: the element-wise disjunction, as [`Intrinsic::BytesAnd`].
+    BytesOr,
+    /// `(a, b) -> bytes`: the element-wise difference, as [`Intrinsic::BytesAnd`].
+    BytesXor,
+    /// `(element…) -> bytes`: one flat leaf holding exactly these elements — the fused form of an append chain, minted only by the optimizer's `fuse_append_chains` and never by the door. The arity is the element count, one per payload byte.
+    BytesChunk(usize),
     ListLen,
     ListGet,
     ListSlice,
-    /// The `List` mirror of [`Intrinsic::BinRest`].
+    /// The `List` mirror of [`Intrinsic::BytesRest`].
     ListRest,
     ListAppend,
     ListConcat(usize),
     /// `(list) -> list`: the same value, flat — a leaf answers itself, and anything else answers a fresh leaf over its forced payload (an O(1) wrap, since payload arrays are filled once and never rewritten). Semantically the identity; representationally the settle the door inserts on stores into fields the Ersd census marked indexed-only, so the values a program only ever indexes are flat by the time they are stored.
     ListSettle,
-    /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_append_chains` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`Intrinsic::BinChunk`].
+    /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_append_chains` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`Intrinsic::BytesChunk`].
     ListFlat(usize),
     TupleGet(usize),
     /// `(row) -> value`: slot `index` of a [`ValueExpr::Row`](super::ValueExpr::Row) of `row`. Which slot holds what is the row's to say — a family's slot zero is its tag — and the door is what knows it. Distinct from [`Intrinsic::TupleGet`] so a row read names the row whose final type the emitter casts to exactly, and so a structural projection can never silently read a row value through the roster cascade: the two vocabularies meet only in the verifier, which refuses a mismatch.
@@ -129,8 +129,8 @@ pub enum Repr {
     Flt,
     /// A `Nat` or `Int` operand: a reference in general, and the word it is where the representation analysis holds one there — a small literal, a bounded result, or a parameter every argument reaching it is one of those. A demand, never a carrier: no value is held at it, and a use reading it tests a reference before unboxing and takes a word as it is.
     Number,
-    /// A packed-binary reference at the given grain: a small-canonical immediate or a rope. The grain rides the carrier because the two immediate layouts share no runtime discrimination — only the static type keeps them apart, so the coercion tables must be unable to confuse them.
-    Bin(Grain),
+    /// A packed-binary reference: a small-canonical immediate or a rope.
+    Bytes,
     /// A list rope reference.
     List,
     /// An opaque reference: nothing is read of it, so nothing constrains it.
@@ -144,32 +144,24 @@ impl Intrinsic {
     pub fn operand_repr(&self, index: usize) -> Repr {
         match (self, index) {
             // The sequence operations are the only ones whose operands differ from one another: a rope first, then positions.
-            (
-                Self::BinGet(grain)
-                | Self::BinSlice(grain)
-                | Self::BinRest(grain)
-                | Self::BinAppend(grain),
-                0,
-            ) => Repr::Bin(*grain),
-            (Self::BinGet(_) | Self::BinSlice(_) | Self::BinRest(_) | Self::BinAppend(_), _) => {
+            (Self::BytesGet | Self::BytesSlice | Self::BytesRest | Self::BytesAppend, 0) => {
+                Repr::Bytes
+            }
+            (Self::BytesGet | Self::BytesSlice | Self::BytesRest | Self::BytesAppend, _) => {
                 Repr::Nat
             }
             // Both operands of a pointwise combination are ropes, which is what separates it from every other sequence row here — there is no position among them.
-            (Self::BinAnd(grain) | Self::BinOr(grain) | Self::BinXor(grain), _) => {
-                Repr::Bin(*grain)
-            }
-            // A fill takes a count and a generator, and neither is a rope: the element rides the `Nat` grain as an append's does.
-            (Self::BinReplicate(_), _) => Repr::Nat,
+            (Self::BytesAnd | Self::BytesOr | Self::BytesXor, _) => Repr::Bytes,
+            // A fill takes a count and a generator, and neither is a rope: the element rides the `Nat` carrier as an append's does.
+            (Self::BytesReplicate, _) => Repr::Nat,
             (Self::ListGet | Self::ListSlice | Self::ListRest | Self::ListAppend, 0) => Repr::List,
             (Self::ListGet | Self::ListSlice | Self::ListRest, _) => Repr::Nat,
-            // A chunk element is one packed byte, carried at the `Nat` grain like an append's.
-            (Self::BinChunk(_, _), _) => Repr::Nat,
-            // A list element is carried, never interpreted — unlike a `Bytes` element, which is a `Nat` grain.
+            // A chunk element is one packed byte, carried at the `Nat` carrier like an append's.
+            (Self::BytesChunk(_), _) => Repr::Nat,
+            // A list element is carried, never interpreted — unlike a `Bytes` element, which rides the `Nat` carrier.
             (Self::ListAppend, _) => Repr::Ref,
-            (Self::BinConcat(grain, _), _) | (Self::BinEql(grain) | Self::BinLen(grain), _) => {
-                Repr::Bin(*grain)
-            }
-            (Self::FltOfLeBytes, _) => Repr::Bin(Grain::X),
+            (Self::BytesConcat(_), _) | (Self::BytesEql | Self::BytesLen, _) => Repr::Bytes,
+            (Self::FltOfLeBytes, _) => Repr::Bytes,
             (Self::WindowExtent, _) => Repr::Nat,
             // The whole point of a test is to look at the reference uncoerced, and the read that follows the immediate one hands that same reference on.
             (Self::IsImmediate | Self::ImmediateGet | Self::IsRow(_), _) => Repr::Ref,
@@ -298,7 +290,7 @@ impl Intrinsic {
             | Self::FltNeq
             | Self::FltLt
             | Self::FltLe
-            | Self::BinEql(_) => Repr::Nat,
+            | Self::BytesEql => Repr::Nat,
 
             // Every `Nat` or `Int` an operation computes is a reference, since no operation bounds its result's size in general: a length and a window's checked extent included, which a sequence past the i31 would leave.
             Self::NatAdd
@@ -334,7 +326,7 @@ impl Intrinsic {
             | Self::FltToInt
             | Self::FltMantissa
             | Self::FltExponent
-            | Self::BinLen(_)
+            | Self::BytesLen
             | Self::ListLen
             | Self::WindowExtent => Repr::Ref,
 
@@ -356,17 +348,17 @@ impl Intrinsic {
             | Self::FltOfLeBytes => Repr::Flt,
 
             // The two tests join the predicates: each answers a `Bool`, whose carrier is a `Nat`.
-            Self::BinGet(_) | Self::IsImmediate | Self::IsRow(_) => Repr::Nat,
-            Self::BinSlice(grain)
-            | Self::BinRest(grain)
-            | Self::BinAppend(grain)
-            | Self::BinConcat(grain, _)
-            | Self::BinChunk(grain, _)
-            | Self::BinReplicate(grain)
-            | Self::BinAnd(grain)
-            | Self::BinOr(grain)
-            | Self::BinXor(grain) => Repr::Bin(*grain),
-            Self::FltToLeBytes => Repr::Bin(Grain::X),
+            Self::BytesGet | Self::IsImmediate | Self::IsRow(_) => Repr::Nat,
+            Self::BytesSlice
+            | Self::BytesRest
+            | Self::BytesAppend
+            | Self::BytesConcat(_)
+            | Self::BytesChunk(_)
+            | Self::BytesReplicate
+            | Self::BytesAnd
+            | Self::BytesOr
+            | Self::BytesXor => Repr::Bytes,
+            Self::FltToLeBytes => Repr::Bytes,
             Self::ListSlice
             | Self::ListRest
             | Self::ListAppend
@@ -410,7 +402,7 @@ impl Intrinsic {
             | Self::FltToInt
             | Self::FltMantissa
             | Self::FltExponent
-            | Self::BinLen(_)
+            | Self::BytesLen
             | Self::ListLen
             | Self::TupleGet(_)
             | Self::RowGet(..)
@@ -463,21 +455,21 @@ impl Intrinsic {
             | Self::FltMin
             | Self::FltMax
             | Self::FltCopysign
-            | Self::BinEql(_)
-            | Self::BinGet(_)
-            | Self::BinRest(_)
-            | Self::BinAppend(_)
-            | Self::BinReplicate(_)
-            | Self::BinAnd(_)
-            | Self::BinOr(_)
-            | Self::BinXor(_)
+            | Self::BytesEql
+            | Self::BytesGet
+            | Self::BytesRest
+            | Self::BytesAppend
+            | Self::BytesReplicate
+            | Self::BytesAnd
+            | Self::BytesOr
+            | Self::BytesXor
             | Self::ListGet
             | Self::ListRest
             | Self::ListAppend => 2,
-            Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent | Self::FltFma(_) => 3,
-            Self::BinConcat(_, arity)
+            Self::BytesSlice | Self::ListSlice | Self::WindowExtent | Self::FltFma(_) => 3,
+            Self::BytesConcat(arity)
             | Self::ListConcat(arity)
-            | Self::BinChunk(_, arity)
+            | Self::BytesChunk(arity)
             | Self::ListFlat(arity) => arity,
         }
     }
@@ -499,9 +491,9 @@ impl Intrinsic {
             | Self::FltMantissa
             | Self::FltExponent
             | Self::FltOfLeBytes
-            | Self::BinGet(_)
-            | Self::BinSlice(_)
-            | Self::BinRest(_)
+            | Self::BytesGet
+            | Self::BytesSlice
+            | Self::BytesRest
             | Self::ListGet
             | Self::ListSlice
             | Self::ListRest
@@ -510,17 +502,17 @@ impl Intrinsic {
             | Self::WindowExtent => IntrinsicEffect::MayTrap,
 
             // Allocates a *sequence*. An `Flt` result is boxed too, but every `Flt` producer below is treated as total, so the category means a rope or a list rather than any heap traffic at all.
-            Self::BinAppend(_)
-            | Self::BinConcat(_, _)
-            | Self::BinChunk(_, _)
+            Self::BytesAppend
+            | Self::BytesConcat(_)
+            | Self::BytesChunk(_)
             | Self::ListAppend
             | Self::ListConcat(_)
             | Self::ListSettle
             | Self::ListFlat(_)
-            | Self::BinReplicate(_)
-            | Self::BinAnd(_)
-            | Self::BinOr(_)
-            | Self::BinXor(_)
+            | Self::BytesReplicate
+            | Self::BytesAnd
+            | Self::BytesOr
+            | Self::BytesXor
             | Self::FltToLeBytes => IntrinsicEffect::Allocates,
 
             Self::NatEql
@@ -577,8 +569,8 @@ impl Intrinsic {
             | Self::FltSqrt(_)
             | Self::FltRoundIntegral(_)
             | Self::FltCopysign
-            | Self::BinLen(_)
-            | Self::BinEql(_)
+            | Self::BytesLen
+            | Self::BytesEql
             | Self::ListLen
             | Self::IsImmediate
             | Self::ImmediateGet
@@ -660,18 +652,18 @@ impl Intrinsic {
             | Self::FltToInt
             | Self::FltMantissa
             | Self::FltExponent
-            | Self::BinLen(_)
-            | Self::BinEql(_)
-            | Self::BinGet(_)
-            | Self::BinSlice(_)
-            | Self::BinRest(_)
-            | Self::BinAppend(_)
-            | Self::BinConcat(_, _)
-            | Self::BinReplicate(_)
-            | Self::BinAnd(_)
-            | Self::BinOr(_)
-            | Self::BinXor(_)
-            | Self::BinChunk(_, _)
+            | Self::BytesLen
+            | Self::BytesEql
+            | Self::BytesGet
+            | Self::BytesSlice
+            | Self::BytesRest
+            | Self::BytesAppend
+            | Self::BytesConcat(_)
+            | Self::BytesReplicate
+            | Self::BytesAnd
+            | Self::BytesOr
+            | Self::BytesXor
+            | Self::BytesChunk(_)
             | Self::ListLen
             | Self::ListSlice
             | Self::ListRest

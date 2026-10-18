@@ -51,7 +51,7 @@ fn former(parent: &Subterm) -> Option<Former> {
                 Carrier::Nat { .. } => Some(Former::NatMatch),
                 Carrier::List { .. } => Some(Former::ListMatch),
                 // A packed word's fold. No seed is a word, and the words' own laws are the grid's rows.
-                Carrier::Bin { .. } => None,
+                Carrier::Bytes { .. } => None,
             },
         },
         // Written as a call of its former or its constructor, which reduction rebuilds as this node: the contexts under an application are the ones that reach it.

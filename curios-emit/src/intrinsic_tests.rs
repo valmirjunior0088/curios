@@ -371,7 +371,7 @@ fn flt_to_le_bytes_packs_an_eight_byte_leaf() {
     ));
     assert_contains(&wat, "i64.reinterpret_f64");
     assert_contains(&wat, "array.new_fixed");
-    assert_contains(&wat, "struct.new $rope/bin/leaf");
+    assert_contains(&wat, "struct.new $rope/bytes/leaf");
 }
 
 /// The truncation instruction traps by itself past its own result type, so a guard placed after it never runs where it matters most: the order is the property. What refuses is the domain the evidence states, and a float past the i31 grows through `big/of_f64`.

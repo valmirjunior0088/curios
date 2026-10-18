@@ -113,7 +113,7 @@ impl Offer {
             Offer::Open { words, floats } => match carrier {
                 Repr::Nat => *words,
                 Repr::Flt => *floats,
-                Repr::Number | Repr::Bin(_) | Repr::List | Repr::Ref => true,
+                Repr::Number | Repr::Bytes | Repr::List | Repr::Ref => true,
             },
             Offer::Fixed(fixed) => *fixed == carrier,
             Offer::Never => false,
@@ -135,7 +135,7 @@ fn literal_repr(literal: &Literal) -> Repr {
         Literal::Nat(value) if nat_is_small(value) => Repr::Nat,
         Literal::Nat(_) | Literal::Int(_) => Repr::Ref,
         Literal::Flt(_) => Repr::Flt,
-        Literal::Bin(grain, _) => Repr::Bin(*grain),
+        Literal::Bytes(_) => Repr::Bytes,
     }
 }
 
@@ -479,7 +479,7 @@ fn raw_carrier(repr: &Repr) -> Option<Repr> {
     match repr {
         Repr::Nat | Repr::Flt => Some(*repr),
         Repr::Number => Some(Repr::Nat),
-        Repr::Bin(_) | Repr::List | Repr::Ref => None,
+        Repr::Bytes | Repr::List | Repr::Ref => None,
     }
 }
 

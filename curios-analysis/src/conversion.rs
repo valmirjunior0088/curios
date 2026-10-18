@@ -36,7 +36,7 @@ pub trait Driver: Reducer {
     /// An intrinsic as this checker reads it before any peel does. The elaborator substitutes the metavariables it has solved, since two occurrences of one sum pair only once their witness metavariables are spliced; the kernel, handed finished terms, reads it as it is.
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic;
 
-    /// The elaborator's solving views, each splitting a pair no congruence relates into goals the driver holds: a `Bin` literal against an `append` or `concat` spine, at the spine's known lengths, and two lists that lead with written elements, one of them going on past its own, element by element. `Some(true)` once those goals are the driver's, `Some(false)` on a length clash no solution can repair, and `None` where no view applies. The kernel has none, since it compares what the elaborator's solutions already made agree by reduction.
+    /// The elaborator's solving views, each splitting a pair no congruence relates into goals the driver holds: a `Bytes` literal against an `append` or `concat` spine, at the spine's known lengths, and two lists that lead with written elements, one of them going on past its own, element by element. `Some(true)` once those goals are the driver's, `Some(false)` on a length clash no solution can repair, and `None` where no view applies. The kernel has none, since it compares what the elaborator's solutions already made agree by reduction.
     fn solving_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool>;
 
     /// The registry an operation's signature is read through.
@@ -185,7 +185,7 @@ fn chain(
         }));
     }
 
-    // The shapes carry everything that is not a term — which operation, which grain, which literal, which successor floor, which foreign row — so comparing them settles the operation's identity in one derived equality. Their result levels are the driver's to compare.
+    // The shapes carry everything that is not a term — which operation, which literal, which successor floor, which foreign row — so comparing them settles the operation's identity in one derived equality. Their result levels are the driver's to compare.
     let (mut this_shape, this_operands) = decompose(&this);
     let (mut that_shape, that_operands) = decompose(&that);
     if let Some(universes) = this_shape.result_universes_mut() {
@@ -359,7 +359,7 @@ pub(crate) fn read(
         None => (this, that),
     };
 
-    // `Nat`, `Bin` and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off; `&&` and `||` are semilattices, so two of one are equal when they hold one set of leaves; and two stuck `get`s are one element when they read one position of one root. This decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than two opaque literals. `Undecided` falls through to the congruence, which still compares like-shaped operands, so a peel can only strengthen conversion. A sufficient residual is compared exactly as an equivalent one is: conversion establishes the equation by establishing it, and a residual that fails leaves the pair to the refusal it would have met anyway.
+    // `Nat`, `Bytes` and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off; `&&` and `||` are semilattices, so two of one are equal when they hold one set of leaves; and two stuck `get`s are one element when they read one position of one root. This decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than two opaque literals. `Undecided` falls through to the congruence, which still compares like-shaped operands, so a peel can only strengthen conversion. A sufficient residual is compared exactly as an equivalent one is: conversion establishes the equation by establishing it, and a residual that fails leaves the pair to the refusal it would have met anyway.
     // The two sufficient pairings are asked before the list because a peel of it answers undecided for a pair they take apart, and an answer ends the asking: `Int`'s reads a product as one summand, and a symmetric operation's reads a comparison's sides in the order they are held.
     if let Some(conclusion) = peel_monomial(&this, &that)
         .or_else(|| peel_comparison(&this, &that))
@@ -520,7 +520,7 @@ fn same_value(produced: &Produced, this: &Intrinsic, that: &Intrinsic) -> bool {
         Subterm::Intrinsic(Intrinsic::BoolType) => Carrier::Boolean,
         Subterm::Intrinsic(Intrinsic::ByteType) => Carrier::Byte,
         Subterm::Intrinsic(Intrinsic::FltType) => Carrier::Float,
-        Subterm::Intrinsic(Intrinsic::BinType(grain)) => Carrier::Packed(*grain),
+        Subterm::Intrinsic(Intrinsic::BytesType) => Carrier::Bytes,
         _ => return false,
     };
     let (this, that) = (Term::intrinsic(this.clone()), Term::intrinsic(that.clone()));

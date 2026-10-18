@@ -12,7 +12,7 @@ use {
         CellOperation, ChannelOperation, Constant, Intrinsic, Operation, Rhs, SequenceGrain,
         SequenceOp, SuspensionOperation, Terminator,
     },
-    curios_num::{Binary, Floating, Grain, Integer, Natural, ScalarTrap},
+    curios_num::{Binary, Floating, Integer, Natural, ScalarTrap},
 };
 
 /// What allocating a value commits a pass to. Immutable allocation is not language-observable and may be discarded or duplicated; mutable allocation (a cell) may not. Ordered by severity so [`join`](Allocation::join) is `max`.
@@ -324,20 +324,20 @@ impl Semantics {
     /// The pointwise rows do not trap. Their one bound is that the operands share a length, and that is stated in the type and discharged before erasure — nothing survives to this stage that could fail it, so treating them as fallible would keep a dead-result elimination from removing one whose result nothing reads.
     pub fn sequence(operation: SequenceOp) -> LocalBehavior {
         match operation {
-            SequenceOp::BinGet(_) | SequenceOp::ListGet => LocalBehavior::trap(),
-            SequenceOp::BinSlice(_) | SequenceOp::ListSlice => {
+            SequenceOp::BytesGet | SequenceOp::ListGet => LocalBehavior::trap(),
+            SequenceOp::BytesSlice | SequenceOp::ListSlice => {
                 LocalBehavior::trap().with_alloc(Allocation::Immutable)
             }
-            SequenceOp::BinAppend(_)
-            | SequenceOp::BinConcat(_)
-            | SequenceOp::BinReplicate(_)
-            | SequenceOp::BinAnd(_)
-            | SequenceOp::BinOr(_)
-            | SequenceOp::BinXor(_)
+            SequenceOp::BytesAppend
+            | SequenceOp::BytesConcat
+            | SequenceOp::BytesReplicate
+            | SequenceOp::BytesAnd
+            | SequenceOp::BytesOr
+            | SequenceOp::BytesXor
             | SequenceOp::ListAppend
             | SequenceOp::ListConcat
             | SequenceOp::ListBuild => LocalBehavior::alloc(Allocation::Immutable),
-            SequenceOp::BinLen(_) | SequenceOp::ListLen | SequenceOp::BinEql(_) => {
+            SequenceOp::BytesLen | SequenceOp::ListLen | SequenceOp::BytesEql => {
                 LocalBehavior::pure()
             }
         }
@@ -443,8 +443,8 @@ impl Semantics {
             Some(Constant::Bool(value)) => Some(*value),
             _ => None,
         };
-        let bin_x = |index: usize| match operands.get(index) {
-            Some(Constant::Bin(Grain::X, value)) => Some(value),
+        let bytes_x = |index: usize| match operands.get(index) {
+            Some(Constant::Bytes(value)) => Some(value),
             _ => None,
         };
 
@@ -558,10 +558,10 @@ impl Semantics {
                 Operation::NatToByte => {
                     Constant::Byte(u8::try_from(u32::try_from(nat(0)?).ok()?).ok()?)
                 }
-                Operation::FltToLeBytes => Constant::Bin(Grain::X, flt(0)?.to_le_bytes()),
+                Operation::FltToLeBytes => Constant::Bytes(flt(0)?.to_le_bytes()),
                 Operation::FltOfLeBytes => {
                     return Some(scalar_result(
-                        Floating::of_le_bytes(bin_x(0)?),
+                        Floating::of_le_bytes(bytes_x(0)?),
                         Constant::Flt,
                     ));
                 }
@@ -572,8 +572,8 @@ impl Semantics {
 
     /// Constant-fold a sequence operation. Only packed-binary operations can fold — the constant domain has no list carrier, so list operations are always [`FoldOutcome::Unknown`] here (the evaluator interprets them over its own value domain instead). An element is a `Byte`.
     pub fn fold_sequence(operation: SequenceOp, operands: &[Constant]) -> FoldOutcome {
-        let bin = |index: usize, grain: Grain| match operands.get(index) {
-            Some(Constant::Bin(found, value)) if *found == grain => Some(value),
+        let bytes = |index: usize| match operands.get(index) {
+            Some(Constant::Bytes(value)) => Some(value),
             _ => None,
         };
         let nat = |index: usize| match operands.get(index) {
@@ -587,63 +587,48 @@ impl Semantics {
 
         let compute = || -> Option<Result<Constant, TrapKind>> {
             Some(Ok(match operation {
-                SequenceOp::BinLen(grain) => {
-                    Constant::Nat(Natural::from(bin(0, grain)?.len(grain)))
-                }
-                SequenceOp::BinEql(grain) => Constant::Bool(bin(0, grain)? == bin(1, grain)?),
-                SequenceOp::BinGet(Grain::X) => {
-                    return Some(
-                        match bin(0, Grain::X)?.byte(usize::try_from(nat(1)?).ok()?) {
-                            Some(byte) => Ok(Constant::Byte(byte)),
-                            None => Err(TrapKind::IndexOutOfBounds),
-                        },
-                    );
+                SequenceOp::BytesLen => Constant::Nat(Natural::from(bytes(0)?.len())),
+                SequenceOp::BytesEql => Constant::Bool(bytes(0)? == bytes(1)?),
+                SequenceOp::BytesGet => {
+                    return Some(match bytes(0)?.byte(usize::try_from(nat(1)?).ok()?) {
+                        Some(byte) => Ok(Constant::Byte(byte)),
+                        None => Err(TrapKind::IndexOutOfBounds),
+                    });
                 }
                 // A window is `(start, length)`; the packed view takes a half-open range, so the end is computed here and an end past `usize` is the out-of-bounds it would have been anyway.
-                SequenceOp::BinSlice(grain) => {
-                    let value = bin(0, grain)?;
+                SequenceOp::BytesSlice => {
+                    let value = bytes(0)?;
                     let start = usize::try_from(nat(1)?).ok()?;
                     let count = usize::try_from(nat(2)?).ok()?;
                     return Some(
                         match start
                             .checked_add(count)
-                            .and_then(|end| value.slice(grain, start, end))
+                            .and_then(|end| value.slice(start, end))
                         {
-                            Some(value) => Ok(Constant::Bin(grain, value)),
+                            Some(value) => Ok(Constant::Bytes(value)),
                             None => Err(TrapKind::SliceOutOfBounds),
                         },
                     );
                 }
-                SequenceOp::BinAppend(Grain::X) => {
-                    Constant::Bin(Grain::X, bin(0, Grain::X)?.append_byte(byte(1)?)?)
+                SequenceOp::BytesAppend => Constant::Bytes(bytes(0)?.append_byte(byte(1)?)),
+                SequenceOp::BytesConcat => Constant::Bytes(Binary::concat(
+                    (0..operands.len()).map(bytes).collect::<Option<Vec<_>>>()?,
+                )),
+                SequenceOp::BytesReplicate => {
+                    Constant::Bytes(Binary::replicate(byte(1)?, usize::try_from(nat(0)?).ok()?))
                 }
-                SequenceOp::BinConcat(grain) => Constant::Bin(
-                    grain,
-                    Binary::concat(
-                        (0..operands.len())
-                            .map(|index| bin(index, grain))
-                            .collect::<Option<Vec<_>>>()?,
-                    ),
-                ),
-                SequenceOp::BinReplicate(Grain::X) => Constant::Bin(
-                    Grain::X,
-                    Binary::replicate(Grain::X, byte(1)?, usize::try_from(nat(0)?).ok()?),
-                ),
                 // Two literals of different lengths decline to fold rather than answering, exactly as the Core reducer declines them: the length is the type's to hold and the checker's to enforce, and a folder that decided it here would be answering for a run that is neither operand's.
-                SequenceOp::BinAnd(grain) => {
-                    let (left, right) = (bin(0, grain)?, bin(1, grain)?);
-                    (left.bit_length() == right.bit_length())
-                        .then(|| Constant::Bin(grain, left.and(right)))?
+                SequenceOp::BytesAnd => {
+                    let (left, right) = (bytes(0)?, bytes(1)?);
+                    (left.len() == right.len()).then(|| Constant::Bytes(left.and(right)))?
                 }
-                SequenceOp::BinOr(grain) => {
-                    let (left, right) = (bin(0, grain)?, bin(1, grain)?);
-                    (left.bit_length() == right.bit_length())
-                        .then(|| Constant::Bin(grain, left.or(right)))?
+                SequenceOp::BytesOr => {
+                    let (left, right) = (bytes(0)?, bytes(1)?);
+                    (left.len() == right.len()).then(|| Constant::Bytes(left.or(right)))?
                 }
-                SequenceOp::BinXor(grain) => {
-                    let (left, right) = (bin(0, grain)?, bin(1, grain)?);
-                    (left.bit_length() == right.bit_length())
-                        .then(|| Constant::Bin(grain, left.xor(right)))?
+                SequenceOp::BytesXor => {
+                    let (left, right) = (bytes(0)?, bytes(1)?);
+                    (left.len() == right.len()).then(|| Constant::Bytes(left.xor(right)))?
                 }
                 SequenceOp::ListLen
                 | SequenceOp::ListGet
@@ -738,20 +723,16 @@ impl Semantics {
         match operation {
             SequenceOp::ListConcat => Some((SequenceGrain::List, FreeMonoidPart::Product)),
             SequenceOp::ListAppend => Some((SequenceGrain::List, FreeMonoidPart::Append)),
-            SequenceOp::BinConcat(grain) => {
-                Some((SequenceGrain::Bin(grain), FreeMonoidPart::Product))
-            }
-            SequenceOp::BinAppend(grain) => {
-                Some((SequenceGrain::Bin(grain), FreeMonoidPart::Append))
-            }
-            SequenceOp::BinLen(_)
-            | SequenceOp::BinEql(_)
-            | SequenceOp::BinGet(_)
-            | SequenceOp::BinSlice(_)
-            | SequenceOp::BinReplicate(_)
-            | SequenceOp::BinAnd(_)
-            | SequenceOp::BinOr(_)
-            | SequenceOp::BinXor(_)
+            SequenceOp::BytesConcat => Some((SequenceGrain::Bytes, FreeMonoidPart::Product)),
+            SequenceOp::BytesAppend => Some((SequenceGrain::Bytes, FreeMonoidPart::Append)),
+            SequenceOp::BytesLen
+            | SequenceOp::BytesEql
+            | SequenceOp::BytesGet
+            | SequenceOp::BytesSlice
+            | SequenceOp::BytesReplicate
+            | SequenceOp::BytesAnd
+            | SequenceOp::BytesOr
+            | SequenceOp::BytesXor
             | SequenceOp::ListBuild
             | SequenceOp::ListLen
             | SequenceOp::ListGet

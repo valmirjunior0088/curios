@@ -1,13 +1,13 @@
 use {
     super::{Context, MatchCompiler, SortSite},
     crate::{
-        Apply, BinSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic,
+        Apply, BytesSegment, Choose, ChooseTest, Error, Field, FuncParam, FuncTypeParam, Intrinsic,
         Label, Let, LetBinding, LetGroup, LetSignature, Lint, LintedBinder, ListEntry, Literal,
         Name, NumLit, Pattern, PatternField, ProofLiteral, StructLit, StructLitEntry, Subterm,
         Term, func_sugar_params, func_sugar_type_params,
     },
     curios_abi::ForeignFunction,
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
     curios_utilities::{Plicity, Span, recurse},
     std::{
         cell::{Cell, RefCell},
@@ -986,8 +986,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.lower_list_literal(term.span(), entries, |term| self.collect(term, binds))?,
             ),
             // A `Bytes` literal's spread operands hoist likewise (a spread-free literal has no subterms and lowers unchanged).
-            Subterm::Literal(Literal::Bin(segments)) => {
-                curios_core::Term::intrinsic(Self::lower_bin_literal(segments, |term| {
+            Subterm::Literal(Literal::Bytes(segments)) => {
+                curios_core::Term::intrinsic(Self::lower_bytes_literal(segments, |term| {
                     self.collect(term, binds)
                 })?)
             }
@@ -1348,7 +1348,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Flush the pending elements onto `operands`.
     ///
-    /// A single element following an operand is an *append* onto it: the surface wrote one generator, and `ListAppend` is what one generator is — the same reading `\.` takes on the packed side, so `[..xs, y]` and `x[..xs, y]` lower alike. Two or more go into an `List` chunk, which the carrier holds directly; the packed literal chunks its atoms the same way whenever it can represent them, and reaches for `BinAppend` only where it cannot.
+    /// A single element following an operand is an *append* onto it: the surface wrote one generator, and `ListAppend` is what one generator is — the same reading `\.` takes on the packed side, so `[..xs, y]` and `x[..xs, y]` lower alike. Two or more go into an `List` chunk, which the carrier holds directly; the packed literal chunks its atoms the same way whenever it can represent them, and reaches for `BytesAppend` only where it cannot.
     fn flush_list_run(
         &self,
         span: Option<&Span>,
@@ -1427,7 +1427,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     /// A constant element folded back into the literal's byte run. Escaped as `\48` it is already a run; written as a term (`0x48`) the parser cannot tell it from a computed one, and left as an atom it would build an append chain where the escaped spelling builds a single packed value. `core::spine` decodes a concrete appended atom as a length-1 literal run, so conversion equates the two spellings either way — this is compaction, not meaning.
     ///
     /// A written sign excludes `Byte` (see `syntax.md`), and a magnitude past `255` is a type error elaboration should report against the expected element type rather than one this fold silently truncates; both stay atoms.
-    fn bin_constant_atom(term: &Term) -> Option<u8> {
+    fn bytes_constant_atom(term: &Term) -> Option<u8> {
         match term.as_subterm() {
             Subterm::Intrinsic(Intrinsic::Byte(byte)) => Some(*byte),
             Subterm::NumLit(NumLit {
@@ -1444,19 +1444,18 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// The `Bytes` sibling of [`Self::lower_list_literal`]: a constant literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal intrinsic has no element-type slot). Adjacent constant atoms — the values [`Self::bin_constant_atom`] recognizes — fold into packed runs as they are met, so `x[0x48, 0x69]` is the one packed value it is rather than a chain of appends.
+    /// The `Bytes` sibling of [`Self::lower_list_literal`]: a constant literal lowers to one packed value, and atom and spread segments splice into an n-ary `BytesConcat` (the shared internal intrinsic has no element-type slot). Adjacent constant atoms — the values [`Self::bytes_constant_atom`] recognizes — fold into packed runs as they are met, so `x[0x48, 0x69]` is the one packed value it is rather than a chain of appends.
     ///
-    /// A non-constant atom is the free monoid's generator at a value lowering cannot know, so it lowers to a `BinAppend` onto whatever precedes it, with no carve-out: `x[0x48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `x[h, ..t]` meets a refined motive without unfolding anything.
-    pub(super) fn lower_bin_literal(
-        segments: &[BinSegment],
+    /// A non-constant atom is the free monoid's generator at a value lowering cannot know, so it lowers to a `BytesAppend` onto whatever precedes it, with no carve-out: `x[0x48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `x[h, ..t]` meets a refined motive without unfolding anything.
+    pub(super) fn lower_bytes_literal(
+        segments: &[BytesSegment],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Intrinsic, Error> {
-        let grain = Grain::X;
         let flush = |operands: &mut Vec<curios_core::Term>, run: &mut Vec<u8>| {
             if !run.is_empty() {
                 let value = Binary::from_bytes(std::mem::take(run));
-                operands.push(curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(
-                    grain, value,
+                operands.push(curios_core::Term::intrinsic(curios_core::Intrinsic::Bytes(
+                    value,
                 )));
             }
         };
@@ -1465,24 +1464,21 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         let mut run: Vec<u8> = Vec::new();
         for segment in segments {
             match segment {
-                BinSegment::Atom(term) => {
-                    if let Some(atom) = Self::bin_constant_atom(term) {
+                BytesSegment::Atom(term) => {
+                    if let Some(atom) = Self::bytes_constant_atom(term) {
                         run.push(atom);
                         continue;
                     }
                     flush(&mut operands, &mut run);
                     let base = operands.pop().unwrap_or_else(|| {
-                        curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(
-                            grain,
-                            Binary::empty(),
-                        ))
+                        curios_core::Term::intrinsic(curios_core::Intrinsic::Bytes(Binary::empty()))
                     });
                     let atom = lower(term)?;
                     operands.push(curios_core::Term::intrinsic(
-                        curios_core::Intrinsic::bin_append(grain, base, atom),
+                        curios_core::Intrinsic::bytes_append(base, atom),
                     ));
                 }
-                BinSegment::Spread(term) => {
+                BytesSegment::Spread(term) => {
                     flush(&mut operands, &mut run);
                     operands.push(lower(term)?);
                 }
@@ -1491,25 +1487,24 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
         // A literal of constants alone — the empty literal included — is the packed value itself.
         if operands.is_empty() {
-            return Ok(curios_core::Intrinsic::Bin(grain, Binary::from_bytes(run)));
+            return Ok(curios_core::Intrinsic::Bytes(Binary::from_bytes(run)));
         }
         flush(&mut operands, &mut run);
 
-        // A lone packed-shaped operand at this literal's own grain is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away. Only that family may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`x[..b]`) against the packed type instead of adopting the operand's own — `x[..true]` would collapse to `true`, and a bits value spread into a bytes literal would adopt the wrong grain.
+        // A lone packed-shaped operand is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away. Only that family may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`x[..b]`) against the packed type instead of adopting the operand's own — `x[..true]` would collapse to `true`.
         if operands.len() == 1
             && let curios_core::Subterm::Intrinsic(intrinsic) = &*operands[0]
             && matches!(
                 intrinsic,
-                curios_core::Intrinsic::Bin(g, _)
-                | curios_core::Intrinsic::BinAppend { grain: g, .. }
-                | curios_core::Intrinsic::BinConcat { grain: g, .. }
-                if *g == grain
+                curios_core::Intrinsic::Bytes(_)
+                    | curios_core::Intrinsic::BytesAppend { .. }
+                    | curios_core::Intrinsic::BytesConcat { .. }
             )
         {
             return Ok(intrinsic.clone());
         }
 
-        Ok(curios_core::Intrinsic::BinConcat { grain, operands })
+        Ok(curios_core::Intrinsic::BytesConcat { operands })
     }
 
     /// Lowers a literal written at `span`, where its term has one.
@@ -1521,8 +1516,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok(match literal {
             Literal::Bool(b) => curios_core::Intrinsic::Bool(*b),
             Literal::Flt(flt) => curios_core::Intrinsic::Flt(*flt),
-            // `\hex` is a raw byte sequence; `\..` segments splice other `Bin`s.
-            Literal::Bin(segments) => Self::lower_bin_literal(segments, |term| self.term(term))?,
+            // `\hex` is a raw byte sequence; `\..` segments splice other `Bytes`s.
+            Literal::Bytes(segments) => {
+                Self::lower_bytes_literal(segments, |term| self.term(term))?
+            }
             Literal::List(entries) => {
                 self.lower_list_literal(span, entries, |term| self.term(term))?
             }

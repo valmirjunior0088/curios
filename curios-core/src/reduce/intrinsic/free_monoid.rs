@@ -1,8 +1,8 @@
 //! Folding an operation that distributes over a free-monoid spine.
 //!
-//! A `Bin`, a `List` and a `Nat` are all a concatenation of pieces, and an operation that is a homomorphism over that concatenation reduces piecewise — so a symbolic tail does not block the literal pieces around it. [`Shape`] is the peeled spine, and [`reduce_homomorphism`] is the fold over it that every such operation shares.
+//! A `Bytes`, a `List` and a `Nat` are all a concatenation of pieces, and an operation that is a homomorphism over that concatenation reduces piecewise — so a symbolic tail does not block the literal pieces around it. [`Shape`] is the peeled spine, and [`reduce_homomorphism`] is the fold over it that every such operation shares.
 //!
-//! **Two readers here stay one per carrier, for reasons that are not drift.** [`bin_shape`] and [`list_shape`] answer different types — `Shape<u8>` against `Shape<Term>` — and only the first is fallible, because only it materializes a run to charge for. [`bin_piece`] and [`list_piece`] differ in what they need from outside the value: a grain is a `Copy` tag [`FreeMonoid`] already carries, while a `List`'s element type is a *term* it does not, and every narrowed piece has to restate it. The readers that did fold into the carrier — the spine walk, the joined walk, the one-generator read — needed nothing from outside that the carrier did not already hold, which is the line between the two groups.
+//! **Two readers here stay one per carrier, for reasons that are not drift.** [`bytes_shape`] and [`list_shape`] answer different types — `Shape<u8>` against `Shape<Term>` — and only the first is fallible, because only it materializes a run to charge for. [`bytes_piece`] and [`list_piece`] differ in what they need from outside the value: [`bytes_piece`] needs nothing, while a `List`'s element type is a *term* [`FreeMonoid`] does not carry, and every narrowed piece has to restate it. The readers that did fold into the carrier — the spine walk, the joined walk, the one-generator read — needed nothing from outside that the carrier did not already hold, which is the line between the two groups.
 
 use {
     super::as_index,
@@ -11,10 +11,10 @@ use {
         Words,
     },
     curios_algebra::{Alphabet, Seam, seam_window},
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
 };
 
-/// The free-monoid product structure of a reduced carrier value, the view a monoid homomorphism (`len`/`map`) distributes over: a literal run of generators `L` (bytes for `Bin`, elements for `List`), an n-ary `Concat` of operands to recurse on, an `Append` of a base and one appended generator, a `Window` cut from a base with the bound that placed it, or an `Opaque` node (a variable) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
+/// The free-monoid product structure of a reduced carrier value, the view a monoid homomorphism (`len`/`map`) distributes over: a literal run of generators `L` (bytes for `Bytes`, elements for `List`), an n-ary `Concat` of operands to recurse on, an `Append` of a base and one appended generator, a `Window` cut from a base with the bound that placed it, or an `Opaque` node (a variable) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
 ///
 /// **A window is a shape, not an opaque node, because its length is known without its contents.** `slice` states `start + length <= len(base)` as its precondition, so a window's own `length` operand is its measure at every well-typed instance, and a homomorphism that reads only the count (`len`) or passes through elementwise (`map`) has a law over it — `len(slice(b, s, n)) = n` and `map(f, slice(b, s, n)) = slice(map(f, b), s, n)` — that filing the slice as opaque left stuck even at literal bounds. What a window does *not* give a reader is a bound on its base for a position inside it, which is why `get` and `slice` through a window are not laws here: the outer bound is a proposition no term in hand proves, and a reducer may not invent one.
 pub(super) enum Shape<L> {
@@ -30,38 +30,30 @@ pub(super) enum Shape<L> {
     Opaque(Term),
 }
 
-/// Classify a reduced `Bin` value into its product shape (generators are bytes).
+/// Classify a reduced `Bytes` value into its product shape (generators are bytes).
 ///
-/// **The literal arm materializes the whole run**, one `u8` per generator. An operation whose result is a single `Nat` therefore allocates its entire subject to compute it, and that is why this takes a reducer: the buffer is charged before it is filled. `Bin/len` of a wholly-literal value answers from the free monoid's measure without reaching here, but every symbolic shape falls through to the homomorphism and pays this.
-pub(super) fn bin_shape(
+/// **The literal arm materializes the whole run**, one `u8` per generator. An operation whose result is a single `Nat` therefore allocates its entire subject to compute it, and that is why this takes a reducer: the buffer is charged before it is filled. `Bytes/len` of a wholly-literal value answers from the free monoid's measure without reaching here, but every symbolic shape falls through to the homomorphism and pays this.
+pub(super) fn bytes_shape(
     reducer: &mut impl Reducer,
-    grain: Grain,
     value: Term,
 ) -> Result<Shape<u8>, ReduceError> {
     Ok(match Term::unwrap_or_clone(value) {
-        Subterm::Intrinsic(Intrinsic::Bin(found, value)) if found == grain => {
-            reducer.spend(Cost::buffer(value.len(grain) as u64))?;
+        Subterm::Intrinsic(Intrinsic::Bytes(value)) => {
+            reducer.spend(Cost::buffer(value.len() as u64))?;
 
-            Shape::Literal(match grain {
-                Grain::X => value.to_bytes().unwrap(),
-            })
+            Shape::Literal(value.to_bytes())
         }
-        Subterm::Intrinsic(Intrinsic::BinConcat {
-            grain: found,
-            operands,
-        }) if found == grain => Shape::Concat(operands),
-        Subterm::Intrinsic(Intrinsic::BinAppend {
-            grain: found,
-            bin: base,
+        Subterm::Intrinsic(Intrinsic::BytesConcat { operands }) => Shape::Concat(operands),
+        Subterm::Intrinsic(Intrinsic::BytesAppend {
+            bytes: base,
             element: atom,
-        }) if found == grain => Shape::Append(base, atom),
-        Subterm::Intrinsic(Intrinsic::BinSlice {
-            grain: found,
-            bin: base,
+        }) => Shape::Append(base, atom),
+        Subterm::Intrinsic(Intrinsic::BytesSlice {
+            bytes: base,
             start,
             length,
             within,
-        }) if found == grain => Shape::Window {
+        }) => Shape::Window {
             base,
             start,
             length,
@@ -149,69 +141,58 @@ pub(super) fn nat_sum(images: Vec<Term>) -> Term {
         })
 }
 
-/// One piece of a located `Bin` window, as a value.
+/// One piece of a located `Bytes` window, as a value.
 ///
-/// Every segment the carrier's own spine walk admits is a literal run, so a narrowed edge is narrowed *here* — `Binary::slice` is an O(1) window into the same payload — rather than rebuilt as a `BinSlice` node for the next pass to fold into exactly this. Same value, same operation, one round trip earlier, and the window arm then constructs no bounded node at all.
-pub(super) fn bin_piece(grain: Grain, piece: Piece<'_>) -> Term {
+/// Every segment the carrier's own spine walk admits is a literal run, so a narrowed edge is narrowed *here* — `Binary::slice` is an O(1) window into the same payload — rather than rebuilt as a `BytesSlice` node for the next pass to fold into exactly this. Same value, same operation, one round trip earlier, and the window arm then constructs no bounded node at all.
+pub(super) fn bytes_piece(piece: Piece<'_>) -> Term {
     match piece {
         Piece::Whole(operand) => operand.clone(),
         Piece::Part(operand, lo, hi) => match &**operand {
-            Subterm::Intrinsic(Intrinsic::Bin(found, run)) if *found == grain => {
+            Subterm::Intrinsic(Intrinsic::Bytes(run)) => {
                 let narrowed = run
-                    .slice(grain, lo, hi)
+                    .slice(lo, hi)
                     .expect("a window's piece lies inside the run it was located in");
 
-                Term::intrinsic(Intrinsic::Bin(grain, narrowed))
+                Term::intrinsic(Intrinsic::Bytes(narrowed))
             }
             _ => unreachable!("a located window's segments are literal runs"),
         },
     }
 }
 
-/// The generator a located index names, read straight out of the literal run holding it.
-///
-/// The generator at an index of a literal run, as the value its grain reads it as.
-///
-/// **The one place the grain decides what a generator *is*** — a `Byte` at X — so every path that reads one generator branches here and nowhere else, which is what lets the fold arms above take the grain as a parameter rather than as a case.
-pub(super) fn element_of_run(grain: Grain, run: &Binary, local: usize) -> Option<Subterm> {
-    match grain {
-        Grain::X => run
-            .byte(local)
-            .map(|byte| Subterm::Intrinsic(Intrinsic::Byte(byte))),
-    }
+/// The generator a located index names, read straight out of the literal run holding it: a `Byte`, read here and nowhere else.
+pub(super) fn element_of_run(run: &Binary, local: usize) -> Option<Subterm> {
+    run.byte(local)
+        .map(|byte| Subterm::Intrinsic(Intrinsic::Byte(byte)))
 }
 
 /// One generator, read out of the term an element reduced to.
 ///
-/// The other direction of [`element_of_run`]'s seam, and the rest of what the grain decides: reading a generator *into* a run takes both a carrier — a `Byte` at X — and an append that can refuse, since a byte has to land on a byte boundary. Naming the generator separates the two steps the append arm needs kept apart, because the budget is charged between them: the read decides whether there is work to do, and the charge has to precede the copy that does it.
+/// The other direction of [`element_of_run`]'s seam. Naming the generator separates the two steps the append arm needs kept apart, because the budget is charged between them: the read decides whether there is work to do, and the charge has to precede the copy that does it.
 pub(super) enum Generator {
     Byte(u8),
 }
 
 impl Generator {
-    /// The generator a reduced element names at this grain, or `None` where it is not a literal of it.
-    pub(super) fn read(grain: Grain, element: &Subterm) -> Option<Self> {
-        match grain {
-            Grain::X => match element {
-                Subterm::Intrinsic(Intrinsic::Byte(byte)) => Some(Self::Byte(*byte)),
-                _ => None,
-            },
+    /// The generator a reduced element names, or `None` where it is no literal byte.
+    pub(super) fn read(element: &Subterm) -> Option<Self> {
+        match element {
+            Subterm::Intrinsic(Intrinsic::Byte(byte)) => Some(Self::Byte(*byte)),
+            _ => None,
         }
     }
 
-    /// The run with this generator appended — `None` over a run that is not byte-aligned.
-    pub(super) fn appended_to(self, run: &Binary) -> Option<Binary> {
+    /// The run with this generator appended.
+    pub(super) fn appended_to(self, run: &Binary) -> Binary {
         match self {
             Self::Byte(byte) => run.append_byte(byte),
         }
     }
 
-    /// `count` copies of this generator, as a run of its own.
-    ///
-    /// The fill partner of [`Generator::appended_to`], and total where that one can refuse: an append has to land a byte on a byte boundary, while a fill decides its own length and starts from zero. Placed here for the same reason the append is — the carrier a generator reads into is the grain's seam, and both directions of it belong in one place.
+    /// `count` copies of this generator, as a run of its own: the fill partner of [`Generator::appended_to`], beside it because both directions of the seam belong in one place.
     pub(super) fn replicated(self, count: usize) -> Binary {
         match self {
-            Self::Byte(byte) => Binary::replicate(Grain::X, byte, count),
+            Self::Byte(byte) => Binary::replicate(byte, count),
         }
     }
 }
@@ -221,25 +202,20 @@ impl FreeMonoid {
     ///
     /// **Why this rather than an inner `get`.** A located one-operand window gives `get(v, i) = get(w, 0)`, and rebuilding that inner read would need a proof that `0 < len(w)` — a proposition the caller's own bound does not state, and one a reducer may not construct: [`crate::Intrinsic::signature`]'s module documentation records that a reducer emitting proofs is the defect the bound fields exist to remove. Reading the generator out of the two shapes a one-element value takes needs no proof at all, and declining every other shape costs reductions and never an answer.
     ///
-    /// Lives here rather than beside the carrier's other readers because reading a generator *out* is the grain's own seam ([`element_of_run`]), which is reduction's rather than the term representation's.
+    /// Lives here rather than beside the carrier's other readers because reading a generator *out* is this module's seam ([`element_of_run`]), which is reduction's rather than the term representation's.
     pub(super) fn single_generator(self, operand: &Term) -> Option<Term> {
         match (self, &**operand) {
-            (FreeMonoid::Bin(grain), Subterm::Intrinsic(Intrinsic::Bin(found, run)))
-                if *found == grain && run.len(grain) == 1 =>
-            {
-                element_of_run(grain, run, 0).map(Term::from)
+            (FreeMonoid::Bytes, Subterm::Intrinsic(Intrinsic::Bytes(run))) if run.len() == 1 => {
+                element_of_run(run, 0).map(Term::from)
             }
             (
-                FreeMonoid::Bin(grain),
-                Subterm::Intrinsic(Intrinsic::BinAppend {
-                    grain: found,
-                    bin: base,
+                FreeMonoid::Bytes,
+                Subterm::Intrinsic(Intrinsic::BytesAppend {
+                    bytes: base,
                     element,
                 }),
-            ) if *found == grain => match &**base {
-                Subterm::Intrinsic(Intrinsic::Bin(empty, run))
-                    if *empty == grain && run.len(grain) == 0 =>
-                {
+            ) => match &**base {
+                Subterm::Intrinsic(Intrinsic::Bytes(run)) if run.is_empty() => {
                     Some(element.clone())
                 }
                 _ => None,
@@ -345,7 +321,7 @@ impl FreeMonoid {
     }
 }
 
-/// [`bin_piece`] over the element carrier, restoring the element type every `List` value carries.
+/// [`bytes_piece`] over the element carrier, restoring the element type every `List` value carries.
 pub(super) fn list_piece(element: &Term, piece: Piece<'_>) -> Term {
     match piece {
         Piece::Whole(operand) => operand.clone(),

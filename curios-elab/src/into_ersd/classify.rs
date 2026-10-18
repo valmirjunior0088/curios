@@ -8,7 +8,6 @@ use {
     curios_core::{
         Advance, Bound, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType,
     },
-    curios_num::Grain,
     std::collections::BTreeSet,
 };
 
@@ -42,7 +41,7 @@ pub(crate) fn constructor_entries<B: Bound>(
     Ok(entries)
 }
 
-/// The erased carrier shape of a kept field's declared type — the full recorder behind [`curios_ersd::FieldShape`]. `Immediate` iff every runtime value of the type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-field collapses (a structure with one relevant field, a tuple of one field) landing on one. `Number` is a `Nat` or `Int`, an i31 while small and a boxed magnitude past it. The other shaped answers name the erased carrier the type always takes: the boxed `Flt` struct, a packed grain (a `Handle` token is its bytes at the byte grain, the ABI's encoding), a list rope, a closure at its telescope's arity, a boxed product row at its relevant width, or a multi-constructor family. Everything unstated answers `Opaque`, and the asymmetry is the point: a conservative answer only misses an encoding or a census entry, an aggressive one would corrupt what is spent on it.
+/// The erased carrier shape of a kept field's declared type — the full recorder behind [`curios_ersd::FieldShape`]. `Immediate` iff every runtime value of the type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-field collapses (a structure with one relevant field, a tuple of one field) landing on one. `Number` is a `Nat` or `Int`, an i31 while small and a boxed magnitude past it. The other shaped answers name the erased carrier the type always takes: the boxed `Flt` struct, a packed `Bytes` (a `Handle` token is its bytes, the ABI's encoding), a list rope, a closure at its telescope's arity, a boxed product row at its relevant width, or a multi-constructor family. Everything unstated answers `Opaque`, and the asymmetry is the point: a conservative answer only misses an encoding or a census entry, an aggressive one would corrupt what is spent on it.
 ///
 /// `visited` makes the chain-chasing terminate: a self-referential struct elaborates (it is merely uninhabited), so the recursion through nominal declarations can cycle, and a cycle classifies `Opaque`. The chain recurses into at most one field per level, so the set is the ancestor chain and never needs unwinding.
 pub(crate) fn field_shape(
@@ -140,8 +139,8 @@ fn shape_walk(
             Ok(curios_ersd::FieldShape::Number)
         }
         Subterm::Intrinsic(Intrinsic::FltType) => Ok(curios_ersd::FieldShape::Flt),
-        Subterm::Intrinsic(Intrinsic::BinType(grain)) => Ok(curios_ersd::FieldShape::Packed(grain)),
-        Subterm::Intrinsic(Intrinsic::HandleType) => Ok(curios_ersd::FieldShape::Packed(Grain::X)),
+        Subterm::Intrinsic(Intrinsic::BytesType) => Ok(curios_ersd::FieldShape::Bytes),
+        Subterm::Intrinsic(Intrinsic::HandleType) => Ok(curios_ersd::FieldShape::Bytes),
         Subterm::Intrinsic(Intrinsic::ListType(_)) => Ok(curios_ersd::FieldShape::List),
         // The field is kept, so the codomain does not erase; the value is a closure over every binder of the outermost telescope, which is the arity the lowering gives it.
         Subterm::FuncType(FuncType { telescope, .. }) => {

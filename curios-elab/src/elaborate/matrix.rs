@@ -20,7 +20,7 @@ use {
         Atom, Bind, Free, InductArm, Many, Matrix, Pattern, Row, Scope, StructType, Subterm,
         Telescope, Term, Tuple,
     },
-    curios_num::{Grain, Natural},
+    curios_num::Natural,
     curios_utilities::{Plicity, recurse},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -299,8 +299,8 @@ impl<'m> Compiler<'m> {
 
                 self.lists(context, columns, lines, top, mode)
             }
-            Pattern::End(_) | Pattern::Atom(..) => {
-                if !every(|_, other| matches!(other, Pattern::End(_) | Pattern::Atom(..))) {
+            Pattern::End | Pattern::Atom(_) => {
+                if !every(|_, other| matches!(other, Pattern::End | Pattern::Atom(_))) {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
@@ -1063,7 +1063,7 @@ impl<'m> Compiler<'m> {
         )
     }
 
-    /// Rows split into the empty packed sequence and one atom ahead of a tail, at the one grain every row that writes a case writes, a row that writes a binder under both.
+    /// Rows split into the empty packed sequence and one atom ahead of a tail, a row that writes a binder under both.
     fn packed(
         &mut self,
         context: &mut Context,
@@ -1075,38 +1075,25 @@ impl<'m> Compiler<'m> {
         let column = columns.remove(0);
         self.joined(context, &mut lines, &column);
 
-        let mut grain: Option<Grain> = None;
         let mut empties = Vec::new();
         let mut atoms: Vec<Peeled<'m>> = Vec::new();
         for mut line in lines {
-            let written = match line.cells.remove(0) {
-                Some((Pattern::End(written), _)) => {
-                    empties.push(line);
-
-                    *written
-                }
-                Some((Pattern::Atom(written, hypothesis), place)) => {
+            match line.cells.remove(0) {
+                Some((Pattern::End, _)) => empties.push(line),
+                Some((Pattern::Atom(hypothesis), place)) => {
                     atoms.push((Some((place, hypothesis)), line));
-
-                    *written
                 }
                 _ => {
                     empties.push(line.clone());
                     atoms.push((None, line));
-
-                    continue;
                 }
-            };
-            grain = Some(written);
+            }
         }
-        let grain = grain.expect("a column of packed sequences has a row that writes one");
 
-        let cases = match grain {
-            Grain::X => ["x[]", "x[_, .._]"],
-        };
+        let cases = ["x[]", "x[_, .._]"];
         self.sequence(
             context,
-            Sequence::Bin(grain),
+            Sequence::Bytes,
             (column, columns),
             (empties, atoms),
             cases,
@@ -1699,9 +1686,9 @@ impl<'m> Compiler<'m> {
                     }
                 }
             }
-            Pattern::Nil | Pattern::Cons(_) | Pattern::End(_) | Pattern::Atom(..) => {
+            Pattern::Nil | Pattern::Cons(_) | Pattern::End | Pattern::Atom(_) => {
                 let sequence = match pattern {
-                    Pattern::End(grain) | Pattern::Atom(grain, _) => Sequence::Bin(*grain),
+                    Pattern::End | Pattern::Atom(_) => Sequence::Bytes,
                     _ => Sequence::List,
                 };
                 let split = match shared {
@@ -1724,7 +1711,7 @@ impl<'m> Compiler<'m> {
                 };
 
                 match pattern {
-                    Pattern::Cons(bind) | Pattern::Atom(_, bind) => {
+                    Pattern::Cons(bind) | Pattern::Atom(bind) => {
                         let head = self.name(context, &line, place);
                         line.taken[place] = Some(Term::free_var(&head));
                         let tail = self.name(context, &line, place + 1);
@@ -1945,8 +1932,8 @@ fn refutations(pattern: &Pattern) -> usize {
         | Pattern::Character(_)
         | Pattern::Nil
         | Pattern::Cons(_)
-        | Pattern::End(_)
-        | Pattern::Atom(..) => 1,
+        | Pattern::End
+        | Pattern::Atom(_) => 1,
     }
 }
 
@@ -2029,8 +2016,8 @@ fn fold_places<'m>(
                 path.pop();
             }
         }
-        Pattern::Zero | Pattern::Nil | Pattern::End(_) => visit(path, None),
-        Pattern::Succ(bind) | Pattern::Cons(bind) | Pattern::Atom(_, bind) => {
+        Pattern::Zero | Pattern::Nil | Pattern::End => visit(path, None),
+        Pattern::Succ(bind) | Pattern::Cons(bind) | Pattern::Atom(bind) => {
             visit(path, Some(bind.as_ref()))
         }
     }

@@ -3,7 +3,7 @@
 use {
     super::{Intrinsic, Repr},
     curios_abi::ForeignFunction,
-    curios_num::{Binary, Floating, Grain, Integer, Natural},
+    curios_num::{Binary, Floating, Integer, Natural},
     curios_utilities::id,
     std::{collections::BTreeMap, fmt, sync::Arc},
 };
@@ -48,7 +48,7 @@ pub enum Literal {
     Nat(Natural),
     Int(Integer),
     Flt(Floating),
-    Bin(Grain, Binary),
+    Bytes(Binary),
 }
 
 #[derive(Debug, Clone, PartialEq)]

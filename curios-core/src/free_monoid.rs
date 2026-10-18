@@ -1,31 +1,31 @@
-//! The free-monoid destructors. `Nat`, `Bin`, and `List` are the native intrinsics that are free monoids on their generators (the unary unit, bytes, elements). Their structural eliminator (`Cases::FreeMonoid`) reduces by a one-step decode — peel the empty identity or a single leading generator off the scrutinee — and that decode is `uncons`, one match arm per carrier; the catamorphism driver in `reduce` consumes the `Layer` it returns and never inspects the carrier's representation again. The eliminator-side analogue of `spine::peel_intrinsic`: a new free-monoid carrier is one `FreeMonoid` variant and its `uncons` arm.
+//! The free-monoid destructors. `Nat`, `Bytes`, and `List` are the native intrinsics that are free monoids on their generators (the unary unit, bytes, elements). Their structural eliminator (`Cases::FreeMonoid`) reduces by a one-step decode — peel the empty identity or a single leading generator off the scrutinee — and that decode is `uncons`, one match arm per carrier; the catamorphism driver in `reduce` consumes the `Layer` it returns and never inspects the carrier's representation again. The eliminator-side analogue of `spine::peel_intrinsic`: a new free-monoid carrier is one `FreeMonoid` variant and its `uncons` arm.
 //!
-//! For `Bin` and `List`, the same front decode also feeds the operation level: `Bin/get`/`Bin/slice` and `List/get`/`List/slice` peel one generator at a time via `peel_first_atom`/`peel_first_elem`. Each carrier's two destructors share one structural traversal (`peel_front`, `peel_front_list`); `Bin` reflects the peeled head two ways — a `Nat` byte for the eliminator, a one-byte `Bin` chunk for the operations — while `List`'s head is the element term for both.
+//! For `Bytes` and `List`, the same front decode also feeds the operation level: `Bytes/get`/`Bytes/slice` and `List/get`/`List/slice` peel one generator at a time via `peel_first_atom`/`peel_first_elem`. Each carrier's two destructors share one structural traversal (`peel_front`, `peel_front_list`); `Bytes` reflects the peeled head two ways — a `Nat` byte for the eliminator, a one-byte `Bytes` chunk for the operations — while `List`'s head is the element term for both.
 //!
-//! Beside the destructors, this module owns the free monoid's *product* and its *measure*, because both are walks over the same spine. [`normalize_concat`] is the product: it collapses a concatenation under the unit and associativity laws and fuses literal operands up to [`FUSION_CAP`], past which a value keeps its `Concat` node rather than being recopied into a longer run. The measure is how many generators a value carries, folded off the spine, and it is read two ways: `get` and `slice` locate a window through [`FreeMonoid::segments`], which yields the operands they will read *into*, while `len` goes through `bin_measure`, which answers for strictly more values because a length can be known where a generator cannot. Neither takes a [`crate::Reducer`]: measuring or peeling cannot re-enter reduction, and that is enforced by the signatures rather than asserted in a comment. The two-strategy entry that *does* take one — `reduce::intrinsic`'s `FreeMonoid::window` — reaches its symbolic half only once these have declined, so a measurable value still costs no budget.
+//! Beside the destructors, this module owns the free monoid's *product* and its *measure*, because both are walks over the same spine. [`normalize_concat`] is the product: it collapses a concatenation under the unit and associativity laws and fuses literal operands up to [`FUSION_CAP`], past which a value keeps its `Concat` node rather than being recopied into a longer run. The measure is how many generators a value carries, folded off the spine, and it is read two ways: `get` and `slice` locate a window through [`FreeMonoid::segments`], which yields the operands they will read *into*, while `len` goes through `bytes_measure`, which answers for strictly more values because a length can be known where a generator cannot. Neither takes a [`crate::Reducer`]: measuring or peeling cannot re-enter reduction, and that is enforced by the signatures rather than asserted in a comment. The two-strategy entry that *does* take one — `reduce::intrinsic`'s `FreeMonoid::window` — reaches its symbolic half only once these have declined, so a measurable value still costs no budget.
 //!
-//! **What belongs on the carrier and what does not.** A reader folds into [`FreeMonoid`] exactly when it needs nothing the carrier does not already hold. The spine walk, the joined walk and the one-generator read all qualify, and are methods here. The two that do not are `reduce::intrinsic`'s `bin_shape`/`list_shape`, which answer different types and differ in fallibility, and its `bin_piece`/`list_piece`, which must restate a `List`'s element type — a term the `List` variant does not carry, where a grain is a tag the `Bin` variant does. The criterion settles the question in advance rather than per pair.
+//! **What belongs on the carrier and what does not.** A reader folds into [`FreeMonoid`] exactly when it needs nothing the carrier does not already hold. The spine walk, the joined walk and the one-generator read all qualify, and are methods here. The two that do not are `reduce::intrinsic`'s `bytes_shape`/`list_shape`, which answer different types and differ in fallibility, and its `bytes_piece`/`list_piece`, which must restate a `List`'s element type — a term the `List` variant does not carry. The criterion settles the question in advance rather than per pair.
 
 use {
     super::{Intrinsic, Nat, Subterm, Term},
     curios_algebra::{Concatenated, Joining, Span, join, locate, total},
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
 };
 
-/// The one-step decode of a free-monoid scrutinee — a carrier's signature functor made concrete. `Empty` is the identity form (`x[]`, `[]`, `0`); `Cons` peels a generator: its `head` is the payload reflected into the element type — a `Nat` byte for `Bin`, the element term itself for `List`, and `None` for `Nat`, whose unary successor carries no payload — over the symbolic tail the induction hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
+/// The one-step decode of a free-monoid scrutinee — a carrier's signature functor made concrete. `Empty` is the identity form (`x[]`, `[]`, `0`); `Cons` peels a generator: its `head` is the payload reflected into the element type — a `Nat` byte for `Bytes`, the element term itself for `List`, and `None` for `Nat`, whose unary successor carries no payload — over the symbolic tail the induction hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
 pub enum Layer {
     Empty,
     Cons { head: Option<Term>, tail: Term },
     Stuck(Subterm),
 }
 
-/// A native intrinsic that is the free monoid on a generator set, named by its generator: `Unary` is `Nat` on the unit, `Bin` is `Bin` on its bytes, `List` is `List` on its elements. A closed set — the value-level twin of the `Carrier` the eliminator already carries (`reduce` maps one to the other). `uncons` is the only seam the structural eliminator needs; the recursion scheme around it is carrier-generic and lives in `reduce`.
+/// A native intrinsic that is the free monoid on a generator set, named by its generator: `Unary` is `Nat` on the unit, `Bytes` is `Bytes` on its bytes, `List` is `List` on its elements. A closed set — the value-level twin of the `Carrier` the eliminator already carries (`reduce` maps one to the other). `uncons` is the only seam the structural eliminator needs; the recursion scheme around it is carrier-generic and lives in `reduce`.
 #[derive(Clone, Copy)]
 pub enum FreeMonoid {
     /// The free monoid on one payload-less generator: the unary naturals. `succ` peels to its predecessor with no head.
     Unary,
     /// The free monoid on bytes. Its generator is a byte, reflected back into the eliminator as a `Nat`.
-    Bin(Grain),
+    Bytes,
     /// The free monoid on its elements. Its generator is the element term itself.
     List,
 }
@@ -35,7 +35,7 @@ impl FreeMonoid {
     pub fn uncons(self, scrutinee: Subterm) -> Layer {
         match self {
             FreeMonoid::Unary => Self::uncons_unary(scrutinee),
-            FreeMonoid::Bin(grain) => Self::uncons_bin(grain, scrutinee),
+            FreeMonoid::Bytes => Self::uncons_bytes(scrutinee),
             FreeMonoid::List => Self::uncons_list(scrutinee),
         }
     }
@@ -54,10 +54,10 @@ impl FreeMonoid {
         }
     }
 
-    fn uncons_bin(grain: Grain, scrutinee: Subterm) -> Layer {
+    fn uncons_bytes(scrutinee: Subterm) -> Layer {
         let term = scrutinee.into();
 
-        match peel_front(grain, &term) {
+        match peel_front(&term) {
             Front::Empty => Layer::Empty,
             // The peeled byte is the eliminator's `Nat`-typed head generator.
             Front::Cons { head, tail } => Layer::Cons {
@@ -83,14 +83,14 @@ impl FreeMonoid {
     }
 }
 
-/// A leading generator peeled off a `Bin` value: a concrete byte (`Literal`) or the symbolic byte of a cons `append(x[], c)`, the head `x[c, ..t]` lowers to (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Nat`, `Bin/get`/`Bin/slice` into a one-byte `Bin` chunk.
+/// A leading generator peeled off a `Bytes` value: a concrete byte (`Literal`) or the symbolic byte of a cons `append(x[], c)`, the head `x[c, ..t]` lowers to (`Symbolic`). Kept abstract so each destructor reflects it into the shape its consumer wants — the eliminator into a `Nat`, `Bytes/get`/`Bytes/slice` into a one-byte `Bytes` chunk.
 enum Head {
     LiteralByte(u8),
     Symbolic(Term),
 }
 
 impl Head {
-    /// Reflect into the eliminator's grain-specific element type.
+    /// Reflect into the eliminator's carrier-specific element type.
     fn into_atom(self) -> Term {
         match self {
             Head::LiteralByte(byte) => Subterm::Intrinsic(Intrinsic::Byte(byte)).into(),
@@ -98,94 +98,80 @@ impl Head {
         }
     }
 
-    /// Reflect into a length-1 `Bin` chunk — the cons head `Bin/get`/`Bin/slice` rebuild as `head ++ tail` (`get(head, 0)` is the byte; a symbolic cons head stays `append(x[], c)`).
-    fn into_chunk(self, grain: Grain) -> Term {
+    /// Reflect into a length-1 `Bytes` chunk — the cons head `Bytes/get`/`Bytes/slice` rebuild as `head ++ tail` (`get(head, 0)` is the byte; a symbolic cons head stays `append(x[], c)`).
+    fn into_chunk(self) -> Term {
         match self {
             Head::LiteralByte(byte) => {
-                Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![byte]))).into()
+                Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![byte]))).into()
             }
-            Head::Symbolic(atom) => Term::intrinsic(Intrinsic::bin_append(
-                grain,
-                Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())),
+            Head::Symbolic(atom) => Term::intrinsic(Intrinsic::bytes_append(
+                Subterm::Intrinsic(Intrinsic::Bytes(Binary::empty())),
                 atom,
             )),
         }
     }
 }
 
-/// One step of the `Bin` front decode. `Empty` is the identity (`x[]`); `Cons` peels a leading generator and the residual tail; `Opaque` is a value exposing no leading generator (a variable, a slice, a non-`x[]`-based append, a fill whose count is neither zero nor a successor).
+/// One step of the `Bytes` front decode. `Empty` is the identity (`x[]`); `Cons` peels a leading generator and the residual tail; `Opaque` is a value exposing no leading generator (a variable, a slice, a non-`x[]`-based append, a fill whose count is neither zero nor a successor).
 enum Front {
     Empty,
     Cons { head: Head, tail: Term },
     Opaque,
 }
 
-/// One pending level of a leading-edge descent — what that level has to put back once the generator underneath it has been peeled. `Appended` is a `BinAppend`'s trailing atom; `Concat` is the operands a `BinConcat` carried after its first.
+/// One pending level of a leading-edge descent — what that level has to put back once the generator underneath it has been peeled. `Appended` is a `BytesAppend`'s trailing atom; `Concat` is the operands a `BytesConcat` carried after its first.
 ///
 /// **The descent is explicit rather than recursive because this depth is *data*-shaped.** `FUSION_CAP` stops an accumulation fusing, so what it builds is a concatenation nested as deeply as the loop is long, and the leading edge of that is what these walks descend. [`curios_utilities::recurse`] is taken at the *entry point* of each checker's reduction and checked between its frames, never per level of a helper it calls, so a hundred thousand native frames here would spend one granted segment without ever reaching a check. `curios-emit`'s `$<carrier>/force` walks the same shape on the same kind of explicit worklist, for the same reason — and `documentation/design/compilation/depth-is-bought-with-stack-not-with-hand-rolled-frames.md` does not reach here: what that entry defends is the two reduction and conversion strategies written deliberately *twice*, so that a person can diff them, and these are single-implementation helpers both of them share.
-enum BinLevel<'a> {
+enum BytesLevel<'a> {
     Appended(&'a Term),
     Concat(&'a [Term]),
 }
 
-/// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bin/get`/`Bin/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a cons `append(x[], c)` yields its symbolic byte; a fill yields its atom over a fill one shorter; a concatenation descends into its first operand so a literal- or cons-led `BinConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`x[]`-based append, a fill of unknown count) is `Opaque`.
+/// The structural traversal shared by both `Bytes` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bytes/get`/`Bytes/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a cons `append(x[], c)` yields its symbolic byte; a fill yields its atom over a fill one shorter; a concatenation descends into its first operand so a literal- or cons-led `BytesConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`x[]`-based append, a fill of unknown count) is `Opaque`.
 ///
-/// Two phases over a [`BinLevel`] stack: descend the leading edge to the value that actually carries the first generator, then rebuild outward, each level rejoining what it was holding. `Opaque` propagates through both level kinds, and a concatenation whose first operand exposes no generator is itself opaque — a reduced `BinConcat` has no empty operands, so that case is a leading variable or slice.
-fn peel_front(grain: Grain, bin: &Term) -> Front {
-    let mut levels: Vec<BinLevel<'_>> = Vec::new();
-    let mut current = bin;
+/// Two phases over a [`BytesLevel`] stack: descend the leading edge to the value that actually carries the first generator, then rebuild outward, each level rejoining what it was holding. `Opaque` propagates through both level kinds, and a concatenation whose first operand exposes no generator is itself opaque — a reduced `BytesConcat` has no empty operands, so that case is a leading variable or slice.
+fn peel_front(bytes: &Term) -> Front {
+    let mut levels: Vec<BytesLevel<'_>> = Vec::new();
+    let mut current = bytes;
 
     let mut front = loop {
         match &**current {
-            Subterm::Intrinsic(Intrinsic::Bin(found, bytes)) if *found == grain => {
+            Subterm::Intrinsic(Intrinsic::Bytes(run)) => {
                 let tail = || {
-                    Subterm::Intrinsic(Intrinsic::Bin(
-                        grain,
-                        bytes.slice(grain, 1, bytes.len(grain)).unwrap(),
-                    ))
-                    .into()
+                    Subterm::Intrinsic(Intrinsic::Bytes(run.slice(1, run.len()).unwrap())).into()
                 };
 
-                break match grain {
-                    Grain::X => match bytes.byte(0) {
-                        None => Front::Empty,
-                        Some(byte) => Front::Cons {
-                            head: Head::LiteralByte(byte),
-                            tail: tail(),
-                        },
+                break match run.byte(0) {
+                    None => Front::Empty,
+                    Some(byte) => Front::Cons {
+                        head: Head::LiteralByte(byte),
+                        tail: tail(),
                     },
                 };
             }
             // `append(base, atom) = base ++ [atom]`: peel the base's leading generator, and the appended atom rejoins the residual. An empty base is the canonical one-atom chunk, which is where the symbolic head comes from; any other base decodes as far as it can, so a chained `append(append(x[], a), b)` and a run-based `append(x[0x48], b)` both expose their first generator instead of going opaque. `core::spine`'s two-value peel has always decoded an append this way, so without this level the same term was transparent to conversion and opaque to reduction.
-            Subterm::Intrinsic(Intrinsic::BinAppend {
-                grain: found,
-                bin: base,
+            Subterm::Intrinsic(Intrinsic::BytesAppend {
+                bytes: base,
                 element: atom,
-            }) if *found == grain => {
-                levels.push(BinLevel::Appended(atom));
+            }) => {
+                levels.push(BytesLevel::Appended(atom));
                 current = base;
             }
-            Subterm::Intrinsic(Intrinsic::BinConcat {
-                grain: found,
-                operands,
-            }) if *found == grain => match operands.split_first() {
-                Some((first, rest)) => {
-                    levels.push(BinLevel::Concat(rest));
-                    current = first;
+            Subterm::Intrinsic(Intrinsic::BytesConcat { operands }) => {
+                match operands.split_first() {
+                    Some((first, rest)) => {
+                        levels.push(BytesLevel::Concat(rest));
+                        current = first;
+                    }
+                    None => break Front::Empty,
                 }
-                None => break Front::Empty,
-            },
+            }
             // `replicate(n, a)` is `n` copies of one generator, so the leading one is `a` and what remains is a shorter fill of the same atom — no descent, because a fill carries its generator directly rather than under a spine. The count is read as [`FreeMonoid::uncons_unary`] reads a scrutinee, which is what makes a *symbolic* successor peel: a closed count folded to a run long before it reached here, so what arrives is the fill `/std`'s `not`, `shl` and `shr` build over an operand's own length, and leaving it opaque made a fill the one packed shape no eliminator could take apart.
-            Subterm::Intrinsic(Intrinsic::BinReplicate {
-                grain: found,
-                count,
-                atom,
-            }) if *found == grain => {
+            Subterm::Intrinsic(Intrinsic::BytesReplicate { count, atom }) => {
                 break match Nat::peel_succ(count) {
                     Some(rest) => Front::Cons {
                         head: Head::Symbolic(atom.clone()),
-                        tail: Term::intrinsic(Intrinsic::BinReplicate {
-                            grain,
+                        tail: Term::intrinsic(Intrinsic::BytesReplicate {
                             count: rest,
                             atom: atom.clone(),
                         }),
@@ -202,66 +188,61 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
 
     while let Some(level) = levels.pop() {
         front = match (level, front) {
-            (BinLevel::Appended(atom), Front::Empty) => Front::Cons {
+            (BytesLevel::Appended(atom), Front::Empty) => Front::Cons {
                 head: Head::Symbolic(atom.clone()),
-                tail: Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())).into(),
+                tail: Subterm::Intrinsic(Intrinsic::Bytes(Binary::empty())).into(),
             },
-            (BinLevel::Appended(atom), Front::Cons { head, tail }) => Front::Cons {
+            (BytesLevel::Appended(atom), Front::Cons { head, tail }) => Front::Cons {
                 head,
-                tail: Subterm::Intrinsic(Intrinsic::BinAppend {
-                    grain,
-                    bin: tail,
+                tail: Subterm::Intrinsic(Intrinsic::BytesAppend {
+                    bytes: tail,
                     element: atom.clone(),
                 })
                 .into(),
             },
             (
-                BinLevel::Concat(rest),
+                BytesLevel::Concat(rest),
                 Front::Cons {
                     head,
                     tail: first_tail,
                 },
             ) => {
                 let mut segments = Vec::with_capacity(rest.len() + 1);
-                if !is_empty_bin(grain, &first_tail) {
+                if !is_empty_bytes(&first_tail) {
                     segments.push(first_tail);
                 }
                 segments.extend(rest.iter().cloned());
                 let tail = match segments.len() {
-                    0 => Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())).into(),
+                    0 => Subterm::Intrinsic(Intrinsic::Bytes(Binary::empty())).into(),
                     1 => segments.into_iter().next().unwrap(),
-                    _ => Subterm::Intrinsic(Intrinsic::BinConcat {
-                        grain,
-                        operands: segments,
-                    })
-                    .into(),
+                    _ => Subterm::Intrinsic(Intrinsic::BytesConcat { operands: segments }).into(),
                 };
                 Front::Cons { head, tail }
             }
-            (BinLevel::Appended(_), Front::Opaque)
-            | (BinLevel::Concat(_), Front::Empty | Front::Opaque) => Front::Opaque,
+            (BytesLevel::Appended(_), Front::Opaque)
+            | (BytesLevel::Concat(_), Front::Empty | Front::Opaque) => Front::Opaque,
         };
     }
 
     front
 }
 
-/// Split the first byte off a reduced `Bin` value, returning a length-1 head chunk and the residual tail. Where `peel_bin` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructors `Bin/get` and `Bin/slice` walk an atom at a time, exposing the cons structure a symbolic `x[h, ..t]` builds (`concat(append(x[], h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
-pub(crate) fn peel_first_atom(grain: Grain, bin: &Term) -> Option<(Term, Term)> {
-    match peel_front(grain, bin) {
-        Front::Cons { head, tail } => Some((head.into_chunk(grain), tail)),
+/// Split the first byte off a reduced `Bytes` value, returning a length-1 head chunk and the residual tail. Where `peel_bytes` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructors `Bytes/get` and `Bytes/slice` walk an atom at a time, exposing the cons structure a symbolic `x[h, ..t]` builds (`concat(append(x[], h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
+pub(crate) fn peel_first_atom(bytes: &Term) -> Option<(Term, Term)> {
+    match peel_front(bytes) {
+        Front::Cons { head, tail } => Some((head.into_chunk(), tail)),
         Front::Empty | Front::Opaque => None,
     }
 }
 
-/// One step of the `List` front decode — the element-typed analogue of [`Front`]. `Empty` is the identity (`[]`); `Cons` peels the leading element and the residual tail; `Opaque` is a value exposing no leading element (a variable, a slice). Unlike `Bin`, the head needs no reflection — a `List` generator IS its element term, used directly by both the eliminator and the operations.
+/// One step of the `List` front decode — the element-typed analogue of [`Front`]. `Empty` is the identity (`[]`); `Cons` peels the leading element and the residual tail; `Opaque` is a value exposing no leading element (a variable, a slice). Unlike `Bytes`, the head needs no reflection — a `List` generator IS its element term, used directly by both the eliminator and the operations.
 enum ListFront {
     Empty,
     Cons { head: Term, tail: Term },
     Opaque,
 }
 
-/// [`BinLevel`] over the element carrier: `Appended` is a `ListAppend`'s trailing element, `Concat` the segments a `ListConcat` carried after its first. Each level also carries the element type, since every `List`-valued producer holds one and the residual has to be rebuilt with it.
+/// [`BytesLevel`] over the element carrier: `Appended` is a `ListAppend`'s trailing element, `Concat` the segments a `ListConcat` carried after its first. Each level also carries the element type, since every `List`-valued producer holds one and the residual has to be rebuilt with it.
 enum ListLevel<'a> {
     Appended { elem: &'a Term, appended: &'a Term },
     Concat { elem: &'a Term, rest: &'a [Term] },
@@ -290,7 +271,7 @@ fn peel_front_list(list: &Term) -> ListFront {
                     },
                 };
             }
-            // `append(base, e) = base ++ [e]`: peel the base's leading element, and the appended element rejoins the residual. An empty base's front is the appended element itself; a decodable base exposes its own head instead. The element-typed twin of the `BinAppend` level above, closing the same gap: `core::spine`'s two-value peel decodes an append as `concat(base, [e])`, so without this level the same term was transparent to conversion and opaque to reduction.
+            // `append(base, e) = base ++ [e]`: peel the base's leading element, and the appended element rejoins the residual. An empty base's front is the appended element itself; a decodable base exposes its own head instead. The element-typed twin of the `BytesAppend` level above, closing the same gap: `core::spine`'s two-value peel decodes an append as `concat(base, [e])`, so without this level the same term was transparent to conversion and opaque to reduction.
             Subterm::Intrinsic(Intrinsic::ListAppend {
                 element: elem,
                 list: base,
@@ -370,7 +351,7 @@ fn peel_front_list(list: &Term) -> ListFront {
     front
 }
 
-/// Split the first element off a reduced `List` value, returning the head element and the residual tail — the element-typed twin of [`peel_first_atom`]. Lets `List/get` and `List/slice` peel a symbolic cons one element at a time, exactly as `Bin/get`/`Bin/slice` walk an atom at a time. `None` for the empty array or an opaque symbolic value, where no first element is statically exposed.
+/// Split the first element off a reduced `List` value, returning the head element and the residual tail — the element-typed twin of [`peel_first_atom`]. Lets `List/get` and `List/slice` peel a symbolic cons one element at a time, exactly as `Bytes/get`/`Bytes/slice` walk an atom at a time. `None` for the empty array or an opaque symbolic value, where no first element is statically exposed.
 pub(crate) fn peel_first_elem(list: &Term) -> Option<(Term, Term)> {
     match peel_front_list(list) {
         ListFront::Cons { head, tail } => Some((head, tail)),
@@ -378,9 +359,9 @@ pub(crate) fn peel_first_elem(list: &Term) -> Option<(Term, Term)> {
     }
 }
 
-// `cons` injects a byte at the front as `append(x[], c)` (a one-byte `Bin`); `peel_front` recognises that encoding to decode a symbolic cons head.
-fn is_empty_bin(grain: Grain, term: &Term) -> bool {
-    matches!(&**term, Subterm::Intrinsic(Intrinsic::Bin(found, bytes)) if *found == grain && bytes.is_empty())
+// `cons` injects a byte at the front as `append(x[], c)` (a one-byte `Bytes`); `peel_front` recognises that encoding to decode a symbolic cons head.
+fn is_empty_bytes(term: &Term) -> bool {
+    matches!(&**term, Subterm::Intrinsic(Intrinsic::Bytes( bytes)) if bytes.is_empty())
 }
 
 // `cons` injects an element at the front as the singleton literal `[h]`; `peel_front_list`'s concat recursion decodes that encoding through the literal case.
@@ -408,18 +389,12 @@ impl FreeMonoid {
     /// **Deliberately narrow: literal runs and their concatenations, nothing else.** Anything whose length this cannot read off answers `None`, and every caller then falls back to the rule it uses otherwise. That keeps it from asserting an equation that is not already decided: measuring a window by the count it carries would be sound on `/sys`'s `s + l <= len(b)` precondition, but nothing decides `len(slice(b, s, l)) = l` — conversion holds a window's very emptiness undecidable (`curios-algebra`'s word strip answers `Undecided` against the empty value) — so admitting it would be a *new* definitional equation on the soundness board's weakest row. It buys nothing here, since an accumulation's spine is literals.
     fn spine<'a>(self, value: &'a Term) -> Option<Spine<'a>> {
         match (self, &**value) {
-            (FreeMonoid::Bin(grain), Subterm::Intrinsic(Intrinsic::Bin(found, run)))
-                if *found == grain =>
-            {
-                Some(Spine::Run(run.len(grain)))
+            (FreeMonoid::Bytes, Subterm::Intrinsic(Intrinsic::Bytes(run))) => {
+                Some(Spine::Run(run.len()))
             }
-            (
-                FreeMonoid::Bin(grain),
-                Subterm::Intrinsic(Intrinsic::BinConcat {
-                    grain: found,
-                    operands,
-                }),
-            ) if *found == grain => Some(Spine::Operands(operands)),
+            (FreeMonoid::Bytes, Subterm::Intrinsic(Intrinsic::BytesConcat { operands })) => {
+                Some(Spine::Operands(operands))
+            }
             (
                 FreeMonoid::List,
                 Subterm::Intrinsic(Intrinsic::List {
@@ -443,25 +418,19 @@ impl FreeMonoid {
     /// The seam [`FreeMonoid::concatenated`] walks, beside the one [`FreeMonoid::spine`] walks. They differ in what they admit rather than in how they recurse: a spine node must be *measurable*, so an append is not one, while a joined node need only be a juxtaposition, which an append is by the peel's own law.
     fn joined<'a>(self, value: &'a Term) -> Option<Joined<'a>> {
         match (self, &**value) {
+            (FreeMonoid::Bytes, Subterm::Intrinsic(Intrinsic::BytesConcat { operands })) => {
+                Some(Joined::Operands(operands))
+            }
             (
-                FreeMonoid::Bin(grain),
-                Subterm::Intrinsic(Intrinsic::BinConcat {
-                    grain: found,
-                    operands,
-                }),
-            ) if *found == grain => Some(Joined::Operands(operands)),
-            (
-                FreeMonoid::Bin(grain),
-                Subterm::Intrinsic(Intrinsic::BinAppend {
-                    grain: found,
-                    bin: base,
+                FreeMonoid::Bytes,
+                Subterm::Intrinsic(Intrinsic::BytesAppend {
+                    bytes: base,
                     element,
                 }),
-            ) if *found == grain => Some(Joined::Append {
+            ) => Some(Joined::Append {
                 base,
-                singleton: Term::intrinsic(Intrinsic::bin_append(
-                    grain,
-                    Term::intrinsic(Intrinsic::Bin(grain, Binary::empty())),
+                singleton: Term::intrinsic(Intrinsic::bytes_append(
+                    Term::intrinsic(Intrinsic::Bytes(Binary::empty())),
                     element.clone(),
                 )),
             }),
@@ -524,7 +493,7 @@ impl FreeMonoid {
 
     /// The operands of an already-reduced value, left to right, each with the number of generators it carries — `None` where any operand's length is not statically known.
     ///
-    /// **The free monoid's measure, and the one thing `len`, `get` and `slice` all actually want.** A length is a homomorphism into `(ℕ, +, 0)`, and over a value already in normal form it is a *fold over the spine*: no reduction, no rebuilding, no budget. That is what this is, where building `Bin/len(operand)` terms and handing them back to the reducer would cost a full re-walk of each sub-spine, so a spine of depth n would cost Σk = O(n²) where the answer is one linear pass.
+    /// **The free monoid's measure, and the one thing `len`, `get` and `slice` all actually want.** A length is a homomorphism into `(ℕ, +, 0)`, and over a value already in normal form it is a *fold over the spine*: no reduction, no rebuilding, no budget. That is what this is, where building `Bytes/len(operand)` terms and handing them back to the reducer would cost a full re-walk of each sub-spine, so a spine of depth n would cost Σk = O(n²) where the answer is one linear pass.
     ///
     /// **It takes no [`crate::Reducer`], and that is the enforcement rather than a comment.** A function that cannot reach the reducer cannot re-enter reduction, cannot spend budget, and cannot rebuild a term to ask about it. The audit is the signature.
     ///
@@ -546,10 +515,10 @@ impl FreeMonoid {
 
     /// How many generators an already-reduced value carries. `None` where it is not wholly measurable, or where the total does not fit a `usize`.
     ///
-    /// **`Bin`'s answer is deliberately a superset of its segments**, which is why this dispatches rather than folding [`FreeMonoid::segments`] for every carrier — see [`bin_measure`].
+    /// **`Bytes`'s answer is deliberately a superset of its segments**, which is why this dispatches rather than folding [`FreeMonoid::segments`] for every carrier — see [`bytes_measure`].
     pub(crate) fn measure(self, value: &Term) -> Option<usize> {
         match self {
-            FreeMonoid::Bin(grain) => bin_measure(grain, value),
+            FreeMonoid::Bytes => bytes_measure(value),
             _ => total(&lengths(&self.segments(value)?)),
         }
     }
@@ -567,29 +536,26 @@ impl FreeMonoid {
     }
 }
 
-/// How many generators an already-reduced `Bin` value carries. `None` where the value is not wholly measurable, or where the total does not fit a `usize`.
+/// How many generators an already-reduced `Bytes` value carries. `None` where the value is not wholly measurable, or where the total does not fit a `usize`.
 ///
-/// **Deliberately a superset of [`FreeMonoid::segments`] rather than a fold over it.** A *segment* is something `Bin/get` and `Bin/slice` may read *into*; this walk additionally credits an operation whose result arity is fixed by the operation rather than by any operand. That is `Flt/to_le_bytes` alone, which writes eight bytes for every float, NaN and both zeros included.
+/// **Deliberately a superset of [`FreeMonoid::segments`] rather than a fold over it.** A *segment* is something `Bytes/get` and `Bytes/slice` may read *into*; this walk additionally credits an operation whose result arity is fixed by the operation rather than by any operand. That is `Flt/to_le_bytes` alone, which writes eight bytes for every float, NaN and both zeros included.
 ///
-/// Crediting it as a segment instead would be wrong twice over: locating an index would hand the node back to `Bin/get` as the operand holding it, which re-enters this same node and never terminates, and [`FreeMonoid::measured_window`] would try to narrow a value it cannot read.
+/// Crediting it as a segment instead would be wrong twice over: locating an index would hand the node back to `Bytes/get` as the operand holding it, which re-enters this same node and never terminates, and [`FreeMonoid::measured_window`] would try to narrow a value it cannot read.
 ///
-/// The length is the one thing about such a node knowable without observing the float, and that is what this reads. `Flt` folds through the binary64 model, so a *literal* operand is answered by `reduce::intrinsic` before it ever reaches here; what reaches it is a **symbolic** operand, where `Bin/len(Flt/to_le_bytes(x))` is still `8` because it is the arity of the result rather than anything about the float. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
-fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
+/// The length is the one thing about such a node knowable without observing the float, and that is what this reads. `Flt` folds through the binary64 model, so a *literal* operand is answered by `reduce::intrinsic` before it ever reaches here; what reaches it is a **symbolic** operand, where `Bytes/len(Flt/to_le_bytes(x))` is still `8` because it is the arity of the result rather than anything about the float. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
+fn bytes_measure(value: &Term) -> Option<usize> {
     let mut total = 0usize;
     let mut pending = vec![value];
 
     while let Some(term) = pending.pop() {
         let length = match &**term {
-            Subterm::Intrinsic(Intrinsic::Bin(found, run)) if *found == grain => run.len(grain),
-            Subterm::Intrinsic(Intrinsic::BinConcat {
-                grain: found,
-                operands,
-            }) if *found == grain => {
+            Subterm::Intrinsic(Intrinsic::Bytes(run)) => run.len(),
+            Subterm::Intrinsic(Intrinsic::BytesConcat { operands }) => {
                 // Order is irrelevant to a sum, so this walk does not reverse the way [`FreeMonoid::segments`] must.
                 pending.extend(operands.iter());
                 continue;
             }
-            Subterm::Intrinsic(Intrinsic::FltToLeBytes(_)) if grain == Grain::X => 8,
+            Subterm::Intrinsic(Intrinsic::FltToLeBytes(_)) => 8,
             _ => return None,
         };
         total = total.checked_add(length)?;
@@ -631,7 +597,7 @@ fn window(
     })
 }
 
-/// The largest literal operand reduction will fuse, in the carrier's own generators — bytes at [`Grain::X`], elements for `List`.
+/// The largest literal operand reduction will fuse, in the carrier's own generators — bytes for `Bytes`, elements for `List`.
 ///
 /// **Fusion is an optimization for small runs, not a normalization obligation.** [`normalize_concat`] copies every operand it fuses, so an accumulation that appends to its own result recopies everything accumulated so far on every step: a linear number of transitions performing a quadratic volume of construction. Declining to fuse past this size leaves the `Concat` node standing instead, and each step is then one node over operands it shares rather than copies. `curios`'s `tests::reduction` measures both halves; `tests::runtime`'s `accumulation_loops_are_linear_by_construction` is the same loop at runtime, where a rope has always made it linear.
 ///
@@ -650,7 +616,7 @@ fn window(
 /// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that would close by literal equality failing to close through the peel. It does not: `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges adjacent runs, so a capped spelling and the literal it would have fused to decompose identically. `curios-core`'s `spine` tests state that per carrier, `curios`'s `tests::aggregates::monoid_tests::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
 pub(crate) const FUSION_CAP: usize = 64;
 
-/// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`Binary` for `Bin`, the element vector for `List`), exposing only the emptiness [`normalize_concat`] drops.
+/// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`Binary` for `Bytes`, the element vector for `List`), exposing only the emptiness [`normalize_concat`] drops.
 pub(crate) trait Run {
     fn is_empty(&self) -> bool;
 }
@@ -667,13 +633,13 @@ impl Run for Vec<Term> {
     }
 }
 
-/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BinConcat` and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `Binary::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands. Which operands are dropped, fused or kept is `curios-algebra`'s `join`, over what `literal` says each one is; this reads them for it and builds what it decides.
+/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BytesConcat` and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `Binary::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands. Which operands are dropped, fused or kept is `curios-algebra`'s `join`, over what `literal` says each one is; this reads them for it and builds what it decides.
 ///
 /// An over-cap operand therefore reads exactly like a symbolic one here: not droppable as empty, not fusible, and left standing by `into_concat`. That is the whole of the cap's implementation, and it is why the emptiness filter below is unaffected — an over-cap run is never empty.
 ///
 /// **`merge` is fallible and the other two are not**, and the asymmetry is the price list's rather than this function's: fusing is the only branch that *constructs* anything, so it is the only one that has to charge before it does. Dropping an empty operand and rebuilding the survivors both hand back storage that already exists. That makes this function fallible for its caller, which is the shape the audit says to expect at every fusing seam rather than only at this one.
 ///
-/// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here: that is the word strip's job when *deciding equality* (`curios-algebra`'s `Word::push`); reduction only needs a normal form, and conversion closes any residual gap.
+/// Window fusion (adjacent `Bytes/slice`s of one base) is deliberately NOT done here: that is the word strip's job when *deciding equality* (`curios-algebra`'s `Word::push`); reduction only needs a normal form, and conversion closes any residual gap.
 pub(crate) fn normalize_concat<C: Run, E>(
     mut operands: Vec<Term>,
     literal: impl Fn(&Term) -> Option<&C>,

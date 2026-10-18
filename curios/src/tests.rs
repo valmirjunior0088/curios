@@ -292,7 +292,7 @@ fn cont_optm(source: &str) -> String {
 
 /// Every intrinsic the optimized module emits, tagged by the node kind that carries it, sorted.
 ///
-/// The `Debug` spelling is the comparison key on purpose: it is exact, total, and carries the grain and arity a printed name deliberately leaves to the operand list — `Bytes/chunk` is one name for `BinChunk(X, 2)` and `BinChunk(X, 3)`. Nothing here reaches a user, so the Rust spelling costs nothing and cannot drift from the enum it names.
+/// The `Debug` spelling is the comparison key on purpose: it is exact, total, and carries the arity a printed name deliberately leaves to the operand list — `Bytes/chunk` is one name for `BytesChunk(2)` and `BytesChunk(3)`. Nothing here reaches a user, so the Rust spelling costs nothing and cannot drift from the enum it names.
 fn cont_operations(module: &curios_cont::Module) -> Vec<String> {
     let mut operations: Vec<String> = module
         .nodes()

@@ -83,7 +83,7 @@ pub(super) fn parse_induct_match_branch<'a>(state: ParserState<'a>) -> Parsed<'a
         .parse(state)
 }
 
-// The `; ih` induction-hypothesis tail on a `Nat` succ or `List`/`Bin` cons leaf pattern: `;` sets the hypothesis apart from the scrutinee's shape. The hypothesis binds the *fold result*, not scrutinee shape, so it takes the same irrefutable pattern grammar a `let` binder does — `; ih` a plain name, `; (cur, live)` a destructuring. A plain case-split needs no hypothesis, so the tail may be omitted — `None`, not a placeholder; lowering mints a fresh internal name for it directly.
+// The `; ih` induction-hypothesis tail on a `Nat` succ or `List`/`Bytes` cons leaf pattern: `;` sets the hypothesis apart from the scrutinee's shape. The hypothesis binds the *fold result*, not scrutinee shape, so it takes the same irrefutable pattern grammar a `let` binder does — `; ih` a plain name, `; (cur, live)` a destructuring. A plain case-split needs no hypothesis, so the tail may be omitted — `None`, not a placeholder; lowering mints a fresh internal name for it directly.
 pub(super) fn parse_cons_ih<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Pattern>> {
     parse_literal(";")
         .and_keep(parse_pattern)
@@ -151,7 +151,7 @@ pub(super) fn parse_choose<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
         .parse(state)
 }
 
-// A `match` is exactly one surface shape: the general headed pattern matrix. Every headed carrier form — `Bool`, `Nat` (induction *and* literal dispatch), `List`, `Bin` — is just a matrix whose arm patterns are that carrier's leaves (see `parse_match_pattern`), compiled by `curios-elab`'s matrix compiler. The headless ladder is `choose` (`parse_choose`), parsed separately. Zero arms are legal: under index inversion every impossible arm is silently omittable, and a scrutinee whose indices clash with *every* constructor's target eliminates with no arms at all.
+// A `match` is exactly one surface shape: the general headed pattern matrix. Every headed carrier form — `Bool`, `Nat` (induction *and* literal dispatch), `List`, `Bytes` — is just a matrix whose arm patterns are that carrier's leaves (see `parse_match_pattern`), compiled by `curios-elab`'s matrix compiler. The headless ladder is `choose` (`parse_choose`), parsed separately. Zero arms are legal: under index inversion every impossible arm is silently omittable, and a scrutinee whose indices clash with *every* constructor's target eliminates with no arms at all.
 pub(super) fn parse_match<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
     parse_match_prefix
         .and(many0(parse_induct_match_branch))

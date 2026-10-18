@@ -7,7 +7,7 @@ use {
         Free, InstanceHead, Intrinsic, Level, MetavarId, MetavarOrigin, Nat, ReduceError, Subterm,
         Term, Universes, Var,
     },
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
 };
 
 /// A question asked again with nothing written since is answered from what it was answered, at the one transition every question spends: the comparison is made once.
@@ -159,24 +159,24 @@ fn intrinsic_list_rejects_different_lengths() {
 }
 
 #[test]
-fn intrinsic_bin_type_is_equal_to_itself() {
+fn intrinsic_bytes_type_is_equal_to_itself() {
     let mut context = context();
 
-    let this = Subterm::Intrinsic(Intrinsic::BinType(Grain::X)).into();
-    let that = Subterm::Intrinsic(Intrinsic::BinType(Grain::X)).into();
+    let this = Subterm::Intrinsic(Intrinsic::BytesType).into();
+    let that = Subterm::Intrinsic(Intrinsic::BytesType).into();
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
 #[test]
-fn intrinsic_bin_literal_compares_bytes() {
+fn intrinsic_bytes_literal_compares_bytes() {
     let mut context = context();
 
     assert_eq!(
         conv(
             &mut context,
-            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2]))).into(),
-            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![1, 2]))).into(),
         ),
         Ok(true)
     );
@@ -184,33 +184,33 @@ fn intrinsic_bin_literal_compares_bytes() {
     assert_eq!(
         conv(
             &mut context,
-            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2]))).into(),
-            &Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 3]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![1, 2]))).into(),
+            &Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![1, 3]))).into(),
         ),
         Ok(false)
     );
 }
 
 #[test]
-fn intrinsic_bin_len_recurses_into_operand() {
+fn intrinsic_bytes_len_recurses_into_operand() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
 
     let this = func(
         [&x],
-        Subterm::Intrinsic(Intrinsic::bin_len(Grain::X, Term::free_var(&x))),
+        Subterm::Intrinsic(Intrinsic::bytes_len(Term::free_var(&x))),
     );
     let that = func(
         [&y],
-        Subterm::Intrinsic(Intrinsic::bin_len(Grain::X, Term::free_var(&y))),
+        Subterm::Intrinsic(Intrinsic::bytes_len(Term::free_var(&y))),
     );
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
 #[test]
-fn intrinsic_bin_get_recurses_into_operands() {
+fn intrinsic_bytes_get_recurses_into_operands() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let a = context.fresh(Some("a"));
@@ -221,8 +221,7 @@ fn intrinsic_bin_get_recurses_into_operands() {
         [&x],
         func(
             [&a],
-            Subterm::Intrinsic(Intrinsic::bin_get(
-                Grain::X,
+            Subterm::Intrinsic(Intrinsic::bytes_get(
                 Term::free_var(&x),
                 Term::free_var(&a),
                 qed(),
@@ -234,8 +233,7 @@ fn intrinsic_bin_get_recurses_into_operands() {
         [&y],
         func(
             [&b],
-            Subterm::Intrinsic(Intrinsic::bin_get(
-                Grain::X,
+            Subterm::Intrinsic(Intrinsic::bytes_get(
                 Term::free_var(&y),
                 Term::free_var(&b),
                 qed(),
@@ -247,7 +245,7 @@ fn intrinsic_bin_get_recurses_into_operands() {
 }
 
 #[test]
-fn intrinsic_bin_concat_recurses_into_operands() {
+fn intrinsic_bytes_concat_recurses_into_operands() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let a = context.fresh(Some("a"));
@@ -258,10 +256,10 @@ fn intrinsic_bin_concat_recurses_into_operands() {
         [&x],
         func(
             [&a],
-            Subterm::Intrinsic(Intrinsic::bin_concat(
-                Grain::X,
-                [Term::free_var(&x), Term::free_var(&a)],
-            )),
+            Subterm::Intrinsic(Intrinsic::bytes_concat([
+                Term::free_var(&x),
+                Term::free_var(&a),
+            ])),
         ),
     );
 
@@ -269,10 +267,10 @@ fn intrinsic_bin_concat_recurses_into_operands() {
         [&y],
         func(
             [&b],
-            Subterm::Intrinsic(Intrinsic::bin_concat(
-                Grain::X,
-                [Term::free_var(&y), Term::free_var(&b)],
-            )),
+            Subterm::Intrinsic(Intrinsic::bytes_concat([
+                Term::free_var(&y),
+                Term::free_var(&b),
+            ])),
         ),
     );
 
@@ -321,7 +319,7 @@ fn a_nested_concatenation_converts_with_its_flat_spelling_past_unlike_heads() {
 }
 
 #[test]
-fn intrinsic_bin_slice_recurses_into_operands() {
+fn intrinsic_bytes_slice_recurses_into_operands() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let a = context.fresh(Some("a"));
@@ -336,8 +334,7 @@ fn intrinsic_bin_slice_recurses_into_operands() {
             [&a],
             func(
                 [&p],
-                Subterm::Intrinsic(Intrinsic::bin_slice(
-                    Grain::X,
+                Subterm::Intrinsic(Intrinsic::bytes_slice(
                     Term::free_var(&x),
                     Term::free_var(&a),
                     Term::free_var(&p),
@@ -353,8 +350,7 @@ fn intrinsic_bin_slice_recurses_into_operands() {
             [&b],
             func(
                 [&q],
-                Subterm::Intrinsic(Intrinsic::bin_slice(
-                    Grain::X,
+                Subterm::Intrinsic(Intrinsic::bytes_slice(
                     Term::free_var(&y),
                     Term::free_var(&b),
                     Term::free_var(&q),
@@ -391,13 +387,10 @@ fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
 fn one_operation_at_two_universe_instances_is_one_number() {
     let mut context = context();
     let length = |operand: &Free, level: u32| {
-        Term::intrinsic(Intrinsic::bin_len(
-            Grain::X,
-            Term::instance(
-                InstanceHead::Var(Var::free(*operand)),
-                vec![Level::constant(level)],
-            ),
-        ))
+        Term::intrinsic(Intrinsic::bytes_len(Term::instance(
+            InstanceHead::Var(Var::free(*operand)),
+            vec![Level::constant(level)],
+        )))
     };
     let (n, m) = (context.fresh(Some("n")), context.fresh(Some("m")));
 

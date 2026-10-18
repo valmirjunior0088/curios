@@ -67,7 +67,7 @@ fn bytes_growing(n: usize) -> String {
     )
 }
 
-/// [`bytes_opaque`] over the `List` carrier, whose fusion flattens element vectors where `Bin`'s copies packed bytes.
+/// [`bytes_opaque`] over the `List` carrier, whose fusion flattens element vectors where `Bytes`'s copies packed bytes.
 fn list_opaque(n: usize) -> String {
     fill!(
         r#"

@@ -221,7 +221,7 @@ pub(super) fn nat_euclid_split(dividend: &Term, divisor: &Natural) -> Option<(Te
     ))
 }
 
-/// `Nat/div`/`Nat/rem`: partial, like [`reduce_nat_binary`] is not — a divisor that reduces to literal zero is a reported error (the type-level mirror of the runtime trap, following `BinGet`'s pattern), never a Rust panic.
+/// `Nat/div`/`Nat/rem`: partial, like [`reduce_nat_binary`] is not — a divisor that reduces to literal zero is a reported error (the type-level mirror of the runtime trap, following `BytesGet`'s pattern), never a Rust panic.
 ///
 /// Past the closed fold, two unconditional laws let a literal divisor see through a symbolic dividend. Writing the dividend as `inner + floor` and the divisor as `n`:
 ///

@@ -7,7 +7,7 @@ use {
         Universes, Var, Variant,
     },
     curios_abi::stdio,
-    curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
+    curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat, soft_line},
     curios_utilities::{InfixOp, Plicity, Qualifier, Symbol, recurse},
     std::{
@@ -887,7 +887,7 @@ fn print_flt(flt: Floating, frame: Frame) -> Printer {
         if flt.abs().to_bits() == Floating::nan().to_bits() {
             return pure(format!("{sign}nan.0"));
         }
-        let bytes = Term::intrinsic(Intrinsic::Bin(Grain::X, flt.to_le_bytes()));
+        let bytes = Term::intrinsic(Intrinsic::Bytes(flt.to_le_bytes()));
         return print_call("Flt/of_le_bytes", vec![], vec![bytes], frame);
     }
 
@@ -937,14 +937,9 @@ fn print_entries(open: &'static str, entries: Vec<Printer>) -> Printer {
     flat([pure(open), sep_flat(entries, || pure(", ")), pure("]")])
 }
 
-/// [`print_entries`] under a grain letter.
-fn print_packed(grain: Grain, entries: Vec<Printer>) -> Printer {
-    print_entries(
-        match grain {
-            Grain::X => "x[",
-        },
-        entries,
-    )
+/// [`print_entries`] for a packed literal.
+fn print_packed(entries: Vec<Printer>) -> Printer {
+    print_entries("x[", entries)
 }
 
 /// A certified string as the literal it stands for — `"body"` in place of the struct over its bytes and the proof certifying them (axis (f)). `None` unless the spelling was told which declaration that is and the head is it, and `None` for a `Str` whose bytes are not one constant — a concatenation, a slice, a binder's — or are not text, each of which has nothing shorter to say than its own spelling.
@@ -953,11 +948,11 @@ fn string_literal(name: &Global, fields: &[Term], spelling: &Rc<Spelling>) -> Op
         return None;
     }
 
-    let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, packed)) = &**fields.first()? else {
+    let Subterm::Intrinsic(Intrinsic::Bytes(packed)) = &**fields.first()? else {
         return None;
     };
 
-    let text = String::from_utf8(packed.to_bytes()?).ok()?;
+    let text = String::from_utf8(packed.to_bytes()).ok()?;
 
     // A diagnostic quoting a page of text whole says nothing a prefix does not, and a report is where this spelling is read: the rest is counted rather than shown.
     let shown = text.chars().count();
@@ -1025,15 +1020,12 @@ impl IntrinsicOperand for Term {
 }
 
 /// The constant atoms of a packed literal: its bytes.
-fn packed_atoms<T>(grain: Grain, packed: &Binary) -> Vec<LiteralEntry<T>> {
-    match grain {
-        Grain::X => packed
-            .as_bytes()
-            .unwrap()
-            .iter()
-            .map(|byte| LiteralEntry::Byte(*byte))
-            .collect(),
-    }
+fn packed_atoms<T>(packed: &Binary) -> Vec<LiteralEntry<T>> {
+    packed
+        .as_bytes()
+        .iter()
+        .map(|byte| LiteralEntry::Byte(*byte))
+        .collect()
 }
 
 /// The entries of a list concatenation as the surface spells them: a literal operand contributes its items in place, a nested concatenation its own entries, and anything else a `..` spread. Lowering turns the `[h, ..t]` a reader wrote into a concatenation of the literal `[h]` with `t`, and substitution nests one concatenation inside another; splicing both back is what lets the report quote the program rather than its lowering. Concatenation is associative, so the splice changes no value — which is exactly why axis (g) exists: a report that has found two groupings rendering alike keeps the nesting instead.
@@ -1069,30 +1061,29 @@ fn list_entries<T: IntrinsicOperand>(
     }
 }
 
-/// [`list_entries`] for a packed concatenation: a constant operand of the same grain contributes its atoms in place.
+/// [`list_entries`] for a packed concatenation: a constant operand contributes its atoms in place.
 fn packed_entries<T: IntrinsicOperand>(
-    grain: Grain,
     operands: Vec<T>,
     grouped: bool,
     entries: &mut Vec<LiteralEntry<T>>,
 ) {
     for operand in operands {
         match operand.as_intrinsic() {
-            Some(Intrinsic::Bin(g, packed)) if *g == grain => {
-                entries.extend(packed_atoms(grain, packed));
+            Some(Intrinsic::Bytes(packed)) => {
+                entries.extend(packed_atoms(packed));
             }
-            Some(Intrinsic::BinConcat { grain: g, .. }) if *g == grain && !grouped => {
-                let Some(Intrinsic::BinConcat { operands, .. }) = operand.into_intrinsic() else {
+            Some(Intrinsic::BytesConcat { .. }) if !grouped => {
+                let Some(Intrinsic::BytesConcat { operands, .. }) = operand.into_intrinsic() else {
                     unreachable!()
                 };
-                packed_entries(grain, operands, grouped, entries);
+                packed_entries(operands, grouped, entries);
             }
-            Some(Intrinsic::BinAppend { grain: g, .. }) if *g == grain && !grouped => {
-                let Some(Intrinsic::BinAppend { bin, element, .. }) = operand.into_intrinsic()
+            Some(Intrinsic::BytesAppend { .. }) if !grouped => {
+                let Some(Intrinsic::BytesAppend { bytes, element, .. }) = operand.into_intrinsic()
                 else {
                     unreachable!()
                 };
-                packed_entries(grain, vec![bin], grouped, entries);
+                packed_entries(vec![bytes], grouped, entries);
                 entries.push(LiteralEntry::Item(element));
             }
             _ => entries.push(LiteralEntry::Spread(operand)),
@@ -1326,7 +1317,7 @@ pub enum IntrinsicForm<T = Term> {
     Int(Integer),
     Flt(Floating),
     /// A packed literal, `x[…]`: its entries in order.
-    Packed(Grain, Vec<LiteralEntry<T>>),
+    Bytes(Vec<LiteralEntry<T>>),
     /// A list literal: its entries in order.
     List(Vec<LiteralEntry<T>>),
     /// A handle the host minted at run time, which no source spells.
@@ -1575,7 +1566,7 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![],
             explicits: vec![i],
         },
-        Intrinsic::FltOfLeBytes { bin: i, .. } => IntrinsicForm::Call {
+        Intrinsic::FltOfLeBytes { bytes: i, .. } => IntrinsicForm::Call {
             path: "Flt/of_le_bytes".into(),
             implicits: vec![],
             explicits: vec![i],
@@ -1640,19 +1631,16 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![],
             explicits: vec![i],
         },
-        Intrinsic::BinType(Grain::X) => IntrinsicForm::Named("Bytes"),
-        Intrinsic::Bin(Grain::X, bytes) => {
-            IntrinsicForm::Packed(Grain::X, packed_atoms(Grain::X, &bytes))
-        }
-        Intrinsic::BinLen(Grain::X, b) => IntrinsicForm::Call {
+        Intrinsic::BytesType => IntrinsicForm::Named("Bytes"),
+        Intrinsic::Bytes(bytes) => IntrinsicForm::Bytes(packed_atoms(&bytes)),
+        Intrinsic::BytesLen(b) => IntrinsicForm::Call {
             path: "Bytes/len".into(),
             implicits: vec![],
             explicits: vec![b],
         },
-        Intrinsic::BinEql(Grain::X, l, r) => IntrinsicForm::Infix(operator("=="), l, r),
-        Intrinsic::BinGet {
-            grain: Grain::X,
-            bin: b,
+        Intrinsic::BytesEql(l, r) => IntrinsicForm::Infix(operator("=="), l, r),
+        Intrinsic::BytesGet {
+            bytes: b,
             index: i,
             in_range: _,
         } => IntrinsicForm::Call {
@@ -1660,78 +1648,58 @@ pub fn intrinsic_form<T: IntrinsicOperand>(
             implicits: vec![],
             explicits: vec![b, i],
         },
-        Intrinsic::BinSlice {
-            grain: Grain::X,
-            bin,
+        Intrinsic::BytesSlice {
+            bytes,
             start,
             length,
             within: _,
         } => IntrinsicForm::Call {
             path: "Bytes/slice".into(),
             implicits: vec![],
-            explicits: vec![bin, start, length],
+            explicits: vec![bytes, start, length],
         },
         // An append has no named form in the surface: `x[..acc, b]` is how a program writes one, and so how a report does.
-        Intrinsic::BinAppend {
-            grain,
-            bin,
-            element,
-        } => {
+        Intrinsic::BytesAppend { bytes, element } => {
             let mut entries = Vec::new();
-            packed_entries(grain, vec![bin], grouped, &mut entries);
+            packed_entries(vec![bytes], grouped, &mut entries);
             entries.push(LiteralEntry::Item(element));
-            IntrinsicForm::Packed(grain, entries)
+            IntrinsicForm::Bytes(entries)
         }
-        Intrinsic::BinConcat { grain, operands } => {
+        Intrinsic::BytesConcat { operands } => {
             let mut entries = Vec::new();
-            packed_entries(grain, operands, grouped, &mut entries);
-            IntrinsicForm::Packed(grain, entries)
+            packed_entries(operands, grouped, &mut entries);
+            IntrinsicForm::Bytes(entries)
         }
-        // One arm apiece rather than one per grain, as `BinConcat` above already is: the grain decides nothing here but which carrier's name to spell. The bound is dropped like every other proof operand — it is not what the program wrote.
-        Intrinsic::BinReplicate { grain, count, atom } => IntrinsicForm::Call {
-            path: (match grain {
-                Grain::X => "Bytes/replicate",
-            })
-            .into(),
+        // The bound is dropped like every other proof operand — it is not what the program wrote.
+        Intrinsic::BytesReplicate { count, atom } => IntrinsicForm::Call {
+            path: "Bytes/replicate".into(),
             implicits: vec![],
             explicits: vec![count, atom],
         },
-        Intrinsic::BinAnd {
-            grain,
+        Intrinsic::BytesAnd {
             left,
             right,
             same_length: _,
         } => IntrinsicForm::Call {
-            path: (match grain {
-                Grain::X => "Bytes/and",
-            })
-            .into(),
+            path: "Bytes/and".into(),
             implicits: vec![],
             explicits: vec![left, right],
         },
-        Intrinsic::BinOr {
-            grain,
+        Intrinsic::BytesOr {
             left,
             right,
             same_length: _,
         } => IntrinsicForm::Call {
-            path: (match grain {
-                Grain::X => "Bytes/or",
-            })
-            .into(),
+            path: "Bytes/or".into(),
             implicits: vec![],
             explicits: vec![left, right],
         },
-        Intrinsic::BinXor {
-            grain,
+        Intrinsic::BytesXor {
             left,
             right,
             same_length: _,
         } => IntrinsicForm::Call {
-            path: (match grain {
-                Grain::X => "Bytes/xor",
-            })
-            .into(),
+            path: "Bytes/xor".into(),
             implicits: vec![],
             explicits: vec![left, right],
         },
@@ -1964,9 +1932,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         IntrinsicForm::Byte(value) => pure(format!("0x{value:02X}")),
         IntrinsicForm::Int(value) => pure(format!("{value:+}")),
         IntrinsicForm::Flt(value) => print_flt(value, frame),
-        IntrinsicForm::Packed(grain, entries) => {
-            print_packed(grain, entries.into_iter().map(entry).collect())
-        }
+        IntrinsicForm::Bytes(entries) => print_packed(entries.into_iter().map(entry).collect()),
         IntrinsicForm::List(entries) => {
             print_entries("[", entries.into_iter().map(entry).collect())
         }
@@ -2197,7 +2163,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 )
             }
         }
-        // Like `InductType` but with no indices: `Pair(Nat, Bin)`. Concepts are struct-shaped, so a concept application marks its parameters here too.
+        // Like `InductType` but with no indices: `Pair(Nat, Bytes)`. Concepts are struct-shaped, so a concept application marks its parameters here too.
         Subterm::StructType(StructType {
             name,
             universes,
@@ -2273,7 +2239,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 Cases::Induct { .. } => "match ",
                 Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat { .. } => "Nat.fold ",
-                    Carrier::Bin { .. } => "Bin.fold ",
+                    Carrier::Bytes { .. } => "Bytes.fold ",
                     Carrier::List { .. } => "List.fold ",
                 },
             };
@@ -2363,14 +2329,12 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                     }
                 }
                 Cases::FreeMonoid { carrier } => {
-                    // The cons arm mirrors each carrier's own literal delimiters: `x[head, ..tail]; ih` for `Bin`, `[head, ..tail]; ih` for `List` — the same bracketed shape, told apart by the letter.
-                    let cons_bin = |grain: Grain, cons_case: Scope<Three>| {
+                    // The cons arm mirrors each carrier's own literal delimiters: `x[head, ..tail]; ih` for `Bytes`, `[head, ..tail]; ih` for `List` — the same bracketed shape, told apart by the letter.
+                    let cons_bytes = |cons_case: Scope<Three>| {
                         let ((head_label, tail_label, ih_label), cons_case) =
                             frame.open_three(cons_case);
                         flat([
-                            pure(match grain {
-                                Grain::X => "\n| x[",
-                            }),
+                            pure("\n| x["),
                             pure(frame.spelling.label(&head_label)),
                             pure(", .."),
                             pure(frame.spelling.label(&tail_label)),
@@ -2395,7 +2359,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                         ])
                     };
 
-                    // Per carrier: the identity arm's literal, its body, and the cons arm — which binds `(predecessor, ih)` for the head-less unary `Nat`, and `(head, tail), ih` for `Bin`/`List`.
+                    // Per carrier: the identity arm's literal, its body, and the cons arm — which binds `(predecessor, ih)` for the head-less unary `Nat`, and `(head, tail), ih` for `Bytes`/`List`.
                     let (empty_lit, empty_case, cons_arm) = match carrier {
                         Carrier::Nat {
                             empty_case,
@@ -2412,17 +2376,10 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                             ]);
                             ("\n| 0n =>\n", empty_case, cons_arm)
                         }
-                        Carrier::Bin {
-                            grain,
+                        Carrier::Bytes {
                             empty_case,
                             cons_case,
-                        } => (
-                            match grain {
-                                Grain::X => "\n| x[] =>\n",
-                            },
-                            empty_case,
-                            cons_bin(grain, cons_case),
-                        ),
+                        } => ("\n| x[] =>\n", empty_case, cons_bytes(cons_case)),
                         Carrier::List {
                             empty_case,
                             cons_case,
@@ -2657,16 +2614,12 @@ fn pattern_text(pattern: &Pattern, names: &mut dyn Iterator<Item = String>) -> S
 
             format!("[{head}, ..{tail}]{}", peeled(hypothesis, names))
         }
-        Pattern::End(grain) => format!("{}[]", grain_letter(*grain)),
-        Pattern::Atom(grain, hypothesis) => {
+        Pattern::End => "x[]".to_string(),
+        Pattern::Atom(hypothesis) => {
             let head = names.next().unwrap_or_default();
             let tail = names.next().unwrap_or_default();
 
-            format!(
-                "{}[{head}, ..{tail}]{}",
-                grain_letter(*grain),
-                peeled(hypothesis, names)
-            )
+            format!("x[{head}, ..{tail}]{}", peeled(hypothesis, names))
         }
     }
 }
@@ -2693,13 +2646,6 @@ fn bind_text(bind: &Bind, names: &mut dyn Iterator<Item = String>) -> String {
                 _ => format!("({fields})"),
             }
         }
-    }
-}
-
-/// The letter a packed literal of `grain` opens with.
-fn grain_letter(grain: Grain) -> &'static str {
-    match grain {
-        Grain::X => "x",
     }
 }
 

@@ -13,7 +13,7 @@ use {
         connectives_agree_classed, convert_classed, convert_intrinsics,
     },
     curios_core::{Cost, Free, Intrinsic, Produced, ReduceError, Reducer, Subterm, Term},
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
     curios_utilities::SyntaxRegistry,
 };
 
@@ -169,111 +169,83 @@ impl Driver for Elaborating<'_, '_> {
     }
 }
 
-/// Decompose a nonempty (or empty) packed literal against an `append`/`concat` spine of the same grain, when the spine's segment lengths determine the split. `None` when the pair is not literal-versus-spine or a middle segment's length is unknown — the caller's congruence (and the drain's metavariable parking) keep their own handling. `Some(false)` is a definite structural length clash: segment lengths are fixed by the spine's shape, so no metavariable solution can repair them.
+/// Decompose a nonempty (or empty) packed literal against an `append`/`concat` spine, when the spine's segment lengths determine the split. `None` when the pair is not literal-versus-spine or a middle segment's length is unknown — the caller's congruence (and the drain's metavariable parking) keep their own handling. `Some(false)` is a definite structural length clash: segment lengths are fixed by the spine's shape, so no metavariable solution can repair them.
 fn packed_literal_view(cmp: &mut Convert, this: &Intrinsic, that: &Intrinsic) -> Option<bool> {
     match (literal_of(this), literal_of(that)) {
-        (Some((grain, lit)), None) => split_against(cmp, grain, lit, that),
-        (None, Some((grain, lit))) => split_against(cmp, grain, lit, this),
+        (Some(lit), None) => split_against(cmp, lit, that),
+        (None, Some(lit)) => split_against(cmp, lit, this),
         _ => None,
     }
 }
 
-fn literal_of(intrinsic: &Intrinsic) -> Option<(Grain, &Binary)> {
+fn literal_of(intrinsic: &Intrinsic) -> Option<&Binary> {
     match intrinsic {
-        Intrinsic::Bin(grain, value) => Some((*grain, value)),
+        Intrinsic::Bytes(value) => Some(value),
         _ => None,
     }
 }
 
 /// The number of atoms `intrinsic` denotes when its shape determines it: a literal's stored length, an `append`'s base plus one, a `concat`'s segment sum. `None` for anything symbolic-length (a variable, a slice, a metavariable).
-fn known_len(grain: Grain, term: &Term) -> Option<usize> {
+fn known_len(term: &Term) -> Option<usize> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return None;
     };
     match intrinsic {
-        Intrinsic::Bin(found, value) if *found == grain => Some(literal_len(grain, value)),
-        Intrinsic::BinAppend {
-            grain: found,
-            bin: base,
+        Intrinsic::Bytes(value) => Some(value.len()),
+        Intrinsic::BytesAppend {
+            bytes: base,
             element: _,
-        } if *found == grain => known_len(grain, base).map(|len| len + 1),
-        Intrinsic::BinConcat {
-            grain: found,
-            operands,
-        } if *found == grain => operands
-            .iter()
-            .map(|operand| known_len(grain, operand))
-            .sum(),
+        } => known_len(base).map(|len| len + 1),
+        Intrinsic::BytesConcat { operands } => operands.iter().map(known_len).sum(),
         _ => None,
     }
 }
 
-fn literal_len(grain: Grain, value: &Binary) -> usize {
-    match grain {
-        Grain::X => value
-            .to_bytes()
-            .expect("an X-grain literal packs whole bytes")
-            .len(),
-    }
-}
-
-/// The literal's atoms `lo..hi` as a `Bin` literal of the same grain.
-fn literal_slice(grain: Grain, value: &Binary, lo: usize, hi: usize) -> Term {
-    Term::intrinsic(Intrinsic::Bin(
-        grain,
-        match grain {
-            Grain::X => Binary::from_bytes(value.to_bytes().unwrap()[lo..hi].to_vec()),
-        },
-    ))
+/// The literal's atoms `lo..hi` as a `Bytes` literal.
+fn literal_slice(value: &Binary, lo: usize, hi: usize) -> Term {
+    Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(
+        value.as_bytes()[lo..hi].to_vec(),
+    )))
 }
 
 /// The literal's atom at `index` as the element intrinsic an `append` operand carries: a `Byte`.
-fn literal_atom(grain: Grain, value: &Binary, index: usize) -> Term {
-    Term::intrinsic(match grain {
-        Grain::X => Intrinsic::Byte(value.to_bytes().unwrap()[index]),
-    })
+fn literal_atom(value: &Binary, index: usize) -> Term {
+    Term::intrinsic(Intrinsic::Byte(value.as_bytes()[index]))
 }
 
 /// Split `lit` against one spine node, enqueuing the aligned sub-goals.
-fn split_against(cmp: &mut Convert, grain: Grain, lit: &Binary, spine: &Intrinsic) -> Option<bool> {
-    let len = literal_len(grain, lit);
+fn split_against(cmp: &mut Convert, lit: &Binary, spine: &Intrinsic) -> Option<bool> {
+    let len = lit.len();
     match spine {
         // `append(base, atom) = base ++ [atom]`: the last literal atom pairs with `atom`, the rest with `base`. An empty literal against an always-nonempty `append` is a definite clash.
-        Intrinsic::BinAppend {
-            grain: found,
-            bin: base,
+        Intrinsic::BytesAppend {
+            bytes: base,
             element: atom,
-        } if *found == grain => {
+        } => {
             if len == 0 {
                 return Some(false);
             }
             cmp.enqueue(
                 Term::type_ground(),
                 base.clone(),
-                literal_slice(grain, lit, 0, len - 1),
+                literal_slice(lit, 0, len - 1),
             );
             cmp.enqueue(
                 Term::type_ground(),
                 atom.clone(),
-                literal_atom(grain, lit, len - 1),
+                literal_atom(lit, len - 1),
             );
             Some(true)
         }
         // `concat` splits at its segments' known lengths, consumed left to right, one trailing unknown-length segment taking the remainder — `curios-algebra`'s `split`. Each segment is related to its range of the literal as the split reaches it, so a split that clashes or abstains has already related the segments before where it stopped.
-        Intrinsic::BinConcat {
-            grain: found,
-            operands,
-        } if *found == grain => {
-            let lengths = operands
-                .iter()
-                .map(|operand| known_len(grain, operand))
-                .collect::<Vec<_>>();
+        Intrinsic::BytesConcat { operands } => {
+            let lengths = operands.iter().map(known_len).collect::<Vec<_>>();
             let split = split(&lengths, len);
             for (operand, range) in operands.iter().zip(split.ranges) {
                 cmp.enqueue(
                     Term::type_ground(),
                     operand.clone(),
-                    literal_slice(grain, lit, range.start, range.end),
+                    literal_slice(lit, range.start, range.end),
                 );
             }
             match split.cut {

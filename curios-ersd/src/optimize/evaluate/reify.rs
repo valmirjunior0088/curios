@@ -23,8 +23,8 @@ pub(super) fn reify_check(
 ) -> Result<(), Bail> {
     budget.node()?;
     if let Some(constant) = value.as_constant() {
-        if let Constant::Bin(grain, value) = &constant {
-            budget.payload(value.len(*grain))?;
+        if let Constant::Bytes(value) = &constant {
+            budget.payload(value.len())?;
         }
         return Ok(());
     }
@@ -97,8 +97,8 @@ pub(super) fn reify(
     budget.node()?;
 
     if let Some(constant) = value.as_constant() {
-        if let Constant::Bin(grain, value) = &constant {
-            budget.payload(value.len(*grain))?;
+        if let Constant::Bytes(value) = &constant {
+            budget.payload(value.len())?;
         }
         return Ok(Atom::Constant(module.intern_constant(constant)));
     }
@@ -146,7 +146,7 @@ pub(super) fn reify(
         | Value::Int(_)
         | Value::Flt(_)
         | Value::Handle(_)
-        | Value::Bin(..) => unreachable!("leaf values are reified through `as_constant`"),
+        | Value::Bytes(_) => unreachable!("leaf values are reified through `as_constant`"),
     }
 }
 

@@ -5,7 +5,7 @@
 use {
     super::{Reducer, reduce_intrinsic},
     crate::{Cost, Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term},
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
 };
 
 /// A binder no fixture spells: the suites name their symbols by small indices, so one minted far above them aliases none, and a process-wide counter keeps two openings in one test apart.
@@ -172,14 +172,13 @@ pub(super) fn at(term: Term, binder: &Free, value: Term) -> Term {
 }
 
 pub(super) fn run_bytes(run: &[u8]) -> Term {
-    Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(run.to_vec())))
+    Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(run.to_vec())))
 }
 
 /// The same five bytes, spelled four ways: whole, split once, split twice, and left-nested the way an accumulation builds one.
 pub(super) fn groupings(whole: &[u8]) -> Vec<Term> {
     let nest = |left: Term, right: Term| {
-        Term::intrinsic(Intrinsic::BinConcat {
-            grain: Grain::X,
+        Term::intrinsic(Intrinsic::BytesConcat {
             operands: vec![left, right],
         })
     };
@@ -187,8 +186,7 @@ pub(super) fn groupings(whole: &[u8]) -> Vec<Term> {
     vec![
         run_bytes(whole),
         nest(run_bytes(&whole[..2]), run_bytes(&whole[2..])),
-        Term::intrinsic(Intrinsic::BinConcat {
-            grain: Grain::X,
+        Term::intrinsic(Intrinsic::BytesConcat {
             operands: vec![
                 run_bytes(&whole[..1]),
                 run_bytes(&whole[1..3]),
@@ -202,7 +200,7 @@ pub(super) fn groupings(whole: &[u8]) -> Vec<Term> {
     ]
 }
 
-/// The `List` twin of the three tests above, in one: its carrier flattens element vectors where `Bin` copies packed bytes, and the walks are written separately, so agreement on one is not agreement on the other. Elements are symbols, compared syntactically — which is all the property needs, since regrouping never changes an element, only which run it sits in.
+/// The `List` twin of the three tests above, in one: its carrier flattens element vectors where `Bytes` copies packed bytes, and the walks are written separately, so agreement on one is not agreement on the other. Elements are symbols, compared syntactically — which is all the property needs, since regrouping never changes an element, only which run it sits in.
 pub(super) fn list_of(elements: &[u32]) -> Term {
     Term::intrinsic(Intrinsic::List {
         element: symbol(1000, "T"),
@@ -218,14 +216,13 @@ pub(super) fn nat_list(elements: &[u32]) -> Term {
     })
 }
 
-/// Fold a closed `Bin` term to its literal run — the ground truth the peel grids compare, so it must land on a literal or the instantiation was not closed.
-pub(super) fn bin_value(term: Term) -> Term {
+/// Fold a closed `Bytes` term to its literal run — the ground truth the peel grids compare, so it must land on a literal or the instantiation was not closed.
+pub(super) fn bytes_value(term: Term) -> Term {
     let folded = fold(term);
     assert!(
         matches!(
             &*folded,
-            Subterm::Intrinsic(Intrinsic::Bin(Grain::X, _))
-                | Subterm::Intrinsic(Intrinsic::Byte(_))
+            Subterm::Intrinsic(Intrinsic::Bytes(_)) | Subterm::Intrinsic(Intrinsic::Byte(_))
         ),
         "a closed instantiation folds to a literal, got {folded:?}",
     );

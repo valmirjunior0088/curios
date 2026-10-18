@@ -48,7 +48,7 @@ use {
         Quality, Rec, Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality,
         Tuple, TupleType, Variant,
     },
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Natural},
     curios_utilities::recurse,
     std::convert::Infallible,
 };
@@ -684,11 +684,11 @@ fn check_cases(
 fn reads_hypothesis(carrier: &Carrier) -> bool {
     match carrier {
         Carrier::Nat { cons_case, .. } => cons_case.uses(1),
-        Carrier::Bin { cons_case, .. } | Carrier::List { cons_case, .. } => cons_case.uses(2),
+        Carrier::Bytes { cons_case, .. } | Carrier::List { cons_case, .. } => cons_case.uses(2),
     }
 }
 
-/// The free-monoid arm rule: the identity arm inhabits the result at the carrier's empty value, and the cons arm — under a peeled generator, a tail, and the induction hypothesis at that tail when the arm reads it — inhabits it at one generator prepended to the tail. The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `List`, the append-to-empty singleton for `Bin`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
+/// The free-monoid arm rule: the identity arm inhabits the result at the carrier's empty value, and the cons arm — under a peeled generator, a tail, and the induction hypothesis at that tail when the arm reads it — inhabits it at one generator prepended to the tail. The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `List`, the append-to-empty singleton for `Bytes`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
 ///
 /// **The hypothesis is assumed exactly when the arm reads it, and only a family types it**, at the motive opened at the tail — the rule erasure's split-or-fold reading and the elaborator's state too. Its precondition therefore binds exactly the folds that read it: an ambient goal has no tail to be taken at once the head is substituted away, so it cannot type one ([`Error::AmbientFold`]). A family that names the scrutinee beside its binder states one proposition at every tail, which the arms inhabit as it is written. An arm that reads none — a case split — is checked as a `Bool` arm is, at its case value under either form of result: its reduct `arm(h, t, fold(t))` never contains the fold at the tail, so nothing needs the type the hypothesis would have had.
 ///
@@ -852,33 +852,27 @@ fn check_free_monoid(
             cons(kernel, binders, cons_value.clone(), cons_value, &body)
         }
 
-        Carrier::Bin {
-            grain,
+        Carrier::Bytes {
             empty_case,
             cons_case,
         } => {
-            if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::BinType(found)) if found == grain)
-            {
+            if !matches!(&**scrutinee_type, Subterm::Intrinsic(Intrinsic::BytesType)) {
                 return Err(Error::Unclassified(scrutinee_type.clone()));
             }
 
-            let empty = Term::intrinsic(Intrinsic::Bin(*grain, Binary::empty()));
+            let empty = Term::intrinsic(Intrinsic::Bytes(Binary::empty()));
             identity(kernel, empty.clone(), empty_case)?;
 
-            let atom_type = Term::intrinsic(match grain {
-                Grain::X => Intrinsic::ByteType,
-            });
+            let atom_type = Term::intrinsic(Intrinsic::ByteType);
             let head = kernel.fresh(cons_case.first_hint());
             let tail = kernel.fresh(cons_case.second_hint());
             let ih = kernel.fresh(cons_case.third_hint());
             let tail_occurrence = Term::free_var(&tail);
-            let singleton = Term::intrinsic(Intrinsic::BinAppend {
-                grain: *grain,
-                bin: empty,
+            let singleton = Term::intrinsic(Intrinsic::BytesAppend {
+                bytes: empty,
                 element: Term::free_var(&head),
             });
-            let cons_value = Term::intrinsic(Intrinsic::BinConcat {
-                grain: *grain,
+            let cons_value = Term::intrinsic(Intrinsic::BytesConcat {
                 operands: vec![singleton, tail_occurrence.clone()],
             });
             let body = cons_case.open(&[
@@ -889,7 +883,7 @@ fn check_free_monoid(
 
             let mut binders = vec![
                 (&head, atom_type),
-                (&tail, Term::intrinsic(Intrinsic::BinType(*grain))),
+                (&tail, Term::intrinsic(Intrinsic::BytesType)),
             ];
             binders.extend(hypothesis(&tail_occurrence).map(|type_| (&ih, type_)));
 

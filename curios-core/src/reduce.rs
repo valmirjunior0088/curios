@@ -20,12 +20,12 @@ pub enum ReduceError {
         /// What the refused charge came to. [`u64::MAX`] is a size that overflowed while being computed, which is refused without being compared.
         attempted: u64,
     },
-    BinGetOutOfBounds {
+    BytesGetOutOfBounds {
         len: usize,
         index: usize,
         extent: Option<Extent>,
     },
-    BinSliceOutOfRange {
+    BytesSliceOutOfRange {
         len: usize,
         start: usize,
         length: usize,
@@ -42,7 +42,7 @@ pub enum ReduceError {
         length: usize,
         extent: Option<Extent>,
     },
-    /// A `Nat`/`Int` division whose divisor reduced to literal zero — mathematically undefined, so reported like [`ReduceError::BinGetOutOfBounds`] rather than panicking the fold. (Runtime *range* limits, by contrast, never error at the type level: `Nat`/`Int` folds are unbounded there.)
+    /// A `Nat`/`Int` division whose divisor reduced to literal zero — mathematically undefined, so reported like [`ReduceError::BytesGetOutOfBounds`] rather than panicking the fold. (Runtime *range* limits, by contrast, never error at the type level: `Nat`/`Int` folds are unbounded there.)
     DivisionByZero {
         kind: &'static str,
         extent: Option<Extent>,

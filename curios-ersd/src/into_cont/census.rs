@@ -117,7 +117,7 @@ pub(crate) fn sequence_census(module: &Module) -> SequenceFacts {
             } => {
                 let kind = match grain {
                     SequenceGrain::List => UseKind::ListEvidence,
-                    SequenceGrain::Bin(_) => UseKind::Neutral,
+                    SequenceGrain::Bytes => UseKind::Neutral,
                 };
                 record(scrutinee, kind);
             }
@@ -256,8 +256,8 @@ fn sequence_use(operation: SequenceOp, position: usize) -> UseKind {
         (SequenceOp::ListLen, 0) | (SequenceOp::ListGet | SequenceOp::ListSlice, 0) => {
             UseKind::ListEvidence
         }
-        (SequenceOp::BinLen(_) | SequenceOp::BinEql(_), _) => UseKind::Neutral,
-        (SequenceOp::BinGet(_) | SequenceOp::BinSlice(_), 0) => UseKind::Neutral,
+        (SequenceOp::BytesLen | SequenceOp::BytesEql, _) => UseKind::Neutral,
+        (SequenceOp::BytesGet | SequenceOp::BytesSlice, 0) => UseKind::Neutral,
         _ => UseKind::Poison,
     }
 }

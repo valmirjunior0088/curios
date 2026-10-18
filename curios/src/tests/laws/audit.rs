@@ -12,7 +12,6 @@ use {
     },
     crate::tests::typecheck,
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation, declares},
-    curios_num::Grain,
 };
 
 /// Every generated law with its sides swapped.
@@ -165,7 +164,7 @@ fn answering(carrier: Carrier) -> Option<&'static str> {
         Carrier::Boolean => Some("bool_of"),
         Carrier::Byte => Some("byte_of"),
         Carrier::Float => Some("flt_of"),
-        Carrier::Packed(Grain::X) => Some("bytes_of"),
+        Carrier::Bytes => Some("bytes_of"),
         Carrier::List => None,
     }
 }

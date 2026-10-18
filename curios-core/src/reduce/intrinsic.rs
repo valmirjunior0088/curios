@@ -34,14 +34,14 @@ pub use truth::*;
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Aligned, Cost, Declaration, Element, Extremum, FUSION_CAP, FreeMonoid, Func, Intrinsic,
-        LinearViews, Nat, Operands, Probe, Subterm, Telescope, Term, Words, int_cancel_common,
-        int_distributes, int_footprint, int_multiply, int_negate, int_of_nat, int_preimage,
-        int_sum, int_terms, normalize_concat, peel_bin, peel_first_atom, peel_first_elem,
-        same_atom,
+        Aligned, Bytes, Cost, Declaration, Element, Extremum, FUSION_CAP, FreeMonoid, Func,
+        Intrinsic, LinearViews, Nat, Operands, Probe, Subterm, Telescope, Term, Words,
+        int_cancel_common, int_distributes, int_footprint, int_multiply, int_negate, int_of_nat,
+        int_preimage, int_sum, int_terms, normalize_concat, peel_bytes, peel_first_atom,
+        peel_first_elem, same_atom,
     },
     curios_algebra::{Carrier, Comparison, Deduction, Half},
-    curios_num::{Binary, Floating, Grain, Integer, Natural},
+    curios_num::{Binary, Floating, Integer, Natural},
 };
 
 /// A `&&` or `||` tree with every leaf forced and the tree re-nested to the left, asked for by name where a comparison needs one set of leaves against another — the converters' rule for two conjunctions or two disjunctions, the twin of `Nat::normalize` for a stuck product. `None` for any other intrinsic.
@@ -295,37 +295,32 @@ pub fn successor_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {
 /// The three pointwise rows fold by one rule: two literal runs of one length combine in the packed representation, and anything else keeps the node it was written as.
 ///
 /// **Two literals of different lengths decline to fold rather than trapping.** The bound in the type is what forbids the pair, and the checker is what enforces it; a reducer that answered here would be deciding a proposition it may not construct — the defect `Intrinsic::signature`'s module documentation records the bound fields as existing to remove — and one that panicked would turn an ill-typed term into a crash instead of a report. Declining costs reductions and never an answer, which is `FreeMonoid::single_generator`'s trade at a different seam.
-fn reduce_bin_pointwise(
+fn reduce_bytes_pointwise(
     reducer: &mut impl Reducer,
-    grain: Grain,
     left: &Term,
     right: &Term,
     same_length: &Term,
     combine: impl Fn(&Binary, &Binary) -> Binary,
-    rebuild: impl FnOnce(Grain, Term, Term, Term) -> Intrinsic,
+    rebuild: impl FnOnce(Term, Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
     if let (
-        Subterm::Intrinsic(Intrinsic::Bin(found_left, run_left)),
-        Subterm::Intrinsic(Intrinsic::Bin(found_right, run_right)),
+        Subterm::Intrinsic(Intrinsic::Bytes(run_left)),
+        Subterm::Intrinsic(Intrinsic::Bytes(run_right)),
     ) = (&*left, &*right)
-        && *found_left == grain
-        && *found_right == grain
-        && run_left.bit_length() == run_right.bit_length()
+        && run_left.len() == run_right.len()
     {
         // Three payloads: each operand normalizes into a buffer of its own, and the combined run collects into a third.
-        reducer.spend(packed_bound(grain, run_left.bit_length() as u64).saturating_mul(3))?;
+        reducer.spend(Cost::packed_bytes(run_left.len() as u64).saturating_mul(3))?;
 
-        return Ok(Subterm::Intrinsic(Intrinsic::Bin(
-            grain,
-            combine(run_left, run_right),
-        )));
+        return Ok(Subterm::Intrinsic(Intrinsic::Bytes(combine(
+            run_left, run_right,
+        ))));
     }
 
     Ok(Subterm::Intrinsic(rebuild(
-        grain,
         left,
         right,
         same_length.clone(),
@@ -1021,20 +1016,20 @@ pub fn reduce_intrinsic(
             }
 
             Ok(Subterm::Intrinsic(match inner.as_flt() {
-                Some(value) => Intrinsic::Bin(Grain::X, value.to_le_bytes()),
+                Some(value) => Intrinsic::Bytes(value.to_le_bytes()),
                 None => Intrinsic::FltToLeBytes(inner),
             }))
         }
-        Intrinsic::FltOfLeBytes { bin, eight_bytes } => {
-            let bin = reducer.reduce_forced(bin.clone())?;
+        Intrinsic::FltOfLeBytes { bytes, eight_bytes } => {
+            let bytes = reducer.reduce_forced(bytes.clone())?;
 
             // Decoding what `Flt/to_le_bytes` wrote is the float it was given — `Intrinsic::undone`.
-            if let Some(operand) = intrinsic.undone(&bin) {
+            if let Some(operand) = intrinsic.undone(&bytes) {
                 return reducer.reduce(operand.clone()).map(Term::unwrap_or_clone);
             }
 
-            let folded = match &*bin {
-                Subterm::Intrinsic(Intrinsic::Bin(Grain::X, packed)) => {
+            let folded = match &*bytes {
+                Subterm::Intrinsic(Intrinsic::Bytes(packed)) => {
                     Floating::of_le_bytes(packed).ok().map(Intrinsic::Flt)
                 }
                 _ => None,
@@ -1043,12 +1038,12 @@ pub fn reduce_intrinsic(
             Ok(Subterm::Intrinsic(match folded {
                 Some(intrinsic) => intrinsic,
                 None => Intrinsic::FltOfLeBytes {
-                    bin,
+                    bytes,
                     eight_bytes: eight_bytes.clone(),
                 },
             }))
         }
-        // The conversions preserve the number, never the bits — a bit view belongs to explicit `Bin` casts. `Nat/to_int` is total: ℕ embeds in ℤ, and both are unbounded here. The runtime's carrier-range traps stay where they always were, at the `into_wasm` boundary.
+        // The conversions preserve the number, never the bits — a bit view belongs to explicit `Bytes` casts. `Nat/to_int` is total: ℕ embeds in ℤ, and both are unbounded here. The runtime's carrier-range traps stay where they always were, at the `into_wasm` boundary.
         Intrinsic::NatToInt(inner) => {
             let inner = reducer.reduce_forced(inner.clone())?;
 
@@ -1147,26 +1142,19 @@ pub fn reduce_intrinsic(
                 finite: finite.clone(),
             },
         ),
-        Intrinsic::BinType(grain) => Ok(Subterm::Intrinsic(Intrinsic::BinType(*grain))),
-        Intrinsic::Bin(grain, run) => Ok(Subterm::Intrinsic(Intrinsic::Bin(*grain, run.clone()))),
-        Intrinsic::BinLen(grain, bin) => {
-            let grain = *grain;
-            let bin = reducer.reduce_forced(bin.clone())?;
-            // The measure answers a wholly-literal spine by folding it, without rebuilding a `Bin/len` per operand and handing each back to the reducer, which would make a length over a deep concatenation re-walk every sub-spine. It agrees with the homomorphism below by construction on the shapes it accepts (a literal run's length, summed over a concatenation's operands) and declines everything else, which the homomorphism reduces.
-            if let Some(total) = FreeMonoid::Bin(grain).measure(&bin) {
+        Intrinsic::BytesType => Ok(Subterm::Intrinsic(Intrinsic::BytesType)),
+        Intrinsic::Bytes(run) => Ok(Subterm::Intrinsic(Intrinsic::Bytes(run.clone()))),
+        Intrinsic::BytesLen(bytes) => {
+            let bytes = reducer.reduce_forced(bytes.clone())?;
+            // The measure answers a wholly-literal spine by folding it, without rebuilding a `Bytes/len` per operand and handing each back to the reducer, which would make a length over a deep concatenation re-walk every sub-spine. It agrees with the homomorphism below by construction on the shapes it accepts (a literal run's length, summed over a concatenation's operands) and declines everything else, which the homomorphism reduces.
+            if let Some(total) = FreeMonoid::Bytes.measure(&bytes) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
             }
             // `len(replicate(count, x)) = count`, which the measure above answers only once the count is a literal. It has to hold symbolically too, because a fill is how a program builds a run as long as another one: `/std`'s `not` is an `xor` against a fill of its operand's length, and the equal-length bound that guards it has nothing to reduce to without this.
-            if let Subterm::Intrinsic(Intrinsic::BinReplicate {
-                grain: found,
-                count,
-                ..
-            }) = &*bin
-                && *found == grain
-            {
+            if let Subterm::Intrinsic(Intrinsic::BytesReplicate { count, .. }) = &*bytes {
                 return Ok(Term::unwrap_or_clone(count.clone()));
             }
-            let shape = bin_shape(reducer, grain, bin)?;
+            let shape = bytes_shape(reducer, bytes)?;
 
             reduce_homomorphism(
                 reducer,
@@ -1181,30 +1169,28 @@ pub fn reduce_intrinsic(
                 },
                 // A window's length is the count it was cut to: `slice` carries `start + length <= len(base)`, so the count is the measure at every well-typed instance.
                 |_, _, length, _| length,
-                |sub| Term::intrinsic(Intrinsic::bin_len(grain, sub)),
+                |sub| Term::intrinsic(Intrinsic::bytes_len(sub)),
             )
         }
-        Intrinsic::BinEql(grain, left, right) => {
-            let grain = *grain;
+        Intrinsic::BytesEql(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
 
             // Reflexivity: any value equals itself. Catches a shared variable before the peel, which would otherwise read it as two identical chunks and say the same.
-            if same_atom(Carrier::Packed(grain), &left, &right) {
+            if same_atom(Carrier::Bytes, &left, &right) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Bool(true)));
             }
 
-            // A bare side — a variable, a projection, anything that is not an intrinsic — is read as the one-chunk spine it is, under the grain this arm already carries: `x[..bs]` is `bs` on values, so the peel's verdict on the wrapped pair is its verdict on the original. What the wrap decides is the clash on a positive residual, `append(bs, k) ~ bs`; the peel needs a head to read the grain off, and a variable has none. The fold's alone: conversion can only refuse such a pair, and inversion solves a bare side as a binder.
+            // A bare side — a variable, a projection, anything that is not an intrinsic — is read as the one-chunk spine it is: `x[..bs]` is `bs` on values, so the peel's verdict on the wrapped pair is its verdict on the original. What the wrap decides is the clash on a positive residual, `append(bs, k) ~ bs`; the peel reads a word off a head, and a variable has none. The fold's alone: conversion can only refuse such a pair, and inversion solves a bare side as a binder.
             let spine = |side: &Term| match &**side {
                 Subterm::Intrinsic(intrinsic) => intrinsic.clone(),
-                _ => Intrinsic::BinConcat {
-                    grain,
+                _ => Intrinsic::BytesConcat {
                     operands: vec![side.clone()],
                 },
             };
 
             // Structural decision via the free-monoid peel (`core::spine`): a peeled-equal pair is `true`, a definite generator or length clash is `false` (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`). Anything the peel leaves undecided stays neutral — the same conservative seam conversion reads, so the fold only ever strengthens, never weakens.
-            match peel_bin(&spine(&left), &spine(&right)) {
+            match peel_bytes(&spine(&left), &spine(&right)) {
                 Some(Deduction::Equal) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(true))),
                 Some(Deduction::Impossible) => {
                     return Ok(Subterm::Intrinsic(Intrinsic::Bool(false)));
@@ -1212,55 +1198,48 @@ pub fn reduce_intrinsic(
                 Some(Deduction::Equivalent(_)) | Some(Deduction::Undecided) | None => {}
             }
 
-            Ok(Subterm::Intrinsic(Intrinsic::BinEql(grain, left, right)))
+            Ok(Subterm::Intrinsic(Intrinsic::BytesEql(left, right)))
         }
-        Intrinsic::BinGet {
-            grain,
-            bin,
+        Intrinsic::BytesGet {
+            bytes,
             index,
             in_range,
         } => {
-            let grain = *grain;
             let extent = index.extent();
-            let bin = reducer.reduce_forced(bin.clone())?;
+            let bytes = reducer.reduce_forced(bytes.clone())?;
             let index_reduced = reducer.reduce_forced(index.clone())?;
             let i = as_index(&index_reduced);
             // A concrete index into a literal run.
-            if let (Subterm::Intrinsic(Intrinsic::Bin(found, run)), Some(i)) = (&*bin, i)
-                && *found == grain
-            {
-                return element_of_run(grain, run, i).ok_or(ReduceError::BinGetOutOfBounds {
-                    len: run.len(grain),
+            if let (Subterm::Intrinsic(Intrinsic::Bytes(run)), Some(i)) = (&*bytes, i) {
+                return element_of_run(run, i).ok_or(ReduceError::BytesGetOutOfBounds {
+                    len: run.len(),
                     index: i,
                     extent,
                 });
             }
-            // The cons head's generator: `get(append(x[], k), 0) = k` — the base case of the cons-peel below, and the partner of `BinSlice`'s rules. Without it the peel's symbolic head chunk is this same `append(x[], k)`, so the `0`-index step would rebuild the redex it came from until the budget exhausted.
-            if let Subterm::Intrinsic(Intrinsic::BinAppend {
-                grain: found,
-                bin: base,
+            // The cons head's generator: `get(append(x[], k), 0) = k` — the base case of the cons-peel below, and the partner of `BytesSlice`'s rules. Without it the peel's symbolic head chunk is this same `append(x[], k)`, so the `0`-index step would rebuild the redex it came from until the budget exhausted.
+            if let Subterm::Intrinsic(Intrinsic::BytesAppend {
+                bytes: base,
                 element,
-            }) = &*bin
-                && *found == grain
-                && let Subterm::Intrinsic(Intrinsic::Bin(empty, b)) = &**base
-                && *empty == grain
+            }) = &*bytes
+                && let Subterm::Intrinsic(Intrinsic::Bytes(b)) = &**base
                 && b.is_empty()
                 && let Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) = &*index_reduced
             {
                 return reducer.reduce(element.clone()).map(Term::unwrap_or_clone);
             }
             // An index is a window of one, so the same two strategies that place a window place an index — see `FreeMonoid::window`. The concrete one narrows the operand holding it down to that single generator; the symbolic one takes a whole operand that already carries exactly one, which is the seam case `get([..p, k], len(p)) = k`.
-            match FreeMonoid::Bin(grain).window(
+            match FreeMonoid::Bytes.window(
                 reducer,
-                &bin,
+                &bytes,
                 &index_reduced,
                 &Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                |piece| bin_piece(grain, piece),
-                &Words::new(grain),
+                bytes_piece,
+                &Words::new(Bytes),
             )? {
                 Some(Windowed::Parts(parts)) => {
                     if let [only] = parts.as_slice()
-                        && let Some(generator) = FreeMonoid::Bin(grain).single_generator(only)
+                        && let Some(generator) = FreeMonoid::Bytes.single_generator(only)
                     {
                         return reducer.reduce(generator).map(Term::unwrap_or_clone);
                     }
@@ -1268,8 +1247,7 @@ pub fn reduce_intrinsic(
                 // The index lies inside the last operand: the same `get` over that operand, under the same bound — which the seam walk's cancellation has already turned into a bound on that operand alone.
                 Some(Windowed::Inside { operand, start }) => {
                     return reducer
-                        .reduce(Term::intrinsic(Intrinsic::bin_get(
-                            grain,
+                        .reduce(Term::intrinsic(Intrinsic::bytes_get(
                             operand,
                             start,
                             in_range.clone(),
@@ -1277,7 +1255,7 @@ pub fn reduce_intrinsic(
                         .map(Term::unwrap_or_clone);
                 }
                 Some(Windowed::Past { total, start, .. }) => {
-                    return Err(ReduceError::BinGetOutOfBounds {
+                    return Err(ReduceError::BytesGetOutOfBounds {
                         len: total,
                         index: start,
                         extent,
@@ -1286,13 +1264,12 @@ pub fn reduce_intrinsic(
                 None => {}
             }
             // A get over a cons spine peels one generator per `0`/`succ` index step: `get(cons(h, t), 0) = h` and `get(cons(h, t), succ k) = get(t, k)`.
-            if let Some((head, tail)) = peel_first_atom(grain, &bin) {
+            if let Some((head, tail)) = peel_first_atom(&bytes) {
                 match &*index_reduced {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
                         let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
                         return reducer
-                            .reduce(Term::intrinsic(Intrinsic::bin_get(
-                                grain,
+                            .reduce(Term::intrinsic(Intrinsic::bytes_get(
                                 head,
                                 zero,
                                 in_range.clone(),
@@ -1303,8 +1280,7 @@ pub fn reduce_intrinsic(
                         let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
                         let prev = Term::intrinsic(Intrinsic::nat_sub(index_reduced.clone(), one));
                         return reducer
-                            .reduce(Term::intrinsic(Intrinsic::bin_get(
-                                grain,
+                            .reduce(Term::intrinsic(Intrinsic::bytes_get(
                                 tail,
                                 prev,
                                 in_range.clone(),
@@ -1314,48 +1290,42 @@ pub fn reduce_intrinsic(
                     _ => {}
                 }
             }
-            Ok(Subterm::Intrinsic(Intrinsic::bin_get(
-                grain,
-                bin,
+            Ok(Subterm::Intrinsic(Intrinsic::bytes_get(
+                bytes,
                 index_reduced,
                 in_range.clone(),
             )))
         }
-        Intrinsic::BinSlice {
-            grain,
-            bin,
+        Intrinsic::BytesSlice {
+            bytes,
             start,
             length,
             within,
         } => {
-            let grain = *grain;
             let extent = start.extent().or_else(|| length.extent());
-            let bin = reducer.reduce_forced(bin.clone())?;
+            let bytes = reducer.reduce_forced(bytes.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
             let length_reduced = reducer.reduce_forced(length.clone())?;
-            // The full slice is the identity: `slice(b, 0, len b) = b`. Sound even for a symbolic `b` — a window covering everything is always in range, never trapping — and the runtime partner of `core::spine`'s window-collapse: it lets a bare full-window `BinSlice` reduce to its base, so a `Bin/slice` over the whole value costs no copy and converts against the base directly.
+            // The full slice is the identity: `slice(b, 0, len b) = b`. Sound even for a symbolic `b` — a window covering everything is always in range, never trapping — and the runtime partner of `core::spine`'s window-collapse: it lets a bare full-window `BytesSlice` reduce to its base, so a `Bytes/slice` over the whole value costs no copy and converts against the base directly.
             if matches!(
                 &*start_reduced,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))
-            ) && matches!(&*length_reduced, Subterm::Intrinsic(Intrinsic::BinLen(found, whole)) if *found == grain && *whole == bin)
+            ) && matches!(&*length_reduced, Subterm::Intrinsic(Intrinsic::BytesLen( whole)) if *whole == bytes)
             {
-                return Ok(Term::unwrap_or_clone(bin));
+                return Ok(Term::unwrap_or_clone(bytes));
             }
             // The empty slice is empty: `slice(b, i, 0)` is the empty run. The dual of the full-window identity and equally sound — a zero-length window yields no generators regardless of `b` or `i`, and never equates two distinct literals. It lets a codepoint take collapse its zero-width base (`take 0`) to the empty string even over a symbolic cons. Reading a *count* is what makes this one test rather than a comparison of two subjects.
             if Nat::is_zero(&length_reduced) {
-                return Ok(Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())));
+                return Ok(Subterm::Intrinsic(Intrinsic::Bytes(Binary::empty())));
             }
             let s = as_index(&start_reduced);
             let n = as_index(&length_reduced);
             // A concrete slice of a literal run.
-            if let (Subterm::Intrinsic(Intrinsic::Bin(found, run)), Some(s), Some(n)) =
-                (&*bin, s, n)
-                && *found == grain
-            {
-                return match s.checked_add(n).and_then(|e| run.slice(grain, s, e)) {
-                    Some(slice) => Ok(Subterm::Intrinsic(Intrinsic::Bin(grain, slice))),
-                    None => Err(ReduceError::BinSliceOutOfRange {
-                        len: run.len(grain),
+            if let (Subterm::Intrinsic(Intrinsic::Bytes(run)), Some(s), Some(n)) = (&*bytes, s, n) {
+                return match s.checked_add(n).and_then(|e| run.slice(s, e)) {
+                    Some(slice) => Ok(Subterm::Intrinsic(Intrinsic::Bytes(slice))),
+                    None => Err(ReduceError::BytesSliceOutOfRange {
+                        len: run.len(),
                         start: s,
                         length: n,
                         extent,
@@ -1363,24 +1333,23 @@ pub fn reduce_intrinsic(
                 };
             }
             // The window, by whichever strategy reaches it — see `FreeMonoid::window`.
-            match FreeMonoid::Bin(grain).window(
+            match FreeMonoid::Bytes.window(
                 reducer,
-                &bin,
+                &bytes,
                 &start_reduced,
                 &length_reduced,
-                |piece| bin_piece(grain, piece),
-                &Words::new(grain),
+                bytes_piece,
+                &Words::new(Bytes),
             )? {
                 Some(Windowed::Parts(parts)) => {
                     return reducer
-                        .reduce(Term::intrinsic(Intrinsic::bin_concat(grain, parts)))
+                        .reduce(Term::intrinsic(Intrinsic::bytes_concat(parts)))
                         .map(Term::unwrap_or_clone);
                 }
                 // The window lies inside the last operand: the same window into that operand, under the same bound.
                 Some(Windowed::Inside { operand, start }) => {
                     return reducer
-                        .reduce(Term::intrinsic(Intrinsic::bin_slice(
-                            grain,
+                        .reduce(Term::intrinsic(Intrinsic::bytes_slice(
                             operand,
                             start,
                             length_reduced,
@@ -1393,7 +1362,7 @@ pub fn reduce_intrinsic(
                     start,
                     count,
                 }) => {
-                    return Err(ReduceError::BinSliceOutOfRange {
+                    return Err(ReduceError::BytesSliceOutOfRange {
                         len: total,
                         start,
                         length: count,
@@ -1405,7 +1374,7 @@ pub fn reduce_intrinsic(
             // A slice over a cons spine peels one generator per `0`/`succ` boundary step — the reduction partner of the `x[c, ..t]` cons `/std/Str/Valid`'s proofs walk:  `slice(cons(h, t), 0, succ n) = h ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)`.
             //
             // Advancing the start leaves the length alone: the count is invariant under peeling the base, so nothing about the window has to be recomputed to move it.
-            if let Some((head, tail)) = peel_first_atom(grain, &bin) {
+            if let Some((head, tail)) = peel_first_atom(&bytes) {
                 let dec = |n: &Term| {
                     let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
                     Term::intrinsic(Intrinsic::nat_sub(n.clone(), one))
@@ -1416,19 +1385,17 @@ pub fn reduce_intrinsic(
                         Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))),
                     ) => {
                         let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
-                        let rest = Term::intrinsic(Intrinsic::bin_slice(
-                            grain,
+                        let rest = Term::intrinsic(Intrinsic::bytes_slice(
                             tail,
                             zero,
                             dec(&length_reduced),
                             within.clone(),
                         ));
-                        let consed = Term::intrinsic(Intrinsic::bin_concat(grain, [head, rest]));
+                        let consed = Term::intrinsic(Intrinsic::bytes_concat([head, rest]));
                         return reducer.reduce(consed).map(Term::unwrap_or_clone);
                     }
                     (Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))), _) => {
-                        let sliced = Term::intrinsic(Intrinsic::bin_slice(
-                            grain,
+                        let sliced = Term::intrinsic(Intrinsic::bytes_slice(
                             tail,
                             dec(&start_reduced),
                             length_reduced.clone(),
@@ -1439,51 +1406,36 @@ pub fn reduce_intrinsic(
                     _ => {}
                 }
             }
-            Ok(Subterm::Intrinsic(Intrinsic::bin_slice(
-                grain,
-                bin,
+            Ok(Subterm::Intrinsic(Intrinsic::bytes_slice(
+                bytes,
                 start_reduced,
                 length_reduced,
                 within.clone(),
             )))
         }
-        Intrinsic::BinAppend {
-            grain,
-            bin,
-            element,
-        } => {
-            let grain = *grain;
-            let bin = reducer.reduce_forced(bin.clone())?;
-            // A concrete generator is a literal of the grain: a `Byte` at X, taken as the runtime's packed-`i8` store and the optimizer's `as u8` take it, a `Bool` at B. A symbolic operand reads as no generator, so it stays stuck rather than truncating.
+        Intrinsic::BytesAppend { bytes, element } => {
+            let bytes = reducer.reduce_forced(bytes.clone())?;
+            // A concrete generator is a literal `Byte`, taken as the runtime's packed-`i8` store and the optimizer's `as u8` take it. A symbolic operand reads as no generator, so it stays stuck rather than truncating.
             let element = reducer.reduce_forced(element.clone())?;
-            if let Subterm::Intrinsic(Intrinsic::Bin(found, run)) = &*bin
-                && *found == grain
-                && let Some(generator) = Generator::read(grain, &element)
+            if let Subterm::Intrinsic(Intrinsic::Bytes(run)) = &*bytes
+                && let Some(generator) = Generator::read(&element)
             {
                 // Twice the whole rebuilt value: an append copies the packed payload out and then copies the extended run into a fresh buffer. Appending one generator therefore costs the length of everything appended so far, twice — which is the shape that makes a naive accumulation quadratic, and the reason it is charged rather than treated as an increment. Charged before the copy, which is why the generator is read first.
-                reducer.spend(
-                    packed_bound(grain, run.bit_length() as u64 + grain.bits() as u64)
-                        .saturating_mul(2),
-                )?;
+                reducer.spend(Cost::packed_bytes(run.len() as u64 + 1).saturating_mul(2))?;
 
-                let appended = generator
-                    .appended_to(run)
-                    .expect("a literal run of a grain takes that grain's generator");
-
-                return Ok(Subterm::Intrinsic(Intrinsic::Bin(grain, appended)));
+                return Ok(Subterm::Intrinsic(Intrinsic::Bytes(
+                    generator.appended_to(run),
+                )));
             }
 
-            Ok(Subterm::Intrinsic(Intrinsic::bin_append(
-                grain, bin, element,
-            )))
+            Ok(Subterm::Intrinsic(Intrinsic::bytes_append(bytes, element)))
         }
-        Intrinsic::BinConcat { grain, operands } => {
-            let grain = *grain;
+        Intrinsic::BytesConcat { operands } => {
             let reduced: Vec<Term> = operands
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // Normalise by the monoid unit/associativity laws — drop the empty identity (so `concat(x[], a)`/`concat(a, x[])` collapse to `a`), fuse an all-literal survivor set with `Binary::concat`, collapse a lone operand. The definitional partner of `peel_bin`'s `x[]`-handling (`core::spine`); see `normalize_concat`.
+            // Normalise by the monoid unit/associativity laws — drop the empty identity (so `concat(x[], a)`/`concat(a, x[])` collapse to `a`), fuse an all-literal survivor set with `Binary::concat`, collapse a lone operand. The definitional partner of `peel_bytes`'s `x[]`-handling (`core::spine`); see `normalize_concat`.
             //
             // A run past `FUSION_CAP` declines to lend itself, so the concatenation keeps its node instead of copying both operands into a third.
             // The reduced operand vector, and the survivor vector the normalizer filters out of it — two collections whose length is the operand count, charged together before either exists.
@@ -1492,99 +1444,76 @@ pub fn reduce_intrinsic(
             normalize_concat(
                 reduced,
                 |operand: &Term| match &**operand {
-                    Subterm::Intrinsic(Intrinsic::Bin(found, bytes))
-                        if *found == grain && bytes.len(grain) <= FUSION_CAP =>
-                    {
+                    Subterm::Intrinsic(Intrinsic::Bytes(bytes)) if bytes.len() <= FUSION_CAP => {
                         Some(bytes)
                     }
                     _ => None,
                 },
                 |runs| {
                     // Twice the fused payload, per the price list's last paragraph: `Binary::concat` fills a `Vec<u8>` and then converts it into an `Arc<[u8]>`, which allocates a second buffer of the same length. The operation costs two payloads even though one survives.
-                    let bits = runs
+                    let bytes = runs
                         .iter()
-                        .map(|run| run.bit_length() as u64)
+                        .map(|run| run.len() as u64)
                         .fold(0u64, u64::saturating_add);
-                    reducer.spend(packed_bound(grain, bits).saturating_mul(2))?;
+                    reducer.spend(Cost::packed_bytes(bytes).saturating_mul(2))?;
 
-                    Ok(Subterm::Intrinsic(Intrinsic::Bin(
-                        grain,
-                        Binary::concat(runs),
-                    )))
+                    Ok(Subterm::Intrinsic(Intrinsic::Bytes(Binary::concat(runs))))
                 },
-                |kept| {
-                    Subterm::Intrinsic(Intrinsic::BinConcat {
-                        grain,
-                        operands: kept,
-                    })
-                },
+                |kept| Subterm::Intrinsic(Intrinsic::BytesConcat { operands: kept }),
             )
         }
-        Intrinsic::BinReplicate { grain, count, atom } => {
-            let grain = *grain;
+        Intrinsic::BytesReplicate { count, atom } => {
             let count = reducer.reduce_forced(count.clone())?;
             let atom = reducer.reduce_forced(atom.clone())?;
 
             if let Some(n) = as_index(&count)
-                && let Some(generator) = Generator::read(grain, &atom)
+                && let Some(generator) = Generator::read(&atom)
             {
                 // The payload the fill materializes, charged before it exists. This is the one construction here whose size an *operand names* rather than an operand carrying it, so a count the program computed is exactly what has to be priced — the budget is the whole of what stands between a fill and the machine.
-                reducer.spend(packed_bound(
-                    grain,
-                    (n as u64).saturating_mul(grain.bits() as u64),
-                ))?;
+                reducer.spend(Cost::packed_bytes(n as u64))?;
 
-                return Ok(Subterm::Intrinsic(Intrinsic::Bin(
-                    grain,
+                return Ok(Subterm::Intrinsic(Intrinsic::Bytes(
                     generator.replicated(n),
                 )));
             }
 
-            Ok(Subterm::Intrinsic(Intrinsic::bin_replicate(
-                grain, count, atom,
-            )))
+            Ok(Subterm::Intrinsic(Intrinsic::bytes_replicate(count, atom)))
         }
-        Intrinsic::BinAnd {
-            grain,
+        Intrinsic::BytesAnd {
             left,
             right,
             same_length,
-        } => reduce_bin_pointwise(
+        } => reduce_bytes_pointwise(
             reducer,
-            *grain,
             left,
             right,
             same_length,
             Binary::and,
-            Intrinsic::bin_and,
+            Intrinsic::bytes_and,
         ),
-        Intrinsic::BinOr {
-            grain,
+        Intrinsic::BytesOr {
             left,
             right,
             same_length,
-        } => reduce_bin_pointwise(
+        } => reduce_bytes_pointwise(
             reducer,
-            *grain,
             left,
             right,
             same_length,
             Binary::or,
-            Intrinsic::bin_or,
+            Intrinsic::bytes_or,
         ),
-        Intrinsic::BinXor {
-            grain,
+        Intrinsic::BytesXor {
             left,
             right,
             same_length,
-        } => reduce_bin_pointwise(
+        } => reduce_bytes_pointwise(
             reducer,
-            *grain,
             left,
             right,
             same_length,
             Binary::xor,
-            Intrinsic::bin_xor,
+            Intrinsic::bytes_xor,
         ),
         Intrinsic::ListType(elem) => {
             let elem = reducer.reduce(elem.clone())?;
@@ -1635,7 +1564,7 @@ pub fn reduce_intrinsic(
                         base_len,
                     ))
                 },
-                // The `List` twin of `BinLen`'s window law: the count a window was cut to is its length.
+                // The `List` twin of `BytesLen`'s window law: the count a window was cut to is its length.
                 |_, _, length, _| length,
                 |sub| Term::intrinsic(Intrinsic::list_len(type_.clone(), sub)),
             )
@@ -1687,7 +1616,7 @@ pub fn reduce_intrinsic(
                     .reduce(Term::apply(function.clone(), [inner_get]))
                     .map(Term::unwrap_or_clone);
             }
-            // An index is a window of one, so the same two strategies that place a window place an index — see `FreeMonoid::window`. The `List` twin of `BinGet`'s, down to the seam case `get([..p, k], len(p)) = k`.
+            // An index is a window of one, so the same two strategies that place a window place an index — see `FreeMonoid::window`. The `List` twin of `BytesGet`'s, down to the seam case `get([..p, k], len(p)) = k`.
             match FreeMonoid::List.window(
                 reducer,
                 &list,
@@ -1703,7 +1632,7 @@ pub fn reduce_intrinsic(
                         return reducer.reduce(generator).map(Term::unwrap_or_clone);
                     }
                 }
-                // The `List` twin of `BinGet`'s: the index lies inside the last operand, so it is the same `get` over that operand under the same bound.
+                // The `List` twin of `BytesGet`'s: the index lies inside the last operand, so it is the same `get` over that operand under the same bound.
                 Some(Windowed::Inside { operand, start }) => {
                     return reducer
                         .reduce(Term::intrinsic(Intrinsic::list_get(
@@ -1761,7 +1690,7 @@ pub fn reduce_intrinsic(
             let list = reducer.reduce_forced(list.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
             let length_reduced = reducer.reduce_forced(length.clone())?;
-            // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for a symbolic `a` — a window covering everything is always in range — the `List` twin of `BinSlice`'s full-window identity, letting a full-length `List/slice` reduce to its base instead of copying.
+            // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for a symbolic `a` — a window covering everything is always in range — the `List` twin of `BytesSlice`'s full-window identity, letting a full-length `List/slice` reduce to its base instead of copying.
             if matches!(
                 &*start_reduced,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))
@@ -1769,7 +1698,7 @@ pub fn reduce_intrinsic(
             {
                 return Ok(Term::unwrap_or_clone(list));
             }
-            // The empty slice is empty: `slice(a, i, 0) = []`. Sound for a symbolic `a` — a zero-length window yields no elements regardless — and the base case the cons peel below bottoms out on (the `List` twin of `BinSlice`'s empty-slice identity).
+            // The empty slice is empty: `slice(a, i, 0) = []`. Sound for a symbolic `a` — a zero-length window yields no elements regardless — and the base case the cons peel below bottoms out on (the `List` twin of `BytesSlice`'s empty-slice identity).
             if Nat::is_zero(&length_reduced) {
                 return Ok(Subterm::Intrinsic(Intrinsic::List {
                     element: type_.clone(),
@@ -1819,7 +1748,7 @@ pub fn reduce_intrinsic(
                         .reduce(Term::intrinsic(Intrinsic::list_concat(type_, parts)))
                         .map(Term::unwrap_or_clone);
                 }
-                // The `List` twin of `BinSlice`'s: the window lies inside the last operand, so it is the same window into that operand under the same bound.
+                // The `List` twin of `BytesSlice`'s: the window lies inside the last operand, so it is the same window into that operand under the same bound.
                 Some(Windowed::Inside { operand, start }) => {
                     return reducer
                         .reduce(Term::intrinsic(Intrinsic::list_slice(
@@ -1845,7 +1774,7 @@ pub fn reduce_intrinsic(
                 }
                 None => {}
             }
-            // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `List` twin of `BinSlice`'s element peel: `slice(cons(h, t), 0, succ n) = [h] ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)` — the count riding through the second untouched.
+            // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `List` twin of `BytesSlice`'s element peel: `slice(cons(h, t), 0, succ n) = [h] ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)` — the count riding through the second untouched.
             if let Some((head, tail)) = peel_first_elem(&list) {
                 let dec = |n: &Term| {
                     let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
@@ -1907,7 +1836,7 @@ pub fn reduce_intrinsic(
                     element: list_elem,
                     items: mut elems,
                 }) => {
-                    // Growing a vector reallocates it, so the whole extended run is charged rather than the one slot appended — the same reason `BinAppend` charges its whole rebuilt value.
+                    // Growing a vector reallocates it, so the whole extended run is charged rather than the one slot appended — the same reason `BytesAppend` charges its whole rebuilt value.
                     reducer.spend(Cost::collection(elems.len() as u64 + 1))?;
                     elems.push(elem);
 
@@ -1930,8 +1859,8 @@ pub fn reduce_intrinsic(
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // The `List` twin of `BinConcat` normalisation: drop the empty list (so `concat([], a)`/`concat(a, [])` collapse to `a`), fuse an all-literal survivor set into one flattened literal, collapse a lone operand — the definitional partner of `peel_list`'s `[]`-handling (`spine`); see `normalize_concat`.
-            // A run past `FUSION_CAP` declines to lend itself, exactly as on the `Bin` side, so a growing accumulation stops flattening its element vector into a longer one every step.
+            // The `List` twin of `BytesConcat` normalisation: drop the empty list (so `concat([], a)`/`concat(a, [])` collapse to `a`), fuse an all-literal survivor set into one flattened literal, collapse a lone operand — the definitional partner of `peel_list`'s `[]`-handling (`spine`); see `normalize_concat`.
+            // A run past `FUSION_CAP` declines to lend itself, exactly as on the `Bytes` side, so a growing accumulation stops flattening its element vector into a longer one every step.
             fn literal(operand: &Term) -> Option<&Vec<Term>> {
                 match &**operand {
                     Subterm::Intrinsic(Intrinsic::List {

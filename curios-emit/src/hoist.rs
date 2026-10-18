@@ -1,6 +1,6 @@
 //! Constant-data hoisting: intern every body binding whose value is statically constant as a module const, so codegen materialises it once in a wasm global instead of allocating it at every execution.
 //!
-//! `Flt`, `Bin`, a `Nat` or `Int` past the i31, and the aggregates allocate on every construction, so every constant one hoists; a small `Nat` or `Int` is an i31 immediate that costs nothing inline, so it hoists only on demand — when a hoisted aggregate names it, because const emission resolves aggregate elements through the const table. Interning is structural, so equal constants share one global module-wide, and the const vector stays in discovery order, which is dependency order for the start function's initialisation. Use sites need only a rename to the interned name: value resolution already falls back to the const table when a name is neither a closure field nor a local.
+//! `Flt`, `Bytes`, a `Nat` or `Int` past the i31, and the aggregates allocate on every construction, so every constant one hoists; a small `Nat` or `Int` is an i31 immediate that costs nothing inline, so it hoists only on demand — when a hoisted aggregate names it, because const emission resolves aggregate elements through the const table. Interning is structural, so equal constants share one global module-wide, and the const vector stays in discovery order, which is dependency order for the start function's initialisation. Use sites need only a rename to the interned name: value resolution already falls back to the const table when a name is neither a closure field nor a local.
 
 use {
     super::{
@@ -8,7 +8,7 @@ use {
         EmissionData, EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue,
         EmissionValueName,
     },
-    curios_num::{Binary, Grain, Integer, Natural},
+    curios_num::{Binary, Integer, Natural},
     std::collections::HashMap,
 };
 
@@ -18,7 +18,7 @@ enum ConstKey {
     Nat(Natural),
     Int(Integer),
     Flt(u64),
-    Bin(Grain, Binary),
+    Bytes(Binary),
     List(Vec<String>),
     Tuple(Vec<String>),
     /// A nominal row is its identity and its canonicalized slots, a filler keying as `None` — kept apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant.
@@ -101,8 +101,8 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                 let interned = interner.intern(ConstKey::Flt(value.to_bits()), data.clone());
                 consts.renames.insert(name.clone(), interned);
             }
-            EmissionData::Bin(grain, value) => {
-                let interned = interner.intern(ConstKey::Bin(*grain, value.clone()), data.clone());
+            EmissionData::Bytes(value) => {
+                let interned = interner.intern(ConstKey::Bytes(value.clone()), data.clone());
                 consts.renames.insert(name.clone(), interned);
             }
             EmissionData::Tuple(elems) => {
@@ -259,7 +259,7 @@ fn rename_value(
             EmissionData::Nat(_)
             | EmissionData::Int(_)
             | EmissionData::Flt(_)
-            | EmissionData::Bin(_, _) => {}
+            | EmissionData::Bytes(_) => {}
             EmissionData::List(elems) | EmissionData::Tuple(elems) => rename_names(elems, renames),
             EmissionData::Row(_, slots) => rename_jump_args(slots, renames),
             EmissionData::Closure(_, fields) => rename_names(fields, renames),

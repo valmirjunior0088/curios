@@ -1,36 +1,20 @@
-//! The packed `Binary` a `Bytes` value is, beside the numbers every constant folder shares, and the `Grain` it is read at.
+//! The packed `Binary` a `Bytes` value is, beside the numbers every constant folder shares.
 //!
-//! Values are immutable windows over a shared byte buffer. Bit zero is the least-significant bit of the first byte.
+//! Values are immutable windows over a shared byte buffer, their offset and length counted in bytes.
 
 use {
     crate::BufferBytes,
     std::{hash::Hash, sync::Arc},
 };
 
-/// The logical grain of a packed binary sequence.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
-pub enum Grain {
-    /// One logical atom per byte.
-    X,
-}
-
-impl Grain {
-    pub const fn bits(self) -> usize {
-        match self {
-            Self::X => 8,
-        }
-    }
-}
-
-/// An immutable logical bit window over shared packed bytes.
+/// An immutable window over shared bytes.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct Binary {
     #[archived_with(BufferBytes)]
     bytes: Arc<[u8]>,
-    bit_offset: usize,
-    bit_length: usize,
+    offset: usize,
+    length: usize,
 }
 
 impl Binary {
@@ -40,145 +24,58 @@ impl Binary {
 
     pub fn from_bytes(bytes: impl Into<Arc<[u8]>>) -> Self {
         let bytes = bytes.into();
-        let bit_length = bytes.len() * 8;
+        let length = bytes.len();
         Self {
             bytes,
-            bit_offset: 0,
-            bit_length,
+            offset: 0,
+            length,
         }
     }
 
-    pub fn from_bits(bits: impl IntoIterator<Item = bool>) -> Self {
-        let bits: Vec<_> = bits.into_iter().collect();
-        let mut bytes = vec![0; bits.len().div_ceil(8)];
-        for (index, bit) in bits.iter().copied().enumerate() {
-            if bit {
-                bytes[index / 8] |= 1 << (index % 8);
-            }
-        }
-        Self {
-            bytes: bytes.into(),
-            bit_offset: 0,
-            bit_length: bits.len(),
-        }
+    /// `count` copies of one byte.
+    pub fn replicate(atom: u8, count: usize) -> Self {
+        Self::from_bytes(vec![atom; count])
     }
 
-    /// `count` copies of one generator, a byte.
-    pub fn replicate(grain: Grain, atom: u8, count: usize) -> Self {
-        match grain {
-            Grain::X => Self::from_bytes(vec![atom; count]),
-        }
-    }
-
-    pub fn window(&self, bit_offset: usize, bit_length: usize) -> Option<Self> {
-        (bit_offset <= self.bit_length && bit_length <= self.bit_length - bit_offset).then(|| {
-            Self {
-                bytes: self.bytes.clone(),
-                bit_offset: self.bit_offset + bit_offset,
-                bit_length,
-            }
+    /// The `length` bytes from `offset`, over this value's buffer.
+    pub fn window(&self, offset: usize, length: usize) -> Option<Self> {
+        (offset <= self.length && length <= self.length - offset).then(|| Self {
+            bytes: self.bytes.clone(),
+            offset: self.offset + offset,
+            length,
         })
     }
 
-    pub fn bit_length(&self) -> usize {
-        self.bit_length
+    pub fn len(&self) -> usize {
+        self.length
     }
-    pub fn bit_offset(&self) -> usize {
-        self.bit_offset
+    pub fn offset(&self) -> usize {
+        self.offset
     }
     pub fn is_empty(&self) -> bool {
-        self.bit_length == 0
-    }
-    /// The window's length in the grain's own generators.
-    ///
-    /// **Asserted rather than debug-asserted.** A byte-grain length over a window that is not byte-aligned is not a near miss but a wrong number, and `bit_length / 8` hands it back silently — into the reducer's cost accounting, into an out-of-range report, and through conversion into what the kernel compares. The alignment holds by construction, since [`Binary::window`] adds offsets and an X-grain [`Binary::slice`] multiplies both of its bounds by eight, so this never fires; what it buys is that a path which breaks the invariant says so where it breaks it rather than somewhere downstream of a wrong length.
-    pub fn len(&self, grain: Grain) -> usize {
-        assert!(
-            self.is_x_aligned(),
-            "a byte-grain length needs a byte-aligned window"
-        );
-        self.bit_length / grain.bits()
-    }
-    pub fn is_x_aligned(&self) -> bool {
-        self.bit_offset.is_multiple_of(8) && self.bit_length.is_multiple_of(8)
-    }
-    pub fn bit(&self, index: usize) -> Option<bool> {
-        (index < self.bit_length).then(|| {
-            let index = self.bit_offset + index;
-            self.bytes[index / 8] & (1 << (index % 8)) != 0
-        })
+        self.length == 0
     }
     pub fn byte(&self, index: usize) -> Option<u8> {
-        if !self.is_x_aligned() || index >= self.bit_length / 8 {
-            return None;
-        }
-        self.bytes.get(self.bit_offset / 8 + index).copied()
+        self.as_bytes().get(index).copied()
     }
-    pub fn to_packed_bytes(&self) -> Vec<u8> {
-        // An aligned window has no padding bits to mask, so its stored bytes already are the packed form.
-        if let Some(bytes) = self.as_bytes() {
-            return bytes.to_vec();
-        }
-        let mut out = vec![0; self.bit_length.div_ceil(8)];
-        for index in 0..self.bit_length {
-            if self.bit(index).unwrap() {
-                out[index / 8] |= 1 << (index % 8);
-            }
-        }
-        out
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes[self.offset..self.offset + self.length]
     }
-    pub fn to_bytes(&self) -> Option<Vec<u8>> {
-        self.is_x_aligned().then(|| {
-            self.bytes[self.bit_offset / 8..(self.bit_offset + self.bit_length) / 8].to_vec()
-        })
-    }
-    pub fn as_bytes(&self) -> Option<&[u8]> {
-        self.is_x_aligned()
-            .then(|| &self.bytes[self.bit_offset / 8..(self.bit_offset + self.bit_length) / 8])
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
     }
 
-    pub fn slice(&self, grain: Grain, start: usize, end: usize) -> Option<Self> {
-        (start <= end && end <= self.len(grain)).then(|| {
-            self.window(start * grain.bits(), (end - start) * grain.bits())
-                .unwrap()
-        })
+    pub fn slice(&self, start: usize, end: usize) -> Option<Self> {
+        (start <= end && end <= self.length).then(|| self.window(start, end - start).unwrap())
     }
 
     pub fn concat<'a>(values: impl IntoIterator<Item = &'a Self>) -> Self {
         let values: Vec<_> = values.into_iter().collect();
-        // Aligned operands (every byte string) concatenate by bulk byte copy; only unaligned bit windows need the per-bit repack.
-        if values.iter().all(|value| value.is_x_aligned()) {
-            let mut bytes =
-                Vec::with_capacity(values.iter().map(|value| value.bit_length / 8).sum());
-            for value in &values {
-                bytes.extend_from_slice(value.as_bytes().unwrap());
-            }
-            return Self::from_bytes(bytes);
+        let mut bytes = Vec::with_capacity(values.iter().map(|value| value.length).sum());
+        for value in values {
+            bytes.extend_from_slice(value.as_bytes());
         }
-        Self::from_bits(
-            values
-                .into_iter()
-                .flat_map(|value| (0..value.bit_length).map(|index| value.bit(index).unwrap())),
-        )
-    }
-
-    /// The value with one bit appended.
-    ///
-    /// **Packed, like every other append.** [`Binary::concat`] already takes the bulk byte copy where the operands allow it and repacks bit by bit only where they do not, and this is that rule at one generator: [`Binary::to_packed_bytes`] normalizes any offset and already returns the stored bytes outright for an aligned window, so the cost is the payload rather than the `bool`-per-bit scratch `from_bits` would materialize — eight units for every one the result holds. Total, unlike [`Binary::append_byte`], because a bit needs no alignment to land on.
-    pub fn append_bit(&self, bit: bool) -> Self {
-        let mut bytes = self.to_packed_bytes();
-        if self.bit_length.is_multiple_of(8) {
-            bytes.push(0);
-        }
-        if bit {
-            bytes[self.bit_length / 8] |= 1 << (self.bit_length % 8);
-        }
-
-        Self {
-            bytes: bytes.into(),
-            bit_offset: 0,
-            bit_length: self.bit_length + 1,
-        }
+        Self::from_bytes(bytes)
     }
 
     /// The pointwise conjunction of two runs of one length.
@@ -196,97 +93,69 @@ impl Binary {
         self.pointwise(other, |left, right| left ^ right)
     }
 
-    /// Two runs combined generator-wise, one stored byte at a time.
+    /// Two runs combined a byte at a time.
     ///
-    /// **The padding needs no mask, which is what keeps this a zip.** Both operands normalize through [`Binary::to_packed_bytes`], whose per-bit arm zeroes a partial trailing byte and whose aligned arm has no partial byte to leave dirty — so every padding bit enters as zero, and `&`, `|` and `^` each take `(0, 0)` to `0`. The invariant [`Binary::cmp`] rests on therefore survives by construction, the way [`Binary::append_bit`] already trusts it to. [`Binary::replicate`] is where a fill has to mask instead, and says so.
-    ///
-    /// Equal lengths are the caller's to establish rather than this function's to accommodate: `/sys` states the bound in the type and every reduction reaches here through it, so a mismatch is a broken invariant, not an input. Asserted for [`Binary::len`]'s reason — a pointwise result over two lengths is not a near miss but a run that is neither operand's, and it should say so where it breaks rather than downstream of a wrong length.
+    /// Equal lengths are the caller's to establish rather than this function's to accommodate: `/sys` states the bound in the type and every reduction reaches here through it, so a mismatch is a broken invariant, not an input. Asserted rather than debug-asserted, because a pointwise result over two lengths is not a near miss but a run that is neither operand's, and it should say so where it breaks rather than downstream of a wrong length.
     fn pointwise(&self, other: &Self, combine: impl Fn(u8, u8) -> u8) -> Self {
         assert_eq!(
-            self.bit_length, other.bit_length,
+            self.length, other.length,
             "a pointwise operation needs two runs of one length"
         );
 
-        let (left, right) = (self.to_packed_bytes(), other.to_packed_bytes());
-
-        Self {
-            bytes: left
+        Self::from_bytes(
+            self.as_bytes()
                 .iter()
-                .zip(right.iter())
+                .zip(other.as_bytes())
                 .map(|(left, right)| combine(*left, *right))
-                .collect(),
-            bit_offset: 0,
-            bit_length: self.bit_length,
-        }
+                .collect::<Vec<_>>(),
+        )
     }
 
-    pub fn append_byte(&self, byte: u8) -> Option<Self> {
-        self.is_x_aligned().then(|| {
-            let mut bytes = self.to_bytes().unwrap();
-            bytes.push(byte);
-            Self::from_bytes(bytes)
-        })
-    }
-
-    /// The `index`-th byte of the packed form, read without materializing it — bits past `bit_length` read as the zero padding [`Binary::to_packed_bytes`] writes.
-    ///
-    /// The streaming spelling `Hash` and `Ord` share: `Ord` must agree with the aligned arm's byte slice it compares beside, and a second copy of this loop is a second thing to keep in step with it.
-    fn packed_byte(&self, index: usize) -> u8 {
-        let mut byte = 0u8;
-        for offset in 0..8 {
-            if self.bit(index * 8 + offset).unwrap_or(false) {
-                byte |= 1 << offset;
-            }
-        }
-        byte
+    pub fn append_byte(&self, byte: u8) -> Self {
+        let mut bytes = self.to_bytes();
+        bytes.push(byte);
+        Self::from_bytes(bytes)
     }
 }
 
 impl PartialEq for Binary {
-    /// Equal bits, decided as cheaply as the representation allows.
+    /// Equal bytes, decided as cheaply as the representation allows.
     ///
-    /// **Two windows of one buffer at one offset are the same bits**, so they are equal without a read — and that case is the one the closed machine asks about once per element of a packed walk: every step's tail is a window of the literal's buffer, and the run-scoped memo that keeps the walk linear probes a key holding it, which finds the key it stored and then has to confirm the two are equal. Confirming it bit by bit makes a `Str` literal's check quadratic in wall clock where every counter says linear, and `curios`' `str_literal_cost_measurements` carries the ladder.
-    ///
-    /// Two aligned windows compare as byte slices, which is the same answer at a word at a time; only an unaligned window pays the per-bit walk, and only against a buffer it does not share.
+    /// **Two windows of one buffer at one offset are the same bytes**, so they are equal without a read — and that case is the one the closed machine asks about once per element of a packed walk: every step's tail is a window of the literal's buffer, and the run-scoped memo that keeps the walk linear probes a key holding it, which finds the key it stored and then has to confirm the two are equal. Confirming it byte by byte makes a `Str` literal's check quadratic in wall clock where every counter says linear, and `curios`' `str_literal_cost_measurements` carries the ladder.
     fn eq(&self, other: &Self) -> bool {
-        if self.bit_length != other.bit_length {
+        if self.length != other.length {
             return false;
         }
-        if Arc::ptr_eq(&self.bytes, &other.bytes) && self.bit_offset == other.bit_offset {
+        if Arc::ptr_eq(&self.bytes, &other.bytes) && self.offset == other.offset {
             return true;
         }
-        match (self.as_bytes(), other.as_bytes()) {
-            (Some(left), Some(right)) => left == right,
-            _ => (0..self.bit_length).all(|index| self.bit(index) == other.bit(index)),
-        }
+        self.as_bytes() == other.as_bytes()
     }
 }
 impl Eq for Binary {}
-/// How many packed bytes [`Binary`]'s hash reads from a value larger than that. Enough that two values of one length agreeing at all of them are not a shape a program writes by accident, and small enough that hashing is a constant.
+/// How many bytes [`Binary`]'s hash reads from a value larger than that. Enough that two values of one length agreeing at all of them are not a shape a program writes by accident, and small enough that hashing is a constant.
 const HASH_SAMPLE_BYTES: usize = 32;
 
 impl Hash for Binary {
-    /// **Constant-cost, which is what keeps a walk over a literal linear.** A hash is memoized per term node, but *computing* one is not free: a node is hashed when it is built, and peeling a literal builds one node per element, each holding a window one element shorter than the last. Reading every byte of each made that walk quadratic — the shape [`Binary::eq`] records on its own side of the same probe, where a window of one buffer is equal to itself without a read. A cache probe cannot take that shortcut, because a window and a directly-built value of the same bits are equal and must hash alike, so what this does instead is read a bounded sample.
+    /// **Constant-cost, which is what keeps a walk over a literal linear.** A hash is memoized per term node, but *computing* one is not free: a node is hashed when it is built, and peeling a literal builds one node per element, each holding a window one element shorter than the last. Reading every byte of each made that walk quadratic — the shape [`Binary::eq`] records on its own side of the same probe, where a window of one buffer is equal to itself without a read. A cache probe cannot take that shortcut, because a window and a directly-built value of the same bytes are equal and must hash alike, so what this does instead is read a bounded sample.
     ///
-    /// The length is hashed whole and at most `HASH_SAMPLE_BYTES` bytes are read from the packed form, spread across it with both ends included. Two values of one length that agree at every sampled byte collide, and a collision costs a comparison rather than an answer: [`Binary::eq`] decides the pair, as it decides every probe that reaches it. Where the hash is an *order* rather than a key — `Nat::multiply` sorts a monomial's factors by the structural hash their term carries — a collision leaves two factors in their written order under a stable sort, which is incompleteness and never a wrong equation, exactly as that sort already records for two distinct factors hashing alike.
+    /// The length is hashed whole and at most `HASH_SAMPLE_BYTES` bytes are read, spread across the run with both ends included. Two values of one length that agree at every sampled byte collide, and a collision costs a comparison rather than an answer: [`Binary::eq`] decides the pair, as it decides every probe that reaches it. Where the hash is an *order* rather than a key — `Nat::multiply` sorts a monomial's factors by the structural hash their term carries — a collision leaves two factors in their written order under a stable sort, which is incompleteness and never a wrong equation, exactly as that sort already records for two distinct factors hashing alike.
     ///
-    /// Allocation-free, which is what lets a cache probe stay a probe: a lookup that allocated would have to be fallible under a budget that charges construction. One streamed spelling serves every value — a bulk hash of an aligned value's byte slice would read the whole of it — so no two arms have to be kept agreeing byte for byte.
+    /// Allocation-free, which is what lets a cache probe stay a probe: a lookup that allocated would have to be fallible under a budget that charges construction.
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.bit_length.hash(state);
+        self.length.hash(state);
 
-        let packed = self.bit_length.div_ceil(8);
-        packed.hash(state);
-
-        match packed <= HASH_SAMPLE_BYTES {
+        let bytes = self.as_bytes();
+        match bytes.len() <= HASH_SAMPLE_BYTES {
             true => {
-                for index in 0..packed {
-                    state.write_u8(self.packed_byte(index));
+                for &byte in bytes {
+                    state.write_u8(byte);
                 }
             }
-            // Spread over `0..packed` with both ends included, so a value that differs from another only in its first or last byte is still told apart by the hash rather than by the comparison behind it.
+            // Spread over the run with both ends included, so a value that differs from another only in its first or last byte is still told apart by the hash rather than by the comparison behind it.
             false => {
                 for step in 0..HASH_SAMPLE_BYTES {
-                    state.write_u8(self.packed_byte(step * (packed - 1) / (HASH_SAMPLE_BYTES - 1)));
+                    state.write_u8(bytes[step * (bytes.len() - 1) / (HASH_SAMPLE_BYTES - 1)]);
                 }
             }
         }
@@ -299,23 +168,9 @@ impl PartialOrd for Binary {
     }
 }
 impl Ord for Binary {
-    /// Packed bytes first, then logical length — bytewise with the shorter prefix first, which is `/std/Bytes/cmp` at the byte grain, where a packed byte *is* the element and the agreement falls out rather than being engineered.
-    ///
-    /// **The length is what makes this a total order rather than a hash collision.** Padding is zeroed, so `b[1]` and `b[1, 0]` pack into the same byte and are separated by nothing else; comparing the packed bytes alone would answer `Equal` for two unequal values and break the agreement with [`Binary::eq`] that a key's correctness rests on. The bit grain's ordering in the language is deliberately *not* this one: `/std/Bits/cmp` compares bit by bit from index zero, while this compares packed bytes, whose most significant bit is the run's seventh — so `b[1, 0]` sorts below `b[0, 1]` here and above it there. Nothing observes both. This order is a key's, reached through a `BTreeMap` or `BTreeSet` of the compiler's own and nowhere else, and matching it would have cost a program an order that is neither the sequence reading the carrier documents nor the numeric one `shl` and `shr` obey.
-    ///
-    /// Allocation-free on both arms for [`Binary::hash`]'s reason — this is what an optimizer's key sort walks.
+    /// Bytewise with the shorter prefix first, which is `/std/Bytes/cmp`: a byte *is* the element, so the agreement falls out rather than being engineered. Allocation-free for [`Binary::hash`]'s reason — this is what an optimizer's key sort walks.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let ordering = match (self.as_bytes(), other.as_bytes()) {
-            (Some(left), Some(right)) => left.cmp(right),
-            _ => {
-                let (left, right) = (self.bit_length.div_ceil(8), other.bit_length.div_ceil(8));
-                (0..left.min(right))
-                    .map(|index| self.packed_byte(index).cmp(&other.packed_byte(index)))
-                    .find(|ordering| ordering.is_ne())
-                    .unwrap_or_else(|| left.cmp(&right))
-            }
-        };
-        ordering.then_with(|| self.bit_length.cmp(&other.bit_length))
+        self.as_bytes().cmp(other.as_bytes())
     }
 }
 

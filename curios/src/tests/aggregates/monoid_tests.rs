@@ -1,4 +1,4 @@
-//! `Bin` and `List` as free monoids: a value does not depend on how its run is grouped, and a window must meet at its seam.
+//! `Bytes` and `List` as free monoids: a value does not depend on how its run is grouped, and a window must meet at its seam.
 
 use crate::tests::{error, run};
 
@@ -66,7 +66,7 @@ fn list_map_distributes_over_cons() {
 }
 
 #[test]
-fn bin_match_is_a_foldr() {
+fn bytes_match_is_a_foldr() {
     // Native `Bytes` induction (slice 2): the `| x[] | (h, t), ih` eliminator, erased exactly like `List` — `Nat`-induction on the byte length, reusing the loop. The leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr` probe as `list_match_is_a_foldr`: the bytes `x[0x01, 0x02, 0x03, 0x04]` fold to `4321`, not `1234`, pinning head = first byte and ih = fold of the tail.
     let source = r#"
         use /std/{Str, Nat, Byte, Bytes, Io};
@@ -85,8 +85,8 @@ fn bin_match_is_a_foldr() {
 }
 
 #[test]
-fn bin_concat_is_a_free_monoid() {
-    // `peel_bin` (core::spine) makes `Bytes` a free monoid up to *definitional* equality: concatenation associates, the empty bytestring `x[]` is its identity, and a literal run re-segments freely — all provable by `refl` for SYMBOLIC operands, which `reduce` cannot fold. Each binding's declared type forces `convert` to peel the two `BinConcat`s to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check. A parenthesized spread operand is what keeps the two nestings apart: writing the operands flat would let the literal build one `BinConcat` for both sides, and the `refl` would hold by syntax rather than by the peel.
+fn bytes_concat_is_a_free_monoid() {
+    // `peel_bytes` (core::spine) makes `Bytes` a free monoid up to *definitional* equality: concatenation associates, the empty bytestring `x[]` is its identity, and a literal run re-segments freely — all provable by `refl` for SYMBOLIC operands, which `reduce` cannot fold. Each binding's declared type forces `convert` to peel the two `BytesConcat`s to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check. A parenthesized spread operand is what keeps the two nestings apart: writing the operands flat would let the literal build one `BytesConcat` for both sides, and the `refl` would hold by syntax rather than by the peel.
     let source = r#"
         use /std/{Str, Eq, Bytes, Io};
         let assoc(a : Bytes, b : Bytes, c : Bytes)
@@ -106,8 +106,8 @@ fn bin_concat_is_a_free_monoid() {
 }
 
 #[test]
-fn bin_concat_leading_byte_clash_is_rejected() {
-    // The dual: a leading-byte disagreement under a shared symbolic tail is a definite `Clash`, so `x[0x01] ++ x` and `x[0x02] ++ x` are never convertible and the `refl` is rejected. Guards `peel_bin` against deciding unequal values equal.
+fn bytes_concat_leading_byte_clash_is_rejected() {
+    // The dual: a leading-byte disagreement under a shared symbolic tail is a definite `Clash`, so `x[0x01] ++ x` and `x[0x02] ++ x` are never convertible and the `refl` is rejected. Guards `peel_bytes` against deciding unequal values equal.
     let source = r#"
         use /std/{Str, Eq, Bytes, Io};
         let bad(x : Bytes) -> Eq()(x[0x01, ..x], x[0x02, ..x]) = Eq/refl();
@@ -185,7 +185,7 @@ fn a_symbolic_run_is_the_same_value_however_it_is_grouped() {
 
 #[test]
 fn a_length_and_a_window_do_not_depend_on_grouping() {
-    // **The law the measure adds, stated where both checkers see it.** `Bin/len` answers a wholly-literal spine by folding the operands' own lengths, and `Bin/get`/`Bin/slice` locate their position the same way, rather than rebuilding a `len` per operand or peeling one generator at a time. A length is a definitional equation, so a measure that disagreed with the run would be a false one and congruence carries a false equation to `False` — which is why this is stated as a checked proof rather than an observed result.
+    // **The law the measure adds, stated where both checkers see it.** `Bytes/len` answers a wholly-literal spine by folding the operands' own lengths, and `Bytes/get`/`Bytes/slice` locate their position the same way, rather than rebuilding a `len` per operand or peeling one generator at a time. A length is a definitional equation, so a measure that disagreed with the run would be a false one and congruence carries a false equation to `False` — which is why this is stated as a checked proof rather than an observed result.
     //
     // Each law puts the *same* run on both sides under different groupings, so what is being proven is precisely that grouping is invisible. `curios-core`'s `reduce::intrinsic` tests state the same thing against the folds directly and over more shapes; this is the both-checkers half.
     let source = r#"
@@ -211,7 +211,7 @@ fn a_length_and_a_window_do_not_depend_on_grouping() {
 }
 
 #[test]
-fn bin_slice_is_a_monoid_citizen() {
+fn bytes_slice_is_a_monoid_citizen() {
     // `Bytes/slice` rides the free-monoid spine (`curios-core`'s `words`) as a measured `Window` — a chunk carrying its own length, whose contents are symbolic — so the slice algebra holds up to *definitional* equality, provable by `refl` for SYMBOLIC operands that `reduce` cannot fold. `split` fuses two adjacent windows of one base across their shared seam; `empty` drops a zero-length window (the monoid identity); `full` collapses `slice(b, 0, len b)` to its base (the `reduce` partner of the spine's window-collapse). Each declared type forces `convert` to peel the windows to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check.
     //
     // `split` is where the window's whole bound discipline is visible at once. It takes **one** hypothesis, where a `(start, end)` window would need three, because a count cannot spell a reversed range; and the fused window is passed `@total` — *the second window's own proof, unchanged*. That only type-checks because `(s + l1) + l2` and `s + (l1 + l2)` are convertible, which is the equation `peel_nat_terms` decides. The first window's bound is the one thing actually derived, and only to weaken the total.
@@ -240,7 +240,7 @@ fn bin_slice_is_a_monoid_citizen() {
 }
 
 #[test]
-fn bin_slice_window_seam_mismatch_is_rejected() {
+fn bytes_slice_window_seam_mismatch_is_rejected() {
     // The dual: two windows whose seam does not meet — `slice(b, s, l1)` then `slice(b, o, l2)` with `o` unrelated to `s + l1` — must NOT fuse, so the concat is not convertible to `slice(b, s, l1 + l2)` and the `refl` is rejected. Guards the fusion's seam check, which under `(start, length)` is an *arithmetic* test (`o = s + l1`) decided by the `Nat` peel rather than a shared term compared syntactically, against gluing non-adjacent slices of one base.
     let source = r#"
         use /std/{Str, Eq, Bytes, Nat, Io};
@@ -260,7 +260,7 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
 
 #[test]
 fn list_slice_is_a_monoid_citizen() {
-    // The `List` mirror of `bin_slice_is_a_monoid_citizen`, count-based like it: `split` takes one hypothesis and hands the fused window the second window's own proof, `empty` drops a zero-length window, and `full` collapses the whole one.
+    // The `List` mirror of `bytes_slice_is_a_monoid_citizen`, count-based like it: `split` takes one hypothesis and hands the fused window the second window's own proof, `empty` drops a zero-length window, and `full` collapses the whole one.
     let source = r#"
         use /std/{Str, Eq, List, Nat, Io};
         use /std/Bool/{Holds};
@@ -302,7 +302,7 @@ fn list_append_is_concat_with_a_single() {
 }
 
 #[test]
-fn bin_append_is_concat_with_a_single_byte() {
+fn bytes_append_is_concat_with_a_single_byte() {
     // The `Bytes` twin of `list_append_is_concat_with_a_single`: an atom splice rides the spine as `base ++ b`, so it converts to the concatenation-with-a-one-byte form by `refl` even for a symbolic base and a symbolic byte.
     let source = r#"
         use /std/{Str, Eq, Byte, Bytes, Io};
@@ -319,7 +319,7 @@ fn bin_append_is_concat_with_a_single_byte() {
 
 #[test]
 fn list_slice_window_seam_mismatch_is_rejected() {
-    // The dual of `bin_slice_window_seam_mismatch_is_rejected`: two `List` windows whose seam does not meet must NOT fuse, so the concat is not convertible to the single slice and the `refl` is rejected.
+    // The dual of `bytes_slice_window_seam_mismatch_is_rejected`: two `List` windows whose seam does not meet must NOT fuse, so the concat is not convertible to the single slice and the `refl` is rejected.
     let source = r#"
         use /std/{Str, Eq, List, Nat, Io};
         use /std/Bool/{Holds};
@@ -339,7 +339,7 @@ fn list_slice_window_seam_mismatch_is_rejected() {
 }
 
 #[test]
-fn bin_len_reduces_across_a_cons_spine() {
+fn bytes_len_reduces_across_a_cons_spine() {
     // The `Bytes/len` partner of the slice/get cons-reduction: length distributes over concatenation and an `append` is one byte longer, so a cons spine's length reduces to a `succ` over the tail's — `len(cons(h, t)) = succ(len t)`. `Nat/lt` then discharges the codepoint walk's bounds guard on that spine: `lt(0, succ _) = true` (the left literal is below the successor floor) and `lt(succ _, 0) = false` (the left is at least the floor). All by `refl` for a SYMBOLIC tail, the pair that lets the codepoint walk step a symbolic cons.
     let source = r#"
         use /std/{Str, Eq, Byte, Bytes, Nat, Io};
@@ -359,7 +359,7 @@ fn bin_len_reduces_across_a_cons_spine() {
 
 #[test]
 fn an_append_over_a_nonempty_base_still_decodes_its_first_atom() {
-    // `peel_front` (`core::free_monoid`) recognises an append over any base, as `core::spine`'s two-value peel does: `append(x[0x48], b)` — what `x[0x48, b]` lowers to — peels its first generator and rejoins the residual, as the `BinConcat` arm beside it does. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and every appended atom here is SYMBOLIC, so nothing is literal folding. `chained` is the recursive case — adjacent atoms lower to `append(append(...))`, whose first generator sits two bases down.
+    // `peel_front` (`core::free_monoid`) recognises an append over any base, as `core::spine`'s two-value peel does: `append(x[0x48], b)` — what `x[0x48, b]` lowers to — peels its first generator and rejoins the residual, as the `BytesConcat` arm beside it does. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and every appended atom here is SYMBOLIC, so nothing is literal folding. `chained` is the recursive case — adjacent atoms lower to `append(append(...))`, whose first generator sits two bases down.
     let source = r#"
         use /std/{Str, Eq, Byte, Bytes, Bool, Option, Io};
         let lead : Byte = 0x48;
@@ -391,7 +391,7 @@ fn nat_sub_peels_a_successor_spine() {
 
 #[test]
 fn list_concat_is_a_free_monoid() {
-    // `peel_list` (`curios-core`'s `spine`) makes `List` a free monoid on its elements, the twin of `bin_concat_is_a_free_monoid`: concatenation associates, the empty array `[]` is its identity, and a literal run re-segments freely — all by `refl` for SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels the two `ListConcat`s to a common normal form. A spread whose operand is itself a list literal is what keeps the two nestings apart, exactly as the parenthesized packed operand does for `Bytes`.
+    // `peel_list` (`curios-core`'s `spine`) makes `List` a free monoid on its elements, the twin of `bytes_concat_is_a_free_monoid`: concatenation associates, the empty array `[]` is its identity, and a literal run re-segments freely — all by `refl` for SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels the two `ListConcat`s to a common normal form. A spread whose operand is itself a list literal is what keeps the two nestings apart, exactly as the parenthesized packed operand does for `Bytes`.
     let source = r#"
         use /std/{Str, Eq, List, Io};
         let assoc(@T : Type, a : List(T), b : List(T), c : List(T))
@@ -425,7 +425,7 @@ fn list_concat_length_clash_is_rejected() {
 }
 
 #[test]
-fn empty_bin_literal_is_the_empty_sequence() {
+fn empty_bytes_literal_is_the_empty_sequence() {
     // The empty `Bytes` literal concatenated with a value is the identity.
     assert_eq!(
         run(r#"

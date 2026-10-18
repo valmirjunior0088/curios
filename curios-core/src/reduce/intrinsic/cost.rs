@@ -4,14 +4,7 @@
 //!
 //! Each bound is computed from operand *sizes* rather than from the result, so a fold that would allocate more than the budget allows is refused before `num-bigint` is asked for anything — the difference between a diagnostic and a process the allocator does not return from.
 
-use {crate::Cost, curios_algebra::distribution_size, curios_num::Grain};
-
-/// What a packed value of `bits` logical bits costs, in its grain's row of the price list.
-pub(super) fn packed_bound(grain: Grain, bits: u64) -> Cost {
-    match grain {
-        Grain::X => Cost::packed_bytes(bits / 8),
-    }
-}
+use {crate::Cost, curios_algebra::distribution_size};
 
 /// What a closed binary fold on two big numbers may construct, charged before it runs.
 ///

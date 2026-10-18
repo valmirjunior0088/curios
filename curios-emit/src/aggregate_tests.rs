@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    curios_num::{Binary, Grain, Rounding},
+    curios_num::{Binary, Rounding},
 };
 
 #[test]
@@ -24,14 +24,13 @@ fn small_packed_literal_rides_the_immediate() {
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
-    let bin = module.add_value(Some("bin".into()));
-    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(bin)]));
+    let bytes = module.add_value(Some("bytes".into()));
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(bytes)]));
     let build = module.add_node(curios_cont::Node::LetValue {
-        result: bin,
-        value: curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
-            Grain::X,
-            Binary::from_bytes(vec![1, 2, 3]),
-        )),
+        result: bytes,
+        value: curios_cont::ValueExpr::Literal(curios_cont::Literal::Bytes(Binary::from_bytes(
+            vec![1, 2, 3],
+        ))),
         next: exit,
     });
     module.define_function(
@@ -54,9 +53,9 @@ fn small_packed_literal_rides_the_immediate() {
 }
 
 #[test]
-fn packed_bin_literal_builds_a_rope_leaf() {
-    let wat = wat(&bin_len());
-    assert_contains(&wat, "struct.new $rope/bin/leaf");
+fn packed_bytes_literal_builds_a_rope_leaf() {
+    let wat = wat(&bytes_len());
+    assert_contains(&wat, "struct.new $rope/bytes/leaf");
     // The static bytes come from a passive data segment.
     assert_contains(&wat, "array.new_data $bytes");
     assert_contains(&wat, "(data ");

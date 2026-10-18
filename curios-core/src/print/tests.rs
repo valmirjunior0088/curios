@@ -397,13 +397,8 @@ fn a_non_finite_flt_prints_as_what_reads_back_as_it() {
 #[test]
 fn an_append_prints_as_the_literal_that_writes_it() {
     let var = |index, hint| Term::free_var(&Free::local(index, Some(hint)));
-    let append = |bin: Term, element: Term| {
-        Term::intrinsic(Intrinsic::BinAppend {
-            grain: Grain::X,
-            bin,
-            element,
-        })
-    };
+    let append =
+        |bytes: Term, element: Term| Term::intrinsic(Intrinsic::BytesAppend { bytes, element });
 
     assert_eq!(
         append(var(0, "acc"), var(1, "b")).to_string(),

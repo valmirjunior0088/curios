@@ -18,7 +18,7 @@ use {
         Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Transient,
         TupleType, Var, Visit, WitnessOrigin,
     },
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
     curios_utilities::{Plicity, recurse},
     std::{
         cell::RefCell,
@@ -709,29 +709,23 @@ impl Writing {
                     cons_case,
                 }
             }
-            Carrier::Bin {
-                grain,
+            Carrier::Bytes {
                 empty_case,
                 cons_case,
             } => {
-                let grain = *grain;
-                let atom = Term::intrinsic(match grain {
-                    Grain::X => Intrinsic::ByteType,
-                });
-                let sequence = Term::intrinsic(Intrinsic::BinType(grain));
-                let empty = Term::intrinsic(Intrinsic::Bin(grain, Binary::empty()));
+                let atom = Term::intrinsic(Intrinsic::ByteType);
+                let sequence = Term::intrinsic(Intrinsic::BytesType);
+                let empty = Term::intrinsic(Intrinsic::Bytes(Binary::empty()));
                 let (empty_case, cons_case) = self.sequence(
                     context,
                     head,
                     motive,
                     (&atom, &sequence, &empty),
                     |head, tail| {
-                        Term::intrinsic(Intrinsic::BinConcat {
-                            grain,
+                        Term::intrinsic(Intrinsic::BytesConcat {
                             operands: vec![
-                                Term::intrinsic(Intrinsic::BinAppend {
-                                    grain,
-                                    bin: Term::intrinsic(Intrinsic::Bin(grain, Binary::empty())),
+                                Term::intrinsic(Intrinsic::BytesAppend {
+                                    bytes: Term::intrinsic(Intrinsic::Bytes(Binary::empty())),
                                     element: head.clone(),
                                 }),
                                 tail.clone(),
@@ -741,8 +735,7 @@ impl Writing {
                     (empty_case, cons_case),
                 );
 
-                Carrier::Bin {
-                    grain,
+                Carrier::Bytes {
                     empty_case,
                     cons_case,
                 }

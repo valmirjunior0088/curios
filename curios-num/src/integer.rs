@@ -197,7 +197,7 @@ impl TryFrom<&Integer> for i32 {
     }
 }
 
-/// `Int/to_nat`: the same number as a [`Natural`], refusing a negative, which no natural equals — a language conversion with a trap, so its error is [`ScalarTrap::ConversionRange`] rather than [`OutOfRange`]. [`From<Natural>`](Integer::from) is the total inverse. The conversions carry values, never bit views — reinterpretation belongs to explicit `Bin` casts.
+/// `Int/to_nat`: the same number as a [`Natural`], refusing a negative, which no natural equals — a language conversion with a trap, so its error is [`ScalarTrap::ConversionRange`] rather than [`OutOfRange`]. [`From<Natural>`](Integer::from) is the total inverse. The conversions carry values, never bit views — reinterpretation belongs to explicit `Bytes` casts.
 impl TryFrom<&Integer> for Natural {
     type Error = ScalarTrap;
 

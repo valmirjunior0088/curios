@@ -660,7 +660,7 @@ fn literal_data(literal: &curios_cont::Literal) -> EmissionData {
         curios_cont::Literal::Nat(value) => EmissionData::Nat(value.clone()),
         curios_cont::Literal::Int(value) => EmissionData::Int(value.clone()),
         curios_cont::Literal::Flt(value) => EmissionData::Flt(f64::from(*value)),
-        curios_cont::Literal::Bin(grain, value) => EmissionData::Bin(*grain, value.clone()),
+        curios_cont::Literal::Bytes(value) => EmissionData::Bytes(value.clone()),
     }
 }
 

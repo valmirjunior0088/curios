@@ -17,7 +17,7 @@ fn each_runs_its_effects_in_element_order() {
     assert_eq!(run(source), b"123");
 }
 
-/// A list reads as its flat copy does, whatever its node's children are: the read that answers from a flat child is the packed grains' too, and every element of each shape, read upward and then downward, is the settled list's.
+/// A list reads as its flat copy does, whatever its node's children are: the read that answers from a flat child is `Bytes`'s too, and every element of each shape, read upward and then downward, is the settled list's.
 #[test]
 fn a_list_reads_as_its_flat_copy_in_every_shape_its_children_take() {
     let (system, io) = MockHost::builder().stdin_chunks(vec![ARRIVAL]).build();

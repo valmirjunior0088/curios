@@ -3,8 +3,8 @@ mod tests;
 
 use {
     super::{
-        Apply, Argument, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Doc,
-        Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
+        Apply, Argument, BytesPattern, BytesSegment, Choose, ChooseArm, ChooseTest, ConceptField,
+        Doc, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
         Intrinsic, Label, Let, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern,
         MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj,
         ProofLiteral, Radix, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase,
@@ -64,7 +64,7 @@ fn wrapped_list(open: &'static str, entries: Vec<ListEntry>) -> Printer {
                     let compact = is_atom(&term)
                         || match term.as_subterm() {
                             Subterm::Literal(Literal::List(entries)) => entries.is_empty(),
-                            Subterm::Literal(Literal::Bin(segments)) => segments.is_empty(),
+                            Subterm::Literal(Literal::Bytes(segments)) => segments.is_empty(),
                             Subterm::Tuple(Tuple { fields }) => fields.is_empty(),
                             _ => false,
                         };
@@ -181,7 +181,7 @@ fn is_atom(term: &Term) -> bool {
 fn carries_its_own_break(term: &Term) -> bool {
     match term.as_subterm() {
         Subterm::Literal(Literal::List(entries)) => !entries.is_empty(),
-        Subterm::Literal(Literal::Bin(segments)) => !segments.is_empty(),
+        Subterm::Literal(Literal::Bytes(segments)) => !segments.is_empty(),
         Subterm::Tuple(Tuple { fields }) => fields.len() >= 2,
         Subterm::Func(_) => true,
         _ => false,
@@ -478,7 +478,7 @@ fn print_struct_entry(entry: StructLitEntry) -> Printer {
     }
 }
 
-/// The optional `; ih` tail of a `Nat` fold's succ arm or a `List`/`Bin` fold's cons arm — any irrefutable pattern, printed through `print_pattern`; `None` prints nothing at all (a plain case-split), matching how it was written.
+/// The optional `; ih` tail of a `Nat` fold's succ arm or a `List`/`Bytes` fold's cons arm — any irrefutable pattern, printed through `print_pattern`; `None` prints nothing at all (a plain case-split), matching how it was written.
 fn print_cons_ih(ih: Option<Pattern>) -> Printer {
     match ih {
         Some(ih) => flat([pure("; "), print_pattern(ih)]),
@@ -590,8 +590,8 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
             pure("]"),
             print_cons_ih(ih),
         ]),
-        MatchPattern::Bin(BinPattern::End) => pure("x[]"),
-        MatchPattern::Bin(BinPattern::Atom {
+        MatchPattern::Bytes(BytesPattern::End) => pure("x[]"),
+        MatchPattern::Bytes(BytesPattern::Atom {
             head_label,
             tail_label,
             ih,
@@ -661,12 +661,12 @@ fn print_literal(literal: Literal) -> Printer {
         Literal::Bool(true) => pure("true"),
         Literal::Flt(value) => print_flt(value),
         // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `x[]` on its own.
-        Literal::Bin(segments) => {
+        Literal::Bytes(segments) => {
             let entries = segments
                 .into_iter()
                 .map(|segment| match segment {
-                    BinSegment::Atom(operand) => ListEntry::Elem(operand),
-                    BinSegment::Spread(operand) => ListEntry::Spread(operand),
+                    BytesSegment::Atom(operand) => ListEntry::Elem(operand),
+                    BytesSegment::Spread(operand) => ListEntry::Spread(operand),
                 })
                 .collect();
             wrapped_list("x[", entries)

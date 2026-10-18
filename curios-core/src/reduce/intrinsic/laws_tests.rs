@@ -3,11 +3,11 @@
 use {
     super::test_support::*,
     crate::{
-        Free, Intrinsic, Nat, Subterm, Term, decide_bool, peel_bin, peel_int_pair, peel_list,
+        Free, Intrinsic, Nat, Subterm, Term, decide_bool, peel_bytes, peel_int_pair, peel_list,
         peel_nat_terms, peel_position,
     },
     curios_algebra::Deduction,
-    curios_num::{Grain, Integer},
+    curios_num::Integer,
 };
 
 // Soundness gate for the peel's own verdicts over values: `Nat::cancel_common` decides all three, and the law behind them is otherwise argued only in code comments.
@@ -150,43 +150,31 @@ fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
     );
 }
 
-// Soundness gate for the `Bin` peel's verdicts over values — the `Bin` half of what `every_nat_peel_verdict_holds_at_every_closed_instantiation` states for `Nat`, since these laws are otherwise argued only in code comments. The obligations are the same three. A `Deduction::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Deduction::Impossible` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. A `Deduction::Equivalent`'s residuals must be equi-satisfiable with the pair they replaced, since the caller compares the residuals and reports their verdict as the originals'. `Deduction::Undecided` promises nothing and is only tallied.
+// Soundness gate for the `Bytes` peel's verdicts over values — the `Bytes` half of what `every_nat_peel_verdict_holds_at_every_closed_instantiation` states for `Nat`, since these laws are otherwise argued only in code comments. The obligations are the same three. A `Deduction::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Deduction::Impossible` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. A `Deduction::Equivalent`'s residuals must be equi-satisfiable with the pair they replaced, since the caller compares the residuals and reports their verdict as the originals'. `Deduction::Undecided` promises nothing and is only tallied.
 //
 // The shapes reach the laws the code comments assert and nothing else stated: symbolic chunks cancelling by syntactic equality with a byte clash surviving past them, window fusion across a shared seam (`slice(w, s, l₁) ++ slice(w, s + l₁, l₂) = slice(w, s, l₁ + l₂)`), the empty-window drop (`slice(w, i, 0)` vanishing), append-as-concatenation (`append(b, c) = b ++ append(x[], c)`), and a near-miss control beside each: windows meeting at no seam must not fuse, and a one-byte symbolic cons against the identity clashes — as does a positive run behind a symbolic chunk, since the identity check reads the whole residual and not its head. Ground truth is the folded value at every closed instantiation of the symbols — instantiations respect `/sys/slice`'s `s + l <= len(b)` precondition, since a program outside them cannot be written, and that typing fact is exactly what makes the window laws unconditional.
 //
 // Mutation-checked: fusing two windows of one base without the seam check (`*seam == lo` dropped from `push`) turns the no-seam control into a false `Equal` and this grid fails it at the first anchor whose seam bytes differ. The tally is the anti-inertness assertion the soundness board asks of a sole-reach fixture: `Undecided` is where a pair falls when nothing fires, so a grid that decided nothing would otherwise pass while checking nothing.
 #[test]
-fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
-    let bin_left = Free::local(0, Some("x"));
-    let bin_right = Free::local(1, Some("y"));
+fn every_bytes_peel_verdict_holds_at_every_closed_instantiation() {
+    let bytes_left = Free::local(0, Some("x"));
+    let bytes_right = Free::local(1, Some("y"));
     let byte_free = Free::local(2, Some("c"));
     let anchor_free = Free::local(3, Some("w"));
     let count_free = Free::local(4, Some("n"));
-    let x = Term::free_var(&bin_left);
-    let y = Term::free_var(&bin_right);
+    let x = Term::free_var(&bytes_left);
+    let y = Term::free_var(&bytes_right);
     let w = Term::free_var(&anchor_free);
     let c = Term::free_var(&byte_free);
     let n = Term::free_var(&count_free);
 
-    let cat = |parts: Vec<Term>| {
-        Term::intrinsic(Intrinsic::BinConcat {
-            grain: Grain::X,
-            operands: parts,
-        })
-    };
+    let cat = |parts: Vec<Term>| Term::intrinsic(Intrinsic::BytesConcat { operands: parts });
     let window = |lo: u32, hi: u32| {
-        Term::intrinsic(Intrinsic::bin_slice(
-            Grain::X,
-            w.clone(),
-            lit(lo),
-            lit(hi),
-            qed(),
-        ))
+        Term::intrinsic(Intrinsic::bytes_slice(w.clone(), lit(lo), lit(hi), qed()))
     };
-    let chunk = Term::intrinsic(Intrinsic::bin_append(Grain::X, run_bytes(&[]), c.clone()));
+    let chunk = Term::intrinsic(Intrinsic::bytes_append(run_bytes(&[]), c.clone()));
     let fill = |count: Term| {
-        Term::intrinsic(Intrinsic::BinReplicate {
-            grain: Grain::X,
+        Term::intrinsic(Intrinsic::BytesReplicate {
             count,
             atom: c.clone(),
         })
@@ -227,7 +215,7 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
         ),
         (
             "append(x, c) ~ x ++ append(x[], c)",
-            Term::intrinsic(Intrinsic::bin_append(Grain::X, x.clone(), c.clone())),
+            Term::intrinsic(Intrinsic::bytes_append(x.clone(), c.clone())),
             cat(vec![x.clone(), chunk.clone()]),
         ),
         (
@@ -244,24 +232,12 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
         // A window of a window is the window it names in the root, read through both starts; the near miss names a start one short and must not be decided equal.
         (
             "slice(slice(w, 1, 3), 1, 2) ~ slice(w, 2, 2)",
-            Term::intrinsic(Intrinsic::bin_slice(
-                Grain::X,
-                window(1, 3),
-                lit(1),
-                lit(2),
-                qed(),
-            )),
+            Term::intrinsic(Intrinsic::bytes_slice(window(1, 3), lit(1), lit(2), qed())),
             window(2, 2),
         ),
         (
             "slice(slice(w, 1, 3), 1, 2) ~ slice(w, 1, 2)",
-            Term::intrinsic(Intrinsic::bin_slice(
-                Grain::X,
-                window(1, 3),
-                lit(1),
-                lit(2),
-                qed(),
-            )),
+            Term::intrinsic(Intrinsic::bytes_slice(window(1, 3), lit(1), lit(2), qed())),
             window(1, 2),
         ),
         (
@@ -317,7 +293,7 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
 
     for (label, left, right) in &cases {
         let peel =
-            peel_bin(&as_intrinsic(left), &as_intrinsic(right)).expect("two Bin values peel");
+            peel_bytes(&as_intrinsic(left), &as_intrinsic(right)).expect("two Bytes values peel");
 
         match &peel {
             Deduction::Equal => equal += 1,
@@ -332,15 +308,15 @@ fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
                     for anchor in anchors {
                         for count in counts {
                             let close = |term: &Term| {
-                                let term = at(term.clone(), &bin_left, run_bytes(left_run));
-                                let term = at(term, &bin_right, run_bytes(right_run));
+                                let term = at(term.clone(), &bytes_left, run_bytes(left_run));
+                                let term = at(term, &bytes_right, run_bytes(right_run));
                                 let term = at(
                                     term,
                                     &byte_free,
                                     Term::intrinsic(Intrinsic::Byte(byte_value)),
                                 );
                                 let term = at(term, &anchor_free, run_bytes(anchor));
-                                bin_value(at(term, &count_free, lit(count)))
+                                bytes_value(at(term, &count_free, lit(count)))
                             };
 
                             let agree = close(left) == close(right);
@@ -495,7 +471,7 @@ fn as_intrinsic_int(term: &Term) -> Intrinsic {
     }
 }
 
-// The `List` half of the grid above, separate because the two carriers differ exactly where a copied rule would be wrong: `List` literals hold *terms*, so two leading runs whose heads differ syntactically are NOT a clash — the elements may still be convertible — while a leftover run against the exhausted identity is still a definite length clash whatever its elements are. The first shape pins that difference over values: `[a + b]` and `[b + a]` denote one list at every instantiation, so the `Bin` byte-disagreement rule applied here would be a false impossibility, which is the vacuous-elimination route to `False`. Mutation-checked: clashing two differing literal heads the way `peel_bin` does fails that shape at its first instantiation. The other shapes and the tally mirror the `Bin` grid's obligations: append-as-concatenation with a symbolic element, window fusion over the element carrier, a genuine length clash, and residual equi-satisfiability.
+// The `List` half of the grid above, separate because the two carriers differ exactly where a copied rule would be wrong: `List` literals hold *terms*, so two leading runs whose heads differ syntactically are NOT a clash — the elements may still be convertible — while a leftover run against the exhausted identity is still a definite length clash whatever its elements are. The first shape pins that difference over values: `[a + b]` and `[b + a]` denote one list at every instantiation, so the `Bytes` byte-disagreement rule applied here would be a false impossibility, which is the vacuous-elimination route to `False`. Mutation-checked: clashing two differing literal heads the way `peel_bytes` does fails that shape at its first instantiation. The other shapes and the tally mirror the `Bytes` grid's obligations: append-as-concatenation with a symbolic element, window fusion over the element carrier, a genuine length clash, and residual equi-satisfiability.
 #[test]
 fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
     let list_left = Free::local(0, Some("xs"));
@@ -558,7 +534,7 @@ fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
             cat(vec![window(0, 2), window(2, 2)]),
             window(0, 4),
         ),
-        // A window of a window, as in the `Bin` grid: the window it names in the root, and the near miss one short of it.
+        // A window of a window, as in the `Bytes` grid: the window it names in the root, and the near miss one short of it.
         (
             "slice(slice(ws, 1, 3), 1, 2) ~ slice(ws, 2, 2)",
             Term::intrinsic(Intrinsic::list_slice(
@@ -682,7 +658,7 @@ fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
     );
 }
 
-// A position through a window, held over values: `get(slice(w, s, l), i)` is decided the same element as `get(w, s + i)`, at both packed grains' carrier and at `List`, and the near miss one position short must not be. So is a position inside an operand of a concatenation: `get(v ++ w, 2)` is `get(v, 2)` and `get(v ++ w, len(v) + 1)` is `get(w, 1)`, while the other operand at the same offset, and a position one short, are not. An `Equal` must hold at every anchor, inside the reads' own preconditions — `v` is never shorter than three, so every read of it here is in range; the tally says both verdicts were reached.
+// A position through a window, held over values: `get(slice(w, s, l), i)` is decided the same element as `get(w, s + i)`, at `Bytes` and at `List`, and the near miss one position short must not be. So is a position inside an operand of a concatenation: `get(v ++ w, 2)` is `get(v, 2)` and `get(v ++ w, len(v) + 1)` is `get(w, 1)`, while the other operand at the same offset, and a position one short, are not. An `Equal` must hold at every anchor, inside the reads' own preconditions — `v` is never shorter than three, so every read of it here is in range; the tally says both verdicts were reached.
 #[test]
 fn every_position_verdict_holds_at_every_closed_instantiation() {
     let anchor_free = Free::local(0, Some("w"));
@@ -691,13 +667,7 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
     let v = Term::free_var(&operand_free);
     let elem = symbol(1000, "T");
 
-    let bin_window = Term::intrinsic(Intrinsic::bin_slice(
-        Grain::X,
-        w.clone(),
-        lit(1),
-        lit(3),
-        qed(),
-    ));
+    let bytes_window = Term::intrinsic(Intrinsic::bytes_slice(w.clone(), lit(1), lit(3), qed()));
     let list_window = Term::intrinsic(Intrinsic::list_slice(
         elem.clone(),
         w.clone(),
@@ -705,9 +675,8 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
         lit(3),
         qed(),
     ));
-    let bin_get = |bin: Term, index: u32| Intrinsic::BinGet {
-        grain: Grain::X,
-        bin,
+    let bytes_get = |bytes: Term, index: u32| Intrinsic::BytesGet {
+        bytes,
         index: lit(index),
         in_range: qed(),
     };
@@ -718,14 +687,12 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
         in_range: qed(),
     };
 
-    let bin_get_at = |bin: Term, index: Term| Intrinsic::BinGet {
-        grain: Grain::X,
-        bin,
+    let bytes_get_at = |bytes: Term, index: Term| Intrinsic::BytesGet {
+        bytes,
         index,
         in_range: qed(),
     };
-    let bin_joined = Term::intrinsic(Intrinsic::BinConcat {
-        grain: Grain::X,
+    let bytes_joined = Term::intrinsic(Intrinsic::BytesConcat {
         operands: vec![v.clone(), w.clone()],
     });
     let list_joined = Term::intrinsic(Intrinsic::ListConcat {
@@ -735,31 +702,31 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
     // `len(v) + 1` as reduction spells it, a floor over the length, which is the spelling conversion hands the peel.
     let past_v = Term::intrinsic(Intrinsic::Nat(Nat::Succ(
         1u32.into(),
-        Term::intrinsic(Intrinsic::BinLen(Grain::X, v.clone())),
+        Term::intrinsic(Intrinsic::BytesLen(v.clone())),
     )));
 
-    let bin_anchors: [&[u8]; 2] = [&[9, 8, 7, 6], &[9, 8, 7, 7, 3]];
+    let bytes_anchors: [&[u8]; 2] = [&[9, 8, 7, 6], &[9, 8, 7, 7, 3]];
     let list_anchors: [&[u32]; 2] = [&[9, 8, 7, 6], &[9, 8, 7, 7, 3]];
-    let bin_operands: [&[u8]; 2] = [&[1, 2, 3], &[4, 5, 6, 7]];
+    let bytes_operands: [&[u8]; 2] = [&[1, 2, 3], &[4, 5, 6, 7]];
     let list_operands: [&[u32]; 2] = [&[1, 2, 3], &[4, 5, 6, 7]];
 
     let cases = [
         (
             "get(v ++ w, 2) ~ get(v, 2)",
-            bin_get(bin_joined.clone(), 2),
-            bin_get(v.clone(), 2),
+            bytes_get(bytes_joined.clone(), 2),
+            bytes_get(v.clone(), 2),
             true,
         ),
         (
             "get(v ++ w, len(v) + 1) ~ get(w, 1)",
-            bin_get_at(bin_joined.clone(), past_v),
-            bin_get(w.clone(), 1),
+            bytes_get_at(bytes_joined.clone(), past_v),
+            bytes_get(w.clone(), 1),
             true,
         ),
         (
             "get(v ++ w, 2) ~ get(w, 2)",
-            bin_get(bin_joined, 2),
-            bin_get(w.clone(), 2),
+            bytes_get(bytes_joined, 2),
+            bytes_get(w.clone(), 2),
             true,
         ),
         (
@@ -776,14 +743,14 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
         ),
         (
             "get(slice(w, 1, 3), 2) ~ get(w, 3)",
-            bin_get(bin_window.clone(), 2),
-            bin_get(w.clone(), 3),
+            bytes_get(bytes_window.clone(), 2),
+            bytes_get(w.clone(), 3),
             true,
         ),
         (
             "get(slice(w, 1, 3), 2) ~ get(w, 2)",
-            bin_get(bin_window, 2),
-            bin_get(w.clone(), 2),
+            bytes_get(bytes_window, 2),
+            bytes_get(w.clone(), 2),
             true,
         ),
         (
@@ -814,8 +781,8 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
             let close = |side: &Intrinsic| {
                 let (anchor, operand) = match packed {
                     true => (
-                        run_bytes(bin_anchors[index]),
-                        run_bytes(bin_operands[index]),
+                        run_bytes(bytes_anchors[index]),
+                        run_bytes(bytes_operands[index]),
                     ),
                     false => (
                         nat_list(list_anchors[index]),
@@ -943,13 +910,13 @@ fn every_truth_table_decision_holds_at_every_closed_instantiation() {
 
 // Soundness gate for the open-term reduction laws the code comments beside the folds assert and nothing else stated: the subtraction borrow within the floor, the literal-factor distribution of `·` on either side, the full-window collapse `slice(b, 0, len(b)) = b`, the empty window `slice(b, i, 0) = x[]` over a symbolic base and start, the cons peels of `get` and `slice` over a symbolic tail and symbolic bounds, and the `len`/`map` homomorphisms over an append and a concatenation. Each case states the law's own reduct and holds the pair to two obligations. The open fold must land on exactly that reduct — so the law demonstrably fired, and where its comment claims, which is what keeps a case from passing vacuously when a rule stops firing. And the original and the reduct must agree as values at every closed instantiation, which is what a definitional equation promises and the only thing a false one fails. Instantiations respect the operations' `/sys` preconditions (`i < len` for `get`, `s + l <= len` for `slice`), since a program outside them cannot be written.
 //
-// `map`'s ground truth is structural rather than numeric: the mapped function stays a free symbol, so both sides fold to element runs of identical stuck applications, and their agreement says no element was dropped, duplicated or reordered — which is the whole of what the distribution law claims. Mutation-checked: misstating the append measure (`nat_add(2, base)` for `nat_add(1, base)` in the `BinLen` slot) fails the length case on both obligations at once.
+// `map`'s ground truth is structural rather than numeric: the mapped function stays a free symbol, so both sides fold to element runs of identical stuck applications, and their agreement says no element was dropped, duplicated or reordered — which is the whole of what the distribution law claims. Mutation-checked: misstating the append measure (`nat_add(2, base)` for `nat_add(1, base)` in the `BytesLen` slot) fails the length case on both obligations at once.
 #[test]
 fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
     let nat_x = Free::local(0, Some("x"));
     let nat_y = Free::local(1, Some("y"));
-    let bin_base = Free::local(2, Some("b"));
-    let bin_tail = Free::local(3, Some("t"));
+    let bytes_base = Free::local(2, Some("b"));
+    let bytes_tail = Free::local(3, Some("t"));
     let byte_free = Free::local(4, Some("c"));
     let nat_end = Free::local(5, Some("e"));
     let nat_start = Free::local(6, Some("s"));
@@ -992,8 +959,8 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         ]
     };
     let y = Term::free_var(&nat_y);
-    let b = Term::free_var(&bin_base);
-    let t = Term::free_var(&bin_tail);
+    let b = Term::free_var(&bytes_base);
+    let t = Term::free_var(&bytes_tail);
     let c = Term::free_var(&byte_free);
     let e = Term::free_var(&nat_end);
     let s = Term::free_var(&nat_start);
@@ -1052,19 +1019,14 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
             non_neg: qed(),
         })
     };
-    let cat = |parts: Vec<Term>| {
-        Term::intrinsic(Intrinsic::BinConcat {
-            grain: Grain::X,
-            operands: parts,
-        })
+    let cat = |parts: Vec<Term>| Term::intrinsic(Intrinsic::BytesConcat { operands: parts });
+    let bytes_slice = |base: Term, start: Term, count: Term| {
+        Term::intrinsic(Intrinsic::bytes_slice(base, start, count, qed()))
     };
-    let bin_slice = |base: Term, start: Term, count: Term| {
-        Term::intrinsic(Intrinsic::bin_slice(Grain::X, base, start, count, qed()))
-    };
-    let bin_get =
-        |base: Term, index: Term| Term::intrinsic(Intrinsic::bin_get(Grain::X, base, index, qed()));
-    let bin_len = |base: Term| Term::intrinsic(Intrinsic::bin_len(Grain::X, base));
-    let chunk = Term::intrinsic(Intrinsic::bin_append(Grain::X, run_bytes(&[]), c.clone()));
+    let bytes_get =
+        |base: Term, index: Term| Term::intrinsic(Intrinsic::bytes_get(base, index, qed()));
+    let bytes_len = |base: Term| Term::intrinsic(Intrinsic::bytes_len(base));
+    let chunk = Term::intrinsic(Intrinsic::bytes_append(run_bytes(&[]), c.clone()));
     let elem = symbol(1000, "T");
     let list_append = |base: Term, element: Term| {
         Term::intrinsic(Intrinsic::list_append(elem.clone(), base, element))
@@ -1194,45 +1156,48 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         ),
         (
             "slice(b, 0, len(b)) = b",
-            bin_slice(b.clone(), lit(0), bin_len(b.clone())),
+            bytes_slice(b.clone(), lit(0), bytes_len(b.clone())),
             b.clone(),
             vec![
-                vec![(&bin_base, run_bytes(&[]))],
-                vec![(&bin_base, run_bytes(&[9, 8, 7]))],
+                vec![(&bytes_base, run_bytes(&[]))],
+                vec![(&bytes_base, run_bytes(&[9, 8, 7]))],
             ],
         ),
         // Decided on the *length* alone, where a `(start, end)` window would compare two subjects — which is what a count buys.
         (
             "slice(b, e, 0) = x[]",
-            bin_slice(b.clone(), e.clone(), lit(0)),
+            bytes_slice(b.clone(), e.clone(), lit(0)),
             run_bytes(&[]),
             vec![
-                vec![(&bin_base, run_bytes(&[])), (&nat_end, lit(0))],
-                vec![(&bin_base, run_bytes(&[9, 8, 7])), (&nat_end, lit(2))],
-                vec![(&bin_base, run_bytes(&[9, 8, 7])), (&nat_end, lit(3))],
+                vec![(&bytes_base, run_bytes(&[])), (&nat_end, lit(0))],
+                vec![(&bytes_base, run_bytes(&[9, 8, 7])), (&nat_end, lit(2))],
+                vec![(&bytes_base, run_bytes(&[9, 8, 7])), (&nat_end, lit(3))],
             ],
         ),
         (
             "slice(cons(c, b), 0, e + 1) = cons(c, x[]) ++ slice(b, 0, e)",
-            bin_slice(
+            bytes_slice(
                 cat(vec![chunk.clone(), b.clone()]),
                 lit(0),
                 plus(e.clone(), lit(1)),
             ),
-            cat(vec![chunk.clone(), bin_slice(b.clone(), lit(0), e.clone())]),
+            cat(vec![
+                chunk.clone(),
+                bytes_slice(b.clone(), lit(0), e.clone()),
+            ]),
             vec![
                 vec![
-                    (&bin_base, run_bytes(&[])),
+                    (&bytes_base, run_bytes(&[])),
                     (&byte_free, byte(7)),
                     (&nat_end, lit(0)),
                 ],
                 vec![
-                    (&bin_base, run_bytes(&[8, 9])),
+                    (&bytes_base, run_bytes(&[8, 9])),
                     (&byte_free, byte(255)),
                     (&nat_end, lit(1)),
                 ],
                 vec![
-                    (&bin_base, run_bytes(&[8, 9])),
+                    (&bytes_base, run_bytes(&[8, 9])),
                     (&byte_free, byte(0)),
                     (&nat_end, lit(2)),
                 ],
@@ -1241,33 +1206,33 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         (
             // Advancing the start leaves the count alone, which is the reparameterisation paying for itself: peeling the base is invariant for the window's own length, so nothing about it has to be recomputed to move it.
             "slice(cons(c, b), s + 1, e) = slice(b, s, e)",
-            bin_slice(
+            bytes_slice(
                 cat(vec![chunk.clone(), b.clone()]),
                 plus(s.clone(), lit(1)),
                 e.clone(),
             ),
-            bin_slice(b.clone(), s.clone(), e.clone()),
+            bytes_slice(b.clone(), s.clone(), e.clone()),
             vec![
                 vec![
-                    (&bin_base, run_bytes(&[8, 9])),
+                    (&bytes_base, run_bytes(&[8, 9])),
                     (&byte_free, byte(7)),
                     (&nat_start, lit(0)),
                     (&nat_end, lit(0)),
                 ],
                 vec![
-                    (&bin_base, run_bytes(&[8, 9])),
+                    (&bytes_base, run_bytes(&[8, 9])),
                     (&byte_free, byte(7)),
                     (&nat_start, lit(0)),
                     (&nat_end, lit(2)),
                 ],
                 vec![
-                    (&bin_base, run_bytes(&[8, 9])),
+                    (&bytes_base, run_bytes(&[8, 9])),
                     (&byte_free, byte(7)),
                     (&nat_start, lit(1)),
                     (&nat_end, lit(1)),
                 ],
                 vec![
-                    (&bin_base, run_bytes(&[8, 9])),
+                    (&bytes_base, run_bytes(&[8, 9])),
                     (&byte_free, byte(7)),
                     (&nat_start, lit(2)),
                     (&nat_end, lit(0)),
@@ -1276,7 +1241,7 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         ),
         (
             "get(cons(c, x[]), 0) = c",
-            bin_get(chunk.clone(), lit(0)),
+            bytes_get(chunk.clone(), lit(0)),
             c.clone(),
             vec![
                 vec![(&byte_free, byte(0))],
@@ -1286,16 +1251,16 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         ),
         (
             "get(cons(c, b), e + 1) = get(b, e)",
-            bin_get(cat(vec![chunk.clone(), b.clone()]), plus(e.clone(), lit(1))),
-            bin_get(b.clone(), e.clone()),
+            bytes_get(cat(vec![chunk.clone(), b.clone()]), plus(e.clone(), lit(1))),
+            bytes_get(b.clone(), e.clone()),
             vec![
                 vec![
-                    (&bin_base, run_bytes(&[8, 9])),
+                    (&bytes_base, run_bytes(&[8, 9])),
                     (&byte_free, byte(7)),
                     (&nat_end, lit(0)),
                 ],
                 vec![
-                    (&bin_base, run_bytes(&[8, 9])),
+                    (&bytes_base, run_bytes(&[8, 9])),
                     (&byte_free, byte(7)),
                     (&nat_end, lit(1)),
                 ],
@@ -1303,26 +1268,25 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         ),
         (
             "len(append(b, c)) = len(b) + 1",
-            bin_len(Term::intrinsic(Intrinsic::bin_append(
-                Grain::X,
+            bytes_len(Term::intrinsic(Intrinsic::bytes_append(
                 b.clone(),
                 c.clone(),
             ))),
-            plus(bin_len(b.clone()), lit(1)),
+            plus(bytes_len(b.clone()), lit(1)),
             vec![
-                vec![(&bin_base, run_bytes(&[])), (&byte_free, byte(0))],
-                vec![(&bin_base, run_bytes(&[9, 8])), (&byte_free, byte(255))],
+                vec![(&bytes_base, run_bytes(&[])), (&byte_free, byte(0))],
+                vec![(&bytes_base, run_bytes(&[9, 8])), (&byte_free, byte(255))],
             ],
         ),
         (
             "len(b ++ x[0509] ++ t) = len(b) + len(t) + 2",
-            bin_len(cat(vec![b.clone(), run_bytes(&[5, 9]), t.clone()])),
-            plus(plus(bin_len(b.clone()), bin_len(t.clone())), lit(2)),
+            bytes_len(cat(vec![b.clone(), run_bytes(&[5, 9]), t.clone()])),
+            plus(plus(bytes_len(b.clone()), bytes_len(t.clone())), lit(2)),
             vec![
-                vec![(&bin_base, run_bytes(&[])), (&bin_tail, run_bytes(&[]))],
+                vec![(&bytes_base, run_bytes(&[])), (&bytes_tail, run_bytes(&[]))],
                 vec![
-                    (&bin_base, run_bytes(&[7])),
-                    (&bin_tail, run_bytes(&[1, 2])),
+                    (&bytes_base, run_bytes(&[7])),
+                    (&bytes_tail, run_bytes(&[1, 2])),
                 ],
             ],
         ),
@@ -2500,29 +2464,39 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         // The free monoid's seam windows over symbolic operands, and the measure through a map.
         (
             "slice(b ++ t, 0, len(b)) = b",
-            bin_slice(cat(vec![b.clone(), t.clone()]), lit(0), bin_len(b.clone())),
+            bytes_slice(
+                cat(vec![b.clone(), t.clone()]),
+                lit(0),
+                bytes_len(b.clone()),
+            ),
             b.clone(),
             vec![
-                vec![(&bin_base, run_bytes(&[])), (&bin_tail, run_bytes(&[7]))],
                 vec![
-                    (&bin_base, run_bytes(&[1, 2])),
-                    (&bin_tail, run_bytes(&[3, 4, 5])),
+                    (&bytes_base, run_bytes(&[])),
+                    (&bytes_tail, run_bytes(&[7])),
+                ],
+                vec![
+                    (&bytes_base, run_bytes(&[1, 2])),
+                    (&bytes_tail, run_bytes(&[3, 4, 5])),
                 ],
             ],
         ),
         (
             "slice(b ++ t, len(b), len(t)) = t",
-            bin_slice(
+            bytes_slice(
                 cat(vec![b.clone(), t.clone()]),
-                bin_len(b.clone()),
-                bin_len(t.clone()),
+                bytes_len(b.clone()),
+                bytes_len(t.clone()),
             ),
             t.clone(),
             vec![
-                vec![(&bin_base, run_bytes(&[9])), (&bin_tail, run_bytes(&[]))],
                 vec![
-                    (&bin_base, run_bytes(&[1, 2])),
-                    (&bin_tail, run_bytes(&[3, 4, 5])),
+                    (&bytes_base, run_bytes(&[9])),
+                    (&bytes_tail, run_bytes(&[])),
+                ],
+                vec![
+                    (&bytes_base, run_bytes(&[1, 2])),
+                    (&bytes_tail, run_bytes(&[3, 4, 5])),
                 ],
             ],
         ),
@@ -2538,21 +2512,21 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         // A window's length is the count it was cut to, and a map moves inside a window. Both rest on `slice`'s own precondition, which is the domain the instantiations below keep to, and both were stuck at literal bounds while a slice was filed as opaque.
         (
             "len(slice(b, s, e)) = e",
-            bin_len(bin_slice(b.clone(), s.clone(), e.clone())),
+            bytes_len(bytes_slice(b.clone(), s.clone(), e.clone())),
             e.clone(),
             vec![
                 vec![
-                    (&bin_base, run_bytes(&[9, 8, 7])),
+                    (&bytes_base, run_bytes(&[9, 8, 7])),
                     (&nat_start, lit(1)),
                     (&nat_end, lit(2)),
                 ],
                 vec![
-                    (&bin_base, run_bytes(&[9, 8, 7])),
+                    (&bytes_base, run_bytes(&[9, 8, 7])),
                     (&nat_start, lit(0)),
                     (&nat_end, lit(0)),
                 ],
                 vec![
-                    (&bin_base, run_bytes(&[9, 8, 7])),
+                    (&bytes_base, run_bytes(&[9, 8, 7])),
                     (&nat_start, lit(0)),
                     (&nat_end, lit(3)),
                 ],
@@ -2606,42 +2580,42 @@ fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
         // A window past every operand but the last lies inside the last one, at the distance that remains: the seam walk narrows there because the caller's bound cancels to exactly that operand's length. Instantiations keep to the bound the narrowed operation states.
         (
             "get(b ++ t, len(b) + s) = get(t, s)",
-            bin_get(
+            bytes_get(
                 cat(vec![b.clone(), t.clone()]),
-                plus(bin_len(b.clone()), s.clone()),
+                plus(bytes_len(b.clone()), s.clone()),
             ),
-            bin_get(t.clone(), s.clone()),
+            bytes_get(t.clone(), s.clone()),
             vec![
                 vec![
-                    (&bin_base, run_bytes(&[9, 8])),
-                    (&bin_tail, run_bytes(&[7, 6, 5])),
+                    (&bytes_base, run_bytes(&[9, 8])),
+                    (&bytes_tail, run_bytes(&[7, 6, 5])),
                     (&nat_start, lit(0)),
                 ],
                 vec![
-                    (&bin_base, run_bytes(&[])),
-                    (&bin_tail, run_bytes(&[7, 6, 5])),
+                    (&bytes_base, run_bytes(&[])),
+                    (&bytes_tail, run_bytes(&[7, 6, 5])),
                     (&nat_start, lit(2)),
                 ],
             ],
         ),
         (
             "slice(b ++ t, len(b) + s, e) = slice(t, s, e)",
-            bin_slice(
+            bytes_slice(
                 cat(vec![b.clone(), t.clone()]),
-                plus(bin_len(b.clone()), s.clone()),
+                plus(bytes_len(b.clone()), s.clone()),
                 e.clone(),
             ),
-            bin_slice(t.clone(), s.clone(), e.clone()),
+            bytes_slice(t.clone(), s.clone(), e.clone()),
             vec![
                 vec![
-                    (&bin_base, run_bytes(&[9, 8])),
-                    (&bin_tail, run_bytes(&[7, 6, 5])),
+                    (&bytes_base, run_bytes(&[9, 8])),
+                    (&bytes_tail, run_bytes(&[7, 6, 5])),
                     (&nat_start, lit(1)),
                     (&nat_end, lit(2)),
                 ],
                 vec![
-                    (&bin_base, run_bytes(&[9])),
-                    (&bin_tail, run_bytes(&[7, 6, 5])),
+                    (&bytes_base, run_bytes(&[9])),
+                    (&bytes_tail, run_bytes(&[7, 6, 5])),
                     (&nat_start, lit(0)),
                     (&nat_end, lit(0)),
                 ],

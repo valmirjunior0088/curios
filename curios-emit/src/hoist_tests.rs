@@ -19,8 +19,8 @@ fn runtime_tuples_stay_inline() {
 }
 
 #[test]
-fn constant_bin_literals_hoist_into_a_start_initialized_global() {
-    let wat = wat(&bin_len());
+fn constant_bytes_literals_hoist_into_a_start_initialized_global() {
+    let wat = wat(&bytes_len());
     assert_contains(&wat, "global.set $const/");
     assert_contains(&wat, "global.get $const/");
     // The program's one constant; a refusal's sentence is built by its helper from a `refusal/…` segment and is not counted here.

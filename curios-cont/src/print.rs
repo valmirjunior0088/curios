@@ -19,7 +19,7 @@ use {
         IntrinsicCall, Literal, Module, Node, NodeId, Register, RowId, Slot, ValueExpr, ValueId,
     },
     curios_abi::Namespace,
-    curios_num::{Grain, Rounding},
+    curios_num::Rounding,
     curios_utilities::{grown, recurse},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -627,12 +627,6 @@ fn intrinsic_call_name(op: IntrinsicCall) -> &'static str {
     }
 }
 
-fn grain_carrier(grain: Grain) -> &'static str {
-    match grain {
-        Grain::X => "Bytes",
-    }
-}
-
 /// The name of every intrinsic, carrier first and operation last.
 ///
 /// The `/sys` path of a float operation rounded in `rounding`: `Flt/add` in the default direction, `Flt/toward_zero/add` in another.
@@ -726,18 +720,18 @@ fn intrinsic_name(op: &Intrinsic) -> String {
         Intrinsic::IsImmediate => "Immediate/is",
         Intrinsic::ImmediateGet => "Immediate/get",
         Intrinsic::IsRow(row) => return format!("Row/is({row})"),
-        Intrinsic::BinLen(grain) => return format!("{}/len", grain_carrier(*grain)),
-        Intrinsic::BinEql(grain) => return format!("{}/eql", grain_carrier(*grain)),
-        Intrinsic::BinGet(grain) => return format!("{}/get", grain_carrier(*grain)),
-        Intrinsic::BinSlice(grain) => return format!("{}/slice", grain_carrier(*grain)),
-        Intrinsic::BinRest(grain) => return format!("{}/rest", grain_carrier(*grain)),
-        Intrinsic::BinAppend(grain) => return format!("{}/append", grain_carrier(*grain)),
-        Intrinsic::BinConcat(grain, _) => return format!("{}/concat", grain_carrier(*grain)),
-        Intrinsic::BinChunk(grain, _) => return format!("{}/chunk", grain_carrier(*grain)),
-        Intrinsic::BinReplicate(grain) => return format!("{}/replicate", grain_carrier(*grain)),
-        Intrinsic::BinAnd(grain) => return format!("{}/and", grain_carrier(*grain)),
-        Intrinsic::BinOr(grain) => return format!("{}/or", grain_carrier(*grain)),
-        Intrinsic::BinXor(grain) => return format!("{}/xor", grain_carrier(*grain)),
+        Intrinsic::BytesLen => "Bytes/len",
+        Intrinsic::BytesEql => "Bytes/eql",
+        Intrinsic::BytesGet => "Bytes/get",
+        Intrinsic::BytesSlice => "Bytes/slice",
+        Intrinsic::BytesRest => "Bytes/rest",
+        Intrinsic::BytesAppend => "Bytes/append",
+        Intrinsic::BytesConcat(_) => "Bytes/concat",
+        Intrinsic::BytesChunk(_) => "Bytes/chunk",
+        Intrinsic::BytesReplicate => "Bytes/replicate",
+        Intrinsic::BytesAnd => "Bytes/and",
+        Intrinsic::BytesOr => "Bytes/or",
+        Intrinsic::BytesXor => "Bytes/xor",
         // Reached only through `Printer::intrinsic`'s projection arms with the wrong operand count, which a verified module does not produce.
         Intrinsic::RowGet(row, index) => return format!("Row/get({row}, {index})"),
         Intrinsic::TupleGet(index) => return format!("Tuple/get({index})"),
@@ -758,15 +752,13 @@ fn render_literal(literal: &Literal) -> String {
                 format!("flt:0x{:016x}", float.to_bits())
             }
         }
-        Literal::Bin(grain, bits) => {
-            let rendered = bits
-                .to_packed_bytes()
+        Literal::Bytes(bytes) => {
+            let rendered = bytes
+                .as_bytes()
                 .iter()
                 .map(|byte| format!("{byte:02x}"))
                 .collect::<String>();
-            match grain {
-                Grain::X => format!("x\"{rendered}\""),
-            }
+            format!("x\"{rendered}\"")
         }
     }
 }

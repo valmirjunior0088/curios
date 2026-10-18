@@ -9,7 +9,6 @@ use {
         MetavarId, StructDecl, StructType, Subterm, Telescope, Term, UniverseContext, Universes,
         Var,
     },
-    curios_num::Grain,
     curios_utilities::{Plicity, Qualifier},
 };
 
@@ -798,13 +797,10 @@ fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
 fn one_operation_at_two_universe_instances_is_one_number() {
     let mut kernel = kernel();
     let length = |operand: &Free, level: u32| {
-        Term::intrinsic(Intrinsic::bin_len(
-            Grain::X,
-            Term::instance(
-                InstanceHead::Var(Var::free(*operand)),
-                vec![Level::constant(level)],
-            ),
-        ))
+        Term::intrinsic(Intrinsic::bytes_len(Term::instance(
+            InstanceHead::Var(Var::free(*operand)),
+            vec![Level::constant(level)],
+        )))
     };
     let (n, m) = (binder(60, "n"), binder(61, "m"));
 

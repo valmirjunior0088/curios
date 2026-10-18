@@ -6,7 +6,7 @@ use {
         parse_nat_digits, parse_place, parse_premise, parse_qualified_name, refused, require_space,
     },
     crate::{
-        BinPattern, FuncParam, FuncType, FuncTypeParam, Label, ListPattern, MatchPattern,
+        BytesPattern, FuncParam, FuncType, FuncTypeParam, Label, ListPattern, MatchPattern,
         MatchPatternField, NatLiteral, NatPattern, Pattern, PatternField, Subterm, Term,
         parse_term, parse_whitespace,
     },
@@ -317,7 +317,7 @@ pub(super) fn parse_nat_zero_match_pattern<'a>(state: ParserState<'a>) -> Parsed
         .parse(state)
 }
 
-// The `pred + 1; ih` leaf of a `Nat` match-arm pattern, with the same optional `; ih` as the `List`/`Bin` cons leaves below (`parse_cons_ih`). Tried after the constructor pattern and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name+1;ih` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace), so a glued `pred+1` is no successor pattern and `refuse_glued_successor` refuses it by name.
+// The `pred + 1; ih` leaf of a `Nat` match-arm pattern, with the same optional `; ih` as the `List`/`Bytes` cons leaves below (`parse_cons_ih`). Tried after the constructor pattern and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name+1;ih` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace), so a glued `pred+1` is no successor pattern and `refuse_glued_successor` refuses it by name.
 pub(super) fn parse_nat_succ_match_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern> {
     parse_label
         .and_drop(preceded_by_space)
@@ -399,15 +399,19 @@ pub(super) fn parse_list_cons_match_pattern<'a>(
         .parse(state)
 }
 
-// The `x[]` leaf of a nested `Bin` pattern (the empty literal) — the packed counterpart of `parse_list_nil_match_pattern`, and glued exactly as `[]` is.
-pub(super) fn parse_bin_end_match_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern> {
+// The `x[]` leaf of a nested `Bytes` pattern (the empty literal) — the packed counterpart of `parse_list_nil_match_pattern`, and glued exactly as `[]` is.
+pub(super) fn parse_bytes_end_match_pattern<'a>(
+    state: ParserState<'a>,
+) -> Parsed<'a, MatchPattern> {
     parse_literal("x[]")
-        .map(|()| MatchPattern::Bin(BinPattern::End))
+        .map(|()| MatchPattern::Bytes(BytesPattern::End))
         .parse(state)
 }
 
-// The `x[head, ..tail][; ih]` leaf of a nested `Bin` pattern — the packed counterpart of `parse_list_cons_match_pattern`, differing only in the letter glued to the bracket.
-pub(super) fn parse_bin_byte_match_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern> {
+// The `x[head, ..tail][; ih]` leaf of a nested `Bytes` pattern — the packed counterpart of `parse_list_cons_match_pattern`, differing only in the letter glued to the bracket.
+pub(super) fn parse_bytes_byte_match_pattern<'a>(
+    state: ParserState<'a>,
+) -> Parsed<'a, MatchPattern> {
     parse_literal("x[")
         .and_keep(parse_label)
         .and_drop(parse_literal(","))
@@ -416,7 +420,7 @@ pub(super) fn parse_bin_byte_match_pattern<'a>(state: ParserState<'a>) -> Parsed
         .and_drop(parse_literal("]"))
         .and(parse_cons_ih)
         .map(|((head_label, tail_label), ih)| {
-            MatchPattern::Bin(BinPattern::Atom {
+            MatchPattern::Bytes(BytesPattern::Atom {
                 head_label,
                 tail_label,
                 ih,
@@ -432,8 +436,8 @@ pub(super) fn parse_match_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, Matc
 
 fn parse_match_pattern_inner<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern> {
     parse_qualified_match_pattern
-        .or(parse_bin_byte_match_pattern)
-        .or(parse_bin_end_match_pattern)
+        .or(parse_bytes_byte_match_pattern)
+        .or(parse_bytes_end_match_pattern)
         .or(parse_struct_match_pattern)
         .or(parse_ctor_match_pattern)
         .or(parse_bool_match_pattern)

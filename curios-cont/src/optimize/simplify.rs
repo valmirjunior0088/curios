@@ -3,7 +3,7 @@ use {
         Atom, Callee, ContinuationId, Demand, Edge, Intrinsic, Literal, Module, Node, NodeId,
         RowId, ValueExpr, ValueId, demand_of, demands, evaluate, rows_reaching, visit_atoms_mut,
     },
-    curios_num::{Grain, Integer, Natural},
+    curios_num::{Integer, Natural},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -436,56 +436,50 @@ pub(crate) fn fold_intrinsic_identities(module: &mut Module) -> bool {
     changed
 }
 
-/// Fuse a chain of packed appends into one flat chunk build. A literal with non-constant atoms lowers to appends onto whatever precedes it — the free monoid's honest spelling — and each append allocates a one-element leaf and a node the first read then gathers. Where the chain is local and unshared, the elements build one exact flat leaf instead: `BinChunk` alone when the chain is rooted at the empty packed value, or the root concatenated with the chunk otherwise. Only an intermediate append nothing else reads may fuse — a shared intermediate is a value the program observes — and a lone append onto a non-empty root stays as written, since a one-element chunk beside a concat node buys back exactly what it costs.
+/// Fuse a chain of packed appends into one flat chunk build. A literal with non-constant atoms lowers to appends onto whatever precedes it — the free monoid's honest spelling — and each append allocates a one-element leaf and a node the first read then gathers. Where the chain is local and unshared, the elements build one exact flat leaf instead: `BytesChunk` alone when the chain is rooted at the empty packed value, or the root concatenated with the chunk otherwise. Only an intermediate append nothing else reads may fuse — a shared intermediate is a value the program observes — and a lone append onto a non-empty root stays as written, since a one-element chunk beside a concat node buys back exactly what it costs.
 pub(crate) fn fuse_append_chains(module: &mut Module) -> bool {
     let counts = module.value_use_counts();
 
-    // Every packed append by its result — node, grain, base, element, successor — and every packed literal binding, so a chain rooted at an interned empty is recognized.
+    // Every packed append by its result — node, base, element, successor — and every packed literal binding, so a chain rooted at an interned empty is recognized.
     let mut appends = BTreeMap::new();
     let mut literals = BTreeMap::new();
     for (id, node) in module.live_nodes() {
         match node {
             Node::LetIntrinsic {
                 result,
-                op: Intrinsic::BinAppend(grain),
+                op: Intrinsic::BytesAppend,
                 args,
                 next,
             } => {
-                appends.insert(
-                    *result,
-                    (id, *grain, args[0].clone(), args[1].clone(), *next),
-                );
+                appends.insert(*result, (id, args[0].clone(), args[1].clone(), *next));
             }
             Node::LetValue {
                 result,
-                value: ValueExpr::Literal(Literal::Bin(grain, value)),
+                value: ValueExpr::Literal(Literal::Bytes(value)),
                 ..
             } => {
-                literals.insert(*result, (*grain, value.clone()));
+                literals.insert(*result, value.clone());
             }
             _ => {}
         }
     }
 
-    // An interior link is an append result whose one use is the base of a same-grain append; a chain is walked from each tip — an append that is no interior link — down through interior links to its root atom.
-    let interior = |value: &ValueId, grain: Grain| {
-        counts.get(value).copied().unwrap_or(0) == 1
-            && appends.get(value).is_some_and(|(_, g, ..)| *g == grain)
+    // An interior link is an append result whose one use is the base of an append; a chain is walked from each tip — an append that is no interior link — down through interior links to its root atom.
+    let interior = |value: &ValueId| {
+        counts.get(value).copied().unwrap_or(0) == 1 && appends.contains_key(value)
     };
-    let is_empty_literal = |atom: &Atom, grain: Grain| match atom {
-        Atom::Literal(Literal::Bin(g, value)) => *g == grain && value.len(grain) == 0,
-        Atom::Value(value) => literals
-            .get(value)
-            .is_some_and(|(g, value)| *g == grain && value.len(grain) == 0),
+    let is_empty_literal = |atom: &Atom| match atom {
+        Atom::Literal(Literal::Bytes(value)) => value.is_empty(),
+        Atom::Value(value) => literals.get(value).is_some_and(|value| value.is_empty()),
         _ => false,
     };
 
     let mut changed = false;
-    for (&tip, &(tip_node, grain, ref tip_base, ref tip_elem, tip_next)) in &appends {
+    for (&tip, &(tip_node, ref tip_base, ref tip_elem, tip_next)) in &appends {
         let consumed_as_base = appends
             .values()
-            .any(|(_, g, base, ..)| *g == grain && *base == Atom::Value(tip));
-        if interior(&tip, grain) && consumed_as_base {
+            .any(|(_, base, ..)| *base == Atom::Value(tip));
+        if interior(&tip) && consumed_as_base {
             continue;
         }
 
@@ -493,21 +487,21 @@ pub(crate) fn fuse_append_chains(module: &mut Module) -> bool {
         let mut elems = vec![tip_elem.clone()];
         let mut root = tip_base.clone();
         while let Atom::Value(value) = &root
-            && interior(value, grain)
+            && interior(value)
         {
-            let (node, _, base, elem, _) = &appends[value];
+            let (node, base, elem, _) = &appends[value];
             chain.push((*node, *value));
             elems.push(elem.clone());
             root = base.clone();
         }
         elems.reverse();
 
-        let rooted_empty = is_empty_literal(&root, grain);
+        let rooted_empty = is_empty_literal(&root);
         if !rooted_empty && elems.len() < 2 {
             continue;
         }
 
-        let chunk = Intrinsic::BinChunk(grain, elems.len());
+        let chunk = Intrinsic::BytesChunk(elems.len());
         if rooted_empty {
             module.set_node(
                 tip_node,
@@ -522,7 +516,7 @@ pub(crate) fn fuse_append_chains(module: &mut Module) -> bool {
             let chunk_result = module.add_value(None);
             let concat = module.add_node(Node::LetIntrinsic {
                 result: tip,
-                op: Intrinsic::BinConcat(grain, 2),
+                op: Intrinsic::BytesConcat(2),
                 args: vec![root, Atom::Value(chunk_result)],
                 next: tip_next,
             });
@@ -541,7 +535,7 @@ pub(crate) fn fuse_append_chains(module: &mut Module) -> bool {
         let redirect = chain
             .iter()
             .map(|&(node, value)| {
-                let (_, _, _, _, next) = appends[&value];
+                let (_, _, _, next) = appends[&value];
                 (node, next)
             })
             .collect();

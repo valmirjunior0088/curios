@@ -8,14 +8,14 @@ fn rope_names_match_the_wasm_vocabulary() {
     let module = EmissionModule::new();
     let raw = HashMap::new();
     let table = Table::new(&module, &raw);
-    let bin = table.bin_rope();
+    let bytes = table.bytes_rope();
     let list = table.list_rope();
 
-    assert_eq!(bin.base.as_str(), "rope/bin");
-    assert_eq!(bin.leaf.as_str(), "rope/bin/leaf");
-    assert_eq!(bin.node.as_str(), "rope/bin/node");
-    assert_eq!(bin.view.as_str(), "rope/bin/view");
-    assert_eq!(bin.payload.as_str(), "bytes");
+    assert_eq!(bytes.base.as_str(), "rope/bytes");
+    assert_eq!(bytes.leaf.as_str(), "rope/bytes/leaf");
+    assert_eq!(bytes.node.as_str(), "rope/bytes/node");
+    assert_eq!(bytes.view.as_str(), "rope/bytes/view");
+    assert_eq!(bytes.payload.as_str(), "bytes");
 
     assert_eq!(list.base.as_str(), "rope/list");
     assert_eq!(list.leaf.as_str(), "rope/list/leaf");

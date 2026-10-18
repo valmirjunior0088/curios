@@ -73,7 +73,7 @@ impl Arity for Two {
     }
 }
 
-/// The static three-binder arity — the `(head, tail, ih)` cons arms of the `Bin`/`List` eliminators.
+/// The static three-binder arity — the `(head, tail, ih)` cons arms of the `Bytes`/`List` eliminators.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Three;

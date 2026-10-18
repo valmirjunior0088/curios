@@ -19,7 +19,7 @@ use {
         Module, Node, NodeId, Origin, PARAM_SPLIT_GROWTH_LIMIT, RowId, UseTarget, ValueExpr,
         ValueId, analyze_calls, atoms, demand_of, demands, origins, rewire_node, visit_atoms_mut,
     },
-    curios_num::{Grain, Natural},
+    curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -510,17 +510,17 @@ pub(crate) fn split_workers(module: &mut Module) -> bool {
 /// Which sequence row a window region reads through, unified across every operation the region contains.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WindowFamily {
-    Bin(Grain),
+    Bytes,
     List,
 }
 
 impl WindowFamily {
     fn of(op: Intrinsic) -> Option<(Self, WindowRead)> {
         match op {
-            Intrinsic::BinLen(grain) => Some((Self::Bin(grain), WindowRead::Len)),
-            Intrinsic::BinGet(grain) => Some((Self::Bin(grain), WindowRead::Get)),
-            Intrinsic::BinSlice(grain) => Some((Self::Bin(grain), WindowRead::Slice)),
-            Intrinsic::BinRest(grain) => Some((Self::Bin(grain), WindowRead::Rest)),
+            Intrinsic::BytesLen => Some((Self::Bytes, WindowRead::Len)),
+            Intrinsic::BytesGet => Some((Self::Bytes, WindowRead::Get)),
+            Intrinsic::BytesSlice => Some((Self::Bytes, WindowRead::Slice)),
+            Intrinsic::BytesRest => Some((Self::Bytes, WindowRead::Rest)),
             Intrinsic::ListLen => Some((Self::List, WindowRead::Len)),
             Intrinsic::ListGet => Some((Self::List, WindowRead::Get)),
             Intrinsic::ListSlice => Some((Self::List, WindowRead::Slice)),
@@ -531,14 +531,14 @@ impl WindowFamily {
 
     fn len_op(self) -> Intrinsic {
         match self {
-            Self::Bin(grain) => Intrinsic::BinLen(grain),
+            Self::Bytes => Intrinsic::BytesLen,
             Self::List => Intrinsic::ListLen,
         }
     }
 
     fn get_op(self) -> Intrinsic {
         match self {
-            Self::Bin(grain) => Intrinsic::BinGet(grain),
+            Self::Bytes => Intrinsic::BytesGet,
             Self::List => Intrinsic::ListGet,
         }
     }

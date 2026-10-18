@@ -4,7 +4,7 @@
 
 use {
     crate::{Atom, Intrinsic, Literal, Module, Node, NodeId, ValueId, rewire_node, rewrite_atoms},
-    curios_num::{Binary, Grain, Integer, Natural},
+    curios_num::{Binary, Integer, Natural},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -16,7 +16,7 @@ enum AtomKey {
     Nat(Natural),
     Int(Integer),
     Flt(u64),
-    Bin(Grain, Binary),
+    Bytes(Binary),
     Filler,
 }
 
@@ -27,7 +27,7 @@ fn atom_key(atom: &Atom) -> AtomKey {
         Atom::Literal(Literal::Nat(value)) => AtomKey::Nat(value.clone()),
         Atom::Literal(Literal::Int(value)) => AtomKey::Int(value.clone()),
         Atom::Literal(Literal::Flt(value)) => AtomKey::Flt(value.to_bits()),
-        Atom::Literal(Literal::Bin(grain, value)) => AtomKey::Bin(*grain, value.clone()),
+        Atom::Literal(Literal::Bytes(value)) => AtomKey::Bytes(value.clone()),
         Atom::Filler => AtomKey::Filler,
     }
 }
@@ -42,7 +42,7 @@ fn intrinsic_key(op: Intrinsic, args: &[Atom]) -> (Intrinsic, Vec<AtomKey>) {
 
 /// One scope-walk work item: visit a node under the current table, or retract what a binder inserted once its subtree is done. The LIFO order makes retraction happen exactly between a `LetCont`'s sibling subtrees, which is what keeps one sibling's bindings invisible to the next.
 ///
-/// A retraction names the *node*, not the key it inserted. The walk never mutates the module — every rewrite is batched after the last function is walked — so the node still carries the operator and operands that produced its key, and recomputing costs one `intrinsic_key`. Carrying the key instead would park an owned `Vec<AtomKey>` here for the whole extent of the binder's subtree, and an `AtomKey::Bin` holds a packed literal's entire byte string, so a chain of literal-bearing intrinsics would hold one copy of each literal per pending retraction.
+/// A retraction names the *node*, not the key it inserted. The walk never mutates the module — every rewrite is batched after the last function is walked — so the node still carries the operator and operands that produced its key, and recomputing costs one `intrinsic_key`. Carrying the key instead would park an owned `Vec<AtomKey>` here for the whole extent of the binder's subtree, and an `AtomKey::Bytes` holds a packed literal's entire byte string, so a chain of literal-bearing intrinsics would hold one copy of each literal per pending retraction.
 enum Task {
     Visit(NodeId),
     Retract(NodeId),

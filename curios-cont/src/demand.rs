@@ -96,11 +96,11 @@ pub(crate) fn demands(module: &Module) -> BTreeMap<ValueId, Demand> {
                 // A sequence read consumes only elements, lengths, or windows of its carrier operand: the carrier's demand stays `Indexed`, while every other operand — an index, a count, an appended element — is consumed whole. `ListSettle` joins the reads because settling is exactly what an `Indexed` construction would have done to itself. The growth forms — concat, append, chunk, flat — are deliberately absent: their carrier operands are consumed into a new value, which is the escape the lattice point exists to exclude.
                 Node::LetIntrinsic {
                     op:
-                        Intrinsic::BinLen(_)
-                        | Intrinsic::BinEql(_)
-                        | Intrinsic::BinGet(_)
-                        | Intrinsic::BinSlice(_)
-                        | Intrinsic::BinRest(_)
+                        Intrinsic::BytesLen
+                        | Intrinsic::BytesEql
+                        | Intrinsic::BytesGet
+                        | Intrinsic::BytesSlice
+                        | Intrinsic::BytesRest
                         | Intrinsic::ListLen
                         | Intrinsic::ListGet
                         | Intrinsic::ListSlice
@@ -114,7 +114,7 @@ pub(crate) fn demands(module: &Module) -> BTreeMap<ValueId, Demand> {
                         2 if matches!(
                             node,
                             Node::LetIntrinsic {
-                                op: Intrinsic::BinEql(_),
+                                op: Intrinsic::BytesEql,
                                 ..
                             }
                         ) =>

@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Natural},
     std::sync::Arc,
 };
 
@@ -282,17 +282,12 @@ fn a_word_around_the_recursion_threads_both_sides() {
 #[test]
 fn a_run_of_bytes_built_under_its_recursion_gains_a_worker() {
     let printed = optimized(
-        constant(Constant::Bin(Grain::X, Binary::empty())),
+        constant(Constant::Bytes(Binary::empty())),
         |builder, f, _, pred| {
-            let byte = Atom::Constant(
-                builder.constant(Constant::Bin(Grain::X, Binary::from_bytes(vec![0x61]))),
-            );
+            let byte =
+                Atom::Constant(builder.constant(Constant::Bytes(Binary::from_bytes(vec![0x61]))));
             let recursion = recur(builder, f, pred);
-            sequence(
-                builder,
-                SequenceOp::BinConcat(Grain::X),
-                vec![byte, recursion],
-            )
+            sequence(builder, SequenceOp::BytesConcat, vec![byte, recursion])
         },
     );
     assert!(printed.contains("f@w"), "{printed}");

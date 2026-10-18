@@ -160,7 +160,7 @@ impl<'a> Layout<'a> {
             {
                 curios_cont::Slot::Row(self.row_identity(module, family))
             }
-            FieldShape::Family(_) | FieldShape::Packed(_) | FieldShape::Opaque => {
+            FieldShape::Family(_) | FieldShape::Bytes | FieldShape::Opaque => {
                 curios_cont::Slot::Opaque
             }
         }

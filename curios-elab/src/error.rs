@@ -13,7 +13,7 @@ use {
         ReaderPrinter, ReduceError, Rename, Spelling, Spellings, Term, UniverseConstraintOrigin,
         UniverseError, Unresolved, WitnessKey, build_rename,
     },
-    curios_num::{Grain, Integer, Natural},
+    curios_num::{Integer, Natural},
     curios_utilities::{InfixOp, Note, Plicity, Qualifier, Report, Span, SyntaxRegistry},
     std::{collections::BTreeMap, fmt, rc::Rc},
 };
@@ -309,7 +309,7 @@ macro_rules! shown_terms {
             | Self::NotNatType { head_type }
             | Self::NotBoolType { head_type }
             | Self::NotListType { head_type }
-            | Self::NotBinType { head_type, .. }
+            | Self::NotBytesType { head_type, .. }
             | Self::NotAInductType { head_type, .. } => $visit(head_type),
             Self::NotAFunctionType { expected, .. }
             | Self::NotATupleType { expected, .. }
@@ -450,11 +450,11 @@ pub enum Error {
         /// As [`Error::ReduceExhausted`]'s.
         refusal: ReduceError,
     },
-    BinGetOutOfBounds {
+    BytesGetOutOfBounds {
         len: usize,
         index: usize,
     },
-    BinSliceOutOfRange {
+    BytesSliceOutOfRange {
         len: usize,
         start: usize,
         length: usize,
@@ -579,9 +579,8 @@ pub enum Error {
     NotListType {
         head_type: Box<Term>,
     },
-    /// `grain` names the packed binary the operation wanted, so the message says `Bytes` — the spelling the surface has. There is no surface type named after the grain-parametric family.
-    NotBinType {
-        grain: Grain,
+    /// A packed operation's operand is no `Bytes`, which the message spells as the surface does.
+    NotBytesType {
         head_type: Box<Term>,
     },
     /// A call, literal or lambda supplies the wrong number of arguments for a telescope whose slots are all written. At a lambda this counts *explicit* slots and *explicit* binders alone, because the hidden ones are inserted rather than written — see [`Error::SurplusFuncBinders`] for why a total would name a number the author may not write.
@@ -1003,15 +1002,15 @@ impl Error {
     ) -> Error {
         match error {
             refusal @ ReduceError::Exhausted { .. } => exhausted(refusal),
-            ReduceError::BinGetOutOfBounds { len, index, extent } => {
-                Error::BinGetOutOfBounds { len, index }.at_opt(extent)
+            ReduceError::BytesGetOutOfBounds { len, index, extent } => {
+                Error::BytesGetOutOfBounds { len, index }.at_opt(extent)
             }
-            ReduceError::BinSliceOutOfRange {
+            ReduceError::BytesSliceOutOfRange {
                 len,
                 start,
                 length,
                 extent,
-            } => Error::BinSliceOutOfRange { len, start, length }.at_opt(extent),
+            } => Error::BytesSliceOutOfRange { len, start, length }.at_opt(extent),
             ReduceError::ListGetOutOfBounds { len, index, extent } => {
                 Error::ListGetOutOfBounds { len, index }.at_opt(extent)
             }
@@ -1268,9 +1267,8 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_bin_type<U: Into<Term>>(grain: Grain, head_type: U) -> Self {
-        Self::NotBinType {
-            grain,
+    pub(crate) fn not_bytes_type<U: Into<Term>>(head_type: U) -> Self {
+        Self::NotBytesType {
             head_type: Box::new(head_type.into()),
         }
     }

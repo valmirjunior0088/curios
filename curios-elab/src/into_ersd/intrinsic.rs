@@ -1,6 +1,6 @@
 //! The intrinsic transcription: each Core intrinsic to its arena identity, shape for shape.
 //!
-//! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is its grain's shape (`Byte` for `X`, `Bool` for `B`) — every collapse onto a runtime carrier belongs to the lowering out of the representation. Type-level numerals cross whole, the erased carriers being unbounded too; the one narrowing here is a dispatch key's, refused rather than wrapped (`narrow_case_key`).
+//! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is a `Byte` — every collapse onto a runtime carrier belongs to the lowering out of the representation. Type-level numerals cross whole, the erased carriers being unbounded too; the one narrowing here is a dispatch key's, refused rather than wrapped (`narrow_case_key`).
 
 use {
     super::{Error, Intrinsic, Lowering, Nat, Natural, Outcome, Retyping, Subterm, Term, emitted},
@@ -206,7 +206,7 @@ pub(super) fn erase_intrinsic(
         | Intrinsic::ByteType
         | Intrinsic::IntType
         | Intrinsic::FltType
-        | Intrinsic::BinType(_)
+        | Intrinsic::BytesType
         | Intrinsic::ListType(_)
         | Intrinsic::HandleType
         | Intrinsic::CellType(_)
@@ -324,21 +324,21 @@ pub(super) fn erase_intrinsic(
         Intrinsic::FltToLeBytes(..) => op!(curios_ersd::Operation::FltToLeBytes),
         Intrinsic::FltOfLeBytes { .. } => op!(curios_ersd::Operation::FltOfLeBytes),
 
-        Intrinsic::Bin(grain, value) => {
-            Ok(lowering.constant_outcome(curios_ersd::Constant::Bin(*grain, value.clone())))
+        Intrinsic::Bytes(value) => {
+            Ok(lowering.constant_outcome(curios_ersd::Constant::Bytes(value.clone())))
         }
-        Intrinsic::BinLen(grain, ..) => seq!(curios_ersd::SequenceOp::BinLen(*grain)),
-        Intrinsic::BinEql(grain, ..) => seq!(curios_ersd::SequenceOp::BinEql(*grain)),
-        Intrinsic::BinGet { grain, .. } => seq!(curios_ersd::SequenceOp::BinGet(*grain)),
-        Intrinsic::BinSlice { grain, .. } => seq!(curios_ersd::SequenceOp::BinSlice(*grain)),
-        Intrinsic::BinAppend { grain, .. } => seq!(curios_ersd::SequenceOp::BinAppend(*grain)),
-        Intrinsic::BinReplicate { grain, .. } => {
-            seq!(curios_ersd::SequenceOp::BinReplicate(*grain))
+        Intrinsic::BytesLen(..) => seq!(curios_ersd::SequenceOp::BytesLen),
+        Intrinsic::BytesEql(..) => seq!(curios_ersd::SequenceOp::BytesEql),
+        Intrinsic::BytesGet { .. } => seq!(curios_ersd::SequenceOp::BytesGet),
+        Intrinsic::BytesSlice { .. } => seq!(curios_ersd::SequenceOp::BytesSlice),
+        Intrinsic::BytesAppend { .. } => seq!(curios_ersd::SequenceOp::BytesAppend),
+        Intrinsic::BytesReplicate { .. } => {
+            seq!(curios_ersd::SequenceOp::BytesReplicate)
         }
-        Intrinsic::BinAnd { grain, .. } => seq!(curios_ersd::SequenceOp::BinAnd(*grain)),
-        Intrinsic::BinOr { grain, .. } => seq!(curios_ersd::SequenceOp::BinOr(*grain)),
-        Intrinsic::BinXor { grain, .. } => seq!(curios_ersd::SequenceOp::BinXor(*grain)),
-        Intrinsic::BinConcat { grain, .. } => seq!(curios_ersd::SequenceOp::BinConcat(*grain)),
+        Intrinsic::BytesAnd { .. } => seq!(curios_ersd::SequenceOp::BytesAnd),
+        Intrinsic::BytesOr { .. } => seq!(curios_ersd::SequenceOp::BytesOr),
+        Intrinsic::BytesXor { .. } => seq!(curios_ersd::SequenceOp::BytesXor),
+        Intrinsic::BytesConcat { .. } => seq!(curios_ersd::SequenceOp::BytesConcat),
 
         Intrinsic::List { .. } => seq!(curios_ersd::SequenceOp::ListBuild),
         Intrinsic::ListLen { .. } => seq!(curios_ersd::SequenceOp::ListLen),

@@ -7,7 +7,7 @@
 use {
     super::{Lowering, suspension::Polled},
     curios_abi::WireType,
-    curios_num::{Binary, Floating, Grain, Integer, Natural},
+    curios_num::{Binary, Floating, Integer, Natural},
 };
 
 impl Lowering<'_> {
@@ -87,9 +87,7 @@ impl Lowering<'_> {
             WireType::Bool => self.constant_atom(curios_ersd::Constant::Bool(false)),
             WireType::Byte => self.constant_atom(curios_ersd::Constant::Byte(0)),
             WireType::Flt => self.constant_atom(curios_ersd::Constant::Flt(Floating::zero(false))),
-            WireType::Bytes => {
-                self.constant_atom(curios_ersd::Constant::Bin(Grain::X, Binary::empty()))
-            }
+            WireType::Bytes => self.constant_atom(curios_ersd::Constant::Bytes(Binary::empty())),
             WireType::Handle => self.constant_atom(curios_ersd::Constant::Handle(0)),
             WireType::List(_) | WireType::Option(_) => self.empty_list(),
         }

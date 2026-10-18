@@ -1076,7 +1076,7 @@ impl Machine {
             Cases::FreeMonoid { carrier } => {
                 let layer = match &carrier {
                     Carrier::Nat { .. } => FreeMonoid::Unary,
-                    Carrier::Bin { grain, .. } => FreeMonoid::Bin(*grain),
+                    Carrier::Bytes { .. } => FreeMonoid::Bytes,
                     Carrier::List { .. } => FreeMonoid::List,
                 }
                 .uncons(Term::unwrap_or_clone(scrutinee));
@@ -1085,7 +1085,7 @@ impl Machine {
                     Layer::Empty => Ok(Step::Eval(
                         match carrier {
                             Carrier::Nat { empty_case, .. }
-                            | Carrier::Bin { empty_case, .. }
+                            | Carrier::Bytes { empty_case, .. }
                             | Carrier::List { empty_case, .. } => empty_case,
                         },
                         demand,
@@ -1106,9 +1106,10 @@ impl Machine {
                                 Carrier::Nat { cons_case, .. } => {
                                     cons_case.open(&[&tail, &hypothesis])
                                 }
-                                Carrier::Bin { cons_case, .. }
+                                Carrier::Bytes { cons_case, .. }
                                 | Carrier::List { cons_case, .. } => cons_case.open(&[
-                                    head.as_ref().expect("a Bin/List cons layer carries a head"),
+                                    head.as_ref()
+                                        .expect("a Bytes/List cons layer carries a head"),
                                     &tail,
                                     &hypothesis,
                                 ]),

@@ -7,7 +7,7 @@
 use {
     crate::into_wasm,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
-    curios_num::{Binary, Floating, Grain, Integer, Natural},
+    curios_num::{Binary, Floating, Integer, Natural},
     std::{collections::BTreeMap, sync::Arc},
 };
 
@@ -172,26 +172,25 @@ pub(super) fn list_len() -> curios_cont::Module {
 }
 
 /// A packed-bytes literal then its length.
-pub(super) fn bin_len() -> curios_cont::Module {
+pub(super) fn bytes_len() -> curios_cont::Module {
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
-    let bin = module.add_value(Some("bin".into()));
+    let bytes = module.add_value(Some("bytes".into()));
     let len = module.add_value(Some("len".into()));
     let exit = module.add_node(halt(vec![curios_cont::Atom::Value(len)]));
     let measure = module.add_node(curios_cont::Node::LetIntrinsic {
         result: len,
-        op: curios_cont::Intrinsic::BinLen(Grain::X),
-        args: vec![curios_cont::Atom::Value(bin)],
+        op: curios_cont::Intrinsic::BytesLen,
+        args: vec![curios_cont::Atom::Value(bytes)],
         next: exit,
     });
     let build = module.add_node(curios_cont::Node::LetValue {
-        result: bin,
+        result: bytes,
         // Four bytes: one past the small-canonical envelope, so the literal exercises the rope path these fixtures pin rather than the immediate a smaller value rides.
-        value: curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
-            Grain::X,
-            Binary::from_bytes(vec![1, 2, 3, 4]),
-        )),
+        value: curios_cont::ValueExpr::Literal(curios_cont::Literal::Bytes(Binary::from_bytes(
+            vec![1, 2, 3, 4],
+        ))),
         next: measure,
     });
     module.define_function(
@@ -490,11 +489,8 @@ fn indirect_application(discard_result: bool) -> curios_cont::Module {
 
 // --- Rope operations ------------------------------------------------------
 
-pub(super) fn bin_lit(bytes: Vec<u8>) -> curios_cont::Atom {
-    curios_cont::Atom::Literal(curios_cont::Literal::Bin(
-        Grain::X,
-        Binary::from_bytes(bytes),
-    ))
+pub(super) fn bytes_lit(bytes: Vec<u8>) -> curios_cont::Atom {
+    curios_cont::Atom::Literal(curios_cont::Literal::Bytes(Binary::from_bytes(bytes)))
 }
 
 /// A list literal read at an index — the list-rope read helper.
@@ -638,7 +634,7 @@ pub(super) fn list_map() -> curios_cont::Module {
 }
 
 /// A long left-leaning chain of appends, each over the previous result. Lowering must return on the default test-thread stack, so the only assertion that matters is that `into_wasm` returns at all.
-pub(super) fn deep_bin_chain(depth: usize) -> curios_cont::Module {
+pub(super) fn deep_bytes_chain(depth: usize) -> curios_cont::Module {
     let mut module = curios_cont::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -648,13 +644,13 @@ pub(super) fn deep_bin_chain(depth: usize) -> curios_cont::Module {
     let mut next = module.add_node(halt(vec![curios_cont::Atom::Value(values[depth - 1])]));
     for i in (0..depth).rev() {
         let carrier = if i == 0 {
-            bin_lit(vec![0])
+            bytes_lit(vec![0])
         } else {
             curios_cont::Atom::Value(values[i - 1])
         };
         next = module.add_node(curios_cont::Node::LetIntrinsic {
             result: values[i],
-            op: curios_cont::Intrinsic::BinAppend(Grain::X),
+            op: curios_cont::Intrinsic::BytesAppend,
             args: vec![carrier, nat(1)],
             next,
         });

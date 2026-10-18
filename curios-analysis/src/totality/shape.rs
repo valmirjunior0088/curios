@@ -2,7 +2,7 @@
 //!
 //! Every leaf is either a binder identity minted by the traversal that built it, or a closed literal shape. That is what makes the comparison trustworthy: two trees compare equal only when they name the same binders, so a same-named constructor of a different type would still have to reach the same binders to be mistaken for one.
 //!
-//! Free-monoid layers are held as packed **runs** — [`Shape::UnaryRun`], [`Shape::ElemRun`] — mirroring the carriers' own packed representation: `Nat::Succ` carries its spine as a count and `Bin` its bytes as a value, so a literal's shape costs its representation rather than its value. The subterm order on a run is decided by count arithmetic and suffix agreement; expanding a run into one nested node per layer would make both the construction and every comparison recurse as deep as the literal is large, which for a `Nat` is unbounded by the source that spelled it.
+//! Free-monoid layers are held as packed **runs** — [`Shape::UnaryRun`], [`Shape::ElemRun`] — mirroring the carriers' own packed representation: `Nat::Succ` carries its spine as a count and `Bytes` its bytes as a value, so a literal's shape costs its representation rather than its value. The subterm order on a run is decided by count arithmetic and suffix agreement; expanding a run into one nested node per layer would make both the construction and every comparison recurse as deep as the literal is large, which for a `Nat` is unbounded by the source that spelled it.
 
 use {
     super::Size,
@@ -13,7 +13,7 @@ use {
 
 /// The constructor a [`Shape`] node stands for.
 ///
-/// Carriers are kept apart so a `Bin` layer can never be mistaken for a `List` layer. Well-typed code could not confuse them, but the size order is only as trustworthy as the identities it compares.
+/// Carriers are kept apart so a `Bytes` layer can never be mistaken for a `List` layer. Well-typed code could not confuse them, but the size order is only as trustworthy as the identities it compares.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Tag {
     /// An inductive constructor, by tag alone.
@@ -34,7 +34,7 @@ pub(super) enum Tag {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Carriers {
     Unary,
-    Bin,
+    Bytes,
     List,
 }
 
@@ -49,7 +49,7 @@ pub(super) enum Shape {
     Node(Tag, Rc<[Shape]>),
     /// A packed run of `Nat` successors: `count` unary layers over `tail`, the shape-level mirror of `Nat::Succ`'s packed spine. Canonical by construction — built only through [`Shape::unary_run`], so the count is nonzero and the tail is never itself a unary run.
     UnaryRun { count: Natural, tail: Rc<Shape> },
-    /// A packed run of `Bin`/`List` elements over `tail`, front first — one head shape per element, held breadth-wise. The carrier is [`Carriers::Bin`] or [`Carriers::List`]; `Nat`'s payload-less layers are [`Shape::UnaryRun`]. Canonical by construction — built only through [`Shape::elem_run`], so the heads are nonempty and the tail is never an elem run of the same carrier.
+    /// A packed run of `Bytes`/`List` elements over `tail`, front first — one head shape per element, held breadth-wise. The carrier is [`Carriers::Bytes`] or [`Carriers::List`]; `Nat`'s payload-less layers are [`Shape::UnaryRun`]. Canonical by construction — built only through [`Shape::elem_run`], so the heads are nonempty and the tail is never an elem run of the same carrier.
     ElemRun {
         carrier: Carriers,
         heads: Rc<[Shape]>,

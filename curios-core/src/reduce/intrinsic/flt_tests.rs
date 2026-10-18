@@ -104,9 +104,9 @@ fn a_rounding_to_an_integral_value_is_fixed_by_every_direction() {
 #[test]
 fn the_byte_round_trip_reduces_from_both_sides() {
     let (run, float) = (sym(0, "b"), sym(1, "f"));
-    let decoded = |bin: Term| {
+    let decoded = |bytes: Term| {
         Term::intrinsic(Intrinsic::FltOfLeBytes {
-            bin,
+            bytes,
             eight_bytes: qed(),
         })
     };

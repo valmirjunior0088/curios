@@ -1,7 +1,7 @@
 use {
     super::{
-        TUPLE_FIELD_TAKES_NO_MARK, members, parse_apply_argument, parse_bin_literal,
-        parse_block_string_literal, parse_bool_intrinsic, parse_char_lit, parse_func_param,
+        TUPLE_FIELD_TAKES_NO_MARK, members, parse_apply_argument, parse_block_string_literal,
+        parse_bool_intrinsic, parse_bytes_literal, parse_char_lit, parse_func_param,
         parse_func_type_param, parse_held, parse_identifier, parse_label, parse_list_literal,
         parse_literal, parse_mark, parse_name, parse_number, parse_string_literal,
         refuse_dangling_dot,
@@ -28,7 +28,7 @@ pub(super) fn parse_intrinsic<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
         // The block form is tried first, since its opener begins with the one-line form's.
         .or(parse_block_string_literal)
         .or(parse_string_literal)
-        .or(parse_bin_literal)
+        .or(parse_bytes_literal)
         .or(parse_list_literal)
         .parse(state)
 }

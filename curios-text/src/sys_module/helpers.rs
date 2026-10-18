@@ -4,7 +4,7 @@
 
 use {
     crate::{Apply, Argument, FuncType, FuncTypeParam, Intrinsic, Name, Subterm, Term, TupleType},
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Natural},
     curios_utilities::Plicity,
 };
 
@@ -39,12 +39,12 @@ pub(super) fn byte() -> Term {
 }
 
 pub(super) fn bytes() -> Term {
-    intrinsic(Intrinsic::BinType(Grain::X))
+    intrinsic(Intrinsic::BytesType)
 }
 
 // A `Bytes` literal value term, for a table the toolchain pins whole.
 pub(super) fn bytes_lit(contents: Vec<u8>) -> Term {
-    intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(contents)))
+    intrinsic(Intrinsic::Bytes(Binary::from_bytes(contents)))
 }
 
 // A `Byte` literal value term, for a wire code that is a byte on both sides.

@@ -1,4 +1,4 @@
-//! Tests for the browser bridge helpers and the harness's host table. Program-side `Bytes` is a rope (`$rope/bin/leaf` / `$rope/bin/node` structs); what crosses to a host is always the forced flat payload, which is what the bridge accessors read and write.
+//! Tests for the browser bridge helpers and the harness's host table. Program-side `Bytes` is a rope (`$rope/bytes/leaf` / `$rope/bytes/node` structs); what crosses to a host is always the forced flat payload, which is what the bridge accessors read and write.
 
 use {
     curios_abi::{ENTRY, HostOp, PANIC},
@@ -89,29 +89,29 @@ fn bridge_bytes_encode_a_wasm_module() {
 fn bridge_accessors_roundtrip() {
     let mut bridge = bridge();
 
-    // The `bin` this hands back is an opaque guest reference, threaded into every call below — which is why the test-support value type exists rather than a plain `i32`.
-    let bin = call(&mut bridge, "bytes_new", &[GuestValue::from_i32(3)]);
+    // The `bytes` this hands back is an opaque guest reference, threaded into every call below — which is why the test-support value type exists rather than a plain `i32`.
+    let bytes = call(&mut bridge, "bytes_new", &[GuestValue::from_i32(3)]);
 
     for (index, value) in [7, 8, 9].into_iter().enumerate() {
         call_void(
             &mut bridge,
             "bytes_set",
             &[
-                bin,
+                bytes,
                 GuestValue::from_i32(index as i32),
                 GuestValue::from_i32(value),
             ],
         );
     }
 
-    assert_eq!(i32_of(call(&mut bridge, "bytes_len", &[bin])), 3);
+    assert_eq!(i32_of(call(&mut bridge, "bytes_len", &[bytes])), 3);
 
     for (index, value) in [7, 8, 9].into_iter().enumerate() {
         assert_eq!(
             i32_of(call(
                 &mut bridge,
                 "bytes_get",
-                &[bin, GuestValue::from_i32(index as i32)],
+                &[bytes, GuestValue::from_i32(index as i32)],
             )),
             value
         );
@@ -240,7 +240,7 @@ fn bulk_transfers_roundtrip_through_the_memory() {
         .memory_write("memory", 0, payload)
         .expect("memory write failed");
 
-    let bin = call(
+    let bytes = call(
         &mut bridge,
         "bytes_store",
         &[GuestValue::from_i32(payload.len() as i32)],
@@ -250,7 +250,7 @@ fn bulk_transfers_roundtrip_through_the_memory() {
         .memory_write("memory", 0, &vec![0; payload.len()])
         .expect("memory clear failed");
     assert_eq!(
-        i32_of(call(&mut bridge, "bytes_load", &[bin])),
+        i32_of(call(&mut bridge, "bytes_load", &[bytes])),
         payload.len() as i32
     );
 

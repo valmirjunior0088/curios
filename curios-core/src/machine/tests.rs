@@ -4,7 +4,7 @@ use {
         Cases, Category, Cost, Exhaustion, Free, Func, InductArm, Intrinsic, Let, Many, Match,
         ReduceError, Reducer, Scope, Subterm, Term,
     },
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
     std::collections::BTreeMap,
 };
 
@@ -91,12 +91,12 @@ fn nat_type() -> Term {
     Term::intrinsic(Intrinsic::NatType)
 }
 
-fn bin_type() -> Term {
-    Term::intrinsic(Intrinsic::BinType(Grain::X))
+fn bytes_type() -> Term {
+    Term::intrinsic(Intrinsic::BytesType)
 }
 
 fn bytes(data: Vec<u8>) -> Term {
-    Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(data)))
+    Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(data)))
 }
 
 fn motive() -> Scope<Many> {
@@ -116,8 +116,7 @@ fn an_ih_fold_costs_transitions_rather_than_frames() {
     let mut host = Host::new(200 * n as u64);
     let (h, t, ih) = (binder(0, "h"), binder(1, "t"), binder(2, "ih"));
 
-    let count = Term::bin_match_scoped(
-        Grain::X,
+    let count = Term::bytes_match_scoped(
         bytes(vec![7; n]),
         motive(),
         nat(0),
@@ -140,8 +139,7 @@ fn a_hypothesis_demanded_twice_is_forced_once() {
         binder(3, "c"),
     );
 
-    let count = Term::bin_match_scoped(
-        Grain::X,
+    let count = Term::bytes_match_scoped(
         bytes(vec![7; n]),
         motive(),
         nat(5),
@@ -195,9 +193,8 @@ fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
     let (h, t, ih) = (binder(3, "h"), binder(4, "t"), binder(5, "ih"));
 
     let body = Term::func(
-        [(acc, nat_type()), (b, bin_type())],
-        Term::bin_match_scoped(
-            Grain::X,
+        [(acc, nat_type()), (b, bytes_type())],
+        Term::bytes_match_scoped(
             Term::free_var(&b),
             motive(),
             Term::free_var(&acc),
@@ -215,7 +212,7 @@ fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
     Term::rec(
         [(
             go,
-            Term::func_type([(acc, nat_type()), (b, bin_type())], nat_type()),
+            Term::func_type([(acc, nat_type()), (b, bytes_type())], nat_type()),
             body,
         )],
         Term::apply(Term::free_var(&go), [nat(0), bytes(data)]),
@@ -230,9 +227,8 @@ fn whnf_keeps_a_recursive_application_folded() {
     let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
 
     let body = Term::func(
-        [(b, bin_type())],
-        Term::bin_match_scoped(
-            Grain::X,
+        [(b, bytes_type())],
+        Term::bytes_match_scoped(
             Term::free_var(&b),
             motive(),
             nat(0),
@@ -240,7 +236,7 @@ fn whnf_keeps_a_recursive_application_folded() {
             Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
         ),
     );
-    let group = [(go, Term::func_type([(b, bin_type())], nat_type()), body)];
+    let group = [(go, Term::func_type([(b, bytes_type())], nat_type()), body)];
 
     let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
         group.clone(),
@@ -280,9 +276,8 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
     let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
 
     let body = Term::func(
-        [(b, bin_type())],
-        Term::bin_match_scoped(
-            Grain::X,
+        [(b, bytes_type())],
+        Term::bytes_match_scoped(
             Term::free_var(&b),
             motive(),
             nat(0),
@@ -290,7 +285,7 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
             Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
         ),
     );
-    let group = [(go, Term::func_type([(b, bin_type())], nat_type()), body)];
+    let group = [(go, Term::func_type([(b, bytes_type())], nat_type()), body)];
 
     let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
         group,
@@ -469,8 +464,7 @@ fn an_operation_that_does_not_fold_keeps_its_proof_as_written() {
     let mut host = Host::new(100_000);
     let (left, right) = (binder(92, "left"), binder(93, "right"));
     let stuck = [
-        Intrinsic::BinAnd {
-            grain: Grain::X,
+        Intrinsic::BytesAnd {
             left: Term::free_var(&left),
             right: Term::free_var(&right),
             same_length: spinning(),
@@ -681,8 +675,7 @@ fn spend_probe() {
         let budget = 1_000_000_000u64;
         let mut host = Host::new(budget);
         let (h, t, ih) = (binder(0, "h"), binder(1, "t"), binder(2, "ih"));
-        let count = Term::bin_match_scoped(
-            Grain::X,
+        let count = Term::bytes_match_scoped(
             bytes(vec![7; n]),
             motive(),
             nat(0),

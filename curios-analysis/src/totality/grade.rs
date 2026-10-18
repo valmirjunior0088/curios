@@ -291,11 +291,11 @@ impl<'a, E: Env> Grader<'a, E> {
             Subterm::Intrinsic(Intrinsic::Nat(_)) => self.monoid_shape(FreeMonoid::Unary, term)?,
 
             Subterm::Intrinsic(
-                Intrinsic::Bin(grain, _)
-                | Intrinsic::BinAppend { grain, .. }
-                | Intrinsic::BinConcat { grain, .. }
-                | Intrinsic::BinSlice { grain, .. },
-            ) => self.monoid_shape(FreeMonoid::Bin(*grain), term)?,
+                Intrinsic::Bytes(_)
+                | Intrinsic::BytesAppend { .. }
+                | Intrinsic::BytesConcat { .. }
+                | Intrinsic::BytesSlice { .. },
+            ) => self.monoid_shape(FreeMonoid::Bytes, term)?,
 
             Subterm::Intrinsic(
                 Intrinsic::List { .. }
@@ -362,7 +362,7 @@ impl<'a, E: Env> Grader<'a, E> {
 
     /// Decode a whole free-monoid prefix into one packed run over the shape of whatever stops the peel.
     ///
-    /// The run mirrors the carrier's own representation instead of re-expanding it: a `Nat`'s successor count is read wholesale off the packed spine, and a `Bin`/`List` prefix is peeled breadth-wise into one head vector. One node per layer would recurse — in construction and in every later comparison — as deep as the literal is large, and a `Nat` literal's value is unbounded by the source that spelled it.
+    /// The run mirrors the carrier's own representation instead of re-expanding it: a `Nat`'s successor count is read wholesale off the packed spine, and a `Bytes`/`List` prefix is peeled breadth-wise into one head vector. One node per layer would recurse — in construction and in every later comparison — as deep as the literal is large, and a `Nat` literal's value is unbounded by the source that spelled it.
     fn monoid_shape(&mut self, carrier: FreeMonoid, term: &Term) -> Result<Shape, E::Error> {
         let carriers = match carrier {
             FreeMonoid::Unary => {
@@ -376,7 +376,7 @@ impl<'a, E: Env> Grader<'a, E> {
                     _ => self.unfolded_shape(term),
                 };
             }
-            FreeMonoid::Bin(_) => Carriers::Bin,
+            FreeMonoid::Bytes => Carriers::Bytes,
             FreeMonoid::List => Carriers::List,
         };
 

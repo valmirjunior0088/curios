@@ -457,7 +457,7 @@ impl<'m> Census<'m> {
                 Node::LetIntrinsic {
                     result, op, args, ..
                 } => {
-                    if matches!(op, Intrinsic::BinSlice(_) | Intrinsic::ListSlice) {
+                    if matches!(op, Intrinsic::BytesSlice | Intrinsic::ListSlice) {
                         self.slice_sites.insert(*result, node_id);
                         self.home_of_value.insert(*result, Home::Node(node_id));
                     }
@@ -468,13 +468,13 @@ impl<'m> Census<'m> {
                                     (Intrinsic::TupleGet(field), 0) => {
                                         Consumption::Projection(*field)
                                     }
-                                    (Intrinsic::BinLen(_) | Intrinsic::ListLen, 0) => {
+                                    (Intrinsic::BytesLen | Intrinsic::ListLen, 0) => {
                                         Consumption::RopeLen
                                     }
-                                    (Intrinsic::BinGet(_) | Intrinsic::ListGet, 0) => {
+                                    (Intrinsic::BytesGet | Intrinsic::ListGet, 0) => {
                                         Consumption::RopeGet
                                     }
-                                    (Intrinsic::BinSlice(_) | Intrinsic::ListSlice, 0) => {
+                                    (Intrinsic::BytesSlice | Intrinsic::ListSlice, 0) => {
                                         Consumption::RopeSlice
                                     }
                                     _ => Consumption::OpaqueIntrinsic,
@@ -1233,8 +1233,8 @@ fn rebirth(census: &Census) -> Rebirth {
             continue;
         };
         let bases: &[Atom] = match op {
-            Intrinsic::BinAppend(_) | Intrinsic::ListAppend => &args[..1],
-            Intrinsic::BinConcat(_, _) | Intrinsic::ListConcat(_) => args.as_slice(),
+            Intrinsic::BytesAppend | Intrinsic::ListAppend => &args[..1],
+            Intrinsic::BytesConcat(_) | Intrinsic::ListConcat(_) => args.as_slice(),
             _ => continue,
         };
         for base in bases {

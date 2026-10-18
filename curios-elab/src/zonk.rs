@@ -1516,12 +1516,10 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
                             empty_case: zonk_term(context, empty_case)?,
                             cons_case: cons_case.try_map_body(|b| zonk_term(context, b))?,
                         },
-                        Carrier::Bin {
-                            grain,
+                        Carrier::Bytes {
                             empty_case,
                             cons_case,
-                        } => Carrier::Bin {
-                            grain: *grain,
+                        } => Carrier::Bytes {
                             empty_case: zonk_term(context, empty_case)?,
                             cons_case: cons_case.try_map_body(|b| zonk_term(context, b))?,
                         },
@@ -1600,7 +1598,7 @@ fn zonk_subterm(context: &Zonk, term: &Term) -> Result<Subterm, Error> {
     })
 }
 
-/// Zonk an intrinsic's term operands: collect them through the masking [`Visit`], substitute fallibly, and rebuild the node through the rewriting one. Both passes are [`Intrinsic::traverse`], the single definition of an intrinsic's operands — so the collection and the rebuild agree positionally by construction, and a new operation (or a new operand on an existing one) is covered the moment it is representable, with no per-operation arm to forget. Non-term payload (a grain, a literal, `Nat`'s spine floor) is preserved by the traversal's shape rebuild.
+/// Zonk an intrinsic's term operands: collect them through the masking [`Visit`], substitute fallibly, and rebuild the node through the rewriting one. Both passes are [`Intrinsic::traverse`], the single definition of an intrinsic's operands — so the collection and the rebuild agree positionally by construction, and a new operation (or a new operand on an existing one) is covered the moment it is representable, with no per-operation arm to forget. Non-term payload (a literal, `Nat`'s spine floor) is preserved by the traversal's shape rebuild.
 fn zonk_intrinsic(context: &Zonk, intrinsic: &Intrinsic) -> Result<Intrinsic, Error> {
     let mut masking = Visit::masking(|_, _: &Var| None, Term::type_ground());
     intrinsic.traverse(&mut masking);

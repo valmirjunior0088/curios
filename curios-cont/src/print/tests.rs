@@ -6,7 +6,7 @@ use {
         Node, NodeId, Register, Row, Slot, ValueDef, ValueExpr,
         test_support::{halt, halt_zero},
     },
-    curios_num::{Grain, Natural, Rounding},
+    curios_num::{Natural, Rounding},
 };
 
 fn nat(value: u32) -> Atom {
@@ -724,7 +724,7 @@ fn an_intrinsic_spells_its_carrier_and_operation() {
             "Flt/round",
         ),
         (Intrinsic::FltOfLeBytes, "Flt/of_le_bytes"),
-        (Intrinsic::BinLen(Grain::X), "Bytes/len"),
+        (Intrinsic::BytesLen, "Bytes/len"),
         (Intrinsic::ListConcat(2), "List/concat"),
         (Intrinsic::WindowExtent, "Window/extent"),
         (Intrinsic::IsImmediate, "Immediate/is"),

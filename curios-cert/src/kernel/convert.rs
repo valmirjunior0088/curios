@@ -1350,18 +1350,15 @@ fn ground_cases(
                         )
                     })?),
                 (
-                    Carrier::Bin {
-                        grain: this_grain,
+                    Carrier::Bytes {
                         empty_case: this_empty,
                         cons_case: this_cons,
                     },
-                    Carrier::Bin {
-                        grain: that_grain,
+                    Carrier::Bytes {
                         empty_case: that_empty,
                         cons_case: that_cons,
                     },
-                ) => Ok(this_grain == that_grain
-                    && ground(kernel, pairs, this_empty, that_empty)?
+                ) => Ok(ground(kernel, pairs, this_empty, that_empty)?
                     && kernel.scoped(|kernel| {
                         let o = cons_binders(kernel, this, &left.result);
                         ground(

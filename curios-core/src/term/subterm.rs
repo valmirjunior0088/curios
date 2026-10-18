@@ -312,7 +312,7 @@ impl Subterm {
                             empty_case.collect_construction_names(names);
                             cons_case.body().collect_construction_names(names);
                         }
-                        Carrier::Bin {
+                        Carrier::Bytes {
                             empty_case,
                             cons_case,
                             ..
@@ -414,7 +414,7 @@ impl Subterm {
                                 empty_case,
                                 cons_case,
                             } => pred(empty_case) || pred(cons_case.body()),
-                            Carrier::Bin {
+                            Carrier::Bytes {
                                 empty_case,
                                 cons_case,
                                 ..
@@ -785,12 +785,10 @@ impl Bound for Subterm {
                                 empty_case: visit.visit_subterm(empty_case),
                                 cons_case: visit.visit_scope(cons_case),
                             },
-                            Carrier::Bin {
-                                grain,
+                            Carrier::Bytes {
                                 empty_case,
                                 cons_case,
-                            } => Carrier::Bin {
-                                grain: *grain,
+                            } => Carrier::Bytes {
                                 empty_case: visit.visit_subterm(empty_case),
                                 cons_case: visit.visit_scope(cons_case),
                             },
@@ -944,7 +942,7 @@ impl Bound for Subterm {
                         empty_case,
                         cons_case,
                     } => empty_case.reach().max(cons_case.reach()),
-                    Carrier::Bin {
+                    Carrier::Bytes {
                         empty_case,
                         cons_case,
                         ..

@@ -83,16 +83,16 @@ pub(super) fn operation_intrinsic(operation: Operation) -> curios_cont::Intrinsi
 /// The Cont intrinsic of a [`SequenceOp`], threading the operand count into the variadic concatenations. `ListBuild` is a list value, never an intrinsic.
 pub(super) fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_cont::Intrinsic {
     match operation {
-        SequenceOp::BinLen(grain) => curios_cont::Intrinsic::BinLen(grain),
-        SequenceOp::BinEql(grain) => curios_cont::Intrinsic::BinEql(grain),
-        SequenceOp::BinGet(grain) => curios_cont::Intrinsic::BinGet(grain),
-        SequenceOp::BinSlice(grain) => curios_cont::Intrinsic::BinSlice(grain),
-        SequenceOp::BinAppend(grain) => curios_cont::Intrinsic::BinAppend(grain),
-        SequenceOp::BinConcat(grain) => curios_cont::Intrinsic::BinConcat(grain, arity),
-        SequenceOp::BinReplicate(grain) => curios_cont::Intrinsic::BinReplicate(grain),
-        SequenceOp::BinAnd(grain) => curios_cont::Intrinsic::BinAnd(grain),
-        SequenceOp::BinOr(grain) => curios_cont::Intrinsic::BinOr(grain),
-        SequenceOp::BinXor(grain) => curios_cont::Intrinsic::BinXor(grain),
+        SequenceOp::BytesLen => curios_cont::Intrinsic::BytesLen,
+        SequenceOp::BytesEql => curios_cont::Intrinsic::BytesEql,
+        SequenceOp::BytesGet => curios_cont::Intrinsic::BytesGet,
+        SequenceOp::BytesSlice => curios_cont::Intrinsic::BytesSlice,
+        SequenceOp::BytesAppend => curios_cont::Intrinsic::BytesAppend,
+        SequenceOp::BytesConcat => curios_cont::Intrinsic::BytesConcat(arity),
+        SequenceOp::BytesReplicate => curios_cont::Intrinsic::BytesReplicate,
+        SequenceOp::BytesAnd => curios_cont::Intrinsic::BytesAnd,
+        SequenceOp::BytesOr => curios_cont::Intrinsic::BytesOr,
+        SequenceOp::BytesXor => curios_cont::Intrinsic::BytesXor,
         SequenceOp::ListLen => curios_cont::Intrinsic::ListLen,
         SequenceOp::ListGet => curios_cont::Intrinsic::ListGet,
         SequenceOp::ListSlice => curios_cont::Intrinsic::ListSlice,
@@ -113,20 +113,20 @@ pub(super) fn cell_op(operation: CellOperation) -> curios_cont::CellOp {
 pub(super) fn sequence_len_op(grain: SequenceGrain) -> curios_cont::Intrinsic {
     match grain {
         SequenceGrain::List => curios_cont::Intrinsic::ListLen,
-        SequenceGrain::Bin(grain) => curios_cont::Intrinsic::BinLen(grain),
+        SequenceGrain::Bytes => curios_cont::Intrinsic::BytesLen,
     }
 }
 
 pub(super) fn sequence_get_op(grain: SequenceGrain) -> curios_cont::Intrinsic {
     match grain {
         SequenceGrain::List => curios_cont::Intrinsic::ListGet,
-        SequenceGrain::Bin(grain) => curios_cont::Intrinsic::BinGet(grain),
+        SequenceGrain::Bytes => curios_cont::Intrinsic::BytesGet,
     }
 }
 
 pub(super) fn sequence_rest_op(grain: SequenceGrain) -> curios_cont::Intrinsic {
     match grain {
         SequenceGrain::List => curios_cont::Intrinsic::ListRest,
-        SequenceGrain::Bin(grain) => curios_cont::Intrinsic::BinRest(grain),
+        SequenceGrain::Bytes => curios_cont::Intrinsic::BytesRest,
     }
 }

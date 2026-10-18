@@ -688,7 +688,7 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::ByteType
             | Intrinsic::IntType
             | Intrinsic::FltType
-            | Intrinsic::BinType(_)
+            | Intrinsic::BytesType
             | Intrinsic::HandleType => {}
 
             // `List` is covariant: a list of `T`s is a finite product of `T`s, so a strict occurrence in the element stays strict. This is the rule that admits `Json/arr(List(Json))` and `Toml/arr(List(Toml))`.
@@ -781,17 +781,17 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::FltToLeBytes(..)
             | Intrinsic::FltOfLeBytes { .. }
             | Intrinsic::FltToInt { .. }
-            | Intrinsic::Bin(..)
-            | Intrinsic::BinLen(..)
-            | Intrinsic::BinEql(..)
-            | Intrinsic::BinGet { .. }
-            | Intrinsic::BinSlice { .. }
-            | Intrinsic::BinAppend { .. }
-            | Intrinsic::BinConcat { .. }
-            | Intrinsic::BinReplicate { .. }
-            | Intrinsic::BinAnd { .. }
-            | Intrinsic::BinOr { .. }
-            | Intrinsic::BinXor { .. }
+            | Intrinsic::Bytes(..)
+            | Intrinsic::BytesLen(..)
+            | Intrinsic::BytesEql(..)
+            | Intrinsic::BytesGet { .. }
+            | Intrinsic::BytesSlice { .. }
+            | Intrinsic::BytesAppend { .. }
+            | Intrinsic::BytesConcat { .. }
+            | Intrinsic::BytesReplicate { .. }
+            | Intrinsic::BytesAnd { .. }
+            | Intrinsic::BytesOr { .. }
+            | Intrinsic::BytesXor { .. }
             | Intrinsic::List { .. }
             | Intrinsic::ListLen { .. }
             | Intrinsic::ListGet { .. }

@@ -213,7 +213,7 @@ pub(super) fn parse_let<'a>(state: ParserState<'a>) -> Parsed<'a, Term> {
         .parse(state)
 }
 
-// A glued `.index`/`.label` projection, consuming no whitespace — usable both as an ordinary term suffix (via the whitespace-eating [`parse_proj_suffix`]) and inside the tight `Bin`-literal spread operand.
+// A glued `.index`/`.label` projection, consuming no whitespace — usable both as an ordinary term suffix (via the whitespace-eating [`parse_proj_suffix`]) and inside the tight `Bytes`-literal spread operand.
 pub(super) fn parse_proj_suffix_raw<'a>(state: ParserState<'a>) -> Parsed<'a, Field> {
     take_exact(".")
         .and_keep(

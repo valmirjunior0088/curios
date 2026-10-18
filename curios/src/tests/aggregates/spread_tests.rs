@@ -108,7 +108,7 @@ fn list_spread_operand_hoists_bangs() {
 }
 
 #[test]
-fn bin_spread_concats_segments() {
+fn bytes_spread_concats_segments() {
     // `x[0x01, ..b, 0x04]` splices the bytes of `b` between the literal runs, and the glued suffix chain admits a call operand (`\..Bytes/slice(...)`).
     let source = r#"
         use /std/{Nat, Bytes, Io, Try, Process};
@@ -122,7 +122,7 @@ fn bin_spread_concats_segments() {
 }
 
 #[test]
-fn bin_spread_identity_and_multi() {
+fn bytes_spread_identity_and_multi() {
     let source = r#"
         use /std/{Bytes, Io, Try, Process};
         let b : Bytes = x[0x48, 0x65];
@@ -136,7 +136,7 @@ fn bin_spread_identity_and_multi() {
 }
 
 #[test]
-fn bin_spread_of_non_bin_is_rejected() {
+fn bytes_spread_of_non_bytes_is_rejected() {
     // A spread operand must itself be a `Bytes` — a list is an ordinary type mismatch.
     let source = r#"
         use /std/{Str, Nat, List, Bytes, Io};
@@ -151,7 +151,7 @@ fn bin_spread_of_non_bin_is_rejected() {
 }
 
 #[test]
-fn bin_spread_operand_hoists_bangs() {
+fn bytes_spread_operand_hoists_bangs() {
     // The `Bytes` sibling of `list_spread_operand_hoists_bangs`, through the dedicated `Intrinsic::Bytes` collect arm — the glued `!` binds to the operand.
     assert_eq!(
         run(r#"

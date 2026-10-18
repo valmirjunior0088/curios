@@ -1,11 +1,8 @@
 //! Packed literals and field stores fusing to a flat build, and the regrown store that stays lazy.
 
-use {
-    crate::tests::{census_settles, cont_optm_module, emits, run},
-    curios_num::Grain,
-};
+use crate::tests::{census_settles, cont_optm_module, emits, run};
 
-/// A packed literal's non-constant atoms fuse into one flat chunk build (`fuse_append_chains` in `curios-cont`): the byte literal's two runtime atoms become a `BinChunk(X, 2)`, in place of the append-per-atom chains the lowering honestly writes, and the program still prints what the chains would. The taint keeps every atom out of constant folding, so the chunks survive to emission and the equality runs over runtime-built values.
+/// A packed literal's non-constant atoms fuse into one flat chunk build (`fuse_append_chains` in `curios-cont`): the byte literal's two runtime atoms become a `BytesChunk(X, 2)`, in place of the append-per-atom chains the lowering honestly writes, and the program still prints what the chains would. The taint keeps every atom out of constant folding, so the chunks survive to emission and the equality runs over runtime-built values.
 #[test]
 fn tainted_packed_literals_fuse_to_flat_chunks() {
     let source = r#"
@@ -24,8 +21,7 @@ fn tainted_packed_literals_fuse_to_flat_chunks() {
 
     let module = cont_optm_module(source);
     assert!(
-        emits(&module, |op| *op
-            == curios_cont::Intrinsic::BinChunk(Grain::X, 2)),
+        emits(&module, |op| *op == curios_cont::Intrinsic::BytesChunk(2)),
         "the byte atoms fuse into one chunk: {module}"
     );
 

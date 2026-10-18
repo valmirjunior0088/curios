@@ -4,7 +4,7 @@ use {
         LoadAs, RopeData, Table, block, box_instr, br, br_if, call, either, get, rounding_code,
         set, tee, when,
     },
-    curios_num::{Grain, Rounding},
+    curios_num::Rounding,
 };
 
 /// Where one computed value goes: the local it is stored in, and the name the representation analysis decided about.
@@ -15,7 +15,7 @@ struct Dest<'a> {
     local: curios_wasm::LocalName,
 }
 
-/// A sequence window lowering's helpers: the shared `slice`, and the normalisation its result owes — `Some` exactly for the byte grain, whose small values ride the i31 and whose every producer therefore answers through `$bytes/norm`.
+/// A sequence window lowering's helpers: the shared `slice`, and the normalisation its result owes — `Some` exactly for `Bytes`, whose small values ride the i31 and whose every producer therefore answers through `$bytes/norm`.
 struct WindowFuncs {
     slice: curios_wasm::FuncName,
     norm: Option<curios_wasm::FuncName>,
@@ -1149,9 +1149,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     }
 
     /// Lower a packed length with the immediate split: an i31 answers its length field's shift, a rope its length struct field. The test replaces the box call a helper entry would pay, and no memory is touched on the immediate arm.
-    fn emit_bin_len(&mut self, grain: Grain, carrier: &'a EmissionValueName) {
-        let len_shift = ImmediateLayout::of(grain).len_shift;
-        let rope = self.context.table().bin_rope();
+    fn emit_bytes_len(&mut self, carrier: &'a EmissionValueName) {
+        let len_shift = ImmediateLayout::new().len_shift;
+        let rope = self.context.table().bytes_rope();
         self.emit_instrs(self.context.load_value_instrs(carrier, LoadAs::NonNull));
         self.emit_instr(curios_wasm::Instr::RefTest {
             ref_type: Table::int_type(false),
@@ -1175,7 +1175,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         rope_arm.push(Self::rope_get(&rope, &rope.len_field));
 
         self.emit_instr(curios_wasm::Instr::If {
-            label_name: curios_wasm::LabelName::from("bin_len"),
+            label_name: curios_wasm::LabelName::from("bytes_len"),
             block_type: curios_wasm::BlockType::Inline(curios_wasm::ValType::Num(
                 curios_wasm::NumType::I32,
             )),
@@ -1185,17 +1185,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     }
 
     /// Lower a packed element read with the immediate split: an i31 answers by shift and mask — the bounds trap first, exactly where the helper's leaf arm traps — and a rope takes the leaf split in front of the shared helper. On an immediate key this is the whole read: no call, no load, no allocation.
-    fn emit_bin_get(
-        &mut self,
-        grain: Grain,
-        carrier: &'a EmissionValueName,
-        index: &'a EmissionValueName,
-    ) {
-        let len_shift = ImmediateLayout::of(grain).len_shift;
-        let rope = self.context.table().bin_rope();
-        let read = match grain {
-            Grain::X => self.context.table().bytes_read_func(),
-        };
+    fn emit_bytes_get(&mut self, carrier: &'a EmissionValueName, index: &'a EmissionValueName) {
+        let len_shift = ImmediateLayout::new().len_shift;
+        let rope = self.context.table().bytes_rope();
+        let read = self.context.table().bytes_read_func();
         let imm = self.context.push_local(
             "bytes_imm",
             curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -1236,16 +1229,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_wasm::Instr::LocalGet { local_name: imm },
         ]);
         imm_arm.extend(self.context.load_value_instrs(index, LoadAs::Nat));
-        match grain {
-            // (v >> 8i) & 0xFF.
-            Grain::X => imm_arm.extend([
-                curios_wasm::Instr::I32Const { value: 3 },
-                curios_wasm::Instr::I32Shl,
-                curios_wasm::Instr::I32ShrU,
-                curios_wasm::Instr::I32Const { value: 0xFF },
-                curios_wasm::Instr::I32And,
-            ]),
-        }
+        // (v >> 8i) & 0xFF.
+        imm_arm.extend([
+            curios_wasm::Instr::I32Const { value: 3 },
+            curios_wasm::Instr::I32Shl,
+            curios_wasm::Instr::I32ShrU,
+            curios_wasm::Instr::I32Const { value: 0xFF },
+            curios_wasm::Instr::I32And,
+        ]);
 
         let cast_rope = curios_wasm::Instr::RefCast {
             ref_type: curios_wasm::RefType {
@@ -1277,38 +1268,29 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
         let mut rope_arm = self.context.load_value_instrs(carrier, LoadAs::NonNull);
         rope_arm.push(cast_rope);
-        match grain {
-            Grain::X => {
-                rope_arm.push(Self::rope_get(&rope, &rope.tag_field));
-                rope_arm.push(curios_wasm::Instr::I32Eqz);
-                rope_arm.push(curios_wasm::Instr::If {
-                    label_name: curios_wasm::LabelName::from("seq_get"),
-                    block_type: i32_result.clone(),
-                    then_instructions: leaf_arm,
-                    else_instructions: read_arm,
-                });
-            }
+        {
+            rope_arm.push(Self::rope_get(&rope, &rope.tag_field));
+            rope_arm.push(curios_wasm::Instr::I32Eqz);
+            rope_arm.push(curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("seq_get"),
+                block_type: i32_result.clone(),
+                then_instructions: leaf_arm,
+                else_instructions: read_arm,
+            });
         }
 
         self.emit_instr(curios_wasm::Instr::If {
-            label_name: curios_wasm::LabelName::from("bin_get"),
+            label_name: curios_wasm::LabelName::from("bytes_get"),
             block_type: i32_result,
             then_instructions: imm_arm,
             else_instructions: rope_arm,
         });
     }
 
-    /// Lower a packed equality with the immediate split: two immediates compare as one `i32` equality — small-canonical means equal values are bit-identical — a mixed pair is unequal by construction, since a canonical rope lies past its grain's envelope and an immediate inside it, and two ropes pay the shared helper.
-    fn emit_bin_eql(
-        &mut self,
-        grain: Grain,
-        left: &'a EmissionValueName,
-        right: &'a EmissionValueName,
-    ) {
-        let rope = self.context.table().bin_rope();
-        let eql = match grain {
-            Grain::X => self.context.table().bytes_eql_func(),
-        };
+    /// Lower a packed equality with the immediate split: two immediates compare as one `i32` equality — small-canonical means equal values are bit-identical — a mixed pair is unequal by construction, since a canonical rope lies past the envelope and an immediate inside it, and two ropes pay the shared helper.
+    fn emit_bytes_eql(&mut self, left: &'a EmissionValueName, right: &'a EmissionValueName) {
+        let rope = self.context.table().bytes_rope();
+        let eql = self.context.table().bytes_eql_func();
         let i31 = || curios_wasm::Instr::RefTest {
             ref_type: Table::int_type(false),
         };
@@ -1334,7 +1316,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let mut left_imm = self.context.load_value_instrs(right, LoadAs::NonNull);
         left_imm.push(i31());
         left_imm.push(curios_wasm::Instr::If {
-            label_name: curios_wasm::LabelName::from("bin_eql_rhs"),
+            label_name: curios_wasm::LabelName::from("bytes_eql_rhs"),
             block_type: i32_result.clone(),
             then_instructions: both_imm,
             else_instructions: vec![curios_wasm::Instr::I32Const { value: 0 }],
@@ -1349,14 +1331,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let mut left_rope = self.context.load_value_instrs(right, LoadAs::NonNull);
         left_rope.push(i31());
         left_rope.push(curios_wasm::Instr::If {
-            label_name: curios_wasm::LabelName::from("bin_eql_mixed"),
+            label_name: curios_wasm::LabelName::from("bytes_eql_mixed"),
             block_type: i32_result.clone(),
             then_instructions: vec![curios_wasm::Instr::I32Const { value: 0 }],
             else_instructions: both_rope,
         });
 
         self.emit_instr(curios_wasm::Instr::If {
-            label_name: curios_wasm::LabelName::from("bin_eql"),
+            label_name: curios_wasm::LabelName::from("bytes_eql"),
             block_type: i32_result,
             then_instructions: left_imm,
             else_instructions: left_rope,
@@ -1366,32 +1348,25 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     /// Force both operands and hand their payloads, with the run's own length and the bytes it occupies, to the shared combiner.
     ///
     /// **The forcing is here rather than inside the helper**, which is what keeps the helper a walk over two byte arrays: a pair of calls is a straight-line sequence, and straight-line is exactly what a call site may inline. The loop, which it may not, stays in `rope_emitter`. Both lengths come off the left operand's run because a payload's extent is not the run's: a payload may hold room past the run.
-    fn emit_bin_pointwise(
+    fn emit_bytes_pointwise(
         &mut self,
-        grain: Grain,
         left: &'a EmissionValueName,
         right: &'a EmissionValueName,
         combine: curios_wasm::FuncName,
     ) {
-        let force = match grain {
-            Grain::X => self.context.table().bytes_force_func(),
-        };
-        let norm = match grain {
-            Grain::X => self.context.table().bytes_norm_func(),
-        };
-        let rope = self.context.table().bin_rope();
+        let force = self.context.table().bytes_force_func();
+        let norm = self.context.table().bytes_norm_func();
+        let rope = self.context.table().bytes_rope();
 
-        let left_instrs = self.context.load_value_instrs(left, LoadAs::Bin(grain));
-        let right_instrs = self.context.load_value_instrs(right, LoadAs::Bin(grain));
+        let left_instrs = self.context.load_value_instrs(left, LoadAs::Bytes);
+        let right_instrs = self.context.load_value_instrs(right, LoadAs::Bytes);
         let length_instrs: Vec<_> = self
             .context
-            .load_value_instrs(left, LoadAs::Bin(grain))
+            .load_value_instrs(left, LoadAs::Bytes)
             .into_iter()
             .chain([Self::rope_get(&rope, &rope.len_field)])
             .collect();
-        let count_instrs = match grain {
-            Grain::X => length_instrs.clone(),
-        };
+        let count_instrs = length_instrs.clone();
 
         self.emit_instrs(left_instrs);
         self.emit_instr(curios_wasm::Instr::Call {
@@ -1402,46 +1377,37 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instrs(length_instrs);
         self.emit_instrs(count_instrs);
         self.emit_instr(curios_wasm::Instr::Call { func_name: combine });
-        // Back to canonical form. Every other packed producer norms — `BinConcat` and `BinSlice` through their own lowering, `BinChunk` by building the immediate outright — so a short run left as a rope is a shape nothing else in the program hands out, and the equality fast path is entitled to have assumed it away.
+        // Back to canonical form. Every other packed producer norms — `BytesConcat` and `BytesSlice` through their own lowering, `BytesChunk` by building the immediate outright — so a short run left as a rope is a shape nothing else in the program hands out, and the equality fast path is entitled to have assumed it away.
         self.emit_instr(curios_wasm::Instr::Call { func_name: norm });
     }
 
     /// Lower a packed concatenation with the immediate split, pair by pair from the left. Two immediates whose lengths together fit the envelope join by arithmetic — the right payload shifted past the left's elements, the two lengths summed — with no box, no node and no normalisation; every other pair is the rope's: a node over its boxed operands, a side that is empty answering the other, normalised since that answer may be a boxed immediate. Fewer than two operands join nothing and take the rope's lowering whole.
     ///
     /// **The split is here for what a cons costs.** `x[h, ..t]` is a chunk of one concatenated with `t`, so a short run built from the front is this lowering once an element; without the arithmetic arm each step boxes both operands, allocates their node and gathers it back into the immediate it was always going to be.
-    fn emit_bin_concat(
+    fn emit_bytes_concat(
         &mut self,
-        grain: Grain,
         result_local: &curios_wasm::LocalName,
         operands: &'a [EmissionValueName],
     ) {
-        let rope = self.context.table().bin_rope();
-        let (norm, boxf) = match grain {
-            Grain::X => (
-                self.context.table().bytes_norm_func(),
-                self.context.table().bytes_box_func(),
-            ),
-        };
+        let rope = self.context.table().bytes_rope();
+        let (norm, boxf) = (
+            self.context.table().bytes_norm_func(),
+            self.context.table().bytes_box_func(),
+        );
         let (first, rest) = match operands {
             [first, rest @ ..] if !rest.is_empty() => (first, rest),
             _ => {
-                self.emit_rope_concat(
-                    result_local,
-                    operands,
-                    LoadAs::Bin(grain),
-                    &rope,
-                    Some(norm),
-                );
+                self.emit_rope_concat(result_local, operands, LoadAs::Bytes, &rope, Some(norm));
                 return;
             }
         };
 
-        let layout = ImmediateLayout::of(grain);
+        let layout = ImmediateLayout::new();
         let (len_shift, payload_mask, envelope) =
             (layout.len_shift, layout.payload_mask(), layout.envelope);
         let word = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
-        let left = self.context.push_local("bin_left", word.clone());
-        let right = self.context.push_local("bin_right", word);
+        let left = self.context.push_local("bytes_left", word.clone());
+        let right = self.context.push_local("bytes_right", word);
         let length = |local: &curios_wasm::LocalName| {
             [
                 get(local),
@@ -1454,17 +1420,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 ref_type: Table::int_type(false),
             },
             curios_wasm::Instr::I32Eqz,
-            br_if("bin_concat_rope"),
+            br_if("bytes_concat_rope"),
         ];
 
         // The accumulator: the first operand as it is written, and the result local once a pair has settled into it.
         let mut lhs = self.context.load_value_instrs(first, LoadAs::NonNull);
-        let mut lhs_rope = self.context.load_value_instrs(first, LoadAs::Bin(grain));
+        let mut lhs_rope = self.context.load_value_instrs(first, LoadAs::Bytes);
         for operand in rest {
             let rhs = self.context.load_value_instrs(operand, LoadAs::NonNull);
-            let rhs_rope = self.context.load_value_instrs(operand, LoadAs::Bin(grain));
+            let rhs_rope = self.context.load_value_instrs(operand, LoadAs::Bytes);
 
-            // Immediate, fitting: left payload | right payload << left's elements | (left length + right length) << len_shift, the position one byte or one bit an element per the grain.
+            // Immediate, fitting: left payload | right payload << left's elements | (left length + right length) << len_shift, the position one byte an element.
             let mut joined = lhs.clone();
             joined.extend(is_rope.clone());
             joined.extend(rhs.clone());
@@ -1487,7 +1453,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 curios_wasm::Instr::I32Add,
                 curios_wasm::Instr::I32Const { value: envelope },
                 curios_wasm::Instr::I32GtU,
-                br_if("bin_concat_rope"),
+                br_if("bytes_concat_rope"),
                 get(&left),
                 curios_wasm::Instr::I32Const {
                     value: payload_mask,
@@ -1500,12 +1466,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 curios_wasm::Instr::I32And,
             ]);
             joined.extend(length(&left));
-            if matches!(grain, Grain::X) {
-                joined.extend([
-                    curios_wasm::Instr::I32Const { value: 3 },
-                    curios_wasm::Instr::I32Shl,
-                ]);
-            }
+            joined.extend([
+                curios_wasm::Instr::I32Const { value: 3 },
+                curios_wasm::Instr::I32Shl,
+            ]);
             joined.extend([curios_wasm::Instr::I32Shl, curios_wasm::Instr::I32Or]);
             joined.extend(length(&left));
             joined.extend(length(&right));
@@ -1515,11 +1479,11 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 curios_wasm::Instr::I32Shl,
                 curios_wasm::Instr::I32Or,
                 curios_wasm::Instr::RefI31,
-                br("bin_concat"),
+                br("bytes_concat"),
             ]);
 
             // Rope: the node over the boxed pair, read back and normalised.
-            let mut pair = vec![block("bin_concat_rope", joined)];
+            let mut pair = vec![block("bytes_concat_rope", joined)];
             pair.extend(self.concat_pair_instrs(lhs_rope, rhs_rope, result_local, &rope));
             pair.extend([
                 get(result_local),
@@ -1533,7 +1497,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             ]);
 
             self.emit_instr(curios_wasm::Instr::Block {
-                label_name: curios_wasm::LabelName::from("bin_concat"),
+                label_name: curios_wasm::LabelName::from("bytes_concat"),
                 block_type: curios_wasm::BlockType::Inline(Table::top_type(false)),
                 instructions: pair,
             });
@@ -1545,23 +1509,20 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     }
 
     /// Lower a packed append with the immediate split. A base inside the envelope appends by arithmetic — mask the element, OR it at the next slot, bump the length — with no allocation at all; a full immediate boxes into a leaf under a fresh node, entering the rope world one element past the envelope; a rope base (past the envelope, by canonicity) builds the ordinary node, whose result can never be small, so no arm normalises.
-    fn emit_bin_append(
+    fn emit_bytes_append(
         &mut self,
-        grain: Grain,
         carrier: &'a EmissionValueName,
         elem_instrs: Vec<curios_wasm::Instr>,
     ) {
-        let layout = ImmediateLayout::of(grain);
+        let layout = ImmediateLayout::new();
         let (len_shift, payload_mask, envelope, elem_mask) = (
             layout.len_shift,
             layout.payload_mask(),
             layout.envelope,
-            layout.elem_mask(),
+            ImmediateLayout::ELEM_MASK,
         );
-        let rope = self.context.table().bin_rope();
-        let boxf = match grain {
-            Grain::X => self.context.table().bytes_box_func(),
-        };
+        let rope = self.context.table().bytes_rope();
+        let boxf = self.context.table().bytes_box_func();
         let imm = self.context.push_local(
             "bytes_imm",
             curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -1602,7 +1563,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         overflow.extend(elem_leaf(elem_instrs.clone()));
         overflow.extend(Self::node_instrs(&rope));
 
-        // Immediate, roomy: (payload | elem << position·len) | (len + 1) << len_shift, the position one byte or one bit per the grain.
+        // Immediate, roomy: (payload | elem << position·len) | (len + 1) << len_shift, the position one byte an element.
         let mut grow = vec![
             curios_wasm::Instr::LocalGet {
                 local_name: imm.clone(),
@@ -1622,12 +1583,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_wasm::Instr::I32Const { value: len_shift },
             curios_wasm::Instr::I32ShrU,
         ]);
-        if matches!(grain, Grain::X) {
-            grow.extend([
-                curios_wasm::Instr::I32Const { value: 3 },
-                curios_wasm::Instr::I32Shl,
-            ]);
-        }
+        grow.extend([
+            curios_wasm::Instr::I32Const { value: 3 },
+            curios_wasm::Instr::I32Shl,
+        ]);
         grow.extend([
             curios_wasm::Instr::I32Shl,
             curios_wasm::Instr::I32Or,
@@ -1654,7 +1613,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_wasm::Instr::I32Const { value: envelope },
             curios_wasm::Instr::I32Eq,
             curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("bin_append_full"),
+                label_name: curios_wasm::LabelName::from("bytes_append_full"),
                 block_type: any_result.clone(),
                 then_instructions: overflow,
                 else_instructions: grow,
@@ -1688,7 +1647,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         rope_arm.extend(Self::node_instrs(&rope));
 
         self.emit_instr(curios_wasm::Instr::If {
-            label_name: curios_wasm::LabelName::from("bin_append"),
+            label_name: curios_wasm::LabelName::from("bytes_append"),
             block_type: any_result,
             then_instructions: imm_arm,
             else_instructions: rope_arm,
@@ -2207,7 +2166,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     "flt_bits",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I64),
                 );
-                let rope = self.context.table().bin_rope();
+                let rope = self.context.table().bytes_rope();
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 8 });
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
@@ -2236,13 +2195,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             curios_cont::Intrinsic::FltOfLeBytes => {
                 let operand = &args[0];
-                // The inverse of `FltToLeBytes`: trap (via the special label) unless the `Bin` is exactly 8 bytes, then OR the bytes back into an i64 -- each `$bytes/read` zero-extends its packed byte to i32, which is widened again before it is shifted into place -- and reinterpret. Byte-for-byte `f64::from_le_bytes`, no host round-trip.
-                let rope = self.context.table().bin_rope();
+                // The inverse of `FltToLeBytes`: trap (via the special label) unless the `Bytes` is exactly 8 bytes, then OR the bytes back into an i64 -- each `$bytes/read` zero-extends its packed byte to i32, which is widened again before it is shifted into place -- and reinterpret. Byte-for-byte `f64::from_le_bytes`, no host round-trip.
+                let rope = self.context.table().bytes_rope();
                 let read = self.context.table().bytes_read_func();
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(operand, LoadAs::Bin(Grain::X)),
-                );
+                self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bytes));
                 self.emit_instr(Self::rope_get(&rope, &rope.len_field));
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 8 });
                 self.emit_instr(curios_wasm::Instr::I32Ne);
@@ -2256,10 +2212,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     else_instructions: vec![],
                 });
                 for shift in [0, 8, 16, 24, 32, 40, 48, 56] {
-                    self.emit_instrs(
-                        self.context
-                            .load_value_instrs(operand, LoadAs::Bin(Grain::X)),
-                    );
+                    self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Bytes));
                     self.emit_instr(curios_wasm::Instr::I32Const { value: shift / 8 });
                     self.emit_instr(curios_wasm::Instr::Call {
                         func_name: read.clone(),
@@ -2284,69 +2237,61 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_cont::Intrinsic::FltExponent => {
                 self.emit_flt_decomposition(dest, &op, &args[0], false)
             }
-            curios_cont::Intrinsic::BinLen(grain) => {
-                self.emit_bin_len(grain, &args[0]);
+            curios_cont::Intrinsic::BytesLen => {
+                self.emit_bytes_len(&args[0]);
                 self.emit_length_box();
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::BinEql(grain) => {
-                self.emit_bin_eql(grain, &args[0], &args[1]);
+            curios_cont::Intrinsic::BytesEql => {
+                self.emit_bytes_eql(&args[0], &args[1]);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::BinGet(grain) => {
-                self.emit_bin_get(grain, &args[0], &args[1]);
+            curios_cont::Intrinsic::BytesGet => {
+                self.emit_bytes_get(&args[0], &args[1]);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::BinSlice(grain) => {
-                let funcs = match grain {
-                    Grain::X => WindowFuncs {
-                        slice: self.context.table().bytes_slice_func(),
-                        norm: Some(self.context.table().bytes_norm_func()),
-                    },
+            curios_cont::Intrinsic::BytesSlice => {
+                let funcs = WindowFuncs {
+                    slice: self.context.table().bytes_slice_func(),
+                    norm: Some(self.context.table().bytes_norm_func()),
                 };
                 self.emit_rope_slice(
                     &result_local,
                     &args[0],
                     &args[1],
                     &args[2],
-                    LoadAs::Bin(grain),
+                    LoadAs::Bytes,
                     funcs,
                 );
             }
-            curios_cont::Intrinsic::BinRest(grain) => {
-                let funcs = match grain {
-                    Grain::X => WindowFuncs {
-                        slice: self.context.table().bytes_slice_func(),
-                        norm: Some(self.context.table().bytes_norm_func()),
-                    },
+            curios_cont::Intrinsic::BytesRest => {
+                let funcs = WindowFuncs {
+                    slice: self.context.table().bytes_slice_func(),
+                    norm: Some(self.context.table().bytes_norm_func()),
                 };
-                let rope = self.context.table().bin_rope();
+                let rope = self.context.table().bytes_rope();
                 self.emit_rope_rest(
                     &result_local,
                     &args[0],
                     &args[1],
-                    LoadAs::Bin(grain),
+                    LoadAs::Bytes,
                     &rope,
                     funcs,
                 );
             }
-            curios_cont::Intrinsic::BinAppend(grain) => {
+            curios_cont::Intrinsic::BytesAppend => {
                 let elem_instrs = self.context.load_value_instrs(&args[1], LoadAs::Nat);
-                self.emit_bin_append(grain, &args[0], elem_instrs);
+                self.emit_bytes_append(&args[0], elem_instrs);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::BinConcat(grain, _) => {
-                self.emit_bin_concat(grain, &result_local, args);
+            curios_cont::Intrinsic::BytesConcat(_) => {
+                self.emit_bytes_concat(&result_local, args);
             }
-            curios_cont::Intrinsic::BinReplicate(grain) => {
-                let replicate = match grain {
-                    Grain::X => self.context.table().bytes_replicate_func(),
-                };
-                let norm = match grain {
-                    Grain::X => self.context.table().bytes_norm_func(),
-                };
+            curios_cont::Intrinsic::BytesReplicate => {
+                let replicate = self.context.table().bytes_replicate_func();
+                let norm = self.context.table().bytes_norm_func();
                 let count = self.context.load_length_instrs(&args[0]);
                 let atom = self.context.load_value_instrs(&args[1], LoadAs::Nat);
                 self.emit_instrs(count);
@@ -2354,39 +2299,42 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::Call {
                     func_name: replicate,
                 });
-                // A fill short enough to be an immediate has to come back as one, for `emit_bin_pointwise`'s reason.
+                // A fill short enough to be an immediate has to come back as one, for `emit_bytes_pointwise`'s reason.
                 self.emit_instr(curios_wasm::Instr::Call { func_name: norm });
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::BinAnd(grain) => {
-                let combine = self.context.table().bin_and_func();
-                self.emit_bin_pointwise(grain, &args[0], &args[1], combine);
+            curios_cont::Intrinsic::BytesAnd => {
+                let combine = self.context.table().bytes_and_func();
+                self.emit_bytes_pointwise(&args[0], &args[1], combine);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::BinOr(grain) => {
-                let combine = self.context.table().bin_or_func();
-                self.emit_bin_pointwise(grain, &args[0], &args[1], combine);
+            curios_cont::Intrinsic::BytesOr => {
+                let combine = self.context.table().bytes_or_func();
+                self.emit_bytes_pointwise(&args[0], &args[1], combine);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::BinXor(grain) => {
-                let combine = self.context.table().bin_xor_func();
-                self.emit_bin_pointwise(grain, &args[0], &args[1], combine);
+            curios_cont::Intrinsic::BytesXor => {
+                let combine = self.context.table().bytes_xor_func();
+                self.emit_bytes_pointwise(&args[0], &args[1], combine);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::BinChunk(grain, arity) => {
-                let rope = self.context.table().bin_rope();
-                // A small chunk is its immediate, built by ORing each (wrapped) element at its constant slot — no allocation, no call. The envelope and the slot stride are the grain's.
-                let layout = ImmediateLayout::of(grain);
-                let (len_shift, elem_mask, stride) =
-                    (layout.len_shift, layout.elem_mask(), layout.stride());
+            curios_cont::Intrinsic::BytesChunk(arity) => {
+                let rope = self.context.table().bytes_rope();
+                // A small chunk is its immediate, built by ORing each (wrapped) element at its constant slot — no allocation, no call. The envelope and the slot stride are the layout's.
+                let layout = ImmediateLayout::new();
+                let (len_shift, elem_mask, stride) = (
+                    layout.len_shift,
+                    ImmediateLayout::ELEM_MASK,
+                    ImmediateLayout::STRIDE,
+                );
                 if layout.holds(arity) {
                     self.emit_instr(curios_wasm::Instr::I32Const {
                         value: (arity as i32) << len_shift,
@@ -2413,16 +2361,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::I32Const {
                     value: arity as i32,
                 });
-                match grain {
-                    Grain::X => {
-                        for arg in args {
-                            self.emit_instrs(self.context.load_value_instrs(arg, LoadAs::Nat));
-                        }
-                        self.emit_instr(curios_wasm::Instr::ArrayNewFixed {
-                            type_name: rope.payload.clone(),
-                            length: arity as u32,
-                        });
+                {
+                    for arg in args {
+                        self.emit_instrs(self.context.load_value_instrs(arg, LoadAs::Nat));
                     }
+                    self.emit_instr(curios_wasm::Instr::ArrayNewFixed {
+                        type_name: rope.payload.clone(),
+                        length: arity as u32,
+                    });
                 }
                 self.emit_instr(curios_wasm::Instr::StructNew {
                     type_name: rope.leaf.clone(),

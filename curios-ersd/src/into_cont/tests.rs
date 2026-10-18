@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Natural},
     std::sync::Arc,
 };
 
@@ -766,7 +766,7 @@ fn folds_lower_to_accumulator_loops() {
 fn a_sequence_fold_reads_through_its_grain() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
-    let bytes = builder.constant(Constant::Bin(Grain::X, Binary::from_bytes(vec![1, 2, 3])));
+    let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
     builder.open_block();
     let zero = nat(&mut builder, 0);
     let empty_block = builder.seal_block(Terminator::Return(zero));
@@ -778,7 +778,7 @@ fn a_sequence_fold_reads_through_its_grain() {
     let remaining = builder.let_value(
         None,
         Rhs::Sequence {
-            operation: SequenceOp::BinLen(Grain::X),
+            operation: SequenceOp::BytesLen,
             operands: vec![Atom::Value(suffix)],
         },
     );
@@ -793,7 +793,7 @@ fn a_sequence_fold_reads_through_its_grain() {
     let folded = builder.let_value(
         None,
         Rhs::FoldSequence {
-            grain: SequenceGrain::Bin(Grain::X),
+            grain: SequenceGrain::Bytes,
             scrutinee: Atom::Constant(bytes),
             empty: empty_block,
             step: FoldSequenceStep {
@@ -809,23 +809,20 @@ fn a_sequence_fold_reads_through_its_grain() {
     let module = builder.finalize().expect("verifies");
     let cont = lowered(&module);
     assert!(
-        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BinLen(_))),
+        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesLen)),
         "{cont}"
     );
     assert!(
-        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BinGet(_))),
+        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesGet)),
         "{cont}"
     );
-    // A suffix, not a window: the peel names a start and lets the value decide how much follows, so no lowering derives a count. A `BinSlice` here would mean a lowering derives one.
+    // A suffix, not a window: the peel names a start and lets the value decide how much follows, so no lowering derives a count. A `BytesSlice` here would mean a lowering derives one.
     assert!(
-        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BinRest(_))),
+        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesRest)),
         "{cont}"
     );
     assert!(
-        !has_intrinsic(&cont, |op| matches!(
-            op,
-            curios_cont::Intrinsic::BinSlice(_)
-        )),
+        !has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesSlice)),
         "{cont}"
     );
 }
@@ -834,12 +831,12 @@ fn a_sequence_fold_reads_through_its_grain() {
 ///
 /// The suffix is a slice, and a slice allocates a view — once per element, inside the loop. Nearly every fold discards it (`Bytes/fold`, `List/fold`, and `/std/Str/fold`'s per-character walk, whose `t` survives only in erased `Prop` positions), so emitting it unconditionally would put one allocation and one runtime allocation call per element into the hottest loops in the corpus, for a value nothing reads.
 ///
-/// **No later pass can undo that**, which is why the check belongs at the point of emission: `BinSlice` is `MayTrap`, so dead-result elimination must keep one, and the reason this one cannot trap — the loop below indexes `[i, len)` with `1 <= i <= len` — is a property of the loop this same function emits rather than a range fact recoverable downstream.
+/// **No later pass can undo that**, which is why the check belongs at the point of emission: `BytesSlice` is `MayTrap`, so dead-result elimination must keep one, and the reason this one cannot trap — the loop below indexes `[i, len)` with `1 <= i <= len` — is a property of the loop this same function emits rather than a range fact recoverable downstream.
 #[test]
 fn an_unused_fold_suffix_is_not_sliced() {
     let mut builder = ErsdBuilder::new();
     builder.open_block();
-    let bytes = builder.constant(Constant::Bin(Grain::X, Binary::from_bytes(vec![1, 2, 3])));
+    let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
     builder.open_block();
     let zero = nat(&mut builder, 0);
     let empty_block = builder.seal_block(Terminator::Return(zero));
@@ -859,7 +856,7 @@ fn an_unused_fold_suffix_is_not_sliced() {
     let folded = builder.let_value(
         None,
         Rhs::FoldSequence {
-            grain: SequenceGrain::Bin(Grain::X),
+            grain: SequenceGrain::Bytes,
             scrutinee: Atom::Constant(bytes),
             empty: empty_block,
             step: FoldSequenceStep {
@@ -876,14 +873,11 @@ fn an_unused_fold_suffix_is_not_sliced() {
     let cont = lowered(&module);
     // The element is still read through its grain; only the discarded suffix is gone.
     assert!(
-        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BinGet(_))),
+        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesGet)),
         "{cont}"
     );
     assert!(
-        !has_intrinsic(&cont, |op| matches!(
-            op,
-            curios_cont::Intrinsic::BinSlice(_)
-        )),
+        !has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesSlice)),
         "{cont}"
     );
 }
@@ -1010,7 +1004,7 @@ fn io_constants_ride_the_binary_carrier() {
     let width = builder.let_value(
         None,
         Rhs::Sequence {
-            operation: SequenceOp::BinLen(Grain::X),
+            operation: SequenceOp::BytesLen,
             operands: vec![Atom::Constant(stdout)],
         },
     );
@@ -1019,7 +1013,7 @@ fn io_constants_ride_the_binary_carrier() {
     let module = builder.finalize().expect("verifies");
     let cont = lowered(&module);
     assert!(
-        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BinLen(_))),
+        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesLen)),
         "{cont}"
     );
 }

@@ -18,5 +18,5 @@ paths:
 - A value that only makes sense relative to another is computed from the source constant, imported by name, never restated.
 - State that lives across requests says what bounds it and is keyed by the identity of what it caches, so a change replaces the entry rather than stranding it.
 - Investigate cost with `curios-profile` — `profile!` spans carrying their inputs as fields, `sample!`, `note!`, and the fold — never `eprintln!` or a hand-rolled timer; when it falls short, extend it.
-- Per-carrier helpers, fields and emitted functions are named type-first, operation-last: `bin_force`, `list_slice`.
+- Per-carrier helpers, fields and emitted functions are named type-first, operation-last: `bytes_force`, `list_slice`.
 - `//!` states a module's purpose and invariants, `///` an API's contract. One line per paragraph, never hardwrapped. A comment states a non-obvious why — an invariant, a rejected alternative, a trade-off — in the present tense, never what the code already says. An absolute Curios path leads with its slash: `/std/Str`.

@@ -5,7 +5,7 @@ use {
     crate::{Context, reduce},
     curios_analysis::test_support::SYNTAX,
     curios_core::{Intrinsic, Nat, Subterm, Term},
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Natural},
 };
 
 fn context() -> Context<'static> {
@@ -159,7 +159,7 @@ fn mul_distributes_literal_over_symbolic_floor() {
     ));
 }
 
-// `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — a symbolic cons `List/get` and `List/slice` decode one element at a time, like their `Bin` twins.
+// `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — a symbolic cons `List/get` and `List/slice` decode one element at a time, like their `Bytes` twins.
 fn list_cons_seven(xs: &Term) -> Term {
     Term::intrinsic(Intrinsic::list_concat(
         Term::intrinsic(Intrinsic::NatType),
@@ -251,7 +251,7 @@ fn list_slice_peels_symbolic_cons() {
     );
 }
 
-// `List/len` distributes over the monoid like `Bin/len`: a symbolic cons or append reduces its length to a `succ` spine instead of stalling.
+// `List/len` distributes over the monoid like `Bytes/len`: a symbolic cons or append reduces its length to a `succ` spine instead of stalling.
 #[test]
 fn list_len_distributes_over_cons_and_append() {
     let mut context = context();
@@ -316,7 +316,7 @@ fn list_len_distributes_over_cons_and_append() {
     );
 }
 
-// The full slice is the identity even over a symbolic array: `slice(xs, 0, len xs) = xs` (the `List` twin of `BinSlice`'s full-window identity).
+// The full slice is the identity even over a symbolic array: `slice(xs, 0, len xs) = xs` (the `List` twin of `BytesSlice`'s full-window identity).
 #[test]
 fn list_slice_full_window_is_identity() {
     let mut context = context();
@@ -341,20 +341,20 @@ fn list_slice_full_window_is_identity() {
     );
 }
 
-// `Bin/eql` decides definitional equality through the spine peel: reflexivity and a peeled-equal pair fold to `true`, a definite byte/length clash to `false`, and a genuinely undecided pair stays neutral.
+// `Bytes/eql` decides definitional equality through the spine peel: reflexivity and a peeled-equal pair fold to `true`, a definite byte/length clash to `false`, and a genuinely undecided pair stays neutral.
 #[test]
-fn bin_eql_decides_structurally() {
+fn bytes_eql_decides_structurally() {
     let mut context = context();
     let x_binder = context.fresh(Some("x"));
     let y_binder = context.fresh(Some("y"));
-    let bin = |bytes: Vec<u8>| Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(bytes)));
+    let bytes = |values: Vec<u8>| Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(values)));
     let x = Term::free_var(&x_binder);
 
     // Reflexivity over a symbolic value: `eql(x, x) = true`.
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_eql(Grain::X, x.clone(), x.clone()))
+            Term::intrinsic(Intrinsic::bytes_eql(x.clone(), x.clone()))
         ),
         Subterm::Intrinsic(Intrinsic::Bool(true)),
     );
@@ -363,33 +363,25 @@ fn bin_eql_decides_structurally() {
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_eql(
-                Grain::X,
-                bin(vec![1, 2]),
-                bin(vec![1, 2])
-            ))
+            Term::intrinsic(Intrinsic::bytes_eql(bytes(vec![1, 2]), bytes(vec![1, 2])))
         ),
         Subterm::Intrinsic(Intrinsic::Bool(true)),
     );
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_eql(
-                Grain::X,
-                bin(vec![1, 2]),
-                bin(vec![1, 3])
-            ))
+            Term::intrinsic(Intrinsic::bytes_eql(bytes(vec![1, 2]), bytes(vec![1, 3])))
         ),
         Subterm::Intrinsic(Intrinsic::Bool(false)),
     );
 
     // A first-byte clash decides `false` even past a shared symbolic tail: `eql([1] ++ x, [2] ++ x) = false`.
-    let lhs = Term::intrinsic(Intrinsic::bin_concat(Grain::X, [bin(vec![1]), x.clone()]));
-    let rhs = Term::intrinsic(Intrinsic::bin_concat(Grain::X, [bin(vec![2]), x.clone()]));
+    let lhs = Term::intrinsic(Intrinsic::bytes_concat([bytes(vec![1]), x.clone()]));
+    let rhs = Term::intrinsic(Intrinsic::bytes_concat([bytes(vec![2]), x.clone()]));
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_eql(Grain::X, lhs, rhs))
+            Term::intrinsic(Intrinsic::bytes_eql(lhs, rhs))
         ),
         Subterm::Intrinsic(Intrinsic::Bool(false)),
     );
@@ -397,11 +389,8 @@ fn bin_eql_decides_structurally() {
     // Distinct variables are undecidable: `eql(x, y)` stays neutral.
     let y = Term::free_var(&y_binder);
     assert!(matches!(
-        reduced(
-            &mut context,
-            Term::intrinsic(Intrinsic::bin_eql(Grain::X, x, y))
-        ),
-        Subterm::Intrinsic(Intrinsic::BinEql(Grain::X, ..)),
+        reduced(&mut context, Term::intrinsic(Intrinsic::bytes_eql(x, y))),
+        Subterm::Intrinsic(Intrinsic::BytesEql(..)),
     ));
 }
 
@@ -409,64 +398,55 @@ fn bin_eql_decides_structurally() {
 fn bytes_reduce_through_symbolic_free_monoid_spines() {
     let mut context = context();
     let tail_binder = context.fresh(Some("tail"));
-    let bytes = |values: &[u8]| {
-        Term::intrinsic(Intrinsic::Bin(
-            Grain::X,
-            Binary::from_bytes(values.to_vec()),
-        ))
-    };
+    let bytes =
+        |values: &[u8]| Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(values.to_vec())));
     let tail = Term::free_var(&tail_binder);
-    let cons = Term::intrinsic(Intrinsic::bin_concat(Grain::X, [bytes(&[1]), tail.clone()]));
+    let cons = Term::intrinsic(Intrinsic::bytes_concat([bytes(&[1]), tail.clone()]));
 
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_get(Grain::X, cons.clone(), lit(0), qed()))
+            Term::intrinsic(Intrinsic::bytes_get(cons.clone(), lit(0), qed()))
         ),
         Subterm::Intrinsic(Intrinsic::Byte(1)),
     );
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_slice(
-                Grain::X,
-                cons.clone(),
-                lit(0),
-                lit(1),
-                qed(),
-            ))
+            Term::intrinsic(Intrinsic::bytes_slice(cons.clone(), lit(0), lit(1), qed(),))
         ),
         Term::unwrap_or_clone(bytes(&[1])),
     );
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_len(Grain::X, cons.clone()))
+            Term::intrinsic(Intrinsic::bytes_len(cons.clone()))
         ),
         reduced(
             &mut context,
             Term::intrinsic(Intrinsic::nat_add(
                 lit(1),
-                Term::intrinsic(Intrinsic::bin_len(Grain::X, tail.clone())),
+                Term::intrinsic(Intrinsic::bytes_len(tail.clone())),
             ))
         ),
     );
 
-    let other_cons = Term::intrinsic(Intrinsic::bin_concat(Grain::X, [bytes(&[0]), tail.clone()]));
+    let other_cons = Term::intrinsic(Intrinsic::bytes_concat([bytes(&[0]), tail.clone()]));
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_eql(Grain::X, cons, other_cons))
+            Term::intrinsic(Intrinsic::bytes_eql(cons, other_cons))
         ),
         Subterm::Intrinsic(Intrinsic::Bool(false)),
     );
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_concat(
-                Grain::X,
-                [bytes(&[]), tail.clone(), bytes(&[])],
-            ))
+            Term::intrinsic(Intrinsic::bytes_concat([
+                bytes(&[]),
+                tail.clone(),
+                bytes(&[])
+            ],))
         ),
         Term::unwrap_or_clone(tail),
     );

@@ -12,8 +12,8 @@ pub enum ListEntry {
 
 /// One entry of a `Bytes` literal `x[\00, byte, ..bytes, \01]` — a run of escaped literal bytes, a term contributing one atom, or a `..`-spread whose term contributes a whole `Bytes` run. Entries are comma-delimited, so an atom or spread operand is an arbitrary term.
 #[derive(Debug, Clone, PartialEq)]
-pub enum BinSegment {
-    /// A single atom given by a term, a `Byte`: the free monoid's generator, where [`BinSegment::Spread`] carries a whole element. A constant atom is an ordinary numeral term, which `Byte` realizes, and lowering folds adjacent constant atoms into one packed run, so the AST needs no constant-run variant of its own.
+pub enum BytesSegment {
+    /// A single atom given by a term, a `Byte`: the free monoid's generator, where [`BytesSegment::Spread`] carries a whole element. A constant atom is an ordinary numeral term, which `Byte` realizes, and lowering folds adjacent constant atoms into one packed run, so the AST needs no constant-run variant of its own.
     Atom(Term),
     Spread(Term),
 }
@@ -23,7 +23,7 @@ pub enum BinSegment {
 pub enum Literal {
     Bool(bool),
     Flt(Floating),
-    Bin(Vec<BinSegment>),
+    Bytes(Vec<BytesSegment>),
     List(Vec<ListEntry>),
 }
 

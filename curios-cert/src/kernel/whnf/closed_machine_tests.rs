@@ -4,7 +4,7 @@ use {
     super::{test_support::*, unfold_rec},
     crate::Kernel,
     curios_core::{Free, Global, Intrinsic, Level, Many, Reducer, Scope, Subterm, Term},
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
     curios_utilities::{Plicity, Qualifier},
 };
 
@@ -144,8 +144,8 @@ fn the_closed_machine_keeps_a_witness_named_at_an_instance_as_written() {
 /// Both demands are asked because the plain one is where the machine and the strategy can disagree, on `forced_then_plain` below: a `rec` block both evaluators leave unopened at a plain demand is compared there but reaches nothing.
 #[test]
 fn the_closed_machine_agrees_with_the_strategy() {
-    let bin_type = Term::intrinsic(Intrinsic::BinType(Grain::X));
-    let bytes = |data: Vec<u8>| Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(data)));
+    let bytes_type = Term::intrinsic(Intrinsic::BytesType);
+    let bytes = |data: Vec<u8>| Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(data)));
     let motive = || {
         let m = binder(100, "m");
         Scope::close(Many(1), &[&m], nat_type())
@@ -153,8 +153,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
 
     let ih_fold = {
         let (h, t, ih) = (binder(0, "h"), binder(1, "t"), binder(2, "ih"));
-        Term::bin_match_scoped(
-            Grain::X,
+        Term::bytes_match_scoped(
             bytes(vec![7; 40]),
             motive(),
             nat(0),
@@ -167,9 +166,8 @@ fn the_closed_machine_agrees_with_the_strategy() {
         let (go, acc, b) = (binder(0, "go"), binder(1, "acc"), binder(2, "b"));
         let (h, t, ih) = (binder(3, "h"), binder(4, "t"), binder(5, "ih"));
         let body = Term::func(
-            [(acc, nat_type()), (b, bin_type.clone())],
-            Term::bin_match_scoped(
-                Grain::X,
+            [(acc, nat_type()), (b, bytes_type.clone())],
+            Term::bytes_match_scoped(
                 Term::free_var(&b),
                 motive(),
                 Term::free_var(&acc),
@@ -189,7 +187,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         Term::rec(
             [(
                 go,
-                Term::func_type([(acc, nat_type()), (b, bin_type.clone())], nat_type()),
+                Term::func_type([(acc, nat_type()), (b, bytes_type.clone())], nat_type()),
                 body,
             )],
             Term::apply(Term::free_var(&go), [nat(0), bytes(vec![3; 40])]),
@@ -269,9 +267,8 @@ fn the_closed_machine_agrees_with_the_strategy() {
         let (go, b, x) = (binder(0, "go"), binder(1, "b"), binder(6, "x"));
         let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
         let body = Term::func(
-            [(b, bin_type.clone())],
-            Term::bin_match_scoped(
-                Grain::X,
+            [(b, bytes_type.clone())],
+            Term::bytes_match_scoped(
                 Term::free_var(&b),
                 motive(),
                 nat(0),
@@ -282,7 +279,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
             [(
                 go,
-                Term::func_type([(b, bin_type.clone())], nat_type()),
+                Term::func_type([(b, bytes_type.clone())], nat_type()),
                 body,
             )],
             Term::let_(
@@ -304,9 +301,8 @@ fn the_closed_machine_agrees_with_the_strategy() {
         let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
         let motive_b = binder(7, "m");
         let body = Term::func(
-            [(b, bin_type.clone())],
-            Term::bin_match_scoped(
-                Grain::X,
+            [(b, bytes_type.clone())],
+            Term::bytes_match_scoped(
                 Term::free_var(&b),
                 motive(),
                 nat(0),
@@ -328,7 +324,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
             [(
                 go,
-                Term::func_type([(b, bin_type.clone())], nat_type()),
+                Term::func_type([(b, bytes_type.clone())], nat_type()),
                 body,
             )],
             Term::let_(

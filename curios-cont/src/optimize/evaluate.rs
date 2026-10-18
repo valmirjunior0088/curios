@@ -114,14 +114,14 @@ pub(crate) fn evaluate(op: Intrinsic, args: &[Atom]) -> Option<Literal> {
         Intrinsic::FltToInt => Some(Literal::Int(flt(0)?.to_integer().ok()?)),
         Intrinsic::FltMantissa => Some(Literal::Int(flt(0)?.to_dyadic().ok()?.0)),
         Intrinsic::FltExponent => Some(Literal::Int(Integer::from(flt(0)?.to_dyadic().ok()?.1))),
-        // Folds over the *runtime* representation, not the literal's kind: a `Nat` or `Int` is an i31 or a boxed magnitude, both of which the test admits, while an `Flt` is a boxed struct and a `Bin` a rope reference, so those answer 0.
+        // Folds over the *runtime* representation, not the literal's kind: a `Nat` or `Int` is an i31 or a boxed magnitude, both of which the test admits, while an `Flt` is a boxed struct and a `Bytes` a rope reference, so those answer 0.
         Intrinsic::IsImmediate => Some(Literal::Nat(Natural::from(match literals[0] {
             Literal::Nat(_) | Literal::Int(_) => 1u32,
-            Literal::Flt(_) | Literal::Bin(_, _) => 0,
+            Literal::Flt(_) | Literal::Bytes(_) => 0,
         }))),
         // The identity on the value, so a literal operand is the answer. Reached only when the dispatch above already folded to the immediate side.
         Intrinsic::ImmediateGet => Some(literals[0].clone()),
-        // No literal is a row's struct: a `Nat` or `Int` is an i31 or a magnitude, an `Flt` its box and a `Bin` a rope.
+        // No literal is a row's struct: a `Nat` or `Int` is an i31 or a magnitude, an `Flt` its box and a `Bytes` a rope.
         Intrinsic::IsRow(_) => bool_(false),
         _ => None,
     }

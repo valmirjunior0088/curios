@@ -212,7 +212,7 @@ fn hex_literal_is_num_lit() {
 }
 
 #[test]
-fn bin_literal_is_num_lit() {
+fn bytes_literal_is_num_lit() {
     assert_eq!(
         "0b1010".parse::<Term>().unwrap(),
         Subterm::NumLit(NumLit {
@@ -455,27 +455,27 @@ fn list_literal_spread_entries() {
 }
 
 #[test]
-fn bin_literal_spread_segments() {
+fn bytes_literal_spread_segments() {
     let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
 
     // Constant atoms are ordinary numeral terms around the spread segments: the surface keeps what was written, and lowering folds adjacent constants into packed runs.
     assert_eq!(
         r"x[0, ..xs, 1]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(vec![
-            BinSegment::Atom(num_lit(0, Sign::Unmarked)),
-            BinSegment::Spread(name("xs")),
-            BinSegment::Atom(num_lit(1, Sign::Unmarked)),
+        Subterm::Literal(Literal::Bytes(vec![
+            BytesSegment::Atom(num_lit(0, Sign::Unmarked)),
+            BytesSegment::Spread(name("xs")),
+            BytesSegment::Atom(num_lit(1, Sign::Unmarked)),
         ]))
         .into()
     );
     assert_eq!(
         r"x[0, 1, ..x, 2, 3]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(vec![
-            BinSegment::Atom(num_lit(0, Sign::Unmarked)),
-            BinSegment::Atom(num_lit(1, Sign::Unmarked)),
-            BinSegment::Spread(name("x")),
-            BinSegment::Atom(num_lit(2, Sign::Unmarked)),
-            BinSegment::Atom(num_lit(3, Sign::Unmarked)),
+        Subterm::Literal(Literal::Bytes(vec![
+            BytesSegment::Atom(num_lit(0, Sign::Unmarked)),
+            BytesSegment::Atom(num_lit(1, Sign::Unmarked)),
+            BytesSegment::Spread(name("x")),
+            BytesSegment::Atom(num_lit(2, Sign::Unmarked)),
+            BytesSegment::Atom(num_lit(3, Sign::Unmarked)),
         ]))
         .into()
     );
@@ -483,7 +483,7 @@ fn bin_literal_spread_segments() {
     // A spread operand is an ordinary term: projections and absolute paths need no special grammar.
     assert_eq!(
         r"x[..hdr.bytes]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(vec![BinSegment::Spread(
+        Subterm::Literal(Literal::Bytes(vec![BytesSegment::Spread(
             Subterm::Proj(Proj {
                 head: name("hdr"),
                 field: Field::Label("bytes".to_string()),
@@ -493,37 +493,37 @@ fn bin_literal_spread_segments() {
         .into()
     );
     let term = r"x[../std/x]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
-        panic!("expected a Bin literal");
+    let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
+        panic!("expected a Bytes literal");
     };
-    let BinSegment::Spread(operand) = &segments[0] else {
+    let BytesSegment::Spread(operand) = &segments[0] else {
         panic!("expected a spread segment");
     };
     assert!(matches!(operand.as_subterm(), Subterm::Name(name) if name.is_abs()));
 
     // Commas delimit, so an operand that a tight grammar could only take parenthesized — an infix chain — is written bare.
     let term = r"x[..x + y, 0x01]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
-        panic!("expected a Bin literal");
+    let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
+        panic!("expected a Bytes literal");
     };
     assert!(
-        matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Infix(_)))
+        matches!(&segments[0], BytesSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Infix(_)))
     );
     assert!(
-        matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
+        matches!(&segments[1], BytesSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
     let term = r"x[..read()!, 0x01]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
-        panic!("expected a Bin literal");
+    let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
+        panic!("expected a Bytes literal");
     };
     assert!(
-        matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Bang(_)))
+        matches!(&segments[0], BytesSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Bang(_)))
     );
 
     // The empty literal is spelled like `[]` behind its letter.
     assert_eq!(
         "x[]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(vec![])).into()
+        Subterm::Literal(Literal::Bytes(vec![])).into()
     );
 
     // Past the `[` the literal lexes like any other bracketed list: interior whitespace is invisible and one trailing comma is admitted.
@@ -560,63 +560,63 @@ fn a_packed_literal_reports_its_own_entry_rather_than_the_form_around_it() {
 }
 
 #[test]
-fn bin_literal_atom_segments() {
+fn bytes_literal_atom_segments() {
     let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
 
     // A bare term entry splices one generator; constant and non-constant atoms alike stay entries.
     assert_eq!(
         r"x[72, b, 0]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(vec![
-            BinSegment::Atom(num_lit(72, Sign::Unmarked)),
-            BinSegment::Atom(name("b")),
-            BinSegment::Atom(num_lit(0, Sign::Unmarked)),
+        Subterm::Literal(Literal::Bytes(vec![
+            BytesSegment::Atom(num_lit(72, Sign::Unmarked)),
+            BytesSegment::Atom(name("b")),
+            BytesSegment::Atom(num_lit(0, Sign::Unmarked)),
         ]))
         .into()
     );
     assert_eq!(
         r"x[b]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(vec![BinSegment::Atom(name("b"))])).into()
+        Subterm::Literal(Literal::Bytes(vec![BytesSegment::Atom(name("b"))])).into()
     );
 
     // `..` marks the spread; without it the same operand contributes a single atom.
     assert_eq!(
         r"x[..xs, b]".parse::<Term>().unwrap(),
-        Subterm::Literal(Literal::Bin(vec![
-            BinSegment::Spread(name("xs")),
-            BinSegment::Atom(name("b")),
+        Subterm::Literal(Literal::Bytes(vec![
+            BytesSegment::Spread(name("xs")),
+            BytesSegment::Atom(name("b")),
         ]))
         .into()
     );
 
     // An atom operand is an ordinary term, exactly as a spread operand is.
     let term = r"x[hdr.byte, 0x01]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
-        panic!("expected a Bin literal");
+    let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
+        panic!("expected a Bytes literal");
     };
     assert!(
-        matches!(&segments[0], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::Proj(_)))
+        matches!(&segments[0], BytesSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::Proj(_)))
     );
     assert!(
-        matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
+        matches!(&segments[1], BytesSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
     let term = r"x[f( x , y ), 0x01]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
-        panic!("expected a Bin literal");
+    let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
+        panic!("expected a Bytes literal");
     };
     assert!(
-        matches!(&segments[0], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::Apply(_)))
+        matches!(&segments[0], BytesSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::Apply(_)))
     );
 
     // A numeral is the only constant spelling, and it stays an `Atom` here: the surface keeps what was written — radix included — and `into_core` folds constants into packed runs.
     let term = r"x[0x48, 0x69]".parse::<Term>().unwrap();
-    let Subterm::Literal(Literal::Bin(segments)) = term.as_subterm() else {
-        panic!("expected a Bin literal");
+    let Subterm::Literal(Literal::Bytes(segments)) = term.as_subterm() else {
+        panic!("expected a Bytes literal");
     };
     assert!(
-        matches!(&segments[0], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
+        matches!(&segments[0], BytesSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
     assert!(
-        matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
+        matches!(&segments[1], BytesSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
     );
 
     // `\` spells nothing — in an atom position or anywhere else.

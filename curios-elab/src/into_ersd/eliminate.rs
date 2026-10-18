@@ -13,40 +13,38 @@ use {
     crate::InductCase,
     curios_analysis::{case_target_indices, pinned_by_targets},
     curios_core::{Free, MatchResult, Universes},
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Natural},
     std::collections::HashMap,
 };
 
-/// The `List`/`Bin` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
+/// The `List`/`Bytes` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
 #[derive(Clone, Copy)]
 enum SeqCarrier<'a> {
     List { element: &'a Term },
-    Bin { grain: Grain },
+    Bytes,
 }
 
 impl SeqCarrier<'_> {
     fn grain(self) -> curios_ersd::SequenceGrain {
         match self {
             SeqCarrier::List { .. } => curios_ersd::SequenceGrain::List,
-            SeqCarrier::Bin { grain } => curios_ersd::SequenceGrain::Bin(grain),
+            SeqCarrier::Bytes => curios_ersd::SequenceGrain::Bytes,
         }
     }
 
-    /// The type of the sequence eliminated, which the form states: a list of its element, or the packed carrier of its grain.
+    /// The type of the sequence eliminated, which the form states: a list of its element, or `Bytes`.
     fn sequence_type(self) -> Term {
         Term::intrinsic(match self {
             SeqCarrier::List { element } => Intrinsic::ListType(element.clone()),
-            SeqCarrier::Bin { grain } => Intrinsic::BinType(grain),
+            SeqCarrier::Bytes => Intrinsic::BytesType,
         })
     }
 
-    /// The type of the element the cons arm binds — the list element type, or the grain's own scalar shape for a packed binary.
+    /// The type of the element the cons arm binds — the list element type, or `Byte` for a packed binary.
     fn element_type(self) -> Term {
         match self {
             SeqCarrier::List { element } => element.clone(),
-            SeqCarrier::Bin { grain } => Term::intrinsic(match grain {
-                Grain::X => Intrinsic::ByteType,
-            }),
+            SeqCarrier::Bytes => Term::intrinsic(Intrinsic::ByteType),
         }
     }
 
@@ -57,7 +55,7 @@ impl SeqCarrier<'_> {
                 element: element.clone(),
                 items: vec![],
             }),
-            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::Bin(grain, Binary::empty())),
+            SeqCarrier::Bytes => Term::intrinsic(Intrinsic::Bytes(Binary::empty())),
         }
     }
 
@@ -74,12 +72,10 @@ impl SeqCarrier<'_> {
                     tail.clone(),
                 ],
             }),
-            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::BinConcat {
-                grain,
+            SeqCarrier::Bytes => Term::intrinsic(Intrinsic::BytesConcat {
                 operands: vec![
-                    Term::intrinsic(Intrinsic::BinAppend {
-                        grain,
-                        bin: Term::intrinsic(Intrinsic::Bin(grain, Binary::empty())),
+                    Term::intrinsic(Intrinsic::BytesAppend {
+                        bytes: Term::intrinsic(Intrinsic::Bytes(Binary::empty())),
                         element: head.clone(),
                     }),
                     tail.clone(),
@@ -155,18 +151,11 @@ impl Lowering<'_> {
             ),
             Cases::FreeMonoid {
                 carrier:
-                    Carrier::Bin {
-                        grain,
+                    Carrier::Bytes {
                         empty_case,
                         cons_case,
                     },
-            } => self.erase_seq_fold(
-                context,
-                site,
-                SeqCarrier::Bin { grain: *grain },
-                empty_case,
-                cons_case,
-            ),
+            } => self.erase_seq_fold(context, site, SeqCarrier::Bytes, empty_case, cons_case),
         }
     }
 
@@ -495,7 +484,7 @@ impl Lowering<'_> {
         ))
     }
 
-    /// A `List`/`Bin` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a first-class `UnconsSequence` binding the element and the suffix alone. Both hand the reads to `curios-ersd`'s lowering rather than emitting them, which is what keeps a window's operand convention out of this crate.
+    /// A `List`/`Bytes` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a first-class `UnconsSequence` binding the element and the suffix alone. Both hand the reads to `curios-ersd`'s lowering rather than emitting them, which is what keeps a window's operand convention out of this crate.
     fn erase_seq_fold(
         &mut self,
         context: &mut Retyping,

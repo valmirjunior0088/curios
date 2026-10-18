@@ -15,7 +15,7 @@ use {
         Intrinsic, IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Quality, Scope,
         Subterm, Telescope, Term, Three, Two, Universes,
     },
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Natural},
     curios_utilities::Plicity,
 };
 
@@ -48,8 +48,8 @@ impl Scrutinee {
         let carrier = match expected {
             IntrinsicHead::Nat => matches!(&*type_, Subterm::Intrinsic(Intrinsic::NatType)),
             IntrinsicHead::Bool => matches!(&*type_, Subterm::Intrinsic(Intrinsic::BoolType)),
-            IntrinsicHead::Bin(grain) => {
-                matches!(&*type_, Subterm::Intrinsic(Intrinsic::BinType(actual)) if *actual == grain)
+            IntrinsicHead::Bytes => {
+                matches!(&*type_, Subterm::Intrinsic(Intrinsic::BytesType))
             }
         };
 
@@ -67,7 +67,7 @@ pub(super) enum Eliminator {
     /// The fold over a natural and the dispatch on one alike.
     Nat,
     List,
-    Bin(Grain),
+    Bytes,
     /// `vacuous` where the match writes no arm and no default: what it eliminates is then said to be empty.
     Nominal {
         vacuous: bool,
@@ -82,7 +82,7 @@ fn refused_scrutinee(context: &mut Context, eliminator: Eliminator, type_: &Term
             Eliminator::Bool => Error::not_bool_type(type_),
             Eliminator::Nat => Error::not_nat_type(type_),
             Eliminator::List => Error::not_list_type(type_),
-            Eliminator::Bin(grain) => Error::not_bin_type(grain, type_),
+            Eliminator::Bytes => Error::not_bytes_type(type_),
             Eliminator::Nominal { vacuous } => Error::not_a_induct_type(type_, vacuous),
         }
     })
@@ -347,13 +347,13 @@ fn elaborate_nat_match(
 #[derive(Debug, Clone, Copy)]
 pub(super) enum Sequence {
     List,
-    Bin(Grain),
+    Bytes,
 }
 
-/// What a sequence's cases are built from: a list's element type, read off the scrutinee's type, or a packed sequence's grain.
+/// What a sequence's cases are built from: a list's element type, read off the scrutinee's type, or nothing for `Bytes`.
 enum Atoms {
     List { element: Term },
-    Bin { grain: Grain },
+    Bytes,
 }
 
 /// A fold over a list or a packed sequence with its scrutinee and its result resolved: the empty case, and an atom ahead of a tail with a hypothesis about the tail where its arm reads one.
@@ -391,15 +391,12 @@ impl SequenceSplit {
 
                 (head, head_type, Atoms::List { element })
             }
-            // `Bin` is a parameterless carrier (like `Nat`/`Bool`), so the scrutinee's type is just `Bin` — no element type to read off the head as `List` needs.
-            Sequence::Bin(grain) => {
-                let (head, head_type) = scrutinee.of_intrinsic(
-                    context,
-                    Eliminator::Bin(grain),
-                    IntrinsicHead::Bin(grain),
-                )?;
+            // `Bytes` is a parameterless carrier (like `Nat`/`Bool`), so the scrutinee's type is just `Bytes` — no element type to read off the head as `List` needs.
+            Sequence::Bytes => {
+                let (head, head_type) =
+                    scrutinee.of_intrinsic(context, Eliminator::Bytes, IntrinsicHead::Bytes)?;
 
-                (head, head_type, Atoms::Bin { grain })
+                (head, head_type, Atoms::Bytes)
             }
         };
         let result =
@@ -427,7 +424,7 @@ impl SequenceSplit {
                 element: element.clone(),
                 items: vec![],
             },
-            Atoms::Bin { grain } => Intrinsic::Bin(*grain, Binary::empty()),
+            Atoms::Bytes => Intrinsic::Bytes(Binary::empty()),
         })
         .into();
 
@@ -468,20 +465,15 @@ impl SequenceSplit {
 
                     (element.clone(), value.into())
                 }
-                Atoms::Bin { grain } => {
-                    let grain = *grain;
-                    let atom_type = Subterm::Intrinsic(match grain {
-                        Grain::X => Intrinsic::ByteType,
-                    });
+                Atoms::Bytes => {
+                    let atom_type = Subterm::Intrinsic(Intrinsic::ByteType);
                     // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(x[], head)` (an atom appended to the empty packed sequence), not a literal run.
-                    let singleton: Term = Subterm::Intrinsic(Intrinsic::BinAppend {
-                        grain,
-                        bin: Subterm::Intrinsic(Intrinsic::Bin(grain, Binary::empty())).into(),
+                    let singleton: Term = Subterm::Intrinsic(Intrinsic::BytesAppend {
+                        bytes: Subterm::Intrinsic(Intrinsic::Bytes(Binary::empty())).into(),
                         element: Term::free_var(atom),
                     })
                     .into();
-                    let value = Subterm::Intrinsic(Intrinsic::BinConcat {
-                        grain,
+                    let value = Subterm::Intrinsic(Intrinsic::BytesConcat {
                         operands: vec![singleton, Term::free_var(tail)],
                     });
 
@@ -526,8 +518,7 @@ impl SequenceSplit {
                 empty_case: empty,
                 cons_case,
             },
-            Atoms::Bin { grain } => Carrier::Bin {
-                grain: *grain,
+            Atoms::Bytes => Carrier::Bytes {
                 empty_case: empty,
                 cons_case,
             },
@@ -562,9 +553,8 @@ fn elaborate_list_match(
     )
 }
 
-fn elaborate_bin_match(
+fn elaborate_bytes_match(
     context: &mut Context,
-    grain: Grain,
     scrutinee: Scrutinee,
     motive: &Scope<Many>,
     cases: (&Term, &Scope<Three>),
@@ -573,7 +563,7 @@ fn elaborate_bin_match(
 ) -> Result<(Term, Term), Error> {
     elaborate_sequence_match(
         context,
-        Sequence::Bin(grain),
+        Sequence::Bytes,
         scrutinee,
         motive,
         cases,
@@ -838,14 +828,12 @@ fn eliminate(
         ),
         Cases::FreeMonoid {
             carrier:
-                Carrier::Bin {
-                    grain,
+                Carrier::Bytes {
                     empty_case,
                     cons_case,
                 },
-        } => elaborate_bin_match(
+        } => elaborate_bytes_match(
             context,
-            *grain,
             scrutinee,
             motive,
             (empty_case, cons_case),

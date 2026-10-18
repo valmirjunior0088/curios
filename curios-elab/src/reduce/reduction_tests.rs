@@ -11,7 +11,7 @@ use {
         UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, UniverseRole,
         Universes, Variance,
     },
-    curios_num::{Binary, Floating, Grain, Integer, Rounding},
+    curios_num::{Binary, Floating, Integer, Rounding},
     curios_utilities::Qualifier,
 };
 
@@ -705,38 +705,34 @@ fn list_get_errors_on_out_of_bounds() {
 }
 
 #[test]
-fn bin_append_adds_byte() {
+fn bytes_append_adds_byte() {
     let mut context = context();
 
-    let bin = Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2])));
+    let bytes = Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![1, 2])));
     let byte: Subterm = Subterm::Intrinsic(Intrinsic::Byte(3));
 
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Intrinsic(Intrinsic::bin_append(Grain::X, bin, byte)).into()
+            Subterm::Intrinsic(Intrinsic::bytes_append(bytes, byte)).into()
         ),
-        Ok(Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2, 3]))).into())
+        Ok(Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![1, 2, 3]))).into())
     );
 }
 
 #[test]
-fn bin_append_adds_the_full_byte_range() {
+fn bytes_append_adds_the_full_byte_range() {
     let mut context = context();
 
-    let bin = Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![1, 2])));
+    let bytes = Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![1, 2])));
     let byte: Subterm = Subterm::Intrinsic(Intrinsic::Byte(255));
 
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Intrinsic(Intrinsic::bin_append(Grain::X, bin, byte)).into()
+            Subterm::Intrinsic(Intrinsic::bytes_append(bytes, byte)).into()
         ),
-        Ok(Subterm::Intrinsic(Intrinsic::Bin(
-            Grain::X,
-            Binary::from_bytes(vec![1, 2, 255])
-        ))
-        .into())
+        Ok(Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![1, 2, 255]))).into())
     );
 }
 

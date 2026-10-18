@@ -12,7 +12,7 @@ use {
     curios_num::{Floating, Integer, Natural},
 };
 
-/// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bin`/`List` `get`/`slice` bounds.
+/// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bytes`/`List` `get`/`slice` bounds.
 pub(super) fn as_index(term: &Term) -> Option<usize> {
     term.as_nat()
         .and_then(|n| usize::try_from(&n.to_natural()?).ok())
@@ -104,7 +104,7 @@ pub(super) fn reduce_int_binary(
     }))
 }
 
-/// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero is a reported error — mathematically undefined, following `BinGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see `Int`).
+/// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero is a reported error — mathematically undefined, following `BytesGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see `Int`).
 ///
 /// Beside the two-literal fold stand the laws a truncated division shares with ℕ's, each reading no sign. The floor law and the Euclidean split are not among them: each is false at a dividend below zero, where truncation rounds the other way.
 pub(super) fn reduce_int_division(
@@ -168,7 +168,7 @@ pub(super) fn reduce_int_division(
 ///
 /// The rule the opacity established survives verbatim: an intrinsic needs a fold here only if a type or a proof can depend on its value. `Flt` has moved to the other side of it, because the domains [`Intrinsic::signature`] states for `Flt/to_int` and `Flt/to_nat` are bounds decided by a comparison.
 ///
-/// One fact predates all of it, and `free_monoid::bin_measure` is where: `Bin/len(Flt/to_le_bytes(x))` is `8` for every `x`, symbolic `x` included. That is the arity of the operation's result rather than anything about the float, and it is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
+/// One fact predates all of it, and `free_monoid::bytes_measure` is where: `Bytes/len(Flt/to_le_bytes(x))` is `8` for every `x`, symbolic `x` included. That is the arity of the operation's result rather than anything about the float, and it is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
 pub(super) fn reduce_flt_binary(
     reducer: &mut impl Reducer,
     left: &Term,

@@ -21,7 +21,7 @@
 use {
     super::Intrinsic,
     crate::{Free, Global, Nat, Subterm, Term, Universes, Var},
-    curios_num::{Floating, Grain, Integer},
+    curios_num::{Floating, Integer},
     curios_utilities::{SyntaxName, SyntaxRegistry},
 };
 
@@ -89,10 +89,10 @@ impl Intrinsic {
         let int_type = || Term::intrinsic(Intrinsic::IntType);
         let flt_type = || Term::intrinsic(Intrinsic::FltType);
         let handle_type = || Term::intrinsic(Intrinsic::HandleType);
-        let bin_type = |grain| Term::intrinsic(Intrinsic::BinType(grain));
+        let bytes_type = || Term::intrinsic(Intrinsic::BytesType);
         let list_type = |element: Term| Term::intrinsic(Intrinsic::ListType(element));
         // A bound is stated over the *intrinsic* measure, not `/sys`'s wrapper: this table sits below `/sys`, and it is the shape a reduced occurrence carries anyway.
-        let bin_len = |grain, bin| Term::intrinsic(Intrinsic::BinLen(grain, bin));
+        let bytes_len = |bytes| Term::intrinsic(Intrinsic::BytesLen(bytes));
         let list_len = |element, list| Term::intrinsic(Intrinsic::ListLen { element, list });
         let cell_type = |element: Term| Term::intrinsic(Intrinsic::CellType(element));
         let channel_type = |element: Term| Term::intrinsic(Intrinsic::ChannelType(element));
@@ -106,11 +106,6 @@ impl Intrinsic {
         };
         let io_type = |result: Term| Term::intrinsic(Intrinsic::IoType(result));
         let unit = Term::tuple_type_unit;
-
-        // A grain says what a `Bin` is a sequence *of*: bytes at `X`.
-        let grain_element = |grain| match grain {
-            Grain::X => byte_type(),
-        };
 
         let decided = |slot: SyntaxName, args: Vec<Term>| {
             Term::apply(Term::var(Var::free(Free::global(slot.qualifier()))), args)
@@ -126,7 +121,7 @@ impl Intrinsic {
         };
         let nullary = |produced: Term| sig(Vec::new(), produced);
         let un = |operand: Term, produced: Term| sig(vec![Operand::At(operand)], produced);
-        let bin_op = |operand: Term, produced: Term| {
+        let bytes_op = |operand: Term, produced: Term| {
             sig(
                 vec![Operand::At(operand.clone()), Operand::At(operand)],
                 produced,
@@ -145,7 +140,7 @@ impl Intrinsic {
             | Self::ByteType
             | Self::IntType
             | Self::FltType
-            | Self::BinType(_)
+            | Self::BytesType
             | Self::HandleType => nullary(Term::type_ground()),
             Self::ListType(_) | Self::CellType(_) | Self::ChannelType(_) | Self::IoType(_) => {
                 former()
@@ -158,24 +153,24 @@ impl Intrinsic {
             Self::Byte(_) => nullary(byte_type()),
             Self::Int(_) => nullary(int_type()),
             Self::Flt(_) => nullary(flt_type()),
-            Self::Bin(grain, _) => nullary(bin_type(*grain)),
+            Self::Bytes(_) => nullary(bytes_type()),
             Self::Handle(_) => nullary(handle_type()),
 
             // Comparisons: same-typed operands in, a boolean out.
-            Self::BoolEql(..) | Self::BoolNeq(..) => bin_op(bool_type(), bool_type()),
+            Self::BoolEql(..) | Self::BoolNeq(..) => bytes_op(bool_type(), bool_type()),
             Self::NatEql(..) | Self::NatNeq(..) | Self::NatLt(..) | Self::NatLe(..) => {
-                bin_op(nat_type(), bool_type())
+                bytes_op(nat_type(), bool_type())
             }
             Self::IntEql(..) | Self::IntNeq(..) | Self::IntLt(..) | Self::IntLe(..) => {
-                bin_op(int_type(), bool_type())
+                bytes_op(int_type(), bool_type())
             }
             Self::FltEql(..) | Self::FltNeq(..) | Self::FltLt(..) | Self::FltLe(..) => {
-                bin_op(flt_type(), bool_type())
+                bytes_op(flt_type(), bool_type())
             }
 
             // Arithmetic and bitwise: closed on their carrier.
             Self::BoolAnd(..) | Self::BoolOr(..) | Self::BoolXor(..) => {
-                bin_op(bool_type(), bool_type())
+                bytes_op(bool_type(), bool_type())
             }
             Self::NatAdd(..)
             | Self::NatSub(..)
@@ -187,7 +182,7 @@ impl Intrinsic {
             | Self::NatMax(..)
             | Self::NatShl(..)
             | Self::NatPow(..)
-            | Self::NatShr(..) => bin_op(nat_type(), nat_type()),
+            | Self::NatShr(..) => bytes_op(nat_type(), nat_type()),
             Self::IntAdd(..)
             | Self::IntSub(..)
             | Self::IntMul(..)
@@ -195,7 +190,7 @@ impl Intrinsic {
             | Self::IntOr(..)
             | Self::IntXor(..)
             | Self::IntMin(..)
-            | Self::IntMax(..) => bin_op(int_type(), int_type()),
+            | Self::IntMax(..) => bytes_op(int_type(), int_type()),
             // A shift count is a natural on both carriers: a signed count would leave `Int/shr(v, -1)` — `⌊v / 2^-1⌋` — for the theory to define, which it does not.
             Self::IntShl(..) | Self::IntShr(..) => sig(
                 vec![Operand::At(int_type()), Operand::At(nat_type())],
@@ -208,7 +203,7 @@ impl Intrinsic {
             | Self::FltRem(..)
             | Self::FltMin(..)
             | Self::FltMax(..)
-            | Self::FltCopysign(..) => bin_op(flt_type(), flt_type()),
+            | Self::FltCopysign(..) => bytes_op(flt_type(), flt_type()),
             Self::FltNeg(..)
             | Self::FltAbs(..)
             | Self::FltSqrt(..)
@@ -246,7 +241,7 @@ impl Intrinsic {
                 int_type(),
             ),
 
-            // Conversions preserve the number, never the bits — a bit view belongs to the explicit `Bin` casts below.
+            // Conversions preserve the number, never the bits — a bit view belongs to the explicit `Bytes` casts below.
             Self::ByteToNat(..) => un(byte_type(), nat_type()),
             Self::NatToByte { nat, .. } => sig(
                 vec![
@@ -307,91 +302,73 @@ impl Intrinsic {
                 ],
                 int_type(),
             ),
-            Self::FltToLeBytes(..) => un(flt_type(), bin_type(Grain::X)),
-            Self::FltOfLeBytes { bin, .. } => sig(
+            Self::FltToLeBytes(..) => un(flt_type(), bytes_type()),
+            Self::FltOfLeBytes { bytes, .. } => sig(
                 vec![
-                    Operand::At(bin_type(Grain::X)),
+                    Operand::At(bytes_type()),
                     Operand::At(holds(Self::NatEql(
-                        bin_len(Grain::X, bin.clone()),
+                        bytes_len(bytes.clone()),
                         Term::intrinsic(Self::Nat(self::Nat::new(8u32))),
                     ))),
                 ],
                 flt_type(),
             ),
 
-            // `Bin`: a sequence of bytes or of bits, depending on the grain.
-            Self::BinLen(grain, _) => un(bin_type(*grain), nat_type()),
-            Self::BinEql(grain, ..) => bin_op(bin_type(*grain), bool_type()),
-            // The two bounded `Bin` accessors. `Bin/len` is the *intrinsic* here rather than `/sys`'s wrapper, because a signature states what the operand must be and this table is below `/sys`.
-            Self::BinGet {
-                grain, bin, index, ..
-            } => sig(
+            // `Bytes`: a sequence of bytes.
+            Self::BytesLen(_) => un(bytes_type(), nat_type()),
+            Self::BytesEql(..) => bytes_op(bytes_type(), bool_type()),
+            // The two bounded `Bytes` accessors. `Bytes/len` is the *intrinsic* here rather than `/sys`'s wrapper, because a signature states what the operand must be and this table is below `/sys`.
+            Self::BytesGet { bytes, index, .. } => sig(
                 vec![
-                    Operand::At(bin_type(*grain)),
+                    Operand::At(bytes_type()),
                     Operand::At(nat_type()),
-                    Operand::At(holds(Self::NatLt(
-                        index.clone(),
-                        bin_len(*grain, bin.clone()),
-                    ))),
+                    Operand::At(holds(Self::NatLt(index.clone(), bytes_len(bytes.clone())))),
                 ],
-                grain_element(*grain),
+                byte_type(),
             ),
-            Self::BinSlice {
-                grain,
-                bin,
+            Self::BytesSlice {
+                bytes,
                 start,
                 length,
                 ..
             } => sig(
                 vec![
-                    Operand::At(bin_type(*grain)),
+                    Operand::At(bytes_type()),
                     Operand::At(nat_type()),
                     Operand::At(nat_type()),
                     Operand::At(holds(Self::NatLe(
                         Term::intrinsic(Self::NatAdd(start.clone(), length.clone())),
-                        bin_len(*grain, bin.clone()),
+                        bytes_len(bytes.clone()),
                     ))),
                 ],
-                bin_type(*grain),
+                bytes_type(),
             ),
-            Self::BinAppend { grain, .. } => sig(
+            Self::BytesAppend { .. } => sig(
+                vec![Operand::At(bytes_type()), Operand::At(byte_type())],
+                bytes_type(),
+            ),
+            Self::BytesConcat { operands } => sig(
+                operands.iter().map(|_| Operand::At(bytes_type())).collect(),
+                bytes_type(),
+            ),
+            // Count first, then the generator, as `/std/List/replicate` reads. No bound: every count names a run, and the length of the one it names is what `BytesLen` reduces over this node.
+            Self::BytesReplicate { .. } => sig(
+                vec![Operand::At(nat_type()), Operand::At(byte_type())],
+                bytes_type(),
+            ),
+            // The three pointwise rows are one rule at three operators. See [`Intrinsic::BytesAnd`] for why the equal length is stated rather than extended away.
+            Self::BytesAnd { left, right, .. }
+            | Self::BytesOr { left, right, .. }
+            | Self::BytesXor { left, right, .. } => sig(
                 vec![
-                    Operand::At(bin_type(*grain)),
-                    Operand::At(grain_element(*grain)),
-                ],
-                bin_type(*grain),
-            ),
-            Self::BinConcat { grain, operands } => sig(
-                operands
-                    .iter()
-                    .map(|_| Operand::At(bin_type(*grain)))
-                    .collect(),
-                bin_type(*grain),
-            ),
-            // Count first, then the generator, as `/std/List/replicate` reads. No bound: every count names a run, and the length of the one it names is what `BinLen` reduces over this node.
-            Self::BinReplicate { grain, .. } => sig(
-                vec![Operand::At(nat_type()), Operand::At(grain_element(*grain))],
-                bin_type(*grain),
-            ),
-            // The three pointwise rows are one rule at three operators. See [`Intrinsic::BinAnd`] for why the equal length is stated rather than extended away.
-            Self::BinAnd {
-                grain, left, right, ..
-            }
-            | Self::BinOr {
-                grain, left, right, ..
-            }
-            | Self::BinXor {
-                grain, left, right, ..
-            } => sig(
-                vec![
-                    Operand::At(bin_type(*grain)),
-                    Operand::At(bin_type(*grain)),
+                    Operand::At(bytes_type()),
+                    Operand::At(bytes_type()),
                     Operand::At(holds(Self::NatEql(
-                        bin_len(*grain, left.clone()),
-                        bin_len(*grain, right.clone()),
+                        bytes_len(left.clone()),
+                        bytes_len(right.clone()),
                     ))),
                 ],
-                bin_type(*grain),
+                bytes_type(),
             ),
             // `List`. Every operation carries its element type as an operand, which is what lets it be typed without inventing anything — `[]` included, which has no element to read a type from.
             Self::List { element, items } => sig(

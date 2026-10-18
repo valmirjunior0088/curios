@@ -70,7 +70,7 @@ pub enum Error {
         /// What it was written in instead.
         site: &'static str,
     },
-    /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bin`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
+    /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bytes`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
     MatrixMotiveRequiresCtorHead,
     /// A `choose` bind arm `| pattern = value =>` whose `pattern` is a bare binder — irrefutable, so it always fires and the rest of the ladder is dead. A bind is for *refutable* matching; use a `let` for an unconditional binding.
     BindArmIrrefutable,

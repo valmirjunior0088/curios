@@ -5,7 +5,6 @@ use {
     crate::{Error, Globals},
     curios_analysis::test_support::SYNTAX,
     curios_core::{Global, Intrinsic, Term},
-    curios_num::Grain,
     curios_utilities::Qualifier,
 };
 
@@ -64,7 +63,7 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
 fn a_foreign_row_cannot_be_held_at_another_wire_type() {
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let claimed = Term::intrinsic(Intrinsic::io_type(Term::intrinsic(Intrinsic::ListType(
-        Term::intrinsic(Intrinsic::BinType(Grain::X)),
+        Term::intrinsic(Intrinsic::BytesType),
     ))));
 
     let verdicts = fixture_verdicts(

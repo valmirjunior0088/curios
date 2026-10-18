@@ -26,7 +26,7 @@ use {
         TopItem,
     },
     curios_abi::{CodeCarrier, Failure, code_sets, stdio},
-    curios_num::{Grain, Natural, Rounding},
+    curios_num::{Natural, Rounding},
     curios_unicode::{PACKED_RUN, class_codes, packed_tables},
     curios_utilities::SyntaxRegistry,
 };
@@ -536,8 +536,8 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         ),
         documented(
             &["The number those eight bytes spell, least significant first."],
-            guarded_unary("of_le_bytes", syntax, |bin, eight_bytes| {
-                Intrinsic::FltOfLeBytes { bin, eight_bytes }
+            guarded_unary("of_le_bytes", syntax, |bytes, eight_bytes| {
+                Intrinsic::FltOfLeBytes { bytes, eight_bytes }
             }),
         ),
     ];
@@ -554,7 +554,7 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         .collect()
 }
 
-/// The operations IEEE computes exactly and rounds once, in the direction `rounding` names — at the root for the default, ties to even, and in `/sys/Flt/<direction>` for each other — as the packed operations are written once per [`Grain`].
+/// The operations IEEE computes exactly and rounds once, in the direction `rounding` names — at the root for the default, ties to even, and in `/sys/Flt/<direction>` for each other.
 fn flt_rounded(rounding: Rounding, syntax: &SyntaxRegistry) -> Vec<Decl> {
     let mut decls = vec![
         documented(
@@ -602,11 +602,11 @@ fn flt_rounded(rounding: Rounding, syntax: &SyntaxRegistry) -> Vec<Decl> {
     decls
 }
 
-fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
+fn bytes_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
     vec![
         documented(
             &["How many it holds."],
-            operation("len", &["b"], syntax, Intrinsic::BinLen(grain, name("b"))),
+            operation("len", &["b"], syntax, Intrinsic::BytesLen(name("b"))),
         ),
         documented(
             &["Whether the two hold the same, in the same order."],
@@ -614,7 +614,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 "eql",
                 &["a", "b"],
                 syntax,
-                Intrinsic::BinEql(grain, name("a"), name("b")),
+                Intrinsic::BytesEql(name("a"), name("b")),
             ),
         ),
         documented(
@@ -623,9 +623,8 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 "get",
                 &["b", "i", "ok"],
                 syntax,
-                Intrinsic::BinGet {
-                    grain,
-                    bin: name("b"),
+                Intrinsic::BytesGet {
+                    bytes: name("b"),
                     index: name("i"),
                     in_range: name("ok"),
                 },
@@ -640,9 +639,8 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 "slice",
                 &["b", "s", "l", "within"],
                 syntax,
-                Intrinsic::BinSlice {
-                    grain,
-                    bin: name("b"),
+                Intrinsic::BytesSlice {
+                    bytes: name("b"),
                     start: name("s"),
                     length: name("l"),
                     within: name("within"),
@@ -655,8 +653,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 "replicate",
                 &["count", "x"],
                 syntax,
-                Intrinsic::BinReplicate {
-                    grain,
+                Intrinsic::BytesReplicate {
                     count: name("count"),
                     atom: name("x"),
                 },
@@ -670,8 +667,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 "and",
                 &["a", "b", "same"],
                 syntax,
-                Intrinsic::BinAnd {
-                    grain,
+                Intrinsic::BytesAnd {
                     left: name("a"),
                     right: name("b"),
                     same_length: name("same"),
@@ -684,8 +680,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 "or",
                 &["a", "b", "same"],
                 syntax,
-                Intrinsic::BinOr {
-                    grain,
+                Intrinsic::BytesOr {
                     left: name("a"),
                     right: name("b"),
                     same_length: name("same"),
@@ -698,8 +693,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 "xor",
                 &["a", "b", "same"],
                 syntax,
-                Intrinsic::BinXor {
-                    grain,
+                Intrinsic::BytesXor {
                     left: name("a"),
                     right: name("b"),
                     same_length: name("same"),
@@ -712,9 +706,8 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 "append",
                 &["b", "x"],
                 syntax,
-                Intrinsic::BinAppend {
-                    grain,
-                    bin: name("b"),
+                Intrinsic::BytesAppend {
+                    bytes: name("b"),
                     element: name("x"),
                 },
             ),
@@ -725,8 +718,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<Decl> {
                 "concat",
                 &["a", "b"],
                 syntax,
-                Intrinsic::BinConcat {
-                    grain,
+                Intrinsic::BytesConcat {
                     operands: vec![name("a"), name("b")],
                 },
             ),
@@ -762,7 +754,7 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
                 },
             ),
         ),
-        // The `List` twin of `Bin/slice`'s window bound; see the comment there for why only one half survives the count.
+        // The `List` twin of `Bytes/slice`'s window bound; see the comment there for why only one half survives the count.
         documented(
             &[
                 "The run from `from` up to but not including `to`, under the evidence that both are within the length and in order.",
@@ -1095,8 +1087,8 @@ fn declared(syntax: &SyntaxRegistry) -> Vec<SysModule> {
         SysModule::carrier(
             "Bytes",
             &["A packed run of bytes, written `x[…]`."],
-            operation("Bytes", &[], syntax, Intrinsic::BinType(Grain::X)),
-            items(bin_ops(Grain::X, syntax)),
+            operation("Bytes", &[], syntax, Intrinsic::BytesType),
+            items(bytes_ops(syntax)),
         ),
         // The propositions `/sys`'s own operations state their preconditions in sit beside the decision they reflect: `Holds` is written beside every bound in the roster, and `True` and `False` are what it reduces to.
         SysModule::carrier(

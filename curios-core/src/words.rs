@@ -1,13 +1,13 @@
-//! The words `curios-algebra` compares, read off `Bin` and `List` terms and rebuilt from what it leaves.
+//! The words `curios-algebra` compares, read off `Bytes` and `List` terms and rebuilt from what it leaves.
 //!
-//! A value is read as its segments — a literal as a run, a `Bin/append`'s symbolic byte as a single element, a slice as a window of its base, anything else as an opaque chunk — into `curios-algebra`'s `Word`, which keeps the free monoid's normal form and decides what two words share. What is decided here is which terms are one symbol and which are one number, where a position lies inside the windows it is read through, and how a residual is rebuilt.
+//! A value is read as its segments — a literal as a run, a `Bytes/append`'s symbolic byte as a single element, a slice as a window of its base, anything else as an opaque chunk — into `curios-algebra`'s `Word`, which keeps the free monoid's normal form and decides what two words share. What is decided here is which terms are one symbol and which are one number, where a position lies inside the windows it is read through, and how a residual is rebuilt.
 //!
 //! **Symbols are compared as written.** A list element may be a type, where a level is part of the value, so an element, a symbolic byte, a chunk and a window's base are one symbol only where they are one term. **Numbers take the numeric identity:** a window's offset and length and a position are `Nat`s, compared by the carrier's cancellation up to universe instances ([`Nat::same`]) and summed as the fold sums them ([`Nat::sum`]), Euclid's recombination included.
 
 use {
     super::{Intrinsic, Nat, Subterm, Term},
     curios_algebra::{Alphabet, Packed, Run, Segment, Window, Word},
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
 };
 
 /// A sequence carrier's words: one alphabet over the `Nat` measures every sequence shares, and the sequence that says what its runs are, how a chunk is measured, and how a value is read and rebuilt.
@@ -15,10 +15,13 @@ pub(crate) struct Words<S> {
     sequence: S,
 }
 
+/// The sequence `Bytes`'s words are over, whose every element is a byte.
+pub(crate) struct Bytes;
+
 /// The element type a `List`'s words are over, which every residual is rebuilt with.
 pub(crate) struct Element(pub(crate) Term);
 
-/// What differs between `Bin`'s words and `List`'s.
+/// What differs between `Bytes`'s words and `List`'s.
 pub(crate) trait Sequence: Sized {
     type Run: Run;
     /// `len` of an opaque chunk.
@@ -82,8 +85,8 @@ impl<S: Sequence> Alphabet for Words<S> {
         let (mut base, mut position) = (base.clone(), position.clone());
         loop {
             let (inner, start) = match &*base {
-                Subterm::Intrinsic(Intrinsic::BinSlice { bin, start, .. }) => {
-                    (bin.clone(), start.clone())
+                Subterm::Intrinsic(Intrinsic::BytesSlice { bytes, start, .. }) => {
+                    (bytes.clone(), start.clone())
                 }
                 Subterm::Intrinsic(Intrinsic::ListSlice { list, start, .. }) => {
                     (list.clone(), start.clone())
@@ -101,8 +104,8 @@ impl<S: Sequence> Alphabet for Words<S> {
             return Vec::new();
         };
 
-        if let Some(grain) = bin_grain(intrinsic) {
-            let words = Words::new(grain);
+        if is_bytes_word(intrinsic) {
+            let words = Words::new(Bytes);
             return words.read(intrinsic).offsets_of(&words, operand);
         }
 
@@ -116,19 +119,19 @@ impl<S: Sequence> Alphabet for Words<S> {
     }
 }
 
-/// The `Bin`-valued intrinsics a word reads at `grain`. `Bin` and `BinConcat` carry the monoid's literals and juxtaposition; `BinSlice` rides in as a window, so adjacent slices of one base fuse and equal slices cancel; `BinAppend` rides in as its base followed by the appended byte; `BinReplicate` rides in as its leading generator followed by a fill one shorter, which is what lets a fill compare against the cons it equals. Any other producer is an opaque chunk left to the caller's own comparison.
-pub(crate) fn bin_grain(intrinsic: &Intrinsic) -> Option<Grain> {
-    match intrinsic {
-        Intrinsic::Bin(grain, _)
-        | Intrinsic::BinConcat { grain, operands: _ }
-        | Intrinsic::BinSlice { grain, .. }
-        | Intrinsic::BinAppend { grain, .. }
-        | Intrinsic::BinReplicate { grain, .. } => Some(*grain),
-        _ => None,
-    }
+/// Whether `intrinsic` is one of the `Bytes`-valued intrinsics a word reads. `Bytes` and `BytesConcat` carry the monoid's literals and juxtaposition; `BytesSlice` rides in as a window, so adjacent slices of one base fuse and equal slices cancel; `BytesAppend` rides in as its base followed by the appended byte; `BytesReplicate` rides in as its leading generator followed by a fill one shorter, which is what lets a fill compare against the cons it equals. Any other producer is an opaque chunk left to the caller's own comparison.
+pub(crate) fn is_bytes_word(intrinsic: &Intrinsic) -> bool {
+    matches!(
+        intrinsic,
+        Intrinsic::Bytes(_)
+            | Intrinsic::BytesConcat { operands: _ }
+            | Intrinsic::BytesSlice { .. }
+            | Intrinsic::BytesAppend { .. }
+            | Intrinsic::BytesReplicate { .. }
+    )
 }
 
-/// The `List` analogue of [`bin_grain`], doubling as the element type residuals are rebuilt with: every element of a `List(T)` value is a `T`, so one suffices for the whole list. `List` and `ListConcat` carry the monoid's literals and juxtaposition, `ListSlice` rides in as a window, and `ListAppend` as its base followed by a one-element run, so `append(xs, e)` is `xs ++ [e]`.
+/// The `List` analogue of [`is_bytes_word`], doubling as the element type residuals are rebuilt with: every element of a `List(T)` value is a `T`, so one suffices for the whole list. `List` and `ListConcat` carry the monoid's literals and juxtaposition, `ListSlice` rides in as a window, and `ListAppend` as its base followed by a one-element run, so `append(xs, e)` is `xs ++ [e]`.
 pub(crate) fn list_element(intrinsic: &Intrinsic) -> Option<Term> {
     match intrinsic {
         Intrinsic::List { element, items: _ }
@@ -144,22 +147,21 @@ pub(crate) fn list_element(intrinsic: &Intrinsic) -> Option<Term> {
 
 /// One item of a flattening walk's worklist. `Appended` is an append's trailing element, held back so it lands after everything its base contributes — the one place order is not simply left to right, and the reason a plain stack of operands would not do.
 ///
-/// Explicit rather than recursive because a concatenation's depth is data-shaped once [`crate::FUSION_CAP`] stops an accumulation fusing; see [`crate::free_monoid`]'s `BinLevel`, which states the argument in full for the destructor side.
+/// Explicit rather than recursive because a concatenation's depth is data-shaped once [`crate::FUSION_CAP`] stops an accumulation fusing; see [`crate::free_monoid`]'s `BytesLevel`, which states the argument in full for the destructor side.
 enum Pending<'a> {
     Term(&'a Term),
     Intrinsic(&'a Intrinsic),
     Appended(&'a Term),
 }
 
-impl Sequence for Grain {
+impl Sequence for Bytes {
     type Run = Packed;
 
     fn measure(&self, chunk: &Term) -> Term {
-        Term::intrinsic(Intrinsic::BinLen(*self, chunk.clone()))
+        Term::intrinsic(Intrinsic::BytesLen(chunk.clone()))
     }
 
-    fn read(words: &Words<Grain>, intrinsic: &Intrinsic) -> Word<Words<Grain>> {
-        let grain = words.sequence;
+    fn read(words: &Words<Bytes>, intrinsic: &Intrinsic) -> Word<Words<Bytes>> {
         let mut word = Word::default();
         let mut push = |segment| word.push(words, segment);
         // A stack, so operands are pushed in reverse to come back off in order: a run merges only with the run just before it.
@@ -172,40 +174,30 @@ impl Sequence for Grain {
                     _ => push(Segment::Chunk(term.clone())),
                 },
                 // A concrete byte is a one-element run, so it merges with an abutting run and meets `concat(base, x[b])`; a symbolic one is a single element, whose contents are unknown and whose length is one.
-                Pending::Appended(element) => push(generator(grain, element)),
+                Pending::Appended(element) => push(generator(element)),
                 Pending::Intrinsic(intrinsic) => match intrinsic {
-                    Intrinsic::Bin(found, value) if *found == grain => push(Segment::Run(Packed {
-                        grain,
-                        bits: value.clone(),
+                    Intrinsic::Bytes(value) => push(Segment::Run(Packed {
+                        bytes: value.clone(),
                     })),
-                    Intrinsic::BinConcat {
-                        grain: found,
-                        operands,
-                    } if *found == grain => {
+                    Intrinsic::BytesConcat { operands } => {
                         pending.extend(operands.iter().rev().map(Pending::Term));
                     }
-                    Intrinsic::BinSlice {
-                        grain: found,
-                        bin,
+                    Intrinsic::BytesSlice {
+                        bytes,
                         start,
                         length,
                         within,
-                    } if *found == grain => push(Segment::Window(Window {
-                        base: bin.clone(),
+                    } => push(Segment::Window(Window {
+                        base: bytes.clone(),
                         offset: start.clone(),
                         length: length.clone(),
                         proof: within.clone(),
                     })),
                     // `replicate(n + 1, a) = [a] ++ replicate(n, a)`: the leading generator, and the shorter fill as one chunk, which is all conversion needs — the other side's own residual fill is that same chunk, so the two meet without either being unrolled. A count of zero contributes nothing, and a count of unknown size stays opaque, since a fill that might be empty exposes no generator.
-                    Intrinsic::BinReplicate {
-                        grain: found,
-                        count,
-                        atom,
-                    } if *found == grain => match Nat::peel_succ(count) {
+                    Intrinsic::BytesReplicate { count, atom } => match Nat::peel_succ(count) {
                         Some(rest) => {
-                            push(generator(grain, atom));
-                            push(Segment::Chunk(Term::intrinsic(Intrinsic::BinReplicate {
-                                grain,
+                            push(generator(atom));
+                            push(Segment::Chunk(Term::intrinsic(Intrinsic::BytesReplicate {
                                 count: rest,
                                 atom: atom.clone(),
                             })));
@@ -216,13 +208,9 @@ impl Sequence for Grain {
                             }
                         }
                     },
-                    Intrinsic::BinAppend {
-                        grain: found,
-                        bin,
-                        element,
-                    } if *found == grain => {
+                    Intrinsic::BytesAppend { bytes, element } => {
                         pending.push(Pending::Appended(element));
-                        pending.push(Pending::Term(bin));
+                        pending.push(Pending::Term(bytes));
                     }
                     other => push(Segment::Chunk(Term::intrinsic(other.clone()))),
                 },
@@ -232,18 +220,15 @@ impl Sequence for Grain {
         word
     }
 
-    /// A run is a `Bin` literal, a single element the one-byte `append(x[], b)`, and a window its `BinSlice`.
-    fn rebuild(&self, word: Word<Words<Grain>>) -> Term {
-        let grain = *self;
+    /// A run is a `Bytes` literal, a single element the one-byte `append(x[], b)`, and a window its `BytesSlice`.
+    fn rebuild(&self, word: Word<Words<Bytes>>) -> Term {
         let into_term = |segment| match segment {
-            Segment::Run(Packed { bits, .. }) => Term::intrinsic(Intrinsic::Bin(grain, bits)),
-            Segment::Single(element) => Term::intrinsic(Intrinsic::bin_append(
-                grain,
-                Term::intrinsic(Intrinsic::Bin(grain, Binary::empty())),
+            Segment::Run(Packed { bytes }) => Term::intrinsic(Intrinsic::Bytes(bytes)),
+            Segment::Single(element) => Term::intrinsic(Intrinsic::bytes_append(
+                Term::intrinsic(Intrinsic::Bytes(Binary::empty())),
                 element,
             )),
-            Segment::Window(window) => Term::intrinsic(Intrinsic::bin_slice(
-                grain,
+            Segment::Window(window) => Term::intrinsic(Intrinsic::bytes_slice(
                 window.base,
                 window.offset,
                 window.length,
@@ -255,25 +240,20 @@ impl Sequence for Grain {
         let mut segments = word.into_segments();
         match segments.len() {
             1 => into_term(segments.pop_front().unwrap()),
-            _ => Term::intrinsic(Intrinsic::BinConcat {
-                grain,
+            _ => Term::intrinsic(Intrinsic::BytesConcat {
                 operands: segments.into_iter().map(into_term).collect(),
             }),
         }
     }
 }
 
-/// An appended or replicated `Bin` element as its segment: a decided byte — taken mod 256, as the runtime's packed store takes it — is a one-element run, and anything else a single element.
-fn generator(grain: Grain, element: &Term) -> Segment<Words<Grain>> {
-    let bits = match (grain, &**element) {
-        (Grain::X, Subterm::Intrinsic(Intrinsic::Byte(byte))) => {
-            Some(Binary::from_bytes(vec![*byte]))
-        }
-        _ => None,
-    };
-    match bits {
-        Some(bits) => Segment::Run(Packed { grain, bits }),
-        None => Segment::Single(element.clone()),
+/// An appended or replicated `Bytes` element as its segment: a decided byte — taken mod 256, as the runtime's packed store takes it — is a one-element run, and anything else a single element.
+fn generator(element: &Term) -> Segment<Words<Bytes>> {
+    match &**element {
+        Subterm::Intrinsic(Intrinsic::Byte(byte)) => Segment::Run(Packed {
+            bytes: Binary::from_bytes(vec![*byte]),
+        }),
+        _ => Segment::Single(element.clone()),
     }
 }
 
@@ -336,7 +316,7 @@ impl Sequence for Element {
         word
     }
 
-    /// [`Grain`]'s rebuild over element runs, restoring the element type.
+    /// [`Bytes`]'s rebuild over element runs, restoring the element type.
     fn rebuild(&self, word: Word<Words<Element>>) -> Term {
         let into_term = |segment| match segment {
             Segment::Run(items) => Term::intrinsic(Intrinsic::List {

@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Natural},
 };
 
 /// One construction over a bound input, ending without an exit-code conversion so every narrowing belongs to the construction itself.
@@ -51,16 +51,15 @@ fn construction(
 #[test]
 fn every_length_sum_is_checked_before_its_node_or_flat_allocation() {
     for op in [
-        curios_cont::Intrinsic::BinConcat(Grain::X, 2),
-        curios_cont::Intrinsic::BinAppend(Grain::X),
+        curios_cont::Intrinsic::BytesConcat(2),
+        curios_cont::Intrinsic::BytesAppend,
     ] {
-        let append = matches!(op, curios_cont::Intrinsic::BinAppend(_));
+        let append = matches!(op, curios_cont::Intrinsic::BytesAppend);
         let wat = construction(
             op,
-            curios_cont::ValueExpr::Literal(curios_cont::Literal::Bin(
-                Grain::X,
-                Binary::from_bytes(vec![1, 2, 3, 4]),
-            )),
+            curios_cont::ValueExpr::Literal(curios_cont::Literal::Bytes(Binary::from_bytes(vec![
+                1, 2, 3, 4,
+            ]))),
             2,
             append,
         );
@@ -89,7 +88,7 @@ fn every_length_sum_is_checked_before_its_node_or_flat_allocation() {
 #[test]
 fn a_requested_count_reaches_its_capacity_check_without_position_saturation() {
     let wat = construction(
-        curios_cont::Intrinsic::BinReplicate(Grain::X),
+        curios_cont::Intrinsic::BytesReplicate,
         curios_cont::ValueExpr::Literal(curios_cont::Literal::Nat(Natural::from(1u64 << 32))),
         2,
         true,

@@ -2,7 +2,7 @@
 
 use {
     curios_algebra::{Carrier, Constant, Expr, Law, Operation},
-    curios_num::{Binary, Floating, Grain, Integer, Natural},
+    curios_num::{Binary, Floating, Integer, Natural},
 };
 
 /// A closed value of one carrier.
@@ -14,7 +14,7 @@ pub(super) enum Value {
     Byte(u8),
     /// Compared by bit pattern, so a law about a NaN states the NaN it means.
     Float(Floating),
-    Packed(Grain, Binary),
+    Bytes(Binary),
     List(Vec<Natural>),
 }
 
@@ -54,7 +54,7 @@ fn samples(carrier: Carrier) -> Vec<Value> {
             .map(|bits| Value::Float(Floating::from_bits(*bits)))
             .collect(),
         // The last is eight bytes, a signaling NaN's pattern, so a law that decodes a float is held at a run it can decode.
-        Carrier::Packed(Grain::X) => [
+        Carrier::Bytes => [
             &[][..],
             &[0],
             &[1, 2],
@@ -62,7 +62,7 @@ fn samples(carrier: Carrier) -> Vec<Value> {
             &[1, 0, 0, 0, 0, 0, 0xF0, 0x7F],
         ]
         .into_iter()
-        .map(|bytes| Value::Packed(Grain::X, Binary::from_bytes(bytes.to_vec())))
+        .map(|bytes| Value::Bytes(Binary::from_bytes(bytes.to_vec())))
         .collect(),
         Carrier::List => [&[][..], &[0u32], &[1, 2, 3]]
             .into_iter()
@@ -165,7 +165,7 @@ fn constant(value: Constant, carrier: Carrier) -> Value {
         (Constant::MinusOne, Carrier::Integer) => Value::Integer(Integer::from(-1)),
         (Constant::True, Carrier::Boolean) => Value::Boolean(true),
         (Constant::False, Carrier::Boolean) => Value::Boolean(false),
-        (Constant::Empty, Carrier::Packed(grain)) => Value::Packed(grain, Binary::empty()),
+        (Constant::Empty, Carrier::Bytes) => Value::Bytes(Binary::empty()),
         (Constant::Empty, Carrier::List) => Value::List(Vec::new()),
         _ => panic!("no {value:?} at {carrier:?}"),
     }
@@ -246,7 +246,7 @@ fn apply(carrier: Carrier, operation: Operation, operands: &[Value]) -> Option<V
         (Carrier::Float, Operation::Unequal, [Value::Float(a), Value::Float(b)]) => {
             Value::Boolean(a.neq(*b))
         }
-        (Carrier::Packed(_), Operation::Equal, [Value::Packed(_, a), Value::Packed(_, b)]) => {
+        (Carrier::Bytes, Operation::Equal, [Value::Bytes(a), Value::Bytes(b)]) => {
             Value::Boolean(a == b)
         }
         (
@@ -280,28 +280,26 @@ fn apply(carrier: Carrier, operation: Operation, operands: &[Value]) -> Option<V
         (
             Carrier::Float,
             Operation::Conversion {
-                from: Carrier::Packed(Grain::X),
+                from: Carrier::Bytes,
             },
-            [Value::Packed(Grain::X, bytes)],
+            [Value::Bytes(bytes)],
         ) => Value::Float(Floating::of_le_bytes(bytes).ok()?),
         (
-            Carrier::Packed(Grain::X),
+            Carrier::Bytes,
             Operation::Conversion {
                 from: Carrier::Float,
             },
             [Value::Float(value)],
-        ) => Value::Packed(Grain::X, value.to_le_bytes()),
-        (Carrier::Packed(grain), Operation::Concat, [Value::Packed(_, a), Value::Packed(_, b)]) => {
-            Value::Packed(grain, Binary::concat([a, b]))
+        ) => Value::Bytes(value.to_le_bytes()),
+        (Carrier::Bytes, Operation::Concat, [Value::Bytes(a), Value::Bytes(b)]) => {
+            Value::Bytes(Binary::concat([a, b]))
         }
-        (Carrier::Packed(grain), Operation::Length, [Value::Packed(_, word)]) => {
-            Value::Natural(Natural::from(word.len(grain)))
+        (Carrier::Bytes, Operation::Length, [Value::Bytes(word)]) => {
+            Value::Natural(Natural::from(word.len()))
         }
-        (
-            Carrier::Packed(Grain::X),
-            Operation::Append,
-            [Value::Packed(_, word), Value::Byte(byte)],
-        ) => Value::Packed(Grain::X, word.append_byte(*byte)?),
+        (Carrier::Bytes, Operation::Append, [Value::Bytes(word), Value::Byte(byte)]) => {
+            Value::Bytes(word.append_byte(*byte))
+        }
         (Carrier::List, Operation::Concat, [Value::List(a), Value::List(b)]) => {
             Value::List(a.iter().chain(b).cloned().collect())
         }

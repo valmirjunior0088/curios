@@ -11,7 +11,7 @@ use {
         FunctionId, Intrinsic, Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp,
         Statement, SuspensionOperation, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
-    curios_num::{Grain, Natural},
+    curios_num::Natural,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -694,14 +694,12 @@ fn leaves(values: &[Value]) -> Option<Vec<Constant>> {
 fn sequence_length(grain: SequenceGrain, sequence: &Value) -> Result<usize, Bail> {
     match (grain, sequence) {
         (SequenceGrain::List, Value::List(elements)) => Ok(elements.len()),
-        (SequenceGrain::Bin(expected), Value::Bin(found, packed)) if *found == expected => {
-            Ok(packed.len(expected))
-        }
+        (SequenceGrain::Bytes, Value::Bytes(packed)) => Ok(packed.len()),
         _ => Err(Bail::Unsupported),
     }
 }
 
-/// One peel of a sequence at `at`: the element there and the suffix after it, or `None` at the end. A byte grain peels a `Byte`.
+/// One peel of a sequence at `at`: the element there and the suffix after it, or `None` at the end. A `Bytes` peels a `Byte`.
 ///
 /// Read off the original value the way the door's `Emitter::emit_peel` reads it at runtime — the element by index and the suffix as a window sharing the allocation — so a peel costs the same whether three elements or a hundred thousand follow it. Rebuilding each suffix element by element would make a recursive byte walk quadratic.
 fn peel(grain: SequenceGrain, sequence: &Value, at: usize) -> Result<Option<(Value, Value)>, Bail> {
@@ -715,19 +713,15 @@ fn peel(grain: SequenceGrain, sequence: &Value, at: usize) -> Result<Option<(Val
                 .expect("the suffix after an element is within its list");
             Ok(Some((element.clone(), Value::List(suffix))))
         }
-        (SequenceGrain::Bin(expected), Value::Bin(found, packed)) if *found == expected => {
-            let length = packed.len(expected);
+        (SequenceGrain::Bytes, Value::Bytes(packed)) => {
+            let length = packed.len();
             if at >= length {
                 return Ok(None);
             }
-            let element = match expected {
-                Grain::X => packed.byte(at).map(Value::Byte),
-            };
-            let suffix = packed.slice(expected, at + 1, length);
+            let element = packed.byte(at).map(Value::Byte);
+            let suffix = packed.slice(at + 1, length);
             match (element, suffix) {
-                (Some(element), Some(suffix)) => {
-                    Ok(Some((element, Value::Bin(expected, Rc::new(suffix)))))
-                }
+                (Some(element), Some(suffix)) => Ok(Some((element, Value::Bytes(Rc::new(suffix))))),
                 _ => Err(Bail::Unsupported),
             }
         }
@@ -771,16 +765,16 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
             }
             Ok(Value::List(ListWindow::new(elements)))
         }
-        SequenceOp::BinLen(_)
-        | SequenceOp::BinGet(_)
-        | SequenceOp::BinSlice(_)
-        | SequenceOp::BinAppend(_)
-        | SequenceOp::BinConcat(_)
-        | SequenceOp::BinEql(_)
-        | SequenceOp::BinReplicate(_)
-        | SequenceOp::BinAnd(_)
-        | SequenceOp::BinOr(_)
-        | SequenceOp::BinXor(_) => {
+        SequenceOp::BytesLen
+        | SequenceOp::BytesGet
+        | SequenceOp::BytesSlice
+        | SequenceOp::BytesAppend
+        | SequenceOp::BytesConcat
+        | SequenceOp::BytesEql
+        | SequenceOp::BytesReplicate
+        | SequenceOp::BytesAnd
+        | SequenceOp::BytesOr
+        | SequenceOp::BytesXor => {
             unreachable!("packed-binary operations fold through the semantic contract")
         }
     }

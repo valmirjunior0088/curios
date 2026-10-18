@@ -56,7 +56,7 @@ pub fn another_case<J: Judge>(
 fn stands_as_a_case(term: &Term) -> bool {
     match &**term {
         Subterm::Variant(_) => true,
-        Subterm::Intrinsic(Intrinsic::Bool(_) | Intrinsic::Bin(..) | Intrinsic::List { .. }) => {
+        Subterm::Intrinsic(Intrinsic::Bool(_) | Intrinsic::Bytes(..) | Intrinsic::List { .. }) => {
             true
         }
         Subterm::Intrinsic(Intrinsic::Nat(_)) => Nat::is_zero(&Nat::decompose(term).1),

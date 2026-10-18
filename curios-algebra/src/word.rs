@@ -4,10 +4,7 @@
 //!
 //! **What a word is spelled over is its caller's [`Alphabet`].** A symbol — a single element, an opaque chunk, the base a window is cut from — is one symbol where the caller's equality says so, and two numbers are one number where [`Alphabet::same`] says so. The measures stay the caller's because their normal form is: a sum is folded as the carrier folds it, Euclid's recombination included, which reads the terms the numbers are; and a number is read only where it is compared, so a word costs what its comparisons cost. What is stated here is everything the monoid decides from those answers: the normal form, window fusion, the prefix strip and its verdicts, where an operand begins, and when two positions are one.
 
-use {
-    curios_num::{Binary, Grain},
-    std::collections::VecDeque,
-};
+use {curios_num::Binary, std::collections::VecDeque};
 
 /// What a word is spelled over, and the arithmetic its measures are kept in.
 ///
@@ -62,36 +59,32 @@ pub trait Run {
 /// A packed run: bytes as `curios-num` holds them, never an element per byte.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Packed {
-    pub grain: Grain,
-    pub bits: Binary,
+    pub bytes: Binary,
 }
 
 impl Run for Packed {
     const DECIDED: bool = true;
 
     fn len(&self) -> usize {
-        self.bits.len(self.grain)
+        self.bytes.len()
     }
 
     fn shared_prefix(&self, other: &Self) -> usize {
         let bound = self.len().min(other.len());
-        match self.grain {
-            Grain::X => (0..bound)
-                .take_while(|&index| self.bits.byte(index) == other.bits.byte(index))
-                .count(),
-        }
+        (0..bound)
+            .take_while(|&index| self.bytes.byte(index) == other.bytes.byte(index))
+            .count()
     }
 
     fn skip(&mut self, count: usize) {
-        let skipped = count * self.grain.bits();
-        self.bits = self
-            .bits
-            .window(skipped, self.bits.bit_length() - skipped)
+        self.bytes = self
+            .bytes
+            .window(count, self.bytes.len() - count)
             .expect("a run is skipped by at most its length");
     }
 
     fn extend(&mut self, other: Self) {
-        self.bits = Binary::concat([&self.bits, &other.bits]);
+        self.bytes = Binary::concat([&self.bytes, &other.bytes]);
     }
 }
 

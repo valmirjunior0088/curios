@@ -109,7 +109,7 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
 
 #[test]
 fn a_packed_literal_decomposes_against_its_folded_spine() {
-    // The packed-literal view's acceptance shape: `raw(x[])` folds to the literal `x[1]`, so recovering the injectivity lemma's implicits needs `append(x[], ?h) ≡ x[1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bin` to `BinAppend`/`BinConcat`.
+    // The packed-literal view's acceptance shape: `raw(x[])` folds to the literal `x[1]`, so recovering the injectivity lemma's implicits needs `append(x[], ?h) ≡ x[1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bytes` to `BytesAppend`/`BytesConcat`.
     let source = r#"
         use /std/{Byte, Bytes, Eq, Io};
         use /std/Bool/{True, False, Holds};

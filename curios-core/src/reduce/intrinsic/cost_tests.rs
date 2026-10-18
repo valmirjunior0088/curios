@@ -5,7 +5,7 @@ use {
         Footprint, Reducer, image_bound, operand_bound, product_bound, sum_bound, test_support::*,
     },
     crate::{Category, Cost, Intrinsic, Nat, ReduceError, Term, int_normalize},
-    curios_num::{Binary, Grain, Integer, Natural},
+    curios_num::{Binary, Integer, Natural},
 };
 
 /// A shift's result is `bits(value) + amount` wide and the amount is a *value*, so no operand size bounds it. The charge is computed from the amount and refused before `num-bigint` is asked for anything — which is the difference between a diagnostic and an allocation the process may not survive.
@@ -134,9 +134,8 @@ fn every_payload_carrier_is_charged_for_at_least_what_it_builds() {
 #[test]
 fn a_window_charges_for_no_payload_it_did_not_build() {
     let slice = |n: usize| {
-        Term::intrinsic(Intrinsic::BinSlice {
-            grain: Grain::X,
-            bin: Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(vec![7u8; n]))),
+        Term::intrinsic(Intrinsic::BytesSlice {
+            bytes: Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(vec![7u8; n]))),
             start: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             length: Term::intrinsic(Intrinsic::Nat(Nat::new(4usize))),
             within: qed(),

@@ -396,8 +396,8 @@ fn constant_(constant: &Constant) -> String {
         Constant::Int(value) => format!("Int({value})"),
         Constant::Flt(value) => format!("Flt({value})"),
         Constant::Byte(value) => format!("Byte({value})"),
-        Constant::Bin(grain, bits) => {
-            format!("Bin({grain:?}, {} units)", bits.len(*grain))
+        Constant::Bytes(bytes) => {
+            format!("Bytes({} units)", bytes.len())
         }
         Constant::Handle(token) => format!("Handle({token})"),
     }

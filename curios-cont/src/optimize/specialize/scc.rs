@@ -41,10 +41,7 @@ impl Hash for Context {
                         Literal::Nat(value) => value.hash(state),
                         Literal::Int(value) => value.hash(state),
                         Literal::Flt(value) => value.hash(state),
-                        Literal::Bin(grain, value) => {
-                            grain.hash(state);
-                            value.hash(state);
-                        }
+                        Literal::Bytes(value) => value.hash(state),
                     }
                 }
                 Atom::Filler => {}

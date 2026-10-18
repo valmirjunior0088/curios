@@ -510,11 +510,7 @@ fn a_float_crosses_into_its_bytes_as_the_host_writes_them() {
     ] {
         let bytes = Floating::from(value).to_le_bytes();
 
-        assert_eq!(
-            bytes.to_bytes().as_deref(),
-            Some(&value.to_le_bytes()[..]),
-            "{value}"
-        );
+        assert_eq!(bytes.as_bytes(), &value.to_le_bytes()[..], "{value}");
         assert_eq!(
             Floating::of_le_bytes(&bytes).map(Floating::to_bits),
             Ok(value.to_bits()),

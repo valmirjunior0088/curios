@@ -8,7 +8,7 @@ use {
         NumLit, Scope, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes,
         Var,
     },
-    curios_num::{Binary, Grain, Natural, Rounding},
+    curios_num::{Binary, Natural, Rounding},
     curios_utilities::{InfixOp, Sign, StringSyntax, SyntaxName},
 };
 
@@ -24,7 +24,7 @@ pub fn syn_call(name: SyntaxName, args: impl IntoIterator<Item = Term>) -> Term 
 ///
 /// `Valid` is decided, so the literal's bytes certify themselves: `True/qed()` checks against `Valid(b)` by running the scan over `b` in both checkers, and the term the compiler writes is the same whatever the literal's length or content. How the library proves validity is the library's; nothing here knows the scan.
 pub fn str_literal(syntax: &StringSyntax, bytes: &[u8]) -> Term {
-    let packed = Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(bytes.to_vec())));
+    let packed = Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(bytes.to_vec())));
     let valid = syn_call(syntax.qed, []);
 
     Term::struct_(

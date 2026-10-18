@@ -191,11 +191,9 @@ impl Floating {
 
     /// `Flt/of_le_bytes`: the float eight little-endian bytes spell, bit for bit, so it inverts [`Floating::to_le_bytes`] from both sides. Its precondition states the eight, so anything else is [`ScalarTrap::Malformed`].
     pub fn of_le_bytes(value: &Binary) -> Result<Self, ScalarTrap> {
-        value
-            .to_bytes()
-            .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
+        <[u8; 8]>::try_from(value.as_bytes())
             .map(|bytes| Self::from_bits(u64::from_le_bytes(bytes)))
-            .ok_or(ScalarTrap::Malformed)
+            .map_err(|_| ScalarTrap::Malformed)
     }
 
     /// The default NaN, which an invalid operation with no NaN operand answers.

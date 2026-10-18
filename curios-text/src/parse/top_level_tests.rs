@@ -723,7 +723,7 @@ fn struct_round_trips() {
 
     for source in [
         "Pair { fst = a, snd = b }",
-        "Pair(Nat, Bin) { fst = a, snd = b }",
+        "Pair(Nat, Bytes) { fst = a, snd = b }",
         "Pair(Nat, ?) { fst = a, snd = b }",
         "Str { raw }",
         "Pair { ..p }",

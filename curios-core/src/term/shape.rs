@@ -9,7 +9,7 @@ use {
         UniverseScheme, Universes, Var, Visit, instantiate_qualities, instantiate_universes_scoped,
         project_erased_universes,
     },
-    curios_num::{Grain, Natural},
+    curios_num::Natural,
     curios_utilities::{InfixOp, Mint, Plicity, Sign},
     std::{
         fmt,
@@ -262,7 +262,7 @@ pub struct Proj {
 
 /// An inductive type as an intrinsic normal form. Built inside the automatically-generated type-constructor function's body. Users never write one directly — they write `Result(E, A)` and the type-constructor function reduces to this. Two `InductType`s are convertible iff same `name` and pointwise-convertible `params` and `indices`.
 ///
-/// `params` are uniform across constructors; `indices` are the per-case constrained binders — each constructor's registry terminal states its own index expressions. The split lives here, in the registry, and in the type-constructor function, which takes the two in separate calls where a family has both: a use site writes `Vec(Bin)(3)`.
+/// `params` are uniform across constructors; `indices` are the per-case constrained binders — each constructor's registry terminal states its own index expressions. The split lives here, in the registry, and in the type-constructor function, which takes the two in separate calls where a family has both: a use site writes `Vec(Bytes)(3)`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct InductType {
@@ -525,7 +525,7 @@ pub enum Cases {
         /// The instance of the family the scrutinee stands at, where the match states it: what a match with one arm over a proposition fires on ([`Cases::sole_arm`]), its payload read off this instance's indices and never off what a binder is assumed at. It is part of the term, so a substitution that moves the scrutinee's type moves the match with it, and what is remembered of the one is not read of the other. The elaborator states it where that rule can speak, a proposition whose one constructor's payload its index targets pin, and nowhere else; a match that states none is reduced by its scrutinee's value alone.
         stated: Option<Term>,
     },
-    /// Structural induction on a native free-monoid intrinsic (`Nat`/`List`/ `Bin`): the `carrier` selects the intrinsic and carries both its parameters (`List`'s element type) and its two arms — an identity arm plus a cons arm binding the head generator (absent for `Nat`, whose unary generator carries no payload), the tail, and the induction hypothesis at the tail.
+    /// Structural induction on a native free-monoid intrinsic (`Nat`/`List`/ `Bytes`): the `carrier` selects the intrinsic and carries both its parameters (`List`'s element type) and its two arms — an identity arm plus a cons arm binding the head generator (absent for `Nat`, whose unary generator carries no payload), the tail, and the induction hypothesis at the tail.
     FreeMonoid { carrier: Carrier },
 }
 
@@ -570,7 +570,7 @@ impl Cases {
     }
 }
 
-/// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two eliminator arms. `Nat` is the free monoid on one (payload-less) generator; `Bin` carries none; `List` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih), `Scope<Three>` for `Bin`/`List` (head, tail, ih).
+/// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two eliminator arms. `Nat` is the free monoid on one (payload-less) generator; `Bytes` carries none; `List` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih), `Scope<Three>` for `Bytes`/`List` (head, tail, ih).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Carrier {
@@ -578,8 +578,7 @@ pub enum Carrier {
         empty_case: Term,
         cons_case: Scope<Two>,
     },
-    Bin {
-        grain: Grain,
+    Bytes {
         empty_case: Term,
         cons_case: Scope<Three>,
     },
@@ -595,11 +594,9 @@ impl Carrier {
     pub fn cons_domains(&self) -> Vec<Term> {
         match self {
             Carrier::Nat { .. } => vec![Term::intrinsic(Intrinsic::NatType)],
-            Carrier::Bin { grain, .. } => vec![
-                Term::intrinsic(match grain {
-                    Grain::X => Intrinsic::ByteType,
-                }),
-                Term::intrinsic(Intrinsic::BinType(*grain)),
+            Carrier::Bytes { .. } => vec![
+                Term::intrinsic(Intrinsic::ByteType),
+                Term::intrinsic(Intrinsic::BytesType),
             ],
             Carrier::List { elem, .. } => vec![
                 elem.clone(),

@@ -2,7 +2,7 @@
 //!
 //! A caller maps each of its concrete operations to an [`Operation`] over a [`Carrier`] — or to nothing, which is opaque — and reads what it needs from the mapping: which operands bound the result, which operands the result never exceeds, which conversion undoes which. The mapping is the caller's; what each kind means is this module's, stated once for every operation of that kind.
 
-use curios_num::{Grain, Natural, Rounding};
+use curios_num::{Natural, Rounding};
 
 /// The carrier an operation is over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -18,7 +18,7 @@ pub enum Carrier {
     /// binary64.
     Float,
     /// A packed sequence of bytes.
-    Packed(Grain),
+    Bytes,
     /// A sequence of elements.
     List,
 }
@@ -260,7 +260,7 @@ pub fn round_trip(source: Carrier, target: Carrier) -> bool {
             | (Carrier::Byte, Carrier::Natural)
             | (Carrier::Natural, Carrier::Integer)
             | (Carrier::Integer, Carrier::Natural)
-            | (Carrier::Float, Carrier::Packed(Grain::X))
-            | (Carrier::Packed(Grain::X), Carrier::Float)
+            | (Carrier::Float, Carrier::Bytes)
+            | (Carrier::Bytes, Carrier::Float)
     )
 }

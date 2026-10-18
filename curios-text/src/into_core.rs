@@ -1375,7 +1375,7 @@ fn process_items(
             TopItem::Induct(group) => {
                 // An inductive's lowering is its signature throughout: parameters, indices and constructor telescopes.
                 context.sorts_stand_in(SortSite::Signature);
-                // Step 1: type bindings as one rec group. An inductive's type binding wraps an intrinsic `InductType` normal form in a `Func` over its type parameters and indices (so `Result(Bin, Nat)` beta-reduces to `InductType { Result, [Bin, Nat] }` and `Vec(Bin, 3)` to `InductType { Vec, [Bin], [3] }`), and its shape is recorded in the inductive registry.
+                // Step 1: type bindings as one rec group. An inductive's type binding wraps an intrinsic `InductType` normal form in a `Func` over its type parameters and indices (so `Result(Bytes, Nat)` beta-reduces to `InductType { Result, [Bytes, Nat] }` and `Vec(Bytes, 3)` to `InductType { Vec, [Bytes], [3] }`), and its shape is recorded in the inductive registry.
                 let type_flat_items = group
                     .iter()
                     .map(|u| {
@@ -1739,7 +1739,7 @@ fn process_items(
                         },
                     );
 
-                    // The type-former: `Pair : (A : Type, B : Type) -> Type` whose body is the `StructType` normal form (the bare node when parameterless), so `Pair(Nat, Bin)` reduces to `StructType { Pair, [Nat, Bin] }`. No value constructor.
+                    // The type-former: `Pair : (A : Type, B : Type) -> Type` whose body is the `StructType` normal form (the bare node when parameterless), so `Pair(Nat, Bytes)` reduces to `StructType { Pair, [Nat, Bytes] }`. No value constructor.
                     let struct_type = curios_core::Term::struct_type(name, param_vars);
                     let (type_, body) = if param_tys.is_empty() {
                         (result_sort, struct_type)

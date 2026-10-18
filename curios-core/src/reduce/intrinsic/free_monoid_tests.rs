@@ -3,30 +3,30 @@
 use {
     super::{reduce_intrinsic, test_support::*},
     crate::{FUSION_CAP, Free, Intrinsic, Nat, Subterm, Term},
-    curios_num::{Binary, Grain},
+    curios_num::Binary,
 };
 
 // Regression: `get(append(x[], b), 0)` must reduce to `b` through its own base-case arm — the cons peel's symbolic head chunk IS `append(x[], b)`, so without that arm the rewrite would rebuild the redex it came from until the step budget exhausted.
 #[test]
 fn a_get_of_a_symbolic_cons_head_is_the_head() {
     let byte = Term::free_var(&Free::local(0, Some("b")));
-    let empty: Term = Subterm::Intrinsic(Intrinsic::Bin(Grain::X, Binary::empty())).into();
-    let cons = Term::intrinsic(Intrinsic::bin_append(Grain::X, empty, byte.clone()));
+    let empty: Term = Subterm::Intrinsic(Intrinsic::Bytes(Binary::empty())).into();
+    let cons = Term::intrinsic(Intrinsic::bytes_append(empty, byte.clone()));
     let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
-    let get = Intrinsic::bin_get(Grain::X, cons, zero, qed());
+    let get = Intrinsic::bytes_get(cons, zero, qed());
 
     let reduced = reduce_intrinsic(&mut Inert, &get).expect("reduces");
 
     assert_eq!(Term::from(reduced), byte);
 }
 
-/// **What `Bin/len` answers from has to agree with what the run actually is.** A length is a definitional equation, so a measure that disagreed with the run would be a false one, and congruence carries a false equation to `False`. Ground truth here is the fused literal's own byte count, so this pins the measure to the representation rather than to itself — and it varies the grouping, including the left-nested shape an accumulation builds, because grouping is exactly what the measure must not be able to see.
+/// **What `Bytes/len` answers from has to agree with what the run actually is.** A length is a definitional equation, so a measure that disagreed with the run would be a false one, and congruence carries a false equation to `False`. Ground truth here is the fused literal's own byte count, so this pins the measure to the representation rather than to itself — and it varies the grouping, including the left-nested shape an accumulation builds, because grouping is exactly what the measure must not be able to see.
 #[test]
 fn a_length_does_not_depend_on_how_its_run_is_grouped() {
     let whole: &[u8] = &[0x30, 0x31, 0x32, 0x33, 0x34];
 
     for spelling in groupings(whole) {
-        let length = reduce_intrinsic(&mut Folding, &Intrinsic::BinLen(Grain::X, spelling))
+        let length = reduce_intrinsic(&mut Folding, &Intrinsic::BytesLen(spelling))
             .expect("a length over a literal run reduces");
 
         assert_eq!(
@@ -40,12 +40,11 @@ fn a_length_does_not_depend_on_how_its_run_is_grouped() {
 /// The control the test above would be worthless without: an operand the measure cannot read must send the length back to the homomorphism rather than be silently skipped. Skipping one is the sharp failure — it would report `2` for a value at least two bytes long, which is a false equation in the admitting direction.
 #[test]
 fn an_unmeasurable_operand_is_not_skipped() {
-    let spine = Term::intrinsic(Intrinsic::BinConcat {
-        grain: Grain::X,
+    let spine = Term::intrinsic(Intrinsic::BytesConcat {
         operands: vec![run_bytes(&[0x30, 0x31]), symbol(0, "b")],
     });
 
-    let length = reduce_intrinsic(&mut Folding, &Intrinsic::BinLen(Grain::X, spine))
+    let length = reduce_intrinsic(&mut Folding, &Intrinsic::BytesLen(spine))
         .expect("a length over a symbolic tail reduces to a neutral sum");
 
     assert_ne!(
@@ -55,15 +54,14 @@ fn an_unmeasurable_operand_is_not_skipped() {
     );
 }
 
-/// **A window located by operand lengths has to be the window.** `Bin/slice` reaches its result by measuring the operands and narrowing the two at the edges, rather than peeling one byte at a time; the two must agree for every grouping, or slicing would depend on how a value was spelled.
+/// **A window located by operand lengths has to be the window.** `Bytes/slice` reaches its result by measuring the operands and narrowing the two at the edges, rather than peeling one byte at a time; the two must agree for every grouping, or slicing would depend on how a value was spelled.
 #[test]
 fn a_window_over_a_spine_is_the_window_over_its_run() {
     let whole: &[u8] = &[0x30, 0x31, 0x32, 0x33, 0x34];
 
     for spelling in groupings(whole) {
         for (start, count) in [(0usize, 5usize), (0, 2), (1, 3), (2, 3), (3, 0), (4, 1)] {
-            let window = Intrinsic::bin_slice(
-                Grain::X,
+            let window = Intrinsic::bytes_slice(
                 spelling.clone(),
                 lit(start as u32),
                 lit(count as u32),
@@ -74,10 +72,9 @@ fn a_window_over_a_spine_is_the_window_over_its_run() {
 
             assert_eq!(
                 sliced,
-                Subterm::Intrinsic(Intrinsic::Bin(
-                    Grain::X,
-                    Binary::from_bytes(whole[start..start + count].to_vec()),
-                )),
+                Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(
+                    whole[start..start + count].to_vec()
+                ),)),
                 "the {count} bytes at {start} are the same however the run is grouped",
             );
         }
@@ -91,7 +88,7 @@ fn an_index_into_a_spine_reads_the_same_byte() {
 
     for spelling in groupings(whole) {
         for (index, expected) in whole.iter().enumerate() {
-            let read = Intrinsic::bin_get(Grain::X, spelling.clone(), lit(index as u32), qed());
+            let read = Intrinsic::bytes_get(spelling.clone(), lit(index as u32), qed());
             let byte = reduce_intrinsic(&mut Folding, &read).expect("an index reduces");
 
             assert_eq!(
@@ -114,26 +111,20 @@ fn a_window_across_runs_past_the_fusion_cap_is_the_window_over_their_bytes() {
                 .collect::<Vec<u8>>()
         })
         .collect::<Vec<_>>();
-    let bytes = |values: &[u8]| {
-        Term::intrinsic(Intrinsic::Bin(
-            Grain::X,
-            Binary::from_bytes(values.to_vec()),
-        ))
-    };
+    let bytes =
+        |values: &[u8]| Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(values.to_vec())));
     let operands = runs.iter().map(|run| bytes(run)).collect::<Vec<_>>();
-    let spine = Term::intrinsic(Intrinsic::BinConcat {
-        grain: Grain::X,
+    let spine = Term::intrinsic(Intrinsic::BytesConcat {
         operands: operands.clone(),
     });
 
     let (start, count) = (length - 10, length + 20);
-    let window = Intrinsic::bin_slice(Grain::X, spine, lit(start as u32), lit(count as u32), qed());
+    let window = Intrinsic::bytes_slice(spine, lit(start as u32), lit(count as u32), qed());
     let sliced = reduce_intrinsic(&mut Folding, &window).expect("a window reduces");
 
     assert_eq!(
         sliced,
-        Subterm::Intrinsic(Intrinsic::BinConcat {
-            grain: Grain::X,
+        Subterm::Intrinsic(Intrinsic::BytesConcat {
             operands: vec![
                 bytes(&runs[0][start..]),
                 operands[1].clone(),
@@ -216,19 +207,12 @@ fn a_list_length_window_and_index_do_not_depend_on_grouping() {
 fn a_window_on_a_symbolic_seam_is_its_run_and_a_span_past_the_seam_declines() {
     let left = symbol(0, "l");
     let right = symbol(1, "r");
-    let spine = Term::intrinsic(Intrinsic::BinConcat {
-        grain: Grain::X,
+    let spine = Term::intrinsic(Intrinsic::BytesConcat {
         operands: vec![left.clone(), right.clone()],
     });
-    let measure = |bin: &Term| Term::intrinsic(Intrinsic::bin_len(Grain::X, bin.clone()));
+    let measure = |bytes: &Term| Term::intrinsic(Intrinsic::bytes_len(bytes.clone()));
 
-    let window = Intrinsic::bin_slice(
-        Grain::X,
-        spine.clone(),
-        measure(&left),
-        measure(&right),
-        qed(),
-    );
+    let window = Intrinsic::bytes_slice(spine.clone(), measure(&left), measure(&right), qed());
     let located = reduce_intrinsic(&mut Folding, &window).expect("a seam window reduces");
 
     assert_eq!(
@@ -237,13 +221,7 @@ fn a_window_on_a_symbolic_seam_is_its_run_and_a_span_past_the_seam_declines() {
         "the window from the first seam to the end is the second operand",
     );
 
-    let past = Intrinsic::bin_slice(
-        Grain::X,
-        spine,
-        measure(&left),
-        plus(measure(&right), lit(1)),
-        qed(),
-    );
+    let past = Intrinsic::bytes_slice(spine, measure(&left), plus(measure(&right), lit(1)), qed());
     let declined = reduce_intrinsic(&mut Folding, &past).expect("an unmatched span reduces");
 
     assert_ne!(
@@ -253,30 +231,25 @@ fn a_window_on_a_symbolic_seam_is_its_run_and_a_span_past_the_seam_declines() {
     );
 }
 
-// A bare side is the one-chunk spine it is: the peel needs a head to read the grain off, and a variable has none, so the equality fold lends it the grain it carries. What that decides is the clash on a positive residual — `append(bs, k)` is one byte longer than `bs` whatever both take — and nothing more: a residual that may be empty stays neutral, as it would inside a concatenation.
+// A bare side is the one-chunk spine it is: the peel reads a `Bytes` word off a head, and a variable has none, so the equality fold wraps it as one. What that decides is the clash on a positive residual — `append(bs, k)` is one byte longer than `bs` whatever both take — and nothing more: a residual that may be empty stays neutral, as it would inside a concatenation.
 #[test]
 fn a_spine_against_a_bare_variable_clashes_on_a_positive_residual() {
     let (bs, cs, k) = (sym(0, "bs"), sym(1, "cs"), sym(2, "k"));
 
-    let appended = Term::intrinsic(Intrinsic::bin_append(Grain::X, bs.clone(), k));
-    let folded = fold(Term::intrinsic(Intrinsic::bin_eql(
-        Grain::X,
-        appended,
-        bs.clone(),
-    )));
+    let appended = Term::intrinsic(Intrinsic::bytes_append(bs.clone(), k));
+    let folded = fold(Term::intrinsic(Intrinsic::bytes_eql(appended, bs.clone())));
     assert_eq!(
         folded.as_bool(),
         Some(false),
         "`append(bs, k) == bs` is false for every `bs` and `k`"
     );
 
-    let extended = Term::intrinsic(Intrinsic::BinConcat {
-        grain: Grain::X,
+    let extended = Term::intrinsic(Intrinsic::BytesConcat {
         operands: vec![bs.clone(), cs],
     });
-    let folded = fold(Term::intrinsic(Intrinsic::bin_eql(Grain::X, extended, bs)));
+    let folded = fold(Term::intrinsic(Intrinsic::bytes_eql(extended, bs)));
     assert!(
-        matches!(&*folded, Subterm::Intrinsic(Intrinsic::BinEql(..))),
+        matches!(&*folded, Subterm::Intrinsic(Intrinsic::BytesEql(..))),
         "`x[..bs, ..cs] == bs` is undecided while `cs` may be empty"
     );
 }

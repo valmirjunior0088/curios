@@ -1,17 +1,15 @@
 use {super::*, curios_algebra::Deduction};
 
 /// The shape [`FUSION_CAP`] makes reachable: a left-nested concatenation as deep as an accumulation loop is long, since an accumulator past the cap keeps one node per step instead of fusing into one run.
-fn deep_bin(grain: Grain, depth: usize) -> Term {
+fn deep_bytes(depth: usize) -> Term {
     let leaf = |byte| {
-        Term::from(Subterm::Intrinsic(Intrinsic::Bin(
-            grain,
-            Binary::from_bytes(vec![byte]),
-        )))
+        Term::from(Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(
+            vec![byte],
+        ))))
     };
 
     (0..depth).fold(leaf(0x30), |acc, _| {
-        Subterm::Intrinsic(Intrinsic::BinConcat {
-            grain,
+        Subterm::Intrinsic(Intrinsic::BytesConcat {
             operands: vec![acc, leaf(0x31)],
         })
         .into()
@@ -42,15 +40,14 @@ fn deep_list(depth: usize) -> Term {
 fn a_deep_concatenation_peels_its_first_generator() {
     const DEEP: usize = 100_000;
 
-    let (head, _tail) = peel_first_atom(Grain::X, &deep_bin(Grain::X, DEEP))
+    let (head, _tail) = peel_first_atom(&deep_bytes(DEEP))
         .expect("a literal-led concatenation exposes its leading byte");
 
     assert_eq!(
         head,
-        Term::from(Subterm::Intrinsic(Intrinsic::Bin(
-            Grain::X,
-            Binary::from_bytes(vec![0x30])
-        ))),
+        Term::from(Subterm::Intrinsic(Intrinsic::Bytes(Binary::from_bytes(
+            vec![0x30]
+        )))),
         "the leftmost leaf's byte, found under a hundred thousand levels"
     );
 }
@@ -69,19 +66,19 @@ fn a_deep_list_concatenation_peels_its_first_element() {
     );
 }
 
-// The conversion side of the same depth: `peel_bin`/`peel_list` flatten a value into segments before comparing, so they meet the nesting through a different walk than the destructors above and need their own evidence. Comparing a value against itself is the cheapest thing that forces both sides to flatten in full.
+// The conversion side of the same depth: `peel_bytes`/`peel_list` flatten a value into segments before comparing, so they meet the nesting through a different walk than the destructors above and need their own evidence. Comparing a value against itself is the cheapest thing that forces both sides to flatten in full.
 #[test]
 fn a_deep_concatenation_flattens_for_conversion() {
     const DEEP: usize = 100_000;
 
-    let bin = deep_bin(Grain::X, DEEP);
-    let Subterm::Intrinsic(intrinsic) = &*bin else {
+    let bytes = deep_bytes(DEEP);
+    let Subterm::Intrinsic(intrinsic) = &*bytes else {
         unreachable!("a concatenation");
     };
 
     assert!(
         matches!(
-            crate::peel_bin(intrinsic, intrinsic),
+            crate::peel_bytes(intrinsic, intrinsic),
             Some(Deduction::Equal)
         ),
         "a value is itself, however deeply it is nested"

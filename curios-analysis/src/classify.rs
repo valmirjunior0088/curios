@@ -41,7 +41,7 @@ use {
     },
 };
 
-/// What the table declares a node: an operation at its carrier. A rounding direction and a grain are part of it, so two sums rounded two ways, and a concatenation of bytes beside one of bits, are nodes of two kinds.
+/// What the table declares a node: an operation at its carrier. A rounding direction is part of it, so two sums rounded two ways are nodes of two kinds.
 type Kind = (Carrier, Operation);
 
 /// The opaque atoms a term stands over as it is spelled: a hash of each one's spelling, in order and once.

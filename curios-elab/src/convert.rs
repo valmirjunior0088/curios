@@ -745,7 +745,7 @@ impl Convert {
         };
     }
 
-    /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`List`) for comparison, opened under shared fresh binders for `(head, tail, ih)` at the carrier's domains and the hypothesis ([`Convert::cons_binders`]).
+    /// Enqueue the bodies of two arity-3 cons arms (`Bytes`/`List`) for comparison, opened under shared fresh binders for `(head, tail, ih)` at the carrier's domains and the hypothesis ([`Convert::cons_binders`]).
     fn compare_cons_three(
         &mut self,
         context: &mut Context,
@@ -1599,12 +1599,12 @@ impl Convert {
                         Ok(true)
                     }
                     (
-                        Carrier::Bin {
+                        Carrier::Bytes {
                             empty_case: this_empty,
                             cons_case: this_cons,
                             ..
                         },
-                        Carrier::Bin {
+                        Carrier::Bytes {
                             empty_case: that_empty,
                             cons_case: that_cons,
                             ..

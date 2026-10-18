@@ -5,7 +5,7 @@
 use {
     super::{IMPORTS, closes, holds, misplaced, misplaced_by_the_kernel},
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation, TABLE},
-    curios_num::{Grain, Rounding},
+    curios_num::Rounding,
 };
 
 /// Every family the table declares, at the operation and carrier declaring it.
@@ -158,7 +158,7 @@ pub(super) fn name(index: usize, carrier: Carrier) -> &'static str {
         Carrier::Boolean => ["b", "c", "d", "v", "u"],
         Carrier::Byte => ["m", "n", "o", "k", "r"],
         Carrier::Float => ["f", "g", "h", "e", "s"],
-        Carrier::Packed(Grain::X) => ["bs", "cs", "ds", "es", "fs"],
+        Carrier::Bytes => ["bs", "cs", "ds", "es", "fs"],
         Carrier::List => ["xs", "ys", "zs", "ws", "vs"],
     };
     names[index]
@@ -171,7 +171,7 @@ pub(super) fn type_name(carrier: Carrier) -> &'static str {
         Carrier::Boolean => "Bool",
         Carrier::Byte => "Byte",
         Carrier::Float => "Flt",
-        Carrier::Packed(Grain::X) => "Bytes",
+        Carrier::Bytes => "Bytes",
         Carrier::List => "List(Nat)",
     }
 }
@@ -261,11 +261,11 @@ impl Spelling<'_> {
             (Carrier::Integer, Operation::Max) => call("Int/max"),
             (Carrier::Float, Operation::Min) => call("Flt/min"),
             (Carrier::Float, Operation::Max) => call("Flt/max"),
-            (Carrier::Packed(Grain::X), Operation::Concat) => concat("x["),
+            (Carrier::Bytes, Operation::Concat) => concat("x["),
             (Carrier::List, Operation::Concat) => concat("["),
-            (Carrier::Packed(Grain::X), Operation::Append) => append("x["),
+            (Carrier::Bytes, Operation::Append) => append("x["),
             (Carrier::List, Operation::Append) => append("["),
-            (Carrier::Packed(Grain::X), Operation::Length) => call("Bytes/len"),
+            (Carrier::Bytes, Operation::Length) => call("Bytes/len"),
             (Carrier::List, Operation::Length) => call("List/len"),
             (
                 Carrier::Natural,
@@ -280,7 +280,7 @@ impl Spelling<'_> {
                 },
             ) => call("Nat/to_int"),
             (
-                Carrier::Packed(Grain::X),
+                Carrier::Bytes,
                 Operation::Conversion {
                     from: Carrier::Float,
                 },
@@ -308,7 +308,7 @@ impl Spelling<'_> {
             (
                 Carrier::Float,
                 Operation::Conversion {
-                    from: Carrier::Packed(Grain::X),
+                    from: Carrier::Bytes,
                 },
             ) => self.narrowing(
                 "Flt/of_le_bytes",
@@ -347,7 +347,7 @@ fn constant(value: Constant, carrier: Carrier) -> &'static str {
         (Constant::MinusOne, Carrier::Integer) => "-1",
         (Constant::True, Carrier::Boolean) => "true",
         (Constant::False, Carrier::Boolean) => "false",
-        (Constant::Empty, Carrier::Packed(Grain::X)) => "x[]",
+        (Constant::Empty, Carrier::Bytes) => "x[]",
         (Constant::Empty, Carrier::List) => "[]",
         _ => panic!("no spelling for {value:?} at {carrier:?}"),
     }

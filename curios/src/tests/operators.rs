@@ -493,7 +493,7 @@ fn type_level_operator_indices_stay_convertible() {
 
 // `!=` is `Eql`'s own `neq` method; on `Bytes` both `==` and `!=` resolve through `/std/Bytes`'s `Eql(Bytes)` witness, `neq` negating `eql` because the packed carrier has no disequality instruction.
 #[test]
-fn infix_equality_works_on_bin() {
+fn infix_equality_works_on_bytes() {
     assert_eq!(
         run(r#"
             use /std/{Bool, Bytes, Str, Io};

@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
+    curios_num::{Binary, Floating, Integer, Natural, Rounding},
 };
 
 #[test]
@@ -40,10 +40,10 @@ fn binary_constants_intern_by_their_contents_across_windows() {
     let mut module = Module::new();
     let direct = Binary::from_bytes(vec![1, 0, 1]);
     let framed = Binary::from_bytes(vec![0, 1, 0, 1, 1])
-        .window(8, 24)
+        .window(1, 3)
         .unwrap();
-    let a = module.intern_constant(Constant::Bin(Grain::X, direct));
-    let b = module.intern_constant(Constant::Bin(Grain::X, framed));
+    let a = module.intern_constant(Constant::Bytes(direct));
+    let b = module.intern_constant(Constant::Bytes(framed));
     assert_eq!(a, b, "equal contents share one identity");
 }
 
@@ -159,10 +159,7 @@ fn identities_mint_monotonically_per_arena() {
 fn operation_arities_are_exact() {
     assert_eq!(Operation::NatAdd.arity(), 2);
     assert_eq!(Operation::FltSqrt(Rounding::TiesToEven).arity(), 1);
-    assert_eq!(
-        SequenceOp::BinSlice(Grain::X).arity(),
-        SequenceArity::Exactly(3)
-    );
+    assert_eq!(SequenceOp::BytesSlice.arity(), SequenceArity::Exactly(3));
     assert_eq!(SequenceOp::ListConcat.arity(), SequenceArity::AnyCount);
     assert_eq!(CellOperation::Fill.arity(), 2);
     assert_eq!(Intrinsic::ListMap.arity(), 2);

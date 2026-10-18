@@ -1,6 +1,6 @@
 //! The shared rope helper functions. Straight-line sequences are inlined at their use site; anything the emitter lowers to a *loop* is a helper here instead, so its mutable scratch locals are zeroed by the fresh activation rather than leaking across executions of one call site. Among them:
 //!
-//! - `$<carrier>/force` flattens a byte- or element-grain rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else is filled by an *iterative* tree walk (an explicit `$elems` worklist, grown by doubling), so a 100k-deep concat chain never touches the wasm call stack. The walk's first piece decides where the run goes: a flattened node whose run ends at its payload's written extent hands over that payload's room, and the walk writes the other pieces past the extent; any other first piece leaves a fresh payload, with room twice the run where the entry is a node and the piece no leaf. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
+//! - `$<carrier>/force` flattens a `Bytes` or `List` rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else is filled by an *iterative* tree walk (an explicit `$elems` worklist, grown by doubling), so a 100k-deep concat chain never touches the wasm call stack. The walk's first piece decides where the run goes: a flattened node whose run ends at its payload's written extent hands over that payload's room, and the walk writes the other pieces past the extent; any other first piece leaves a fresh payload, with room twice the run where the entry is a node and the piece no leaf. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
 //! - `$<carrier>/exact` answers a run as a payload exactly its length — the forced payload where its array is the run's, a copy of the run otherwise — for what leaves the rope as a flat array: a leaf sealed over a forced payload, and a host operand.
 //! - `$<carrier>/embed` places a host-built flat payload into a fresh leaf on re-entry.
 //! - `$<carrier>/slice` builds the O(1) window: bounds-check, the trivial windows answer an empty leaf or the rope itself, a view collapses (so windows never stack), and an uncached node base is forced first — which memoizes — so every `view` in existence has a *flat-available* base (a leaf or a cached node).
@@ -21,7 +21,6 @@ use {
         i64_const, i64_type, null, repeat, set, tee, wasm, when,
     },
     curios_abi::{WireLeaf, WireType},
-    curios_num::Grain,
 };
 
 #[derive(Debug)]
@@ -432,7 +431,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// What a read does at a node that was never flattened: it answers from the child that holds `i` where that child is flat-available — a leaf, a window, a flattened node — and flattens the node only where the child is not. On the way out `p` holds the payload to read and `j` the index within it, in the grain's own units.
+    /// What a read does at a node that was never flattened: it answers from the child that holds `i` where that child is flat-available — a leaf, a window, a flattened node — and flattens the node only where the child is not. On the way out `p` holds the payload to read and `j` the index within it.
     ///
     /// ```wat
     /// child := r.left
@@ -709,21 +708,13 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$list/<grain>/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then take every element exact through the grain's own `exact` into a *fresh* payload of the run's length (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
-    pub(crate) fn emit_list_bin_force_func(
-        &mut self,
-        grain: Grain,
-        func_name: curios_wasm::FuncName,
-    ) {
+    /// `$list/bytes/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then take every element exact through `$bytes/exact` into a *fresh* payload of the run's length (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
+    pub(crate) fn emit_list_bytes_force_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
         let list = self.table.list_rope();
 
-        let box_func = match grain {
-            Grain::X => self.table.bytes_box_func(),
-        };
-        let exact_func = match grain {
-            Grain::X => self.table.bytes_exact_func(),
-        };
+        let box_func = self.table.bytes_box_func();
+        let exact_func = self.table.bytes_exact_func();
 
         let r = curios_wasm::LocalName::from("r");
         let flat = curios_wasm::LocalName::from("flat");
@@ -809,7 +800,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$bytes/eql (ref $rope/bin, ref $rope/bin) -> i32`.
+    /// `$bytes/eql (ref $rope/bytes, ref $rope/bytes) -> i32`.
     ///
     /// ```wat
     /// if l.len != r.len → 0            ;; rope lengths answer without forcing
@@ -928,7 +919,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$bin/and` / `/or` / `/xor (ref $payload) (ref $payload) (i32 len) (i32 count) -> (ref $rope/bin)`: the first `count` bytes of two forced payloads combined byte for byte, sealed at `len`.
+    /// `$bytes/and` / `/or` / `/xor (ref $payload) (ref $payload) (i32 len) (i32 count) -> (ref $rope/bytes)`: the first `count` bytes of two forced payloads combined byte for byte, sealed at `len`.
     ///
     /// **Three helpers, because a payload is all they read.** The operands arrive already forced, so what is left is a walk over two byte arrays.
     ///
@@ -938,7 +929,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         func_name: curios_wasm::FuncName,
         combine: curios_wasm::Instr,
     ) {
-        let rope = self.table.bin_rope();
+        let rope = self.table.bytes_rope();
 
         let lb = curios_wasm::LocalName::from("lb");
         let rb = curios_wasm::LocalName::from("rb");
@@ -1028,11 +1019,11 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$<carrier>/replicate (i32 count) (i32 atom) -> (ref $rope/bin)`: `count` copies of one generator, as one flat leaf.
+    /// `$<carrier>/replicate (i32 count) (i32 atom) -> (ref $rope/bytes)`: `count` copies of one generator, as one flat leaf.
     ///
     /// No loop: `array.new` is the fill, every slot the generator.
-    pub(crate) fn emit_replicate_func(&mut self, grain: Grain, func_name: curios_wasm::FuncName) {
-        let rope = self.table.bin_rope();
+    pub(crate) fn emit_replicate_func(&mut self, func_name: curios_wasm::FuncName) {
+        let rope = self.table.bytes_rope();
 
         let count = curios_wasm::LocalName::from("count");
         let atom = curios_wasm::LocalName::from("atom");
@@ -1040,16 +1031,14 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         let locals = vec![(out.clone(), concrete_val(rope.payload.clone(), true))];
 
-        let mut instrs = match grain {
-            Grain::X => vec![
-                get(&atom),
-                get(&count),
-                curios_wasm::Instr::ArrayNew {
-                    type_name: rope.payload.clone(),
-                },
-                set(&out),
-            ],
-        };
+        let mut instrs = vec![
+            get(&atom),
+            get(&count),
+            curios_wasm::Instr::ArrayNew {
+                type_name: rope.payload.clone(),
+            },
+            set(&out),
+        ];
 
         // Seal the filled payload into a fresh leaf at the count it was asked for.
         instrs.extend([
@@ -1190,16 +1179,12 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$bytes/box (ref null any) -> (ref $rope/bin)`: a small-canonical packed value as a rope. An immediate — the length in the top 2 payload bits over up to 3 bytes, LSB-first — is materialised into a fresh exact leaf; anything else casts to the rope it must be, trapping on null as a bare cast would. The payload is masked before byte extraction so the length field can never bleed into a stored byte.
-    pub(crate) fn emit_box_func(&mut self, grain: Grain, func_name: curios_wasm::FuncName) {
-        let layout = ImmediateLayout::of(grain);
-        let (len_shift, payload_mask, slots, unit) = (
-            layout.len_shift,
-            layout.payload_mask(),
-            layout.slots(),
-            layout.unit(),
-        );
-        let rope = self.table.bin_rope();
+    /// `$bytes/box (ref null any) -> (ref $rope/bytes)`: a small-canonical packed value as a rope. An immediate — the length in the top 2 payload bits over up to 3 bytes, LSB-first — is materialised into a fresh exact leaf; anything else casts to the rope it must be, trapping on null as a bare cast would. The payload is masked before byte extraction so the length field can never bleed into a stored byte.
+    pub(crate) fn emit_box_func(&mut self, func_name: curios_wasm::FuncName) {
+        let layout = ImmediateLayout::new();
+        let (len_shift, payload_mask, slots) =
+            (layout.len_shift, layout.payload_mask(), layout.slots());
+        let rope = self.table.bytes_rope();
         let r = curios_wasm::LocalName::from("r");
         let v = curios_wasm::LocalName::from("v");
         let len = curios_wasm::LocalName::from("len");
@@ -1216,9 +1201,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let set_byte = |index: i32| {
             let mut instrs = vec![
                 get(&len),
-                curios_wasm::Instr::I32Const {
-                    value: index * unit,
-                },
+                curios_wasm::Instr::I32Const { value: index },
                 curios_wasm::Instr::I32GtU,
             ];
             let mut body = vec![
@@ -1306,21 +1289,15 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$bytes/norm (ref $rope/bin) -> (ref any)`: the canonical form of a packed rope — inside its envelope it packs into the i31, and anything longer answers itself. Called at every producer's exit, which is what makes a mixed-representation pair unrepresentable and the immediate equality one instruction.
+    /// `$bytes/norm (ref $rope/bytes) -> (ref any)`: the canonical form of a packed rope — inside its envelope it packs into the i31, and anything longer answers itself. Called at every producer's exit, which is what makes a mixed-representation pair unrepresentable and the immediate equality one instruction.
     pub(crate) fn emit_norm_func(
         &mut self,
-        grain: Grain,
         func_name: curios_wasm::FuncName,
         force_func: curios_wasm::FuncName,
     ) {
-        let layout = ImmediateLayout::of(grain);
-        let (len_shift, slots, unit, envelope) = (
-            layout.len_shift,
-            layout.slots(),
-            layout.unit(),
-            layout.envelope,
-        );
-        let rope = self.table.bin_rope();
+        let layout = ImmediateLayout::new();
+        let (len_shift, slots, envelope) = (layout.len_shift, layout.slots(), layout.envelope);
+        let rope = self.table.bytes_rope();
         let r = curios_wasm::LocalName::from("r");
         let p = curios_wasm::LocalName::from("p");
         let len = curios_wasm::LocalName::from("len");
@@ -1351,9 +1328,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             body.push(set(&v));
             vec![
                 get(&len),
-                curios_wasm::Instr::I32Const {
-                    value: index * unit,
-                },
+                curios_wasm::Instr::I32Const { value: index },
                 curios_wasm::Instr::I32GtU,
                 curios_wasm::Instr::If {
                     label_name: curios_wasm::LabelName::from("occupied"),
@@ -1572,19 +1547,13 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$list/<grain>/embed (ref $elems) -> (ref $rope/list)`: embed each raw `$bytes` element into a `$rope/bin/leaf` in place — the host-built array is fresh, nothing else aliases it — then embed the outer array into a `$rope/list/leaf`. Each element leaf is sealed at its payload's length, exactly as `$bytes/embed` seals a bare one.
-    pub(crate) fn emit_list_bin_embed_func(
-        &mut self,
-        grain: Grain,
-        func_name: curios_wasm::FuncName,
-    ) {
+    /// `$list/bytes/embed (ref $elems) -> (ref $rope/list)`: embed each raw `$bytes` element into a `$rope/bytes/leaf` in place — the host-built array is fresh, nothing else aliases it — then embed the outer array into a `$rope/list/leaf`. Each element leaf is sealed at its payload's length, exactly as `$bytes/embed` seals a bare one.
+    pub(crate) fn emit_list_bytes_embed_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
-        let bin = self.table.bin_rope();
+        let rope = self.table.bytes_rope();
         let list = self.table.list_rope();
 
-        let norm_func = match grain {
-            Grain::X => self.table.bytes_norm_func(),
-        };
+        let norm_func = self.table.bytes_norm_func();
 
         let e = curios_wasm::LocalName::from("e");
         let idx = curios_wasm::LocalName::from("idx");
@@ -1595,16 +1564,14 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let locals = vec![
             (idx.clone(), i32_val.clone()),
             (count.clone(), i32_val),
-            (bytes.clone(), concrete_val(bin.payload.clone(), true)),
+            (bytes.clone(), concrete_val(rope.payload.clone(), true)),
         ];
 
         let loop_label = curios_wasm::LabelName::from("fill");
         let done_label = curios_wasm::LabelName::from("done");
 
         // The leaf's length field is the payload's byte count.
-        let leaf_len = match grain {
-            Grain::X => vec![get(&bytes), curios_wasm::Instr::ArrayLen],
-        };
+        let leaf_len = vec![get(&bytes), curios_wasm::Instr::ArrayLen];
 
         let step = [
             get(&idx),
@@ -1618,7 +1585,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             curios_wasm::Instr::ArrayGet {
                 type_name: elems.clone(),
             },
-            cast(&bin.payload),
+            cast(&rope.payload),
             set(&bytes),
             get(&e),
             get(&idx),
@@ -1630,7 +1597,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             get(&bytes),
             curios_wasm::Instr::RefAsNonNull,
             curios_wasm::Instr::StructNew {
-                type_name: bin.leaf.clone(),
+                type_name: rope.leaf.clone(),
             },
             // A host-built element enters the guest world canonical: a small `Bytes` or `Handle` becomes the i31 here.
             curios_wasm::Instr::Call {

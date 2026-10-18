@@ -267,7 +267,7 @@ pub enum StructLitEntry {
     Spread(Term),
 }
 
-/// A struct literal: a head naming the struct type (`Pair`, possibly applied — `Pair(Nat, Bin)` / `Pair(Nat, ?)` — to pin the parameters) followed by a brace of entries. `params` is the head's argument list where one was written — `None` for the bare-name head, and the empty list for `Box()`, the application with nothing written; holes appear as `?` terms. An applied head is an application of the type former, so its arguments take the marks a call's do: `Box(@Nat) { … }`. Plain entries are validated positionally against the declared non-`use` labels at core elaboration; a concept's `use`-marked fields are filled by `use <term>` entries or, when omitted, by witness resolution.
+/// A struct literal: a head naming the struct type (`Pair`, possibly applied — `Pair(Nat, Bytes)` / `Pair(Nat, ?)` — to pin the parameters) followed by a brace of entries. `params` is the head's argument list where one was written — `None` for the bare-name head, and the empty list for `Box()`, the application with nothing written; holes appear as `?` terms. An applied head is an application of the type former, so its arguments take the marks a call's do: `Box(@Nat) { … }`. Plain entries are validated positionally against the declared non-`use` labels at core elaboration; a concept's `use`-marked fields are filled by `use <term>` entries or, when omitted, by witness resolution.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StructLit {
     pub head: Name,
@@ -326,11 +326,11 @@ pub enum MatchPattern {
     /// A nested `List` literal leaf — the `[]`/`[head,..tail][; ih]` shapes a headed `List` match takes.
     List(ListPattern),
     /// A nested `Bytes` literal leaf — the `x[]` and `x[head, ..tail][; ih]` shapes a headed packed-sequence match takes.
-    Bin(BinPattern),
+    Bytes(BytesPattern),
 }
 
 impl MatchPattern {
-    /// Whether this leaf is a genuine single-dispatch shape (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bin`), as opposed to `Binder`/`Tuple`/`Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections) — so there is nothing for a dependent motive to attach to. Used by the matrix compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`List`/`Bin` each nest their own sub-pattern, so a plain [`std::mem::discriminant`] comparison on the outer variant already treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same dispatchable shape, with no separate classifier needed.
+    /// Whether this leaf is a genuine single-dispatch shape (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bytes`), as opposed to `Binder`/`Tuple`/`Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections) — so there is nothing for a dependent motive to attach to. Used by the matrix compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`List`/`Bytes` each nest their own sub-pattern, so a plain [`std::mem::discriminant`] comparison on the outer variant already treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same dispatchable shape, with no separate classifier needed.
     pub(crate) fn is_dispatchable(&self) -> bool {
         !matches!(
             self,
@@ -370,9 +370,9 @@ pub enum ListPattern {
     },
 }
 
-/// The two shapes a nested `Bytes` leaf can take — see [`MatchPattern::Bin`].
+/// The two shapes a nested `Bytes` leaf can take — see [`MatchPattern::Bytes`].
 #[derive(Debug, Clone, PartialEq)]
-pub enum BinPattern {
+pub enum BytesPattern {
     /// The `x[]` leaf.
     End,
     /// The `x[head, ..tail][; ih]` leaf; `ih` is optional (and an irrefutable [`Pattern`]) exactly as on the `List` cons leaf.

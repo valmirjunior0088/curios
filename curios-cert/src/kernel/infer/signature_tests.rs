@@ -8,7 +8,7 @@ use {
         Atom, Declaration, Free, Global, InductDecl, InductParam, Intrinsic, Nat, Polarity,
         Reducer, Subterm, Telescope, Term, UniverseContext, Universes, Var, Visit,
     },
-    curios_num::{Binary, Floating, Grain, Integer, Natural, Rounding},
+    curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_utilities::{Qualifier, SyntaxName},
 };
 
@@ -116,7 +116,7 @@ fn flt(value: f64) -> Term {
 }
 
 fn bytes(run: &[u8]) -> Term {
-    Term::intrinsic(Intrinsic::Bin(Grain::X, Binary::from_bytes(run.to_vec())))
+    Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(run.to_vec())))
 }
 
 fn list(items: &[usize]) -> Term {
@@ -126,18 +126,14 @@ fn list(items: &[usize]) -> Term {
     })
 }
 
-/// A run of `length` generators at `grain`.
-fn run(grain: Grain, length: usize) -> Term {
-    match grain {
-        Grain::X => bytes(&vec![0xA5; length]),
-    }
+/// A run of `length` bytes.
+fn run(length: usize) -> Term {
+    bytes(&vec![0xA5; length])
 }
 
-/// One generator of `grain`, which no [`run`] holds.
-fn generator(grain: Grain) -> Term {
-    match grain {
-        Grain::X => byte(0x5A),
-    }
+/// One byte, which no [`run`] holds.
+fn generator() -> Term {
+    byte(0x5A)
 }
 
 /// The type a carrier of the algebra is, as the roster spells it.
@@ -148,7 +144,7 @@ fn carried(carrier: curios_algebra::Carrier) -> Term {
         curios_algebra::Carrier::Boolean => Intrinsic::BoolType,
         curios_algebra::Carrier::Byte => Intrinsic::ByteType,
         curios_algebra::Carrier::Float => Intrinsic::FltType,
-        curios_algebra::Carrier::Packed(grain) => Intrinsic::BinType(grain),
+        curios_algebra::Carrier::Bytes => Intrinsic::BytesType,
         curios_algebra::Carrier::List => unreachable!("no intrinsic is declared at a list"),
     })
 }
@@ -162,7 +158,7 @@ fn is_value(term: &Term) -> bool {
             | Intrinsic::Byte(_)
             | Intrinsic::Int(_)
             | Intrinsic::Flt(_)
-            | Intrinsic::Bin(..)
+            | Intrinsic::Bytes(_)
             | Intrinsic::List { .. },
         ) => true,
         _ => false,
@@ -310,59 +306,50 @@ fn inside() -> Vec<Term> {
         },
         Intrinsic::FltToLeBytes(flt(2.5)),
         Intrinsic::FltOfLeBytes {
-            bin: bytes(&[0; 8]),
+            bytes: bytes(&[0; 8]),
             eight_bytes: qed(),
         },
     ]);
 
-    let grain = Grain::X;
     rows.extend([
-        Intrinsic::BinLen(grain, run(grain, 2)),
-        Intrinsic::BinEql(grain, run(grain, 2), run(grain, 1)),
+        Intrinsic::BytesLen(run(2)),
+        Intrinsic::BytesEql(run(2), run(1)),
         // The last index, and a window ending where the run does.
-        Intrinsic::BinGet {
-            grain,
-            bin: run(grain, 2),
+        Intrinsic::BytesGet {
+            bytes: run(2),
             index: nat(1),
             in_range: qed(),
         },
-        Intrinsic::BinSlice {
-            grain,
-            bin: run(grain, 2),
+        Intrinsic::BytesSlice {
+            bytes: run(2),
             start: nat(1),
             length: nat(1),
             within: qed(),
         },
-        Intrinsic::BinAppend {
-            grain,
-            bin: run(grain, 2),
-            element: generator(grain),
+        Intrinsic::BytesAppend {
+            bytes: run(2),
+            element: generator(),
         },
-        Intrinsic::BinConcat {
-            grain,
-            operands: vec![run(grain, 2), run(grain, 1)],
+        Intrinsic::BytesConcat {
+            operands: vec![run(2), run(1)],
         },
-        Intrinsic::BinReplicate {
-            grain,
+        Intrinsic::BytesReplicate {
             count: nat(3),
-            atom: generator(grain),
+            atom: generator(),
         },
-        Intrinsic::BinAnd {
-            grain,
-            left: run(grain, 2),
-            right: run(grain, 2),
+        Intrinsic::BytesAnd {
+            left: run(2),
+            right: run(2),
             same_length: qed(),
         },
-        Intrinsic::BinOr {
-            grain,
-            left: run(grain, 2),
-            right: run(grain, 2),
+        Intrinsic::BytesOr {
+            left: run(2),
+            right: run(2),
             same_length: qed(),
         },
-        Intrinsic::BinXor {
-            grain,
-            left: run(grain, 2),
-            right: run(grain, 2),
+        Intrinsic::BytesXor {
+            left: run(2),
+            right: run(2),
             same_length: qed(),
         },
     ]);
@@ -477,11 +464,11 @@ fn outside() -> Vec<Term> {
             finite: qed(),
         },
         Intrinsic::FltOfLeBytes {
-            bin: bytes(&[0; 7]),
+            bytes: bytes(&[0; 7]),
             eight_bytes: qed(),
         },
         Intrinsic::FltOfLeBytes {
-            bin: bytes(&[0; 9]),
+            bytes: bytes(&[0; 9]),
             eight_bytes: qed(),
         },
         Intrinsic::ListGet {
@@ -504,37 +491,31 @@ fn outside() -> Vec<Term> {
         },
     ];
 
-    let grain = Grain::X;
     rows.extend([
-        Intrinsic::BinGet {
-            grain,
-            bin: run(grain, 2),
+        Intrinsic::BytesGet {
+            bytes: run(2),
             index: nat(2),
             in_range: qed(),
         },
-        Intrinsic::BinSlice {
-            grain,
-            bin: run(grain, 2),
+        Intrinsic::BytesSlice {
+            bytes: run(2),
             start: nat(1),
             length: nat(2),
             within: qed(),
         },
-        Intrinsic::BinAnd {
-            grain,
-            left: run(grain, 2),
-            right: run(grain, 1),
+        Intrinsic::BytesAnd {
+            left: run(2),
+            right: run(1),
             same_length: qed(),
         },
-        Intrinsic::BinOr {
-            grain,
-            left: run(grain, 2),
-            right: run(grain, 1),
+        Intrinsic::BytesOr {
+            left: run(2),
+            right: run(1),
             same_length: qed(),
         },
-        Intrinsic::BinXor {
-            grain,
-            left: run(grain, 2),
-            right: run(grain, 1),
+        Intrinsic::BytesXor {
+            left: run(2),
+            right: run(1),
             same_length: qed(),
         },
     ]);
@@ -574,7 +555,7 @@ fn every_fold_lands_in_the_carrier_its_row_states() {
 ///
 /// The second assertion holds each sample to the edge: one the fold still answered would show a bound stronger than its operation needs, and say nothing about where the row draws it.
 ///
-/// Mutation-checked as the fixture above is: `NatToByte`'s bound loosened to `nat < 257`, and `BinGet`'s to `index <= len`, each admit their sample here.
+/// Mutation-checked as the fixture above is: `NatToByte`'s bound loosened to `nat < 257`, and `BytesGet`'s to `index <= len`, each admit their sample here.
 #[test]
 fn a_bounded_row_is_refused_one_step_past_its_folds_domain() {
     for application in outside() {
@@ -817,7 +798,7 @@ fn a_literal_is_typed_at_the_carrier_its_payload_is_a_value_of() {
         (byte(7), Intrinsic::ByteType),
         (int(-7), Intrinsic::IntType),
         (flt(2.5), Intrinsic::FltType),
-        (run(Grain::X, 2), Intrinsic::BinType(Grain::X)),
+        (run(2), Intrinsic::BytesType),
         (Term::intrinsic(Intrinsic::Handle(7)), Intrinsic::HandleType),
         (list(&[4, 5]), Intrinsic::ListType(nat_type())),
     ] {

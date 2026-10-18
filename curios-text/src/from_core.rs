@@ -10,14 +10,15 @@
 
 use {
     crate::{
-        Apply, Argument, BinPattern, BinSegment, Field, Func, FuncParam, FuncType, FuncTypeParam,
-        Infix, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry, ListPattern, Literal,
-        Match, MatchPattern, MatchPatternField, MatrixArm, Name, NatLiteral, NatPattern, NumLit,
-        Pattern, PatternField, Proj, ProofLiteral, Radix, StrLit, StructLit, StructLitEntry,
-        Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam, print_term, spell,
+        Apply, Argument, BytesPattern, BytesSegment, Field, Func, FuncParam, FuncType,
+        FuncTypeParam, Infix, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry,
+        ListPattern, Literal, Match, MatchPattern, MatchPatternField, MatrixArm, Name, NatLiteral,
+        NatPattern, NumLit, Pattern, PatternField, Proj, ProofLiteral, Radix, StrLit, StructLit,
+        StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam, print_term,
+        spell,
     },
     curios_core::Bound,
-    curios_num::{Floating, Grain, Integer, Natural},
+    curios_num::{Floating, Integer, Natural},
     curios_print::Printer,
     curios_utilities::{InfixOp, Plicity, Qualifier, Sign, recurse},
     std::{cell::Cell, rc::Rc},
@@ -584,12 +585,12 @@ fn written_pattern(
                 ih: hypothesis.as_ref().map(|bind| written_bind(bind, names)),
             })
         }
-        curios_core::Pattern::End(Grain::X) => MatchPattern::Bin(BinPattern::End),
-        curios_core::Pattern::Atom(Grain::X, hypothesis) => {
+        curios_core::Pattern::End => MatchPattern::Bytes(BytesPattern::End),
+        curios_core::Pattern::Atom(hypothesis) => {
             let head_label = name(names);
             let tail_label = name(names);
 
-            MatchPattern::Bin(BinPattern::Atom {
+            MatchPattern::Bytes(BytesPattern::Atom {
                 head_label,
                 tail_label,
                 ih: hypothesis.as_ref().map(|bind| written_bind(bind, names)),
@@ -923,13 +924,13 @@ pub(crate) fn written_intrinsic<T>(
             numeral(value.magnitude(), sign)
         }
         Form::Flt(value) => written_flt(value, writer)?,
-        Form::Packed(Grain::X, entries) => {
+        Form::Bytes(entries) => {
             let segments = entries
                 .into_iter()
                 .map(|entry| written_segment(entry, writer))
                 .collect::<Option<Vec<_>>>()?;
 
-            Subterm::Literal(Literal::Bin(segments)).into()
+            Subterm::Literal(Literal::Bytes(segments)).into()
         }
         Form::List(entries) => {
             let entries = entries
@@ -961,17 +962,17 @@ pub(crate) fn written_intrinsic<T>(
 fn written_segment<T>(
     entry: curios_core::LiteralEntry<T>,
     writer: &impl Writer<T>,
-) -> Option<BinSegment> {
+) -> Option<BytesSegment> {
     Some(match entry {
         curios_core::LiteralEntry::Byte(byte) => written_byte(byte),
-        curios_core::LiteralEntry::Item(item) => BinSegment::Atom(writer.operand(item)?),
-        curios_core::LiteralEntry::Spread(run) => BinSegment::Spread(writer.operand(run)?),
+        curios_core::LiteralEntry::Item(item) => BytesSegment::Atom(writer.operand(item)?),
+        curios_core::LiteralEntry::Spread(run) => BytesSegment::Spread(writer.operand(run)?),
     })
 }
 
 /// A constant byte of a packed literal, as the numeral it is written by.
-fn written_byte(byte: u8) -> BinSegment {
-    BinSegment::Atom(
+fn written_byte(byte: u8) -> BytesSegment {
+    BytesSegment::Atom(
         Subterm::NumLit(NumLit {
             magnitude: Natural::from(byte),
             radix: Radix::Hex(0),
@@ -992,7 +993,6 @@ fn written_flt<T>(value: Floating, writer: &impl Writer<T>) -> Option<Term> {
     let bytes = value
         .to_le_bytes()
         .as_bytes()
-        .expect("a float's bytes are whole bytes")
         .iter()
         .map(|byte| written_byte(*byte))
         .collect();
@@ -1001,7 +1001,7 @@ fn written_flt<T>(value: Floating, writer: &impl Writer<T>) -> Option<Term> {
         writer.sys("Flt/of_le_bytes")?,
         vec![argument(
             Plicity::Explicit,
-            Subterm::Literal(Literal::Bin(bytes)).into(),
+            Subterm::Literal(Literal::Bytes(bytes)).into(),
         )],
     ))
 }
@@ -1143,12 +1143,12 @@ fn string_literal(
     if frame.spelling.string_declaration() != Some(name) {
         return None;
     }
-    let curios_core::Subterm::Intrinsic(curios_core::Intrinsic::Bin(Grain::X, packed)) =
+    let curios_core::Subterm::Intrinsic(curios_core::Intrinsic::Bytes(packed)) =
         &**fields.first()?
     else {
         return None;
     };
-    let text = String::from_utf8(packed.to_bytes()?).ok()?;
+    let text = String::from_utf8(packed.to_bytes()).ok()?;
     if text.chars().count() > curios_core::ELIDED_LITERAL_CHARACTERS {
         return Some(None);
     }
@@ -1309,8 +1309,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                     arm(MatchPattern::Nat(succ), sub(body, frame)?),
                 ]
             }
-            Carrier::Bin {
-                grain: Grain::X,
+            Carrier::Bytes {
                 empty_case,
                 cons_case,
             } => {
@@ -1322,15 +1321,18 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                     return None;
                 };
                 let body = cons_case.open(&[peeled, remaining, hypothesized]);
-                let atom = BinPattern::Atom {
+                let atom = BytesPattern::Atom {
                     head_label: binder(first, &body, frame),
                     tail_label: binder(rest, &body, frame),
                     ih: hypothesis(ih, &body, frame),
                 };
 
                 vec![
-                    arm(MatchPattern::Bin(BinPattern::End), sub(empty_case, frame)?),
-                    arm(MatchPattern::Bin(atom), sub(body, frame)?),
+                    arm(
+                        MatchPattern::Bytes(BytesPattern::End),
+                        sub(empty_case, frame)?,
+                    ),
+                    arm(MatchPattern::Bytes(atom), sub(body, frame)?),
                 ]
             }
             Carrier::List {

@@ -1,7 +1,7 @@
 use {
     super::evaluate_closed_terms,
     crate::*,
-    curios_num::{Binary, Grain, Natural},
+    curios_num::{Binary, Natural},
 };
 
 /// `make(x) = (y) => x + y`, bound as an item.
@@ -305,11 +305,11 @@ fn folded(mut builder: ErsdBuilder, value: ValueId) -> Constant {
     module.constant(constant).expect("live constant").clone()
 }
 
-/// `uncons s | x[] => 0 | x[_, ..t] => BinLen(t)` over `x[1, 2, 3]`: the cons arm is handed the two bytes after the head, the suffix the runtime's peel hands it.
+/// `uncons s | x[] => 0 | x[_, ..t] => BytesLen(t)` over `x[1, 2, 3]`: the cons arm is handed the two bytes after the head, the suffix the runtime's peel hands it.
 #[test]
 fn a_peel_hands_the_cons_arm_the_suffix_after_the_element() {
     let mut builder = ErsdBuilder::new();
-    let bytes = builder.constant(Constant::Bin(Grain::X, Binary::from_bytes(vec![1, 2, 3])));
+    let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
     let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
 
     let candidate = sequence_candidate(&mut builder, Atom::Constant(bytes), |builder, s| {
@@ -321,7 +321,7 @@ fn a_peel_hands_the_cons_arm_the_suffix_after_the_element() {
         let length = builder.let_value(
             None,
             Rhs::Sequence {
-                operation: SequenceOp::BinLen(Grain::X),
+                operation: SequenceOp::BytesLen,
                 operands: vec![Atom::Value(suffix)],
             },
         );
@@ -329,7 +329,7 @@ fn a_peel_hands_the_cons_arm_the_suffix_after_the_element() {
         builder.let_value(
             None,
             Rhs::UnconsSequence {
-                grain: SequenceGrain::Bin(Grain::X),
+                grain: SequenceGrain::Bytes,
                 scrutinee: Atom::Value(s),
                 empty,
                 cons: UnconsSequenceStep {
@@ -410,11 +410,11 @@ fn a_list_suffix_is_a_window_whose_slices_index_from_its_own_start() {
     );
 }
 
-/// `fold s | x[] => 0 | x[_, ..t]; acc => BinLen(t) + acc` over `x[1, 2, 3]`: the last element sees the empty suffix and each earlier one the suffix after it, so the suffix lengths sum to three.
+/// `fold s | x[] => 0 | x[_, ..t]; acc => BytesLen(t) + acc` over `x[1, 2, 3]`: the last element sees the empty suffix and each earlier one the suffix after it, so the suffix lengths sum to three.
 #[test]
 fn a_fold_step_sees_the_suffix_after_its_element() {
     let mut builder = ErsdBuilder::new();
-    let bytes = builder.constant(Constant::Bin(Grain::X, Binary::from_bytes(vec![1, 2, 3])));
+    let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
     let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
 
     let candidate = sequence_candidate(&mut builder, Atom::Constant(bytes), |builder, s| {
@@ -427,7 +427,7 @@ fn a_fold_step_sees_the_suffix_after_its_element() {
         let length = builder.let_value(
             None,
             Rhs::Sequence {
-                operation: SequenceOp::BinLen(Grain::X),
+                operation: SequenceOp::BytesLen,
                 operands: vec![Atom::Value(suffix)],
             },
         );
@@ -442,7 +442,7 @@ fn a_fold_step_sees_the_suffix_after_its_element() {
         builder.let_value(
             None,
             Rhs::FoldSequence {
-                grain: SequenceGrain::Bin(Grain::X),
+                grain: SequenceGrain::Bytes,
                 scrutinee: Atom::Value(s),
                 empty,
                 step: FoldSequenceStep {

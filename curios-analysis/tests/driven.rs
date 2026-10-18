@@ -22,7 +22,7 @@ use {
         Telescope, Term, Three, Totality, Transient, Tuple, Two, UniverseContext, Universes, Var,
         Variant,
     },
-    curios_num::{Grain, Integer, Natural, Rounding},
+    curios_num::{Integer, Natural, Rounding},
     curios_utilities::{InfixOp, Plicity, Qualifier},
     std::{collections::BTreeMap, slice, sync::Arc},
 };
@@ -587,7 +587,7 @@ const FORMS: &[&str] = &[
     "a dispatch",
     "a nominal match",
     "a `Nat` eliminator",
-    "a `Bin` eliminator",
+    "a `Bytes` eliminator",
     "a `List` eliminator",
     "a let",
     "a group",
@@ -632,7 +632,7 @@ fn forms(term: &Term) -> Vec<&'static str> {
                 Cases::Induct { .. } => "a nominal match",
                 Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat { .. } => "a `Nat` eliminator",
-                    Carrier::Bin { .. } => "a `Bin` eliminator",
+                    Carrier::Bytes { .. } => "a `Bytes` eliminator",
                     Carrier::List { .. } => "a `List` eliminator",
                 },
             },
@@ -865,8 +865,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             matching(markers, Cases::FreeMonoid { carrier })
         }),
         Specimen::of(&mut markers, |markers| {
-            let carrier = Carrier::Bin {
-                grain: Grain::X,
+            let carrier = Carrier::Bytes {
                 empty_case: markers.visited(),
                 cons_case: Scope::close(
                     Three,
