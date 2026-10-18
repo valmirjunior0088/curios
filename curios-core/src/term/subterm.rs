@@ -6,9 +6,9 @@ use {
     super::FreeVars,
     crate::{
         Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Instance,
-        InstanceHead, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar, Nat, Proj,
-        Quality, Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple, TupleType,
-        UniverseContext, UniverseMetaId, Universes, Var, Variant, Visit, print_term,
+        InstanceHead, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar, Mint, Nat,
+        Proj, Quality, Rec, RecGroup, Spelling, Struct, StructType, Term, Transient, Tuple,
+        TupleType, UniverseContext, UniverseMetaId, Universes, Var, Variant, Visit, print_term,
     },
     curios_abi::ForeignFunction,
     curios_num::{Floating, Integer},
@@ -442,18 +442,25 @@ impl Subterm {
         }
     }
 
-    /// Whether any free variable in this subterm is a binder rather than a top-level definition — the uncached spelling of [`Term::has_local_free`], which supplies the per-node memoization.
+    /// The newest binder occurring free in this subterm, by its index, or `None` where every free variable is a top-level definition — the uncached spelling of [`Term::newest_local`], which supplies the per-node memoization.
     ///
     /// A local is a [`Free::Local`], so this is a discriminant test rather than a search for a marker character in the spelling, which a compiler-made *global* could set by accident.
-    pub(crate) fn has_local_free(&self) -> bool {
+    pub(crate) fn newest_local(&self) -> Option<u64> {
         match self {
             Subterm::Var(var)
             | Subterm::Instance(Instance {
                 head: InstanceHead::Var(var),
                 ..
-            }) => var.as_free().is_some_and(Free::is_local),
-            Subterm::Metavar(Metavar { spine, .. }) => spine.has_local_free(),
-            _ => self.any_child_term(&mut |t| t.has_local_free()),
+            }) => var.as_free().and_then(Free::as_local).map(Mint::index),
+            Subterm::Metavar(Metavar { spine, .. }) => spine.newest_local(),
+            _ => {
+                let mut newest = None;
+                self.any_child_term(&mut |child| {
+                    newest = newest.max(child.newest_local());
+                    false
+                });
+                newest
+            }
         }
     }
 

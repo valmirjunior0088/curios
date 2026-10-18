@@ -64,7 +64,7 @@ pub enum HeadTag<'a> {
     Intrinsic(&'static str),
 }
 
-/// A core-calculus term: an `Rc`-shared `Node` — a [`Subterm`] plus its lazily-cached, position-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence extent: where it was written, in the text of the declaration that wrote it ([`Extent`]). Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The extent is identity-irrelevant: hash and equality look only at the node, so placing a term anew never splits a cache.
+/// A core-calculus term: an `Rc`-shared `Node` — a [`Subterm`] plus its lazily-cached, position-independent derivations (a structural hash, `reach`, the free-variable set, the newest local, and the containment bits such as `has_metavar`) — with an optional per-occurrence extent: where it was written, in the text of the declaration that wrote it ([`Extent`]). Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The extent is identity-irrelevant: hash and equality look only at the node, so placing a term anew never splits a cache.
 ///
 /// The caches are derivations, never identity: hash and equality answer the same before and after a fill, so a map keyed on `Term` is sound. The workspace `clippy.toml` states exactly that to `mutable_key_type`, which is why no `Term`-keyed map carries an `#[allow]` for it.
 #[derive(Debug, Clone)]
@@ -119,10 +119,14 @@ impl Term {
             &mut (),
             |_, term| {
                 if term.inner.scalars.is_filled() {
-                    Enter::Skip(())
-                } else {
-                    Enter::Descend
+                    return Enter::Skip(());
                 }
+                // A metavariable's scalars are its spine's facts, which the spine keeps as it is built: filled here, its entries unvisited, where descending would take every binder in scope.
+                if let Subterm::Metavar(_) = term.look() {
+                    term.inner.scalars.fill(Scalars::of(term.look()));
+                    return Enter::Skip(());
+                }
+                Enter::Descend
             },
             |_, term, _| term.inner.scalars.fill(Scalars::of(term.look())),
         );
@@ -168,7 +172,12 @@ impl Term {
 
     /// Whether any *free* variable in this term is a binder some scope opened ([`Free::Local`]) rather than a top-level definition — the cached spelling of `Subterm::has_local_free`, which records why this is a discriminant test and not a spelling probe. Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
     pub fn has_local_free(&self) -> bool {
-        self.scalars().has_local_free
+        self.scalars().newest_local.is_some()
+    }
+
+    /// The newest binder occurring free in this term, by its index, or `None` where no local does: cached as [`Term::has_local_free`] is, which it refines. A binder newer than it occurs nowhere in the term, which is what lets a capture pass over a subterm that holds only older ones ([`Bound::capture`]).
+    pub(crate) fn newest_local(&self) -> Option<u64> {
+        self.scalars().newest_local
     }
 
     /// Whether a recursive group occurs in this term — a `Rec` node, or the member a universe instance is taken of. Cached per node like `has_local_free`: a walk looking for a group's calls asks it at every node it meets, and passes over the ones that hold none.
@@ -1469,6 +1478,12 @@ impl PartialEq for Term {
         if self.get_or_init_hash() != other.get_or_init_hash() {
             return false;
         }
+        // Two metavariables over one version of one spine differ, if at all, in id or origin: told without enumerating the spine, an entry for every binder in scope, which the probe below would do twice.
+        if let (Subterm::Metavar(this), Subterm::Metavar(that)) = (self.look(), other.look())
+            && this.spine.same_version(&that.spine)
+        {
+            return this.id == that.id && this.origin == that.origin;
+        }
         // Past both O(1) verdicts, one more before anything is allocated: two nodes whose children are pairwise one allocation differ, if at all, in their own payload — variant, names, plicities, levels, scope labels, arities — which the derived comparison settles at once, every child's comparison being the pointer verdict above. This is the memo probe's common case, a key rebuilt one step later over the same operands, and the loop below would answer it by allocating a placeholder, a work vector and a visited set to compare one node — thousands of allocations a byte for a literal folded at the type level.
         match children_pairwise_shared(self.look(), other.look()) {
             Some(true) => {
@@ -1499,6 +1514,28 @@ impl PartialEq for Term {
                 && held_twice(&that)
                 && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner)))
             {
+                continue;
+            }
+
+            // Two metavariables pair their spines' entries only where the spines are two versions, and without the masking below, which would stand a placeholder in for every entry.
+            if let (Subterm::Metavar(this_meta), Subterm::Metavar(that_meta)) =
+                (this.look(), that.look())
+            {
+                if this_meta.id != that_meta.id
+                    || this_meta.origin != that_meta.origin
+                    || this_meta.spine.len() != that_meta.spine.len()
+                {
+                    return false;
+                }
+                if !this_meta.spine.same_version(&that_meta.spine) {
+                    work.extend(
+                        this_meta
+                            .spine
+                            .iter()
+                            .cloned()
+                            .zip(that_meta.spine.iter().cloned()),
+                    );
+                }
                 continue;
             }
 

@@ -59,6 +59,41 @@ fn a_substitution_leaves_a_spine_its_variable() {
     assert!(!opened.mentions_free(&x));
 }
 
+/// A capture passes over a subterm only where every local in it is older than each binder: a binder as new as the newest local, one older than a local beside it, and one a metavariable's spine holds are each bound.
+#[test]
+fn a_capture_binds_a_binder_however_new_the_locals_beside_it() {
+    let [a, b, c, d] = [0, 1, 2, 3].map(|index| Free::local(index, Some("v")));
+    let pair =
+        |left: &Free, right: &Free| Term::tuple([Term::free_var(left), Term::free_var(right)]);
+    let bound = |index| Term::var(Var::bound(index));
+
+    assert_eq!(
+        pair(&a, &c).capture(&[&c]),
+        Term::tuple([Term::free_var(&a), bound(0)])
+    );
+    assert_eq!(
+        pair(&a, &c).capture(&[&a]),
+        Term::tuple([bound(0), Term::free_var(&c)])
+    );
+    assert_eq!(
+        pair(&b, &d).capture(&[&d, &b]),
+        Term::tuple([bound(1), bound(0)])
+    );
+
+    let held = Term::metavar_birthed(
+        MetavarId(0),
+        MetavarOrigin::Hole,
+        vec![Term::free_var(&a), Term::free_var(&c)],
+    );
+    let Subterm::Metavar(captured) = held.capture(&[&c]).as_ref().clone() else {
+        panic!("a capture keeps a metavariable one");
+    };
+    assert_eq!(
+        captured.spine.iter().cloned().collect::<Vec<_>>(),
+        vec![Term::free_var(&a), bound(0)]
+    );
+}
+
 #[test]
 fn close_open_preserves_nested_bind() {
     let x = Free::local(0, Some("x"));

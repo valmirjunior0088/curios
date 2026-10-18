@@ -24,7 +24,7 @@ use {
 struct Facts {
     hash: u64,
     reach: usize,
-    local_free: usize,
+    newest_local: Option<u64>,
     metavar: usize,
     transient: usize,
     universe_meta: usize,
@@ -38,7 +38,7 @@ impl Facts {
         Self {
             hash: placed_hash(rank, entry.get_or_init_hash()),
             reach: entry.reach(),
-            local_free: usize::from(entry.has_local_free()),
+            newest_local: entry.newest_local(),
             metavar: usize::from(entry.has_metavar()),
             transient: usize::from(entry.has_transient()),
             universe_meta: usize::from(entry.has_universe_meta()),
@@ -50,7 +50,7 @@ impl Facts {
     fn add(&mut self, share: Self) {
         self.hash = self.hash.wrapping_add(share.hash);
         self.reach = self.reach.max(share.reach);
-        self.local_free += share.local_free;
+        self.newest_local = self.newest_local.max(share.newest_local);
         self.metavar += share.metavar;
         self.transient += share.transient;
         self.universe_meta += share.universe_meta;
@@ -58,10 +58,9 @@ impl Facts {
         self.group += share.group;
     }
 
-    /// Take `share` out, `reach` excepted: a maximum cannot be taken back, so a rewrite counts the entries' reach again ([`MetavarSpine::rewritten`]).
+    /// Take `share` out, `reach` and the newest local excepted: a maximum cannot be taken back, so a rewrite reads both off the entries again ([`MetavarSpine::rewritten`]).
     fn remove(&mut self, share: Self) {
         self.hash = self.hash.wrapping_sub(share.hash);
-        self.local_free -= share.local_free;
         self.metavar -= share.metavar;
         self.transient -= share.transient;
         self.universe_meta -= share.universe_meta;
@@ -131,6 +130,11 @@ impl MetavarSpine {
         self.identity
     }
 
+    /// Whether the two are one version of one spine, and so hold the same entries, told without reading them.
+    pub(crate) fn same_version(&self, other: &Self) -> bool {
+        self.entries.same_version(&other.entries)
+    }
+
     /// The entries in binding order.
     pub fn iter(&self) -> impl Iterator<Item = &Term> + Clone {
         self.entries.iter().map(|(_, entry)| entry)
@@ -152,7 +156,11 @@ impl MetavarSpine {
             spine.entries.insert(rank, new);
         }
         let mut rewritten = rewritten?;
-        rewritten.facts.reach = rewritten.iter().map(Term::reach).max().unwrap_or(0);
+        let (reach, newest_local) = rewritten.iter().fold((0, None), |(reach, newest), entry| {
+            (reach.max(entry.reach()), newest.max(entry.newest_local()))
+        });
+        rewritten.facts.reach = reach;
+        rewritten.facts.newest_local = newest_local;
 
         Some(rewritten)
     }
@@ -161,8 +169,9 @@ impl MetavarSpine {
         self.facts.reach
     }
 
-    pub(crate) fn has_local_free(&self) -> bool {
-        self.facts.local_free > 0
+    /// The newest binder an entry holds free, by its index.
+    pub(crate) fn newest_local(&self) -> Option<u64> {
+        self.facts.newest_local
     }
 
     /// Whether an entry holds a metavariable: what a walk looking for metavariables asks before it reads the spine, and passes over it where none does.
@@ -203,7 +212,7 @@ impl PartialEq for MetavarSpine {
     fn eq(&self, other: &Self) -> bool {
         self.len() == other.len()
             && self.facts.hash == other.facts.hash
-            && (self.entries.same_version(&other.entries) || self.iter().eq(other.iter()))
+            && (self.same_version(other) || self.iter().eq(other.iter()))
     }
 }
 

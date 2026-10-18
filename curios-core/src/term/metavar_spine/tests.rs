@@ -20,28 +20,29 @@ fn hash_of(spine: &MetavarSpine) -> u64 {
 #[test]
 fn a_spine_holds_the_facts_of_its_entries() {
     let entries = vec![
-        Term::free_var(&local(0, "a")),
+        Term::free_var(&local(4, "a")),
         Term::var(Var::bound(2)),
+        Term::free_var(&local(1, "b")),
         Term::intrinsic(Intrinsic::Nat(Nat::new(3usize))),
     ];
     let spine = MetavarSpine::from(entries.clone());
 
     assert_eq!(spine.reach(), 3);
-    assert!(spine.has_local_free());
+    assert_eq!(spine.newest_local(), Some(4));
     assert!(!spine.has_transient());
     assert!(!spine.has_group());
     assert!(!spine.has_universe_meta());
 
-    // Rewriting the one entry that reached past the spine and the one local leaves neither.
+    // Rewriting the one entry that reached past the spine and the newest local leaves the older local the newest.
     let rewritten = spine
         .rewritten(|entry| {
-            (entry.has_local_free() || entry.reach() > 0)
+            (entry.newest_local() == Some(4) || entry.reach() > 0)
                 .then(|| Term::free_var(&Free::Global(Global::Authored(Qualifier::from(["g"])))))
         })
         .expect("two entries were rewritten");
     assert_eq!(rewritten.reach(), 0);
-    assert!(!rewritten.has_local_free());
-    assert_eq!(rewritten.len(), 3);
+    assert_eq!(rewritten.newest_local(), Some(1));
+    assert_eq!(rewritten.len(), 4);
 }
 
 #[test]

@@ -40,9 +40,14 @@ impl Mint {
 
     /// What this binder was called where it was written, if anything — a rendering aid with no bearing on identity.
     ///
-    /// Crate-private, so no path leads from a `Free` to a spelling outside the stage that renders it. The variant itself stays public — downstream code holds and compares binders — but it cannot look inside one. The index has no accessor at all: nothing ever needed to read it, only to compare it. An order among terms reads it so too, by which of two identities was minted first, and never by its value, which counts every binder minted before it: a structural hash reads the value, and serves hash tables alone.
+    /// Crate-private, so no path leads from a `Free` to a spelling outside the stage that renders it. The variant itself stays public — downstream code holds and compares binders — but it cannot look inside one. The index is read only to compare it ([`Mint::index`]). An order among terms reads it so too, by which of two identities was minted first, and never by its value, which counts every binder minted before it: a structural hash reads the value, and serves hash tables alone.
     pub(crate) fn hint(&self) -> Option<&'static str> {
         self.hint.map(|hint| hint.as_str())
+    }
+
+    /// The index, for a node's cache, which keeps the newest local the node holds packed as a number and compares it against a binder's ([`Term::newest_local`](crate::Term)). Read to compare, never as a count.
+    pub(crate) fn index(&self) -> u64 {
+        self.index
     }
 
     /// The hint as the interned symbol it is kept as, for a scope that remembers it without re-interning its spelling.
@@ -257,7 +262,7 @@ impl Free {
         }
     }
 
-    /// Whether this is a binder some scope opened, as opposed to a top-level definition. The typed replacement for testing a spelling for a marker character — see [`Subterm::has_local_free`](crate::Subterm).
+    /// Whether this is a binder some scope opened, as opposed to a top-level definition. The typed replacement for testing a spelling for a marker character — see [`Subterm::newest_local`](crate::Subterm).
     pub fn is_local(&self) -> bool {
         matches!(self, Free::Local(_))
     }

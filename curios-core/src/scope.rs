@@ -192,10 +192,12 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
 
     /// The closing half of the locally-nameless discipline: turn free occurrences of `binders` into bound indices (position in `binders`, offset by the current depth) while shifting already-loose indices past the new binders. `Scope::close` is this plus the name bookkeeping. Rewrites *free* names, so it can never be pruned by `reach`.
     ///
-    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size and not its tree's. And where every binder is a local, a subterm with no local free and no loose index to shift is handed back unwalked, since nothing in it is a binder's occurrence.
+    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size and not its tree's. And where every binder is a local, a subterm whose every local is older than each binder, with no loose index to shift, is handed back unwalked, since nothing in it is a binder's occurrence. Binders are minted as they are opened and closed innermost first, so a body's own locals are older than the binder closing it: a nest of lambdas whose bodies name only an outer binder closes each lambda without walking the lambdas within it.
     fn capture(&self, binders: &[&Free]) -> Self {
-        let local = binders.iter().all(|binder| binder.is_local());
-        self.traverse(&mut Visit::capturing(local, |depth, var| {
+        let oldest = binders.iter().try_fold(u64::MAX, |oldest, binder| {
+            binder.as_local().map(|mint| oldest.min(mint.index()))
+        });
+        self.traverse(&mut Visit::capturing(oldest, |depth, var| {
             var.as_free()
                 .and_then(|name| {
                     binders
@@ -218,7 +220,8 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
                 index
                     .checked_sub(depth)
                     .map(|delta| match delta < terms.len() {
-                        true => terms[delta].deref().shift(depth),
+                        // Shifted as a term, whose own reach passes a closed one over whole: as a bare subterm a metavariable would visit its spine, an entry for every binder it was born under.
+                        true => terms[delta].shift(depth).deref().clone(),
                         false => Subterm::Var(Var::bound(index - terms.len())),
                     })
             })
@@ -1031,8 +1034,8 @@ enum Mode {
     Plain,
     /// Skip subtrees whose `reach` proves no loose index can be touched.
     Pruning,
-    /// [`Mode::Plain`] for a capture of local binders: skip subtrees with no local free and no loose index the capture would shift.
-    Capturing,
+    /// [`Mode::Plain`] for a capture of local binders, the oldest of them at `oldest`: skip subtrees with no local as new as it and no loose index the capture would shift.
+    Capturing { oldest: u64 },
     /// A term-level pre-hook substitutes whole nodes before descending. A substituted node is not descended into.
     Rewriting(Rewrite),
     /// [`Mode::Rewriting`], visiting only nodes that carry universe data.
@@ -1080,15 +1083,15 @@ where
         }
     }
 
-    /// `capture`'s visit: memoized on node identity and binder depth together, since its effect depends on the depth and a depth-blind memo would hand a second occurrence the wrong indices — see [`Memo`] for when that is legal. `local` says every binder being captured is a local, which is what lets it pass over a subterm that has none free.
-    fn capturing(local: bool, visit: F) -> Self {
+    /// `capture`'s visit: memoized on node identity and binder depth together, since its effect depends on the depth and a depth-blind memo would hand a second occurrence the wrong indices — see [`Memo`] for when that is legal. `oldest` is the oldest binder being captured where every one is a local, which is what lets it pass over a subterm that holds only older locals.
+    fn capturing(oldest: Option<u64>, visit: F) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: match local {
-                true => Mode::Capturing,
-                false => Mode::Plain,
+            mode: match oldest {
+                Some(oldest) => Mode::Capturing { oldest },
+                None => Mode::Plain,
             },
             memo: Memo::ByNodeAndDepth(HashMap::new()),
         }
@@ -1356,7 +1359,7 @@ where
             }
             Mode::Plain
             | Mode::Pruning
-            | Mode::Capturing
+            | Mode::Capturing { .. }
             | Mode::RewritingLevels(..)
             | Mode::ErasingUniverses
             | Mode::Sharing { .. } => None,
@@ -1427,7 +1430,10 @@ where
     pub(crate) fn passes_over(&self, term: &Term) -> bool {
         match self.mode {
             Mode::Pruning => term.reach() <= self.term_depth,
-            Mode::Capturing => !term.has_local_free() && term.reach() <= self.term_depth,
+            Mode::Capturing { oldest } => {
+                term.reach() <= self.term_depth
+                    && term.newest_local().is_none_or(|newest| newest < oldest)
+            }
             _ => false,
         }
     }
