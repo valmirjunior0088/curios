@@ -164,22 +164,13 @@ fn project(
     head_type: &Term,
     field: &Field,
 ) -> Result<(Term, Term), Error> {
-    // Both tuples and structs project; the field telescope is the tuple type's own, or the struct's (instantiated at the head type's parameters). A struct additionally enforces representation privacy here.
-    let (telescope, structure) = match &**head_type {
-        Subterm::TupleType(TupleType { telescope }) => (telescope.clone(), None),
-        Subterm::StructType(StructType {
-            name,
-            universes,
-            params,
-        }) => {
-            let Some(struct_decl) = context.struct_decl(name).cloned() else {
+    // Both tuples and structs project, a slot of the field telescope: the tuple type's own, or the struct's as declared, whose one field read is instantiated below. A struct additionally enforces representation privacy here.
+    let (index, structure) = match &**head_type {
+        Subterm::TupleType(TupleType { telescope }) => (slot(telescope, field)?, None),
+        Subterm::StructType(StructType { name, .. }) => {
+            let Some(struct_decl) = context.struct_decl(name) else {
                 return Err(Error::unknown_declaration(*name));
             };
-            let arity = context.instantiate_universe_bound_at(
-                &struct_decl.universe_context,
-                &struct_decl.arity,
-                universes,
-            )?;
 
             // The use-site module is the enclosing item's qualifier prefix (`Context::island`, set per item by `elaborate_module_suffix`). A private representation is transparent within its declaring module's subtree, so the check is containment, not equality: the declaring module and its descendants may open it, its ancestors and siblings may not.
             if !struct_decl.rep_public
@@ -196,7 +187,7 @@ fn project(
                 return Err(Error::private_field(*name, field));
             }
 
-            (arity.open(&params.iter().collect::<Vec<_>>()), Some(*name))
+            (slot(struct_decl.fields(), field)?, Some(*name))
         }
         _ => {
             return Err(pending(context, [head_type], |reporting, [head_type]| {
@@ -205,7 +196,32 @@ fn project(
         }
     };
 
-    // A label and a written position each resolve to their slot here, and the projection is rebuilt as the slot — nothing below elaboration ever sees either, and an elaborated projection elaborated again reads its slot as one. A label's lookup is unambiguous because duplicate labels are rejected when the tuple type itself elaborates. A position counts the plain fields: a hidden one takes none, and is reached by its label or not at all.
+    // The slot of what the head's type is: a tuple's, or the structure's by name, whatever form the field arrived in.
+    let field = match structure {
+        Some(structure) => Field::Struct(structure, index),
+        None => Field::Tuple(index),
+    };
+    // A struct's one field at the head type's universes and parameters, and no other.
+    let field_type = match &**head_type {
+        Subterm::StructType(StructType {
+            name,
+            universes,
+            params,
+        }) => context
+            .struct_facet(name, universes, |at| at.field_type(params, &head, &field))
+            .expect("the declaration was read above")?,
+        Subterm::TupleType(TupleType { telescope }) => telescope.field_type_from(&head, &field),
+        _ => unreachable!("a projection's head type is a tuple's or a struct's"),
+    }
+    .expect("index in range");
+
+    Ok((Term::from(Subterm::Proj(Proj { head, field })), field_type))
+}
+
+/// The slot `field` names in `telescope`, a field telescope as written, or the refusal of a field it has no slot for.
+///
+/// A label and a written position each resolve to their slot here, and the projection is rebuilt as the slot — nothing below elaboration ever sees either, and an elaborated projection elaborated again reads its slot as one. A label's lookup is unambiguous because duplicate labels are rejected when the tuple type itself elaborates. A position counts the plain fields: a hidden one takes none, and is reached by its label or not at all.
+fn slot(telescope: &Telescope<()>, field: &Field) -> Result<usize, Error> {
     let index = match field {
         Field::Tuple(index) | Field::Struct(_, index) => *index,
         Field::Position(position) => {
@@ -246,20 +262,12 @@ fn project(
         }
     };
 
-    if index >= telescope.len() {
+    // A walk to the slot, where a count would walk every field.
+    if telescope.entry_type(index).is_none() {
         return Err(Error::tuple_index_out_of_bounds(index, telescope.len()));
     }
 
-    // The slot of what the head's type is: a tuple's, or the structure's by name, whatever form the field arrived in.
-    let field = match structure {
-        Some(structure) => Field::Struct(structure, index),
-        None => Field::Tuple(index),
-    };
-    let field_type = telescope
-        .field_type_from(&head, &field)
-        .expect("index in range");
-
-    Ok((Term::from(Subterm::Proj(Proj { head, field })), field_type))
+    Ok(index)
 }
 
 /// Check `args` pointwise against the dependent telescope `signature` — each arg under the earlier ones — collecting the rebuilt args and returning the telescope's terminal, opened at those args. The caller checks arity first; the arity error differs by site. The given-args counterpart to `check_telescope_entries`.

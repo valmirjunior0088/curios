@@ -18,8 +18,9 @@
 
 use {
     super::{Counted, Error, Kernel, arity_matches},
-    crate::instantiate_universes_scoped,
-    curios_core::{Atom, Global, InductDecl, InductType, StructDecl, Telescope, Term, Universes},
+    curios_core::{
+        Atom, Field, Global, InductDecl, InductType, StructDecl, Telescope, Term, Universes,
+    },
 };
 
 /// An `induct` declaration at one occurrence's universes and parameters.
@@ -86,25 +87,58 @@ impl InductAt {
 }
 
 /// A `struct` declaration at one occurrence's universes and parameters.
+///
+/// The sort is instantiated where the handle is made, for every rule reads it; the parameters, the fields and one field's type are each instantiated where they are read, so a structure of many fields is read at an occurrence in what the rule asks of it ([`StructInstance`](curios_core::StructInstance)).
 pub(crate) struct StructAt {
-    declaration: StructDecl,
+    name: Global,
+    universes: Universes,
     params: Vec<Term>,
+    result_sort: Term,
 }
 
 impl StructAt {
     /// The family's declared result sort, at these universes.
     pub(crate) fn result_sort(&self) -> &Term {
-        &self.declaration.result_sort
+        &self.result_sort
     }
 
-    /// The declaration's own parameter telescope, at this occurrence's universes — [`InductAt::parameters`] for a structure.
-    pub(crate) fn parameters(&self) -> Telescope<Telescope<()>> {
-        self.declaration.arity.clone()
+    /// The declaration's own parameter telescope, at this occurrence's universes, the fields beneath it left out — [`InductAt::parameters`] for a structure.
+    pub(crate) fn parameters(&self, kernel: &Kernel<'_>) -> Result<Telescope<()>, Error> {
+        Ok(self.declaration(kernel).at(&self.universes).parameters()?)
     }
 
-    /// The structure's field telescope at this occurrence's parameters.
-    pub(crate) fn fields(&self) -> Telescope<()> {
-        self.declaration.fields_at(&self.params)
+    /// The structure's field telescope at this occurrence's universes and parameters: what a rule reading every field takes.
+    pub(crate) fn fields(&self, kernel: &Kernel<'_>) -> Result<Telescope<()>, Error> {
+        Ok(self
+            .declaration(kernel)
+            .at(&self.universes)
+            .fields_at(&self.params)?)
+    }
+
+    /// The type of the slot `field` reads off `value`, this structure, with that one field instantiated and opened ([`StructInstance::field_type`](curios_core::StructInstance::field_type)), or `None` for a slot past its fields.
+    pub(crate) fn field_type(
+        &self,
+        kernel: &Kernel<'_>,
+        value: &Term,
+        field: &Field,
+    ) -> Result<Option<Term>, Error> {
+        Ok(self
+            .declaration(kernel)
+            .at(&self.universes)
+            .field_type(&self.params, value, field)?)
+    }
+
+    /// How many fields the structure declares.
+    pub(crate) fn field_count(&self, kernel: &Kernel<'_>) -> usize {
+        self.declaration(kernel).field_count()
+    }
+
+    /// The declaration as declared, read again without being noted: the read was noted where this handle was made.
+    fn declaration<'k>(&self, kernel: &'k Kernel<'_>) -> &'k StructDecl {
+        kernel
+            .globals
+            .struct_decl(&self.name)
+            .expect("a handle is made only for a declared structure")
     }
 }
 
@@ -161,15 +195,11 @@ impl Kernel<'_> {
         self.check_instance(&declaration.universe_context, universes)?;
         arity_matches(Counted::Parameters, declaration.param_count(), params.len())?;
 
-        let mut declaration = declaration.clone();
-        declaration.arity = instantiate_universes_scoped(&declaration.arity, universes)?;
-        declaration.result_sort =
-            instantiate_universes_scoped(&declaration.result_sort, universes)?;
-        declaration.universe_context = curios_core::UniverseContext::empty();
-
         Ok(StructAt {
-            declaration,
+            name: *name,
+            universes: universes.clone(),
             params: params.to_vec(),
+            result_sort: declaration.at(universes).result_sort()?,
         })
     }
 }

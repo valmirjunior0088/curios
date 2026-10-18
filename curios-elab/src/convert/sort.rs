@@ -128,12 +128,10 @@ impl Sort {
             },
             Subterm::StructType(StructType {
                 name, universes, ..
-            }) => match context.struct_decl(name).cloned() {
-                Some(struct_decl) => {
-                    let struct_decl = context
-                        .instantiate_struct_decl_at(&struct_decl, universes)
-                        .map_err(ReduceError::Universe)?;
-                    Sort::from_universe(context, &struct_decl.result_sort)?
+            }) => match context.struct_facet(name, universes, |at| at.result_sort()) {
+                Some(result_sort) => {
+                    let result_sort = result_sort.map_err(ReduceError::Universe)?;
+                    Sort::from_universe(context, &result_sort)?
                 }
                 None => {
                     probe_level_fallback("struct decl missing", &reduced);

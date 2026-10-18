@@ -43,6 +43,8 @@ pub(super) enum Growth {
     Fields,
     /// An inductive type of so many constructors, matched once.
     Constructors,
+    /// A concept of so many methods, each a wrapper of its own, satisfied once and called once.
+    Methods,
     /// Calls of an identity function, each the argument of the next.
     Calls,
     /// Parentheses, each around the next.
@@ -67,7 +69,7 @@ pub(super) enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub(super) const ALL: [Growth; 24] = [
+    pub(super) const ALL: [Growth; 25] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -82,6 +84,7 @@ impl Growth {
         Growth::Tuple,
         Growth::Fields,
         Growth::Constructors,
+        Growth::Methods,
         Growth::Calls,
         Growth::Parentheses,
         Growth::RightPlus,
@@ -209,6 +212,22 @@ pub(super) fn grown(growth: Growth, size: usize) -> String {
                     "induct K: Type\n{constructors}end\n\nlet f(k: K) -> Nat =\n    match k: (_) => Nat\n{arms}    end;\n"
                 ),
                 &format!("f(K/k{last}()) + a"),
+            )
+        }
+        Growth::Methods => {
+            let methods = (0..size)
+                .map(|index| format!("    m{index}(A) -> A,\n"))
+                .collect::<String>();
+            let fields = (0..size)
+                .map(|index| format!("    m{index}(x) = x,\n"))
+                .collect::<String>();
+            program(
+                &fill!(
+                    "concept C(A: Type): pub Type {\n${methods}}\n\nsatisfy C(Nat) {\n${fields}}\n",
+                    methods,
+                    fields,
+                ),
+                &format!("C/m{last}(a)"),
             )
         }
         Growth::Calls => program(
@@ -352,6 +371,12 @@ fn a_wide_scope_elaborates_in_its_size() {
 #[test]
 fn a_family_of_many_constructors_compiles_in_its_size() {
     assert_eq!(compiles(&grown(Growth::Constructors, 4_000)), Ok(()));
+}
+
+/// A concept of two thousand methods compiles in its size: each method's wrapper reads its one field of the concept's record, its parameter's shape off the record's row, and the record type's sort alone, where each once read every field.
+#[test]
+fn a_concept_of_many_methods_compiles_in_its_size() {
+    assert_eq!(compiles(&grown(Growth::Methods, 2_000)), Ok(()));
 }
 
 /// Nesting ten thousand deep compiles on a test thread's stack: parentheses, each a nonterminal the parser re-enters, and an arrow, each parameter a term the lowering lowers inside the one before. The depth is bought with stack where it is spent, so no stage's acceptance follows the thread it runs on.

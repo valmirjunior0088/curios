@@ -67,16 +67,9 @@ impl Lowering<'_> {
                         name,
                         universes,
                         params,
-                    }) => {
-                        let declaration = context
-                            .struct_decl(&name)
-                            .cloned()
-                            .expect("erase: a registered struct");
-                        context
-                            .instantiate_struct_decl_at(&declaration, &universes)?
-                            .fields_at(&params)
-                            .field_type_from(head, field)
-                    }
+                    }) => context
+                        .struct_facet(&name, &universes, |at| at.field_type(&params, head, field))
+                        .expect("erase: a registered struct")?,
                     _ => unreachable!("erase: projected a non-tuple/struct"),
                 };
 

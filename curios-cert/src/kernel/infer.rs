@@ -271,11 +271,9 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
                     }),
                     Field::Struct(structure, _),
                 ) if name == *structure => {
-                    let fields = kernel.struct_at(&name, &universes, &params)?.fields();
-                    let len = fields.len();
-                    fields
-                        .field_type_from(head, field)
-                        .ok_or_else(|| out_of_range(len))
+                    let at = kernel.struct_at(&name, &universes, &params)?;
+                    at.field_type(kernel, head, field)?
+                        .ok_or_else(|| out_of_range(at.field_count(kernel)))
                 }
                 (Subterm::TupleType(_) | Subterm::StructType(_), _) => Err(Error::NotASlotOf {
                     named: match field {
@@ -310,7 +308,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             let sort = infer_sort(kernel, term)?;
             let at = kernel.struct_at(name, universes, params)?;
 
-            check_along(kernel, at.parameters(), params)?;
+            check_along(kernel, at.parameters(kernel)?, params)?;
 
             Ok(sort.term())
         }
@@ -360,8 +358,8 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             ..
         }) => {
             let at = kernel.struct_at(name, universes, params)?;
-            check_along(kernel, at.parameters(), params)?;
-            let telescope = at.fields();
+            check_along(kernel, at.parameters(kernel)?, params)?;
+            let telescope = at.fields(kernel)?;
 
             if telescope.len() != fields.len() {
                 return Err(Error::Arity {

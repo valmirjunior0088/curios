@@ -201,15 +201,18 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
 
     /// The opening half of the locally-nameless discipline: substitute the outermost `terms.len()` loose bound indices with `terms` (each shifted by the depth it lands under) and re-tighten the loose indices beyond them. `Scope::open` is this plus the arity check; effects depend only on indices `>= depth`, so the traversal prunes by `reach`, and a node more than one owner holds is released once per depth.
     fn release(&self, terms: &[&Term]) -> Self {
+        self.release_by(terms.len(), |delta| terms[delta].clone())
+    }
+
+    /// [`Bound::release`] of `count` terms, `term` handing out the one for each index, innermost first, where an occurrence of it is met: for a caller that holds them in another order, or makes one only where it is read, so a release costs what the released value holds rather than every term it could have named.
+    fn release_by(&self, count: usize, mut term: impl FnMut(usize) -> Term) -> Self {
         self.traverse(&mut Visit::pruning(|depth, var| {
             var.as_bound().and_then(|index| {
-                index
-                    .checked_sub(depth)
-                    .map(|delta| match delta < terms.len() {
-                        // Shifted as a term, whose own reach passes a closed one over whole: as a bare subterm a metavariable would visit its spine, an entry for every binder it was born under.
-                        true => terms[delta].shift(depth).deref().clone(),
-                        false => Subterm::Var(Var::bound(index - terms.len())),
-                    })
+                index.checked_sub(depth).map(|delta| match delta < count {
+                    // Shifted as a term, whose own reach passes a closed one over whole: as a bare subterm a metavariable would visit its spine, an entry for every binder it was born under.
+                    true => term(delta).shift(depth).deref().clone(),
+                    false => Subterm::Var(Var::bound(index - count)),
+                })
             })
         }))
     }

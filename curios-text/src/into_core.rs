@@ -1911,7 +1911,8 @@ fn process_items(
                     // Built in core rather than as surface AST, because `F` is not the field's *written* type: the record telescope above binds each field's label for the fields after it, so a field type may name the fields before it, and the wrapper has to state it with every such name opened at its own projection off `w`. Restating the written type instead leaves those names bound by nothing — well-formed only while no concept has a dependent field telescope. Reading it out of the telescope also means the wrapper inherits the record's universe metas by construction, rather than by re-lowering the same spans under a role forced to match.
                     //
                     // Type and body are constructed together so both close over the one `w`, and both index the field positionally. Superclass fields are anonymous and get no wrapper: an instance of the outer concept already yields the inner one by resolution.
-                    let param_refs = param_vars.iter().collect::<Vec<_>>();
+                    // The one field each wrapper states, read off the record's payload at the parameters: opening the whole telescope for each would make a concept's wrappers cost the square of its fields.
+                    let fields = arity.terminal();
                     for (index, label) in concept
                         .fields
                         .iter()
@@ -1932,9 +1933,12 @@ fn process_items(
                             )))
                             .collect::<Vec<_>>();
 
-                        let field_type = arity
-                            .open(&param_refs)
-                            .field_type_from(&witness, &curios_core::Field::Struct(name, index))
+                        let field_type = fields
+                            .field_type_beneath(
+                                &param_vars,
+                                &witness,
+                                &curios_core::Field::Struct(name, index),
+                            )
                             .expect("a concept's own field index is within its record telescope");
                         let method = curios_core::Term::proj_struct(witness, name, index);
 

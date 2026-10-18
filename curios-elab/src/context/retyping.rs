@@ -14,7 +14,8 @@ use {
     },
     curios_core::{
         Advance, Atom, Cost, DefinitionKind, Free, Global, InductDecl, InductInstance, ReduceError,
-        StructDecl, Telescope, Term, Trace, UniverseContext, UniverseError, Universes,
+        StructDecl, StructInstance, Telescope, Term, Trace, UniverseContext, UniverseError,
+        Universes,
     },
     curios_utilities::SyntaxRegistry,
 };
@@ -180,6 +181,16 @@ impl<'s> Retyping<'s> {
     /// [`Context::struct_decl`].
     pub(crate) fn struct_decl(&self, name: &Global) -> Option<&StructDecl> {
         self.context.struct_decl(name)
+    }
+
+    /// [`Context::struct_facet`].
+    pub(crate) fn struct_facet<T>(
+        &mut self,
+        name: &Global,
+        universes: &Universes,
+        read: impl FnOnce(StructInstance<'_>) -> Result<T, UniverseError>,
+    ) -> Option<Result<T, UniverseError>> {
+        self.context.struct_facet(name, universes, read)
     }
 
     /// [`Context::instantiate_struct_decl_at`].

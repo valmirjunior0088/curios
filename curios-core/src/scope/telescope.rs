@@ -172,6 +172,46 @@ impl<B: Bound> Telescope<B> {
         }
     }
 
+    /// The type of the entry at `index` as written, beneath the binders of the entries before it, which it is not opened at: for a reader that instantiates or opens that entry alone. `None` past the last entry.
+    pub fn entry_type(&self, index: usize) -> Option<&Term> {
+        let mut at = self;
+        for _ in 0..index {
+            match at {
+                Telescope::Cons(_, _, rest) => at = &rest.body,
+                Telescope::Done(_) => return None,
+            }
+        }
+        match at {
+            Telescope::Cons(_, ty, _) => Some(ty),
+            Telescope::Done(_) => None,
+        }
+    }
+
+    /// The entries alone, ending in nothing: what a reader of the binders takes, the payload beneath them left unread.
+    pub fn prefix(&self) -> Telescope<()> {
+        let mut entries = Vec::new();
+        let mut current = self;
+        while let Telescope::Cons(mark, ty, rest) = current {
+            entries.push((*mark, ty.clone(), rest.labels.clone()));
+            current = &rest.body;
+        }
+
+        entries
+            .into_iter()
+            .rev()
+            .fold(Telescope::Done(Box::new(())), |rest, (mark, ty, labels)| {
+                Telescope::Cons(
+                    mark,
+                    ty,
+                    Scope {
+                        arity: One,
+                        labels,
+                        body: Box::new(rest),
+                    },
+                )
+            })
+    }
+
     /// The binder hint at each position (`""` when unnamed), walking the spine without opening — names are structural, no substitution needed.
     pub fn labels(&self) -> Vec<&str> {
         let mut out = Vec::new();
@@ -395,33 +435,62 @@ impl<B: Bound> Telescope<B> {
     }
 
     /// The type at `index`, with each preceding binder opened at `sub` of its position. The general form; a field telescope read from a value wants [`Telescope::field_type_from`] instead.
-    pub fn nth<F>(self, index: usize, mut sub: F) -> Option<Term>
+    ///
+    /// Only the type read is opened, and `sub` is asked only of a binder it names, where it names it: the entries before it are stepped past unread, so reading one entry costs that entry and the walk to it, whatever the telescope holds before it.
+    pub fn nth<F>(&self, index: usize, mut sub: F) -> Option<Term>
     where
         F: FnMut(usize) -> Term,
     {
-        let mut cursor = self.cursor();
-        for position in 0..index {
-            cursor.entry()?;
-            cursor.advance(sub(position));
-        }
-        cursor.entry().map(|(_, ty)| ty)
+        Some(
+            self.entry_type(index)?
+                .release_by(index, |delta| sub(index - 1 - delta)),
+        )
     }
 
     /// The type of the slot `field` reads off `value`: every field before it is opened at its own projection off `value`, read as `field` reads its own — a tuple's slot, or the same structure's — so a field type that names an earlier field names *that value's* earlier field rather than a loose binder, and names it as a projection written there is elaborated. `None` for a slot past the telescope, and for a written form, which reads none yet.
     ///
     /// This is the one answer to "what type does this projection of `value` have", and every site that asks — inference, sorting, conversion, witness resolution, operator dispatch, and the method wrappers `into_core` generates — reaches it through here. Re-deriving it anywhere else is how two readings drift: a wrapper restating a field's written type in a scope binding no sibling is well-formed only while no concept has a dependent field telescope.
-    pub fn field_type_from(self, value: &Term, field: &Field) -> Option<Term> {
+    pub fn field_type_from(&self, value: &Term, field: &Field) -> Option<Term> {
+        self.field_type_beneath(&[], value, field)
+    }
+
+    /// [`Telescope::field_type_from`] for a field telescope standing beneath `outer` binders more, opened at `outer`, outermost first: a structure's fields read off its arity's payload at its parameters, the one field read opened and no other.
+    pub fn field_type_beneath(&self, outer: &[Term], value: &Term, field: &Field) -> Option<Term> {
         let index = field.slot()?;
 
-        self.nth(index, |earlier| {
-            let field = field.beside(earlier).expect("a slot stands beside a slot");
+        Some(open_field(
+            self.entry_type(index)?,
+            index,
+            outer,
+            value,
+            field,
+        ))
+    }
+}
+
+/// `written`, the type of the field at `index` of a field telescope beneath `outer` binders, opened: each field before it at its projection off `value`, read as `field` reads its own, and each outer binder at `outer`, outermost first. A field type that names an earlier field names *that value's* earlier field rather than a loose binder, and the projection is asked of a field only where the type names it.
+pub(crate) fn open_field(
+    written: &Term,
+    index: usize,
+    outer: &[Term],
+    value: &Term,
+    field: &Field,
+) -> Term {
+    let count = outer.len();
+
+    written.release_by(index + count, |delta| match delta.checked_sub(index) {
+        None => {
+            let earlier = field
+                .beside(index - 1 - delta)
+                .expect("a slot stands beside a slot");
 
             Term::from(Subterm::Proj(Proj {
                 head: value.clone(),
-                field,
+                field: earlier,
             }))
-        })
-    }
+        }
+        Some(beyond) => outer[count - 1 - beyond].clone(),
+    })
 }
 
 /// A position inside a [`Telescope`]: every entry before it opened at the argument its binder was given, and everything from it on left untouched until it is read.
@@ -452,9 +521,7 @@ impl<'a, B: Bound> Cursor<'a, B> {
     pub fn entry(&self) -> Option<(Option<&'a str>, Term)> {
         match self.at {
             Telescope::Done(_) => None,
-            Telescope::Cons(_, ty, rest) => {
-                Some((rest.first_hint(), ty.release(&self.innermost_first())))
-            }
+            Telescope::Cons(_, ty, rest) => Some((rest.first_hint(), self.opened(ty))),
         }
     }
 
@@ -506,19 +573,20 @@ impl<'a, B: Bound> Cursor<'a, B> {
     /// The payload opened at every argument, once every entry is passed; `None` before.
     pub fn body(&self) -> Option<B> {
         match self.at {
-            Telescope::Done(body) => Some(body.release(&self.innermost_first())),
+            Telescope::Done(body) => Some(self.opened(body)),
             Telescope::Cons(..) => None,
         }
     }
 
     /// What remains from this position, as a telescope opened at every argument so far — for a caller that hands the rest on rather than reading it entry by entry. It costs the remainder's whole size, which is why reading through [`Cursor::entry`] is preferred.
     pub fn rest(&self) -> Telescope<B> {
-        self.at.release(&self.innermost_first())
+        self.opened(self.at)
     }
 
-    /// Beneath `j` one-binder scopes the nearest binder is index 0, so a release takes the arguments innermost first.
-    fn innermost_first(&self) -> Vec<&Term> {
-        self.args.iter().rev().collect()
+    /// `value` opened at every argument so far. Beneath `j` one-binder scopes the nearest binder is index 0, so the release reads the arguments innermost first, off the list kept outermost first rather than off a copy of it, which would cost every argument at every entry read.
+    fn opened<T: Bound>(&self, value: &T) -> T {
+        let count = self.args.len();
+        value.release_by(count, |delta| self.args[count - 1 - delta].clone())
     }
 }
 /// A walk that can step past its current binder at a fresh variable: a [`Cursor`], or two cursors in [`Lockstep`]. What a checker's "mint the binder, assume it, step past it" encapsulates, so one helper serves both shapes.

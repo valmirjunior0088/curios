@@ -444,7 +444,7 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                         return Ok(None);
                     };
 
-                    Ok(at.fields().field_type_from(head, field))
+                    at.field_type(kernel, head, field)
                 }
                 _ => Ok(None),
             }

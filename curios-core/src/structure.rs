@@ -1,5 +1,11 @@
+#[cfg(test)]
+mod tests;
+
 use {
-    super::{Polarity, Telescope, Term, UniverseContext, Variance},
+    super::{
+        Field, Polarity, Telescope, Term, UniverseContext, UniverseError, Universes, Variance,
+        instantiate_universes_scoped, open_field,
+    },
     crate::Sharing,
     curios_utilities::Qualifier,
 };
@@ -78,5 +84,78 @@ impl StructDecl {
     /// This structure's field telescope at known parameters: `fields_at([Nat, Bytes])` for `Pair` is `(fst : Nat, snd : Bytes)`. The fields are the arity's terminal, so this opens it rather than peeling a repeated prefix.
     pub fn fields_at(&self, params: &[Term]) -> Telescope<()> {
         self.arity.open(&params.iter().collect::<Vec<_>>())
+    }
+
+    /// This declaration at `universes`, read a facet at a time.
+    pub fn at<'d>(&'d self, universes: &'d Universes) -> StructInstance<'d> {
+        StructInstance {
+            declaration: self,
+            universes,
+        }
+    }
+}
+
+/// A structure declaration read at one occurrence's universes: each facet is instantiated where it is read, so a read of the sort, the parameters or one field pays for that facet and never for every field the declaration has. What [`StructDecl::at`] hands back.
+#[derive(Clone, Copy)]
+pub struct StructInstance<'d> {
+    declaration: &'d StructDecl,
+    universes: &'d Universes,
+}
+
+impl<'d> StructInstance<'d> {
+    /// The declaration as declared: what no universe instance changes — its module, its privacy, its counts, its vectors.
+    pub fn declaration(&self) -> &'d StructDecl {
+        self.declaration
+    }
+
+    /// The parameter telescope at these universes, the fields beneath it left out: what an occurrence's parameters are checked against.
+    pub fn parameters(&self) -> Result<Telescope<()>, UniverseError> {
+        instantiate_universes_scoped(&self.declaration.arity.prefix(), self.universes)
+    }
+
+    /// The declared result sort, at these universes.
+    pub fn result_sort(&self) -> Result<Term, UniverseError> {
+        instantiate_universes_scoped(&self.declaration.result_sort, self.universes)
+    }
+
+    /// The field telescope at these universes and `params` ([`StructDecl::fields_at`]): what a reader of every field takes.
+    pub fn fields_at(&self, params: &[Term]) -> Result<Telescope<()>, UniverseError> {
+        Ok(
+            instantiate_universes_scoped(&self.declaration.arity, self.universes)?
+                .open(&params.iter().collect::<Vec<_>>()),
+        )
+    }
+
+    /// The type of the slot `field` reads off `value`, a structure at `params`, at these universes: what [`Telescope::field_type_from`] reads off [`Self::fields_at`], with that one field instantiated and opened — each field before it at its projection off `value`, each parameter at `params` — and no other. `None` for a slot past the fields, and for a written form.
+    pub fn field_type(
+        &self,
+        params: &[Term],
+        value: &Term,
+        field: &Field,
+    ) -> Result<Option<Term>, UniverseError> {
+        assert_eq!(
+            params.len(),
+            self.declaration.param_count(),
+            "a structure's fields are read at every parameter"
+        );
+        let Some(index) = field.slot() else {
+            return Ok(None);
+        };
+        let Some(written) = self.declaration.fields().entry_type(index) else {
+            return Ok(None);
+        };
+        // The levels first, of the declaration's own type: a parameter stands at the occurrence's.
+        let instantiated = instantiate_universes_scoped(written, self.universes)?;
+
+        Ok(Some(open_field(&instantiated, index, params, value, field)))
+    }
+
+    /// Every facet at these universes: what a reader of the whole declaration — a structure literal's fields, a derivation — takes.
+    pub fn whole(&self) -> Result<StructDecl, UniverseError> {
+        let mut instantiated = self.declaration.clone();
+        instantiated.arity = instantiate_universes_scoped(&self.declaration.arity, self.universes)?;
+        instantiated.result_sort = self.result_sort()?;
+        instantiated.universe_context = UniverseContext::empty();
+        Ok(instantiated)
     }
 }

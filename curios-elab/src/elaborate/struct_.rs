@@ -67,22 +67,41 @@ pub(super) fn elaborate_struct_type(
         params,
     } = st;
 
-    let Some(struct_decl) = context.struct_decl(name).cloned() else {
+    // The facets a structure's type reads, and no field: a structure of many fields is typed in its parameters' size.
+    let Some((universe_context, written, written_sort)) = context.struct_decl(name).map(|decl| {
+        (
+            decl.universe_context.clone(),
+            decl.arity.prefix(),
+            decl.result_sort.clone(),
+        )
+    }) else {
         return Err(match context.assumption(&Free::from(name)) {
             Some(found) => Error::not_a_struct_type(found.clone()),
             None => Error::unknown_declaration(*name),
         });
     };
-    let explicit_universes = (!universes.is_empty()).then_some(universes);
-    let occurrence = Occurrence {
-        instantiated: *name,
-        extent: term.extent(),
+    let (parameters, result_sort, universes) = if universes.is_empty() {
+        let occurrence = Occurrence {
+            instantiated: *name,
+            extent: term.extent(),
+        };
+        let (parameters, universes) =
+            context.instantiate_universe_bound(&universe_context, &written, Some(occurrence))?;
+        let result_sort =
+            instantiate_universes_scoped(&written_sort, &universes).map_err(Error::from)?;
+        (parameters, result_sort, universes)
+    } else {
+        let (parameters, result_sort) = context
+            .struct_facet(name, universes, |at| {
+                Ok((at.parameters()?, at.result_sort()?))
+            })
+            .expect("the declaration was read above")?;
+        (parameters, result_sort, universes.clone())
     };
-    let (struct_decl, universes) =
-        instantiate_struct_decl(context, struct_decl, explicit_universes, occurrence)?;
+    let param_count = parameters.len();
 
-    if params.is_empty() && struct_decl.param_count() != 0 {
-        let mut cursor = struct_decl.arity.cursor();
+    if params.is_empty() && param_count != 0 {
+        let mut cursor = parameters.cursor();
         while let Some((hint, ty)) = cursor.entry() {
             let binder = binder_name(hint);
             let proposition = is_prop(context, &ty).probed()?.unwrap_or(false);
@@ -100,23 +119,23 @@ pub(super) fn elaborate_struct_type(
         }
         return Ok((
             Term::struct_type_at(*name, universes, cursor.into_args()),
-            struct_decl.result_sort.clone(),
+            result_sort,
         ));
     }
 
-    if params.len() != struct_decl.param_count() {
+    if params.len() != param_count {
         return Err(Error::struct_arity_mismatch(
             *name,
-            struct_decl.param_count(),
+            param_count,
             params.len(),
         ));
     }
 
-    let (elaborated, _fields) = check_args_against(context, struct_decl.arity, params)?;
+    let (elaborated, ()) = check_args_against(context, parameters, params)?;
 
     Ok((
         Term::struct_type_at(*name, universes, elaborated),
-        struct_decl.result_sort,
+        result_sort,
     ))
 }
 

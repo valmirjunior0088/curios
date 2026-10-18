@@ -78,10 +78,10 @@ use {
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Declarations, Definition,
         DefinitionKind, Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
         InductDecl, InductInstance, Item, Level, Metavar, MetavarId, MetavarOrigin, MetavarSpine,
-        Minted, Mints, NumLit, Quality, RecGroup, ReduceError, StructDecl, Subterm, Term, Totality,
-        Trace, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMetaId, UniverseRole, Universes, Variance, WitnessKey, WitnessOrigin,
-        instantiate_universes_scoped,
+        Minted, Mints, NumLit, Quality, RecGroup, ReduceError, StructDecl, StructInstance, Subterm,
+        Term, Totality, Trace, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseError, UniverseMetaId, UniverseRole, Universes, Variance, WitnessKey,
+        WitnessOrigin, instantiate_universes_scoped,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -1380,6 +1380,28 @@ impl<'s> Context<'s> {
             (
                 induct_decl.universe_context.clone(),
                 read(induct_decl.at(universes)),
+            )
+        };
+
+        Some(
+            self.universes_mut()
+                .instantiate_at(&universe_context, universes, None)
+                .and(read),
+        )
+    }
+
+    /// [`Context::induct_facet`] for the structure declaration `name`: a read of the sort, the parameters or one field pays for that facet, where [`Context::instantiate_struct_decl_at`] instantiates every field.
+    pub(crate) fn struct_facet<T>(
+        &mut self,
+        name: &Global,
+        universes: &Universes,
+        read: impl FnOnce(StructInstance<'_>) -> Result<T, UniverseError>,
+    ) -> Option<Result<T, UniverseError>> {
+        let (universe_context, read) = {
+            let struct_decl = self.struct_decl(name)?;
+            (
+                struct_decl.universe_context.clone(),
+                read(struct_decl.at(universes)),
             )
         };
 

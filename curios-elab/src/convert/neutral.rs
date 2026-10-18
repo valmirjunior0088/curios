@@ -3,7 +3,6 @@
 //! Both are the *non*-structural half of conversion: [`synth_neutral`] answers what type a head-and-arguments term inhabits, which is what type-directed comparison needs before it can compare anything, and [`identify_universe_levels`] disposes of a problem by committing level equalities rather than by descending. The structural comparison that calls them lives with [`Convert`](super::Convert).
 
 use {
-    super::instantiate_bound_at,
     crate::{Context, Structural, reduce, reduce_forced},
     curios_core::{
         Argument, Families, Field, Free, FuncType, InductType, Instance, InstanceHead, Level,
@@ -397,21 +396,16 @@ pub(crate) fn synth_neutral(
                     }),
                     Field::Struct(structure, _),
                 ) if name == *structure => {
-                    let Some(declaration) = context.struct_decl(&name).cloned() else {
-                        return Ok(None);
-                    };
-                    if declaration.param_count() != params.len() {
+                    if context
+                        .struct_decl(&name)
+                        .is_none_or(|declaration| declaration.param_count() != params.len())
+                    {
                         return Ok(None);
                     }
-                    let arity = instantiate_bound_at(
-                        context,
-                        &declaration.universe_context,
-                        &declaration.arity,
-                        &universes,
-                    )?;
-                    Ok(arity
-                        .open(&params.iter().collect::<Vec<_>>())
-                        .field_type_from(head, field))
+                    context
+                        .struct_facet(&name, &universes, |at| at.field_type(&params, head, field))
+                        .expect("the declaration was read above")
+                        .map_err(ReduceError::Universe)
                 }
                 _ => Ok(None),
             }

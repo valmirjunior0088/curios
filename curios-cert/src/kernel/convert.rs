@@ -668,7 +668,7 @@ fn structural(
             let telescope = kernel
                 .struct_at(left_name, left_universes, left_params)
                 .ok()
-                .map(|at| at.fields());
+                .and_then(|at| at.fields(kernel).ok());
             compare_fields_at(kernel, pairs, telescope, left_fields, right_fields)
         }
 
@@ -771,10 +771,10 @@ fn structural(
 /// Two parameter vectors at the types a declaration's outer telescope assigns them, each opened at the left side's preceding actuals because a later domain may name an earlier parameter.
 ///
 /// `None` for the telescope keeps the grounded comparison: a declaration the registry seeding refused has no types to compare at, and inventing some would be worse than the concession. Shared by the three nominal shapes that carry parameters — a struct type, a struct literal and a constructor value — which reach it from `StructDecl::arity`'s outer half and `InductDecl::arity`'s, the same halves `induct_type_args` walks for a family.
-fn params_at(
+fn params_at<B: Bound>(
     kernel: &mut Kernel,
     pairs: &mut Pairs,
-    telescope: Option<Telescope<Telescope<()>>>,
+    telescope: Option<Telescope<B>>,
     this: &[Term],
     that: &[Term],
 ) -> Result<bool, Error> {
@@ -801,14 +801,8 @@ fn params_at(
 }
 
 /// A struct declaration's parameter telescope at `universes`, or `None` where the declaration is absent or its levels do not instantiate.
-fn struct_params(
-    kernel: &Kernel,
-    name: &Global,
-    universes: &Universes,
-) -> Option<Telescope<Telescope<()>>> {
-    let arity = kernel.struct_decl(name)?.arity.clone();
-
-    instantiate_universes_scoped(&arity, universes).ok()
+fn struct_params(kernel: &Kernel, name: &Global, universes: &Universes) -> Option<Telescope<()>> {
+    kernel.struct_decl(name)?.at(universes).parameters().ok()
 }
 
 /// The same for an inductive family, which a constructor value's parameters are the family's.
@@ -966,7 +960,7 @@ fn struct_eta(
         return Ok(false);
     };
 
-    let fields = at.fields();
+    let fields = at.fields(kernel)?;
     let mut cursor = fields.cursor();
     let mut data = false;
     for (index, field) in literal.fields.iter().enumerate() {
