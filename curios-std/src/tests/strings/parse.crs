@@ -5,10 +5,10 @@ let shown(@A: Type, r: Result(Parse/Error, A), f: (A) -> Str) -> Str =
     match r | success(a) => f(a) | failure(e) => Parse/Error/to_str(e) end;
 
 let pair() -> Parse(Str, {Str, Str}) =
-    let word = Parse/text/take_while((c) => Char/to_nat(c) != 32)!;
-    let _ = Parse/text/expect(' ')!;
-    let _ = Parse/text/literal("wö")!;
-    let rest = Parse/text/rest!;
+    let word = Parse/str/take_while((c) => Char/to_nat(c) != 32)!;
+    let _ = Parse/str/expect(' ')!;
+    let _ = Parse/str/literal("wö")!;
+    let rest = Parse/str/rest!;
     let _ = Parse/eof()!;
     Parse/pure((word, rest));
 
@@ -25,13 +25,13 @@ test a_text_refusal_is_at_a_byte_offset =
         "expected \"wö\" at byte 7");
 
 let two() -> Parse(Str, {Char, Char}) =
-    let a = Parse/text/char!;
-    let b = Parse/text/char!;
+    let a = Parse/str/char!;
+    let b = Parse/str/char!;
     Parse/pure((a, b));
 
 let peeked() -> Parse(Str, Str) =
-    let first = Parse/text/peek!;
-    let taken = Parse/text/char!;
+    let first = Parse/str/peek!;
+    let taken = Parse/str/char!;
     Parse/pure(
         Str/concat(
             match first | some(c) => Str/of_char(c) | none() => "none" end,
@@ -47,8 +47,8 @@ test a_character_is_refused_at_the_end =
 
 -- Of two alternatives that both decline, the refusal reported is the one that reached further into the input, in either order: `ab` then `cd` stops at byte 2, where `x` stopped at the start.
 test or_reports_the_refusal_that_reached_further =
-    let far: Parse(Str, {}) = Parse/bind(Parse/text/literal("ab"), (_) => Parse/text/literal("cd"));
-    let near: Parse(Str, {}) = Parse/text/literal("x");
+    let far: Parse(Str, {}) = Parse/bind(Parse/str/literal("ab"), (_) => Parse/str/literal("cd"));
+    let near: Parse(Str, {}) = Parse/str/literal("x");
     Test/all([
         Test/equal(
             shown(Parse/run(Parse/or(far, near), "abx"), (_) => "ok"),
@@ -68,10 +68,10 @@ test a_bytes_literal_is_read_byte_by_byte =
             "expected \"ab\" at byte 0")]);
 
 let digit: Parse(Str, Char) =
-    Parse/label(Parse/text/char_if(Char/is_digit), "expected a digit");
+    Parse/label(Parse/str/char_if(Char/is_digit), "expected a digit");
 
 let comma: Parse(Str, {}) =
-    Parse/text/literal(",");
+    Parse/str/literal(",");
 
 let whole(list: Parse(Str, List(Char))) -> Parse(Str, Str) =
     let items = list!;
@@ -109,13 +109,13 @@ test many1_owes_its_first_value =
 test or_reports_the_first_refusal_on_a_tie =
     Test/equal(
         shown(
-            Parse/run(Parse/or(Parse/text/literal("a"), Parse/text/literal("b")), "x"),
+            Parse/run(Parse/or(Parse/str/literal("a"), Parse/str/literal("b")), "x"),
             (_) => "ok"),
         "expected \"a\" at byte 0");
 
 let cut(lit: Str) -> Parse(Str, {Str, Str}) =
-    let before = Parse/text/until(lit)!;
-    let rest = Parse/text/rest!;
+    let before = Parse/str/until(lit)!;
+    let rest = Parse/str/rest!;
     Parse/pure((before, rest));
 
 -- `until` answers the piece of the input before a literal's next occurrence and leaves the literal unread, with multi-byte characters on either side of it. Where the literal does not occur it answers all that is left, and an occurrence where the parser stands is an empty piece.

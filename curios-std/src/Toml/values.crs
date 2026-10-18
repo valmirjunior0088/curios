@@ -14,10 +14,10 @@ let val_str_literal: Parse(Str, Toml) =
     Parse/map(Parse/or(str_ml_literal(), str_literal), (s) => Toml/str(s));
 
 let val_true: Parse(Str, Toml) =
-    Parse/map(Parse/text/literal("true"), (_) => Toml/bool(true));
+    Parse/map(Parse/str/literal("true"), (_) => Toml/bool(true));
 
 let val_false: Parse(Str, Toml) =
-    Parse/map(Parse/text/literal("false"), (_) => Toml/bool(false));
+    Parse/map(Parse/str/literal("false"), (_) => Toml/bool(false));
 
 let val_number_signed: Parse(Str, Toml) =
     Parse/or(flt_number(), Parse/or(int_value(), flt_special()));
@@ -29,26 +29,26 @@ let val_number_digit: Parse(Str, Toml) =
     Parse/or(date_time_value, Parse/or(flt_number(), int_value()));
 
 let inline_comma() -> Parse(Str, {}) =
-    let _ = Parse/text/expect(',')!;
+    let _ = Parse/str/expect(',')!;
     ws;
 
 let array_parse() -> Parse(Str, Toml) =
-    let _ = Parse/label(Parse/text/expect('['), "expected array")!;
+    let _ = Parse/label(Parse/str/expect('['), "expected array")!;
     array_items([])
 and array_items(acc: List(Toml)) -> Parse(Str, Toml) =
     let _ = trivia!;
-    let closed = Parse/optional(Parse/text/expect(']'))!;
+    let closed = Parse/optional(Parse/str/expect(']'))!;
     match closed
     | some(_) => Parse/pure(Toml/arr(acc))
     | none() =>
         let v = value_parse()!;
         let _ = trivia!;
         let acc2 = [..acc, v];
-        let comma = Parse/optional(Parse/text/expect(','))!;
+        let comma = Parse/optional(Parse/str/expect(','))!;
         match comma
         | some(_) => array_items(acc2)
         | none() =>
-            let stop = Parse/optional(Parse/text/expect(']'))!;
+            let stop = Parse/optional(Parse/str/expect(']'))!;
             match stop
             | some(_) => Parse/pure(Toml/arr(acc2))
             | none() => Parse/fail("expected ',' or ']' in array")
@@ -56,14 +56,14 @@ and array_items(acc: List(Toml)) -> Parse(Str, Toml) =
         end
     end
 and inline_parse() -> Parse(Str, Toml) =
-    let _ = Parse/label(Parse/text/expect('{'), "expected inline table")!;
+    let _ = Parse/label(Parse/str/expect('{'), "expected inline table")!;
     let _ = ws!;
-    let empty = Parse/optional(Parse/text/expect('}'))!;
+    let empty = Parse/optional(Parse/str/expect('}'))!;
     match empty
     | some(_) => Parse/pure(Toml/table(Map/empty()))
     | none() =>
         let pairs = Parse/sep_by1(inline_pair(), inline_comma())!;
-        let _ = Parse/label(Parse/text/expect('}'), "expected ',' or '}' in inline table")!;
+        let _ = Parse/label(Parse/str/expect('}'), "expected ',' or '}' in inline table")!;
         match inline_fold(pairs)
         | success(m) => Parse/pure(Toml/table(m))
         | failure(e) => Parse/fail(Error/message(e))
@@ -72,13 +72,13 @@ and inline_parse() -> Parse(Str, Toml) =
 and inline_pair() -> Parse(Str, {List(Str), Toml}) =
     let path = key_dotted!;
     let _ = ws!;
-    let _ = Parse/label(Parse/text/expect('='), "expected '=' in inline table")!;
+    let _ = Parse/label(Parse/str/expect('='), "expected '=' in inline table")!;
     let _ = ws!;
     let v = value_parse()!;
     let _ = ws!;
     Parse/pure((path, v))
 pub and value_parse() -> Parse(Str, Toml) =
-    let next = Parse/text/peek!;
+    let next = Parse/str/peek!;
     match next
     | none() => Parse/fail("expected value")
     | some(c) =>

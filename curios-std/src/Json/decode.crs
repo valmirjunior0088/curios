@@ -1,13 +1,13 @@
 use /std/{Str, Bool, Char, Flt, Nat, Int, Parse, Option, List, Json};
 
 let parse_null: Parse(Str, Json) =
-    Parse/map(Parse/text/literal("null"), (_) => Json/null());
+    Parse/map(Parse/str/literal("null"), (_) => Json/null());
 
 let parse_true_val: Parse(Str, Json) =
-    Parse/map(Parse/text/literal("true"), (_) => Json/bool(true));
+    Parse/map(Parse/str/literal("true"), (_) => Json/bool(true));
 
 let parse_false_val: Parse(Str, Json) =
-    Parse/map(Parse/text/literal("false"), (_) => Json/bool(false));
+    Parse/map(Parse/str/literal("false"), (_) => Json/bool(false));
 
 --- The number a run of decimal digits spells, `0` for an empty one.
 let digits_value(run: Str) -> Nat =
@@ -15,17 +15,17 @@ let digits_value(run: Str) -> Nat =
 
 --- A nonempty run of decimal digits, owed once the character before it has been read.
 let digits1() -> Parse(Str, Str) =
-    let run = Parse/text/take_while(Char/is_digit)!;
+    let run = Parse/str/take_while(Char/is_digit)!;
     match Str/is_empty(run) | true => Parse/fail("expected digit") | false => Parse/pure(run) end;
 
 --- The integer part: `0` alone, or a run of digits that does not open with it. A zero ends the part where it stands, so `01` is a zero with a `1` after it, which no document continues with.
 let int_part() -> Parse(Str, Str) =
-    let first = Parse/text/peek!;
+    let first = Parse/str/peek!;
     match first
     | some(c) =>
         choose
-        | c == '0' => Parse/map(Parse/text/char, (_) => "0")
-        | Char/is_digit(c) => Parse/text/take_while(Char/is_digit)
+        | c == '0' => Parse/map(Parse/str/char, (_) => "0")
+        | Char/is_digit(c) => Parse/str/take_while(Char/is_digit)
         | _ => Parse/fail("expected number")
         end
     | none() => Parse/fail("expected number")
@@ -33,11 +33,11 @@ let int_part() -> Parse(Str, Str) =
 
 --- The fraction: the digits after a point, or none where no point is written. A point owes a digit.
 let frac_part() -> Parse(Str, Str) =
-    let point = Parse/optional(Parse/text/expect('.'))!;
+    let point = Parse/optional(Parse/str/expect('.'))!;
     match point | some(_) => Parse/commit(digits1()) | none() => Parse/pure("") end;
 
 let exp_fields() -> Parse(Str, Int) =
-    let sign = Parse/optional(Parse/text/char_if((c) => c == '+' || c == '-'))!;
+    let sign = Parse/optional(Parse/str/char_if((c) => c == '+' || c == '-'))!;
     let run = digits1()!;
     let magnitude = Nat/to_int(digits_value(run));
     Parse/pure(
@@ -48,12 +48,12 @@ let exp_fields() -> Parse(Str, Int) =
 
 --- The exponent: what follows an `e` of either case, or zero where none is written. An `e` owes a digit.
 let exp_part() -> Parse(Str, Int) =
-    let marker = Parse/optional(Parse/text/char_if((c) => c == 'e' || c == 'E'))!;
+    let marker = Parse/optional(Parse/str/char_if((c) => c == 'e' || c == 'E'))!;
     match marker | some(_) => Parse/commit(exp_fields()) | none() => Parse/pure(+0) end;
 
 --- A number as RFC 8259 §6 writes one — `-? (0 | [1-9][0-9]*) (\.[0-9]+)? ([eE][+-]?[0-9]+)?` — converted once, through `Flt/of_decimal`. One past binary64's range is refused; one that rounds to zero is zero of its sign.
 let parse_num() -> Parse(Str, Json) =
-    let minus = Parse/optional(Parse/text/expect('-'))!;
+    let minus = Parse/optional(Parse/str/expect('-'))!;
     let whole = int_part()!;
     let fraction = frac_part()!;
     let exponent = exp_part()!;
@@ -74,7 +74,7 @@ let is_unescaped(c: Char) -> Bool =
     match Char/to_nat(c) | '"' => false | '\\' => false | _ => Char/to_nat(c) >= 0x20 end;
 
 let hex_digit() -> Parse(Str, Nat) =
-    let c = Parse/text/char!;
+    let c = Parse/str/char!;
     match Char/of_hex_digit(c)
     | some(v) => Parse/pure(v)
     | none() => Parse/fail("invalid hex digit")
@@ -99,8 +99,8 @@ let parse_unicode() -> Parse(Str, Str) =
     match hi >= 0xD800 && hi <= 0xDBFF
     | false => scalar(hi)
     | true =>
-        let _ = Parse/label(Parse/text/expect('\\'), "expected low surrogate")!;
-        let _ = Parse/label(Parse/text/expect('u'), "expected low surrogate")!;
+        let _ = Parse/label(Parse/str/expect('\\'), "expected low surrogate")!;
+        let _ = Parse/label(Parse/str/expect('u'), "expected low surrogate")!;
         let lo = hex4()!;
         match lo >= 0xDC00 && lo <= 0xDFFF
         | true => scalar(0x10000 + (hi - 0xD800) * 0x400 + (lo - 0xDC00))
@@ -109,7 +109,7 @@ let parse_unicode() -> Parse(Str, Str) =
     end;
 
 let escape_fields() -> Parse(Str, Str) =
-    let c = Parse/text/char!;
+    let c = Parse/str/char!;
     match Char/to_nat(c)
     | '"' => Parse/pure("\"")
     | '\\' => Parse/pure("\\")
@@ -124,15 +124,15 @@ let escape_fields() -> Parse(Str, Str) =
     end;
 
 let parse_str_escape() -> Parse(Str, Str) =
-    let _ = Parse/text/expect('\\')!;
+    let _ = Parse/str/expect('\\')!;
     Parse/commit(escape_fields());
 
 let parse_str_segment: Parse(Str, Str) =
-    Parse/text/take_while(is_unescaped);
+    Parse/str/take_while(is_unescaped);
 
 --- A raw control character, refused where it stands: declining here would end the string's body, and the report would name the closing quote the string never reached.
 let parse_str_control() -> Parse(Str, Str) =
-    let next = Parse/text/peek!;
+    let next = Parse/str/peek!;
     match next
     | some(c) =>
         match Char/to_nat(c) < 0x20
@@ -147,9 +147,9 @@ let parse_str_body: Parse(Str, List(Str)) =
 
 --- A string: the pieces of the input between its escapes, and the character each escape names, joined. Every piece is text because the input is, so nothing is checked again.
 let parse_raw_str() -> Parse(Str, Str) =
-    let _ = Parse/text/expect('"')!;
+    let _ = Parse/str/expect('"')!;
     let pieces = parse_str_body!;
-    let _ = Parse/text/expect('"')!;
+    let _ = Parse/str/expect('"')!;
     Parse/pure(Str/flatten(pieces));
 
 let parse_str_value: Parse(Str, Json) =
@@ -165,15 +165,15 @@ let is_ws(c: Char) -> Bool =
     end;
 
 let ws: Parse(Str, {}) =
-    Parse/map(Parse/text/take_while(is_ws), (_) => ());
+    Parse/map(Parse/str/take_while(is_ws), (_) => ());
 
 let symbol(c: Char) -> Parse(Str, Char) =
     let _ = ws!;
-    Parse/text/expect(c);
+    Parse/str/expect(c);
 
 --- The next character without consuming it; declines at the end of the input.
 let peek_char() -> Parse(Str, Char) =
-    let next = Parse/text/peek!;
+    let next = Parse/str/peek!;
     match next | some(c) => Parse/pure(c) | none() => Parse/fail("unexpected end of input") end;
 
 let bracketed(
@@ -187,7 +187,7 @@ let bracketed(
     let _ = ws!;
     let next = peek_char()!;
     match next == close
-    | true => Parse/map(Parse/text/char, (_) => [])
+    | true => Parse/map(Parse/str/char, (_) => [])
     | false =>
         let elems = Parse/commit(Parse/sep_by1(elem, symbol(',')))!;
         let _ = Parse/label(symbol(close), after)!;

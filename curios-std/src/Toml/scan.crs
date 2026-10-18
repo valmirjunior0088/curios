@@ -25,26 +25,26 @@ pub let hex_val(n: Nat) -> Option(Nat) =
 
 --- Spaces and tabs, as many as there are.
 pub let ws: Parse(Str, {}) =
-    Parse/map(Parse/text/take_while(is_ws_char), (_) => ());
+    Parse/map(Parse/str/take_while(is_ws_char), (_) => ());
 
 let comment() -> Parse(Str, {}) =
-    let _ = Parse/text/expect('#')!;
-    Parse/map(Parse/text/take_while(is_comment_char), (_) => ());
+    let _ = Parse/str/expect('#')!;
+    Parse/map(Parse/str/take_while(is_comment_char), (_) => ());
 
 --- One line break, either `\r\n` or a bare `\n`.
 pub let newline: Parse(Str, {}) =
     Parse/or(
-        Parse/map(Parse/and(Parse/text/expect('\r'), Parse/text/expect('\n')), (_) => ()),
-        Parse/map(Parse/text/expect('\n'), (_) => ()));
+        Parse/map(Parse/and(Parse/str/expect('\r'), Parse/str/expect('\n')), (_) => ()),
+        Parse/map(Parse/str/expect('\n'), (_) => ()));
 
 --- Whitespace, line breaks and comments, as much as there is: what may sit between two items.
 pub let trivia: Parse(Str, {}) =
     Parse/map(
         Parse/many0(
             Parse/or(
-                Parse/map(Parse/text/expect(' '), (_) => ()),
+                Parse/map(Parse/str/expect(' '), (_) => ()),
                 Parse/or(
-                    Parse/map(Parse/text/expect('\t'), (_) => ()),
+                    Parse/map(Parse/str/expect('\t'), (_) => ()),
                     Parse/or(newline, comment())))),
         (_) => ());
 

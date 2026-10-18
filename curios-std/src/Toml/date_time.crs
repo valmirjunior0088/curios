@@ -3,7 +3,7 @@ use /std/Toml/{Date, Time, OffsetDateTime, LocalDateTime};
 
 let digit: Parse(Str, Nat) =
     Parse/label(
-        Parse/map(Parse/text/char_if(Char/is_digit), (c) => Char/to_nat(c) - '0'),
+        Parse/map(Parse/str/char_if(Char/is_digit), (c) => Char/to_nat(c) - '0'),
         "expected digit");
 
 let fixed(count: Nat, acc: Nat) -> Parse(Str, Nat) =
@@ -15,7 +15,7 @@ let fixed(count: Nat, acc: Nat) -> Parse(Str, Nat) =
     end;
 
 let expect(want: Char) -> Parse(Str, {}) =
-    Parse/label(Parse/map(Parse/text/expect(want), (_) => ()), "malformed date-time");
+    Parse/label(Parse/map(Parse/str/expect(want), (_) => ()), "malformed date-time");
 
 let nat_pow10(n: Nat) -> Nat =
     match n | 0 => 1 | _ + 1; ih => ih * 10 end;
@@ -27,14 +27,14 @@ let frac_stop(taken: Nat, acc: Nat, seen: Bool) -> Parse(Str, Nat) =
     end;
 
 let frac_digits(taken: Nat, acc: Nat, seen: Bool) -> Parse(Str, Nat) =
-    let next = Parse/text/peek!;
+    let next = Parse/str/peek!;
     match next
     | none() => frac_stop(taken, acc, seen)
     | some(c) =>
         match Char/is_digit(c)
         | false => frac_stop(taken, acc, seen)
         | true =>
-            let _ = Parse/text/char!;
+            let _ = Parse/str/char!;
             match taken < 9
             | true => frac_digits(taken + 1, acc * 10 + (Char/to_nat(c) - '0'), true)
             | false => frac_digits(taken, acc, true)
@@ -43,7 +43,7 @@ let frac_digits(taken: Nat, acc: Nat, seen: Bool) -> Parse(Str, Nat) =
     end;
 
 let frac_part() -> Parse(Str, Nat) =
-    let dot = Parse/optional(Parse/text/expect('.'))!;
+    let dot = Parse/optional(Parse/str/expect('.'))!;
     match dot | some(_) => frac_digits(0, 0, false) | none() => Parse/pure(0) end;
 
 let date_fields(y: Nat) -> Parse(Str, Date) =
@@ -90,11 +90,11 @@ let offset_fields(sign: Char) -> Parse(Str, Int) =
     end;
 
 let offset_parse() -> Parse(Str, Int) =
-    let zulu = Parse/optional(Parse/text/char_if((c) => c == 'Z' || c == 'z'))!;
+    let zulu = Parse/optional(Parse/str/char_if((c) => c == 'Z' || c == 'z'))!;
     match zulu
     | some(_) => Parse/pure(+0)
     | none() =>
-        let sign = Parse/label(Parse/text/char_if((c) => c == '+' || c == '-'), "expected offset")!;
+        let sign = Parse/label(Parse/str/char_if((c) => c == '+' || c == '-'), "expected offset")!;
         Parse/commit(offset_fields(sign))
     end;
 
@@ -106,7 +106,7 @@ let offset_tail(date: Date, time: Time) -> Parse(Str, Toml) =
     end;
 
 let date_time_tail(date: Date) -> Parse(Str, Toml) =
-    let _ = Parse/text/char_if((c) => c == 'T' || c == 't' || c == ' ')!;
+    let _ = Parse/str/char_if((c) => c == 'T' || c == 't' || c == ' ')!;
     let time = time_parse()!;
     Parse/or(
         offset_tail(date, time),

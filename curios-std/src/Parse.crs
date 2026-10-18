@@ -8,7 +8,7 @@ pub use Error/{let Error};
 pub mod bytes;
 
 --- Parsers over text: the carrier whose positions are boundaries of valid text, and the primitives that read characters and pieces of the input.
-pub mod text;
+pub mod str;
 
 --- What a parser asks of the carrier it reads: what a position in its bytes knows, the bytes it walks, and that the start is such a position. Sealed: `Bytes` and `Str` are the carriers, each witnessed beside its primitives.
 pub concept Input(I: Type): Type {

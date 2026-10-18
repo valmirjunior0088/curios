@@ -733,26 +733,26 @@ let of_str_in(r: Rounding, s: Str) -> Option(Flt) =
 
 --- An optional sign: whether it is `-`.
 let sign() -> Parse(Str, Bool) =
-    let written = Parse/optional(Parse/text/char_if((c) => c == '+' || c == '-'))!;
+    let written = Parse/optional(Parse/str/char_if((c) => c == '+' || c == '-'))!;
     Parse/pure(match written | some(c) => c == '-' | none() => false end);
 
 --- A run of decimal digits, possibly empty.
 let decimal_run: Parse(Str, Str) =
-    Parse/text/take_while(Char/is_digit);
+    Parse/str/take_while(Char/is_digit);
 
 --- A run of hex digits in either case, possibly empty.
 let hex_run: Parse(Str, Str) =
-    Parse/text/take_while((c) => Option/is_some(Char/of_hex_digit(c)));
+    Parse/str/take_while((c) => Option/is_some(Char/of_hex_digit(c)));
 
 --- `0x`, in either case.
 let hex_mark() -> Parse(Str, {}) =
-    let _ = Parse/text/expect('0')!;
-    let _ = Parse/text/char_if((c) => c == 'x' || c == 'X')!;
+    let _ = Parse/str/expect('0')!;
+    let _ = Parse/str/char_if((c) => c == 'x' || c == 'X')!;
     Parse/pure(());
 
 --- What follows a significand: nothing, which is an exponent of zero, or `lower` or `upper` and then an optional sign and at least one decimal digit.
 let exponent_after(lower: Char, upper: Char) -> Parse(Str, Int) =
-    let marker = Parse/optional(Parse/text/char_if((c) => c == lower || c == upper))!;
+    let marker = Parse/optional(Parse/str/char_if((c) => c == lower || c == upper))!;
     match marker
     | none() => Parse/pure(+0)
     | some(_) =>
@@ -768,18 +768,18 @@ let exponent_after(lower: Char, upper: Char) -> Parse(Str, Int) =
 
 --- What follows a point, or nothing where no point is written: the run `digits` reads after it.
 let fraction_of(digits: Parse(Str, Str)) -> Parse(Str, Str) =
-    let point = Parse/optional(Parse/text/expect('.'))!;
+    let point = Parse/optional(Parse/str/expect('.'))!;
     match point | some(_) => digits | none() => Parse/pure("") end;
 
 --- A NaN's payload: `(0x…)` in hex of either case, or the kind's own where none is written.
 let nan_payload(signaling: Bool) -> Parse(Str, Nat) =
-    let open = Parse/optional(Parse/text/expect('('))!;
+    let open = Parse/optional(Parse/str/expect('('))!;
     match open
     | none() => Parse/pure(match signaling | true => 1 | false => 0 end)
     | some(_) =>
         let _ = hex_mark()!;
         let run = hex_run!;
-        let _ = Parse/text/expect(')')!;
+        let _ = Parse/str/expect(')')!;
         match hex_value(run)
         | some(payload) => Parse/pure(payload)
         | none() => Parse/fail("expected a payload")
@@ -799,7 +799,7 @@ let nan(negative: Bool, signaling: Bool) -> Parse(Str, Flt) =
 
 --- The infinity or NaN a special name spells, of `negative`'s sign: `inf` or `infinity`, and `nan` or `snan` with an optional payload, in any case. The decimal and hex readers share it, since both write these values the same way.
 let special(negative: Bool) -> Parse(Str, Flt) =
-    let name = Parse/text/take_while(Char/is_alpha)!;
+    let name = Parse/str/take_while(Char/is_alpha)!;
     choose
     | Str/eql_ascii_ci(name, "inf") || Str/eql_ascii_ci(name, "infinity") =>
         Parse/pure(match negative | true => -inf.0 | false => +inf.0 end)

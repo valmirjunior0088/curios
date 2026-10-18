@@ -909,13 +909,13 @@ fn a_bytes_walk_is_run_once_however_many_follow_it() {
     );
 }
 
-/// A program stating a claim over one parse: a literal of `letters` letters read by `/std/Parse/text/literal` of the same text, which `claim` is handed as written and answers the declarations for.
+/// A program stating a claim over one parse: a literal of `letters` letters read by `/std/Parse/str/literal` of the same text, which `claim` is handed as written and answers the declarations for.
 ///
 /// `/std/Parse/run` takes its result's type as a hidden member, which unification solves and the term spells as a metavariable until its declaration is zonked: a claim holding the parse holds that metavariable, and a claim over a declaration bound to the parse holds none.
 fn parse_claim(letters: usize, claim: impl FnOnce(&str) -> String) -> String {
     let literal = "a".repeat(letters);
     let claim = claim(&format!(
-        "Parse/run(Parse/text/literal(\"{literal}\"), \"{literal}\")"
+        "Parse/run(Parse/str/literal(\"{literal}\"), \"{literal}\")"
     ));
 
     fill!(
@@ -1102,7 +1102,7 @@ fn primitive_claim(carrier: &str, parser: &str, input: &str) -> String {
     )
 }
 
-/// What each primitive of `/std/Parse/text` costs each checker beside its twin in `/std/Parse/bytes`, over 32 letters: a text primitive steps by a character and hands on a position that is a boundary of valid text, where its twin steps by a byte.
+/// What each primitive of `/std/Parse/str` costs each checker beside its twin in `/std/Parse/bytes`, over 32 letters: a text primitive steps by a character and hands on a position that is a boundary of valid text, where its twin steps by a byte.
 ///
 /// ```sh
 /// cargo test --package curios --all-features -- --ignored --nocapture parse_primitive_measurements
@@ -1135,35 +1135,35 @@ fn parse_primitive_measurements() {
     let rows: [(&str, String, Option<String>); 7] = [
         (
             "literal",
-            format!("Parse/text/literal({text})"),
+            format!("Parse/str/literal({text})"),
             Some(format!("Parse/bytes/literal({text})")),
         ),
         (
             "take_while",
-            "Parse/text/take_while((c) => Char/to_nat(c) == 'a')".to_string(),
+            "Parse/str/take_while((c) => Char/to_nat(c) == 'a')".to_string(),
             Some("Parse/bytes/take_while((b) => Byte/to_nat(b) == 'a')".to_string()),
         ),
         (
             "char, byte",
-            "times(32, Parse/text/char)".to_string(),
+            "times(32, Parse/str/char)".to_string(),
             Some("times(32, Parse/bytes/byte)".to_string()),
         ),
         (
             "char_if, byte_if",
-            "times(32, Parse/text/char_if((c) => Char/to_nat(c) == 'a'))".to_string(),
+            "times(32, Parse/str/char_if((c) => Char/to_nat(c) == 'a'))".to_string(),
             Some("times(32, Parse/bytes/byte_if((b) => Byte/to_nat(b) == 'a'))".to_string()),
         ),
         (
             "expect",
-            "times(32, Parse/text/expect('a'))".to_string(),
+            "times(32, Parse/str/expect('a'))".to_string(),
             Some("times(32, Parse/bytes/expect('a'))".to_string()),
         ),
         (
             "rest",
-            "Parse/text/rest".to_string(),
+            "Parse/str/rest".to_string(),
             Some("Parse/bytes/rest".to_string()),
         ),
-        ("until", "Parse/text/until(\"b\")".to_string(), None),
+        ("until", "Parse/str/until(\"b\")".to_string(), None),
     ];
 
     println!(

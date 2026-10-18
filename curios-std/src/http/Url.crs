@@ -60,8 +60,8 @@ let part(s: Str) -> Parse(Str, Str) =
     end;
 
 let scheme() -> Parse(Str, Scheme) =
-    let name = Parse/text/take_while(until([':']))!;
-    let _ = Parse/text/literal("://")!;
+    let name = Parse/str/take_while(until([':']))!;
+    let _ = Parse/str/literal("://")!;
     choose
     | Str/eql_ascii_ci(name, "http") => Parse/pure(Scheme/http())
     | Str/eql_ascii_ci(name, "https") => Parse/pure(Scheme/https())
@@ -86,9 +86,9 @@ let ends_authority(next: Option(Char)) -> Bool =
 
 -- The port after a `:`: its digits up to where the authority ends. None is the scheme's, as RFC 3986 §3.2.3 reads an empty port, and a number no port holds is refused here rather than at the connection.
 let port_number(s: Scheme) -> Parse(Str, Nat) =
-    let _ = Parse/text/expect(':')!;
-    let digits = Parse/text/take_while(is_digit)!;
-    let next = Parse/text/peek!;
+    let _ = Parse/str/expect(':')!;
+    let digits = Parse/str/take_while(is_digit)!;
+    let next = Parse/str/peek!;
     match ends_authority(next)
     | false => Parse/fail("a port is a number")
     | true =>
@@ -107,25 +107,25 @@ let port_number(s: Scheme) -> Parse(Str, Nat) =
     end;
 
 let port_of(s: Scheme) -> Parse(Str, Nat) =
-    let next = Parse/text/peek!;
+    let next = Parse/str/peek!;
     match next
     | some(c) => match Char/to_nat(c) | ':' => port_number(s) | _ => Parse/pure(default_port(s)) end
     | none() => Parse/pure(default_port(s))
     end;
 
 let path() -> Parse(Str, Str) =
-    let written = Parse/text/take_while(until(['?', '#']))!;
+    let written = Parse/str/take_while(until(['?', '#']))!;
     let s = part(written)!;
     match Str/is_empty(s) | true => Parse/pure("/") | false => Parse/pure(s) end;
 
 let query_text() -> Parse(Str, Option(Str)) =
-    let _ = Parse/text/expect('?')!;
-    let written = Parse/text/take_while(until(['#']))!;
+    let _ = Parse/str/expect('?')!;
+    let written = Parse/str/take_while(until(['#']))!;
     let s = part(written)!;
     Parse/pure(Option/some(s));
 
 let query() -> Parse(Str, Option(Str)) =
-    let next = Parse/text/peek!;
+    let next = Parse/str/peek!;
     match next
     | some(c) => match Char/to_nat(c) | '?' => query_text() | _ => Parse/pure(Option/none()) end
     | none() => Parse/pure(Option/none())
@@ -133,12 +133,12 @@ let query() -> Parse(Str, Option(Str)) =
 
 let url() -> Parse(Str, Url) =
     let s = scheme()!;
-    let h = Parse/text/take_while(until([':', '/', '?', '#']))!;
+    let h = Parse/str/take_while(until([':', '/', '?', '#']))!;
     let host = part(h)!;
     let p = port_of(s)!;
     let pa = path()!;
     let q = query()!;
-    let _ = Parse/text/rest!;
+    let _ = Parse/str/rest!;
     match Str/is_empty(host)
     | true => Parse/fail("a URL names a host")
     | false => Parse/pure(Url { scheme = s, host = host, port = p, path = pa, query = q })
