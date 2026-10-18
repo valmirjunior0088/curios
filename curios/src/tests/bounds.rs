@@ -976,6 +976,16 @@ fn a_counterexample_spells_an_atom_as_the_bound_states_it() {
     }
 }
 
+/// A fact a local definition's annotation states is named with its operators as written: the annotation's witnesses are metavariables elaboration solved after the statement was read, and the report reads it with their solutions in place, as it reads a counterexample's atoms.
+#[test]
+fn a_fact_a_local_definition_states_is_named_with_its_operators() {
+    let refused = typecheck(&format!(
+        "{HEADER}\nlet row(a: Int, b: Int, c: Int, h: Eq()(a, b * c + c)) -> Holds(a < b) = let stated: Eq()(b * c + c, a) = Eq/sym(h); True/proved();\nIo/pure(())"
+    ))
+    .expect_err("the control is refused");
+    assert!(refused.contains("stated: b * c + c <= a"), "{refused}");
+}
+
 /// An atom inside an operation is named as the operand it was written as, through an operator written by its concept and through a local definition standing for one: `width(s)`, where the view read the fold its body unfolds to.
 #[test]
 fn a_counterexample_spells_an_operand_of_an_operation_as_written() {

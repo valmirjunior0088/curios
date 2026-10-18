@@ -143,8 +143,12 @@ pub(crate) fn entail(
                     }
                 }
             };
-            // An atom is written as the operand it was read from states it, where a metavariable elaboration has since solved may still stand: substituted, as it is in the bound the report names above it.
-            Entailed::Refused(refusal.rewritten(|atom| zonk_solved_term_metas(context, atom)))
+            // A fact and an atom are written as the statement they were read from states them, where a metavariable elaboration has since solved may still stand — an operator's witness in a local definition's annotation among them: substituted, as it is in the bound the report names above it.
+            let mut refusal = refusal;
+            for term in refusal.terms_mut() {
+                *term = zonk_solved_term_metas(context, term);
+            }
+            Entailed::Refused(refusal)
         }
         entailed => entailed,
     })
