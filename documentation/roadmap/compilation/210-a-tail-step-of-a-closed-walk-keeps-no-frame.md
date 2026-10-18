@@ -6,7 +6,7 @@
 
 `curios_core::Machine` (`curios-core/src/machine.rs`), which both checkers run a closed term on, keeps every step of a walk on its stack until the walk's value comes back. A call and a `match` each file their value under a `Frame::Memo`, and a recursive member's body runs under a `Frame::RecGuard`; the recursive call in an arm's tail is evaluated above all of them, so a walk of `n` steps ends holding about `6n` frames, and `push` charges `machine_frame()` at every new peak. The charge is honest — the frames are held — and removable: a tail step's frames all answer with the value of the step after them.
 
-Measured at `f41f143ec` (counted, the protocol under *What is known*), per element of a walk over a 200-element literal, across every charge the elaborator takes in the run:
+Measured at `997cec045` (counted, the protocol under *What is known*), per element of a walk over a 200-element literal, across every charge the elaborator takes in the run:
 
 | Walk | Units per element | Beta | Memo entries | Frame peaks | Transitions | Other |
 | --- | --- | --- | --- | --- | --- | --- |
