@@ -1,6 +1,9 @@
 mod asking;
 pub(crate) use asking::*;
 
+mod birth_telescope;
+pub(crate) use birth_telescope::*;
+
 mod attempt;
 pub(crate) use attempt::*;
 
@@ -74,9 +77,9 @@ use {
     curios_core::{
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Declarations, Definition,
         DefinitionKind, Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
-        InductDecl, InductInstance, Item, Level, Metavar, MetavarId, MetavarOrigin, Minted, Mints,
-        NumLit, Quality, RecGroup, ReduceError, StructDecl, Subterm, Term, Totality, Trace,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        InductDecl, InductInstance, Item, Level, Metavar, MetavarId, MetavarOrigin, MetavarSpine,
+        Minted, Mints, NumLit, Quality, RecGroup, ReduceError, StructDecl, Subterm, Term, Totality,
+        Trace, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
         UniverseMetaId, UniverseRole, Universes, Variance, WitnessKey, WitnessOrigin,
         instantiate_universes_scoped,
     },
@@ -108,23 +111,20 @@ use {
 /// **A `Str` literal's ceiling is this constant divided by a per-character price the closed machine sets in transitions, not frames**: on the machine, guarded depth is flat in the length, so the frame row does not enter the price. The current price and ceiling are `curios`' `str_literal_cost_measurements`', and `a_str_literal_costs_transitions_rather_than_frames` holds the shape. Raising this constant raises the ceiling proportionally, and the trade it would make is the one stated above rather than anything about strings.
 pub const DEFAULT_STEP_BUDGET: u64 = 30_000_000;
 
-/// Γ frozen in binding order, with birth-time types. `Rc`-shared: every meta born under the same Γ shares one allocation (see [`Context::identity_snapshot`]).
-type SharedTelescope = Rc<Vec<(Free, Term)>>;
-
-/// The identity spine over a [`SharedTelescope`] — one `Var::free` per binder — shared the same way.
-type SharedSpine = Rc<Vec<Term>>;
+/// The identity spine over a [`BirthTelescope`] — one `Var::free` per binder — shared with the scope as the telescope is.
+type SharedSpine = MetavarSpine;
 
 /// The frozen scope a settle-synthesized lambda's domain metavariables are born under: the settle site's ambient frame, captured by [`Context::domain_scope`] before the lambda's own binders are assumed and consumed by [`Context::fresh_domain_metavar`]. Opaque outside this module — the walk that holds one can only pass it back.
 #[derive(Clone)]
 pub(crate) struct DomainScope {
-    telescope: SharedTelescope,
+    telescope: BirthTelescope,
     spine: SharedSpine,
     frames: HeldFrames,
 }
 
 /// How a metavariable is re-expressed in a context narrower than its own, that of the metavariable whose candidate embeds it ([`Context::metavar_restriction`]) or the one a block leaves standing where it ends ([`Context::block_restriction`]): the stand-in's telescope, drawn from the narrower context's, the arguments it is applied to in the restricted one's birth names, its type over its own binders, and the frames it holds. Opaque outside this module — what plans one can only pass it to [`Context::restrict_metavar`].
 pub(crate) struct Restriction {
-    telescope: SharedTelescope,
+    telescope: BirthTelescope,
     arguments: Vec<Term>,
     result: Term,
     frames: HeldFrames,
@@ -2130,7 +2130,7 @@ impl<'s> Context<'s> {
     pub(crate) fn birth_metavar(
         &mut self,
         id: MetavarId,
-        telescope: impl Into<SharedTelescope>,
+        telescope: impl Into<BirthTelescope>,
         result: Term,
     ) {
         self.birth_metavar_as(
@@ -2153,7 +2153,7 @@ impl<'s> Context<'s> {
     fn birth_metavar_as(
         &mut self,
         id: MetavarId,
-        telescope: SharedTelescope,
+        telescope: BirthTelescope,
         scoped: Scoped,
         result: Term,
         kind: MetaKind,
@@ -2166,7 +2166,7 @@ impl<'s> Context<'s> {
     fn birth_under(
         &mut self,
         id: MetavarId,
-        telescope: SharedTelescope,
+        telescope: BirthTelescope,
         scoped: Scoped,
         frames: HeldFrames,
         result: Term,
@@ -2182,14 +2182,14 @@ impl<'s> Context<'s> {
     /// Bring the telescope a metavariable was born over into scope, where a judgment of it stands on the frames it was born under ([`Context::at_birth`]): nothing where the telescope was taken with those frames and no binder was bound again in view since, the frames binding it as they did, and every binder again otherwise. Assuming it every time would cost each judgment the scope the metavariable was born in.
     pub(crate) fn assume_birth_scope(
         &mut self,
-        telescope: &[(Free, Term)],
+        telescope: &BirthTelescope,
         scoped: Scoped,
         born: &HeldFrames,
     ) {
         if scoped == Scoped::Held && self.typing.frames.binds_as(born) {
             return;
         }
-        for (name, type_) in telescope {
+        for (name, type_) in telescope.iter() {
             self.assume(name, type_);
         }
     }
@@ -2259,7 +2259,7 @@ impl<'s> Context<'s> {
         self.typing.frames.is_top_level(name)
     }
 
-    pub(crate) fn identity_snapshot(&mut self) -> (SharedTelescope, SharedSpine) {
+    pub(crate) fn identity_snapshot(&self) -> (BirthTelescope, SharedSpine) {
         self.typing.frames.identity_snapshot()
     }
 
@@ -2386,7 +2386,7 @@ impl<'s> Context<'s> {
     pub(crate) fn metavar_bound_by_candidate(
         &self,
         inner: MetavarId,
-        occurrences: &[Rc<Vec<Term>>],
+        occurrences: &[MetavarSpine],
         outer: MetavarId,
     ) -> bool {
         let (Some(inner_entry), Some(outer_entry)) =
@@ -2436,7 +2436,7 @@ impl<'s> Context<'s> {
         &self,
         inner: MetavarId,
         origin: &MetavarOrigin,
-        occurrences: &[Rc<Vec<Term>>],
+        occurrences: &[MetavarSpine],
         outer: &Metavar,
     ) -> Option<Restriction> {
         let (inner_entry, outer_entry) =
@@ -2457,7 +2457,7 @@ impl<'s> Context<'s> {
                     .iter()
                     .map(|(name, _)| Term::free_var(name))
                     .collect(),
-                telescope: Rc::clone(&inner_entry.telescope),
+                telescope: inner_entry.telescope.clone(),
                 result: inner_entry.result.clone(),
                 frames: frames(),
             });
@@ -2551,7 +2551,7 @@ impl<'s> Context<'s> {
         let result = inner_entry.result.capture(&mentioned).release(&binder_refs);
 
         Some(Restriction {
-            telescope: Rc::new(telescope),
+            telescope: telescope.into(),
             arguments,
             result,
             frames: frames(),
@@ -2567,7 +2567,7 @@ impl<'s> Context<'s> {
         &self,
         inner: MetavarId,
         origin: &MetavarOrigin,
-        occurrences: &[Rc<Vec<Term>>],
+        occurrences: &[MetavarSpine],
         values: &[(Free, Term)],
     ) -> Option<Restriction> {
         let inner_entry = self.metavar_entry(inner)?;
@@ -2575,13 +2575,14 @@ impl<'s> Context<'s> {
             return None;
         }
 
-        // Read where it was born: every binder as itself, so a value is spelled in the birth's names as it stands.
+        // Read where it was born: every binder as itself, so a value is spelled in the birth's names as it stands. A spine known for the identity is one, unread.
         let telescope = &inner_entry.telescope;
-        let born = |spine: &Rc<Vec<Term>>| {
+        let born = |spine: &MetavarSpine| {
             spine.len() == telescope.len()
-                && spine.iter().zip(telescope.iter()).all(|(entry, (binder, _))| {
-                    matches!(&**entry, Subterm::Var(var) if var.as_free() == Some(binder))
-                })
+                && (spine.is_identity()
+                    || spine.iter().zip(telescope.iter()).all(|(entry, (binder, _))| {
+                        matches!(&**entry, Subterm::Var(var) if var.as_free() == Some(binder))
+                    }))
         };
         if occurrences.is_empty() || !occurrences.iter().all(born) {
             return None;
@@ -2590,7 +2591,11 @@ impl<'s> Context<'s> {
         // Born in the block's own frame: its telescope ends with the block's labels, and what stands before them was bound before the block and names none.
         let labelled = |binder: &Free| values.iter().any(|(label, _)| label == binder);
         let kept = telescope.iter().position(|(binder, _)| labelled(binder))?;
-        if !telescope[kept..].iter().all(|(binder, _)| labelled(binder)) {
+        if !telescope
+            .iter()
+            .skip(kept)
+            .all(|(binder, _)| labelled(binder))
+        {
             return None;
         }
 
@@ -2600,9 +2605,10 @@ impl<'s> Context<'s> {
         }
 
         Some(Restriction {
-            telescope: Rc::new(telescope[..kept].to_vec()),
-            arguments: telescope[..kept]
+            telescope: telescope.prefix(kept),
+            arguments: telescope
                 .iter()
+                .take(kept)
                 .map(|(name, _)| Term::free_var(name))
                 .collect(),
             result: read_by_value(result, values),

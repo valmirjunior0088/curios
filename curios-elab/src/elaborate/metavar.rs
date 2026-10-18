@@ -1,7 +1,7 @@
 use {
     super::insert_auto_argument,
     crate::{Context, Error, Mode, SlotPositions, attempt_witness_goal, expect, reduce_with},
-    curios_core::{CalleeId, Free, Metavar, MetavarOrigin, Subterm, Term},
+    curios_core::{CalleeId, Free, Metavar, MetavarOrigin, MetavarSpine, Subterm, Term},
     curios_utilities::Plicity,
 };
 
@@ -23,11 +23,7 @@ pub(super) fn elaborate_metavar(
                 // Only the bare case is repaired: an occurrence that already carries a spine may be carrying a *substituted* one, opened under binders the birth Γ does not have, and that is the delayed substitution the whole representation exists to keep.
                 let restored =
                     (metavar.spine.is_empty() && !entry.telescope.is_empty()).then(|| {
-                        entry
-                            .telescope
-                            .iter()
-                            .map(|(name, _)| Term::free_var(name))
-                            .collect::<Vec<_>>()
+                        MetavarSpine::identity_over(entry.telescope.iter().map(|(name, _)| name))
                     });
                 expect(context, term, &result, &expected)?;
 

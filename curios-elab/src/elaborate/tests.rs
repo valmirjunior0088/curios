@@ -297,7 +297,10 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
 
     let entry = context.metavar_entry(MetavarId(0)).expect("hole was born");
     assert_eq!(entry.result, nat());
-    assert_eq!(*entry.telescope, vec![(x, nat())]);
+    assert_eq!(
+        entry.telescope.iter().cloned().collect::<Vec<_>>(),
+        vec![(x, nat())]
+    );
 }
 
 #[test]

@@ -4,9 +4,9 @@
 
 use {
     crate::{
-        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Many, Matrix, Quality, Scope,
-        Subterm, Telescope, Term, Three, Two, UniverseContext, UniverseError, UniverseScheme,
-        Universes, Var, Visit, instantiate_qualities, instantiate_universes_scoped,
+        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Many, Matrix, MetavarSpine, Quality,
+        Scope, Subterm, Telescope, Term, Three, Two, UniverseContext, UniverseError,
+        UniverseScheme, Universes, Var, Visit, instantiate_qualities, instantiate_universes_scoped,
         project_erased_universes,
     },
     curios_num::{Grain, Natural},
@@ -920,12 +920,13 @@ impl fmt::Display for MetavarId {
 ///
 /// `spine` is the delayed substitution — one term per binder of the birth telescope (`MetaEntry::telescope` order), recording what that binder corresponds to at this occurrence. Identity (`Var::free(name)`) at birth. The entries are ordinary term content: `traverse` walks them, so `close` captures them and `open` substitutes them, and the mapping survives re-closing under fresh names — which is what lets a solution mentioning a sibling binder resolve correctly wherever the occurrence ends up. An empty spine is a not-yet-birthed `into_core` hole and resolves as the identity.
 ///
-/// The spine is `Rc`-shared: every meta born under the same Γ shares one identity-spine allocation (see `Context::identity_snapshot`), which is what keeps minting metavariables O(1) instead of O(|Γ|).
+/// The spine is persistent and carries its own facts ([`MetavarSpine`]): every metavariable born under one scope shares the scope's identity spine, and a node holding one derives its hash and flags without reading it, which is what keeps minting a metavariable O(1) instead of O(|Γ|).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Metavar {
     pub id: MetavarId,
-    pub spine: Rc<Vec<Term>>,
+    #[archived_with(crate::AsSpineEntries)]
+    pub spine: MetavarSpine,
     pub origin: MetavarOrigin,
 }
 

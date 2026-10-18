@@ -17,8 +17,8 @@ use {
     },
     curios_core::{
         Advance, Atom, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin, Many,
-        Metavar, MetavarId, MetavarOrigin, Produced, Proj, Quality, ReduceError, Scope, Subterm,
-        Telescope, Term, Transient, Universes, Visit,
+        Metavar, MetavarId, MetavarOrigin, MetavarSpine, Produced, Proj, Quality, ReduceError,
+        Scope, Subterm, Telescope, Term, Transient, Universes, Visit,
     },
     std::{
         cell::RefCell,
@@ -1088,8 +1088,8 @@ pub(crate) fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance
 }
 
 /// The spines `id` occurs at in `term`, one per occurrence: what a restriction spells the embedding metavariable's entries through ([`Context::metavar_restriction`]).
-pub(crate) fn metavar_spines(term: &Term, id: MetavarId) -> Vec<Rc<Vec<Term>>> {
-    let spines: Rc<RefCell<Vec<Rc<Vec<Term>>>>> = Rc::new(RefCell::new(Vec::new()));
+pub(crate) fn metavar_spines(term: &Term, id: MetavarId) -> Vec<MetavarSpine> {
+    let spines: Rc<RefCell<Vec<MetavarSpine>>> = Rc::new(RefCell::new(Vec::new()));
     let sink = Rc::clone(&spines);
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
@@ -1101,7 +1101,7 @@ pub(crate) fn metavar_spines(term: &Term, id: MetavarId) -> Vec<Rc<Vec<Term>>> {
             }) = &**term
                 && *occurring == id
             {
-                sink.borrow_mut().push(Rc::clone(spine));
+                sink.borrow_mut().push(spine.clone());
             }
             None
         }),

@@ -3,8 +3,9 @@ mod tests;
 
 use {
     super::{
-        Context, Error, GoalReport, ReaderScope, Suggestions, UniverseSolver, callee,
-        contract_redexes, refold_recs, suggest_candidates, universe_context_validate, written,
+        BirthTelescope, Context, Error, GoalReport, ReaderScope, Suggestions, UniverseSolver,
+        callee, contract_redexes, refold_recs, suggest_candidates, universe_context_validate,
+        written,
     },
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
@@ -87,7 +88,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
         return value.clone();
     }
 
-    type Solution = (Rc<Vec<(Free, Term)>>, Term);
+    type Solution = (BirthTelescope, Term);
     /// The metavariables whose solutions this walk is inside right now.
     ///
     /// Substitution cannot expand a cyclic solution graph, and elaborating a `rec` group produces one: a member's slot is filled with the body that other solutions already mention, so materializing either reaches the other forever. Left unguarded the walk simply descends, and `curios_utilities::recurse` answers a deepening walk by asking the allocator for stack — so the compilation would die by exhausting the machine rather than by refusing anything, on a route no budget prices ([`Cost::FRAME`]'s documentation states the gap: `recurse` grows the stack and nothing else bounds total depth).
@@ -112,7 +113,10 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
                 if matches!(origin, MetavarOrigin::Goal) {
                     return None;
                 }
-                let (labels, solution) = rewrite_solutions.get(id)?;
+                // An unsolved occurrence whose spine holds no metavariable has nothing to materialize: kept as it stands rather than walked an entry per binder in scope.
+                let Some((labels, solution)) = rewrite_solutions.get(id) else {
+                    return (!spine.has_metavar()).then(|| term.clone());
+                };
                 assert_eq!(
                     spine.len(),
                     labels.len(),
@@ -126,8 +130,8 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
                     Rc::clone(&rewrite_solutions),
                     Rc::clone(&rewrite_active),
                 );
-                // A solution that names no binder is the occurrence as it stands, its spine unread, as the strict zonk takes one.
-                if !resolved.has_local_free() && resolved.reach() == 0 {
+                // A solution that names no binder is the occurrence as it stands, its spine unread, as the strict zonk takes one; and so is one read through an identity spine, which reads every binder as itself.
+                if spine.is_identity() || !resolved.has_local_free() && resolved.reach() == 0 {
                     rewrite_active.borrow_mut().remove(id);
                     return Some(match term.extent() {
                         Some(extent) => resolved.with_extent(extent),
@@ -184,11 +188,11 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
         // A filled recursive slot stands for its member, and the member is spelled by its name: substituting the *body* is what closes the cycle, since the body reaches the very solution being materialized. The name is what `RecItem::try_new` captures, so this is also the spelling the group's binder is waiting for. Its body is deliberately not walked — nothing in it needs materializing here, and walking it is the divergence.
         if let Some(name) = context.rec_slot_name(id) {
             // The birth telescope is kept so the occurrence's spine still matches, as every entry here must. A member's name names no binder, so the spine is never read: a member's value does not depend on the slot's spine.
-            solutions.insert(id, (Rc::clone(&entry.telescope), Term::free_var(name)));
+            solutions.insert(id, (entry.telescope.clone(), Term::free_var(name)));
             continue;
         }
         pending.extend(solution.metavars());
-        solutions.insert(id, (Rc::clone(&entry.telescope), solution.clone()));
+        solutions.insert(id, (entry.telescope.clone(), solution.clone()));
     }
     if solutions.is_empty() {
         return value.clone();
@@ -1051,14 +1055,14 @@ pub(crate) fn report_goals(
                 .metavar_entry(*id)
                 .expect("a collected goal has a birth entry");
             (
-                Rc::clone(&entry.telescope),
+                entry.telescope.clone(),
                 entry.frames.clone(),
                 entry.result.clone(),
             )
         };
         all_candidates.push(suggest_candidates(
             context,
-            &telescope,
+            &telescope.iter().cloned().collect::<Vec<_>>(),
             &refinements,
             &result,
             items,
@@ -1313,14 +1317,20 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                 entry.telescope.len(),
                 "a solved metavariable's occurrence carries its full spine"
             );
-            let binders = entry
-                .telescope
-                .iter()
-                .map(|(name, _)| name)
-                .collect::<Vec<_>>();
-            let spine = zonk_terms(context, spine)?;
-            let refs = spine.iter().collect::<Vec<_>>();
-            let zonked = resolved.capture(&binders).release(&refs);
+            // An identity spine reads every binder as itself, and the solution is the occurrence's as it stands.
+            let zonked = match spine.is_identity() {
+                true => resolved,
+                false => {
+                    let binders = entry
+                        .telescope
+                        .iter()
+                        .map(|(name, _)| name)
+                        .collect::<Vec<_>>();
+                    let spine = zonk_terms(context, &spine.iter().cloned().collect::<Vec<_>>())?;
+                    let refs = spine.iter().collect::<Vec<_>>();
+                    resolved.capture(&binders).release(&refs)
+                }
+            };
 
             // Carry the hole's extent only if the solution carries none of its own.
             return Ok(match term.extent() {

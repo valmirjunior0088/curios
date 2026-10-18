@@ -37,7 +37,7 @@ use {
         unfold_rec_apply,
     },
     crate::{
-        Declined, Error, Occurrence, metavar_origins, metavar_spines, named_members,
+        Declined, Error, Occurrence, Scoped, metavar_origins, metavar_spines, named_members,
         read_outside_spines, zonk_solved_term_metas,
     },
     curios_analysis::{Classes, foreign_congruence},
@@ -362,11 +362,23 @@ fn by_value(context: &Context, metavar: &Metavar, mut candidate: Term) -> Term {
     if !candidate.has_local_free() {
         return candidate;
     }
-    let named = metavar
-        .spine
-        .iter()
-        .flat_map(|entry| entry.free_vars())
-        .collect::<HashSet<_>>();
+    // What the occurrence's spine names: each binder of the telescope, where the spine is the identity over one its birth frames bind, which those frames answer for without the spine being read.
+    let birth = context
+        .metavar_entry(metavar.id)
+        .filter(|entry| metavar.spine.is_identity() && entry.scoped == Scoped::Held)
+        .map(|entry| entry.frames.clone());
+    let named = match birth {
+        Some(_) => HashSet::new(),
+        None => metavar
+            .spine
+            .iter()
+            .flat_map(|entry| entry.free_vars())
+            .collect::<HashSet<_>>(),
+    };
+    let names = |name: &Free| match &birth {
+        Some(frames) => frames.binds_locally(name),
+        None => named.contains(name),
+    };
 
     // A value names only the bindings before its own, so each round reads the latest away, and the rounds end where one reads nothing: a local that only an embedded metavariable's spine names stands there ([`read_outside_spines`]), and that metavariable is restricted to the occurrence's context or holds the candidate back.
     loop {
@@ -374,7 +386,7 @@ fn by_value(context: &Context, metavar: &Metavar, mut candidate: Term) -> Term {
             .free_vars_shared()
             .iter()
             // A block's local is a binder, and the test asks nothing of a declaration: `Context::is_top_level` would note a question in the trace for every declaration a candidate names.
-            .filter(|name| matches!(name, Free::Local(_)) && !named.contains(*name))
+            .filter(|name| matches!(name, Free::Local(_)) && !names(name))
             .filter_map(|name| {
                 let value = context.definition_body(name)?;
                 let member = value.as_rec_proj().is_some()
@@ -1945,132 +1957,154 @@ impl Convert {
             "metavariable spine arity diverged from its birth telescope"
         );
 
-        // Materialize *solved-metavariable* occurrences in the entries too — a solved entry stands for its (possibly variable) value, chains terminate because the occurs check forbids solution cycles, and a deep solved occurrence must take the same spelling the materialized candidate now carries or the abstraction subjects below would never match it. Entries are otherwise deliberately unreduced: a name backed by a definition must stay that name, or an obviously-invertible renaming looks flexible.
-        let entries = metavar
-            .spine
-            .iter()
-            .map(|term| zonk_solved_term_metas(context, term))
-            .collect::<Vec<_>>();
-
-        // Invert the spine through its *pattern* entries — a syntactic free variable whose name no other entry shares. A non-variable or duplicated entry is simply not invertible; the solution then may not depend on that slot, which the scope check below enforces — pruning in its simplest form.
-        //
-        // Each entry's multiplicity is counted once, over the spine, rather than by rescanning the spine per entry: a spine is as long as the birth telescope, which is every binder in scope, and a region a hundred `let`s deep solves a metavariable per `!` — rescanning would be a cubic term in a long chain's elaboration.
-        let image: Vec<_> = {
-            let names = entries
-                .iter()
-                .map(|term| match &**term {
-                    Subterm::Var(var) => var.as_free(),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            let mut multiplicity = HashMap::<&Free, usize>::new();
-            for name in names.iter().flatten() {
-                *multiplicity.entry(name).or_default() += 1;
-            }
-
-            names
-                .iter()
-                .zip(telescope.iter())
-                .filter_map(|(name, (birth, _))| {
-                    let name = (*name)?;
-                    // A duplicated image name is ambiguous to invert.
-                    let unique = multiplicity.get(name) == Some(&1);
-                    unique.then_some((*name, birth))
-                })
-                .collect()
-        };
-        let mut entry_multiplicity = HashMap::<&Term, usize>::new();
-        for entry in &entries {
-            *entry_multiplicity.entry(entry).or_default() += 1;
-        }
-
-        // Non-pattern entries that are meta-free and pairwise distinct become *abstraction subjects*: every occurrence of the entry inside the candidate rewrites to the entry's birth binder, extending inversion beyond the pattern fragment (the practical "abstracting over non-variable terms" move; the choice of all occurrences is checked by the round-trip verification below and by re-validation). An entry embedding a metavariable, or equal to another entry, stays ambiguous, and the candidate may not depend on it. Each subject contributes both its spellings — as written, and as the reducer exposes it at a whnf position (the candidate's root arrives reduced while deep positions do not) — except a reduced form that is a bare variable, which would collide with the renaming machinery.
-        let mut subjects = Vec::new();
-        for (entry, (birth, _)) in entries.iter().zip(telescope.iter()) {
-            if matches!(&**entry, Subterm::Var(_))
-                || !entry.metavars().is_empty()
-                || entry_multiplicity.get(entry) != Some(&1)
-            {
-                continue;
-            }
-
-            subjects.push((entry.clone(), *birth));
-
-            // An entry the type level may not reduce (an effectful scrutinee, say) simply contributes no reduced spelling.
-            let Some(reduced) = reduce(context, entry.clone()).probed()? else {
-                continue;
-            };
-            let ambiguous = matches!(&*reduced, Subterm::Var(_))
-                || entries.contains(&reduced)
-                || subjects.iter().any(|(s, _)| *s == reduced);
-            if !ambiguous {
-                subjects.push((reduced, *birth));
-            }
-        }
-
-        let abstracted = match subjects.is_empty() {
-            true => t.clone(),
-            false => abstract_occurrences(t, &subjects),
-        };
-
-        // Scope check, through the inversion: every free variable of the (abstracted) candidate must correspond to exactly one birth binder. A name that is no entry at all can never become one — out of scope; a name only reachable through a non-pattern or duplicated slot is not provably determined — postpone.
-        let allowed = image
-            .iter()
-            .map(|(name, _)| *name)
-            .chain(subjects.iter().map(|(_, birth)| *birth))
-            .collect::<HashSet<_>>();
-        for name in abstracted.free_vars() {
-            if allowed.contains(&name) {
-                continue;
-            }
-            // A top-level definition is a global constant, in scope everywhere and absent from Γ's spine by construction (Γ holds only local binders); a solution may mention it freely. This is what lets an item elaborate independently of the ambient prelude.
-            if context.is_top_level(&name) {
-                continue;
-            }
-            let mentioned = entries.is_empty()
-                || entries
-                    .iter()
-                    .any(|entry| entry.free_vars().contains(&name));
-            curios_profile::note!(
-                target: "curios_elab::solve",
-                meta = id.0,
-                name = %name.faithful(),
-                mentioned,
-                "scope check rejected a free name",
-            );
-            return Ok(match mentioned {
-                true => Solved::Postponed,
-                false => Solved::Failed,
-            });
-        }
-
-        // Invert, storing the solution in birth-named form. The identity renaming (every invertible entry still its own birth binder, and nothing abstracted) skips the rewrite — from the abstracted candidate, never the raw one.
-        let inverted = if subjects.is_empty() && image.iter().all(|(img, birth)| img == *birth) {
-            abstracted.clone()
-        } else {
-            let binders = image.iter().map(|(name, _)| name).collect::<Vec<_>>();
-            let birth_vars = image
-                .iter()
-                .map(|(_, birth)| Term::free_var(birth))
-                .collect::<Vec<_>>();
-            let refs = birth_vars.iter().collect::<Vec<_>>();
-            abstracted.capture(&binders).release(&refs)
-        };
-
-        // The equation must hold by construction: resolving the candidate solution back through this occurrence's spine must reproduce the candidate. This guards the whole abstraction/inversion pair — a missed occurrence or an unfaithful rename postpones instead of committing a wrong solution. Syntactic equality is the fast path; an abstraction that matched a *reduced* spelling resolves back to the raw one, so the fallback criterion is definitional — a strict conversion, which cannot solve anything here since past the embedded guard the sides carry at most context-contained metavariables, and an undecided verdict postpones.
-        if !metavar.spine.is_empty() {
-            let binders = telescope.iter().map(|(name, _)| name).collect::<Vec<_>>();
-            let refs = entries.iter().collect::<Vec<_>>();
-            let resolved = inverted.capture(&binders).release(&refs);
-            if resolved != *t && !convert(context, &Term::type_ground(), &resolved, t)? {
+        // An identity spine over a telescope its birth frames bind names each birth binder as itself: the candidate is in birth names as it stands, no entry is a subject, and the round trip is the candidate. What is left is the scope check, each free name a binder those frames bind or a declaration's, and an inversion that reads the spine would cost every solve the scope the metavariable was born in.
+        let inverted = if metavar.spine.is_identity() && scoped == Scoped::Held {
+            for name in t.free_vars() {
+                if born.binds_locally(&name) || context.is_top_level(&name) {
+                    continue;
+                }
                 curios_profile::note!(
                     target: "curios_elab::solve",
                     meta = id.0,
-                    "postponed: inversion round-trip disagreed",
+                    name = %name.faithful(),
+                    mentioned = false,
+                    "scope check rejected a free name",
                 );
-                return Ok(Solved::Postponed);
+                return Ok(Solved::Failed);
             }
-        }
+
+            t.clone()
+        } else {
+            // Materialize *solved-metavariable* occurrences in the entries too — a solved entry stands for its (possibly variable) value, chains terminate because the occurs check forbids solution cycles, and a deep solved occurrence must take the same spelling the materialized candidate now carries or the abstraction subjects below would never match it. Entries are otherwise deliberately unreduced: a name backed by a definition must stay that name, or an obviously-invertible renaming looks flexible.
+            let entries = metavar
+                .spine
+                .iter()
+                .map(|term| zonk_solved_term_metas(context, term))
+                .collect::<Vec<_>>();
+
+            // Invert the spine through its *pattern* entries — a syntactic free variable whose name no other entry shares. A non-variable or duplicated entry is simply not invertible; the solution then may not depend on that slot, which the scope check below enforces — pruning in its simplest form.
+            //
+            // Each entry's multiplicity is counted once, over the spine, rather than by rescanning the spine per entry: a spine is as long as the birth telescope, which is every binder in scope, and a region a hundred `let`s deep solves a metavariable per `!` — rescanning would be a cubic term in a long chain's elaboration.
+            let image: Vec<_> = {
+                let names = entries
+                    .iter()
+                    .map(|term| match &**term {
+                        Subterm::Var(var) => var.as_free(),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                let mut multiplicity = HashMap::<&Free, usize>::new();
+                for name in names.iter().flatten() {
+                    *multiplicity.entry(name).or_default() += 1;
+                }
+
+                names
+                    .iter()
+                    .zip(telescope.iter())
+                    .filter_map(|(name, (birth, _))| {
+                        let name = (*name)?;
+                        // A duplicated image name is ambiguous to invert.
+                        let unique = multiplicity.get(name) == Some(&1);
+                        unique.then_some((*name, birth))
+                    })
+                    .collect()
+            };
+            let mut entry_multiplicity = HashMap::<&Term, usize>::new();
+            for entry in &entries {
+                *entry_multiplicity.entry(entry).or_default() += 1;
+            }
+
+            // Non-pattern entries that are meta-free and pairwise distinct become *abstraction subjects*: every occurrence of the entry inside the candidate rewrites to the entry's birth binder, extending inversion beyond the pattern fragment (the practical "abstracting over non-variable terms" move; the choice of all occurrences is checked by the round-trip verification below and by re-validation). An entry embedding a metavariable, or equal to another entry, stays ambiguous, and the candidate may not depend on it. Each subject contributes both its spellings — as written, and as the reducer exposes it at a whnf position (the candidate's root arrives reduced while deep positions do not) — except a reduced form that is a bare variable, which would collide with the renaming machinery.
+            let mut subjects = Vec::new();
+            for (entry, (birth, _)) in entries.iter().zip(telescope.iter()) {
+                if matches!(&**entry, Subterm::Var(_))
+                    || !entry.metavars().is_empty()
+                    || entry_multiplicity.get(entry) != Some(&1)
+                {
+                    continue;
+                }
+
+                subjects.push((entry.clone(), *birth));
+
+                // An entry the type level may not reduce (an effectful scrutinee, say) simply contributes no reduced spelling.
+                let Some(reduced) = reduce(context, entry.clone()).probed()? else {
+                    continue;
+                };
+                let ambiguous = matches!(&*reduced, Subterm::Var(_))
+                    || entries.contains(&reduced)
+                    || subjects.iter().any(|(s, _)| *s == reduced);
+                if !ambiguous {
+                    subjects.push((reduced, *birth));
+                }
+            }
+
+            let abstracted = match subjects.is_empty() {
+                true => t.clone(),
+                false => abstract_occurrences(t, &subjects),
+            };
+
+            // Scope check, through the inversion: every free variable of the (abstracted) candidate must correspond to exactly one birth binder. A name that is no entry at all can never become one — out of scope; a name only reachable through a non-pattern or duplicated slot is not provably determined — postpone.
+            let allowed = image
+                .iter()
+                .map(|(name, _)| *name)
+                .chain(subjects.iter().map(|(_, birth)| *birth))
+                .collect::<HashSet<_>>();
+            for name in abstracted.free_vars() {
+                if allowed.contains(&name) {
+                    continue;
+                }
+                // A top-level definition is a global constant, in scope everywhere and absent from Γ's spine by construction (Γ holds only local binders); a solution may mention it freely. This is what lets an item elaborate independently of the ambient prelude.
+                if context.is_top_level(&name) {
+                    continue;
+                }
+                let mentioned = entries.is_empty()
+                    || entries
+                        .iter()
+                        .any(|entry| entry.free_vars().contains(&name));
+                curios_profile::note!(
+                    target: "curios_elab::solve",
+                    meta = id.0,
+                    name = %name.faithful(),
+                    mentioned,
+                    "scope check rejected a free name",
+                );
+                return Ok(match mentioned {
+                    true => Solved::Postponed,
+                    false => Solved::Failed,
+                });
+            }
+
+            // Invert, storing the solution in birth-named form. The identity renaming (every invertible entry still its own birth binder, and nothing abstracted) skips the rewrite — from the abstracted candidate, never the raw one.
+            let inverted = if subjects.is_empty() && image.iter().all(|(img, birth)| img == *birth)
+            {
+                abstracted.clone()
+            } else {
+                let binders = image.iter().map(|(name, _)| name).collect::<Vec<_>>();
+                let birth_vars = image
+                    .iter()
+                    .map(|(_, birth)| Term::free_var(birth))
+                    .collect::<Vec<_>>();
+                let refs = birth_vars.iter().collect::<Vec<_>>();
+                abstracted.capture(&binders).release(&refs)
+            };
+
+            // The equation must hold by construction: resolving the candidate solution back through this occurrence's spine must reproduce the candidate. This guards the whole abstraction/inversion pair — a missed occurrence or an unfaithful rename postpones instead of committing a wrong solution. Syntactic equality is the fast path; an abstraction that matched a *reduced* spelling resolves back to the raw one, so the fallback criterion is definitional — a strict conversion, which cannot solve anything here since past the embedded guard the sides carry at most context-contained metavariables, and an undecided verdict postpones.
+            if !metavar.spine.is_empty() {
+                let binders = telescope.iter().map(|(name, _)| name).collect::<Vec<_>>();
+                let refs = entries.iter().collect::<Vec<_>>();
+                let resolved = inverted.capture(&binders).release(&refs);
+                if resolved != *t && !convert(context, &Term::type_ground(), &resolved, t)? {
+                    curios_profile::note!(
+                        target: "curios_elab::solve",
+                        meta = id.0,
+                        "postponed: inversion round-trip disagreed",
+                    );
+                    return Ok(Solved::Postponed);
+                }
+            }
+
+            inverted
+        };
 
         // Re-validation: the (inverted) candidate must *check* against the metavariable's frozen result type, under its birth context Γ and the refinements it was born under — nothing of an arm it is solved in, all of the arm it was born in — as an *oracle*, constraint parking suppressed (see `Context::with_oracle`). Stable definitions are kept. Checking (rather than synthesizing then converting) admits candidates that are checkable but not inferable — a bare lambda whose domain only `result` knows, an unannotated tuple — which are still the correct solution at the frozen type. What is committed is the term the check rebuilt, as everywhere elaboration checks a term: the check compares a lambda's annotation with the domain it is checked at by subsumption and rebuilds the lambda at that domain, while the kernel compares the two by conversion, so a candidate committed as it came keeps an annotation the kernel refuses — `(T: Type 0) => Io(T)`, the reduct of `Io` at one instance, standing where `(Type 1) -> Type 1` is wanted — and which side of a problem solved the metavariable would decide whether the program certifies. The validation run itself can solve *other* metavariables (inference may mint and pin fresh implicits); the mark/rollback bracket unwinds those if the candidate is rejected, so a failed oracle leaves no fingerprints.
         let mark = context.solution_mark();

@@ -10,8 +10,8 @@
 
 use {
     super::{
-        DefEntry, Defined, Footing, Frame, HeldFrames, InScope, ProjectionEntry, ScrutineeEntry,
-        Settled, SharedSpine, SharedTelescope, Window,
+        BirthTelescope, DefEntry, Defined, Footing, Frame, HeldFrames, InScope, ProjectionEntry,
+        ScrutineeEntry, Settled, SharedSpine, Window,
         frame::{KeptWindow, Prefix, Spelling, at, refined_through, refinements_within, stand},
     },
     crate::DeadArm,
@@ -19,7 +19,7 @@ use {
         DefinitionKind, Free, Global, HeadTag, RecGroup, Term, UniverseContext,
         project_erased_universes,
     },
-    curios_utilities::{Entropy, Keyed},
+    curios_utilities::Keyed,
     std::{
         collections::{BTreeMap, HashMap},
         rc::Rc,
@@ -47,9 +47,6 @@ pub(crate) struct Frames<'s> {
     ///
     /// The bracket the kernel has. A refinement key's *reduced* spelling must rest only on equations that outlive it, which are the frames outside its own: an inner arm's equation retracts first, and the entry's own frame is the equation itself, which a reduction of the key would otherwise meet at its first probe and answer with the case value it is assuming. `curios-cert`'s `Scope::hide_refinements_from` withholds the same span for the same two reasons.
     withhold_refinements_from: Option<usize>,
-    /// One tick per mutation of a frame's locals (assume, frame exit, reassume) — an `Entropy` used as a version stamp: `fresh()` bumps, `count()` reads. Invalidates `identity_cache`, which shares the frozen telescope and identity spine between every meta born under an unchanged Γ.
-    locals_stamp: Entropy,
-    identity_cache: Option<(u64, SharedTelescope, SharedSpine)>,
     /// How many frames have been entered: the number the next one takes ([`Frame::number`]).
     entered: u64,
 }
@@ -65,8 +62,6 @@ impl<'s> Frames<'s> {
             stood: 0,
             members: HashMap::new(),
             withhold_refinements_from: None,
-            locals_stamp: Entropy::new(),
-            identity_cache: None,
             entered: 0,
         }
     }
@@ -127,7 +122,6 @@ impl<'s> Frames<'s> {
 
     /// Pop one frame, reporting `(dropped_refinements, dropped_definitions)` so the façade can run the matching cache protocol.
     pub(crate) fn leave(&mut self) -> (bool, bool) {
-        self.locals_stamp.fresh();
         let frame = self.top.take().expect("a local frame stands to leave");
         self.top = at(&frame, frame.depth - 1).cloned();
 
@@ -156,7 +150,6 @@ impl<'s> Frames<'s> {
 
     /// Assume `label : type_`. Erasure is sort-driven (a proof or a type erases), so a binder carries no runtime-multiplicity mark. The base frame holds one binding of a name: a top-level name assumed again replaces the binding it had.
     pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
-        self.locals_stamp.fresh();
         if self.top.is_none() {
             self.base.unbind_local(name);
         }
@@ -179,7 +172,6 @@ impl<'s> Frames<'s> {
 
     /// Replace the type of an existing assumption in place — the innermost binding of `label`. Used by the `rec` elaborators: a group's signatures must be assumed (lowered) before they can be elaborated, since members reference each other, and are then upgraded here to their rebuilt forms — implicit insertion makes the two no longer interchangeable, and a lowered type must never leak into later reduction. Panics if `label` has no prior assumption — every caller is expected to have `assume`d it earlier in the same scope (a construction bug otherwise, not a user-facing case).
     pub(crate) fn reassume(&mut self, name: &Free, type_: &Term) {
-        self.locals_stamp.fresh();
         self.binder_of(name)
             .unwrap_or_else(|| {
                 panic!(
@@ -282,7 +274,6 @@ impl<'s> Frames<'s> {
 
     /// Set the local frames aside and stand on `held` in their place, with the withholding in force among them, a depth in the frames that stood where it began. Nothing is assumed, defined or registered: a held frame is the frame its entries were registered in. Answers what [`Frames::stand_back`] gives back.
     pub(crate) fn stand_on(&mut self, held: &HeldFrames) -> SetAside {
-        self.locals_stamp.fresh();
         let aside = std::mem::replace(&mut self.top, held.innermost().cloned());
         self.aside.push(aside);
         self.stood += 1;
@@ -295,7 +286,6 @@ impl<'s> Frames<'s> {
 
     /// Leave the frames a judgment stood on and take back the ones it set aside, with their withholding ([`Frames::stand_on`]). The frame the judgment ran in has left already.
     pub(crate) fn stand_back(&mut self, aside: SetAside) {
-        self.locals_stamp.fresh();
         self.top = self.aside.pop().expect("a stand set its frames aside");
         self.stands.pop();
         self.withhold_refinements_from = aside.withheld;
@@ -308,7 +298,6 @@ impl<'s> Frames<'s> {
             "forget: '{}' outside the base frame",
             name.faithful()
         );
-        self.locals_stamp.fresh();
         self.unname_member(name);
         self.base.unbind(name);
     }
@@ -819,44 +808,14 @@ impl<'s> Frames<'s> {
         self.base.assumptions.contains_key(name) || self.in_scope(name).is_some()
     }
 
-    /// The frozen telescope and identity spine for the *current* Γ, shared: rebuilt only when a frame's locals have changed since the last birth, so minting a metavariable is O(1) amortized instead of O(|Γ|) per mint — the difference between linear and quadratic elaboration over a module.
+    /// The frozen telescope and identity spine for the *current* Γ, shared: the innermost frame's, which the frames extend a binder at a time ([`Frame`]), so minting a metavariable costs nothing more than the one before it, whatever the scope.
     ///
-    /// Γ is the *local* binders only — the locals of the frames past the base. Top-level definitions are excluded so an item's elaboration is independent of how much else is in scope: a metavariable born deep in a proof carries just its enclosing binders, not the whole prelude, keeping the contextual solve's spine a small pattern (and the prelude cacheable). Globals a solution mentions are admitted by the solver's scope check via [`Frames::is_top_level`] instead.
-    pub(crate) fn identity_snapshot(&mut self) -> (SharedTelescope, SharedSpine) {
-        if let Some((stamp, telescope, spine)) = &self.identity_cache
-            && *stamp == self.locals_stamp.count()
-        {
-            return (telescope.clone(), spine.clone());
+    /// Γ is the *local* binders only — the locals of the frames past the base, each name once at its innermost binding. Top-level definitions are excluded so an item's elaboration is independent of how much else is in scope: a metavariable born deep in a proof carries just its enclosing binders, not the whole prelude, keeping the contextual solve's spine a small pattern (and the prelude cacheable). Globals a solution mentions are admitted by the solver's scope check via [`Frames::is_top_level`] instead.
+    pub(crate) fn identity_snapshot(&self) -> (BirthTelescope, SharedSpine) {
+        match &self.top {
+            Some(top) => (top.telescope.clone(), top.spine.clone()),
+            None => (BirthTelescope::default(), SharedSpine::new()),
         }
-
-        // One entry per name, at its innermost binding. `retype_locals` re-`assume`s a generalized hypothesis under its case-specialized type and its *original* name, deliberately shadowing the ambient binder, so the locals can hold the same `Free` twice. Γ is a context rather than a stack of bindings: a shadowed entry is unreachable by construction, and leaving it in gives every metavariable born in such an arm a spine with a repeated argument — which `Convert::solve`'s inversion cannot invert, since a name reachable through two slots is not provably determined. The candidate is then refused by the scope check for mentioning a hypothesis that is plainly in scope, and the implicit surfaces as never solved.
-        //
-        // Keeping the *last* occurrence keeps the telescope well-scoped: everything a generalized hypothesis's type can mention was itself generalized — that is what the generalization set is — so every mentioner is re-assumed after it, and no surviving entry refers to the occurrence that was dropped.
-        let locals = self.local_binders().collect::<Vec<_>>();
-        let telescope = Rc::new({
-            let mut innermost = HashMap::with_capacity(locals.len());
-            for (index, (name, _)) in locals.iter().enumerate() {
-                innermost.insert(name, index);
-            }
-
-            locals
-                .iter()
-                .enumerate()
-                .filter(|(index, (name, _))| innermost[name] == *index)
-                .map(|(_, entry)| (*entry).clone())
-                .collect::<Vec<_>>()
-        });
-
-        let spine = Rc::new(
-            telescope
-                .iter()
-                .map(|(name, _)| Term::free_var(name))
-                .collect::<Vec<_>>(),
-        );
-
-        self.identity_cache = Some((self.locals_stamp.count(), telescope.clone(), spine.clone()));
-
-        (telescope, spine)
     }
 }
 

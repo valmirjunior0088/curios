@@ -323,6 +323,14 @@ struct InOrder<'t, K, T> {
     pending: Vec<&'t Node<K, T>>,
 }
 
+impl<K, T> Clone for InOrder<'_, K, T> {
+    fn clone(&self) -> Self {
+        Self {
+            pending: self.pending.clone(),
+        }
+    }
+}
+
 impl<'t, K, T> InOrder<'t, K, T> {
     fn descend(&mut self, mut node: Option<&'t Node<K, T>>) {
         while let Some(current) = node {
@@ -524,8 +532,17 @@ impl<V: Clone> Ordered<V> {
     }
 
     /// Every value with its position, the least position first.
-    pub fn iter(&self) -> impl Iterator<Item = (i64, &V)> {
+    pub fn iter(&self) -> impl Iterator<Item = (i64, &V)> + Clone {
         positioned(&self.tree)
+    }
+
+    /// Whether the two are one version, sharing every node: so for a version and its clone until either is written. Two versions may hold the same values and not be one.
+    pub fn same_version(&self, other: &Self) -> bool {
+        match (&self.tree.root, &other.tree.root) {
+            (Some(ours), Some(theirs)) => Rc::ptr_eq(ours, theirs),
+            (None, None) => true,
+            _ => false,
+        }
     }
 
     /// Every position at which this map and `earlier` differ, the least first, each `report`ed with what `earlier` holds there and what this map does, `None` where one holds nothing: a position both hold is reported where `same` says the two values differ. What two versions of one map share is passed over unread, so comparing them costs what they do not share.
@@ -542,7 +559,7 @@ impl<V: Clone> Ordered<V> {
 }
 
 /// Every value of a position-keyed tree with its position, the least first.
-fn positioned<V>(tree: &Tree<u64, V>) -> impl Iterator<Item = (i64, &V)> {
+fn positioned<V>(tree: &Tree<u64, V>) -> impl Iterator<Item = (i64, &V)> + Clone {
     tree.iter().map(|(key, value)| (position_of(*key), value))
 }
 

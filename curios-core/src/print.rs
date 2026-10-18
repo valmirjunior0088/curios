@@ -2618,10 +2618,11 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         Subterm::Metavar(metavar) => {
             if frame.spelling.anonymous_metavars {
                 pure("?")
-            } else if metavar
-                .spine
-                .iter()
-                .all(|entry| matches!(&**entry, Subterm::Var(_)))
+            } else if metavar.spine.is_identity()
+                || metavar
+                    .spine
+                    .iter()
+                    .all(|entry| matches!(&**entry, Subterm::Var(_)))
             {
                 pure(format!("?{}", metavar.id))
             } else {

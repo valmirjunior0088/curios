@@ -5,7 +5,8 @@ use {
     crate::*,
     curios_core::{
         Atom, CalleeId, DefinitionKind, Free, InductDecl, InductParam, Intrinsic, Level, MetavarId,
-        MetavarOrigin, Nat, Quality, Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
+        MetavarOrigin, MetavarSpine, Nat, Quality, Subterm, Telescope, Term, UniverseContext,
+        WitnessOrigin,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -433,7 +434,7 @@ fn a_stand_in_keeps_the_binders_the_candidate_reaches_and_prunes_the_rest() {
     else {
         panic!("the embedded metavariable is solved to its stand-in");
     };
-    assert_eq!(*stand_in.spine, vec![Term::free_var(&y)]);
+    assert_eq!(stand_in.spine, MetavarSpine::from(vec![Term::free_var(&y)]));
     let entry = context
         .metavar_entry(stand_in.id)
         .expect("the stand-in has a birth record");
@@ -501,7 +502,10 @@ fn an_argument_reached_through_a_non_pattern_entry_is_spelled_through_it() {
     else {
         panic!("the embedded metavariable is solved to its stand-in");
     };
-    assert_eq!(*stand_in.spine, vec![Term::free_var(&r), pair]);
+    assert_eq!(
+        stand_in.spine,
+        MetavarSpine::from(vec![Term::free_var(&r), pair])
+    );
     assert_eq!(
         context.metavar_entry(stand_in.id).map(|entry| entry
             .telescope

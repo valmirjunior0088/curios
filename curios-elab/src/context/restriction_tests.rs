@@ -5,8 +5,7 @@
 use {
     crate::*,
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, Intrinsic, MetavarId, MetavarOrigin, Nat, Subterm, Term},
-    std::rc::Rc,
+    curios_core::{Free, Intrinsic, MetavarId, MetavarOrigin, MetavarSpine, Nat, Subterm, Term},
 };
 
 fn context() -> Context<'static> {
@@ -22,7 +21,7 @@ fn two() -> Term {
 }
 
 /// A metavariable born where the context stands, at `result`, with the occurrence that reads it there.
-fn born(context: &mut Context, id: usize, result: Term) -> Rc<Vec<Term>> {
+fn born(context: &mut Context, id: usize, result: Term) -> MetavarSpine {
     let (telescope, spine) = context.identity_snapshot();
     context.birth_metavar(MetavarId(id), telescope, result);
     spine
@@ -65,11 +64,14 @@ fn a_metavariable_is_restricted_to_the_binders_before_the_blocks_labels() {
             else {
                 panic!("the metavariable is solved to its stand-in");
             };
-            assert_eq!(*stand_in.spine, vec![Term::free_var(&d)]);
+            assert_eq!(stand_in.spine, MetavarSpine::from(vec![Term::free_var(&d)]));
             let entry = context
                 .metavar_entry(stand_in.id)
                 .expect("the stand-in has a birth record");
-            assert_eq!(*entry.telescope, vec![(d, nat_type())]);
+            assert_eq!(
+                entry.telescope.iter().cloned().collect::<Vec<_>>(),
+                vec![(d, nat_type())]
+            );
             assert_eq!(entry.result, Term::apply(Term::free_var(&family), [two()]));
         });
     });
@@ -109,7 +111,7 @@ fn an_occurrence_read_away_from_its_birth_is_not_restricted() {
         context.assume(&d, &nat_type());
         context.define_assuming(&n, &nat_type(), &two(), None);
         let _ = born(context, 0, nat_type());
-        let away = Rc::new(vec![two(), Term::free_var(&n)]);
+        let away = MetavarSpine::from(vec![two(), Term::free_var(&n)]);
         let values = [(n, two())];
 
         assert!(
@@ -148,7 +150,7 @@ fn a_metavariable_waits_for_the_one_its_type_holds() {
     context.with_frame(|context| {
         context.define_assuming(&n, &nat_type(), &two(), None);
         let type_spine = born(context, 0, Term::type_ground());
-        let type_ = Term::metavar_birthed(0, MetavarOrigin::Hole, (*type_spine).clone());
+        let type_ = Term::metavar_birthed(0, MetavarOrigin::Hole, type_spine.clone());
         let occurrences = [born(context, 1, type_)];
         let values = [(n, two())];
 

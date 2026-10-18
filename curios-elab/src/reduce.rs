@@ -1566,7 +1566,7 @@ fn normalize_level(
         }),
         Subterm::Metavar(Metavar { id, spine, origin }) => Subterm::Metavar(Metavar {
             id,
-            spine: normalize_each(context, known, spine.to_vec())?.into(),
+            spine: normalize_each(context, known, spine.iter().cloned().collect())?.into(),
             origin,
         }),
         // Leaves (`Type`/`Prop`/`Var`/`Intrinsic`, the last already carrying reduced operands) and the binder-heavy stuck forms (`Let`/`Rec`/`Match`) keep their weak-head normal shape. A stuck `Instance` is both at once: its head is a variable or an already-stuck projection, so there is nothing under it to normalize.

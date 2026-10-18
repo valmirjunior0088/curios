@@ -11,9 +11,9 @@
 //! **A frame may hold a name twice.** An arm assumes its own payload binder again at the type its case's solution gives it (`retype_locals`), so the locals are a list, read by the later entry, with the assumptions beside them by name.
 
 use {
-    super::{Footing, Window},
+    super::{BirthTelescope, Footing, Window},
     crate::DeadArm,
-    curios_core::{DefinitionKind, Free, Term, UniverseContext},
+    curios_core::{DefinitionKind, Free, MetavarSpine, Term, UniverseContext},
     curios_utilities::{Keyed, Ordered, Persistent},
     std::{cell::RefCell, collections::HashMap, fmt, hash::Hash, ptr, rc::Rc},
 };
@@ -262,6 +262,11 @@ pub(crate) struct Frame {
     /// The place the next local takes, and the first place this frame bound itself.
     next_local: i64,
     first_local: i64,
+    /// Each name the local frames through this one bind, once, at its innermost binding and in binding order, beside the identity spine over them: what a metavariable born where this frame is innermost is born over, shared, so a birth costs nothing more than the one before it. The base frame keeps neither, its names being no metavariable's binders.
+    ///
+    /// One entry per name: an arm assumes a generalized hypothesis again under its case-specialized type (`retype_locals`), and a telescope holding a name twice would give every metavariable born there a spine with a repeated argument, which `Convert::solve` cannot invert. The innermost binding is kept, which keeps the telescope well-scoped: everything a generalized hypothesis's type can mention was generalized with it and bound again after it.
+    pub(super) telescope: BirthTelescope,
+    pub(super) spine: MetavarSpine,
     /// How many times the local frames through this one bound a name again or replaced its type: two frames over one chain that count alike bind every name the frame beneath both binds as it does ([`Frames::binds_as`](super::Frames::binds_as)).
     pub(super) rebound: usize,
     /// The `use`-plicity binders among the locals, in binding order: resolution's search space, scanned innermost first.
@@ -318,6 +323,8 @@ impl Frame {
                 next_local: 0,
                 first_local: 0,
                 rebound: 0,
+                telescope: BirthTelescope::default(),
+                spine: MetavarSpine::new(),
                 witnesses: Ordered::new(),
                 next_witness: 0,
                 refinements: Recorded::new(),
@@ -352,6 +359,8 @@ impl Frame {
             next_local: beneath.next_local,
             first_local: beneath.next_local,
             rebound: beneath.rebound,
+            telescope: beneath.telescope.clone(),
+            spine: beneath.spine.clone(),
             witnesses: beneath.witnesses.clone(),
             next_witness: beneath.next_witness,
             refinements: Recorded::new(),
@@ -392,16 +401,47 @@ impl Frame {
     pub(super) fn bind(&mut self, name: Free, type_: Term) {
         let place = self.next_local;
         self.next_local += 1;
-        self.rebound += usize::from(self.assumptions.contains_key(&name));
+        let again = self.assumptions.contains_key(&name);
+        self.rebound += usize::from(again);
         self.locals.insert(place, (name, type_.clone()));
         self.assumptions.insert(
             name,
             Binding {
-                type_,
+                type_: type_.clone(),
                 universes: UniverseContext::empty(),
                 place,
             },
         );
+        match (self.depth > 0, again) {
+            (false, _) => {}
+            (true, false) => {
+                self.spine.bound(&name);
+                self.telescope.bound(name, type_);
+            }
+            (true, true) => self.restate_scope(),
+        }
+    }
+
+    /// The telescope and the spine stated again from the locals, each name at its innermost binding: where a name is bound again or its type replaced, which only an arm retyping its locals does, and which reads the scope as the retyping did.
+    fn restate_scope(&mut self) {
+        let locals = self
+            .locals
+            .iter()
+            .map(|(_, local)| local)
+            .collect::<Vec<_>>();
+        let mut innermost = HashMap::with_capacity(locals.len());
+        for (rank, (name, _)) in locals.iter().enumerate() {
+            innermost.insert(name, rank);
+        }
+
+        self.telescope = BirthTelescope::default();
+        self.spine = MetavarSpine::new();
+        for (rank, (name, type_)) in locals.iter().enumerate() {
+            if innermost[name] == rank {
+                self.spine.bound(name);
+                self.telescope.bound(*name, type_.clone());
+            }
+        }
     }
 
     /// Whether the innermost binding of `name` is this frame's own, rather than a frame's beneath it.
@@ -420,6 +460,9 @@ impl Frame {
         self.rebound += 1;
         self.locals.insert(binding.place, (*name, type_.clone()));
         self.assumptions.insert(*name, binding);
+        if self.depth > 0 {
+            self.restate_scope();
+        }
     }
 
     /// Replace the universe context of `name`'s innermost binding.
@@ -638,6 +681,13 @@ impl HeldFrames {
         refined_through(self.0.as_ref())
             .map(|frame| &**frame)
             .collect()
+    }
+
+    /// Whether a frame held binds `name` as a local: whether it is a binder of the telescope a metavariable born where the frames were held is born over.
+    pub(crate) fn binds_locally(&self, name: &Free) -> bool {
+        self.0
+            .as_ref()
+            .is_some_and(|frame| frame.assumptions.contains_key(name))
     }
 
     /// Whether no frame is held: what waits where no local frame stood.

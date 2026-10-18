@@ -5,7 +5,7 @@
 //! **Which term awaits a metavariable is kept here, and written at three doors.** A term that reads its parts against types holding metavariables awaits them until it has read them all ([`Solutions::enter_awaiting`]): a metavariable is awaited from its birth by the term being read, and the relation moves only where a link is made — a committed solution holds what it mentions to what it solves, a parked problem holds together what it watches ([`Solutions::birth`], [`Solutions::solve`], [`Solutions::park`]). What links hold together is a class ([`Held`]), joined where the link is made and awaited whole by the outermost standing term that awaited any of it, so a chain of links holds its ends: a numeral under two calls waits for the outer one, which no one link says of it. A term that has completed awaits nothing, which a reader sees without a pass: the record stays and the term no longer stands. So whether a choice may still be informed by what encloses it is read off the metavariable's class, and no pass over the store answers it.
 
 use {
-    super::{HeldFrames, SharedTelescope},
+    super::{BirthTelescope, HeldFrames},
     crate::{DeadArm, Problem, Refusal},
     curios_core::{
         Bound, Extent, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm, Term,
@@ -24,7 +24,7 @@ use {
 #[derive(Debug)]
 pub(crate) struct MetaEntry {
     /// Γ frozen at birth: the local assumption context in binding order, with birth-time types. Drives the scope check and re-validation.
-    pub telescope: SharedTelescope,
+    pub telescope: BirthTelescope,
     /// How the telescope stands to `frames`: taken with them, so they bind it, or stated for the metavariable.
     pub scoped: Scoped,
     /// The frames the metavariable was born under, as they stood: what is judged of it is judged standing on them where they are not the live ones ([`Context::at_birth`](super::Context::at_birth)). Their match-arm refinements are what a solution may rest on beyond Γ, and all it may, each in the frame it was registered in, and containment compares them as it compares Γ; their definitions are the birth's; their witness binders are the reader position a report about the metavariable is spelled for; and their innermost dead arm is why an implicit minted there and never solved has no value to take.
@@ -498,7 +498,7 @@ impl Solutions {
     pub(crate) fn birth_rec_slot(
         &mut self,
         id: MetavarId,
-        telescope: SharedTelescope,
+        telescope: BirthTelescope,
         frames: HeldFrames,
         result: Term,
     ) {
@@ -516,7 +516,7 @@ impl Solutions {
     pub(crate) fn birth(
         &mut self,
         id: MetavarId,
-        telescope: SharedTelescope,
+        telescope: BirthTelescope,
         scoped: Scoped,
         frames: HeldFrames,
         result: Term,
@@ -650,8 +650,11 @@ impl Solutions {
 
     /// `term`, spelled with the names of `entry`'s birth telescope, as it reads at the occurrence `metavar`.
     fn at_occurrence(entry: &MetaEntry, metavar: &Metavar, term: &Term) -> Term {
-        // A term naming no binder reads nothing of the spine, which has an entry for every binder the metavariable was born under: resolving it is free whatever the scope.
-        if metavar.spine.is_empty() || !term.has_local_free() && term.reach() == 0 {
+        // A term naming no binder reads nothing of the spine, which has an entry for every binder the metavariable was born under, and an identity spine reads every binder as itself: resolving either is free whatever the scope.
+        if metavar.spine.is_empty()
+            || metavar.spine.is_identity()
+            || !term.has_local_free() && term.reach() == 0
+        {
             return term.clone();
         }
 

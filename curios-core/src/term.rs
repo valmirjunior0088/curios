@@ -25,6 +25,9 @@ mod rank;
 mod shape;
 pub use shape::*;
 
+mod metavar_spine;
+pub use metavar_spine::*;
+
 mod matrix;
 pub use matrix::*;
 
@@ -801,7 +804,7 @@ impl Term {
     pub fn metavar_birthed(
         id: impl Into<MetavarId>,
         origin: MetavarOrigin,
-        spine: impl Into<Rc<Vec<Term>>>,
+        spine: impl Into<MetavarSpine>,
     ) -> Self {
         Self::from(Subterm::Metavar(Metavar {
             id: id.into(),
@@ -1407,6 +1410,10 @@ impl Term {
 /// Every child is cloned into `work` *before* the old value is released, so releasing it can only decrement — the reference `work` now holds is what stops the drop cascading. What is left behind is `Prop`: no children, and no allocation, because it is a variant with no payload.
 fn detach_children(subterm: &mut Subterm, work: &mut Vec<Term>) {
     let detached = mem::replace(subterm, Subterm::Sort(Quality::Prop, Level::zero()));
+    // A spine is persistent and shared between the occurrences born under one scope: dropped whole, it lowers one count, and releases its entries itself where it held the last, each entry's own drop being this walk. Handed on entry by entry, it would cost every dropped occurrence the scope it was born in.
+    if let Subterm::Metavar(_) = detached {
+        return;
+    }
     detached.any_child_term(&mut |child| {
         work.push(child.clone());
         false
@@ -2695,10 +2702,14 @@ impl Term {
                     return ControlFlow::Continue(Enter::Skip(()));
                 }
 
-                if let Subterm::Metavar(Metavar { id, .. }) = term.look()
-                    && state.0(*id)
-                {
-                    return ControlFlow::Break(());
+                if let Subterm::Metavar(Metavar { id, spine, .. }) = term.look() {
+                    if state.0(*id) {
+                        return ControlFlow::Break(());
+                    }
+                    // A spine holding no metavariable has nothing below for the walk: passed over unread, as its facts say, where descending would visit an entry for every binder in scope.
+                    if !spine.has_metavar() {
+                        return ControlFlow::Continue(Enter::Skip(()));
+                    }
                 }
 
                 ControlFlow::Continue(Enter::Descend)

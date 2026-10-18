@@ -452,6 +452,7 @@ impl Subterm {
                 head: InstanceHead::Var(var),
                 ..
             }) => var.as_free().is_some_and(Free::is_local),
+            Subterm::Metavar(Metavar { spine, .. }) => spine.has_local_free(),
             _ => self.any_child_term(&mut |t| t.has_local_free()),
         }
     }
@@ -464,6 +465,7 @@ impl Subterm {
                 head: InstanceHead::RecProj(..),
                 ..
             }) => true,
+            Subterm::Metavar(Metavar { spine, .. }) => spine.has_group(),
             _ => self.any_child_term(&mut |t| t.has_group()),
         }
     }
@@ -523,6 +525,7 @@ impl Subterm {
     pub(crate) fn has_transient(&self) -> bool {
         match self {
             Subterm::Transient(_) => true,
+            Subterm::Metavar(Metavar { spine, .. }) => spine.has_transient(),
             _ => self.any_child_term(&mut |t| t.has_transient()),
         }
     }
@@ -554,6 +557,7 @@ impl Subterm {
             | Subterm::Struct(Struct { universes, .. }) => {
                 universes.has_meta() || self.any_child_term(&mut |term| term.has_universe_meta())
             }
+            Subterm::Metavar(Metavar { spine, .. }) => spine.has_universe_meta(),
             _ => self.any_child_term(&mut |term| term.has_universe_meta()),
         }
     }
@@ -579,6 +583,7 @@ impl Subterm {
                 group.universe_context() != &UniverseContext::empty()
                     || self.any_child_term(&mut |term| term.has_universe_data())
             }
+            Subterm::Metavar(Metavar { spine, .. }) => spine.has_universe_data(),
             _ => self.any_child_term(&mut |term| term.has_universe_data()),
         }
     }
@@ -849,35 +854,20 @@ impl Bound for Subterm {
                 })
             }
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
-            // The spine is ordinary term content: visiting it is what keeps the delayed substitution aligned through `close`/`open`. Spines are wide (one entry per birth binder) and overwhelmingly identity (bare variables a visit does not touch), so entries are copy-on-write — an untouched `Var` is an `Rc` bump, never a rebuild — and an entirely untouched spine reuses its shared allocation. This is what keeps per-traversal cost flat for the common meta instead of O(|Γ|) allocations.
-            Subterm::Metavar(Metavar { id, spine, origin }) => {
-                let mut touched = false;
-                let visited = spine
-                    .iter()
-                    .map(|t| match &**t {
-                        Subterm::Var(var) => match visit.call(var) {
-                            Some(rewritten) => {
-                                touched = true;
-                                Term::from(rewritten)
-                            }
-                            None => t.clone(),
-                        },
+            // The spine is ordinary term content: visiting it is what keeps the delayed substitution aligned through `close`/`open`. Spines are wide (one entry per birth binder) and overwhelmingly identity (bare variables a visit does not touch), so an untouched entry is kept as it stands and an entirely untouched spine is the spine itself, identity and all.
+            Subterm::Metavar(Metavar { id, spine, origin }) => Subterm::Metavar(Metavar {
+                id: *id,
+                spine: spine
+                    .rewritten(|entry| match &**entry {
+                        Subterm::Var(var) => visit.call(var).map(Term::from),
                         _ => {
-                            let rebuilt = visit.visit_subterm(t);
-                            touched = touched || rebuilt != *t;
-                            rebuilt
+                            let rebuilt = visit.visit_subterm(entry);
+                            (rebuilt != *entry).then_some(rebuilt)
                         }
                     })
-                    .collect::<Vec<_>>();
-                Subterm::Metavar(Metavar {
-                    id: *id,
-                    spine: match touched {
-                        true => Rc::new(visited),
-                        false => spine.clone(),
-                    },
-                    origin: origin.clone(),
-                })
-            }
+                    .unwrap_or_else(|| spine.clone()),
+                origin: origin.clone(),
+            }),
         }
     }
 
@@ -888,7 +878,7 @@ impl Bound for Subterm {
                 .subterms()
                 .map(|child| child.reach())
                 .fold(0, usize::max),
-            Subterm::Metavar(Metavar { spine, .. }) => max_reach(spine.as_slice()),
+            Subterm::Metavar(Metavar { spine, .. }) => spine.reach(),
             // A variable head reaches like a bare `Var`; a projection head like the `Rec` it abbreviates, whose tail — a member variable under the group's own binders — contributes nothing past the block boundary.
             Subterm::Instance(Instance { head, .. }) => match head {
                 InstanceHead::Var(var) => match var.as_bound() {

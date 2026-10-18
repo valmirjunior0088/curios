@@ -17,13 +17,14 @@ use {
     curios_core::{
         Apply, Argument, Atom, Bang, Carrier, Cases, Exhaustion, Field, Free, Global, InductArm,
         InductDecl, InductParam, InductType, Infix, Instance, InstanceHead, Intrinsic, Level, Many,
-        Match, MatchResult, Matrix, Metavar, MetavarId, MetavarOrigin, Nat, Pattern, Polarity,
-        Proj, Rec, Reducer, Row, Scope, Struct, StructEntry, StructType, Subterm, Telescope, Term,
-        Three, Totality, Transient, Tuple, Two, UniverseContext, Universes, Var, Variant,
+        Match, MatchResult, Matrix, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Nat, Pattern,
+        Polarity, Proj, Rec, Reducer, Row, Scope, Struct, StructEntry, StructType, Subterm,
+        Telescope, Term, Three, Totality, Transient, Tuple, Two, UniverseContext, Universes, Var,
+        Variant,
     },
     curios_num::{Grain, Integer, Natural, Rounding},
     curios_utilities::{InfixOp, Plicity, Qualifier},
-    std::{collections::BTreeMap, rc::Rc, slice, sync::Arc},
+    std::{collections::BTreeMap, slice, sync::Arc},
 };
 
 /// The member every probe below plants a call to.
@@ -687,7 +688,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |markers| {
             Subterm::Metavar(Metavar {
                 id: MetavarId::from(0usize),
-                spine: Rc::new(vec![markers.unvisited("a metavariable's spine")]),
+                spine: MetavarSpine::from(vec![markers.unvisited("a metavariable's spine")]),
                 origin: MetavarOrigin::Hole,
             })
             .into()
