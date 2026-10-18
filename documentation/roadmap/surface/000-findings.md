@@ -1,1 +1,3 @@
 # Surface: findings
+
+- **A successor pattern past one is refused as a gluing of its `+`.** `refuse_glued_successor` (`curios-text/src/parse/patterns.rs`) fires on a label followed by blanks, a `+` and digits, so a spaced `| k + 2 =>`, which fails `parse_nat_succ_match_pattern` at the literal and not at the spacing, is told "a successor pattern takes whitespace on both sides of its `+`" though it has. Seen at `b04bf1f3f`: `match n | 0 => 10 | 1 => 11 | k + 2 => … end`. Fix: the refusal says what failed — the spacing where a side has none, and otherwise that a successor pattern binds the predecessor before `+ 1`, a larger step being literal arms or a nested match. Check: a row in `curios-text/src/parse/match_expr_tests.rs` beside the glued one. Size: one commit.
