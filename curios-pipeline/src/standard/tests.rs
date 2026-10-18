@@ -272,7 +272,7 @@ fn std_identity_census() {
     });
 }
 
-/// Whether the standard library elaborates to one module however long its tables keep an answer: its tree lowered once and elaborated with every table cleared at every boundary, and with each answer kept for as long as what it read stands, the two modules compared by value, and where they differ, the items that do. A measurement, since each elaboration is the whole library; counted, and it asserts, since a module that moves is an answer kept past something it read (`documentation/roadmap/theory/200-a-reduct-states-what-it-rests-on.md`).
+/// Whether the standard library elaborates to one module however long its tables keep an answer: its tree lowered once and elaborated with every table cleared at every boundary, and with each answer kept for as long as what it read stands, the two modules compared by value, and where they differ, the items that do. A measurement, since each elaboration is the whole library; counted, and it asserts, since a module that moves is an answer kept past something it read (`documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`).
 #[test]
 #[ignore = "measurement, counted: elaborates the standard library with every table cleared at every boundary and with each answer kept as long as what it read stands, and compares the two modules item by item"]
 fn std_memo_census() {
