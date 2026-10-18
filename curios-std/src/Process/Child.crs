@@ -1,5 +1,5 @@
 use /std/{Bool, Bytes, Nat, Str, List, Option, Result, Path, Try, Io, Process};
-use /std/internal/{Handle, error};
+use /std/internal/{Handle, Status, invalid};
 
 --- A running child, and whichever of its streams were piped.
 pub struct Child: Type {
@@ -27,7 +27,7 @@ let names_a_variable(key: Str) -> Bool =
 let env_checked(env: List({Str, Str})) -> Result(Io/Error, {}) =
     match List/all(env, (entry) => names_a_variable(entry.0))
     | true => Result/success(())
-    | false => Result/failure(Io/Error/other(/sys/errno/inval))
+    | false => Result/failure(invalid)
     end;
 
 --- Whether a stream wired as `s` was piped, which is when the host's answer for it names a pipe's end rather than nothing.
@@ -53,27 +53,23 @@ pub let spawn(s: Io/Scope, p: Process) -> Try(Io, Io/Error, Child) =
             stdio_of(p.stdin),
             stdio_of(p.stdout),
             stdio_of(p.stderr))!;
-    let spawned =
-        match reply.status == /sys/status/ok
-        | true => Result/success(reply)
-        | false => Result/failure(error(reply.status))
-        end!;
+    let _ = Status/succeeded(reply.status)!;
     let c =
         Child {
-            handle = spawned.child,
+            handle = reply.child,
             stdin =
                 match piped(p.stdin)
-                | true => Option/some(Process/Output { spawned.stdin })
+                | true => Option/some(Process/Output { reply.stdin })
                 | false => Option/none()
                 end,
             stdout =
                 match piped(p.stdout)
-                | true => Option/some(Process/Input { spawned.stdout })
+                | true => Option/some(Process/Input { reply.stdout })
                 | false => Option/none()
                 end,
             stderr =
                 match piped(p.stderr)
-                | true => Option/some(Process/Input { spawned.stderr })
+                | true => Option/some(Process/Input { reply.stderr })
                 | false => Option/none()
                 end };
     let _ = Io/Scope/defer(s, (_) => release(c))!;
@@ -124,18 +120,20 @@ pub let kill(c: Child) -> Io({}) =
 --- How this child ended: `ok` beside its exit code and the signal that ended it, or the status of the failure.
 foreign proc_wait(Handle) -> {status: Nat, code: Nat, signal: Nat};
 
+--- How the child of `h` ended, once its handle is readable: asked again where the host still answers that it runs, since readiness is advisory.
+let exit_reply(h: Handle) -> Io({status: Nat, code: Nat, signal: Nat}) =
+    let _ = Handle/wait(h, Handle/Interest/readable)!;
+    let reply = proc_wait(h)!;
+    match Status/of_code(reply.status) | blocked() => exit_reply(h) | _ => Io/pure(reply) end;
+
 --- How the child ended, waiting until it does. A piped input is finished first, so a child reading to the end of its input is not left waiting on the parent that waits on it; the outputs are closed with the child, so read what it wrote before waiting for it.
 pub let wait(c: Child) -> Try(Io, Io/Error, Process/Exit) =
     let _ = close_input(c.stdin)!;
-    let _ = Handle/wait(c.handle, Handle/Interest/readable)!;
-    let reply = proc_wait(c.handle)!;
+    let reply = exit_reply(c.handle)!;
     let _ = close_pipes(c)!;
-    match reply.status == /sys/status/ok
-    | true =>
-        Try/pure(
-            match reply.signal == 0
-            | true => Process/Exit/exited(reply.code)
-            | false => Process/Exit/signaled(reply.signal)
-            end)
-    | false => Try/raise(error(reply.status))
-    end;
+    let _ = Status/succeeded(reply.status)!;
+    Try/pure(
+        match reply.signal == 0
+        | true => Process/Exit/exited(reply.code)
+        | false => Process/Exit/signaled(reply.signal)
+        end);

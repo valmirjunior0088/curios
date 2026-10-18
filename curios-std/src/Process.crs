@@ -1,5 +1,5 @@
 use /std/{Byte, Bytes, Str, List, Option, Result, Path, Try, Io};
-use /std/internal/{Handle};
+use /std/internal/{Handle, Status};
 
 --- How a child's standard stream is wired: shared with this process, piped to the parent, or attached to the null device.
 pub induct Stdio: pub Type
@@ -109,9 +109,9 @@ foreign proc_env(Bytes) -> {status: Nat, value: Bytes};
 pub let env(name: Str) -> Io(Option(Bytes)) =
     let reply = proc_env(Str/to_bytes(name))!;
     Io/pure(
-        match reply.status == /sys/status/ok
-        | true => Option/some(reply.value)
-        | false => Option/none()
+        match Status/of_code(reply.status)
+        | ok() => Option/some(reply.value)
+        | _ => Option/none()
         end);
 
 --- End the instance with this code. The call does not return.

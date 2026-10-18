@@ -1,0 +1,56 @@
+use /std/{Nat, List, Io, Try};
+use /std/Bool/{True, Holds};
+use /std/internal/{unnamed};
+
+--- What a host operation answers beside its payload, read off the wire's code: what a reading of a reply decides by before it reads anything else.
+pub induct Status: pub Type
+--- The operation did what it was asked.
+| ok()
+--- A read found the end of its stream. Nothing but a read answers it.
+| ended()
+--- The operation could not progress without waiting: what asked it waits on a watch of the handle and asks again, so it never reaches a program.
+| blocked()
+--- The failure it names.
+| failed(Io/Error)
+end
+
+let errors: List({Nat, Io/Error}) =
+    [
+        (/sys/status/not_found, Io/Error/not_found()),
+        (/sys/status/permission_denied, Io/Error/permission_denied()),
+        (/sys/status/exists, Io/Error/already_exists()),
+        (/sys/status/refused, Io/Error/connection_refused()),
+        (/sys/status/tls, Io/Error/tls()),
+        (/sys/status/not_empty, Io/Error/not_empty()),
+        (/sys/status/is_directory, Io/Error/is_directory()),
+        (/sys/status/not_directory, Io/Error/not_directory()),
+        (/sys/status/reset, Io/Error/connection_reset()),
+        (/sys/status/broken_pipe, Io/Error/broken_pipe())];
+
+--- The status `code` names: one of the named statuses, or `other` with the errno the host passed through.
+pub let of_code(code: Nat) -> Status =
+    choose
+    | code == /sys/status/ok => Status/ok()
+    | code == /sys/status/eof => Status/ended()
+    | code == /sys/status/would_block => Status/blocked()
+    | _ =>
+        Status/failed(
+            List/fold(
+                errors,
+                Io/Error/other(code - /sys/status/other_base),
+                (entry, acc) => match code == entry.0 | true => entry.1 | false => acc end))
+    end;
+
+--- Nothing where `code` is `ok`, and the failure it names otherwise: what a reading asks of a reply before it reads its payload. A read's end or a wait, which a reply read so cannot answer, is the failure no errno names.
+pub let succeeded(code: Nat) -> Try(Io, Io/Error, {}) =
+    match of_code(code)
+    | ok() => Try/pure(())
+    | failed(e) => Try/raise(e)
+    | _ => Try/raise(unnamed)
+    end;
+
+-- Every failure the wire names decodes to a case of its own: a status the wire's list gains is refused until `errors` names it.
+let _every_failure_the_wire_names_decodes_to_a_case_of_its_own: Holds(
+    List/all(/sys/status/failures, (code: Nat) =>
+        match of_code(code) | failed(other(_)) => false | _ => true end)) =
+    True/qed();

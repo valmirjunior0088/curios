@@ -1,6 +1,6 @@
 use /std/{Bytes, Str, Nat, Bool, Try, Io};
 use /std/tcp/{resolve, Socket, release};
-use /std/internal/{Handle, error};
+use /std/internal/{Handle, Status};
 
 satisfy Io/Read(Socket) {
     read(c, n, @positive) = Io/read(@Handle, c.0, n, @positive),
@@ -30,40 +30,25 @@ foreign socket_open(Bytes) -> {status: Nat, handle: Handle};
 
 let opened(addr: Bytes) -> Try(Io, Io/Error, Handle) =
     let reply = socket_open(addr)!;
-    match reply.status == /sys/status/ok
-    | true => Try/pure(reply.handle)
-    | false => Try/raise(error(reply.status))
-    end;
+    let _ = Status/succeeded(reply.status)!;
+    Try/pure(reply.handle);
 
 --- Start connecting this socket to this address: `ok`, or the status of the failure.
 foreign socket_connect(Handle, Bytes) -> Nat;
 
-let open_and_connect(addr: Bytes) -> Try(Io, Io/Error, {Handle, Bool}) =
-    let h = opened(addr)!;
-    let status = socket_connect(h, addr)!;
-    choose
-    | status == /sys/status/ok => Try/pure((h, false))
-    | status == /sys/status/would_block => Try/pure((h, true))
-    | _ =>
-        let _ = Io/close(h)!;
-        Try/raise(error(status))
-    end;
-
 --- How a connect under way ended: `ok`, or the status of the failure.
 foreign socket_finish_connect(Handle) -> Nat;
 
-let settle(h: Handle, pending: Bool) -> Try(Io, Io/Error, {}) =
-    match pending
-    | false => Try/pure(())
-    | true =>
-        let _ = Handle/wait(h, Handle/Interest/writable)!;
-        let status = socket_finish_connect(h)!;
-        choose
-        | status == /sys/status/ok => Try/pure(())
-        | status == /sys/status/would_block => settle(h, true)
-        | _ => Try/raise(error(status))
-        end
-    end;
+--- The connect under way on `h` ended, once a watch of it for writing is ready, and waited on again while it is still under way.
+let settle(h: Handle) -> Try(Io, Io/Error, {}) =
+    let _ = Handle/wait(h, Handle/Interest/writable)!;
+    let status = socket_finish_connect(h)!;
+    match Status/of_code(status) | blocked() => settle(h) | _ => Status/succeeded(status) end;
+
+--- `h` connected to `addr`: at once, or once the connect the host started has settled.
+let connected(h: Handle, addr: Bytes) -> Try(Io, Io/Error, {}) =
+    let status = socket_connect(h, addr)!;
+    match Status/of_code(status) | blocked() => settle(h) | _ => Status/succeeded(status) end;
 
 --- Upgrade this socket to a TLS client stream for this server name: `ok`, or the status of the failure.
 foreign tls_start(Handle, Bytes) -> Nat;
@@ -72,17 +57,14 @@ let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
     match tls
     | true =>
         let status = tls_start(h, Str/to_bytes(host))!;
-        match status == /sys/status/ok
-        | true => Try/pure(())
-        | false => Try/raise(error(status))
-        end
+        Status/succeeded(status)
     | false => Try/pure(())
     end;
 
 let connect_addr(s: Io/Scope, host: Str, addr: Bytes, tls: Bool) -> Try(Io, Io/Error, Socket) =
-    let (h, pending) = open_and_connect(addr)!;
+    let h = opened(addr)!;
     let _ = Io/Scope/defer(s, (how) => release(h, how))!;
-    let _ = Try/rescue(settle(h, pending), (e) => close_raising(h, e))!;
+    let _ = Try/rescue(connected(h, addr), (e) => close_raising(h, e))!;
     let _ = Try/rescue(upgrade(h, host, tls), (e) => close_raising(h, e))!;
     Try/pure(Socket { h });
 

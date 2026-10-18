@@ -107,7 +107,7 @@ impl Default for TokenMint {
     }
 }
 
-/// Why a fallible host operation failed, mirrored by `/std/Io/Error`'s `of`. It names failures only: success and a stream's end are the shape of the reply that carries it ([`WireReply`](super::WireReply)), so no host can answer a success beside a failure's padding. Each named failure has a fixed wire code, stated beside the status it names in the table of codes (`codes.rs`), which is where [`Failure::code`] is read off; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](crate::status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).
+/// Why a fallible host operation failed, mirrored by `/std/Io/Error` and decoded into it by `/std/internal/Status`. It names failures only: success and a stream's end are the shape of the reply that carries it ([`WireReply`](super::WireReply)), so no host can answer a success beside a failure's padding. Each named failure has a fixed wire code, stated beside the status it names in the table of codes (`codes.rs`), which is where [`Failure::code`] is read off; `Other` is the catch-all carrying the OS errno of an otherwise-unrecognized failure, exactly like the guest's `Error/other(Nat)`, and lowers offset by [`OTHER_BASE`](crate::status::OTHER_BASE) so an errno can never collide with a named code. The native adapter maps an `io::Error` to one of these (`curios-runtime`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Failure {
     NotFound,
@@ -115,7 +115,7 @@ pub enum Failure {
     AlreadyExists,
     /// A `socket_connect` was actively refused — no listener at the target host:port.
     ConnectionRefused,
-    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). Every handle a peer decides on is non-blocking from the moment the host mints it, so this is the failure a read or a write waits on: `/std/internal/Handle` matches on it to wait on a watch of the handle and retry, instead of treating it as a real failure.
+    /// A non-blocking op could not make progress (`ErrorKind::WouldBlock`). Every handle a peer decides on is non-blocking from the moment the host mints it, so this is the failure a read or a write waits on: `/std/internal/Status` decodes it as `blocked`, on which a waiter waits on a watch of the handle and retries, instead of treating it as a real failure.
     WouldBlock,
     /// A TLS upgrade (`tls_start`/`tls_start_server`) or server-config build failed: an unparseable certificate/key, an invalid SNI, or a failed handshake (bad cert chain, protocol error). These are `rustls`'s own errors, not OS errnos, so they collapse to this one named code rather than passing through the errno mapping.
     TlsError,

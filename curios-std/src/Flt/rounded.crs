@@ -65,7 +65,7 @@ pub let sqrt(r: Rounding, a: Flt) -> Flt =
 --- The `Flt` a `Nat` rounds to in the direction `r` names.
 pub let of_nat(r: Rounding, n: Nat) -> Flt =
     match r
-    | ties_to_even() => /sys/Nat/to_flt(n)
+    | ties_to_even() => Nat/to_flt(n)
     | ties_to_away() => /sys/Flt/ties_to_away/of_nat(n)
     | toward_zero() => /sys/Flt/toward_zero/of_nat(n)
     | toward_positive() => /sys/Flt/toward_positive/of_nat(n)
@@ -75,7 +75,7 @@ pub let of_nat(r: Rounding, n: Nat) -> Flt =
 --- The `Flt` an `Int` rounds to in the direction `r` names.
 pub let of_int(r: Rounding, n: Int) -> Flt =
     match r
-    | ties_to_even() => /sys/Int/to_flt(n)
+    | ties_to_even() => Int/to_flt(n)
     | ties_to_away() => /sys/Flt/ties_to_away/of_int(n)
     | toward_zero() => /sys/Flt/toward_zero/of_int(n)
     | toward_positive() => /sys/Flt/toward_positive/of_int(n)

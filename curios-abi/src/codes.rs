@@ -92,7 +92,7 @@ code_sets! {
         ALREADY_EXISTS = 4 => exists, AlreadyExists;
         /// A `socket_connect` was actively refused — no listener at the target address.
         CONNECTION_REFUSED = 5 => refused, ConnectionRefused;
-        /// A non-blocking op could not make progress right now. Retriable by design: `/std/internal/Handle` matches on it to wait on a watch of the handle and retry instead of surfacing a failure.
+        /// A non-blocking op could not make progress right now. Retriable by design: `/std/internal/Status` decodes it as `blocked`, on which a waiter waits on a watch of the handle and retries instead of surfacing a failure.
         WOULD_BLOCK = 6 => would_block, WouldBlock;
         /// A TLS upgrade or server-config build failed. `rustls` errors carry no OS errno, so they collapse to this one named code instead of riding the errno passthrough.
         TLS_ERROR = 7 => tls, TlsError;
@@ -106,7 +106,7 @@ code_sets! {
         CONNECTION_RESET = 11 => reset, ConnectionReset;
         /// A write to a pipe or socket whose reader has gone (`ErrorKind::BrokenPipe`). Named because `/std/print` ends a program quietly on it and loudly on any other failure, and the browser has no errno to pass through.
         BROKEN_PIPE = 12 => broken_pipe, BrokenPipe;
-        /// The errno passthrough lane: `Status::Other(errno)` lowers as `OTHER_BASE + errno`, one past the last named code, so a raw OS errno — EIO is 5, ENXIO is 6 — can never masquerade as `OK` or a named failure. The guest's `Io/Error/of` subtracts it back out.
+        /// The errno passthrough lane: `Status::Other(errno)` lowers as `OTHER_BASE + errno`, one past the last named code, so a raw OS errno — EIO is 5, ENXIO is 6 — can never masquerade as `OK` or a named failure. The guest's `/std/internal/Status` subtracts it back out.
         OTHER_BASE = BROKEN_PIPE + 1 => other_base;
         /// The largest errno the lane carries: an OS reports a positive `int`, so a code past `OTHER_BASE + ERRNO_MAX` is no failure any host can answer.
         ERRNO_MAX = i32::MAX as u64;

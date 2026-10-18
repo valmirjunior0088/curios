@@ -1,5 +1,5 @@
 use /std/{Str, Nat, Bytes, Try, Io};
-use /std/internal/{error};
+use /std/internal/{Status};
 
 --- Look this host and port up: `ok` beside every address found, or the status of the failure. The host answers it later, so the call suspends while the lookup runs.
 foreign dns_lookup(Bytes, Nat) -> {status: Nat, addresses: List(Bytes)};
@@ -7,8 +7,5 @@ foreign dns_lookup(Bytes, Nat) -> {status: Nat, addresses: List(Bytes)};
 --- The first address `host` resolves to, with `port`, as the socket operations take it. The lookup waits by suspending. A name that resolves to no address names nothing a socket can reach, and is `not_found`, as a name that resolves to nothing at all is.
 pub let resolve(host: Str, port: Nat) -> Try(Io, Io/Error, Bytes) =
     let reply = dns_lookup(Str/to_bytes(host), port)!;
-    match reply.status == /sys/status/ok
-    | true =>
-        match reply.addresses | [a, .._] => Try/pure(a) | [] => Try/raise(Io/Error/not_found()) end
-    | false => Try/raise(error(reply.status))
-    end;
+    let _ = Status/succeeded(reply.status)!;
+    match reply.addresses | [a, .._] => Try/pure(a) | [] => Try/raise(Io/Error/not_found()) end;

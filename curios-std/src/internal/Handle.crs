@@ -1,20 +1,28 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr};
-use /std/{Bool, Byte, Bytes, Nat, List, Option, Result, Io, Try};
+use /std/{Bool, Byte, Bytes, Nat, List, Result, Io, Try};
 use /std/Io/{Error};
 use /std/Bool/{Holds};
-use /std/internal/{error};
+use /std/File/{Mode};
+use /std/internal/{Status, unnamed};
 
---- Open the file at this path in this mode, one of `/sys/open_mode`'s codes: `ok` beside its handle, or the status of the failure.
+--- Open the file at this path in the mode this `/sys/open_mode` code names: `ok` beside its handle, or the status of the failure.
 foreign file_open(Bytes, Nat) -> {status: Nat, handle: Handle};
 
---- The handle the file at `path` opens to in `mode`, one of `/sys/open_mode`'s codes: what a file and a terminal are each opened through.
-pub let open(path: Bytes, mode: Nat) -> Try(Io, Io/Error, Handle) =
-    let reply = file_open(path, mode)!;
-    match reply.status == /sys/status/ok
-    | true => Try/pure(reply.handle)
-    | false => Try/raise(error(reply.status))
+--- The host's code for `mode`.
+let mode_code(mode: Mode) -> Nat =
+    match mode
+    | read() => /sys/open_mode/read
+    | write() => /sys/open_mode/write
+    | append() => /sys/open_mode/append
+    | read_write() => /sys/open_mode/read_write
     end;
+
+--- The handle the file at `path` opens to in `mode`: what a file and a terminal are each opened through.
+pub let open(path: Bytes, mode: Mode) -> Try(Io, Io/Error, Handle) =
+    let reply = file_open(path, mode_code(mode))!;
+    let _ = Status/succeeded(reply.status)!;
+    Try/pure(reply.handle);
 
 --- Close this handle.
 foreign handle_close(Handle) -> {};
@@ -56,52 +64,14 @@ let answered(b: Bytes) -> Io/Chunk =
 --- Read up to so many bytes: `ok` beside them, `eof` at the end of the stream, or the status of the failure.
 foreign handle_read(Handle, Nat) -> {status: Nat, bytes: Bytes};
 
---- A read's reply as its outcome: `ok` beside its bytes, `eof` the end of the stream, and any other status the failure it names.
-let reading(h: Handle, n: Nat) -> Io(Result(Nat, Option(Bytes))) =
-    let reply = handle_read(h, n)!;
-    Io/pure(
-        choose
-        | reply.status == /sys/status/ok => Result/success(Option/some(reply.bytes))
-        | reply.status == /sys/status/eof => Result/success(Option/none())
-        | _ => Result/failure(reply.status)
-        end);
-
---- A write's reply as its outcome. One that accepted nothing of the `offered` bytes, where there were some, is the failure no errno names: a loop that resends what is left would resend it for ever.
-let accepted(offered: Nat, status: Nat, written: Nat) -> Result(Nat, Nat) =
-    choose
-    | status != /sys/status/ok => Result/failure(status)
-    | written == 0 && 0 < offered => Result/failure(/sys/status/other_base)
-    | _ => Result/success(written)
-    end;
-
 --- Write these bytes: `ok` beside how many were accepted, or the status of the failure.
 foreign handle_write(Handle, Bytes) -> {status: Nat, written: Nat};
-
-let writing(h: Handle, b: Bytes) -> Io(Result(Nat, Nat)) =
-    let reply = handle_write(h, b)!;
-    Io/pure(accepted(Bytes/len(b), reply.status, reply.written));
 
 --- Hand on what is still held of this handle's writes: `ok`, or the status of the failure.
 foreign handle_flush(Handle) -> Nat;
 
-let flushing(h: Handle) -> Io(Result(Nat, {})) =
-    let status = handle_flush(h)!;
-    Io/pure(
-        match status == /sys/status/ok
-        | true => Result/success(())
-        | false => Result/failure(status)
-        end);
-
 --- End this handle's sending half: `ok`, or the status of the failure.
 foreign handle_finish(Handle) -> Nat;
-
-let finishing(h: Handle) -> Io(Result(Nat, {})) =
-    let status = handle_finish(h)!;
-    Io/pure(
-        match status == /sys/status/ok
-        | true => Result/success(())
-        | false => Result/failure(status)
-        end);
 
 --- Until `h` is ready for `interest`, or has failed or hung up: a suspension on a watch of it, closed whether the wait ends or is cancelled. Readiness is advisory, so what waits retries the operation it waited for, and waits again where it would still block.
 pub let wait(h: Handle, interest: Interest) -> Io({}) =
@@ -110,63 +80,50 @@ pub let wait(h: Handle, interest: Interest) -> Io({}) =
 
 --- Up to `n` bytes, waiting while the host would block.
 let read_waiting(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Io(Result(Error, Io/Chunk)) =
-    let r = reading(h, n)!;
-    match r
-    | success(some(b)) => Io/pure(Result/success(answered(b)))
-    | success(none()) => Io/pure(Result/success(Io/Chunk/ended()))
-    | failure(s) =>
-        choose
-        | s == /sys/status/would_block =>
-            let _ = wait(h, Interest/readable)!;
-            read_waiting(h, n, @positive)
-        | _ => Io/pure(Result/failure(error(s)))
-        end
+    let reply = handle_read(h, n)!;
+    match Status/of_code(reply.status)
+    | ok() => Io/pure(Result/success(answered(reply.bytes)))
+    | ended() => Io/pure(Result/success(Io/Chunk/ended()))
+    | blocked() =>
+        let _ = wait(h, Interest/readable)!;
+        read_waiting(h, n, @positive)
+    | failed(e) => Io/pure(Result/failure(e))
     end;
 
---- The whole of `b`, waiting while the host would block and resending a short write; the first failure is the answer.
+--- The whole of `b`, waiting while the host would block and resending a short write; the first failure is the answer. A write that accepted nothing of bytes there were is the failure no errno names: a loop that resent what is left would resend it for ever.
 let write_waiting(h: Handle, b: Bytes) -> Io(Result(Error, {})) =
-    let r = writing(h, b)!;
-    match r
-    | success(written) =>
+    let reply = handle_write(h, b)!;
+    match Status/of_code(reply.status)
+    | ok() =>
         choose
-        | written < Bytes/len(b) => write_waiting(h, Bytes/drop(b, written))
+        | reply.written == 0 && 0 < Bytes/len(b) => Io/pure(Result/failure(unnamed))
+        | reply.written < Bytes/len(b) => write_waiting(h, Bytes/drop(b, reply.written))
         | _ => Io/pure(Result/success(()))
         end
-    | failure(s) =>
-        choose
-        | s == /sys/status/would_block =>
-            let _ = wait(h, Interest/writable)!;
-            write_waiting(h, b)
-        | _ => Io/pure(Result/failure(error(s)))
-        end
+    | blocked() =>
+        let _ = wait(h, Interest/writable)!;
+        write_waiting(h, b)
+    | _ => Try/run(Status/succeeded(reply.status))
     end;
 
 --- What `h` holds of the writes it accepted, handed on, waiting while the host would block.
 let flush_waiting(h: Handle) -> Io(Result(Error, {})) =
-    let r = flushing(h)!;
-    match r
-    | success(_) => Io/pure(Result/success(()))
-    | failure(s) =>
-        choose
-        | s == /sys/status/would_block =>
-            let _ = wait(h, Interest/writable)!;
-            flush_waiting(h)
-        | _ => Io/pure(Result/failure(error(s)))
-        end
+    let status = handle_flush(h)!;
+    match Status/of_code(status)
+    | blocked() =>
+        let _ = wait(h, Interest/writable)!;
+        flush_waiting(h)
+    | _ => Try/run(Status/succeeded(status))
     end;
 
 --- `h`'s sending half ended, waiting while the host would block.
 let finish_waiting(h: Handle) -> Io(Result(Error, {})) =
-    let r = finishing(h)!;
-    match r
-    | success(_) => Io/pure(Result/success(()))
-    | failure(s) =>
-        choose
-        | s == /sys/status/would_block =>
-            let _ = wait(h, Interest/writable)!;
-            finish_waiting(h)
-        | _ => Io/pure(Result/failure(error(s)))
-        end
+    let status = handle_finish(h)!;
+    match Status/of_code(status)
+    | blocked() =>
+        let _ = wait(h, Interest/writable)!;
+        finish_waiting(h)
+    | _ => Try/run(Status/succeeded(status))
     end;
 
 -- The loops above are plain `Io` over a `Result`, each wrapped once where it is public, so the description a constant `print` copies stays under the evaluator's cap.

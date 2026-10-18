@@ -1,6 +1,6 @@
-use /std/{Bytes, Str, Nat, Result, Try, Io};
+use /std/{Bytes, Str, Nat, Try, Io};
 use /std/tcp/{resolve, Socket, release};
-use /std/internal/{Handle, error};
+use /std/internal/{Handle, Status};
 
 --- A bound, listening socket.
 pub struct Listener: Type {
@@ -12,10 +12,8 @@ foreign socket_listen(Bytes) -> {status: Nat, handle: Handle};
 
 let listening(addr: Bytes) -> Try(Io, Io/Error, Listener) =
     let reply = socket_listen(addr)!;
-    match reply.status == /sys/status/ok
-    | true => Try/pure(Listener { reply.handle })
-    | false => Try/raise(error(reply.status))
-    end;
+    let _ = Status/succeeded(reply.status)!;
+    Try/pure(Listener { reply.handle });
 
 --- A listener bound to `host` at `port` into `s`, which closes it when it ends, the address reusable so a restart does not wait out the previous socket.
 pub let listen(s: Io/Scope, host: Str, port: Nat) -> Try(Io, Io/Error, Listener) =
@@ -28,21 +26,20 @@ pub let listen(s: Io/Scope, host: Str, port: Nat) -> Try(Io, Io/Error, Listener)
 foreign socket_accept(Handle) -> {status: Nat, handle: Handle};
 
 --- The next connection on `l`, waiting until a peer arrives; the handle is the library's, so this stays private and `accept` hands out a `Socket`.
-let accepted(l: Listener) -> Io(Result(Io/Error, Handle)) =
-    let go() -> Io(Result(Io/Error, Handle)) =
-        let reply = socket_accept(l.0)!;
-        choose
-        | reply.status == /sys/status/ok => Io/pure(Result/success(reply.handle))
-        | reply.status == /sys/status/would_block =>
-            let _ = Handle/wait(l.0, Handle/Interest/readable)!;
-            go()
-        | _ => Io/pure(Result/failure(error(reply.status)))
-        end;
-    go();
+let accepted(l: Listener) -> Try(Io, Io/Error, Handle) =
+    let reply = socket_accept(l.0)!;
+    match Status/of_code(reply.status)
+    | blocked() =>
+        let _ = Handle/wait(l.0, Handle/Interest/readable)!;
+        accepted(l)
+    | _ =>
+        let _ = Status/succeeded(reply.status)!;
+        Try/pure(reply.handle)
+    end;
 
 --- The next connection, waiting until a peer arrives, opened into `s` as `Socket/connect` opens one.
 pub let accept(s: Io/Scope, l: Listener) -> Try(Io, Io/Error, Socket) =
-    let h = Try/attempt(accepted(l))!;
+    let h = accepted(l)!;
     let _ = Io/Scope/defer(s, (how) => release(h, how))!;
     Try/pure(Socket { h });
 
@@ -53,7 +50,7 @@ satisfy Io/Close(Listener) {
 
 let accept_loop(l: Listener, on_conn: (Handle) -> Io({})) -> Io({}) =
     let go() -> Io({}) =
-        let r = accepted(l)!;
+        let r = Try/run(accepted(l))!;
         match r
         | failure(_) => Io/pure(())
         | success(h) =>
@@ -82,7 +79,7 @@ foreign tls_start_server(Handle, Handle) -> Nat;
 
 let serve_tls_conn(s: Io/Scope, h: Handle, cfg: Handle, handler: (Socket) -> Io({})) -> Io({}) =
     let status = tls_start_server(h, cfg)!;
-    match status == /sys/status/ok | true => serve_conn(s, h, handler) | false => Io/close(h) end;
+    match Status/of_code(status) | ok() => serve_conn(s, h, handler) | _ => Io/close(h) end;
 
 --- A server's TLS configuration from this certificate chain and this key: `ok` beside its handle, or the status of the failure.
 foreign tls_server_config(Bytes, Bytes) -> {status: Nat, handle: Handle};
@@ -97,11 +94,8 @@ pub let serve_tls(
 ) -> Try(Io, Io/Error, {}) =
     Try/scope((s) =>
         let reply = tls_server_config(cert, key)!;
-        let cfg =
-            match reply.status == /sys/status/ok
-            | true => Result/success(reply.handle)
-            | false => Result/failure(error(reply.status))
-            end!;
+        let _ = Status/succeeded(reply.status)!;
+        let cfg = reply.handle;
         let _ = Io/Scope/defer(s, (_) => Io/close(cfg))!;
         let l = listen(s, host, port)!;
         let _ = accept_loop(l, (h) => serve_tls_conn(s, h, cfg, handler))!;

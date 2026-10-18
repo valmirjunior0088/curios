@@ -1,33 +1,17 @@
-use /std/{Nat, List, Io};
-use /std/Bool/{True, Holds};
+use /std/{Io};
 
 --- A host resource the library holds for a program behind a type of its own: a stream, a lookup, a child, a configuration.
 pub mod Handle;
 pub use Handle/{let Handle};
 
-let errors: List({Nat, Io/Error}) =
-    [
-        (/sys/status/not_found, Io/Error/not_found()),
-        (/sys/status/permission_denied, Io/Error/permission_denied()),
-        (/sys/status/exists, Io/Error/already_exists()),
-        (/sys/status/refused, Io/Error/connection_refused()),
-        (/sys/status/tls, Io/Error/tls()),
-        (/sys/status/not_empty, Io/Error/not_empty()),
-        (/sys/status/is_directory, Io/Error/is_directory()),
-        (/sys/status/not_directory, Io/Error/not_directory()),
-        (/sys/status/reset, Io/Error/connection_reset()),
-        (/sys/status/broken_pipe, Io/Error/broken_pipe())];
+--- What a host operation answers beside its payload.
+pub mod Status;
+pub use Status/{let Status};
 
---- The failure `status` names: one of the named statuses, or `other` with the errno the host passed through.
-pub let error(status: Nat) -> Io/Error =
-    List/fold(
-        errors,
-        Io/Error/other(status - /sys/status/other_base),
-        (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end);
+--- The failure no errno names: what a reply its row rules out is read as, and a write that accepted nothing, as the host names the errno-less failure.
+pub let unnamed: Io/Error =
+    Io/Error/other(0);
 
--- Every failure the wire names is a case here, but `would_block`, which every reading retries on and so never reaches a program: a status the wire's list gains is refused until `errors` names it.
-let _every_failure_the_wire_names_is_a_case: Holds(
-    List/all(/sys/status/failures, (status: Nat) =>
-        status == /sys/status/would_block
-            || match error(status) | other(_) => false | _ => true end)) =
-    True/qed();
+--- An argument refused before any host call, by the errno `/sys/errno` names for it.
+pub let invalid: Io/Error =
+    Io/Error/other(/sys/errno/inval);

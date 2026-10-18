@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Str, Path, Try, Io};
+use /std/{Bytes, Str, Path, Try, Io};
 use /std/internal/{Handle};
 
 --- An open file.
@@ -18,18 +18,9 @@ pub induct Mode: pub Type
 | read_write()
 end
 
---- The host's code for `mode`.
-pub let of_mode(mode: Mode) -> Nat =
-    match mode
-    | read() => /sys/open_mode/read
-    | write() => /sys/open_mode/write
-    | append() => /sys/open_mode/append
-    | read_write() => /sys/open_mode/read_write
-    end;
-
 --- The file at `path`, opened in `mode` into `s`, which closes it when it ends.
 pub let open(s: Io/Scope, path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
-    let h = Handle/open(Path/to_bytes(path), of_mode(mode))!;
+    let h = Handle/open(Path/to_bytes(path), mode)!;
     let f = File { h };
     let _ = Io/Scope/defer(s, (_) => Io/close(f))!;
     Try/pure(f);
