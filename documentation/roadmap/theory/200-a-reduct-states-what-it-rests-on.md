@@ -10,13 +10,14 @@ Working specification for keeping every answer either checker remembers — a re
 - **The elaborator's reducts and closed values have the kernel's two lives** (`Caches`, `curios-elab/src/context/caches.rs`; `ClosedMemo`, `curios-core/src/machine.rs`): a `lasting` term's answer stands for the declaration and goes only at a redefinition or a rollback, and every other goes at each boundary of the scope.
 - **A settlement is bounded by the declaration's budget alone**, as the kernel's is (`reduce`'s `settle`, `curios-elab/src/reduce.rs`), so no ceiling below the budget turns what a table holds into whether an entry settles.
 - **A forced value is kept apart from a reduct** (`Caches::forced`), as the kernel's memos and the closed machine's keep the two demands apart: plain reduction leaves a recursive call folded where forcing unfolds it.
+- **A settlement and a stand are brackets of the scope, not boundaries of it** (`Caches::enter_window`; `Memos::set_aside`, `curios-cert/src/kernel/memos.rs`): what the live window remembered is set aside at a bracket's entry and handed back at its exit, since a settlement commits nothing and files a stuck form only once every entry it could match has been settled, and a stand writes nothing to the frames it sets aside. What the elaborator's settlement remembered is kept by its entry's frame for the next settlement made there, for as long as the frames that stood when it was filed all still stand and no spelling has been forgotten since (`Frame::settled_windows`, `curios-elab/src/context/frame.rs`), its sorts and verdicts only while nothing has been written since they were judged.
 - **The audit holds the rule over `/std`.** `Context::wholesale` makes a context whose caches clear every table at every boundary, and `curios-pipeline`'s `std_memo_census` elaborates `/std` from its tree both ways and requires one module, item by item. A stage that keeps an answer longer passes it, or what it names is a finding fixed first.
 - **A settled spelling already states what it rests on** (`Spelling`, `curios-elab/src/context/frame.rs`): the solutions committed and the universe state where either could move it, and a count of the times every spelling was forgotten at once.
 - **Both checkers cost alike**, which the parity measurements hold (`str_literal_cost_measurements`, `kernel_memo_charge_measurements` and `combinator_web_cost_measurements`, in `curios/src/tests/reduction.rs`).
 
 ## The gap
 
-**A scoped answer is dropped by the kind of boundary, not by what it read.** `Caches` clears every scoped reduct, sort and verdict wherever a guard is registered, a frame is left, a settlement withholds the frames inside its entry or restores them, a judgment stands on held frames or leaves them, levels are rewritten or answers withdrawn; a rollback and a redefinition clear the lasting ones too. Over `/std`'s elaboration at `d930af78e`, 59,828,912 units, 7,581,678 reduce a term again to the answer a clear had just dropped, or compare a pair again to the verdict it had just dropped:
+**A scoped answer is dropped by the kind of boundary, not by what it read.** `Caches` clears every scoped reduct, sort and verdict wherever a guard is registered, a frame is left, levels are rewritten or answers withdrawn; a rollback and a redefinition clear the lasting ones too. Before the windows, a settlement's two sides and a stand's were boundaries as well. Over `/std`'s elaboration at `d930af78e`, 59,828,912 units, 7,581,678 reduce a term again to the answer a clear had just dropped, or compare a pair again to the verdict it had just dropped:
 
 | Boundary | Reducts | Verdicts |
 | --- | --- | --- |
@@ -30,7 +31,7 @@ Working specification for keeping every answer either checker remembers — a re
 | A stamped write | — | 29,020 |
 | A fresh definition | — | 1,037 |
 
-The reducts that name a local are 5,934,014 of them, those holding a metavariable and no local 12,844, those holding a universe metavariable and neither 393,989, and lasting ones dropped by a rollback or a redefinition 181,657. An answer that came back different was rightly dropped: 928 reducts and 2 verdicts. Counted by the census protocol below.
+The reducts that name a local are 5,934,014 of them, those holding a metavariable and no local 12,844, those holding a universe metavariable and neither 393,989, and lasting ones dropped by a rollback or a redefinition 181,657. An answer that came back different was rightly dropped: 928 reducts and 2 verdicts. Counted by the census protocol below. The windows took the two brackets' rows: at `bad41555e`, `/std`'s elaboration costs 62,533,062 units.
 
 **A settlement is made again where its spelling was forgotten, and settles as it did.** Every spelling is forgotten at once at a redefinition, a rollback, withdrawn answers and every rewrite of levels, the closing of a witness's universe instance among them, once for each operator over a universe-polymorphic concept (`Context::close_universe_instance`). At `d930af78e`, 2,669 first settlements cost `/std` 10,703,712 units; 3,528 settlements of an entry already settled in the declaration cost 1,524,357 and came back as they were, and 3 came back otherwise.
 
@@ -56,18 +57,16 @@ The reducts that name a local are 5,934,014 of them, those holding a metavariabl
 
 | Component | Treatment | Stage |
 | --- | --- | --- |
-| Settlements and stands | A table per window, the live one handed back | Windows |
 | Settled spellings | Forgotten by what reaches each one's footing | Spellings |
 | A guard's registration | Drops what met a stuck form its key can answer | Guards |
 | Rollbacks | The solution log's watermark | Solutions |
 
 ## Stages
 
-1. **Windows.** A settlement and a stand are brackets: what the live window remembered before one is what asking again gives once it closes, since a settlement commits nothing and a stuck form is filed only once every entry it could match has been settled, and a stand writes nothing to the frames it sets aside. So each sets the live window's scoped tables aside at its entry and hands them back at its exit, sorts and verdicts with them, and what it reduces is filed for its own window and kept for the next bracket made under that window while the frames outside it stand unwritten. In both checkers: the kernel's settlement (`Kernel::settle_refinement`) narrows and restores the equations in force the same way (`Memos::begin_equations`, `Memos::begin_plain`). Figure: 3,837,058 and 421,666 units of reducts and 1,016,610 of verdicts. Check: the audit, `/std`'s units, the parity measurements, `runaway_measurements`.
-2. **Spellings.** A spelling is forgotten only by what reaches its footing: a rewrite of levels forgets the ones holding a level it rewrites, a rollback the ones settled past its mark, withdrawn answers the ones a question was asked for, and a redefinition the ones that read the name; `Spelling`'s `forgotten` count retires. Figure: 1,524,357 units. Check: the audit, `/std`'s units, and `curios`'s `infix_under_a_guard_takes_its_witness_where_it_stands`, 79 operators under two guards.
-3. **Guards.** A guard's registration drops the answers that met a stuck form its key could answer, and keeps the rest: every head the reduction met where an equation can key one, read under the spellings the probe and the shared rule read it under (`probe_spellings`, `curios_analysis::answers`), joined through hits. In both checkers, where an equation is assumed. Figure: 824,291 units. Check: the audit, `curios-cert`'s and `curios-elab`'s equation tests, the parity measurements.
-4. **Solutions.** An answer is filed with the solution log's length when it was taken; a rollback to a mark, and a restamp of solutions past one, drop the answers filed past it, a lasting one included. Elaborator only. Figure: 740,601 units. Check: the audit and `/std`'s units.
-5. **Retirement**, below.
+1. **Spellings.** A spelling is forgotten only by what reaches its footing: a rewrite of levels forgets the ones holding a level it rewrites, a rollback the ones settled past its mark, withdrawn answers the ones a question was asked for, and a redefinition the ones that read the name; a settlement's kept window is forgotten the same way, and the `forgotten` count `Spelling` and `KeptWindow` are filed with retires. Figure: 1,524,357 units. Check: the audit, `/std`'s units, and `curios`'s `infix_under_a_guard_takes_its_witness_where_it_stands`, 79 operators under two guards.
+2. **Guards.** A guard's registration drops the answers that met a stuck form its key could answer, and keeps the rest: every head the reduction met where an equation can key one, read under the spellings the probe and the shared rule read it under (`probe_spellings`, `curios_analysis::answers`), joined through hits. In both checkers, where an equation is assumed. Figure: 824,291 units. Check: the audit, `curios-cert`'s and `curios-elab`'s equation tests, the parity measurements.
+3. **Solutions.** An answer is filed with the solution log's length when it was taken; a rollback to a mark, and a restamp of solutions past one, drop the answers filed past it, a lasting one included. Elaborator only. Figure: 740,601 units. Check: the audit and `/std`'s units.
+4. **Retirement**, below.
 
 ## Verification
 
@@ -85,6 +84,7 @@ The reducts that name a local are 5,934,014 of them, those holding a metavariabl
 
 - **Naming the declarations each step moves**, as the earlier statement of this specification planned: an answer kept past a boundary that moves the image rests on something its footing does not say, and naming the declarations leaves it so.
 - **A footing in the elaborator alone**: the elaborator would spend less than the kernel at the boundaries both have, so a declaration it accepts could exhaust the kernel's budget.
+- **A kept window in the kernel**: the kernel settles each equation once for each reduction and forgets none, so the one bracket it makes again under a window is a question put to an equation's scrutinee (`Kernel::asked_scrutinee`), 652 of them costing 100,151 units over the prelude's certification at `bad41555e`, 0.51% of its 19,507,266. Where the elaborator keeps a window, it settles again what the kernel settles once.
 - **A frame's exit dropping only what read the frame**, the deepest frame an answer read positively: 402,812 units at `d930af78e`, 0.67% of `/std`'s elaboration.
 - **A rewrite of levels dropping only what holds a level it rewrites**: 239,602 units at `d930af78e`, 0.40%, and 393,989 for every reduct holding a universe metavariable and no local at every boundary, 0.66%, most of which the windows keep.
 - **Sorts and verdicts outside a bracket on the kernel's lives**, past the stamped writes: 42,564 units at `d930af78e`, 0.07%. The `classes` row of `runaway_measurements` is the shape this would have answered; `/std` holds little of it.
