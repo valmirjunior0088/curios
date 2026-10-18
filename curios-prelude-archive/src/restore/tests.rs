@@ -18,8 +18,9 @@ use {
     curios_utilities::{Qualifier, digest},
     std::{
         cell::{Cell, RefCell},
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         fs,
+        ops::ControlFlow,
         path::PathBuf,
         rc::Rc,
         thread,
@@ -162,116 +163,78 @@ fn the_std_record_names_every_authored_source_and_no_other() {
     assert_eq!(recorded, authored);
 }
 
-/// A tier of `/std`: which root modules a declaration of one may name. `curios-std/README.md`'s "`/std` is laid out by tier, subject and kind" gives the rule.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum Tier {
-    /// What performs nothing: the forms the language dispatches through, logic, numbers, text, collections and parsing.
-    Core,
-    /// What describes work the host does, and the forms a program or a test closes with.
-    Host,
-    /// Codecs that reach no host operation, so a type or a proof may run one.
-    Formats,
-    /// Protocols and frameworks over every tier below them.
-    Applications,
+/// Whether a root module of `/std` performs anything. `curios-std/README.md`'s "`/std` is laid out by purity, subject and kind" gives the rule.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Purity {
+    /// It performs nothing: no declaration of it reaches a host operation, so a type or a proof may run any of it.
+    Pure,
+    /// It describes work the host does.
+    Performs,
 }
 
-impl Tier {
-    /// Whether a declaration of this tier may name a declaration of `other`'s.
-    fn reads(self, other: Tier) -> bool {
-        match self {
-            Tier::Core => other == Tier::Core,
-            Tier::Host => matches!(other, Tier::Core | Tier::Host),
-            Tier::Formats => matches!(other, Tier::Core | Tier::Formats),
-            Tier::Applications => true,
-        }
-    }
-}
-
-/// The tier of every root module `/std` declares: the one statement of the library's tiers.
-const TIERS: &[(&str, Tier)] = &[
-    ("ops", Tier::Core),
-    ("Eq", Tier::Core),
-    ("Bool", Tier::Core),
-    ("Ord", Tier::Core),
-    ("Hash", Tier::Core),
-    ("Show", Tier::Core),
-    ("Spell", Tier::Core),
-    ("Monad", Tier::Core),
-    ("Tuple", Tier::Core),
-    ("Byte", Tier::Core),
-    ("Nat", Tier::Core),
-    ("Int", Tier::Core),
-    ("Flt", Tier::Core),
-    ("Dyadic", Tier::Core),
-    ("Bits", Tier::Core),
-    ("Bytes", Tier::Core),
-    ("Char", Tier::Core),
-    ("Str", Tier::Core),
-    ("List", Tier::Core),
-    ("Vec", Tier::Core),
-    ("Option", Tier::Core),
-    ("Result", Tier::Core),
-    ("State", Tier::Core),
-    ("Map", Tier::Core),
-    ("Set", Tier::Core),
-    ("Path", Tier::Core),
-    ("Parse", Tier::Core),
-    ("internal", Tier::Host),
-    ("Io", Tier::Host),
-    ("Cell", Tier::Host),
-    ("Channel", Tier::Host),
-    ("Try", Tier::Host),
-    ("Program", Tier::Host),
-    ("Test", Tier::Host),
-    ("Fmt", Tier::Host),
-    ("time", Tier::Host),
-    ("rand", Tier::Host),
-    ("Process", Tier::Host),
-    ("fs", Tier::Host),
-    ("File", Tier::Host),
-    ("Tty", Tier::Host),
-    ("Serial", Tier::Host),
-    ("tcp", Tier::Host),
-    ("Json", Tier::Formats),
-    ("Toml", Tier::Formats),
-    ("Html", Tier::Formats),
-    ("http", Tier::Applications),
-    ("Cli", Tier::Applications),
-    ("Tui", Tier::Applications),
+/// Whether each root module `/std` declares performs anything: the one statement of which ones do not.
+const PURITY: &[(&str, Purity)] = &[
+    ("ops", Purity::Pure),
+    ("Eq", Purity::Pure),
+    ("Bool", Purity::Pure),
+    ("Ord", Purity::Pure),
+    ("Hash", Purity::Pure),
+    ("Show", Purity::Pure),
+    ("Spell", Purity::Pure),
+    ("Monad", Purity::Pure),
+    ("Tuple", Purity::Pure),
+    ("Byte", Purity::Pure),
+    ("Nat", Purity::Pure),
+    ("Int", Purity::Pure),
+    ("Flt", Purity::Pure),
+    ("Dyadic", Purity::Pure),
+    ("Bits", Purity::Pure),
+    ("Bytes", Purity::Pure),
+    ("Char", Purity::Pure),
+    ("Str", Purity::Pure),
+    ("List", Purity::Pure),
+    ("Vec", Purity::Pure),
+    ("Option", Purity::Pure),
+    ("Result", Purity::Pure),
+    ("State", Purity::Pure),
+    ("Map", Purity::Pure),
+    ("Set", Purity::Pure),
+    ("Path", Purity::Pure),
+    ("Parse", Purity::Pure),
+    ("internal", Purity::Performs),
+    ("Io", Purity::Performs),
+    ("Cell", Purity::Performs),
+    ("Channel", Purity::Performs),
+    ("Try", Purity::Performs),
+    ("Program", Purity::Performs),
+    ("Test", Purity::Performs),
+    ("Fmt", Purity::Performs),
+    ("time", Purity::Performs),
+    ("rand", Purity::Performs),
+    ("Process", Purity::Performs),
+    ("fs", Purity::Performs),
+    ("File", Purity::Performs),
+    ("Tty", Purity::Performs),
+    ("Serial", Purity::Performs),
+    ("tcp", Purity::Performs),
+    ("Json", Purity::Pure),
+    ("Toml", Purity::Pure),
+    ("Html", Purity::Pure),
+    ("http", Purity::Performs),
+    ("Cli", Purity::Performs),
+    ("Tui", Purity::Performs),
 ];
 
-/// The tier of the root's own declarations: the loose printers, which end the program where a write fails.
-const ROOT: Tier = Tier::Host;
-
-/// The tier a root module stands in.
-fn tier(root: &str) -> Tier {
-    TIERS
+/// Whether the root module `root` performs anything.
+fn purity(root: &str) -> Purity {
+    PURITY
         .iter()
         .find(|(name, _)| *name == root)
-        .map(|(_, tier)| *tier)
-        .unwrap_or_else(|| panic!("/std/{root} stands in no tier"))
+        .map(|(_, purity)| *purity)
+        .unwrap_or_else(|| panic!("/std/{root} is not classified"))
 }
 
-/// The tier of a declaration in `module`, or nothing for a module outside `/std`.
-fn tier_of_module(module: &[String]) -> Option<Tier> {
-    match module {
-        [std, rest @ ..] if std == "std" => Some(rest.first().map_or(ROOT, |root| tier(root))),
-        _ => None,
-    }
-}
-
-/// The tier of a declaration `name` names, or nothing for one outside `/std`.
-fn tier_of(name: &Global) -> Option<Tier> {
-    match name {
-        Global::Authored(path) => {
-            let segments = path.segments();
-            tier_of_module(&segments[..segments.len() - 1])
-        }
-        Global::Witness(witness) => tier_of_module(witness.module().segments()),
-    }
-}
-
-/// The root modules `/std`'s header declares, in the order it declares them.
+/// The root modules `/std`'s header declares.
 fn declared_root_modules() -> Vec<String> {
     let header = fs::read_to_string(std_directory().join("lib.crs"))
         .expect("the standard library's header reads");
@@ -289,12 +252,12 @@ fn declared_root_modules() -> Vec<String> {
         .collect()
 }
 
-/// Every root module the header declares has one tier, and the roster names no module the header does not declare.
+/// Every root module the header declares is classified, and the roster names no module the header does not declare.
 #[test]
-fn every_root_module_of_std_stands_in_one_tier() {
+fn every_root_module_of_std_is_classified() {
     let mut declared = declared_root_modules();
     declared.sort();
-    let mut rostered = TIERS
+    let mut rostered = PURITY
         .iter()
         .map(|(name, _)| name.to_string())
         .collect::<Vec<_>>();
@@ -303,52 +266,79 @@ fn every_root_module_of_std_stands_in_one_tier() {
     assert_eq!(declared, rostered);
 }
 
-/// The header reads as the library's architecture: its root modules stand in the order of their tiers.
-#[test]
-fn std_declares_its_root_modules_in_tier_order() {
-    let declared = declared_root_modules();
-    let misplaced = declared
-        .windows(2)
-        .filter(|pair| tier(&pair[0]) > tier(&pair[1]))
-        .map(|pair| {
-            format!(
-                "{} ({:?}) before {} ({:?})",
-                pair[0],
-                tier(&pair[0]),
-                pair[1],
-                tier(&pair[1])
-            )
-        })
-        .collect::<Vec<_>>();
+/// Whether `term` holds a host call.
+fn holds_a_host_call(term: &Term) -> bool {
+    let mut seen = HashSet::new();
 
-    assert!(misplaced.is_empty(), "{misplaced:#?}");
+    term.try_walk(
+        &mut seen,
+        |seen: &mut HashSet<Term>, term| match &**term {
+            Subterm::Foreign(..) => ControlFlow::Break(()),
+            _ if !seen.insert(term.clone()) => ControlFlow::Continue(Enter::Skip(())),
+            _ => ControlFlow::Continue(Enter::Descend),
+        },
+        |_, _, _| (),
+    )
+    .is_break()
 }
 
-/// A declaration of `/std` names only declarations of a tier its own reads, the items of a recursive group and the registry entries a declaration's elaboration consumed included.
+/// A declaration of a module that performs nothing reaches no host operation, through anything it names, the items of a recursive group and the registry entries a declaration's elaboration consumed included, across `/sys` and `/std`: a `foreign` declaration is the one place a host call stands.
 #[test]
-fn a_std_declaration_names_only_tiers_its_own_reads() {
-    let [_, std] = restore_archives();
-    let module = std.unit.core();
+fn a_declaration_of_a_pure_module_reaches_no_foreign_declaration() {
+    let [sys, std] = restore_archives();
+    let modules = [sys.unit.core(), std.unit.core()];
+
+    // Each declaration's reach read the other way, and the declarations a host call stands in.
+    let mut reached_by = HashMap::<Global, Vec<Global>>::new();
+    let mut performing = HashMap::<Global, Option<Global>>::new();
+    let mut queue = Vec::new();
+    for module in modules {
+        for item in &module.items {
+            let host = item
+                .definitions()
+                .iter()
+                .any(|definition| holds_a_host_call(&definition.body));
+            let reached = module.reaches(item);
+            for name in item.declared_names() {
+                for target in &reached {
+                    reached_by.entry(*target).or_default().push(*name);
+                }
+                if host && performing.insert(*name, None).is_none() {
+                    queue.push(*name);
+                }
+            }
+        }
+    }
+    // Every declaration that reaches one, beside the declaration it reaches it through.
+    while let Some(name) = queue.pop() {
+        for reacher in reached_by.get(&name).into_iter().flatten() {
+            if !performing.contains_key(reacher) {
+                performing.insert(*reacher, Some(name));
+                queue.push(*reacher);
+            }
+        }
+    }
+
     let mut crossings = Vec::new();
-
-    for item in &module.items {
-        let Some(owner) = item
-            .definitions()
-            .first()
-            .and_then(|definition| tier_of_module(definition.island.segments()))
-        else {
+    for item in &std.unit.core().items {
+        let pure = item.definitions().first().is_some_and(|definition| {
+            matches!(
+                definition.island.segments(),
+                [std, root, ..] if std == "std" && purity(root) == Purity::Pure
+            )
+        });
+        if !pure {
             continue;
-        };
-
-        for name in module.reaches(item) {
-            if let Some(named) = tier_of(&name)
-                && !owner.reads(named)
-            {
-                crossings.push(format!(
-                    "{} ({owner:?}) names {} ({named:?})",
-                    item.describe(),
-                    name.faithful()
-                ));
+        }
+        for name in item.declared_names() {
+            let mut chain = vec![name.faithful().to_string()];
+            let mut at = performing.get(name);
+            while let Some(Some(next)) = at {
+                chain.push(next.faithful().to_string());
+                at = performing.get(next);
+            }
+            if performing.contains_key(name) {
+                crossings.push(chain.join(" -> "));
             }
         }
     }
