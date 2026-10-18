@@ -175,6 +175,12 @@ impl Stored {
     }
 }
 
+/// One item of a version [`Items::arranged`] puts in order: one the items hold, at its place among them, or one new to them.
+pub enum Arranged {
+    Held(usize),
+    New(Rc<Item>),
+}
+
 /// An item a version holds: one in hand, or a stored module's, read where it is first asked for.
 #[derive(Clone)]
 enum Entry {
@@ -472,17 +478,11 @@ impl Items {
             .insert(position(place), Entry::Made(Rc::new(item)));
     }
 
-    /// `item` at a place after `after`, or first where it is `None`, and before the place that follows it: the place given, or `None` where no place lies between the two, and the version is as it was.
+    /// `item` at a place after `after`, or first where it is `None`, and before the place that follows it, or a version's spacing after `after` where none follows: the place given, or `None` where no place lies between the two, and the version is as it was.
     pub fn insert_after(&mut self, after: Option<usize>, item: Item) -> Option<usize> {
         let placed = self.placed();
         let low = after.map_or(-1, position);
-        let high = placed
-            .after(low)
-            .map_or(position(usize::MAX / 2), |(next, _)| next);
-        let place = low + (high - low) / 2;
-        if place <= low {
-            return None;
-        }
+        let place = between(placed, low)?;
         placed.insert(place, Entry::Made(Rc::new(item)));
 
         Some(place_of(place))
@@ -521,17 +521,34 @@ impl Items {
         let placed = self.placed();
         let entry = placed.remove(position(place))?;
         let low = after.map_or(-1, position);
-        let high = placed
-            .after(low)
-            .map_or(position(usize::MAX / 2), |(next, _)| next);
-        let moved = low + (high - low) / 2;
-        if moved <= low {
+        let Some(moved) = between(placed, low) else {
             placed.insert(position(place), entry);
             return None;
-        }
+        };
         placed.insert(moved, entry);
 
         Some(place_of(moved))
+    }
+
+    /// These items, as a version, in the order `arranged` gives — each one held at a place of these items, or one new to them — placed apart as a version first places its items, sharing every item held: what a version with no place left between two items is made again as.
+    pub fn arranged(&self, arranged: impl IntoIterator<Item = Arranged>) -> Items {
+        let version = self.version();
+        let Held::Placed(placed) = &version.0 else {
+            unreachable!("a version is placed");
+        };
+        let mut respaced = Ordered::new();
+        for (rank, item) in arranged.into_iter().enumerate() {
+            let entry = match item {
+                Arranged::Held(place) => placed
+                    .get(position(place))
+                    .expect("an item held is at a place of the items")
+                    .clone(),
+                Arranged::New(item) => Entry::Made(item),
+            };
+            respaced.insert(position(spaced(rank)), entry);
+        }
+
+        Self(Held::Placed(respaced))
     }
 
     /// The items as a version's.
@@ -621,6 +638,16 @@ impl Items {
 }
 
 /// The place a version made of a module that placed its items at their indices holds the item at `index` at: spaced apart, with room before the first.
+/// The position midway between `low` and the position after it in `placed`, or a version's spacing after `low` where none follows: `None` where no position lies between the two.
+fn between(placed: &Ordered<Entry>, low: i64) -> Option<i64> {
+    let place = match placed.after(low) {
+        Some((high, _)) => low + (high - low) / 2,
+        None => low.checked_add(position(SPACING))?,
+    };
+
+    (place > low).then_some(place)
+}
+
 fn spaced(index: usize) -> usize {
     (index + 1) * SPACING
 }

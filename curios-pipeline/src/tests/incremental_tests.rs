@@ -75,7 +75,7 @@ fn an_edited_body_reaches_the_value_computed_over_it() {
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
-/// A declaration new to the unit is stored where the order puts it, the baseline's order kept around it: `alpha` reaches nothing and is stored first, `delta` reaches nothing and is stored before `zeta`, the first declaration named after it, and `gamma` reaches `zeta` and is stored after it.
+/// A declaration new to the unit is stored where the order puts it, the baseline's order kept around it: `alpha` and `delta` reach nothing of the unit and stand among the declarations of depth zero by name, around `beta`, and `gamma` reaches `zeta` and stands after it, one deeper.
 ///
 /// Mutation-checked: with a new declaration stored after every other, the unit is stored in another order than the whole compile's.
 #[test]

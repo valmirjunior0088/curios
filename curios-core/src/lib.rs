@@ -26,6 +26,9 @@ pub use module::*;
 mod places;
 pub use places::*;
 
+mod order;
+pub use order::*;
+
 mod atoms;
 pub use atoms::*;
 

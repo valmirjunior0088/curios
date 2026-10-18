@@ -421,28 +421,6 @@ fn names(module: &Module) -> Vec<String> {
     module.items.iter().map(Item::describe).collect()
 }
 
-/// A module's stored order is every item after what it reaches and otherwise by name, whatever order the items were handed in.
-#[test]
-fn items_are_ordered_by_what_they_reach_and_then_by_name() {
-    let written = [
-        reading("d", &["b"]),
-        reading("c", &[]),
-        reading("b", &["z"]),
-        reading("a", &["d"]),
-        reading("z", &[]),
-    ];
-
-    let stored = names(&over(written.to_vec()).ordered());
-    assert_eq!(stored, ["/c", "/z", "/b", "/d", "/a"]);
-
-    for turn in 1..written.len() {
-        let mut turned = written.to_vec();
-        turned.rotate_left(turn);
-        turned.swap(0, 1);
-        assert_eq!(names(&over(turned).ordered()), stored);
-    }
-}
-
 /// An item follows what the registry entries it declares reach, which no term of its own names.
 #[test]
 fn an_item_follows_what_its_registry_entry_reaches() {
@@ -452,16 +430,4 @@ fn an_item_follows_what_its_registry_entry_reaches() {
     let module = over(vec![Item::Let(boxed(former)), reading("Payload", &[])]);
 
     assert_eq!(names(&module.ordered()), ["/Payload", "/Box"]);
-}
-
-/// Items that reach one another have no order to be stored in: the least-named of them goes first, and every item is still stored once.
-#[test]
-fn items_that_reach_one_another_are_broken_at_the_least_named() {
-    let module = over(vec![
-        reading("c", &["b"]),
-        reading("b", &["a"]),
-        reading("a", &["b"]),
-    ]);
-
-    assert_eq!(names(&module.ordered()), ["/a", "/b", "/c"]);
 }

@@ -11,7 +11,7 @@ mod tests;
 
 use {
     crate::{Answered, Question},
-    curios_core::{Global, Trace, WitnessKey},
+    curios_core::{Global, Order, Trace, WitnessKey},
     curios_utilities::{InKeyOrder, Persistent, Sorted},
     std::{
         borrow::Borrow,
@@ -35,6 +35,8 @@ pub struct Traces {
     /// **What a recompile keeps the offer by.** Where an edit reaches none of them, the vocabulary reads what it read, so each declaration stands on the side of the offer it was elaborated on, and the walk over the unit asks none of them again to learn it.
     #[archived_with(curios_archive::Shared)]
     before: Rc<BTreeSet<Global>>,
+    /// The order the unit's items are stored in, with what each reaches of the unit and its depth: what a unit compiled over this one gives the order again from the items it made by ([`Order::revised`]).
+    order: Order,
 }
 
 /// What a unit's declarations read of declarations the unit does not hold, another unit's or no one's: each part asked of one, with the digest it had (`part_digest`), none where the name declared no such part.
@@ -147,6 +149,16 @@ impl Traces {
     /// Hold `before` as the declarations settled before the unit's lemmas were offered.
     pub(crate) fn settle_before(&mut self, before: BTreeSet<Global>) {
         self.before = Rc::new(before);
+    }
+
+    /// The order the unit's items are stored in. See the field.
+    pub fn order(&self) -> &Order {
+        &self.order
+    }
+
+    /// Hold `order` as the order the unit's items are stored in.
+    pub(crate) fn ordered(&mut self, order: Order) {
+        self.order = order;
     }
 
     /// Every declaration's trace, in the order of the names the declarations are written as.
