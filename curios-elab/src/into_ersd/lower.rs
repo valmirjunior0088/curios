@@ -263,7 +263,7 @@ impl<'s> Lowering<'s> {
         value: curios_ersd::ValueId,
         type_: &Term,
     ) -> Result<(), Error> {
-        if let Some(register) = register_shape(context, type_)? {
+        if let Some(register) = register_shape(self, context, type_)? {
             self.builder.state(value, register);
         }
         Ok(())

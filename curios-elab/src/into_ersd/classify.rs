@@ -51,16 +51,23 @@ pub(crate) fn field_shape(
     visited: &mut BTreeSet<Global>,
     type_: &Term,
 ) -> Result<curios_ersd::FieldShape, Error> {
-    shape_walk(Some(lowering), context, visited, type_)
+    shape_walk(lowering, Rows::Named, context, visited, type_)
 }
 
-/// The register carrier a value of `type_` is held in where a register holds it ([`curios_ersd::RegisterShape`]): read by the walk a field's shape is read by, so a value and a field of one type agree, with a product and a family answering nothing rather than registering their rows — a value is held as a reference whatever row it holds.
+/// The register carrier a value of `type_` is held in where a register holds it ([`curios_ersd::RegisterShape`]): read by the walk a field's shape is read by, so a value and a field of one type agree, with a product and a family answering nothing rather than naming their rows — a value is held as a reference whatever row it holds.
 pub(crate) fn register_shape(
+    lowering: &mut Lowering<'_>,
     context: &mut Retyping,
     type_: &Term,
 ) -> Result<Option<curios_ersd::RegisterShape>, Error> {
     Ok(
-        match shape_walk(None, context, &mut BTreeSet::new(), type_)? {
+        match shape_walk(
+            lowering,
+            Rows::Unnamed,
+            context,
+            &mut BTreeSet::new(),
+            type_,
+        )? {
             curios_ersd::FieldShape::Immediate => Some(curios_ersd::RegisterShape::Immediate),
             curios_ersd::FieldShape::Flt => Some(curios_ersd::RegisterShape::Flt),
             _ => None,
@@ -68,9 +75,58 @@ pub(crate) fn register_shape(
     )
 }
 
-/// The walk behind [`field_shape`] and [`register_shape`]. `rows` is the lowering a row's identity is registered in; without one, a product or a family answers `Opaque`, which is what a value needs and what keeps reading a value's type from registering a row the program never builds.
+/// Whether a walk names a product's or a family's row, which registers it in the fragment, or answers `Opaque` for one: what a value needs, and what keeps reading a value's type from registering a row the program never builds.
+#[derive(Clone, Copy)]
+enum Rows {
+    Named,
+    Unnamed,
+}
+
+/// What a nominal declaration's row says a value of it is, read off the row's mask: no relevant field, exactly one, at its place in the declaration, which the value is, or a row of two or more.
+///
+/// A mask is the declaration's, so the answer holds at every instantiation: one reading that erases a field the declaration keeps, a parameter instantiated at a proposition, holds the value as the declaration lays it out all the same.
+#[derive(Clone, Copy)]
+pub(super) enum Relevance {
+    None,
+    One(usize),
+    Many,
+}
+
+impl Relevance {
+    pub(super) fn of(mask: &[bool]) -> Self {
+        let mut relevant = mask
+            .iter()
+            .enumerate()
+            .filter(|&(_, &erased)| !erased)
+            .map(|(place, _)| place);
+        match (relevant.next(), relevant.next()) {
+            (None, _) => Self::None,
+            (Some(place), None) => Self::One(place),
+            (Some(_), Some(_)) => Self::Many,
+        }
+    }
+}
+
+/// The type of the entry at `place` of `telescope`, the entries before it opened as fresh variables.
+fn entry_at<B: Bound>(
+    context: &mut Retyping,
+    telescope: Telescope<B>,
+    place: usize,
+) -> Option<Term> {
+    let mut cursor = telescope.cursor();
+    for _ in 0..place {
+        if cursor.is_done() {
+            return None;
+        }
+        cursor.advance_fresh(|hint| context.fresh(hint));
+    }
+    cursor.entry().map(|(_, type_)| type_)
+}
+
+/// The walk behind [`field_shape`] and [`register_shape`]. A nominal type is what its declaration's row says ([`Relevance`]), read where the row is registered, and `rows` says whether a product or a family names its row.
 fn shape_walk(
-    rows: Option<&mut Lowering<'_>>,
+    lowering: &mut Lowering<'_>,
+    rows: Rows,
     context: &mut Retyping,
     visited: &mut BTreeSet<Global>,
     type_: &Term,
@@ -92,25 +148,36 @@ fn shape_walk(
             Ok(curios_ersd::FieldShape::Closure(telescope.len()))
         }
         Subterm::StructType(struct_type) => {
-            let Some(struct_decl) = context.struct_decl(&struct_type.name).cloned() else {
+            // A struct that reaches itself is uninhabited but elaborates, so its own registration is still in flight here and there is no row to read yet. Answering `Opaque` costs a shape no value will ever occupy.
+            let Some(relevance) = lowering.struct_relevance(context, &struct_type.name)? else {
                 return Ok(curios_ersd::FieldShape::Opaque);
             };
-            match relevant_chain(context, struct_decl.fields_at(&struct_type.params))? {
-                Chain::None => Ok(curios_ersd::FieldShape::Opaque),
+            match relevance {
+                Relevance::None => Ok(curios_ersd::FieldShape::Opaque),
                 // The cycle the family arm below cuts, cut here too: a struct naming itself elaborates, so chasing its one relevant field returns to this declaration and the chain never lands. Guarding only where the chain continues keeps `visited` the ancestor chain rather than a seen-set.
-                Chain::One(domain) => match visited.insert(struct_type.name) {
-                    true => shape_walk(rows, context, visited, &domain),
-                    false => Ok(curios_ersd::FieldShape::Opaque),
-                },
-                // A struct that reaches itself is uninhabited but elaborates, so its own registration is still in flight here and there is no schema to name yet. Answering `Opaque` costs a shape no value will ever occupy.
-                Chain::Many => match rows {
-                    Some(lowering) if !lowering.in_flight(&struct_type.name) => Ok(lowering
+                Relevance::One(place) => {
+                    if !visited.insert(struct_type.name) {
+                        return Ok(curios_ersd::FieldShape::Opaque);
+                    }
+                    let Some(fields) = context
+                        .struct_decl(&struct_type.name)
+                        .map(|struct_decl| struct_decl.fields_at(&struct_type.params))
+                    else {
+                        return Ok(curios_ersd::FieldShape::Opaque);
+                    };
+                    match entry_at(context, fields, place) {
+                        Some(domain) => shape_walk(lowering, rows, context, visited, &domain),
+                        None => Ok(curios_ersd::FieldShape::Opaque),
+                    }
+                }
+                Relevance::Many => match rows {
+                    Rows::Named => Ok(lowering
                         .struct_row(context, &struct_type.name)?
                         .schema
                         .map_or(curios_ersd::FieldShape::Opaque, |schema| {
                             curios_ersd::FieldShape::Product(schema)
                         })),
-                    Some(_) | None => Ok(curios_ersd::FieldShape::Opaque),
+                    Rows::Unnamed => Ok(curios_ersd::FieldShape::Opaque),
                 },
             }
         }
@@ -119,73 +186,56 @@ fn shape_walk(
             1 => {
                 let (_, domain) = telescope.cursor().entry().expect("a tuple of one field");
 
-                shape_walk(rows, context, visited, &domain)
+                shape_walk(lowering, rows, context, visited, &domain)
             }
             _ => Ok(curios_ersd::FieldShape::Opaque),
         },
         // A multi-constructor family is its own shape, and its *identity* is what a typed slot needs — never chased, whatever its encoding. A single-constructor family is always its payload row under the collapsed encoding, so the chain continues through it exactly as through a newtype struct; the `visited` guard cuts the cycle a legitimately recursive one would otherwise spin in.
         Subterm::InductType(induct_type) => {
-            let Some(induct_decl) = context.induct_decl(&induct_type.name).cloned() else {
-                return Ok(curios_ersd::FieldShape::Opaque);
+            let family = |lowering: &mut Lowering<'_>, context: &mut Retyping| match rows {
+                Rows::Named => Ok(curios_ersd::FieldShape::Family(
+                    lowering.family_identity(context, &induct_type.name)?,
+                )),
+                Rows::Unnamed => Ok(curios_ersd::FieldShape::Opaque),
             };
-            let tags: Vec<_> = induct_decl.constructor_order().collect();
-            let [tag] = tags.as_slice() else {
-                return match rows {
-                    Some(lowering) => Ok(curios_ersd::FieldShape::Family(
-                        lowering.family_identity(context, &induct_type.name)?,
-                    )),
-                    None => Ok(curios_ersd::FieldShape::Opaque),
-                };
-            };
+            match context
+                .induct_decl(&induct_type.name)
+                .map(|induct_decl| induct_decl.constructors.len())
+            {
+                Some(1) => {}
+                Some(_) => return family(lowering, context),
+                None => return Ok(curios_ersd::FieldShape::Opaque),
+            }
             if !visited.insert(induct_type.name) {
                 return Ok(curios_ersd::FieldShape::Opaque);
             }
-            let Some(telescope) = induct_decl.instantiate(tag, &induct_type.params) else {
+            // A family whose row is being registered right now has no mask to read yet: a field of it is the one reaching it, whose shape the cycle makes `Opaque`.
+            let Some(relevance) = lowering.constructor_relevance(context, &induct_type.name)?
+            else {
                 return Ok(curios_ersd::FieldShape::Opaque);
             };
-            match relevant_chain(context, telescope)? {
+            match relevance {
                 // No payload rides the interned `Nat` zero; one payload is the value itself; two or more are the family's own row, which the collapsed encoding lays out exactly as the equivalent struct.
-                Chain::None => Ok(curios_ersd::FieldShape::Immediate),
-                Chain::One(domain) => shape_walk(rows, context, visited, &domain),
-                Chain::Many => match rows {
-                    Some(lowering) => Ok(curios_ersd::FieldShape::Family(
-                        lowering.family_identity(context, &induct_type.name)?,
-                    )),
-                    None => Ok(curios_ersd::FieldShape::Opaque),
-                },
+                Relevance::None => Ok(curios_ersd::FieldShape::Immediate),
+                Relevance::One(place) => {
+                    let Some(payload) =
+                        context
+                            .induct_decl(&induct_type.name)
+                            .and_then(|induct_decl| {
+                                let (tag, _) = induct_decl.constructors.first()?;
+                                induct_decl.instantiate(tag, &induct_type.params)
+                            })
+                    else {
+                        return Ok(curios_ersd::FieldShape::Opaque);
+                    };
+                    match entry_at(context, payload, place) {
+                        Some(domain) => shape_walk(lowering, rows, context, visited, &domain),
+                        None => Ok(curios_ersd::FieldShape::Opaque),
+                    }
+                }
+                Relevance::Many => family(lowering, context),
             }
         }
         _ => Ok(curios_ersd::FieldShape::Opaque),
-    }
-}
-
-/// What a product-shaped telescope's relevant entries amount to: none, exactly one (the newtype chain, which the caller continues through), or a row of two or more.
-enum Chain {
-    None,
-    One(Term),
-    Many,
-}
-
-fn relevant_chain<B: Bound>(
-    context: &mut Retyping,
-    telescope: Telescope<B>,
-) -> Result<Chain, Error> {
-    let mut first = None;
-    let mut relevant = 0;
-    let mut opened = Vec::new();
-    let mut cursor = telescope.cursor();
-    while let Some((_, type_)) = cursor.entry() {
-        if !context.is_erasable_in(&mut opened, &type_)? {
-            relevant += 1;
-            if first.is_none() {
-                first = Some(type_.clone());
-            }
-        }
-        opened.push((cursor.advance_fresh(|hint| context.fresh(hint)), type_));
-    }
-    match (relevant, first) {
-        (1, Some(domain)) => Ok(Chain::One(domain)),
-        (0, _) => Ok(Chain::None),
-        _ => Ok(Chain::Many),
     }
 }

@@ -6,9 +6,9 @@
 
 use {
     super::{
-        ConstructorRow, Error, FamilyRow, Lowering, Outcome, ProductRow, Proj, Retyping, Struct,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, constructor_entries,
-        emitted,
+        ConstructorRow, Error, FamilyRow, Lowering, Outcome, ProductRow, Proj, Relevance, Retyping,
+        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant,
+        constructor_entries, emitted,
     },
     curios_core::{Bound, Quality},
     std::borrow::Cow,
@@ -122,6 +122,52 @@ impl<'s> Lowering<'s> {
         self.build_induct_row(context, name)?;
 
         Ok(self.declared_induct_row(name).constructors[index].clone())
+    }
+
+    /// What the declaration of the structure `name` says a value of it is, read off its mask where its row is registered: by this item, or by the item declaring it, read there and imported nothing of. Registered here where this item declares it and has not yet; `None` while that registration is in flight.
+    pub(super) fn struct_relevance(
+        &mut self,
+        context: &mut Retyping,
+        name: &curios_core::Global,
+    ) -> Result<Option<Relevance>, Error> {
+        if self.in_flight(name) {
+            return Ok(None);
+        }
+        if let Some(row) = self.environment.declared_struct_row(name) {
+            return Ok(Some(Relevance::of(&row.mask)));
+        }
+        if let Some(row) = self
+            .declaring(name)
+            .and_then(|declaring| declaring.environment().declared_struct_row(name))
+        {
+            return Ok(Some(Relevance::of(&row.mask)));
+        }
+
+        Ok(Some(Relevance::of(&self.struct_row(context, name)?.mask)))
+    }
+
+    /// [`struct_relevance`](Self::struct_relevance) for the one constructor of the inductive `name`.
+    pub(super) fn constructor_relevance(
+        &mut self,
+        context: &mut Retyping,
+        name: &curios_core::Global,
+    ) -> Result<Option<Relevance>, Error> {
+        if self.pending_families.contains_key(name) {
+            return Ok(None);
+        }
+        if let Some(row) = self.environment.declared_induct_row(name) {
+            return Ok(Some(Relevance::of(&row.constructors[0].mask)));
+        }
+        if let Some(row) = self
+            .declaring(name)
+            .and_then(|declaring| declaring.environment().declared_induct_row(name))
+        {
+            return Ok(Some(Relevance::of(&row.constructors[0].mask)));
+        }
+
+        Ok(Some(Relevance::of(
+            &self.induct_constructor(context, name, 0)?.mask,
+        )))
     }
 
     /// The row this item has just registered for `name`.

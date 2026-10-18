@@ -1,4 +1,6 @@
 //! A structural type's runtime shape is its telescope's: a function takes a parameter for each binder and an anonymous tuple holds a field for each member, whatever a binder's type is read as. Each program makes a value at one reading of its type and uses it at another, a substitution or a refinement apart, where one reads a binder as a type and the other as a variable. With a binder dropped by either reading, the first three print `1`, the fourth stops the compiler in `curios-cont`'s verifier, and the tuple traps.
+//!
+//! A nominal type's runtime shape is its declaration's row, at a reading that erases a field the declaration keeps as at any other.
 
 use crate::tests::run;
 
@@ -97,4 +99,33 @@ fn a_function_held_in_a_structure_is_called_at_a_variable() {
         /std/print(Nat/to_str(call(Runner { run = (t, n) => n + 1 }, Nat)))
         "#;
     assert_eq!(run(source), b"42");
+}
+
+// `S(P)` erases `x`, `A` being the proposition `P` there, and a value of it is the two fields its declaration keeps all the same. Read off the reading instead, `S(P)` would be its one number, so the family holding one would take the encoding that tells a number from its other case, and `a` would be matched as `b`, printing `7`.
+#[test]
+fn a_structure_is_its_declarations_row_where_a_reading_erases_a_field() {
+    let source = r#"
+        use /std/{Nat, List, Process};
+        struct S(A: Sort): Type {
+            x: A,
+            y: Nat,
+        }
+        induct P: Prop
+        | p()
+        end
+        induct U: Type
+        | a(s: S(P))
+        | b()
+        end
+        let pick(u: U) -> Nat =
+            match u: (_) => Nat
+            | a(s) => s.y
+            | b() => 7
+            end;
+        let entry() -> /std/Io({}) =
+            let n = List/len(Process/args()!);
+            /std/print(Nat/to_str(pick(U/a(S(P) { x = P/p(), y = n + 40 }))));
+        entry()
+        "#;
+    assert_eq!(run(source), b"40");
 }
