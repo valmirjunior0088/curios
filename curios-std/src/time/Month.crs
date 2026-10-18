@@ -1,0 +1,87 @@
+use /std/{Nat, List, Option, Ord, Hash, Spell};
+use /std/ops/{Eql};
+
+--- A month of the year, declared in calendar order, so the order `Ord` derives is the calendar's.
+pub induct Month: pub Type
+| january()
+| february()
+| march()
+| april()
+| may()
+| june()
+| july()
+| august()
+| september()
+| october()
+| november()
+| december()
+end
+
+pub use Month/*;
+
+satisfy Eql(Month) {
+    ..
+}
+
+satisfy Ord(Month) {
+    ..
+}
+
+satisfy Hash(Month) {
+    ..
+}
+
+satisfy Spell(Month) {
+    ..
+}
+
+--- The month's number, as ISO 8601 writes it: January is 1 and December 12.
+pub let to_nat(m: Month) -> Nat =
+    match m
+    | january() => 1
+    | february() => 2
+    | march() => 3
+    | april() => 4
+    | may() => 5
+    | june() => 6
+    | july() => 7
+    | august() => 8
+    | september() => 9
+    | october() => 10
+    | november() => 11
+    | december() => 12
+    end;
+
+--- The month numbered `n`, or `none` for a number no month has.
+pub let try_of_nat(n: Nat) -> Option(Month) =
+    match n
+    | 1 => Option/some(Month/january())
+    | 2 => Option/some(Month/february())
+    | 3 => Option/some(Month/march())
+    | 4 => Option/some(Month/april())
+    | 5 => Option/some(Month/may())
+    | 6 => Option/some(Month/june())
+    | 7 => Option/some(Month/july())
+    | 8 => Option/some(Month/august())
+    | 9 => Option/some(Month/september())
+    | 10 => Option/some(Month/october())
+    | 11 => Option/some(Month/november())
+    | 12 => Option/some(Month/december())
+    | _ => Option/none()
+    end;
+
+--- The twelve, in order.
+pub let all: List(Month) =
+    [
+        Month/january(),
+        Month/february(),
+        Month/march(),
+        Month/april(),
+        Month/may(),
+        Month/june(),
+        Month/july(),
+        Month/august(),
+        Month/september(),
+        Month/october(),
+        Month/november(),
+        Month/december()];

@@ -1,5 +1,6 @@
 use /std/{Nat, Int, Flt, Bool, Char, Str, List, Map, Option, Toml, Fmt};
-use /std/time/{Date, Time};
+use /std/time/{Date, Time, Month, Offset};
+use /std/time/rfc3339/{FourDigits};
 use /std/Toml/scan/{is_bare_char};
 
 let bare_ok(s: Str) -> Bool =
@@ -53,8 +54,8 @@ let ns_str(ns: Nat) -> Str =
         Str/concat(".", pad(digits, width))
     end;
 
-let date_str(d: Date) -> Str =
-    Fmt/render("%-%-%")(pad(d.year, 4))(pad(d.month, 2))(pad(d.day, 2));
+let date_str(d: Date, @_: FourDigits(d)) -> Str =
+    Fmt/render("%-%-%")(pad(Int/abs(d.year), 4))(pad(Month/to_nat(d.month), 2))(pad(d.day, 2));
 
 let time_str(t: Time) -> Str =
     Str/flatten([
@@ -65,13 +66,14 @@ let time_str(t: Time) -> Str =
         pad(t.second, 2),
         ns_str(t.nanosecond)]);
 
-let offset_str(mins: Int) -> Str =
-    match mins == +0
-    | true => "Z"
-    | false =>
-        let mag = Int/abs(mins);
-        let sign = match mins > +0 | true => "+" | false => "-" end;
-        Str/flatten([sign, pad(mag / 60, 2), ":", pad(mag % 60, 2)])
+-- The offset as RFC 3339 writes it: `Z` where the local offset is unknown, and the hours and minutes east of UTC otherwise, `+00:00` among them; a value's offset is whole minutes, so no second is dropped.
+let offset_str(o: Offset) -> Str =
+    match o
+    | unknown() => "Z"
+    | known(seconds) =>
+        let mag = Int/abs(seconds);
+        let sign = match seconds < +0 | true => "-" | false => "+" end;
+        Str/flatten([sign, pad(mag / 3600, 2), ":", pad(mag % 3600 / 60, 2)])
     end;
 
 let int_str(n: Int) -> Str =
@@ -105,7 +107,11 @@ let value_str(v: Toml) -> Str =
     | flt(f) => flt_str(f)
     | bool(x) => Bool/to_str(x)
     | offset_date_time(odt) =>
-        Str/flatten([date_str(odt.date), "T", time_str(odt.time), offset_str(odt.offset_minutes)])
+        Str/flatten([
+            date_str(odt.date_time.date),
+            "T",
+            time_str(odt.date_time.time),
+            offset_str(odt.offset)])
     | local_date_time(ldt) => Str/flatten([date_str(ldt.date), "T", time_str(ldt.time)])
     | local_date(d) => date_str(d)
     | local_time(t) => time_str(t)

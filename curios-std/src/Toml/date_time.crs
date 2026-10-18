@@ -1,7 +1,6 @@
 use /std/{Nat, Int, Bool, Char, Str, Parse, Toml};
-use /std/Bool/{True};
-use /std/time/{Date, Time, OffsetDateTime};
-use /std/Toml/{LocalDateTime, FourDigits};
+use /std/time/{Date, Time, DateTime, Month, Offset, OffsetDateTime, rfc3339};
+use /std/time/rfc3339/{FourDigits};
 
 let digit: Parse(Str, Nat) =
     Parse/label(
@@ -52,8 +51,12 @@ let date_fields(y: Nat) -> Parse(Str, Date) =
     let mo = fixed(2, 0)!;
     let _ = expect('-')!;
     let d = fixed(2, 0)!;
-    match Date/try_of(y, mo, d)
-    | some(date) => Parse/pure(date)
+    match Month/try_of_nat(mo)
+    | some(month) =>
+        match Date/try_of(Nat/to_int(y), month, d)
+        | some(date) => Parse/pure(date)
+        | none() => Parse/fail("invalid date")
+        end
     | none() => Parse/fail("invalid date")
     end;
 
@@ -77,24 +80,35 @@ let time_parse() -> Parse(Str, Time) =
     let _ = expect(':')!;
     Parse/commit(time_fields(h));
 
-let offset_fields(sign: Char) -> Parse(Str, Int) =
+let offset_fields(sign: Char) -> Parse(Str, Offset) =
     let oh = fixed(2, 0)!;
     let _ = expect(':')!;
     let om = fixed(2, 0)!;
     match oh <= 23 && om <= 59
     | true =>
-        let mins = oh * 60 + om;
+        let seconds = Nat/to_int(oh * 3600 + om * 60);
+        -- `-00:00` states UTC with the local offset unknown (RFC 3339 §4.3), which RFC 9557 writes `Z`.
         match sign == '-'
-        | true => Parse/pure(+0 - Nat/to_int(mins))
-        | false => Parse/pure(Nat/to_int(mins))
+        | true =>
+            match seconds == +0
+            | true => Parse/pure(Offset/unknown())
+            | false => offset_of(+0 - seconds)
+            end
+        | false => offset_of(seconds)
         end
     | false => Parse/fail("invalid offset")
     end;
 
-let offset_parse() -> Parse(Str, Int) =
+let offset_of(seconds: Int) -> Parse(Str, Offset) =
+    match Offset/try_of_seconds(seconds)
+    | some(o) => Parse/pure(o)
+    | none() => Parse/fail("invalid offset")
+    end;
+
+let offset_parse() -> Parse(Str, Offset) =
     let zulu = Parse/optional(Parse/str/char_if((c) => c == 'Z' || c == 'z'))!;
     match zulu
-    | some(_) => Parse/pure(+0)
+    | some(_) => Parse/pure(Offset/unknown())
     | none() =>
         let sign = Parse/label(Parse/str/char_if((c) => c == '+' || c == '-'), "expected offset")!;
         Parse/commit(offset_fields(sign))
@@ -102,15 +116,16 @@ let offset_parse() -> Parse(Str, Int) =
 
 -- `built` over the evidence that `d`'s year has the four digits TOML writes, or the refusal of a date with more.
 let dated(d: Date, built: (ok: FourDigits(d)) -> Toml) -> Parse(Str, Toml) =
-    match d.year <= 9999
-    | true => Parse/pure(built(True/proved()))
-    | false => Parse/fail("invalid date")
+    match rfc3339/four_digits(d)
+    | some(ok) => Parse/pure(built(ok))
+    | none() => Parse/fail("invalid date")
     end;
 
 let offset_tail(date: Date, time: Time) -> Parse(Str, Toml) =
-    let off = offset_parse()!;
-    match OffsetDateTime/try_of(date, time, off)
-    | some(odt) => dated(odt.date, (ok) => Toml/offset_date_time(odt, @ok))
+    let offset = offset_parse()!;
+    let odt = OffsetDateTime { date_time = DateTime { date = date, time = time }, offset = offset };
+    match rfc3339/whole_minutes(offset)
+    | some(minutes) => dated(date, (ok) => Toml/offset_date_time(odt, @ok, @minutes))
     | none() => Parse/fail("invalid offset")
     end;
 
@@ -119,7 +134,7 @@ let date_time_tail(date: Date) -> Parse(Str, Toml) =
     let time = time_parse()!;
     Parse/or(
         offset_tail(date, time),
-        dated(date, (ok) => Toml/local_date_time(LocalDateTime { date = date, time = time }, @ok)));
+        dated(date, (ok) => Toml/local_date_time(DateTime { date = date, time = time }, @ok)));
 
 let date_led() -> Parse(Str, Toml) =
     let date = date_parse()!;

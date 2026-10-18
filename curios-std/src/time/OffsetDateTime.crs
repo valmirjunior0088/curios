@@ -1,24 +1,18 @@
-use /std/{Int, Bool, Option, Spell};
-use /std/Bool/{Holds};
+use /std/{Nat, Int, Ord, Hash, Spell};
 use /std/ops/{Eql};
-use /std/time/{Date, Time};
+use /std/time/{Date, Time, DateTime, Offset, Timestamp};
 
-let sound(offset_minutes: Int) -> Bool =
-    Int/abs(offset_minutes) <= 1439;
-
---- That the offset is one UTC has: at most 23 hours and 59 minutes, ahead or behind.
-pub let Valid(offset_minutes: Int) -> Prop =
-    Holds(sound(offset_minutes));
-
---- A date and time at an offset from UTC, in minutes.
+--- A date and a time of day at an offset from UTC: RFC 3339's `date-time`, a moment that keeps the offset it was written with.
 pub struct OffsetDateTime: pub Type {
-    date: Date,
-    time: Time,
-    offset_minutes: Int,
-    @ok: Valid(offset_minutes),
+    date_time: DateTime,
+    offset: Offset,
 }
 
 satisfy Eql(OffsetDateTime) {
+    ..
+}
+
+satisfy Hash(OffsetDateTime) {
     ..
 }
 
@@ -26,21 +20,32 @@ satisfy Spell(OffsetDateTime) {
     ..
 }
 
---- The moment, under the evidence that the offset is one.
-pub let of(
-    date: Date,
-    time: Time,
-    offset_minutes: Int,
-    @ok: Valid(offset_minutes),
-) -> OffsetDateTime =
-    OffsetDateTime { date = date, time = time, offset_minutes = offset_minutes };
+--- By the moment first, as java.time compares, then the local date-time, then the offset, `unknown()` first: two compare equal exactly where they are one value.
+satisfy Ord(OffsetDateTime) {
+    ord(a, b) =
+        Ord/lexicographic([
+            Ord/ord(to_timestamp(a), to_timestamp(b)),
+            Ord/ord(a.date_time, b.date_time),
+            Ord/ord(a.offset, b.offset)]),
+}
 
-let try_valid(offset_minutes: Int) -> Option(Valid(offset_minutes)) =
-    Bool/decide(sound(offset_minutes));
+--- The moment the date-time names at its offset: its seconds counted as POSIX counts a date and a time, less how far ahead of UTC the offset is, so a second of `60` counts as the next minute's first.
+pub let to_timestamp(odt: OffsetDateTime) -> Timestamp =
+    let date = odt.date_time.date;
+    let time = odt.date_time.time;
+    let seconds =
+        Date/to_days(date) * 86400 + Nat/to_int(time.hour * 3600 + time.minute * 60 + time.second)
+            - Offset/ahead(odt.offset);
+    Timestamp/of_unix_nanos(seconds * 1000000000 + Nat/to_int(time.nanosecond));
 
---- The moment, decided: `none` where the offset is not one.
-pub let try_of(date: Date, time: Time, offset_minutes: Int) -> Option(OffsetDateTime) =
-    match try_valid(offset_minutes)
-    | some(ok) => Option/some(of(date, time, offset_minutes, @ok))
-    | none() => Option/none()
-    end;
+--- The moment `t` as the calendar and the clock name it at `o`. It never answers a second of `60`.
+pub let of_timestamp(t: Timestamp, o: Offset) -> OffsetDateTime =
+    let local =
+        Int/DivMod/of(Timestamp/to_unix_nanos(t) + Offset/ahead(o) * 1000000000, 1000000000);
+    let day = Int/DivMod/of(local.quotient, 86400);
+    OffsetDateTime {
+        date_time =
+            DateTime {
+                date = Date/of_days(day.quotient),
+                time = Time/of_seconds(day.remainder, local.remainder) },
+        offset = o };

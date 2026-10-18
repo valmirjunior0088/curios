@@ -1,11 +1,11 @@
-use /std/{Nat, Bool, Option, Spell};
-use /std/Bool/{Holds};
+use /std/{Nat, Bool, Option, Ord, Hash, Spell};
+use /std/Bool/{True, Holds};
 use /std/ops/{Eql};
 
 let sound(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Bool =
     hour <= 23 && minute <= 59 && second <= 60 && nanosecond <= 999999999;
 
---- That the four spell a time of day. A second of `60` is admitted, since RFC 3339 writes a leap second that way.
+--- That the four spell a time of day. A second of `60` is admitted, since RFC 3339 and TOML write a leap second that way; `OffsetDateTime/to_timestamp` counts it as the next minute's first, as POSIX does.
 pub let Valid(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Prop =
     Holds(sound(hour, minute, second, nanosecond));
 
@@ -19,6 +19,14 @@ pub struct Time: pub Type {
 }
 
 satisfy Eql(Time) {
+    ..
+}
+
+satisfy Ord(Time) {
+    ..
+}
+
+satisfy Hash(Time) {
     ..
 }
 
@@ -36,17 +44,35 @@ pub let of(
 ) -> Time =
     Time { hour = hour, minute = minute, second = second, nanosecond = nanosecond };
 
-let try_valid(
-    hour: Nat,
-    minute: Nat,
-    second: Nat,
-    nanosecond: Nat,
-) -> Option(Valid(hour, minute, second, nanosecond)) =
-    Bool/decide(sound(hour, minute, second, nanosecond));
-
 --- The time, decided: `none` where the four spell none.
 pub let try_of(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Option(Time) =
-    match try_valid(hour, minute, second, nanosecond)
+    match Bool/decide(sound(hour, minute, second, nanosecond))
     | some(ok) => Option/some(of(hour, minute, second, nanosecond, @ok))
     | none() => Option/none()
     end;
+
+--- The time of day `seconds` after midnight and `nanosecond` past that second: what a count of seconds reads as on its day. It never names a second of `60`.
+pub let of_seconds(
+    seconds: Nat,
+    nanosecond: Nat,
+    @in_day: Holds(seconds < 86400),
+    @in_second: Holds(nanosecond < 1000000000),
+) -> Time =
+    let hour = seconds / 3600;
+    let minute = seconds % 3600 / 60;
+    let second = seconds % 60;
+    Time {
+        hour = hour,
+        minute = minute,
+        second = second,
+        nanosecond = nanosecond,
+        @ok =
+            Bool/and/both(
+                hour <= 23 && minute <= 59 && second <= 60,
+                nanosecond <= 999999999,
+                Bool/and/both(
+                    hour <= 23 && minute <= 59,
+                    second <= 60,
+                    Bool/and/both(hour <= 23, minute <= 59, True/proved(), True/proved()),
+                    True/proved()),
+                True/proved()) };

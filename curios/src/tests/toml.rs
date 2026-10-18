@@ -122,6 +122,15 @@ const DATE_TIMES: &[Row] = &[
         expr: r##"canon("d = 1979-05-27T00:32:00-07:00")"##,
         expected: "d = 1979-05-27T00:32:00-07:00\n",
     },
+    // UTC as the reference and UTC with the local offset unknown are two statements (RFC 9557 §2), each written back as it was read; `-00:00` is the second, which RFC 9557 writes `Z`.
+    Row {
+        expr: r##"canon("d = 1979-05-27T07:32:00+00:00")"##,
+        expected: "d = 1979-05-27T07:32:00+00:00\n",
+    },
+    Row {
+        expr: r##"canon("d = 1979-05-27T07:32:00-00:00")"##,
+        expected: "d = 1979-05-27T07:32:00Z\n",
+    },
     Row {
         expr: r##"canon("d = 07:32:00")"##,
         expected: "d = 07:32:00\n",

@@ -10,7 +10,15 @@ pub use Duration/{let Duration};
 pub mod Timestamp;
 pub use Timestamp/{let Timestamp};
 
---- A calendar date, and the bound its fields carry.
+--- A month of the year, in calendar order.
+pub mod Month;
+pub use Month/{let Month};
+
+--- A day of the week, Monday first.
+pub mod Weekday;
+pub use Weekday/{let Weekday};
+
+--- A calendar date, the bound its fields carry, and the count of days it is one with.
 pub mod Date;
 pub use Date/{let Date};
 
@@ -18,10 +26,17 @@ pub use Date/{let Date};
 pub mod Time;
 pub use Time/{let Time};
 
---- A date and time at an offset from UTC, and the bound that offset carries.
+--- A date and a time of day, at no offset.
+pub mod DateTime;
+pub use DateTime/{let DateTime};
+
+--- An offset from UTC, or that the local one is unknown.
+pub mod Offset;
+pub use Offset/{let Offset};
+
+--- A date and time at an offset: a moment that keeps the offset it was written with, and the crossings between the calendar and the timeline.
 pub mod OffsetDateTime;
 pub use OffsetDateTime/{let OffsetDateTime};
 
---- A date and a time of day: a timestamp as the calendar and the clock name it in UTC.
-pub mod DateTime;
-pub use DateTime/{let DateTime};
+--- RFC 3339's profile of ISO 8601: the evidence its text needs of a date and an offset.
+pub mod rfc3339;

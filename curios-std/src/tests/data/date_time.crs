@@ -1,57 +1,80 @@
--- A moment as the calendar names it: the date and the time of day a timestamp is, and the form HTTP writes one in.
-use /std/{Str, Int, List, Option, Test};
-use /std/time/{Timestamp};
-use /std/time/{DateTime};
-use /std/time/DateTime/{Month, Weekday};
+-- The calendar under its proofs: a day count and a date are one, leap days fall where the Gregorian calendar puts them, a date outside it is no date, and a moment crosses to its date and time at an offset and back.
+use /std/{Str, Nat, Int, List, Option, Test};
+use /std/time/{Timestamp, Date, Time, DateTime, Month, Weekday, Offset, OffsetDateTime};
 
-let at(secs: Int) -> Option(DateTime) =
-    DateTime/of_timestamp(Timestamp/of_unix_secs(secs));
+-- The date a day count names, as its fields.
+let fields(n: Int) -> {Int, Nat, Nat} =
+    let d = Date/of_days(n);
+    (d.year, Month/to_nat(d.month), d.day);
 
-let spelled(secs: Int) -> Str =
-    match at(secs) | some(d) => DateTime/to_imf_fixdate(d) | none() => "no date" end;
+-- The epoch is the first of January 1970, a Thursday, and a day count reaches either side of it.
+test the_epoch_is_a_thursday_and_the_count_reaches_either_side =
+    Test/all([
+        Test/equal(fields(+0), (+1970, 1, 1)),
+        Test/equal(Date/weekday(Date/of_days(+0)), Weekday/thursday()),
+        Test/equal(fields(-1), (+1969, 12, 31)),
+        Test/equal(fields(-719528), (+0, 1, 1)),
+        Test/equal(fields(-719529), (-1, 12, 31)),
+        Test/equal(fields(+2932896), (+9999, 12, 31)),
+        Test/equal(fields(+2932897), (+10000, 1, 1))]);
 
--- The epoch is the first of January 1970, a Thursday, at midnight.
-test the_epoch_is_a_thursday =
-    Test/equal(
-        at(0),
-        Option/some(
-            DateTime {
-                year = 1970,
-                month = Month/january(),
-                day = 1,
-                weekday = Weekday/thursday(),
-                hour = 0,
-                minute = 0,
-                second = 0 }));
-
--- A moment before 1970 is none this calendar names.
-test a_moment_before_the_epoch_has_no_date_here =
-    Test/equal(at(-1), Option/none());
-
--- A leap day is the twenty-ninth of February, in a year four divides and in a century four hundred divides; a century it does not has none, so the day after its twenty-eighth of February is the first of March.
+-- A leap day: four divides its year, and a hundred does not unless four hundred does; a century it does not has none, so the day after its twenty-eighth of February is the first of March.
 test a_leap_day_falls_where_the_calendar_puts_it =
     Test/all([
-        Test/equal(spelled(1709164800), "Thu, 29 Feb 2024 00:00:00 GMT"),
-        Test/equal(spelled(951782400), "Tue, 29 Feb 2000 00:00:00 GMT"),
-        Test/equal(spelled(951868800), "Wed, 01 Mar 2000 00:00:00 GMT"),
-        Test/equal(spelled(13574563200), "Tue, 29 Feb 2400 00:00:00 GMT"),
-        Test/equal(spelled(4107542399), "Sun, 28 Feb 2100 23:59:59 GMT"),
-        Test/equal(spelled(4107542400), "Mon, 01 Mar 2100 00:00:00 GMT")]);
-
--- A date is written as HTTP writes one: the weekday and the month by three letters, the day, the hour, the minute and the second in two digits, the year in four. Each month is spelled, here by its fifteenth at noon.
-test a_date_is_spelled_as_http_spells_one =
-    Test/all([
-        Test/equal(spelled(784111777), "Sun, 06 Nov 1994 08:49:37 GMT"),
-        Test/equal(spelled(0), "Thu, 01 Jan 1970 00:00:00 GMT"),
-        Test/equal(spelled(253402300799), "Fri, 31 Dec 9999 23:59:59 GMT"),
         Test/equal(
-            List/map(
-                [1673784000, 1676462400, 1678881600, 1681560000, 1684152000, 1686830400, 1689422400,
-                    1692100800, 1694779200, 1697371200, 1700049600, 1702641600],
-                spelled),
-            ["Sun, 15 Jan 2023 12:00:00 GMT", "Wed, 15 Feb 2023 12:00:00 GMT",
-                "Wed, 15 Mar 2023 12:00:00 GMT", "Sat, 15 Apr 2023 12:00:00 GMT",
-                "Mon, 15 May 2023 12:00:00 GMT", "Thu, 15 Jun 2023 12:00:00 GMT",
-                "Sat, 15 Jul 2023 12:00:00 GMT", "Tue, 15 Aug 2023 12:00:00 GMT",
-                "Fri, 15 Sep 2023 12:00:00 GMT", "Sun, 15 Oct 2023 12:00:00 GMT",
-                "Wed, 15 Nov 2023 12:00:00 GMT", "Fri, 15 Dec 2023 12:00:00 GMT"])]);
+            Option/map(Date/try_of(+2024, Month/february(), 29), Date/to_days),
+            Option/some(+19782)),
+        Test/equal(
+            Option/map(Date/try_of(+2000, Month/february(), 29), Date/weekday),
+            Option/some(Weekday/tuesday())),
+        Test/equal(Date/try_of(+1900, Month/february(), 29), Option/none()),
+        Test/equal(Date/try_of(+2023, Month/february(), 29), Option/none()),
+        Test/equal(fields(+47540), (+2100, 2, 28)),
+        Test/equal(fields(+47541), (+2100, 3, 1)),
+        Test/equal(Date/days_in_month(+2400, Month/february()), 29),
+        Test/equal(Date/days_in_year(-4), 366)]);
+
+-- Each month's length, in a common year and a leap one.
+test every_month_has_its_length =
+    Test/equal(
+        List/map(Month/all, (m: Month) =>
+            Date/days_in_month(+2023, m) + Date/days_in_month(+2024, m)),
+        [62, 57, 62, 60, 62, 60, 62, 62, 60, 62, 60, 62]);
+
+-- Days added and counted between: across a month, a year and the epoch, below zero where the second date is the earlier.
+test days_are_added_and_counted_between_dates =
+    Test/all([
+        Test/equal(Date/to_days(Date/add_days(Date/of_days(+19781), +1)), +19782),
+        Test/equal(Date/days_between(Date/of_days(+0), Date/of_days(-365)), -365),
+        Test/equal(Date/days_between(Date/of_days(-1), Date/of_days(+59)), +60)]);
+
+-- A moment crosses to its date and time at an offset and back, a leap second counted as the next minute's first, and two offsets of one moment compare by the moment first.
+test a_moment_crosses_to_its_calendar_at_an_offset_and_back =
+    let t = Timestamp/of_unix_nanos(+784111777000000500);
+    let india = OffsetDateTime/of_timestamp(t, Offset/known(+19800));
+    let utc = OffsetDateTime/of_timestamp(t, Offset/utc);
+    Test/all([
+        Test/equal(OffsetDateTime/to_timestamp(india), t),
+        Test/equal(OffsetDateTime/to_timestamp(utc), t),
+        Test/equal(
+            (utc.date_time.time.hour, utc.date_time.time.minute, utc.date_time.time.second),
+            (8, 49, 37)),
+        Test/equal((india.date_time.time.hour, india.date_time.time.minute), (14, 19)),
+        Test/equal(utc == OffsetDateTime/of_timestamp(t, Offset/unknown()), false),
+        Test/equal(
+            OffsetDateTime/to_timestamp(
+                OffsetDateTime {
+                    date_time =
+                        DateTime {
+                            date = Date/of_days(+17166),
+                            time = Time { hour = 23, minute = 59, second = 60, nanosecond = 0 } },
+                    offset = Offset/unknown() }),
+            Timestamp/of_unix_secs(+1483228800)),
+        Test/equal(Timestamp/of_unix_nanos(-1) < Timestamp/of_unix_nanos(+0), true),
+        Test/equal(
+            fields(
+                Date/to_days(
+                    OffsetDateTime/of_timestamp(
+                        Timestamp/of_unix_nanos(-1),
+                        Offset/utc).date_time.date)),
+            (+1969, 12, 31))]);

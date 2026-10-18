@@ -1,7 +1,6 @@
 -- The messages a program makes: the method, the fields, the status, and the bytes a request and a reply are written as.
 use /std/{Str, Bytes, Int, List, Option, Result, Parse, Show, Test, Html};
 use /std/time/{Timestamp};
-use /std/time/{DateTime};
 use /std/http/{Method, Url, Field, Status, Request, Response, Limits};
 use /std/http/Field/{Name, Value};
 use /std/http/Url/{Scheme};
@@ -204,19 +203,47 @@ test a_url_reaches_the_wire_percent_encoded =
             Option/some(Value/lit("http://h/a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9"))),
         Test/equal(Url/escaped("/x?y=1%20z"), Value/lit("/x?y=1%20z"))]);
 
--- A date is a field's value in the octets its text spells, built with no check that could refuse: the epoch, a leap day, the last second of 9999 and the first of the year after, which takes a fifth digit.
-test a_date_is_a_value_in_the_octets_its_text_spells =
-    Test/all(
-        List/map(
-            [+0, +784111777, +951782400, +253402300799, +253402300800],
-            (secs: Int) =>
-                match DateTime/of_timestamp(Timestamp/of_unix_secs(secs))
-                | some(d) =>
-                    Test/equal(
-                        Value/of_date_time(d).bytes,
-                        Str/to_bytes(DateTime/to_imf_fixdate(d)))
-                | none() => Test/fail("a moment after 1970 has a date")
-                end));
+-- The moment `secs` seconds after the epoch as HTTP's `Date` writes it, or why it has none.
+let spelled(secs: Int) -> Str =
+    match Value/of_timestamp(Timestamp/of_unix_secs(secs))
+    | some(value) => match Value/to_str(value) | some(s) => s | none() => "not text" end
+    | none() => "no year of four digits"
+    end;
+
+-- A date is written as HTTP writes one: the weekday and the month by three letters, the day, the hour, the minute and the second in two digits, the year in four, each month spelled by its fifteenth at noon, and a moment before 1970 among them.
+test a_date_is_spelled_as_http_spells_one =
+    Test/all([
+        Test/equal(spelled(+784111777), "Sun, 06 Nov 1994 08:49:37 GMT"),
+        Test/equal(spelled(+0), "Thu, 01 Jan 1970 00:00:00 GMT"),
+        Test/equal(spelled(-1), "Wed, 31 Dec 1969 23:59:59 GMT"),
+        Test/equal(spelled(+253402300799), "Fri, 31 Dec 9999 23:59:59 GMT"),
+        Test/equal(
+            List/map(
+                [+1673784000, +1676462400, +1678881600, +1681560000, +1684152000, +1686830400,
+                    +1689422400, +1692100800, +1694779200, +1697371200, +1700049600, +1702641600],
+                spelled),
+            ["Sun, 15 Jan 2023 12:00:00 GMT", "Wed, 15 Feb 2023 12:00:00 GMT",
+                "Wed, 15 Mar 2023 12:00:00 GMT", "Sat, 15 Apr 2023 12:00:00 GMT",
+                "Mon, 15 May 2023 12:00:00 GMT", "Thu, 15 Jun 2023 12:00:00 GMT",
+                "Sat, 15 Jul 2023 12:00:00 GMT", "Tue, 15 Aug 2023 12:00:00 GMT",
+                "Fri, 15 Sep 2023 12:00:00 GMT", "Sun, 15 Oct 2023 12:00:00 GMT",
+                "Wed, 15 Nov 2023 12:00:00 GMT", "Fri, 15 Dec 2023 12:00:00 GMT"])]);
+
+-- A leap day is dated where the calendar puts it, in a year four divides and in a century four hundred divides; a century it does not has none.
+test a_leap_day_is_dated_where_the_calendar_puts_it =
+    Test/all([
+        Test/equal(spelled(+1709164800), "Thu, 29 Feb 2024 00:00:00 GMT"),
+        Test/equal(spelled(+951782400), "Tue, 29 Feb 2000 00:00:00 GMT"),
+        Test/equal(spelled(+951868800), "Wed, 01 Mar 2000 00:00:00 GMT"),
+        Test/equal(spelled(+13574563200), "Tue, 29 Feb 2400 00:00:00 GMT"),
+        Test/equal(spelled(+4107542399), "Sun, 28 Feb 2100 23:59:59 GMT"),
+        Test/equal(spelled(+4107542400), "Mon, 01 Mar 2100 00:00:00 GMT")]);
+
+-- A moment whose year has more than four digits, or falls before year 0, has no date the fixed-length form can write, so a server that reads one dates no reply.
+test a_moment_past_four_digits_has_no_http_date =
+    Test/all([
+        Test/equal(spelled(+253402300800), "no year of four digits"),
+        Test/equal(spelled(-62167219201), "no year of four digits")]);
 
 -- A status carries content unless it is 1xx, 204, 205 or 304, and a reply of all but the 205 among those ends at its head whatever its fields say.
 test a_status_says_whether_it_carries_content =

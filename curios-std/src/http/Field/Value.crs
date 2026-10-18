@@ -1,7 +1,7 @@
-use /std/{Str, Bytes, Byte, Nat, Bool, List, Option, Result, Spell};
+use /std/{Str, Bytes, Byte, Nat, Int, Bool, List, Option, Result, Spell};
 use /std/Bool/{True, Holds};
-use /std/time/{DateTime};
-use /std/time/DateTime/{Month, Weekday};
+use /std/time/{Timestamp, Date, DateTime, Month, Weekday, Offset, OffsetDateTime, rfc3339};
+use /std/time/rfc3339/{FourDigits};
 use /std/ops/{Eql};
 
 --- Whether `b` may stand in a field value: the tab, the space, and every octet past them but DEL, obs-text included (RFC 9110 §5.5). No other control octet may, a line's end least of all.
@@ -92,24 +92,41 @@ let digit(n: Nat, @below: Holds(n < 10)) -> Octet =
 let two_digits(n: Nat, rest: Value) -> Value =
     cons(digit(n / 10 % 10), cons(digit(n % 10), rest));
 
--- `n` in the digits it takes, ahead of `rest`.
-let decimal(n: Nat, rest: Value) -> Value =
-    match n < 10
-    | true => cons(digit(n), rest)
-    | false => decimal(n / 10, cons(digit(n % 10), rest))
+-- `n`, below ten thousand, in four digits ahead of `rest`: the year as the fixed-length form writes it.
+let year_digits(n: Nat, rest: Value, @below: Holds(n < 10000)) -> Value =
+    cons(digit(n / 1000), cons(digit(n / 100 % 10), two_digits(n, rest)));
+
+-- The weekday in the three letters the Internet message format writes it in.
+let weekday_name(d: Weekday) -> Str =
+    match d
+    | monday() => "Mon"
+    | tuesday() => "Tue"
+    | wednesday() => "Wed"
+    | thursday() => "Thu"
+    | friday() => "Fri"
+    | saturday() => "Sat"
+    | sunday() => "Sun"
     end;
 
--- `n` in four digits ahead of `rest`, or in the digits it takes past 9999.
-let year_digits(n: Nat, rest: Value) -> Value =
-    match n < 10000
-    | true => cons(digit(n / 1000), cons(digit(n / 100 % 10), two_digits(n, rest)))
-    | false => decimal(n, rest)
+-- The month in the three letters the Internet message format writes it in.
+let month_name(m: Month) -> Str =
+    match m
+    | january() => "Jan"
+    | february() => "Feb"
+    | march() => "Mar"
+    | april() => "Apr"
+    | may() => "May"
+    | june() => "Jun"
+    | july() => "Jul"
+    | august() => "Aug"
+    | september() => "Sep"
+    | october() => "Oct"
+    | november() => "Nov"
+    | december() => "Dec"
     end;
 
 -- A weekday's and a month's three letters may each stand in a value: by cases, a literal's reason at each.
-let weekday_admitted(
-    d: Weekday,
-) -> Holds(Bytes/all(Str/to_bytes(DateTime/weekday_name(d)), admits)) =
+let weekday_admitted(d: Weekday) -> Holds(Bytes/all(Str/to_bytes(weekday_name(d)), admits)) =
     match d
     | sunday() => True/qed()
     | monday() => True/qed()
@@ -120,7 +137,7 @@ let weekday_admitted(
     | saturday() => True/qed()
     end;
 
-let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(DateTime/month_name(m)), admits)) =
+let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(month_name(m)), admits)) =
     match m
     | january() => True/qed()
     | february() => True/qed()
@@ -136,22 +153,37 @@ let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(DateTime/month_name
     | december() => True/qed()
     end;
 
---- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7): the octets of `DateTime/to_imf_fixdate`, each built as one a value may hold, so a message is dated with no check that could refuse.
-pub let of_date_time(d: DateTime) -> Value =
+--- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7), `Sun, 06 Nov 1994 08:49:37 GMT`: its date and time in UTC, or `none` where its year has more than the four digits the form has room for. Each octet is built as one a value may hold, so a message is dated with no check that could refuse.
+pub let of_timestamp(t: Timestamp) -> Option(Value) =
+    of_utc(OffsetDateTime/of_timestamp(t, Offset/utc).date_time);
+
+-- Decided over a parameter: over the date `of_timestamp` computes, each reading of the year reduces the calendar walk again, which exhausts the kernel run without its memo.
+let of_utc(at: DateTime) -> Option(Value) =
+    match rfc3339/four_digits(at.date)
+    | some(fits) => Option/some(fixdate(at, @fits))
+    | none() => Option/none()
+    end;
+
+let fixdate(at: DateTime, @four_digits: FourDigits(at.date)) -> Value =
+    let date = at.date;
+    let time = at.time;
+    let weekday = Date/weekday(date);
     let clock =
         two_digits(
-            d.hour,
+            time.hour,
             append(
                 lit(":"),
-                two_digits(d.minute, append(lit(":"), two_digits(d.second, lit(" GMT"))))));
+                two_digits(time.minute, append(lit(":"), two_digits(time.second, lit(" GMT"))))));
     append(
-        lit(DateTime/weekday_name(d.weekday), @weekday_admitted(d.weekday)),
+        lit(weekday_name(weekday), @weekday_admitted(weekday)),
         append(
             lit(", "),
             two_digits(
-                d.day,
+                date.day,
                 append(
                     lit(" "),
                     append(
-                        lit(DateTime/month_name(d.month), @month_admitted(d.month)),
-                        append(lit(" "), year_digits(d.year, append(lit(" "), clock))))))));
+                        lit(month_name(date.month), @month_admitted(date.month)),
+                        append(
+                            lit(" "),
+                            year_digits(Int/abs(date.year), append(lit(" "), clock))))))));

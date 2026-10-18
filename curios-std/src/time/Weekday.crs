@@ -1,0 +1,68 @@
+use /std/{Nat, Option, Ord, Hash, Spell};
+use /std/ops/{Eql};
+
+--- A day of the week, Monday first, as ISO 8601 numbers them.
+pub induct Weekday: pub Type
+| monday()
+| tuesday()
+| wednesday()
+| thursday()
+| friday()
+| saturday()
+| sunday()
+end
+
+pub use Weekday/*;
+
+satisfy Eql(Weekday) {
+    ..
+}
+
+satisfy Ord(Weekday) {
+    ..
+}
+
+satisfy Hash(Weekday) {
+    ..
+}
+
+satisfy Spell(Weekday) {
+    ..
+}
+
+--- The day's number, as ISO 8601 writes it: Monday is 1 and Sunday 7.
+pub let to_nat(d: Weekday) -> Nat =
+    match d
+    | monday() => 1
+    | tuesday() => 2
+    | wednesday() => 3
+    | thursday() => 4
+    | friday() => 5
+    | saturday() => 6
+    | sunday() => 7
+    end;
+
+--- The day numbered `n`, or `none` for a number no day has.
+pub let try_of_nat(n: Nat) -> Option(Weekday) =
+    match n
+    | 1 => Option/some(Weekday/monday())
+    | 2 => Option/some(Weekday/tuesday())
+    | 3 => Option/some(Weekday/wednesday())
+    | 4 => Option/some(Weekday/thursday())
+    | 5 => Option/some(Weekday/friday())
+    | 6 => Option/some(Weekday/saturday())
+    | 7 => Option/some(Weekday/sunday())
+    | _ => Option/none()
+    end;
+
+--- The day `n` days after a Monday: what `Date/weekday` reads a count of days through.
+pub let of_days_from_monday(n: Nat) -> Weekday =
+    match n % 7
+    | 0 => Weekday/monday()
+    | 1 => Weekday/tuesday()
+    | 2 => Weekday/wednesday()
+    | 3 => Weekday/thursday()
+    | 4 => Weekday/friday()
+    | 5 => Weekday/saturday()
+    | _ => Weekday/sunday()
+    end;

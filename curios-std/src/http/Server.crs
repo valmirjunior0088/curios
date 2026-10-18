@@ -1,7 +1,6 @@
-use /std/{Bytes, Str, Nat, Bool, List, Result, Try, Io};
+use /std/{Bytes, Str, Nat, Bool, List, Option, Result, Try, Io};
 use /std/Io/{Reader};
 use /std/time/{Duration, Timestamp};
-use /std/time/{DateTime};
 use /std/tcp/{Socket, Listener};
 use /std/http/{Method, Url, Field, Status, Request, Response, Version, Limits, Refusal, Framing,
     read, stream};
@@ -162,13 +161,16 @@ let dated(reply: Response) -> Io(Response) =
     | some(_) => Io/pure(reply)
     | none() =>
         let now = Timestamp/now()!;
-        match DateTime/of_timestamp(now)
-        | some(at) =>
-            let date = Field { name = Name { text = "Date" }, value = Value/of_date_time(at) };
-            Io/pure(Response { ..reply, headers = [date, ..reply.headers], @bodied = reply.bodied })
-        -- A clock reading before 1970 is no time HTTP's date can state (RFC 9110 §6.6.1).
-        | none() => Io/pure(reply)
-        end
+        Io/pure(stamped(reply, Value/of_timestamp(now)))
+    end;
+
+-- `reply` with `date` as its `Date`. A clock reading no year of four digits names is no reasonable approximation of the time, for which RFC 9110 §6.6.1 asks no `Date`.
+let stamped(reply: Response, date: Option(Value)) -> Response =
+    match date
+    | some(value) =>
+        let field = Field { name = Name { text = "Date" }, value = value };
+        Response { ..reply, headers = [field, ..reply.headers], @bodied = reply.bodied }
+    | none() => reply
     end;
 
 -- `reply` written to `c` in answer to a request of `method` — its head alone where the method is `HEAD`, stating the length its body has — and the connection ended as RFC 9112 §9.6 asks: the sending half first, then what the peer still sends read on, since a close over unread bytes would reset the connection under the reply.

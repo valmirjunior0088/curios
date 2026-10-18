@@ -1,44 +1,51 @@
-use /std/{Nat, Bool, Option, Spell};
-use /std/Bool/{Holds};
+use /std/{Nat, Int, Bool, List, Option, Ord, Hash, Spell};
+use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql};
+use /std/time/{Month, Weekday};
 
-let leap(year: Nat) -> Bool =
+--- Whether `year` is a leap year of the proleptic Gregorian calendar: four divides it, and a hundred does not unless four hundred does.
+pub let is_leap(year: Int) -> Bool =
     choose
-    | year % 400 == 0 => true
-    | year % 100 == 0 => false
-    | year % 4 == 0 => true
+    | year % 400 == +0 => true
+    | year % 100 == +0 => false
+    | year % 4 == +0 => true
     | _ => false
     end;
 
--- How many days the month has: none for a number that is no month, so no day is one of it.
-let days_in(year: Nat, month: Nat) -> Nat =
+-- The leap day a year has: one or none. Every length the proofs sum is a literal and this, so the sums stay linear in one atom.
+let leap_day(year: Int) -> Nat =
+    match is_leap(year) | true => 1 | false => 0 end;
+
+--- How many days `month` has in `year`.
+pub let days_in_month(year: Int, month: Month) -> Nat =
     match month
-    | 1 => 31
-    | 2 => match leap(year) | true => 29 | false => 28 end
-    | 3 => 31
-    | 4 => 30
-    | 5 => 31
-    | 6 => 30
-    | 7 => 31
-    | 8 => 31
-    | 9 => 30
-    | 10 => 31
-    | 11 => 30
-    | 12 => 31
-    | _ => 0
+    | january() => 31
+    | february() => 28 + leap_day(year)
+    | march() => 31
+    | april() => 30
+    | may() => 31
+    | june() => 30
+    | july() => 31
+    | august() => 31
+    | september() => 30
+    | october() => 31
+    | november() => 30
+    | december() => 31
     end;
 
-let sound(year: Nat, month: Nat, day: Nat) -> Bool =
-    Nat/in_range(month, 1, 12) && Nat/in_range(day, 1, days_in(year, month));
+--- How many days `year` has.
+pub let days_in_year(year: Int) -> Nat =
+    365 + leap_day(year);
 
---- That the three spell a day: a month of the year, and a day the month has.
-pub let Valid(year: Nat, month: Nat, day: Nat) -> Prop =
-    Holds(sound(year, month, day));
+--- That the three spell a day: a day `month` has in `year`.
+pub let Valid(year: Int, month: Month, day: Nat) -> Prop =
+    Holds(Nat/in_range(day, 1, days_in_month(year, month)));
 
---- A calendar date.
+--- A calendar date, in the proleptic Gregorian calendar with a year 0, as ISO 8601 counts years.
 pub struct Date: pub Type {
-    year: Nat,
-    month: Nat,
+    year: Int,
+    month: Month,
+    --- The day of the month, from 1.
     day: Nat,
     @ok: Valid(year, month, day),
 }
@@ -47,20 +54,139 @@ satisfy Eql(Date) {
     ..
 }
 
+satisfy Ord(Date) {
+    ..
+}
+
+satisfy Hash(Date) {
+    ..
+}
+
 satisfy Spell(Date) {
     ..
 }
 
 --- The date, under the evidence that the three spell one.
-pub let of(year: Nat, month: Nat, day: Nat, @ok: Valid(year, month, day)) -> Date =
+pub let of(year: Int, month: Month, day: Nat, @ok: Valid(year, month, day)) -> Date =
     Date { year = year, month = month, day = day };
 
-let try_valid(year: Nat, month: Nat, day: Nat) -> Option(Valid(year, month, day)) =
-    Bool/decide(sound(year, month, day));
-
 --- The date, decided: `none` where the three spell no day.
-pub let try_of(year: Nat, month: Nat, day: Nat) -> Option(Date) =
-    match try_valid(year, month, day)
+pub let try_of(year: Int, month: Month, day: Nat) -> Option(Date) =
+    match Bool/decide(Nat/in_range(day, 1, days_in_month(year, month)))
     | some(ok) => Option/some(of(year, month, day, @ok))
     | none() => Option/none()
     end;
+
+-- The days of `months` in `year`, summed.
+let span(year: Int, months: List(Month)) -> Nat =
+    match months | [] => 0 | [m, ..rest] => days_in_month(year, m) + span(year, rest) end;
+
+-- The date `r` days into `months` of `year`: the first month whose length exceeds the days left holds it, and that guard is the proof the day is one the month has.
+let in_months(
+    year: Int,
+    months: List(Month),
+    r: Nat,
+    within: Holds(r < span(year, months)),
+) -> Date =
+    match months
+    | [] => match False/refuted() end
+    | [m, ..rest] =>
+        match r < days_in_month(year, m)
+        | true =>
+            of(
+                year,
+                m,
+                r + 1,
+                @Nat/le/to_in_range(r + 1, 1, days_in_month(year, m), True/proved(), True/proved()))
+        | false => in_months(year, rest, r - days_in_month(year, m), True/proved())
+        end
+    end;
+
+-- A year and the days past its first of January.
+struct Ahead: Type {
+    year: Int,
+    days: Nat,
+}
+
+-- The date `s.days` days past the first of January of `s.year`: a year at a time while a year fits, then the months.
+let forward(s: Ahead) -> Date =
+    Nat/descend(
+        (t: Ahead) => t.days,
+        (_) => Date,
+        (t, ih) =>
+            match t.days < days_in_year(t.year)
+            | true => in_months(t.year, Month/all, t.days, True/proved())
+            | false =>
+                ih(Ahead { year = t.year + 1, days = t.days - days_in_year(t.year) }, True/proved())
+            end,
+        s);
+
+-- A year and the days, at least one, before its first of January.
+struct Behind: Type {
+    year: Int,
+    short: Nat,
+}
+
+-- The date `s.short` days before the first of January of `s.year`: a year at a time back while the days left are more than the year before has.
+let backward(s: Behind) -> Date =
+    Nat/descend(
+        (t: Behind) => t.short,
+        (_) => Date,
+        (t, ih) =>
+            match t.short <= days_in_year(t.year - 1)
+            | true =>
+                forward(Ahead { year = t.year - 1, days = days_in_year(t.year - 1) - t.short })
+            | false =>
+                ih(
+                    Behind { year = t.year - 1, short = t.short - days_in_year(t.year - 1) },
+                    True/proved())
+            end,
+        s);
+
+-- The days from 1970-01-01 to the first of January of `y`: Hinnant's `days_from_civil` at the first of January, over floored division.
+let first_of_january(y: Int) -> Int =
+    let split = Int/DivMod/of(y - 1, 400);
+    let yoe = split.remainder;
+    split.quotient * 146097 + Nat/to_int(yoe * 365 + yoe / 4 - yoe / 100 + 306) - 719468;
+
+-- The year Hinnant's `civil_from_days` gives the day `n` since 1970-01-01: exact, and read only as where `of_days` starts, since nothing proves it.
+let year_of(n: Int) -> Int =
+    let split = Int/DivMod/of(n + 719468, 146097);
+    let doe = split.remainder;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let y = Nat/to_int(yoe) + split.quotient * 400;
+    match (5 * doy + 2) / 153 < 10 | true => y | false => y + 1 end;
+
+--- The date `n` days after 1970-01-01, or before it where `n` is below zero.
+---
+--- Hinnant's algorithm gives the year, and is read only as where to start: the days from that year's first of January are walked forward a year at a time while a year fits, or back while they are below zero, and then through the months. The guards are the proof — the first year whose length exceeds the days left and the first month whose length does — so nothing is clipped or invented, and since the year is exact no year is walked.
+pub let of_days(n: Int) -> Date =
+    let y = year_of(n);
+    match Int/view(n - first_of_january(y))
+    | nonneg(k) => forward(Ahead { year = y, days = k })
+    | neg(k) => backward(Behind { year = y, short = k + 1 })
+    end;
+
+--- The days from 1970-01-01 to `d`, below zero before it: Hinnant's `days_from_civil`, over floored division, in eras of 400 years of 146 097 days.
+pub let to_days(d: Date) -> Int =
+    let m = Month/to_nat(d.month);
+    let y = match m <= 2 | true => d.year - 1 | false => d.year end;
+    let split = Int/DivMod/of(y, 400);
+    let yoe = split.remainder;
+    let shifted = match m > 2 | true => m - 3 | false => m + 9 end;
+    let doy = (153 * shifted + 2) / 5 + d.day - 1;
+    split.quotient * 146097 + Nat/to_int(yoe * 365 + yoe / 4 - yoe / 100 + doy) - 719468;
+
+--- The date `n` days after `d`, or before it where `n` is below zero.
+pub let add_days(d: Date, n: Int) -> Date =
+    of_days(to_days(d) + n);
+
+--- How many days after `a` the date `b` is, below zero where `b` is the earlier.
+pub let days_between(a: Date, b: Date) -> Int =
+    to_days(b) - to_days(a);
+
+--- The day of the week: 1970-01-01 was a Thursday.
+pub let weekday(d: Date) -> Weekday =
+    let split = Int/DivMod/of(to_days(d) + 3, 7);
+    Weekday/of_days_from_monday(split.remainder);

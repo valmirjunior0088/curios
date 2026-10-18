@@ -1,0 +1,44 @@
+use /std/{Int, Bool, Option, Ord, Hash, Spell};
+use /std/Bool/{Holds};
+use /std/ops/{Eql};
+
+--- An offset from UTC, as RFC 3339's `time-offset` states one and RFC 9557 §2 reads it: the local offset unknown, the time being stated in UTC, which `Z` writes and `-00:00` was written for; or so many seconds east of UTC, `+00:00` among them, which names UTC as the time's reference.
+pub induct Offset: pub Type
+--- UTC is known and the local offset is not.
+| unknown()
+--- `seconds` east of UTC, less than a day either way.
+| known(seconds: Int, @ok: Holds(Int/abs(seconds) <= 86399))
+end
+
+pub use Offset/*;
+
+satisfy Eql(Offset) {
+    ..
+}
+
+satisfy Ord(Offset) {
+    ..
+}
+
+satisfy Hash(Offset) {
+    ..
+}
+
+satisfy Spell(Offset) {
+    ..
+}
+
+--- UTC as the time's reference: `+00:00`.
+pub let utc: Offset =
+    Offset/known(+0);
+
+--- The offset `seconds` east of UTC, decided: `none` for a day or more.
+pub let try_of_seconds(seconds: Int) -> Option(Offset) =
+    match Bool/decide(Int/abs(seconds) <= 86399)
+    | some(ok) => Option/some(Offset/known(seconds, @ok))
+    | none() => Option/none()
+    end;
+
+--- How far ahead of UTC a time stated at `o` is: none for `unknown()`, which states its time in UTC.
+pub let ahead(o: Offset) -> Int =
+    match o | unknown() => +0 | known(seconds) => seconds end;
