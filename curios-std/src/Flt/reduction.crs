@@ -1,5 +1,6 @@
-use /std/{Flt, Nat, Int, Bool, List, Option, Dyadic};
+use /std/{Flt, Nat, Int, Bool, List, Option};
 use /std/Flt/{Rounding, rounded};
+use /std/Flt/internal/{Dyadic};
 
 --- One term of a reduction (§9.4), read exactly: what an operand is, or what a product or a sum of two operands is before anything rounds.
 pub induct Term: pub Type
@@ -124,7 +125,7 @@ pub let summed(r: Rounding, terms: List(Term)) -> Flt =
     -- No NaN, invalid term or infinity: every term is a number.
     | _ =>
         let s = number_sum(terms);
-        match s.mantissa == +0 | true => zero_sum(r, terms) | false => rounded/of_dyadic(r, s) end
+        match s.mantissa == +0 | true => zero_sum(r, terms) | false => Dyadic/to_flt(r, s) end
     end;
 
 --- Whether a product of `factors` is negative: an odd count of negative ones.
@@ -150,5 +151,5 @@ pub let scaled(r: Rounding, factors: List(Term)) -> {Flt, Int} =
     | _ =>
         let p = number_product(factors);
         let sf = scale_of(p);
-        (rounded/of_dyadic(r, Dyadic { ..p, exponent = p.exponent - sf }), sf)
+        (Dyadic/to_flt(r, Dyadic { ..p, exponent = p.exponent - sf }), sf)
     end;

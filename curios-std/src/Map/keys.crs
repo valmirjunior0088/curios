@@ -1,8 +1,8 @@
 use /std/{List, Option, Eq, Ord};
 use /std/Bool/{Holds};
 use /std/List/{Pairwise};
-use /std/Map/{Map, Key, Node, Grounded, grounded};
-use /std/Map/Node/{let Node};
+use /std/Map/{Map, Key, Grounded, grounded};
+use /std/Map/internal/{Node};
 
 --- The keys, in their type's own order: each is before every one after it, by [`pairwise`].
 pub let keys(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List(K) =

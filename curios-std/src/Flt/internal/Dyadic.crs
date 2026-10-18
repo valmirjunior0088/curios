@@ -1,7 +1,8 @@
 use /std/{Flt, Nat, Int, Bool, Option, Ordering, Str, Show, Spell, Fmt, Ord, Hash};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul};
+use /std/Flt/{Rounding, exact};
 
---- A dyadic rational, `mantissa · 2^exponent`. Every finite float's exact value is one, and so is every sum, difference and product of them, so the arithmetic here never rounds; `Flt/rounded/of_dyadic` is the one way back to a float.
+--- A dyadic rational, `mantissa · 2^exponent`. Every finite float's exact value is one, and so is every sum, difference and product of them, so the arithmetic here never rounds; `to_flt` is the one way back to a float.
 ---
 --- Unnormalized: `3 · 2^0` and `6 · 2^-1` are two representations of one number, and arithmetic keeps whichever it arrives at rather than paying to normalize. Every comparison and the hash read the number, not the representation; `normalized` answers the one representation each number has with an odd mantissa.
 pub struct Dyadic: pub Type {
@@ -19,6 +20,10 @@ pub let of(f: Flt, @ok: Flt/Finite(f)) -> Dyadic =
 pub let try_of(f: Flt) -> Option(Dyadic) =
     match Flt/finite(f) | some(ok) => Option/some(of(f, @ok)) | none() => Option/none() end;
 
+--- `d`, rounded once in the direction `r` names: the rounding every operation of `Flt/rounded` performs, stated over the exact value rather than over operands. An exact zero is `+0.0`.
+pub let to_flt(r: Rounding, d: Dyadic) -> Flt =
+    exact/round(r, d.mantissa < +0, Int/abs(d.mantissa), d.exponent, false);
+
 --- `n`, exactly.
 pub let of_int(n: Int) -> Dyadic =
     Dyadic { mantissa = n, exponent = +0 };
@@ -34,10 +39,6 @@ let common(a: Dyadic, b: Dyadic) -> Int =
 --- The negation.
 pub let neg(a: Dyadic) -> Dyadic =
     Dyadic { mantissa = +0 - a.mantissa, exponent = a.exponent };
-
---- The magnitude.
-pub let abs(a: Dyadic) -> Dyadic =
-    Dyadic { mantissa = Nat/to_int(Int/abs(a.mantissa)), exponent = a.exponent };
 
 --- The exact sum.
 pub let add(a: Dyadic, b: Dyadic) -> Dyadic =

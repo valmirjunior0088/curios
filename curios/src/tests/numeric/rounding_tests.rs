@@ -106,7 +106,7 @@ fn every_direction_executes_as_the_model_rounds() {
     let naturals = NATURALS.join(",\n            ");
     let source = fill!(
         r#"
-        use /std/{Nat, Int, Flt, Bytes, List, Io, Dyadic, Try, Process};
+        use /std/{Nat, Int, Flt, Bytes, List, Io, Try, Process};
         use /std/Flt/{Rounding, rounded};
         let entry() -> /std/Io({}) =
             let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
@@ -194,24 +194,32 @@ const EXPONENTS: [i32; 11] = [
     -1200, -1127, -1075, -1074, -1023, -60, 0, 60, 969, 971, 1000,
 ];
 
-/// `Flt/rounded/of_dyadic` — the Curios rounding every `/std` operation in the exact layer goes through — executed against the model's single rounding, every direction, both signs, over the grid above. The magnitude gains a runtime zero, so the rounding runs in the emitted program rather than folding.
+/// The Curios rounding every `/std` operation in the exact layer goes through, reached from a program as `Flt/rounded/of_hex_str` reads an exact value written in hex, executed against the model's single rounding, every direction, both signs, over the grid above. Each case's text gains a suffix the program reads at run time, so the reading and the rounding run in the emitted program rather than folding.
 #[test]
 fn the_exact_rounding_executes_as_the_model_rounds() {
-    let magnitudes = MAGNITUDES.join(", ");
-    let exponents = EXPONENTS.map(|e| format!("{e:+}")).join(", ");
+    // In the model's order, magnitude, exponent, sign; an exact zero is written unsigned, since its rounding is `+0.0`.
+    let cases = MAGNITUDES
+        .iter()
+        .flat_map(|m| {
+            let magnitude = m.parse::<u128>().expect("a magnitude within 128 bits");
+            EXPONENTS.iter().flat_map(move |e| {
+                [false, true].map(|negative| {
+                    let sign = if negative && magnitude != 0 { "-" } else { "" };
+                    format!("\"{sign}0x{magnitude:X}p{e:+}\"")
+                })
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
     let source = fill!(
         r#"
-        use /std/{Nat, Int, Flt, Bytes, List, Io, Dyadic, Try, Process};
+        use /std/{Flt, Str, Bytes, List, Io, Option, Try, Process};
         use /std/Flt/{Rounding, rounded};
         let entry() -> /std/Io({}) =
-            let zero = Nat/to_int(Bytes/len(/std/rand/bytes(0)!));
-            let magnitudes: List(Int) = List/map([${magnitudes}], (m) => Nat/to_int(m) + zero);
-            let exponents: List(Int) = [${exponents}];
+            let unread = Str/repeat("0", Bytes/len(/std/rand/bytes(0)!));
+            let cases: List(Str) = List/map([${cases}], (s) => Str/concat(s, unread));
             let direction(r: Rounding) -> List(Flt) =
-                List/concat_map(magnitudes, (m) => List/concat_map(exponents, (e) => [
-                    rounded/of_dyadic(r, Dyadic { mantissa = m, exponent = e }),
-                    rounded/of_dyadic(r, Dyadic { mantissa = Int/sub(+0, m), exponent = e }),
-                ]));
+                List/map(cases, (s) => Option/unwrap_or(rounded/of_hex_str(r, s), +nan.0));
             let results = List/concat_map([
                 Rounding/ties_to_even(),
                 Rounding/ties_to_away(),
@@ -223,8 +231,7 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
             Io/pure(());
         entry()
         "#,
-        magnitudes,
-        exponents
+        cases
     );
 
     let mut expected = Vec::new();
@@ -233,7 +240,7 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
             let magnitude = Natural::parse_bytes(m.as_bytes(), 10).expect("a numeral");
             for e in EXPONENTS {
                 for negative in [false, true] {
-                    // `Int/sub(+0, m)` is `+0` for a zero magnitude, which keeps no sign; the rounding of an exact zero is `+0.0`.
+                    // A zero magnitude is written unsigned above: the rounding of an exact zero is `+0.0`.
                     let negative = negative && !magnitude.is_zero();
                     let value = Floating::of_dyadic(negative, &magnitude, e, rounding);
                     expected.push(value.to_bits());

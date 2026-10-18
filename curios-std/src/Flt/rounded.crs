@@ -1,5 +1,6 @@
-use /std/{Flt, Nat, Int, Bool, Str, Option, Dyadic, List, Vec};
+use /std/{Flt, Nat, Int, Bool, Str, Option, List, Vec};
 use /std/Flt/{Rounding, exact, reduction};
+use /std/Flt/internal/{Dyadic};
 use /std/Flt/grammar/{of_str_in, of_hex_str_in, of_decimal_in};
 use /std/Flt/digits/{to_str_significant_in};
 use /std/Bool/{Holds};
@@ -94,16 +95,12 @@ pub let to_integral(r: Rounding, a: Flt) -> Flt =
     | toward_negative() => /sys/Flt/floor(a)
     end;
 
---- `d`, rounded once in the direction `r` names: the rounding every operation in this module performs, stated over the exact value rather than over operands. An exact zero is `+0.0`.
-pub let of_dyadic(r: Rounding, d: Dyadic) -> Flt =
-    exact/round(r, d.mantissa < +0, Int/abs(d.mantissa), d.exponent, false);
-
 --- `f · 2^n`, rounded once in the direction `r` names (§5.3.3 `scaleB`). A NaN answers itself quieted; an infinity and a zero are their own scalings.
 pub let scale(r: Rounding, f: Flt, n: Int) -> Flt =
     choose
     | Flt/is_nan(f) => f + f
     | Flt/is_zero(f) => f
-    | some(d) = Dyadic/try_of(f) => of_dyadic(r, Dyadic { ..d, exponent = d.exponent + n })
+    | some(d) = Dyadic/try_of(f) => Dyadic/to_flt(r, Dyadic { ..d, exponent = d.exponent + n })
     -- An infinity, its own scaling.
     | _ => f
     end;

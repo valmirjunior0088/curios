@@ -1,6 +1,7 @@
-use /std/{Flt, Nat, Int, Bool, Dyadic, List, Vec, Option};
+use /std/{Flt, Nat, Int, Bool, List, Vec, Option};
 use /std/Bool/{True};
 use /std/Flt/{Rounding, Exceptions, rounded, exact, reduction};
+use /std/Flt/internal/{Dyadic};
 
 --- Only the invalid operation.
 let invalid: Exceptions =

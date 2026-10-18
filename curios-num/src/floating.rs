@@ -760,7 +760,7 @@ impl Floating {
         }
     }
 
-    /// `magnitude · 2^exponent`, negated when `negative`, rounded once under `rounding`: the model's own rounding, over a value given exactly rather than as operands. `/std/Flt/rounded/of_dyadic` is its Curios twin. An exact zero keeps the sign it is given.
+    /// `magnitude · 2^exponent`, negated when `negative`, rounded once under `rounding`: the model's own rounding, over a value given exactly rather than as operands. `/std/Flt/internal/Dyadic/to_flt` is its Curios twin. An exact zero keeps the sign it is given.
     pub fn of_dyadic(
         negative: bool,
         magnitude: &Natural,

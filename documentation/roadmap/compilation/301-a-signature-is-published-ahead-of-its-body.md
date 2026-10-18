@@ -4,7 +4,7 @@
 
 ## What is missing
 
-A declaration is published whole, its signature with its body, so one that names another waits for that other's body, and two that name each other are a cycle where neither reads the other's body. `let neq(a: Dyadic, b: Dyadic) -> Bool = Bool/not(a == b)` beside `satisfy Eql(Dyadic) { eql = eql, neq = neq }` is refused (`curios-elab/src/elaborate/module/demand.rs`): the body of `neq` resolves `==` to the witness, and the witness names `neq`, of which it reads the signature alone, which is written out. The refusal says so and gives the two ways around it, the definition calling by name the function it means or its body written in the witness, which may read its own methods. So `/std`'s carriers, whose witnesses delegate to named functions, state no method by the operator of another: `/std/Dyadic/neq`, `gt` and `ge` call `eql`, `lt` and `le` by name.
+A declaration is published whole, its signature with its body, so one that names another waits for that other's body, and two that name each other are a cycle where neither reads the other's body. `let neq(a: Dyadic, b: Dyadic) -> Bool = Bool/not(a == b)` beside `satisfy Eql(Dyadic) { eql = eql, neq = neq }` is refused (`curios-elab/src/elaborate/module/demand.rs`): the body of `neq` resolves `==` to the witness, and the witness names `neq`, of which it reads the signature alone, which is written out. The refusal says so and gives the two ways around it, the definition calling by name the function it means or its body written in the witness, which may read its own methods. So `/std`'s carriers, whose witnesses delegate to named functions, state no method by the operator of another: `/std/Flt/internal/Dyadic/neq`, `gt` and `ge` call `eql`, `lt` and `le` by name.
 
 ## What is known
 
@@ -21,4 +21,4 @@ The split is this specification's: [item tasks](302-item-tasks.md) schedules a d
 - Whether size-change reads a projection of a dictionary as the field it selects, and where that is no call.
 - Which signatures are published early: one that fixes its own universe context, as item tasks states, or every signature written out in full.
 
-It retires when the pair above elaborates, both checkers accept it, and `/std/Dyadic`'s `neq`, `gt` and `ge` are written with their operators.
+It retires when the pair above elaborates, both checkers accept it, and `/std/Flt/internal/Dyadic`'s `neq`, `gt` and `ge` are written with their operators.

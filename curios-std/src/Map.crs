@@ -9,9 +9,9 @@ pub use Key/{let Key};
 --- A key's encoding read a bit at a time, nine to a byte, and where two encodings first differ.
 mod bits;
 
---- The trie under a map: its nodes, and an insertion, a removal and a rewriting of the values under one.
-mod Node;
-use Node/{let Node};
+--- What `Map`'s own modules share and no program sees: a `pub` inside it reaches all of `Map` and no further.
+mod internal;
+use internal/{Node};
 
 -- That a root's trie is sound, in the form a map holds: a family over the root that applies no function to it.
 induct Rooted(K: Type, use Key(K), V: Type): (Option(Node(K, V))) -> Prop

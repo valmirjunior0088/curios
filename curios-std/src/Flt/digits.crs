@@ -1,6 +1,7 @@
-use /std/{Nat, Int, Str, Bool, List, Dyadic, Fmt, Flt};
+use /std/{Nat, Int, Str, Bool, List, Fmt, Flt};
 use /std/Bool/{True, Holds};
 use /std/Flt/{Rounding, exact, to_str};
+use /std/Flt/internal/{Dyadic};
 
 pub let pow2(k: Nat) -> Nat =
     Nat/shl(1, k);

@@ -1,6 +1,7 @@
-use /std/{Nat, Int, Str, Char, Bool, Option, Result, Parse, Dyadic, Flt};
+use /std/{Nat, Int, Str, Char, Bool, Option, Result, Parse, Flt};
 use /std/Bool/{True, Holds};
-use /std/Flt/{Rounding, exact, rounded, neg};
+use /std/Flt/{Rounding, exact, neg};
+use /std/Flt/internal/{Dyadic};
 use /std/Flt/digits/{pow2, div_mod};
 
 --- The number a run of decimal digits spells, `0` for an empty one.
@@ -141,7 +142,7 @@ pub let special(negative: Bool) -> Parse(Str, Flt) =
     | _ => Parse/fail("expected a number")
     end;
 
---- Hex text after its sign, rounded once in the direction `r`: `0x`, hex digits with an optional point and at least one digit among them, and an optional `p` exponent. A nonzero significand is the exact dyadic `rounded/of_dyadic` rounds, whatever its exponent; a zero takes its sign here, since a dyadic's zero has none.
+--- Hex text after its sign, rounded once in the direction `r`: `0x`, hex digits with an optional point and at least one digit among them, and an optional `p` exponent. A nonzero significand is the exact dyadic `Dyadic/to_flt` rounds, whatever its exponent; a zero takes its sign here, since a dyadic's zero has none.
 pub let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
     let _ = hex_mark()!;
     let whole = hex_run!;
@@ -157,7 +158,7 @@ pub let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
             | false =>
                 let mantissa =
                     match negative | true => +0 - Nat/to_int(h) | false => Nat/to_int(h) end;
-                rounded/of_dyadic(r, Dyadic { mantissa = mantissa, exponent = scaled })
+                Dyadic/to_flt(r, Dyadic { mantissa = mantissa, exponent = scaled })
             end)
     end;
 

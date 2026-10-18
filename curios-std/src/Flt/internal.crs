@@ -1,0 +1,3 @@
+--- Dyadic rationals, `mantissa · 2^exponent`: every finite float's exact value, with arithmetic that never rounds.
+pub mod Dyadic;
+pub use Dyadic/{let Dyadic};

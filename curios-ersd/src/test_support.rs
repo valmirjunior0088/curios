@@ -29,7 +29,7 @@ pub fn heaviest_description_copy(module: &Module) -> Option<DescriptionCopy> {
         })
 }
 
-/// Whether the census marks `constructor`'s field indexed-only — the verdict under which the door settles every store into it. Names are the schema's debug names — the family's is its qualified spelling (`/std/Map/Node/Node`, `/Box` for an entrypoint's own) — and an unknown name panics with the known ones listed, since a silent `false` here would defeat the loudness this surface exists for.
+/// Whether the census marks `constructor`'s field indexed-only — the verdict under which the door settles every store into it. Names are the schema's debug names — the family's is its qualified spelling (`/std/Map/internal/Node/Node`, `/Box` for an entrypoint's own) — and an unknown name panics with the known ones listed, since a silent `false` here would defeat the loudness this surface exists for.
 pub fn census_settles_constructor_field(
     module: &Module,
     family: &str,

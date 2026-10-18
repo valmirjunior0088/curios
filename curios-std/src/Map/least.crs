@@ -1,8 +1,8 @@
 use /std/{List, Option, Eq, Ord};
 use /std/Bool/{True, False, Holds};
 use /std/List/{Member};
-use /std/Map/{Map, Key, Node, keys, Grounded, grounded};
-use /std/Map/Node/{let Node};
+use /std/Map/{Map, Key, keys, Grounded, grounded};
+use /std/Map/internal/{Node};
 
 --- The entry of the least key, or `none` of the empty map: the one a walk down the trie's zero sides ends at.
 pub let least(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Option({K, V}) =

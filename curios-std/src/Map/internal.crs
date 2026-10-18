@@ -1,0 +1,3 @@
+--- The trie under a map: its nodes, and an insertion, a removal and a rewriting of the values under one.
+pub mod Node;
+pub use Node/{let Node};

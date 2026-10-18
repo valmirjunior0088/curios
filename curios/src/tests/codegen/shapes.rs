@@ -40,14 +40,14 @@ const PARSE_DIGITS: &str = include_str!(concat!(
     "/../programs/parse_digits.crs"
 ));
 
-/// The recorder's end-to-end pin: the shapes erasure records on `/std/Map/Node/Node` survive to the schema a compiled program's module carries. `leaf(key: K, value: V)` reads polymorphic-opaque twice; `fork(crit: Nat, zero: Node(K, V), one: Node(K, V))` reads immediate and family. The names are the schema's qualified debug names, per `curios_ersd::test_support`'s convention.
+/// The recorder's end-to-end pin: the shapes erasure records on `/std/Map/internal/Node/Node` survive to the schema a compiled program's module carries. `leaf(key: K, value: V)` reads polymorphic-opaque twice; `fork(crit: Nat, zero: Node(K, V), one: Node(K, V))` reads immediate and family. The names are the schema's qualified debug names, per `curios_ersd::test_support`'s convention.
 #[test]
 fn a_recorded_shape_survives_to_the_program_schema() {
     let module = ersd_optm(SPINES);
     let family = module
         .families()
         .iter()
-        .find(|family| family.debug_name.as_deref() == Some("/std/Map/Node/Node"))
+        .find(|family| family.debug_name.as_deref() == Some("/std/Map/internal/Node/Node"))
         .expect("the program module carries the prelude's Node family");
 
     let shapes: BTreeMap<&str, Vec<FieldShape>> = family
@@ -85,7 +85,7 @@ fn a_recorded_shape_survives_to_the_program_schema() {
             .expect("live family")
             .debug_name
             .as_deref(),
-        Some("/std/Map/Node/Node"),
+        Some("/std/Map/internal/Node/Node"),
         "and it is Node's own, recorded through the self-reference",
     );
 }
