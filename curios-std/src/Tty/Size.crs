@@ -1,4 +1,4 @@
-use /std/{Nat, Str, Show, Spell};
+use /std/{Nat, Show, Spell, Fmt};
 use /std/ops/{Eql};
 
 --- The terminal's size in cells.
@@ -16,5 +16,5 @@ satisfy Spell(Size) {
 }
 
 satisfy Show(Size) {
-    show(s) = Str/flatten([Nat/to_str(s.cols), "x", Nat/to_str(s.rows)]),
+    show(s) = Fmt/render("%x%")(s.cols)(s.rows),
 }

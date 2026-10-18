@@ -1,4 +1,4 @@
-use /std/{Nat, Str, Show};
+use /std/{Nat, Show, Fmt};
 
 --- Why a host operation failed: a named status, or `other` with the errno it carries.
 pub induct Error: pub Type
@@ -46,7 +46,7 @@ satisfy Show(Error) {
         | connection_reset() => "connection_reset"
         | broken_pipe() => "broken_pipe"
         | too_long() => "too_long"
-        | not_text(valid) => Str/flatten(["not_text(", Nat/to_str(valid), ")"])
-        | other(n) => Str/flatten(["other(", Nat/to_str(n), ")"])
+        | not_text(valid) => Fmt/render("not_text(%)")(valid)
+        | other(n) => Fmt/render("other(%)")(n)
         end,
 }

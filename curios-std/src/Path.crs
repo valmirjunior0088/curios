@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, List, Show, Spell};
+use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, List, Show, Spell, Fmt};
 use /std/ops/{Eql};
 
 --- A path as the host holds it.
@@ -99,7 +99,7 @@ satisfy Show(Path) {
 satisfy Spell(Path) {
     spell(p) =
         match Str/of_bytes(p.0)
-        | success(s) => Str/flatten(["Path/of_str(", Spell/spell(s), ")"])
-        | failure(_) => Str/flatten(["Path/of_bytes(", Spell/spell(p.0), ")"])
+        | success(s) => Fmt/render("Path/of_str(#)")(s)
+        | failure(_) => Fmt/render("Path/of_bytes(#)")(p.0)
         end,
 }

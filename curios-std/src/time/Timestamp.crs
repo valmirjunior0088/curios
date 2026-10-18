@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Str, Io, Show};
+use /std/{Nat, Bool, Str, Io, Show, Fmt};
 use /std/ops/{Eql};
 use /std/time/{Duration};
 
@@ -41,5 +41,5 @@ satisfy Eql(Timestamp) {
 
 --- `secs.nanos`, the nanoseconds padded to nine digits.
 satisfy Show(Timestamp) {
-    show(t) = Str/flatten([Nat/to_str(t.secs), ".", Str/pad_start(Nat/to_str(t.nanos), 9, '0')]),
+    show(t) = Fmt/render("%.%")(t.secs)(Str/pad_start(Nat/to_str(t.nanos), 9, '0')),
 }

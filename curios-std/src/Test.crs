@@ -1,5 +1,5 @@
-use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Program, print,
-    Process};
+use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Fmt, Program,
+    print, Process};
 use /std/ops/{Eql};
 use /std/time/{Duration};
 
@@ -75,8 +75,7 @@ pub let assert(condition: Bool) -> Test({}) =
 pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Test({}) =
     match actual == expected
     | true => pure(())
-    | false =>
-        fail(Str/flatten(["expected ", Spell/spell(expected), " but got ", Spell/spell(actual)]))
+    | false => fail(Fmt/render("expected # but got #")(expected)(actual))
     end;
 
 --- Flatten an effectful thunk returning a test. A function returning `Test(A)` can instead sequence its `Io` actions directly.
@@ -137,7 +136,7 @@ let report(name: Str, test: Test({})) -> Io(Bool) =
         let _ = print(Str/concat(name, ": passed\n"))!;
         Io/pure(true)
     | failure(failure) =>
-        let _ = print(Str/flatten([name, ": failed\n  ", message(failure), "\n"]))!;
+        let _ = Fmt/print("%: failed\n  %\n")(name)(message(failure))!;
         Io/pure(false)
     end;
 
