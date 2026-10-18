@@ -149,7 +149,7 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
 }
 
 /// Whether a `_` prefix keeps the declaration at `name`: on its own segment, or on any module above it, since keeping a module keeps what it holds.
-fn kept(name: &Qualifier) -> bool {
+pub(super) fn kept(name: &Qualifier) -> bool {
     name.iter().any(|segment| segment.starts_with('_'))
 }
 

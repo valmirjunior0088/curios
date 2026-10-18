@@ -115,11 +115,15 @@ pub(super) fn revise(
     }
 }
 
-/// Each of `baseline`'s declarations the walk did not keep, `steps` being the ones it met, with the names its items declared.
-pub(super) fn gone<'b>(
-    baseline: &'b PreparedText,
-    steps: &[Step],
-) -> Vec<(&'b Rc<LoweredDeclaration>, Vec<curios_core::Global>)> {
+/// One of a baseline's declarations a walk did not keep: its record, and the places and the names of its items in the baseline.
+pub(super) struct Gone<'b> {
+    pub record: &'b Rc<LoweredDeclaration>,
+    pub places: Vec<usize>,
+    pub names: Vec<curios_core::Global>,
+}
+
+/// Each of `baseline`'s declarations the walk did not keep, `steps` being the ones it met ([`Gone`]).
+pub(super) fn gone<'b>(baseline: &'b PreparedText, steps: &[Step]) -> Vec<Gone<'b>> {
     let kept = steps
         .iter()
         .filter_map(|step| step.kept)
@@ -131,11 +135,16 @@ pub(super) fn gone<'b>(
         .iter()
         .filter(|(first, _)| !kept.contains(first))
         .map(|(first, record)| {
-            let names = run(items, place_of(first), record.facts().len())
-                .into_iter()
-                .flat_map(|place| names_at(items, place))
+            let places = run(items, place_of(first), record.facts().len());
+            let names = places
+                .iter()
+                .flat_map(|place| names_at(items, *place))
                 .collect();
-            (record, names)
+            Gone {
+                record,
+                places,
+                names,
+            }
         })
         .collect()
 }

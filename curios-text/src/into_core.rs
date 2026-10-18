@@ -55,6 +55,9 @@ pub use mention::*;
 mod revision;
 use revision::*;
 
+mod reachability;
+use reachability::*;
+
 use {
     crate::{
         Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
@@ -447,6 +450,12 @@ pub struct PreparedText {
     /// Who read each binding, of the unit's lowered declarations read backwards: made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`LookupReaders`]).
     #[archived_with(curios_archive::Skip)]
     lookups: OnceCell<LookupReaders>,
+    /// What the `unused-declaration` lint's roots reach of the unit's items, made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`Reachability`]).
+    #[archived_with(curios_archive::Skip)]
+    reachability: OnceCell<Rc<Reachability>>,
+    /// What the entry's terms name, each a root of the lint, where the unit was lowered in this process: nothing for a unit with no entry, and `None` for one restored, whose entry no unit holds.
+    #[archived_with(curios_archive::Skip)]
+    entry_roots: Option<Rc<BTreeSet<curios_core::Global>>>,
 }
 
 /// An item the parser could not read, as the lowering carries it: the parser's report, and the name its head declared, registered so a reference to it resolves to this name — which the elaborator withholds, as it withholds every dependent of a refusal — rather than reporting as unbound. `None` where the head did not parse as far as a name, whose references then report as the unbound names they are.
@@ -704,6 +713,32 @@ impl PreparedText {
         self.imports
             .get()
             .unwrap_or_else(|error| panic!("a unit's import scopes failed to restore: {error}"))
+    }
+
+    /// What the lint's roots reach of the unit's items. See the field. `None` for an entry restored, whose entry's terms no unit holds.
+    fn reachability(&self) -> Option<&Rc<Reachability>> {
+        if let Some(held) = self.reachability.get() {
+            return Some(held);
+        }
+        let entry = match (
+            &self.entry_roots,
+            self.mounts.iter().any(|mount| mount.prefix.is_root()),
+        ) {
+            (Some(entry), _) => (**entry).clone(),
+            (None, false) => BTreeSet::new(),
+            (None, true) => return None,
+        };
+        let items = reachability::Items {
+            items: &self.core.items,
+            places: self.places(),
+            records: self.lowerings(),
+        };
+
+        Some(
+            self.reachability.get_or_init(|| {
+                Rc::new(Reachability::of(items, &self.public, &self.mounts, entry))
+            }),
+        )
     }
 
     /// The unit's aliases. See the field.
@@ -2544,7 +2579,7 @@ fn into_core_unit_within(
         .unwrap_or_default();
     let gone_names = gone
         .iter()
-        .flat_map(|(_, names)| names)
+        .flat_map(|gone| &gone.names)
         .copied()
         .collect::<HashSet<_>>();
 
@@ -2729,7 +2764,7 @@ fn into_core_unit_within(
     let aliases_moved = made.iter().any(|index| alias(facts[*index]))
         || gone
             .iter()
-            .any(|(record, _)| record.facts().iter().any(alias));
+            .any(|gone| gone.record.facts().iter().any(alias));
     let aliases = match (&baseline, aliases_moved) {
         (Some(baseline), false) => Rc::clone(baseline.unit().aliases()),
         _ => Rc::new(aliases(
@@ -2739,7 +2774,7 @@ fn into_core_unit_within(
                 .zip(facts.iter().copied()),
         )),
     };
-    let only = match (&baseline, reread) {
+    let only = match (&baseline, reread.clone()) {
         (Some(baseline), Some(reread)) if !aliases_moved => {
             let made_names = made
                 .iter()
@@ -2761,7 +2796,7 @@ fn into_core_unit_within(
                     .map(|(name, _, _)| name)
                     .chain(
                         gone.iter()
-                            .flat_map(|(_, names)| names)
+                            .flat_map(|gone| &gone.names)
                             .filter(|name| {
                                 baseline
                                     .unit()
@@ -2800,16 +2835,25 @@ fn into_core_unit_within(
         only.as_ref(),
     )?;
 
-    let dead = unused_declarations(&Declarations {
-        items: &flat_items,
-        facts: &facts,
-        placed: &|extent| shared.anchoring.resolved(extent),
-        entry: entry.as_ref(),
-        table: &table,
-        public: &public,
-        own: &own,
-        mod_spans: &mod_spans,
-    });
+    // Whole, what no root reaches is found by a walk from every root; over a baseline, it is the baseline's decided again where the edit could have moved it, once the unit is a version of the baseline's.
+    let whole_dead = match &baseline {
+        None => unused_declarations(&Declarations {
+            items: &flat_items,
+            facts: &facts,
+            placed: &|extent| shared.anchoring.resolved(extent),
+            entry: entry.as_ref(),
+            table: &table,
+            public: &public,
+            own: &own,
+            mod_spans: &mod_spans,
+        }),
+        Some(_) => Vec::new(),
+    };
+    let made_first = made
+        .iter()
+        .filter_map(|index| flat_items[*index].names().first().copied())
+        .collect::<Vec<_>>();
+    let entry_roots = entry_names(entry.as_ref());
 
     // Where each definition is named, by the name it leaves the lowering under, which for a witness is the one its signature gave it above.
     let definitions = flat_items
@@ -2830,7 +2874,7 @@ fn into_core_unit_within(
         .map(FlatItem::into_core)
         .collect::<Vec<_>>();
     // Over a baseline, the unit is a version of the baseline's: its items, records, names and declarations, and what it minted, imported and anchored, the baseline's with what the walk changed.
-    let (items, records, places, declared, revision) = match &baseline {
+    let (items, records, places, declared, revision, renamed) = match &baseline {
         Some(baseline) => {
             let revised = revise(baseline.unit(), &steps, &declarations, &made);
             shared.settle(
@@ -2845,6 +2889,7 @@ fn into_core_unit_within(
                 OnceCell::from(revised.places),
                 OnceCell::from(revised.declarations),
                 Some(revised.revision),
+                revised.renamed,
             )
         }
         None => (
@@ -2853,7 +2898,51 @@ fn into_core_unit_within(
             OnceCell::new(),
             OnceCell::new(),
             None,
+            Vec::new(),
         ),
+    };
+
+    // Over a baseline, what no root reaches decided again where the edit could have moved it, and every item decided again where the modules open to a consumer may have.
+    let (reachability, dead) = match &baseline {
+        Some(baseline) => {
+            let earlier = baseline.unit();
+            let now = reachability::Items {
+                items: &items,
+                places: places
+                    .get()
+                    .expect("a version holds where it places each name"),
+                records: &records,
+            };
+            let made_places = made_first
+                .iter()
+                .filter_map(|name| now.places.place(name).map(|place| place.item()))
+                .collect::<Vec<_>>();
+            let state = match (earlier.reachability(), &reread) {
+                (Some(state), Some(exported)) => state.revised(
+                    reachability::Items {
+                        items: &earlier.core().items,
+                        places: earlier.places(),
+                        records: earlier.lowerings(),
+                    },
+                    now,
+                    &gone,
+                    &made_places,
+                    &renamed,
+                    exported,
+                    &|name| audiences.exported_at(name),
+                    entry_roots.clone(),
+                ),
+                _ => Reachability::of(now, public.own(), &own, entry_roots.clone()),
+            };
+            let dead = state.lints(
+                now,
+                &|extent| shared.anchoring.resolved(extent),
+                &|module, label| table.get(module)?.get_child(label),
+                &mod_spans,
+            );
+            (OnceCell::from(Rc::new(state)), dead)
+        }
+        None => (OnceCell::new(), whole_dead),
     };
 
     let unit = PreparedText {
@@ -2898,6 +2987,8 @@ fn into_core_unit_within(
             keyed: held_keys,
         }),
         lookups: lookups.map(OnceCell::from).unwrap_or_default(),
+        reachability,
+        entry_roots: Some(Rc::new(entry_roots)),
     };
 
     Ok((unit, entry))

@@ -376,3 +376,75 @@ fn a_witness_written_ahead_of_one_alike_takes_its_place() {
     same_unit(&over, &whole);
     same_keys(&over, &whole);
 }
+
+/// The lints of a unit lowered over a baseline and of a whole lowering, each as a report prints it, in order.
+fn lints_of(unit: &PreparedText) -> Vec<String> {
+    unit.lints()
+        .iter()
+        .map(|lint| format!("{:?}", lint.report))
+        .collect()
+}
+
+/// `a.crs` lowered whole, then written as each of `edits` in turn over the last lowering: at each, the lints of the unit lowered over the last and of a whole lowering are one.
+fn same_lints(name: &str, first: &str, edits: &[&str]) {
+    let root = written(name, first);
+    let mut baseline =
+        into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+    for edit in edits {
+        let (over, whole) = edited(&root, edit, &baseline);
+        assert_eq!(lints_of(&over), lints_of(&whole), "after writing {edit:?}");
+        baseline = over;
+    }
+}
+
+/// A private declaration whose one reader stops reading it becomes unused, and one a reader starts to read becomes used again.
+#[test]
+fn a_declaration_its_reader_drops_becomes_unused() {
+    same_lints(
+        "lint-dropped",
+        "let helper: Type = Type;\n\npub let x: Type = helper;\n",
+        &[
+            "let helper: Type = Type;\n\npub let x: Type = Type;\n",
+            "let helper: Type = Type;\n\npub let x: Type = helper;\n",
+        ],
+    );
+}
+
+/// Private declarations that read one another and nothing reaches are unused, a cycle among them included, and a root that reaches one of them reaches the rest.
+#[test]
+fn a_cycle_nothing_reaches_is_unused() {
+    same_lints(
+        "lint-cycle",
+        "let even(n: Type) -> Type = odd(n);\n\nlet odd(n: Type) -> Type = even(n);\n\npub let x: Type = even(Type);\n",
+        &[
+            "let even(n: Type) -> Type = odd(n);\n\nlet odd(n: Type) -> Type = even(n);\n\npub let x: Type = Type;\n",
+            "let even(n: Type) -> Type = odd(n);\n\nlet odd(n: Type) -> Type = even(n);\n\npub let x: Type = odd(Type);\n",
+        ],
+    );
+}
+
+/// A private module every declaration of which goes unused is reported once, at the module, and a declaration added that reads one of them lifts the fold.
+#[test]
+fn a_private_module_whose_declarations_go_unused_is_folded() {
+    same_lints(
+        "lint-module",
+        "mod inner\n    pub let w: Type = Type;\nend\n\npub let x: Type = inner/w;\n",
+        &[
+            "mod inner\n    pub let w: Type = Type;\nend\n\npub let x: Type = Type;\n",
+            "mod inner\n    pub let w: Type = Type;\nend\n\npub let x: Type = Type;\n\npub let y: Type = inner/w;\n",
+        ],
+    );
+}
+
+/// A declaration made private is reported where nothing reads it, and made public again is not.
+#[test]
+fn a_declaration_made_private_is_reported_where_nothing_reads_it() {
+    same_lints(
+        "lint-private",
+        "pub let w: Type = Type;\n\npub let x: Type = Type;\n",
+        &[
+            "let w: Type = Type;\n\npub let x: Type = Type;\n",
+            "pub let w: Type = Type;\n\npub let x: Type = Type;\n",
+        ],
+    );
+}
