@@ -337,15 +337,14 @@ pub(crate) fn answers_differ(
         return Ok(false);
     };
     let telescope = entry.telescope.clone();
+    let scoped = entry.scoped;
     let born = entry.frames.clone();
     let result = entry.result.clone();
 
     let mark = context.solution_mark();
     let outcome = context.at_birth(&born, |context| {
         context.with_frame(|context| {
-            for (name, ty) in telescope.iter() {
-                context.assume(name, ty);
-            }
+            context.assume_birth_scope(&telescope, scoped, &born);
 
             context.with_oracle(|context| convert_outcome(context, &result, one, another))
         })
@@ -1935,6 +1934,7 @@ impl Convert {
             return Ok(Solved::Failed);
         };
         let telescope = entry.telescope.clone();
+        let scoped = entry.scoped;
         let born = entry.frames.clone();
         let result = entry.result.clone();
 
@@ -2076,9 +2076,7 @@ impl Convert {
         let mark = context.solution_mark();
         let revalidated = context.at_birth(&born, |context| {
             context.with_frame(|context| {
-                for (name, ty) in telescope.iter() {
-                    context.assume(name, ty);
-                }
+                context.assume_birth_scope(&telescope, scoped, &born);
 
                 // The check has three answers. A candidate that checks fits. One that fails where the check wanted to park has not been judged: a type it met — the frozen type itself, while the metavariable's own type is unsolved, or one inside it — still waits on a metavariable, and outside the oracle the same check would have waited for it. Read as a rejection, that would make the verdict follow the order parked work is retried in, a candidate refused one retry short of the solution that types it. Any other failure is a meta-free, well-scoped candidate that is not validly typed here. The check is a [`Probe`]: a candidate it could not afford is no rejected candidate, and the budget's refusal propagates instead.
                 context.with_oracle(|context| {

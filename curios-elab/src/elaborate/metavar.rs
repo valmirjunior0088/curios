@@ -42,8 +42,7 @@ pub(super) fn elaborate_metavar(
                 Ok((rebuilt, expected))
             } else {
                 // Rebuild the hole with the identity spine over its frozen telescope: the rebuilt term is what flows downstream, so every surviving occurrence carries the delayed substitution. Telescope and spine are the shared per-Γ snapshot.
-                let (telescope, spine) = context.identity_snapshot();
-                context.birth_metavar(id, telescope, expected.clone());
+                let spine = context.birth_here(id, expected.clone());
                 if let Some(extent) = term.extent() {
                     context.note_written(id, extent);
                     if matches!(metavar.origin, MetavarOrigin::Goal) {
@@ -71,8 +70,7 @@ pub(super) fn elaborate_metavar(
             None if matches!(metavar.origin, MetavarOrigin::Goal) => {
                 let sort = context.fresh_sort("inferred goal sort");
                 let result = context.fresh_hole_metavar(sort, term.extent());
-                let (telescope, spine) = context.identity_snapshot();
-                context.birth_metavar(id, telescope, result.clone());
+                let spine = context.birth_here(id, result.clone());
                 if let Some(extent) = term.extent() {
                     context.note_goal_extent(id, extent);
                 }

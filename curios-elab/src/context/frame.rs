@@ -262,6 +262,8 @@ pub(crate) struct Frame {
     /// The place the next local takes, and the first place this frame bound itself.
     next_local: i64,
     first_local: i64,
+    /// How many times the local frames through this one bound a name again or replaced its type: two frames over one chain that count alike bind every name the frame beneath both binds as it does ([`Frames::binds_as`](super::Frames::binds_as)).
+    pub(super) rebound: usize,
     /// The `use`-plicity binders among the locals, in binding order: resolution's search space, scanned innermost first.
     pub(super) witnesses: Ordered<(Free, Term)>,
     next_witness: i64,
@@ -315,6 +317,7 @@ impl Frame {
                 locals: Ordered::new(),
                 next_local: 0,
                 first_local: 0,
+                rebound: 0,
                 witnesses: Ordered::new(),
                 next_witness: 0,
                 refinements: Recorded::new(),
@@ -348,6 +351,7 @@ impl Frame {
             locals: beneath.locals.clone(),
             next_local: beneath.next_local,
             first_local: beneath.next_local,
+            rebound: beneath.rebound,
             witnesses: beneath.witnesses.clone(),
             next_witness: beneath.next_witness,
             refinements: Recorded::new(),
@@ -388,6 +392,7 @@ impl Frame {
     pub(super) fn bind(&mut self, name: Free, type_: Term) {
         let place = self.next_local;
         self.next_local += 1;
+        self.rebound += usize::from(self.assumptions.contains_key(&name));
         self.locals.insert(place, (name, type_.clone()));
         self.assumptions.insert(
             name,
@@ -412,6 +417,7 @@ impl Frame {
             return;
         };
         binding.type_ = type_.clone();
+        self.rebound += 1;
         self.locals.insert(binding.place, (*name, type_.clone()));
         self.assumptions.insert(*name, binding);
     }

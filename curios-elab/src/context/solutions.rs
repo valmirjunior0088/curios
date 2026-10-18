@@ -25,6 +25,8 @@ use {
 pub(crate) struct MetaEntry {
     /// Γ frozen at birth: the local assumption context in binding order, with birth-time types. Drives the scope check and re-validation.
     pub telescope: SharedTelescope,
+    /// How the telescope stands to `frames`: taken with them, so they bind it, or stated for the metavariable.
+    pub scoped: Scoped,
     /// The frames the metavariable was born under, as they stood: what is judged of it is judged standing on them where they are not the live ones ([`Context::at_birth`](super::Context::at_birth)). Their match-arm refinements are what a solution may rest on beyond Γ, and all it may, each in the frame it was registered in, and containment compares them as it compares Γ; their definitions are the birth's; their witness binders are the reader position a report about the metavariable is spelled for; and their innermost dead arm is why an implicit minted there and never solved has no value to take.
     pub frames: HeldFrames,
     /// The metavariable's type — the `expected` it was checked against at birth.
@@ -82,6 +84,15 @@ struct Awaiting {
     depth: usize,
     /// Whether it is still reading its parts or completing. A term that has completed awaits nothing.
     standing: bool,
+}
+
+/// How a metavariable's telescope stands to the frames it holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Scoped {
+    /// Taken with the frames where the metavariable was born: they bind every binder of it, each at its type, and a judgment standing on them reads it without assuming it again.
+    Held,
+    /// Stated for the metavariable — a restriction's stand-in over a narrower context's binders, which the frames both births held may not bind, or a fixture's: a judgment of it assumes the telescope again.
+    Stated,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -491,7 +502,14 @@ impl Solutions {
         frames: HeldFrames,
         result: Term,
     ) {
-        self.birth(id, telescope, frames, result, MetaKind::RecSlot);
+        self.birth(
+            id,
+            telescope,
+            Scoped::Held,
+            frames,
+            result,
+            MetaKind::RecSlot,
+        );
     }
 
     /// Materialize a metavariable's birth record, of the kind `kind`. The store grows to cover `id`; births happen exactly once per id (each `_` is distinct and occurs once). The façade stamps the write.
@@ -499,6 +517,7 @@ impl Solutions {
         &mut self,
         id: MetavarId,
         telescope: SharedTelescope,
+        scoped: Scoped,
         frames: HeldFrames,
         result: Term,
         kind: MetaKind,
@@ -510,6 +529,7 @@ impl Solutions {
         self.next_metavar.seed(id.0 as u64 + 1);
         self.entries[id.0] = Some(MetaEntry {
             telescope,
+            scoped,
             frames,
             result,
             solution: None,

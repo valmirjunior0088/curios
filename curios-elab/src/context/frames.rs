@@ -243,6 +243,13 @@ impl<'s> Frames<'s> {
         refinements_within(&read, &held) && refinements_within(&held, &read)
     }
 
+    /// Whether a lookup reads every name `held` binds as `held` binds it: no local frame in view bound one again or replaced its type since it was held. Asked of frames that stand over `held`, as a judgment made for what holds them stands ([`Context::at_birth`](crate::Context::at_birth)), where the local frames through the innermost count every such rebinding.
+    pub(crate) fn binds_as(&self, held: &HeldFrames) -> bool {
+        let rebound = |frame: Option<&Rc<Frame>>| frame.map_or(0, |frame| frame.rebound);
+
+        rebound(self.top.as_ref()) == rebound(held.innermost())
+    }
+
     /// The innermost frame as it stands: the frame a block's end leaves.
     pub(crate) fn innermost_frame(&self) -> &Frame {
         self.top.as_deref().unwrap_or(&self.base)

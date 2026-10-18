@@ -2125,25 +2125,41 @@ impl<'s> Context<'s> {
 
     // === Metavariable store =================================================
 
-    /// Materialize a metavariable's birth record ([`Solutions::birth`]), stamping the write.
+    /// Materialize a metavariable's birth record over a telescope stated for it ([`Solutions::birth`], [`Scoped::Stated`]), under the frames that stand, stamping the write: how a fixture states its metavariables, where elaboration births one where it stands ([`Context::birth_here`]).
+    #[cfg(test)]
     pub(crate) fn birth_metavar(
         &mut self,
         id: MetavarId,
         telescope: impl Into<SharedTelescope>,
         result: Term,
     ) {
-        self.birth_metavar_as(id, telescope.into(), result, MetaKind::Inference);
+        self.birth_metavar_as(
+            id,
+            telescope.into(),
+            Scoped::Stated,
+            result,
+            MetaKind::Inference,
+        );
+    }
+
+    /// Materialize a metavariable's birth record where the context stands — its telescope the local binders in scope, taken with the frames that stand ([`Scoped::Held`]) — and hand back its identity spine.
+    pub(crate) fn birth_here(&mut self, id: MetavarId, result: Term) -> SharedSpine {
+        let (telescope, spine) = self.identity_snapshot();
+        self.birth_metavar_as(id, telescope, Scoped::Held, result, MetaKind::Inference);
+
+        spine
     }
 
     fn birth_metavar_as(
         &mut self,
         id: MetavarId,
         telescope: SharedTelescope,
+        scoped: Scoped,
         result: Term,
         kind: MetaKind,
     ) {
         let frames = self.hold_frames();
-        self.birth_under(id, telescope, frames, result, kind);
+        self.birth_under(id, telescope, scoped, frames, result, kind);
     }
 
     /// [`Solutions::birth`] under the frames `frames`, stamping the write: a metavariable born where the context stands holds the frames that stand, and one born for another context, a lambda's domain or a restriction's stand-in, the frames of that one.
@@ -2151,6 +2167,7 @@ impl<'s> Context<'s> {
         &mut self,
         id: MetavarId,
         telescope: SharedTelescope,
+        scoped: Scoped,
         frames: HeldFrames,
         result: Term,
         kind: MetaKind,
@@ -2159,7 +2176,22 @@ impl<'s> Context<'s> {
         self.underway
             .attempt
             .solutions
-            .birth(id, telescope, frames, result, kind);
+            .birth(id, telescope, scoped, frames, result, kind);
+    }
+
+    /// Bring the telescope a metavariable was born over into scope, where a judgment of it stands on the frames it was born under ([`Context::at_birth`]): nothing where the telescope was taken with those frames and no binder was bound again in view since, the frames binding it as they did, and every binder again otherwise. Assuming it every time would cost each judgment the scope the metavariable was born in.
+    pub(crate) fn assume_birth_scope(
+        &mut self,
+        telescope: &[(Free, Term)],
+        scoped: Scoped,
+        born: &HeldFrames,
+    ) {
+        if scoped == Scoped::Held && self.typing.frames.binds_as(born) {
+            return;
+        }
+        for (name, type_) in telescope {
+            self.assume(name, type_);
+        }
     }
 
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.
@@ -2326,6 +2358,7 @@ impl<'s> Context<'s> {
         self.birth_under(
             id,
             scope.telescope.clone(),
+            Scoped::Held,
             scope.frames.clone(),
             result,
             MetaKind::Inference,
@@ -2609,7 +2642,14 @@ impl<'s> Context<'s> {
         } = restriction;
 
         let narrowed = self.underway.attempt.solutions.mint();
-        self.birth_under(narrowed, telescope, frames, result, MetaKind::Inference);
+        self.birth_under(
+            narrowed,
+            telescope,
+            Scoped::Stated,
+            frames,
+            result,
+            MetaKind::Inference,
+        );
         let stand_in = Term::metavar_birthed(narrowed, origin, arguments);
         let stand_in = match extent {
             Some(extent) => stand_in.with_extent(extent),
@@ -2631,8 +2671,7 @@ impl<'s> Context<'s> {
         origin: MetavarOrigin,
     ) -> (MetavarId, Term) {
         let id = self.underway.attempt.solutions.mint();
-        let (telescope, spine) = self.identity_snapshot();
-        self.birth_metavar(id, telescope, result);
+        let spine = self.birth_here(id, result);
         let metavar = Term::metavar_birthed(id, origin, spine);
 
         let metavar = match extent {
@@ -3114,7 +3153,7 @@ impl<'s> Context<'s> {
     ) -> (MetavarId, Term) {
         let id = self.underway.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
-        self.birth_metavar_as(id, telescope, result, MetaKind::Placeholder);
+        self.birth_metavar_as(id, telescope, Scoped::Held, result, MetaKind::Placeholder);
         let term = Term::metavar_birthed(id, MetavarOrigin::Hole, spine);
 
         let term = match extent {
