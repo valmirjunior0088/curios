@@ -5,11 +5,49 @@ use {
         Atom, Callee, ContinuationId, Edge, Function, FunctionId, Intrinsic, IntrinsicCall, Module,
         Node, NodeId, RowId, ValueExpr, ValueId, atoms,
     },
+    curios_utilities::Sorted,
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
+        hash::Hash,
     },
 };
+
+/// The names a region may use: what encloses it, with what it binds, persistent, so a region's set is its parent's with the names it adds and shares every node of it. A region nested n deep sees every function, value and continuation bound above it, so a set copied into each region would cost the square of the nesting.
+#[derive(Debug, Clone)]
+pub(crate) struct InScope<T>(Sorted<T, ()>);
+
+impl<T> Default for InScope<T> {
+    fn default() -> Self {
+        Self(Sorted::default())
+    }
+}
+
+impl<T: Ord + Hash + Clone> InScope<T> {
+    /// The scope holding `name` alone.
+    fn of(name: T) -> Self {
+        let mut scope = Self::default();
+        scope.insert(name);
+        scope
+    }
+
+    pub(crate) fn insert(&mut self, name: T) {
+        self.0.insert(name, ());
+    }
+
+    /// Whether a region of this scope may use `name`.
+    pub(crate) fn contains(&self, name: &T) -> bool {
+        self.0.contains_key(name)
+    }
+}
+
+impl<T: Ord + Hash + Clone> Extend<T> for InScope<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, names: I) {
+        for name in names {
+            self.insert(name);
+        }
+    }
+}
 
 /// What the module's functions state about returning: which continuation is whose sentinel, and how many values each hands back.
 ///
@@ -47,16 +85,16 @@ struct ScopeBinding {
 enum ScopeTask {
     Function {
         function: FunctionId,
-        values: BTreeSet<ValueId>,
-        functions: BTreeSet<FunctionId>,
+        values: InScope<ValueId>,
+        functions: InScope<FunctionId>,
     },
     Node {
         /// The function the node belongs to. It names the region in a verification message and is needed for nothing else, so a walk that reports nothing has none.
         owner: Option<FunctionId>,
         node: NodeId,
-        values: BTreeSet<ValueId>,
-        functions: BTreeSet<FunctionId>,
-        continuations: BTreeSet<ContinuationId>,
+        values: InScope<ValueId>,
+        functions: InScope<FunctionId>,
+        continuations: InScope<ContinuationId>,
     },
 }
 
@@ -71,9 +109,9 @@ struct ScopeStep {
 type NodeTask = (
     Option<FunctionId>,
     NodeId,
-    BTreeSet<ValueId>,
-    BTreeSet<FunctionId>,
-    BTreeSet<ContinuationId>,
+    InScope<ValueId>,
+    InScope<FunctionId>,
+    InScope<ContinuationId>,
 );
 
 /// The bookkeeping a lexical *verification* walk carries on top of the scope rules: which names have been bound, and which regions are still to visit.
@@ -81,7 +119,7 @@ type NodeTask = (
 struct ScopeVerifier {
     bound_functions: BTreeSet<FunctionId>,
     bound_values: BTreeSet<ValueId>,
-    function_work: Vec<(FunctionId, BTreeSet<ValueId>, BTreeSet<FunctionId>)>,
+    function_work: Vec<(FunctionId, InScope<ValueId>, InScope<FunctionId>)>,
     node_work: Vec<NodeTask>,
 }
 
@@ -352,7 +390,7 @@ impl Module {
     fn verify_lexical_scopes(&self, entry: FunctionId) -> Result<(), VerifyError> {
         let mut walk = ScopeVerifier {
             bound_functions: BTreeSet::from([entry]),
-            function_work: vec![(entry, BTreeSet::new(), BTreeSet::from([entry]))],
+            function_work: vec![(entry, InScope::default(), InScope::of(entry))],
             ..ScopeVerifier::default()
         };
         let mut visited_nodes = BTreeSet::new();
@@ -423,13 +461,13 @@ impl Module {
     /// The functions each body may name, by the rule [`Self::scope_step`] states and [`Self::verify_lexical_scopes`] enforces: its own `LetFun` group, every group enclosing it, and every group bound *before* it along the chain from the entry. Recorded rather than checked, so a pass forwarding a function reference into a body can ask whether that body may legally name it.
     ///
     /// A function the walk does not reach is absent rather than empty, and the caller decides what to answer for it. This runs mid-round, where the module is transiently unscoped by design and only a round boundary promises a walk from the entry reaches every live function.
-    pub(crate) fn lexical_scopes(&self) -> BTreeMap<FunctionId, BTreeSet<FunctionId>> {
+    pub(crate) fn lexical_scopes(&self) -> BTreeMap<FunctionId, InScope<FunctionId>> {
         let Some(entry) = self.entry() else {
             return BTreeMap::new();
         };
         let mut scopes = BTreeMap::new();
         let mut walk = ScopeVerifier {
-            function_work: vec![(entry, BTreeSet::new(), BTreeSet::from([entry]))],
+            function_work: vec![(entry, InScope::default(), InScope::of(entry))],
             ..ScopeVerifier::default()
         };
         let mut visited_nodes = BTreeSet::new();
@@ -460,8 +498,8 @@ impl Module {
     fn function_scope(
         &self,
         function: FunctionId,
-        mut values: BTreeSet<ValueId>,
-        functions: BTreeSet<FunctionId>,
+        mut values: InScope<ValueId>,
+        functions: InScope<FunctionId>,
     ) -> ScopeStep {
         let definition = self.function(function).unwrap();
         let mut step = ScopeStep::default();
@@ -477,7 +515,7 @@ impl Module {
             node: definition.body,
             values,
             functions,
-            continuations: BTreeSet::new(),
+            continuations: InScope::default(),
         });
         step
     }
@@ -489,9 +527,9 @@ impl Module {
         &self,
         owner: Option<FunctionId>,
         node: &Node,
-        values: BTreeSet<ValueId>,
-        functions: BTreeSet<FunctionId>,
-        continuations: BTreeSet<ContinuationId>,
+        values: InScope<ValueId>,
+        functions: InScope<FunctionId>,
+        continuations: InScope<ContinuationId>,
     ) -> ScopeStep {
         let mut step = ScopeStep::default();
         match node {
@@ -648,7 +686,7 @@ impl Module {
         facts: &ReturnFacts<'_>,
         bound_continuations: &mut BTreeSet<ContinuationId>,
     ) -> Result<(), VerifyError> {
-        let mut work = vec![(function.body, BTreeSet::<ContinuationId>::new())];
+        let mut work = vec![(function.body, InScope::<ContinuationId>::default())];
 
         while let Some((id, scope)) = work.pop() {
             let node = self
@@ -707,7 +745,7 @@ impl Module {
         current_function: FunctionId,
         return_cont: ContinuationId,
         facts: &ReturnFacts<'_>,
-        scope: &BTreeSet<ContinuationId>,
+        scope: &InScope<ContinuationId>,
         id: NodeId,
         node: &Node,
     ) -> Result<(), VerifyError> {
@@ -937,7 +975,7 @@ impl Module {
         function: FunctionId,
         return_cont: ContinuationId,
         facts: &ReturnFacts<'_>,
-        scope: &BTreeSet<ContinuationId>,
+        scope: &InScope<ContinuationId>,
         owner: NodeId,
         edge: &Edge,
     ) -> Result<(), VerifyError> {
@@ -958,7 +996,7 @@ impl Module {
         function: FunctionId,
         return_cont: ContinuationId,
         facts: &ReturnFacts<'_>,
-        scope: &BTreeSet<ContinuationId>,
+        scope: &InScope<ContinuationId>,
         target: ContinuationId,
     ) -> Result<usize, VerifyError> {
         if target == return_cont {

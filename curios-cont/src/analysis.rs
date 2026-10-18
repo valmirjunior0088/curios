@@ -1,7 +1,7 @@
 use {
     super::{
-        Atom, Callee, ContinuationId, Edge, FunctionId, Knowledge, Module, Node, NodeId, ValueExpr,
-        ValueId, atoms, merge_inputs, record_known_literals, scc_invariant_knowns,
+        Atom, Callee, ContinuationId, Edge, FunctionId, InScope, Knowledge, Module, Node, NodeId,
+        ValueExpr, ValueId, atoms, merge_inputs, record_known_literals, scc_invariant_knowns,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -16,7 +16,7 @@ pub(crate) struct CallAnalysis {
     pub(crate) recursive: BTreeSet<FunctionId>,
     pub(crate) sccs: SccAnalysis,
     /// The functions each function's body may name: its own `LetFun` group, every group enclosing it, and every group bound before it along the chain from the entry — the scope `verify_lexical_scopes` walks, recorded per function so a pass that forwards a function reference into a body can ask whether that body may name it. Where the walk does not reach a live function, the entry is the owner-chain subset instead, which refuses more than the rule does and never less.
-    pub(crate) lexical_scope: BTreeMap<FunctionId, BTreeSet<FunctionId>>,
+    pub(crate) lexical_scope: BTreeMap<FunctionId, InScope<FunctionId>>,
 }
 /// Function strongly-connected components of the known-callee call graph, computed at an explicit phase boundary. `SccId` is a dense index into `members`; each component lists its functions in `FunctionId` order.
 pub(crate) type SccId = usize;
@@ -218,7 +218,7 @@ pub(crate) fn analyze_calls(module: &Module) -> CallAnalysis {
         if analysis.lexical_scope.contains_key(&function) {
             continue;
         }
-        let mut scope = BTreeSet::new();
+        let mut scope = InScope::default();
         let mut visited = BTreeSet::new();
         let mut current = function;
         while visited.insert(current) {
