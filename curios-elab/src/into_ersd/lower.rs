@@ -5,16 +5,16 @@
 use {
     super::{
         Binding, Bound, Environment, ErasedBaseline, ErasedItem, ErasedOver, ErasedUnit, Erasures,
-        Error, Export, Intrinsic, Let, Projected, Retyping, Subterm, Telescope, Term, emitted,
-        evaluate, intrinsic, link, register_shape,
+        Error, Export, Intrinsic, Let, Projected, Projection, Retyping, Subterm, Telescope, Term,
+        emitted, evaluate, intrinsic, link, register_shape,
     },
     crate::{
-        Answered, Foreign, Question, Traces, validate_entry_universes, validate_universes,
-        validate_universes_of,
+        Answered, Foreign, Parts, Question, Readers, Traces, validate_entry_universes,
+        validate_universes, validate_universes_in,
     },
     curios_core::{
-        Certification, Entrypoint, Extent, Free, Global, Item, Module, Operand, Program, Zonked,
-        foreign_operands, project_erased_universes,
+        Certification, Entrypoint, Extent, Free, Global, Item, Module, Operand, Program, Trace,
+        Zonked, foreign_operands, project_erased_universes,
     },
     curios_utilities::{SyntaxRegistry, grown},
     std::{
@@ -530,31 +530,47 @@ pub fn erase_unit(
     })
 }
 
-/// [`erase_unit`] for a unit compiled over a baseline: an item keeps the erased form `baseline` has for it, the baseline's own and no copy of it, where the elaborator kept its declaration and everything its erasure asked there is answered as it was (`over`), and every other is erased.
+/// [`erase_unit`] for a unit compiled over a baseline: an item keeps the erased form `baseline` has for it, the baseline's own and no copy of it, where the elaborator kept its declaration and everything its erasure asked there is answered as it was (`over`), and every other is erased. The walk visits the items an edit could reach and no other; where the module is a version of the baseline's, the unit is a version of the baseline's unit and the module's projection of the baseline's.
 ///
-/// The universes held to their schemes are those of the items the elaborator did not keep, and of any the baseline holds no erased form for: a kept declaration's were held where the baseline was compiled, and what it reads of a scheme stands, or it would not have been kept.
+/// The universes held to their schemes are those of the items the elaborator made again: a kept declaration's were held where the baseline was compiled, and what it reads of a scheme stands, or it would not have been kept.
+///
+/// Beside the unit comes what erasure read of `module` out of its universes, which the unit of `module` keeps ([`Projection`]), so an erasure over that unit finds it as this one left it.
 pub fn erase_unit_over(
     budget: u64,
     syntax: SyntaxRegistry,
     scope: Erasures<'_>,
     module: &Zonked<Module>,
     baseline: ErasedBaseline<'_>,
-) -> Result<ErasedUnit, Error> {
+) -> Result<(ErasedUnit, Projection), Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
         let module = module.as_module();
-        validate_universes_of(module, &|name| {
-            baseline.made.contains(name) || baseline.erased.held(name).is_none()
-        })?;
-        let view = Projected::over(scope, module);
-        let context = &mut Retyping::over(budget, syntax, &view);
-        erase_items(
-            context,
-            &view,
-            scope,
+        let made = baseline
+            .made
+            .iter()
+            .filter_map(|name| baseline.now.place(name))
+            .map(|place| place.item())
+            .collect::<BTreeSet<_>>();
+        validate_universes_in(
             module,
-            Some(ErasedOver::new(baseline, module, scope)),
-        )
+            baseline.now,
+            &made
+                .iter()
+                .map(|place| &module.items[*place])
+                .collect::<Vec<_>>(),
+        )?;
+        let over = ErasedOver::new(baseline, module, scope);
+        let projection = match over.changes() {
+            Some(changes) => baseline.projection.revised(baseline.core, module, changes),
+            None => Projection::of(module),
+        };
+        let view = Projected::revised(scope, module, baseline.now, projection);
+        let erased = {
+            let context = &mut Retyping::over(budget, syntax, &view);
+            erase_items(context, &view, scope, module, Some(over))?
+        };
+
+        Ok((erased, view.into_projection()))
     })
 }
 
@@ -605,6 +621,8 @@ pub(super) fn projected<'a>(
 }
 
 /// Erase `module`'s items in the order it stores them, each into a fragment of its own and each read out of its universes through `view`, but for those `over` keeps the baseline's erased form of, which are never projected. What erasing each item asked is kept with the unit: of the declarations around it, through the reader's doors, of each erased form it read how a name is bound in, and of each erased form its evaluation ran, the form whole.
+///
+/// **Over a baseline whose module this one is a version of, the unit begins as the baseline's**, every item standing where the baseline holds it with what its erasure asked, and the walk visits the items an edit could reach alone ([`ErasedOver`]); over any other, it is made item by item.
 pub(super) fn erase_items<'s>(
     context: &mut Retyping<'s>,
     view: &'s Projected<'_>,
@@ -612,17 +630,42 @@ pub(super) fn erase_items<'s>(
     module: &Module,
     mut over: Option<ErasedOver<'_>>,
 ) -> Result<ErasedUnit, Error> {
-    let mut unit = ErasedUnit::default();
-    let mut asked = Traces::default();
-    // The first name of each item erased here, whose trace is its own.
-    let mut made = Vec::new();
-    for place in module.items.places() {
+    let shared = over.as_ref().and_then(|over| {
+        over.changes()
+            .map(|changes| (over.baseline(), changes.clone()))
+    });
+    let (mut unit, mut asked) = match &shared {
+        Some((baseline, changes)) => {
+            // What the baseline held where the module holds another item or none is taken out, names and all: every item the module holds anew is one the walk visits, made again by the elaborator.
+            let mut unit = baseline.erased.version();
+            for place in changes.replaced.iter().chain(&changes.removed) {
+                unit.forget(*place, &baseline.core.items.names(*place));
+            }
+
+            (unit, baseline.erased.traces().clone())
+        }
+        None => (ErasedUnit::default(), Traces::default()),
+    };
+    if shared.is_some()
+        && let Some(over) = &over
+    {
+        for name in over.lost() {
+            asked.forget(name);
+        }
+    }
+    let walk = match (&over, &shared) {
+        (Some(over), Some(_)) => over.visited().collect::<Vec<_>>(),
+        _ => module.items.places().collect(),
+    };
+    // The first name of each item erased here, whose trace is its own, and every other name such an item declares.
+    let (mut made, mut others) = (Vec::new(), Vec::new());
+    for place in walk {
         let item = &module.items[place];
         let names = item.declared_names();
-        let kept = over.as_mut().and_then(|over| over.keep(item, &unit));
+        let kept = over.as_mut().and_then(|over| over.keep(place, item, &unit));
         let trace = match kept {
             Some((held, trace)) => {
-                unit.keep(item, held);
+                unit.keep(place, item, held);
 
                 trace
             }
@@ -660,8 +703,13 @@ pub(super) fn erase_items<'s>(
                 // One sample for each item erased, with how much its erasure asked.
                 curios_profile::sample!("erase::asked", trace.len());
 
-                unit.push(item, erased);
+                unit.push(place, item, erased);
                 made.extend(names.first().map(|name| **name));
+                // A trace is filed under the first name, so one the baseline filed under another is a declaration this one now holds the name of.
+                for name in names.iter().skip(1) {
+                    asked.forget(name);
+                    others.push(**name);
+                }
 
                 Rc::new(trace)
             }
@@ -670,12 +718,11 @@ pub(super) fn erase_items<'s>(
             asked.share(**name, trace);
         }
     }
-    note_foreign(&mut asked, &unit, scope, over.as_ref());
     // Who asked what of the unit's traces: the baseline's, with the edges of every item erased again, or no longer held, replaced.
     let readers = over.as_ref().map(|over| {
         let earlier = over.earlier();
         let mut readers = earlier.readers().clone();
-        for name in made.iter().chain(over.lost()) {
+        for name in made.iter().chain(&others).chain(over.lost()) {
             readers.replace(
                 *name,
                 earlier.asked(name).map(Rc::as_ref),
@@ -685,6 +732,12 @@ pub(super) fn erase_items<'s>(
 
         readers
     });
+    match (&over, &readers) {
+        (Some(over), Some(readers)) => {
+            revise_foreign(&mut asked, &unit, scope, over, &made, &others, readers);
+        }
+        _ => note_foreign(&mut asked, &unit, scope),
+    }
     let unit = unit.asking(asked);
 
     Ok(match readers {
@@ -693,56 +746,81 @@ pub(super) fn erase_items<'s>(
     })
 }
 
-/// Record what erasing `unit`'s items read of declarations the unit does not hold, each part and each binding by the digest it has in `scope`: what a later erasure over this unit asks a read of another unit again by (`Foreign`).
-///
-/// Taken where the walk ends, off the traces that stood, as elaboration takes its own. What a kept form's erasure read of a unit that did not move is the baseline's, digest and all, and an erasure that kept every form of its baseline in a scope that did not move holds the baseline's table.
-fn note_foreign(
-    asked: &mut Traces,
-    unit: &ErasedUnit,
-    scope: Erasures<'_>,
-    over: Option<&ErasedOver<'_>>,
-) {
-    let earlier = over.map(|over| over.earlier().foreign());
-    if let (Some(earlier), Some(over)) = (earlier, over)
-        && scope.settled()
-        && over.kept_all()
-        && asked.len() == over.earlier().asked_len()
-    {
-        asked.read(Rc::clone(earlier));
-        return;
-    }
-
+/// Record what erasing `unit`'s items read of declarations the unit does not hold, each part and each binding by the digest it has in `scope`: what a later erasure over this unit asks a read of another unit again by (`Foreign`). What will not digest is recorded nowhere, and a read with no record does not stand.
+fn note_foreign(asked: &mut Traces, unit: &ErasedUnit, scope: Erasures<'_>) {
     let mut read = Foreign::default();
-    let mut noted = HashMap::<Global, Vec<Question>>::new();
     for trace in asked.each() {
-        for (question, answered) in trace.asked() {
-            let (Some(name), Answered::Part) = (question.subject(), answered) else {
-                continue;
-            };
-            if unit.place(name).is_some() || !scope.recorded(name) {
-                continue;
+        for part in foreign_parts(trace, unit, scope) {
+            if read.digest(&part).is_none()
+                && let Ok(digest) = scope.part_digest(&part)
+            {
+                read.record(part, digest);
             }
-            let seen = noted.entry(*name).or_default();
-            if seen.contains(question) {
-                continue;
-            }
-            seen.push(*question);
-
-            let kept = earlier
-                .and_then(|earlier| earlier.digest(question))
-                .filter(|_| scope.unmoved(name));
-            let digest = match kept {
-                Some(digest) => digest.clone(),
-                None => match scope.part_digest(question) {
-                    Ok(digest) => digest,
-                    // What will not digest is recorded nowhere, and a read with no record does not stand.
-                    Err(_) => continue,
-                },
-            };
-            read.record(*question, digest);
         }
     }
     asked.read(Rc::new(read));
+}
+
+/// [`note_foreign`] for an erasure over a baseline, as elaboration revises its own: the baseline's table, revised where an item was erased again or dropped ([`Foreign::revised`]). A part a kept form's erasure read of a unit that moved digests to what it did, or the form would have been erased again, so its record stands; and an erasure that erased and dropped nothing, in a scope that did not move, holds the baseline's table.
+fn revise_foreign(
+    asked: &mut Traces,
+    unit: &ErasedUnit,
+    scope: Erasures<'_>,
+    over: &ErasedOver<'_>,
+    made: &[Global],
+    others: &[Global],
+    readers: &Readers,
+) {
+    let (earlier, baseline) = (over.earlier(), over.baseline());
+    if scope.settled() && made.is_empty() && over.lost().is_empty() {
+        asked.read(Rc::clone(earlier.foreign()));
+        return;
+    }
+
+    let read = made
+        .iter()
+        .filter_map(|name| asked.held(name))
+        .flat_map(|trace| foreign_parts(trace, unit, scope))
+        .collect::<Vec<_>>();
+    let dropped = made
+        .iter()
+        .chain(others)
+        .chain(over.lost())
+        .filter_map(|name| earlier.asked(name))
+        .flat_map(|trace| foreign_parts(trace, unit, scope))
+        .collect::<Vec<_>>();
+    // A name the unit declares now and the baseline did not is read of the unit, no other.
+    let declared = baseline
+        .made
+        .iter()
+        .filter(|name| baseline.places.place(name).is_none())
+        .flat_map(|name| Parts::ALL.questions(*name));
+    let revised = earlier.foreign().revised(
+        read,
+        dropped,
+        declared,
+        |part| part.subject().is_some_and(|name| !scope.unmoved(name)),
+        |part| scope.part_digest(part),
+        |part| readers.asks(part),
+    );
+    asked.read(Rc::new(revised));
+}
+
+/// The parts `trace` reads of declarations `unit` does not hold, as the table of them records each: every part asked; none of a declaration of a fixed unit.
+fn foreign_parts<'t>(
+    trace: &'t Trace<Question, Answered>,
+    unit: &'t ErasedUnit,
+    scope: Erasures<'t>,
+) -> impl Iterator<Item = Question> + 't {
+    trace
+        .asked()
+        .iter()
+        .filter_map(move |(question, answered)| {
+            let name = question.subject()?;
+
+            (*answered == Answered::Part && unit.place(name).is_none() && scope.recorded(name))
+                .then_some(*question)
+        })
 }
 
 /// Erase one item into a fragment of its own, on a budget restored for it.

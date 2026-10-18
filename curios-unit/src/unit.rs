@@ -83,6 +83,12 @@ impl Uncertified {
         self
     }
 
+    /// This unit, holding `projection` as what erasure has read of its module out of its universes: what the erasure over a baseline that made the unit carries over from the baseline's, in place of making a cell for every item again.
+    pub fn projecting(mut self, projection: Projection) -> Self {
+        self.projection = Rc::new(OnceCell::from(projection));
+        self
+    }
+
     /// Whether the unit is the compiler's own. See the field.
     pub fn fixed(&self) -> bool {
         self.fixed

@@ -65,6 +65,38 @@ impl Foreign {
         self.read.remove(question);
     }
 
+    /// This table as a walk revises it that made again or dropped some of the declarations it was read off, the table of every other standing: each part of `read` — one a declaration made again reads now — recorded, digested again where nothing was recorded of it or `moved` says the unit declaring it moved, and taken out where it will not digest; each part of `dropped` — one a declaration made again or dropped read before — taken out where `read_now` says no declaration reads it now; and each part of `declared` — one of a name the unit declares now — taken out.
+    pub(crate) fn revised(
+        &self,
+        read: impl IntoIterator<Item = Question>,
+        dropped: impl IntoIterator<Item = Question>,
+        declared: impl IntoIterator<Item = Question>,
+        moved: impl Fn(&Question) -> bool,
+        digest: impl Fn(&Question) -> Result<Option<String>, String>,
+        read_now: impl Fn(&Question) -> bool,
+    ) -> Foreign {
+        let mut revised = self.clone();
+        for part in read {
+            if revised.digest(&part).is_some() && !moved(&part) {
+                continue;
+            }
+            match digest(&part) {
+                Ok(digest) => revised.record(part, digest),
+                Err(_) => revised.forget(&part),
+            }
+        }
+        for part in dropped {
+            if !read_now(&part) {
+                revised.forget(&part);
+            }
+        }
+        for part in declared {
+            revised.forget(&part);
+        }
+
+        revised
+    }
+
     /// The name each part recorded here was asked of.
     pub fn subjects(&self) -> impl Iterator<Item = &Global> {
         self.read.iter().filter_map(|(asked, _)| asked.subject())
@@ -120,11 +152,6 @@ impl Traces {
     /// Every declaration's trace, in the order of the names the declarations are written as.
     pub(crate) fn each(&self) -> impl Iterator<Item = &Trace<Question, Answered>> {
         self.declarations.iter().map(|(_, trace)| trace.as_ref())
-    }
-
-    /// How many declarations hold a trace.
-    pub(crate) fn len(&self) -> usize {
-        self.declarations.len()
     }
 
     /// The declarations holding a trace, by the name each is written as, with how many questions each asked.
@@ -403,6 +430,15 @@ impl Readers {
     /// The declarations that asked about `name`, each with the parts it asked.
     pub(crate) fn of_name(&self, name: &Global) -> &[(Global, Parts)] {
         self.parts.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether some declaration asked the part `question` asks of the name it is about.
+    pub(crate) fn asks(&self, question: &Question) -> bool {
+        let (Some(name), Some(asked)) = (question.subject(), Parts::of(question)) else {
+            return false;
+        };
+
+        self.of_name(name).iter().any(|(_, read)| read.meets(asked))
     }
 
     /// The declarations that asked at `concept` and `key`: for the witness standing there, or whether one is declared there.

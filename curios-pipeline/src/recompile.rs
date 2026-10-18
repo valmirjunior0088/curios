@@ -193,7 +193,7 @@ pub(crate) fn compile_lowered_over(
     // Erasure decides what it keeps by its own record: an erased form stands where the elaborator kept its declaration and what its erasure asked is answered as it was.
     let views = predecessors.projected();
     let erased = predecessors.erased();
-    let ersd = erase_unit_over(
+    let (ersd, projection) = erase_unit_over(
         budget,
         *syntax,
         Erasures::of(&cores, &erased)
@@ -205,7 +205,10 @@ pub(crate) fn compile_lowered_over(
             core: baseline.core(),
             places: baseline.places(),
             erased: baseline.erased(),
+            projection: baseline.projection(),
             made: &made,
+            dropped: &dropped,
+            now: &places,
         },
     )
     .map_err(|error| {
@@ -225,6 +228,7 @@ pub(crate) fn compile_lowered_over(
         Uncertified::new(lowered, core.into_module(), ersd, traces)
             .reading(readers)
             .placing(Some(places))
+            .projecting(projection)
             .certified(certification),
         entry,
     ))

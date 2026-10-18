@@ -10,10 +10,11 @@ use {
     super::Erasures,
     crate::{Defined, InScope},
     curios_core::{
-        ConceptDecl, Declared, Definition, Global, InductDecl, InductParam, Item, Module, Place,
-        Places, RecGroup, StructDecl, Term, WitnessKey, project_erased_universes,
+        Changes, ConceptDecl, Declared, Definition, Global, InductDecl, InductParam, Item, Module,
+        Place, Places, RecGroup, StructDecl, Term, WitnessKey, project_erased_universes,
     },
-    std::{cell::OnceCell, collections::HashMap},
+    curios_utilities::Persistent,
+    std::{cell::OnceCell, rc::Rc},
 };
 
 /// One item out of its universes: the item as erasure walks it, and, for a group, each member as another item reads it.
@@ -108,42 +109,63 @@ fn project_struct(declaration: &StructDecl) -> StructDecl {
 /// What erasure has read of one unit out of its universes: a cell for each of its items and each of its registry entries, filled the first time one is read.
 ///
 /// **Kept with the unit, as where it holds each name is.** A unit in scope of many compilations is asked for the same declarations by each, so what one projected the next finds, and making the cells is paid once for a unit and not once for a compile. It holds no reference to the module it is of: every read hands it the module, which is its unit's.
-#[derive(Debug, Default)]
+///
+/// **A version of its baseline's where its unit was erased over one.** The cells are shared and held in persistent maps, so the projection of a module that is a version of its baseline's is the baseline's with a cell made anew at each place the version changed ([`Projection::revised`]), what was read of every other item standing.
+#[derive(Debug, Clone, Default)]
 pub struct Projection {
     /// By the item's place ([`curios_core::Items::places`]).
-    items: HashMap<usize, OnceCell<Erasable>>,
-    inducts: HashMap<Global, OnceCell<InductDecl>>,
-    structs: HashMap<Global, OnceCell<StructDecl>>,
+    items: Persistent<usize, Rc<OnceCell<Erasable>>>,
+    inducts: Persistent<Global, Rc<OnceCell<InductDecl>>>,
+    structs: Persistent<Global, Rc<OnceCell<StructDecl>>>,
 }
 
 impl Projection {
     /// The cells of `module`, none filled.
     pub fn of(module: &Module) -> Self {
-        Self {
-            items: module
-                .items
-                .places()
-                .map(|place| (place, OnceCell::new()))
-                .collect(),
-            // Which names declare a nominal is what each place says, so a cell is made for each with no entry read.
-            inducts: module
-                .formers()
-                .into_iter()
-                .filter(|(_, declared)| *declared == Declared::Inductive)
-                .map(|(name, _)| (name, OnceCell::new()))
-                .collect(),
-            structs: module
-                .formers()
-                .into_iter()
-                .filter(|(_, declared)| *declared != Declared::Inductive)
-                .map(|(name, _)| (name, OnceCell::new()))
-                .collect(),
+        let mut projection = Self::default();
+        for place in module.items.places() {
+            projection.cells(module, place);
+        }
+
+        projection
+    }
+
+    /// This projection, of an earlier module, as the projection of `module`, a version of it that `changes` says what it changed of ([`curios_core::Items::changed_since`]): a cell made anew for each item and each registry entry at a place it changed, and none for one it took out.
+    pub(super) fn revised(&self, earlier: &Module, module: &Module, changes: &Changes) -> Self {
+        let mut projection = self.clone();
+        for place in changes.replaced.iter().chain(&changes.removed) {
+            projection.items.remove(place);
+            for name in earlier.items.names(*place) {
+                projection.inducts.remove(name);
+                projection.structs.remove(name);
+            }
+        }
+        for place in changes.replaced.iter().chain(&changes.inserted) {
+            projection.cells(module, *place);
+        }
+
+        projection
+    }
+
+    /// A cell for the item at `place` of `module`, and for each registry entry it declares. Which names declare a nominal is what each place says, so a cell is made for each with no entry read.
+    fn cells(&mut self, module: &Module, place: usize) {
+        self.items.insert(place, Rc::default());
+        let names = module.items.names(place).into_iter().copied();
+        for (name, declared) in names.zip(module.items.declared(place)) {
+            match declared {
+                Declared::Inductive => self.inducts.insert(name, Rc::default()),
+                declared if declared.is_former() => self.structs.insert(name, Rc::default()),
+                _ => {}
+            }
         }
     }
 
     /// The item at `place` of `module`, out of its universes.
     fn item(&self, module: &Module, place: usize) -> &Erasable {
-        self.items[&place].get_or_init(|| Erasable::of(&module.items[place]))
+        self.items
+            .get(&place)
+            .expect("a place the module holds an item at")
+            .get_or_init(|| Erasable::of(&module.items[place]))
     }
 }
 
@@ -249,6 +271,41 @@ pub(crate) struct Projected<'a> {
 impl<'a> Projected<'a> {
     /// `scope`'s units, each read by what its unit keeps for erasure where the scope holds that, then `unit`, the one being erased.
     pub(crate) fn over(scope: Erasures<'a>, unit: &'a Module) -> Self {
+        Self::with(scope, Unit::made(unit))
+    }
+
+    /// The units of `scope` and `unit`, whose module is held at `places` and has been read out of its universes as `projection` holds it: a unit erased over a baseline, whose places are its module's own and whose projection is a version of its baseline's.
+    pub(crate) fn revised(
+        scope: Erasures<'a>,
+        unit: &'a Module,
+        places: &'a Places,
+        projection: Projection,
+    ) -> Self {
+        Self::with(
+            scope,
+            Unit {
+                module: unit,
+                places: Held::Kept(places),
+                projection: Held::Made(Box::new(projection)),
+            },
+        )
+    }
+
+    /// What erasure read of the unit being erased out of its universes: what that unit keeps, a later erasure over it finding it as this one left it.
+    pub(crate) fn into_projection(mut self) -> Projection {
+        let own = self
+            .units
+            .pop()
+            .expect("the unit being erased is the view's last");
+
+        match own.projection {
+            Held::Made(projection) => *projection,
+            Held::Kept(projection) => projection.clone(),
+        }
+    }
+
+    /// The units of `scope`, each read by what its unit keeps for it where it keeps it, with `own` last.
+    fn with(scope: Erasures<'a>, own: Unit<'a>) -> Self {
         let units = scope
             .cores()
             .iter()
@@ -261,7 +318,7 @@ impl<'a> Projected<'a> {
                 },
                 None => Unit::made(module),
             })
-            .chain([Unit::made(unit)])
+            .chain([own])
             .collect();
 
         Self { units }

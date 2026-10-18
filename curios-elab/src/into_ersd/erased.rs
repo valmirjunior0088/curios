@@ -13,11 +13,11 @@ use {
     crate::{Answered, Foreign, Question, Readers, Traces, part_digest},
     curios_archive::{Bytes, Deferred, joined, parted},
     curios_core::{Extent, Free, Global, Item, Module, Places, Trace},
-    curios_utilities::digest,
+    curios_utilities::{Ordered, Persistent, digest},
     std::{
-        borrow::Cow,
+        borrow::{Borrow, Cow},
         cell::OnceCell,
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
     },
 };
@@ -248,7 +248,85 @@ type InductRowRead<'a> = (
     Vec<(Option<&'a str>, usize, &'a Vec<bool>)>,
 );
 
-/// A unit's items' erased forms, in the order the unit stores its items.
+/// A unit's erased forms by place, which item declares each name, and which items compute: what the unit is restored with, the forms stored beside it.
+///
+/// **By the place the unit's module holds each item at** ([`curios_core::Items::places`]), in maps that are persistent: a unit erased over a baseline whose module is a version of the baseline's is the baseline's index with the forms of what it erased again placed again. What is stored names an item by its rank among the unit's items, read off where the unit is filed ([`Ranking`]).
+#[derive(Debug, Clone, Default)]
+pub struct ErasedIndex {
+    /// Each item's erased form, by its place.
+    items: Ordered<Rc<Deferred<ErasedItem>>>,
+    /// The place of the item that declares each name.
+    declared: Persistent<Global, i64>,
+    /// The places of the items whose evaluation at initialization computes ([`curios_ersd::Module::computes`]): what a program links whether or not it names them, since whether one is observable is the program's to say.
+    computing: Ordered<()>,
+}
+
+/// An erased unit's index as it is stored: each name by the rank of the item declaring it among the unit's items, and the ranks of the items that compute, ascending.
+#[curios_archive::archived]
+pub struct RankedIndex {
+    declared: BTreeMap<Global, u32>,
+    computing: Vec<u32>,
+}
+
+/// How an erased unit's index is archived: as a [`RankedIndex`], each place given as its item's rank. A unit restored holds its items at their ranks.
+pub struct Ranking;
+
+/// The field adapter: `#[archived_with(Ranked)]`.
+pub type Ranked = curios_archive::Via<Ranking>;
+
+impl curios_archive::Proxy<ErasedIndex> for Ranking {
+    type Archivable = RankedIndex;
+
+    fn to_archivable(index: &ErasedIndex) -> impl Borrow<RankedIndex> {
+        let ranks = index
+            .items
+            .iter()
+            .enumerate()
+            .map(|(rank, (at, _))| (at, rank))
+            .collect::<HashMap<_, _>>();
+        // An index restored with no forms beside it holds its items at their ranks.
+        let rank = |at: i64| {
+            let rank = ranks
+                .get(&at)
+                .copied()
+                .unwrap_or_else(|| usize::try_from(at).expect("a place is not negative"));
+            u32::try_from(rank).expect("a unit's items are counted in a u32")
+        };
+
+        RankedIndex {
+            declared: index
+                .declared
+                .iter()
+                .map(|(name, at)| (*name, rank(*at)))
+                .collect(),
+            computing: index.computing.iter().map(|(at, _)| rank(at)).collect(),
+        }
+    }
+
+    fn from_archivable(stored: RankedIndex) -> Result<ErasedIndex, String> {
+        let mut index = ErasedIndex::default();
+        for (name, rank) in stored.declared {
+            index.declared.insert(name, i64::from(rank));
+        }
+        for rank in stored.computing {
+            index.computing.insert(i64::from(rank), ());
+        }
+
+        Ok(index)
+    }
+}
+
+/// A place as an index's key.
+fn position(place: usize) -> i64 {
+    i64::try_from(place).expect("a place is counted in an i64")
+}
+
+/// The place an index's key is.
+fn place_of(position: i64) -> usize {
+    usize::try_from(position).expect("a place is not negative")
+}
+
+/// A unit's items' erased forms, by the place the unit's module holds each item at ([`ErasedIndex`]).
 ///
 /// Each is held by a handle of its own, the form or the bytes it was stored as until something reads it: a unit compiled over a baseline keeps the baseline's own handle for every item it does not erase again, so it copies none and reads none, and where it is filed that form's bytes are the ones it was restored from.
 ///
@@ -256,12 +334,8 @@ type InductRowRead<'a> = (
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct ErasedUnit {
-    #[archived_with(curios_archive::Skip)]
-    items: Vec<Rc<Deferred<ErasedItem>>>,
-    /// The item that declares each name.
-    declared: BTreeMap<Global, u32>,
-    /// The items whose evaluation at initialization computes ([`curios_ersd::Module::computes`]), ascending: what a program links whether or not it names them, since whether one is observable is the program's to say.
-    computing: Vec<u32>,
+    #[archived_with(Ranked)]
+    index: ErasedIndex,
     /// What erasing each item asked of the declarations around it, by the first name the item declares — see the module documentation.
     ///
     /// **The unit's baseline half**, as a lowered unit keeps its own: stored beside what the unit is for its successors ([`ErasedUnit::baseline_bytes`]), handed back as bytes where the unit is restored ([`ErasedUnit::with_baseline`]), and read out of them when an erasure over the unit first asks.
@@ -275,13 +349,22 @@ pub struct ErasedUnit {
 impl ErasedUnit {
     /// Whether this holds no erased item — the freshness probe the archive tests use.
     pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
+        self.index.items.is_empty()
     }
 
-    /// Add `item`'s erased form, made here, after those of the items before it.
-    pub(super) fn push(&mut self, item: &Item, erased: ErasedItem) {
+    /// This unit's index with none of its traces: what a unit erased over this one starts from, where its module is a version of this one's.
+    pub(super) fn version(&self) -> ErasedUnit {
+        ErasedUnit {
+            index: self.index.clone(),
+            ..ErasedUnit::default()
+        }
+    }
+
+    /// `item`'s erased form, made here, at `place`, in place of what was held there.
+    pub(super) fn push(&mut self, place: usize, item: &Item, erased: ErasedItem) {
         let computes = erased.module.computes();
         self.keep(
+            place,
             item,
             Held {
                 erased: Rc::new(Deferred::held(erased)),
@@ -290,33 +373,59 @@ impl ErasedUnit {
         );
     }
 
-    /// Add `item`'s erased form as another unit holds it, after those of the items before it. The form is not read: whether it computes is the holder's to say.
-    pub(super) fn keep(&mut self, item: &Item, held: Held) {
-        let place = u32::try_from(self.items.len()).expect("a unit's items are counted in a u32");
+    /// `item`'s erased form as another unit holds it, at `place`, in place of what was held there. The form is not read: whether it computes is the holder's to say.
+    pub(super) fn keep(&mut self, place: usize, item: &Item, held: Held) {
+        let at = position(place);
         for name in item.declared_names() {
-            self.declared.insert(*name, place);
+            self.index.declared.insert(*name, at);
         }
-        if held.computes {
-            self.computing.push(place);
+        match held.computes {
+            true => self.index.computing.insert(at, ()),
+            false => {
+                self.index.computing.remove(at);
+            }
         }
-        self.items.push(held.erased);
+        self.index.items.insert(at, held.erased);
+    }
+
+    /// Take out the erased form held at `place`, and each of `names` declared there: an item the unit no longer holds.
+    pub(super) fn forget(&mut self, place: usize, names: &[&Global]) {
+        let at = position(place);
+        self.index.items.remove(at);
+        self.index.computing.remove(at);
+        for name in names {
+            if self.index.declared.get(name) == Some(&at) {
+                self.index.declared.remove(name);
+            }
+        }
     }
 
     /// The erased form of the item at `place`, read out of its bytes now where the unit was restored and nothing has read it before.
     pub(super) fn item(&self, place: usize) -> &ErasedItem {
-        self.items[place]
+        self.form(place)
             .get()
             .unwrap_or_else(|error| panic!("a unit's erased form failed to restore: {error}"))
     }
 
+    /// The handle of the erased form at `place`, which the unit holds.
+    fn form(&self, place: usize) -> &Rc<Deferred<ErasedItem>> {
+        self.index
+            .items
+            .get(position(place))
+            .expect("a place the unit holds a form at")
+    }
+
     /// The erased forms, in item order, each read as [`ErasedUnit::item`] reads it.
     pub(super) fn forms(&self) -> impl Iterator<Item = &ErasedItem> {
-        (0..self.items.len()).map(|place| self.item(place))
+        self.index.items.iter().map(|(_, form)| {
+            form.get()
+                .unwrap_or_else(|error| panic!("a unit's erased form failed to restore: {error}"))
+        })
     }
 
     /// Where the item declaring `name` sits.
     pub(super) fn place(&self, name: &Global) -> Option<usize> {
-        self.declared.get(name).map(|place| *place as usize)
+        self.index.declared.get(name).map(|at| place_of(*at))
     }
 
     /// The erased form of the item declaring `name`.
@@ -327,11 +436,10 @@ impl ErasedUnit {
     /// The erased form of the item declaring `name`, as this unit holds it, with whether it computes: what a unit compiled over this one keeps, reading nothing.
     pub(super) fn held(&self, name: &Global) -> Option<Held> {
         let place = self.place(name)?;
-        let at = u32::try_from(place).expect("a unit's items are counted in a u32");
 
         Some(Held {
-            erased: Rc::clone(&self.items[place]),
-            computes: self.computing.binary_search(&at).is_ok(),
+            erased: Rc::clone(self.form(place)),
+            computes: self.index.computing.get(position(place)).is_some(),
         })
     }
 
@@ -340,7 +448,7 @@ impl ErasedUnit {
         let (Some(this), Some(that)) = (self.place(name), other.place(name)) else {
             return false;
         };
-        let (this, that) = (&self.items[this], &other.items[that]);
+        let (this, that) = (self.form(this), other.form(that));
         if Rc::ptr_eq(this, that) {
             return true;
         }
@@ -350,12 +458,12 @@ impl ErasedUnit {
 
     /// The digest of the erased form of the item at `place`, whole, as it is stored.
     fn form_digest(&self, place: usize) -> Result<String, String> {
-        self.items[place].bytes().map(|bytes| digest(&bytes))
+        self.form(place).bytes().map(|bytes| digest(&bytes))
     }
 
     /// The places of the items that compute at initialization, ascending.
     pub(super) fn computing(&self) -> impl Iterator<Item = usize> {
-        self.computing.iter().map(|place| *place as usize)
+        self.index.computing.iter().map(|(at, _)| place_of(at))
     }
 
     /// This unit with `asked` as what erasing each of its items asked.
@@ -365,7 +473,7 @@ impl ErasedUnit {
     }
 
     /// What erasing each item asked, read out of the unit's baseline half now, where the unit was restored and no erasure over it has asked before.
-    fn traces(&self) -> &Traces {
+    pub(super) fn traces(&self) -> &Traces {
         self.asked
             .get()
             .unwrap_or_else(|error| panic!("an erased unit's traces failed to restore: {error}"))
@@ -387,11 +495,6 @@ impl ErasedUnit {
         }
     }
 
-    /// Every name an item of the unit declares.
-    pub(super) fn names(&self) -> impl Iterator<Item = &Global> {
-        self.declared.keys()
-    }
-
     /// What erasing the item declaring `name` first asked, as the unit holds it.
     pub(super) fn asked(&self, name: &Global) -> Option<&Rc<Trace<Question, Answered>>> {
         self.traces().held(name)
@@ -400,11 +503,6 @@ impl ErasedUnit {
     /// What erasing the unit's items read of declarations the unit does not hold, each part and each binding by the digest it had.
     pub fn foreign(&self) -> &Rc<Foreign> {
         self.traces().foreign()
-    }
-
-    /// How many items' erasures hold a trace.
-    pub(super) fn asked_len(&self) -> usize {
-        self.traces().len()
     }
 
     /// The bytes of this unit's baseline half: what erasing each of its items asked, stored apart from what the unit is for its successors.
@@ -420,9 +518,10 @@ impl ErasedUnit {
 
     /// The bytes of this unit's erased forms, each stored on its own behind how many they are and how long each is ([`joined`]): the ones a form was restored from, and otherwise its archive, made now.
     pub fn items_bytes(&self) -> Result<Vec<u8>, String> {
-        self.items
+        self.index
+            .items
             .iter()
-            .map(|erased| erased.bytes())
+            .map(|(_, erased)| erased.bytes())
             .collect::<Result<Vec<_>, _>>()
             .map(|parts| joined(&parts))
     }
@@ -430,15 +529,18 @@ impl ErasedUnit {
     /// This unit with `bytes` as its erased forms ([`ErasedUnit::items_bytes`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves it with none. `Err` is bytes that hold no such forms, or not one for each item the unit's index names.
     pub fn with_items(mut self, bytes: impl Into<Bytes>) -> Result<Self, String> {
         let items = parted(&bytes.into()).ok_or("not a unit's erased forms")?;
-        let named = |place: &u32| (*place as usize) < items.len();
-        if !self.declared.values().all(named) || !self.computing.iter().all(named) {
+        let named = |at: i64| usize::try_from(at).is_ok_and(|place| place < items.len());
+        if !self.index.declared.iter().all(|(_, at)| named(*at))
+            || !self.index.computing.iter().all(|(at, _)| named(at))
+        {
             return Err("a unit's erased forms are fewer than its index names".to_string());
         }
 
-        self.items = items
-            .into_iter()
-            .map(|bytes| Rc::new(Deferred::stored(bytes)))
-            .collect();
+        let mut forms = Ordered::new();
+        for (place, bytes) in items.into_iter().enumerate() {
+            forms.insert(position(place), Rc::new(Deferred::stored(bytes)));
+        }
+        self.index.items = forms;
 
         Ok(self)
     }

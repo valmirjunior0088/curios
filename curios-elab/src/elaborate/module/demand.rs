@@ -240,8 +240,7 @@ impl<'a> Demand<'a> {
             return;
         }
 
-        let mut read = Foreign::clone(over.traces.foreign());
-        let mut dropped = Vec::new();
+        let (mut read, mut dropped) = (Vec::new(), Vec::new());
         for declaration in made {
             let names = self.names(declaration);
             for name in &names {
@@ -249,18 +248,8 @@ impl<'a> Demand<'a> {
                     dropped.extend(self.foreign_parts(earlier, scope));
                 }
             }
-            let Some(trace) = self.traces.of(names[0]) else {
-                continue;
-            };
-            for part in self.foreign_parts(trace, scope) {
-                let name = part.subject().expect("a part is of a name");
-                if read.digest(&part).is_some() && scope.unmoved(name) {
-                    continue;
-                }
-                match scope.part_digest(&part) {
-                    Ok(digest) => read.record(part, digest),
-                    Err(_) => read.forget(&part),
-                }
+            if let Some(trace) = self.traces.of(names[0]) {
+                read.extend(self.foreign_parts(trace, scope));
             }
         }
         for name in over.dropped {
@@ -272,24 +261,17 @@ impl<'a> Demand<'a> {
             .readers
             .as_ref()
             .expect("a walk over a baseline keeps who asked what");
-        for part in dropped {
-            let name = part.subject().expect("a part is of a name");
-            let read_now = Parts::of(&part).is_some_and(|asked| {
-                readers
-                    .of_name(name)
-                    .iter()
-                    .any(|(_, read)| read.meets(asked))
-            });
-            if !read_now {
-                read.forget(&part);
-            }
-        }
-        for name in &self.gained {
-            for part in Parts::ALL.questions(*name) {
-                read.forget(&part);
-            }
-        }
-        self.traces.read(Rc::new(read));
+        let revised = over.traces.foreign().revised(
+            read,
+            dropped,
+            self.gained
+                .iter()
+                .flat_map(|name| Parts::ALL.questions(*name)),
+            |part| part.subject().is_some_and(|name| !scope.unmoved(name)),
+            |part| scope.part_digest(part),
+            |part| readers.asks(part),
+        );
+        self.traces.read(Rc::new(revised));
     }
 
     /// The parts `trace` reads of declarations the unit does not hold, as the table of them records each: every part asked, and the signature of each witness found, which its own question does not ask; none of a declaration of a fixed unit.
