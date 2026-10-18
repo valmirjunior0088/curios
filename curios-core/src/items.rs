@@ -2,7 +2,9 @@
 //!
 //! **A stored module is read by item.** A compilation reads of a unit in scope the declarations it names, and a library holds thousands a program names a few of; restored whole, every process pays for all of them before its first declaration. So a module that was stored holds a cell for each of its items and a restorer its unit hands it, and reading the item at a place fills that cell and no other.
 //!
-//! **What a place declares is known without its item.** Where a module holds each name, which of its items are groups and whether two units declare one name are asked of every unit in scope by every compilation, and none of them reads a term: a stored module keeps the names each place declares beside its cells.
+//! **What a place declares is known without its item.** Where a module holds each name, which of its items are groups and whether two units declare one name are asked of every unit in scope by every compilation, and none of them reads a term: a stored module keeps the names each place declares beside its cells ([`Outlines`]).
+//!
+//! **An item stored on its own is stored again as it was read.** A module whose items were each archived apart is restored from those parts, and a version that shares one of its items hands back the part it was read from ([`Items::part`]), so a unit filed again writes the bytes of what it did not change as they were.
 //!
 //! **Reading it is indexing it.** Every reader that goes by place is written as it would be over a vector, and a reader that walks every item restores every item: slow where a walk was not looked for, and never another answer.
 //!
@@ -22,24 +24,76 @@ use {
 /// How far apart a version first places the items of a module that placed them at their indices: room for an item new to a later version between any two, many times over.
 const SPACING: usize = 1 << 20;
 
-/// An item's outline: the names it declares, in the order it declares them, what it declares each as, and whether it is a group. What is known of a place of a stored module without its item.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// What each of a module's items declares, flat: every name in the order of the items and of each item's own, what each is declared as — a former by which kind of declaration it is the former of, with nothing of its entry — where each item's names end, and which items are groups. What is known of the places of a stored module without its items.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
-pub struct Outline {
-    pub names: Vec<Global>,
-    /// What each of `names` is declared as, in their order: a former by which kind of declaration it is the former of, with nothing of its entry.
-    pub declared: Vec<Declared>,
-    pub group: bool,
+pub struct Outlines {
+    names: Vec<Global>,
+    declared: Vec<Declared>,
+    /// The end of each item's names in `names`.
+    ends: Vec<u32>,
+    groups: Vec<bool>,
 }
 
-impl Outline {
-    /// `item`'s outline.
-    pub fn of(item: &Item) -> Self {
-        Self {
-            names: item.declared_names().into_iter().copied().collect(),
-            declared: declared_by(item),
-            group: matches!(item, Item::Rec(_)),
+impl Outlines {
+    /// The outlines of `items`, each read off what its place declares: of a stored module, with nothing restored.
+    pub fn of(items: &Items) -> Self {
+        let mut outlines = Self::default();
+        for place in items.places() {
+            outlines.push(
+                items.names(place).into_iter().copied(),
+                items.declared(place),
+                items.is_group(place),
+            );
         }
+
+        outlines
+    }
+
+    /// The outline of an item after the others: the names it declares, what each is declared as, in their order, and whether it is a group.
+    pub fn push(
+        &mut self,
+        names: impl IntoIterator<Item = Global>,
+        declared: impl IntoIterator<Item = Declared>,
+        group: bool,
+    ) {
+        self.names.extend(names);
+        self.declared.extend(declared);
+        debug_assert_eq!(self.names.len(), self.declared.len());
+        self.ends
+            .push(u32::try_from(self.names.len()).expect("a module's names are counted in a u32"));
+        self.groups.push(group);
+    }
+
+    /// How many items are outlined.
+    pub fn len(&self) -> usize {
+        self.ends.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.ends.is_empty()
+    }
+
+    /// Where the names of the item at `index` lie among every item's.
+    fn run(&self, index: usize) -> Range<usize> {
+        let start = match index {
+            0 => 0,
+            _ => self.ends[index - 1] as usize,
+        };
+
+        start..self.ends[index] as usize
+    }
+
+    fn names(&self, index: usize) -> &[Global] {
+        &self.names[self.run(index)]
+    }
+
+    fn declared(&self, index: usize) -> &[Declared] {
+        &self.declared[self.run(index)]
+    }
+
+    fn group(&self, index: usize) -> bool {
+        self.groups[index]
     }
 }
 
@@ -63,11 +117,43 @@ fn declared_by(item: &Item) -> Vec<Declared> {
     }
 }
 
-/// A stored module's items: a cell for each, what each declares, and what restores one.
+/// A stored module's items: a cell for each, what each declares, and where each is restored from.
 struct Stored {
     cells: Vec<OnceCell<Item>>,
-    declared: Vec<Outline>,
-    restore: Box<dyn Fn(usize) -> Item>,
+    outlines: Outlines,
+    source: Source,
+}
+
+/// Where a stored module's items are restored from.
+enum Source {
+    /// What the module's unit hands it, asked for one item at a time.
+    Restorer(Box<dyn Fn(usize) -> Item>),
+    /// The bytes each item was archived as on its own: none where they were not handed over, and no item can be read.
+    Parts(Vec<curios_archive::Bytes>),
+}
+
+impl Stored {
+    /// The item at `index`, restored the first time it is asked for.
+    fn item(&self, index: usize) -> &Item {
+        self.cells[index].get_or_init(|| match &self.source {
+            Source::Restorer(restore) => restore(index),
+            Source::Parts(parts) => {
+                let part = parts
+                    .get(index)
+                    .expect("a stored module's items are handed over before one is read");
+                curios_archive::from_bytes::<Item>(part.as_slice())
+                    .unwrap_or_else(|error| panic!("a stored item failed to restore: {error}"))
+            }
+        })
+    }
+
+    /// The bytes the item at `index` was archived as on its own, where it was.
+    fn part(&self, index: usize) -> Option<&curios_archive::Bytes> {
+        match &self.source {
+            Source::Parts(parts) => parts.get(index),
+            Source::Restorer(_) => None,
+        }
+    }
 }
 
 /// An item a version holds: one in hand, or a stored module's, read where it is first asked for.
@@ -92,37 +178,42 @@ impl Entry {
     fn first_name(&self) -> Option<&Global> {
         match self {
             Entry::Made(item) => first_name(item),
-            Entry::Stored(stored, index) => stored.declared[*index].names.first(),
+            Entry::Stored(stored, index) => stored.outlines.names(*index).first(),
         }
     }
 
     fn item(&self) -> &Item {
         match self {
             Entry::Made(item) => item,
-            Entry::Stored(stored, index) => {
-                stored.cells[*index].get_or_init(|| (stored.restore)(*index))
-            }
+            Entry::Stored(stored, index) => stored.item(*index),
         }
     }
 
     fn names(&self) -> Vec<&Global> {
         match self {
             Entry::Made(item) => item.declared_names(),
-            Entry::Stored(stored, index) => stored.declared[*index].names.iter().collect(),
+            Entry::Stored(stored, index) => stored.outlines.names(*index).iter().collect(),
         }
     }
 
     fn declared(&self) -> Vec<Declared> {
         match self {
             Entry::Made(item) => declared_by(item),
-            Entry::Stored(stored, index) => stored.declared[*index].declared.clone(),
+            Entry::Stored(stored, index) => stored.outlines.declared(*index).to_vec(),
         }
     }
 
     fn is_group(&self) -> bool {
         match self {
             Entry::Made(item) => matches!(**item, Item::Rec(_)),
-            Entry::Stored(stored, index) => stored.declared[*index].group,
+            Entry::Stored(stored, index) => stored.outlines.group(*index),
+        }
+    }
+
+    fn part(&self) -> Option<&curios_archive::Bytes> {
+        match self {
+            Entry::Made(_) => None,
+            Entry::Stored(stored, index) => stored.part(*index),
         }
     }
 }
@@ -189,13 +280,49 @@ pub struct Changes {
 pub struct Items(Held);
 
 impl Items {
-    /// The items of a stored module: one for each entry of `declared`, the item at a place being what `restore` answers for it, asked once.
-    pub fn stored(declared: Vec<Outline>, restore: impl Fn(usize) -> Item + 'static) -> Self {
+    /// The items of a stored module: one for each of `outlines`, the item at a place being what `restore` answers for it, asked once.
+    pub fn stored(outlines: Outlines, restore: impl Fn(usize) -> Item + 'static) -> Self {
         Self(Held::Stored(Rc::new(Stored {
-            cells: declared.iter().map(|_| OnceCell::new()).collect(),
-            declared,
-            restore: Box::new(restore),
+            cells: (0..outlines.len()).map(|_| OnceCell::new()).collect(),
+            outlines,
+            source: Source::Restorer(Box::new(restore)),
         })))
+    }
+
+    /// The items of a stored module whose items were each archived on its own: one for each of `outlines`, the item at a place read out of its part the first time it is asked for. No part is handed over yet where `parts` is empty, and reading an item is then a fault; `Err` is parts that are neither none nor one for each item.
+    pub fn parted(outlines: Outlines, parts: Vec<curios_archive::Bytes>) -> Result<Self, String> {
+        if !parts.is_empty() && parts.len() != outlines.len() {
+            return Err(format!(
+                "a module outlines {} items and stores {}",
+                outlines.len(),
+                parts.len()
+            ));
+        }
+
+        Ok(Self(Held::Stored(Rc::new(Stored {
+            cells: (0..outlines.len()).map(|_| OnceCell::new()).collect(),
+            outlines,
+            source: Source::Parts(parts),
+        }))))
+    }
+
+    /// These items, a stored module's archived on their own ([`Items::parted`]), with `parts` handed over as their bytes.
+    pub fn with_parts(&self, parts: Vec<curios_archive::Bytes>) -> Result<Self, String> {
+        match &self.0 {
+            Held::Stored(stored) if matches!(stored.source, Source::Parts(_)) => {
+                Self::parted(stored.outlines.clone(), parts)
+            }
+            _ => Err("items not archived on their own are handed no parts".to_string()),
+        }
+    }
+
+    /// The bytes the item at `place` was archived as on its own, where it was read from them and these items hold it as it was read: what it is archived as again.
+    pub fn part(&self, place: usize) -> Option<&curios_archive::Bytes> {
+        match &self.0 {
+            Held::Made(_) => None,
+            Held::Stored(stored) => stored.part(place),
+            Held::Placed(placed) => entry(placed, place).part(),
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -269,7 +396,7 @@ impl Items {
     pub fn first_name(&self, place: usize) -> Option<&Global> {
         match &self.0 {
             Held::Made(items) => first_name(&items[place]),
-            Held::Stored(stored) => stored.declared[place].names.first(),
+            Held::Stored(stored) => stored.outlines.names(place).first(),
             Held::Placed(placed) => entry(placed, place).first_name(),
         }
     }
@@ -354,7 +481,7 @@ impl Items {
     pub fn names(&self, place: usize) -> Vec<&Global> {
         match &self.0 {
             Held::Made(items) => items[place].declared_names(),
-            Held::Stored(stored) => stored.declared[place].names.iter().collect(),
+            Held::Stored(stored) => stored.outlines.names(place).iter().collect(),
             Held::Placed(placed) => entry(placed, place).names(),
         }
     }
@@ -363,7 +490,7 @@ impl Items {
     pub fn declared(&self, place: usize) -> Vec<Declared> {
         match &self.0 {
             Held::Made(items) => declared_by(&items[place]),
-            Held::Stored(stored) => stored.declared[place].declared.clone(),
+            Held::Stored(stored) => stored.outlines.declared(place).to_vec(),
             Held::Placed(placed) => entry(placed, place).declared(),
         }
     }
@@ -372,7 +499,7 @@ impl Items {
     pub fn is_group(&self, place: usize) -> bool {
         match &self.0 {
             Held::Made(items) => matches!(items[place], Item::Rec(_)),
-            Held::Stored(stored) => stored.declared[place].group,
+            Held::Stored(stored) => stored.outlines.group(place),
             Held::Placed(placed) => entry(placed, place).is_group(),
         }
     }
@@ -457,7 +584,7 @@ impl Index<usize> for Items {
     fn index(&self, place: usize) -> &Item {
         match &self.0 {
             Held::Made(items) => &items[place],
-            Held::Stored(stored) => stored.cells[place].get_or_init(|| (stored.restore)(place)),
+            Held::Stored(stored) => stored.item(place),
             Held::Placed(placed) => entry(placed, place).item(),
         }
     }

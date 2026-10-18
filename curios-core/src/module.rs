@@ -9,7 +9,7 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
-        Members, Outline, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
+        Members, Outlines, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
         Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
         UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
     },
@@ -979,47 +979,39 @@ impl Module {
             read => return curios_archive::from_bytes::<Module>(read.as_slice()),
         };
         let pooled = std::rc::Rc::new(curios_archive::Pooled::new());
-        let outlines = archived
-            .items
-            .iter()
-            .map(|item| {
-                // What a name is declared as is read off the archive where it lies: an entry a former carries is restored with its item, the first time one is read.
-                let declared = |kind: &ArchivedDefinitionKind| match kind {
-                    ArchivedDefinitionKind::Authored => Declared::Authored,
-                    ArchivedDefinitionKind::Nominal(nominal) => match &**nominal {
-                        ArchivedNominal::Inductive(_) => Declared::Inductive,
-                        ArchivedNominal::Struct(_) => Declared::Struct,
-                        ArchivedNominal::Concept { .. } => Declared::Concept,
-                    },
-                    ArchivedDefinitionKind::InductiveConstructor { .. } => Declared::Constructor,
-                    ArchivedDefinitionKind::ConceptMethod { .. } => Declared::Method,
-                    ArchivedDefinitionKind::Witness => Declared::Witness,
-                    ArchivedDefinitionKind::Test => Declared::Test,
-                };
-                let (names, declared) = match item {
-                    ArchivedItem::Let(definition) => (
-                        vec![pooled.restore::<Global>(&definition.name)?],
-                        vec![declared(&definition.kind)],
-                    ),
-                    ArchivedItem::Rec(rec) => (
-                        rec.definitions
-                            .iter()
-                            .map(|definition| pooled.restore::<Global>(&definition.name))
-                            .collect::<Result<_, _>>()?,
-                        rec.definitions
-                            .iter()
-                            .map(|definition| declared(&definition.kind))
-                            .collect(),
-                    ),
-                };
-
-                Ok(Outline {
-                    names,
-                    declared,
-                    group: matches!(item, ArchivedItem::Rec(_)),
-                })
-            })
-            .collect::<Result<Vec<_>, String>>()?;
+        // What a name is declared as is read off the archive where it lies: an entry a former carries is restored with its item, the first time one is read.
+        let declared = |kind: &ArchivedDefinitionKind| match kind {
+            ArchivedDefinitionKind::Authored => Declared::Authored,
+            ArchivedDefinitionKind::Nominal(nominal) => match &**nominal {
+                ArchivedNominal::Inductive(_) => Declared::Inductive,
+                ArchivedNominal::Struct(_) => Declared::Struct,
+                ArchivedNominal::Concept { .. } => Declared::Concept,
+            },
+            ArchivedDefinitionKind::InductiveConstructor { .. } => Declared::Constructor,
+            ArchivedDefinitionKind::ConceptMethod { .. } => Declared::Method,
+            ArchivedDefinitionKind::Witness => Declared::Witness,
+            ArchivedDefinitionKind::Test => Declared::Test,
+        };
+        let mut outlines = Outlines::default();
+        for item in archived.items.iter() {
+            match item {
+                ArchivedItem::Let(definition) => outlines.push(
+                    [pooled.restore::<Global>(&definition.name)?],
+                    [declared(&definition.kind)],
+                    false,
+                ),
+                ArchivedItem::Rec(rec) => outlines.push(
+                    rec.definitions
+                        .iter()
+                        .map(|definition| pooled.restore::<Global>(&definition.name))
+                        .collect::<Result<Vec<_>, _>>()?,
+                    rec.definitions
+                        .iter()
+                        .map(|definition| declared(&definition.kind)),
+                    true,
+                ),
+            }
+        }
         let items = {
             let pooled = std::rc::Rc::clone(&pooled);
 

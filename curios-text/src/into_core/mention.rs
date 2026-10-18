@@ -112,10 +112,10 @@ impl Text<'_> {
                 let items = self
                     .labels
                     .iter()
-                    .filter_map(|(name, _)| Some(self.unit.declared.get(name)?.item))
+                    .filter_map(|(name, _)| Some(self.unit.places().place(name)?.item()))
                     .collect::<BTreeSet<_>>();
                 for item in items {
-                    self.unit.lowered_item(item as usize).each_term(&mut read);
+                    self.unit.lowered_item(item).each_term(&mut read);
                 }
             }
         }

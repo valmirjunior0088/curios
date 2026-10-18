@@ -388,19 +388,17 @@ pub struct PreparedText {
     /// Every absolute path this unit gives a global, made the first time a report spells a name over it and kept — see [`PreparedText::paths`]. Never stored, being read off `table`, `public` and `audiences`.
     #[archived_with(curios_archive::Skip)]
     paths: OnceCell<Rc<BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>>>>,
-    /// The lowered module: whole where the unit was lowered in this process, which is what its elaboration reads, and holding no item where it was restored.
+    /// The lowered module: what its elaboration reads, each item in hand where the unit was lowered in this process and read out of the bytes it was stored as where it was restored.
     ///
-    /// **Stored without its items.** What every unit lowered after this one reads of it is the registry entries its lowering wrote, so that is what a unit is restored with; an item is read by a later lowering of the same sources, and by a unit whose witness names its declaration ([`PreparedText::written`]), so each is stored on its own, beside the unit, and read by whoever asks for it ([`PreparedText::lowered_item`]).
+    /// **Stored without its items.** What every unit lowered after this one reads of it is what each item declares and the registry entries its lowering wrote, so that is what a unit is restored with; an item is read by a later lowering of the same sources, and by a unit whose witness names its declaration ([`PreparedText::written`]), so each is stored on its own, beside the unit, and read by whoever asks for it ([`PreparedText::lowered_item`]).
     #[archived_with(WithoutItems)]
     core: curios_core::Module,
-    /// Where the unit's lowered items hold each name it declares, with the kind it declares it as: what finds a declaration's lowered form by its name, and says what it is with nothing read.
-    declared: BTreeMap<curios_core::Global, LoweredAt>,
+    /// Where the unit's lowered items hold each name it declares, made the first time something asks: what finds a declaration's lowered form by its name, and says what it is with nothing read.
+    #[archived_with(curios_archive::Skip)]
+    places: OnceCell<curios_core::Places>,
     /// The declarations the unit's lowered items make, made the first time something asks: what its elaboration asks a declaration for by name.
     #[archived_with(curios_archive::Skip)]
     declarations: OnceCell<curios_core::Declarations>,
-    /// The unit's lowered items where it was restored, each the bytes it was stored as until something reads it: `core` holds them where the unit was lowered in this process.
-    #[archived_with(curios_archive::Skip)]
-    items: Option<Vec<curios_archive::Deferred<curios_core::Item>>>,
     /// The bytes a baseline stored an item as, for each item this unit took from one whole ([`PreparedText::taken_from`]), by the item's place: what the item is stored as again, since it is the baseline's. Empty for a unit lowered over none.
     #[archived_with(curios_archive::Skip)]
     carried: Vec<Option<curios_archive::Bytes>>,
@@ -435,51 +433,6 @@ pub struct PreparedText {
     /// Who read each binding, of the unit's lowered declarations read backwards: made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`LookupReaders`]).
     #[archived_with(curios_archive::Skip)]
     lookups: OnceCell<LookupReaders>,
-}
-
-/// Where a unit's lowered items hold a name it declares, and the kind it declares it as.
-#[derive(Debug, Clone)]
-#[curios_archive::archived]
-struct LoweredAt {
-    /// The item, by its place among the unit's.
-    item: u32,
-    declared: curios_core::Declared,
-    /// Whether the item is the definition itself, where it would otherwise be a group the name is a member of.
-    alone: bool,
-}
-
-/// Where `items` hold each name they declare — see [`LoweredAt`].
-fn declared_in(items: &[curios_core::Item]) -> BTreeMap<curios_core::Global, LoweredAt> {
-    let mut declared = BTreeMap::new();
-    for (place, item) in items.iter().enumerate() {
-        let item_at = u32::try_from(place).expect("a unit's items are counted in a u32");
-        match item {
-            curios_core::Item::Let(definition) => {
-                declared.insert(
-                    definition.name,
-                    LoweredAt {
-                        item: item_at,
-                        declared: definition.kind.declared(),
-                        alone: true,
-                    },
-                );
-            }
-            curios_core::Item::Rec(rec) => {
-                for definition in &rec.definitions {
-                    declared.insert(
-                        definition.name,
-                        LoweredAt {
-                            item: item_at,
-                            declared: definition.kind.declared(),
-                            alone: false,
-                        },
-                    );
-                }
-            }
-        }
-    }
-
-    declared
 }
 
 /// An item the parser could not read, as the lowering carries it: the parser's report, and the name its head declared, registered so a reference to it resolves to this name — which the elaborator withholds, as it withholds every dependent of a refusal — rather than reporting as unbound. `None` where the head did not parse as far as a name, whose references then report as the unbound names they are.
@@ -546,34 +499,40 @@ impl PreparedText {
         &self.reached
     }
 
-    /// The lowered module of a unit lowered in this process: what its elaboration reads. A restored unit reads an item where one is asked for (`lowered_item`), a former with the entry it carries (`nominal`), so asking it for the module whole is a fault.
+    /// The lowered module: what its elaboration reads, each item of a restored unit read out of its bytes where it is first asked for.
     pub fn core(&self) -> &curios_core::Module {
-        assert!(
-            self.items.is_none(),
-            "a restored unit's lowered module holds no item"
-        );
-
         &self.core
     }
 
     /// The item at `place` of the ones this unit lowered to, read out of its bytes now where the unit was restored and nothing has read it before.
     pub(crate) fn lowered_item(&self, place: usize) -> &curios_core::Item {
-        let Some(items) = &self.items else {
-            return &self.core.items[place];
+        &self.core.items[place]
+    }
+
+    /// Where the unit's lowered items hold each name it declares. See the field.
+    fn places(&self) -> &curios_core::Places {
+        self.places
+            .get_or_init(|| curios_core::Places::of(&self.core))
+    }
+
+    /// What `name` is declared as at `place`, with nothing read.
+    fn declared_at(&self, place: curios_core::Place) -> curios_core::Declared {
+        let member = match place {
+            curios_core::Place::Let(_) => 0,
+            curios_core::Place::Member { member, .. } => member as usize,
         };
-        items[place]
-            .get()
-            .unwrap_or_else(|error| panic!("a unit's lowered item failed to restore: {error}"))
+
+        self.core.items.declared(place.item())[member]
     }
 
     /// The entry this unit's lowering wrote for the nominal declaration `name`, read at the former that carries it: the one lowered item, read out of its bytes now where the unit was restored and nothing has read it before. `None` for a name the unit declares no nominal under.
     pub(crate) fn nominal(&self, name: &curios_core::Global) -> Option<&curios_core::Nominal> {
-        let declared = self.declared.get(name)?;
-        if !declared.declared.is_former() {
+        let place = self.places().place(name)?;
+        if !self.declared_at(place).is_former() {
             return None;
         }
 
-        self.lowered_item(declared.item as usize)
+        self.lowered_item(place.item())
             .nominals()
             .into_iter()
             .find_map(|(held, nominal)| (held == name).then_some(nominal))
@@ -581,14 +540,16 @@ impl PreparedText {
 
     /// What this unit declares `name` as, with nothing read. `None` for a name the unit does not declare.
     pub fn declared_as(&self, name: &curios_core::Global) -> Option<curios_core::Declared> {
-        self.declared.get(name).map(|declared| declared.declared)
+        self.places()
+            .place(name)
+            .map(|place| self.declared_at(place))
     }
 
     /// The item this unit's lowering declares `name` by, read out of its bytes now where the unit was restored and nothing has read it before. `None` for a name the unit does not declare.
     pub fn lowered(&self, name: &curios_core::Global) -> Option<&curios_core::Item> {
-        self.declared
-            .get(name)
-            .map(|declared| self.lowered_item(declared.item as usize))
+        self.places()
+            .place(name)
+            .map(|place| self.lowered_item(place.item()))
     }
 
     /// How this unit declares `name`, as a witness's key reads it: its kind, and its lowered body where it is a definition written on its own. `None` for a name the unit does not declare.
@@ -598,10 +559,11 @@ impl PreparedText {
         &self,
         name: &curios_core::Global,
     ) -> Option<(curios_core::Declared, Option<&curios_core::Term>)> {
-        let declared = self.declared.get(name)?;
-        let body = match declared.declared {
-            curios_core::Declared::Authored if declared.alone => {
-                match self.lowered_item(declared.item as usize) {
+        let place = self.places().place(name)?;
+        let declared = self.declared_at(place);
+        let body = match (declared, place) {
+            (curios_core::Declared::Authored, curios_core::Place::Let(_)) => {
+                match self.lowered_item(place.item()) {
                     curios_core::Item::Let(definition) => Some(&definition.body),
                     curios_core::Item::Rec(_) => None,
                 }
@@ -609,7 +571,7 @@ impl PreparedText {
             _ => None,
         };
 
-        Some((declared.declared, body))
+        Some((declared, body))
     }
 
     /// The `foreign` rows this unit declares.
@@ -673,54 +635,38 @@ impl PreparedText {
         self
     }
 
-    /// The bytes of this unit's lowered items, each stored on its own behind how many they are and how long each is ([`joined`]): the ones an item was restored from where the unit was, and its archive, made now, where it was lowered here.
+    /// The bytes of this unit's lowered items, each stored on its own behind how many they are and how long each is ([`joined`]): the ones an item was restored from where the unit holds it as it was read, those it carries of a baseline, and its archive, made now, otherwise.
     pub fn items_bytes(&self) -> Result<Vec<u8>, String> {
-        match &self.items {
-            Some(items) => items
-                .iter()
-                .map(curios_archive::Deferred::bytes)
-                .collect::<Result<Vec<_>, _>>()
-                .map(|parts| joined(&parts)),
-            None => self
-                .core
-                .items
-                .iter()
-                .enumerate()
-                .map(|(place, item)| match self.carried.get(place) {
-                    Some(Some(carried)) => {
+        let items = &self.core.items;
+        items
+            .places()
+            .enumerate()
+            .map(|(index, place)| {
+                let stored = items
+                    .part(place)
+                    .or_else(|| self.carried.get(index).and_then(Option::as_ref));
+                match stored {
+                    Some(stored) => {
                         debug_assert!(
-                            curios_archive::to_bytes(item)
-                                .is_ok_and(|made| *made == *carried.as_slice()),
-                            "an item taken from a baseline whole is stored as the baseline stored it"
+                            curios_archive::to_bytes(&items[place])
+                                .is_ok_and(|made| *made == *stored.as_slice()),
+                            "an item kept as it was stored is stored as it was"
                         );
 
-                        Ok(Cow::Borrowed(carried.as_slice()))
+                        Ok(Cow::Borrowed(stored.as_slice()))
                     }
-                    _ => curios_archive::to_bytes(item).map(|made| Cow::Owned(made.to_vec())),
-                })
-                .collect::<Result<Vec<_>, String>>()
-                .map(|parts| joined(&parts)),
-        }
+                    None => curios_archive::to_bytes(&items[place])
+                        .map(|made| Cow::Owned(made.to_vec())),
+                }
+            })
+            .collect::<Result<Vec<_>, String>>()
+            .map(|parts| joined(&parts))
     }
 
-    /// This unit with `bytes` as its lowered items ([`PreparedText::items_bytes`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves its module without one. `Err` is bytes that hold no such items, or not one for each the unit declares.
+    /// This unit with `bytes` as its lowered items ([`PreparedText::items_bytes`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves its module without one. `Err` is bytes that hold no such items, or not one for each the unit outlines.
     pub fn with_items(mut self, bytes: impl Into<Bytes>) -> Result<Self, String> {
-        let items = parted(&bytes.into()).ok_or("not a unit's lowered items")?;
-        if self
-            .declared
-            .values()
-            .any(|declared| declared.item as usize >= items.len())
-        {
-            return Err("a unit's lowered items hold fewer than it declares".to_string());
-        }
-
-        self.core.items = Vec::new().into();
-        self.items = Some(
-            items
-                .into_iter()
-                .map(curios_archive::Deferred::stored)
-                .collect(),
-        );
+        let parts = parted(&bytes.into()).ok_or("not a unit's lowered items")?;
+        self.core.items = self.core.items.with_parts(parts)?;
 
         Ok(self)
     }
@@ -741,19 +687,22 @@ impl PreparedText {
             .map(|(ours, _)| ours)
             .collect::<HashSet<_>>();
 
-        self.declared
-            .iter()
-            .filter(|(_, at)| !taken.contains(&(at.item as usize)))
-            .map(|(name, _)| *name)
+        let items = &self.core.items;
+        items
+            .places()
+            .filter(|place| !taken.contains(place))
+            .flat_map(|place| items.names(place))
+            .copied()
             .collect()
     }
 
     /// The names `baseline` declares and this unit does not.
     pub fn dropped_from(&self, baseline: &PreparedText) -> BTreeSet<curios_core::Global> {
-        baseline
-            .declared
-            .keys()
-            .filter(|name| !self.declared.contains_key(*name))
+        let items = &baseline.core.items;
+        items
+            .places()
+            .flat_map(|place| items.names(place))
+            .filter(|name| self.places().place(name).is_none())
             .copied()
             .collect()
     }
@@ -773,9 +722,9 @@ impl PreparedText {
             let count = declaration.facts().len();
             if let Some(&from) = held.get(&Rc::as_ptr(declaration)) {
                 for place in 0..count {
-                    let ours = self.lowered_item(first + place);
-                    let theirs = baseline.lowered_item(from + place);
-                    if ours.declared_names() == theirs.declared_names() {
+                    let ours = self.core.items.names(first + place);
+                    let theirs = baseline.core.items.names(from + place);
+                    if ours == theirs {
                         taken.push((first + place, from + place));
                     }
                 }
@@ -788,10 +737,11 @@ impl PreparedText {
 
     /// The bytes the item at `place` was stored as, where this unit holds them: the ones it was restored from, or the ones it carries of a baseline.
     fn item_stored(&self, place: usize) -> Option<curios_archive::Bytes> {
-        match &self.items {
-            Some(items) => items[place].as_stored().cloned(),
-            None => self.carried.get(place).cloned().flatten(),
-        }
+        self.core
+            .items
+            .part(place)
+            .or_else(|| self.carried.get(place).and_then(Option::as_ref))
+            .cloned()
     }
 
     /// Carry, for each item this unit took from `baseline` whole, the bytes the baseline stored it as: what [`PreparedText::items_bytes`] stores it as again.
@@ -2637,9 +2587,8 @@ fn into_core_unit_within(
         public: public.into_own().into_iter().collect(),
         audiences: OnceCell::from(audiences),
         paths: OnceCell::new(),
-        declared: declared_in(&items),
+        places: OnceCell::new(),
         declarations: OnceCell::new(),
-        items: None,
         carried: Vec::new(),
         core: curios_core::Module {
             items: items.into(),

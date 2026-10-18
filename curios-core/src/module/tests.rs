@@ -375,7 +375,8 @@ fn nominal_marks_read_the_type_formers_and_no_other_item() {
     let reading = Rc::clone(&restored);
 
     let mut module = over(Vec::new());
-    module.items = Items::stored(items.iter().map(Outline::of).collect(), move |place| {
+    let outlines = Outlines::of(&Items::from(items.to_vec()));
+    module.items = Items::stored(outlines, move |place| {
         reading.borrow_mut().push(place);
         items[place].clone()
     });

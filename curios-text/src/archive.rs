@@ -34,23 +34,37 @@ where
 
 pub(crate) type OrderedMap = Via<SortedEntries>;
 
-/// A lowered module archived without its items: its mounts, its witnesses and its tests, which is what a unit's lowering keeps of it for every unit lowered after it. A registry entry rides in the former that declares it, so it is read with that item. An item is stored on its own, beside the unit, and read by whoever names it.
+/// A lowered module archived without its items: what each item declares, its mounts, its witnesses and its tests, which is what a unit's lowering keeps of it for every unit lowered after it. A registry entry rides in the former that declares it, so it is read with that item. An item is stored on its own, beside the unit, and read by whoever names it: a module restored holds its items as parts not yet handed over (`curios_core::Items::parted`).
 pub(crate) struct Itemless;
 
-impl Proxy<curios_core::Module> for Itemless {
-    type Archivable = curios_core::Module;
+/// A lowered module as [`Itemless`] archives it.
+#[curios_archive::archived]
+pub(crate) struct ItemlessModule {
+    outlines: curios_core::Outlines,
+    mounts: Vec<curios_utilities::Mount>,
+    witnesses: std::collections::BTreeSet<curios_core::Global>,
+    tests: Vec<curios_core::Global>,
+}
 
-    fn to_archivable(module: &curios_core::Module) -> impl Borrow<curios_core::Module> {
-        curios_core::Module {
-            items: Vec::new().into(),
+impl Proxy<curios_core::Module> for Itemless {
+    type Archivable = ItemlessModule;
+
+    fn to_archivable(module: &curios_core::Module) -> impl Borrow<ItemlessModule> {
+        ItemlessModule {
+            outlines: curios_core::Outlines::of(&module.items),
             mounts: module.mounts.clone(),
             witnesses: module.witnesses.clone(),
             tests: module.tests.clone(),
         }
     }
 
-    fn from_archivable(module: curios_core::Module) -> Result<curios_core::Module, String> {
-        Ok(module)
+    fn from_archivable(module: ItemlessModule) -> Result<curios_core::Module, String> {
+        Ok(curios_core::Module {
+            items: curios_core::Items::parted(module.outlines, Vec::new())?,
+            mounts: module.mounts,
+            witnesses: module.witnesses,
+            tests: module.tests,
+        })
     }
 }
 
