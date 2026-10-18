@@ -5,9 +5,12 @@
 //! **What a place declares is known without its item.** Where a module holds each name, which of its items are groups and whether two units declare one name are asked of every unit in scope by every compilation, and none of them reads a term: a stored module keeps the names each place declares beside its cells.
 //!
 //! **Reading it is indexing it.** Every reader that goes by place is written as it would be over a vector, and a reader that walks every item restores every item: slow where a walk was not looked for, and never another answer.
+//!
+//! **A version holds items by place.** A unit compiled over a baseline holds the baseline's items and replaces the ones it made: a version shares every item it did not change with the module it was made from, each at the place it had, and holds an item new to it at a place between two others ([`Items::version`]). A module made whole or restored places its items at their indices; a version made of one spaces them apart first, once, and every version made of a version keeps its places. So a reader goes by the places a module gives ([`Items::places`]), never by counting.
 
 use {
     crate::{Declared, Global, Item},
+    curios_utilities::Ordered,
     std::{
         cell::OnceCell,
         fmt,
@@ -15,6 +18,9 @@ use {
         rc::Rc,
     },
 };
+
+/// How far apart a version first places the items of a module that placed them at their indices: room for an item new to a later version between any two, many times over.
+const SPACING: usize = 1 << 20;
 
 /// An item's outline: the names it declares, in the order it declares them, what it declares each as, and whether it is a group. What is known of a place of a stored module without its item.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,13 +62,90 @@ struct Stored {
     restore: Box<dyn Fn(usize) -> Item>,
 }
 
+/// An item a version holds: one in hand, or a stored module's, read where it is first asked for.
+#[derive(Clone)]
+enum Entry {
+    Made(Rc<Item>),
+    Stored(Rc<Stored>, usize),
+}
+
+impl Entry {
+    fn item(&self) -> &Item {
+        match self {
+            Entry::Made(item) => item,
+            Entry::Stored(stored, index) => {
+                stored.cells[*index].get_or_init(|| (stored.restore)(*index))
+            }
+        }
+    }
+
+    fn names(&self) -> Vec<&Global> {
+        match self {
+            Entry::Made(item) => item.declared_names(),
+            Entry::Stored(stored, index) => stored.declared[*index].names.iter().collect(),
+        }
+    }
+
+    fn declared(&self) -> Vec<Declared> {
+        match self {
+            Entry::Made(item) => declared_by(item),
+            Entry::Stored(stored, index) => stored.declared[*index].declared.clone(),
+        }
+    }
+
+    fn is_group(&self) -> bool {
+        match self {
+            Entry::Made(item) => matches!(**item, Item::Rec(_)),
+            Entry::Stored(stored, index) => stored.declared[*index].group,
+        }
+    }
+}
+
 #[derive(Clone)]
 enum Held {
     /// Every item, as a module made in this process holds them.
     Made(Vec<Item>),
     /// The items of a module that was stored, shared by every clone of it, so one reading serves them all.
     Stored(Rc<Stored>),
+    /// The items of a version, each at its place ([`Items::version`]).
+    Placed(Ordered<Entry>),
 }
+
+/// The places of a module's items, in order: a version's taken as the walk begins.
+#[derive(Debug, Clone)]
+pub enum ItemPlaces {
+    Indices(Range<usize>),
+    Placed(std::vec::IntoIter<usize>),
+}
+
+impl Iterator for ItemPlaces {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<usize> {
+        match self {
+            ItemPlaces::Indices(indices) => indices.next(),
+            ItemPlaces::Placed(places) => places.next(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match self {
+            ItemPlaces::Indices(indices) => indices.size_hint(),
+            ItemPlaces::Placed(places) => places.size_hint(),
+        }
+    }
+}
+
+impl DoubleEndedIterator for ItemPlaces {
+    fn next_back(&mut self) -> Option<usize> {
+        match self {
+            ItemPlaces::Indices(indices) => indices.next_back(),
+            ItemPlaces::Placed(places) => places.next_back(),
+        }
+    }
+}
+
+impl ExactSizeIterator for ItemPlaces {}
 
 /// A module's items, in the order it stores them — see the module documentation.
 #[derive(Clone)]
@@ -82,6 +165,89 @@ impl Items {
         match &self.0 {
             Held::Made(items) => items.len(),
             Held::Stored(stored) => stored.cells.len(),
+            Held::Placed(placed) => placed.len(),
+        }
+    }
+
+    /// The places of the items, in order: their indices, where the module is no version.
+    pub fn places(&self) -> ItemPlaces {
+        match &self.0 {
+            Held::Made(items) => ItemPlaces::Indices(0..items.len()),
+            Held::Stored(stored) => ItemPlaces::Indices(0..stored.cells.len()),
+            Held::Placed(placed) => ItemPlaces::Placed(
+                placed
+                    .iter()
+                    .map(|(place, _)| place_of(place))
+                    .collect::<Vec<_>>()
+                    .into_iter(),
+            ),
+        }
+    }
+
+    /// These items as a version to change, sharing every item with them: their own places where they are a version, and their indices spaced apart otherwise, so an item new to the version has a place between any two.
+    pub fn version(&self) -> Items {
+        let placed = match &self.0 {
+            Held::Placed(placed) => placed.clone(),
+            Held::Made(items) => {
+                let mut placed = Ordered::new();
+                for (index, item) in items.iter().enumerate() {
+                    placed.insert(
+                        position(index * SPACING),
+                        Entry::Made(Rc::new(item.clone())),
+                    );
+                }
+                placed
+            }
+            Held::Stored(stored) => {
+                let mut placed = Ordered::new();
+                for index in 0..stored.cells.len() {
+                    placed.insert(
+                        position(index * SPACING),
+                        Entry::Stored(Rc::clone(stored), index),
+                    );
+                }
+                placed
+            }
+        };
+
+        Self(Held::Placed(placed))
+    }
+
+    /// `item` at `place`, in place of what this version held there.
+    pub fn replace(&mut self, place: usize, item: Item) {
+        self.placed()
+            .insert(position(place), Entry::Made(Rc::new(item)));
+    }
+
+    /// `item` at a place after `after`, or first where it is `None`, and before the place that follows it: the place given, or `None` where no place lies between the two, and the version is as it was.
+    pub fn insert_after(&mut self, after: Option<usize>, item: Item) -> Option<usize> {
+        let placed = self.placed();
+        let low = after.map_or(-1, position);
+        let high = placed
+            .after(low)
+            .map_or(position(usize::MAX / 2), |(next, _)| next);
+        let place = low + (high - low) / 2;
+        if place <= low {
+            return None;
+        }
+        placed.insert(place, Entry::Made(Rc::new(item)));
+
+        Some(place_of(place))
+    }
+
+    /// The item at `place`, taken out of this version.
+    pub fn remove(&mut self, place: usize) {
+        self.placed().remove(position(place));
+    }
+
+    /// The items as a version's.
+    fn placed(&mut self) -> &mut Ordered<Entry> {
+        if !matches!(self.0, Held::Placed(_)) {
+            *self = self.version();
+        }
+        match &mut self.0 {
+            Held::Placed(placed) => placed,
+            _ => unreachable!("a version above"),
         }
     }
 
@@ -93,7 +259,7 @@ impl Items {
     pub fn iter(&self) -> Iter<'_> {
         Iter {
             items: self,
-            places: 0..self.len(),
+            places: self.places(),
         }
     }
 
@@ -102,6 +268,7 @@ impl Items {
         match &self.0 {
             Held::Made(items) => items[place].declared_names(),
             Held::Stored(stored) => stored.declared[place].names.iter().collect(),
+            Held::Placed(placed) => entry(placed, place).names(),
         }
     }
 
@@ -110,6 +277,7 @@ impl Items {
         match &self.0 {
             Held::Made(items) => declared_by(&items[place]),
             Held::Stored(stored) => stored.declared[place].declared.clone(),
+            Held::Placed(placed) => entry(placed, place).declared(),
         }
     }
 
@@ -118,6 +286,7 @@ impl Items {
         match &self.0 {
             Held::Made(items) => matches!(items[place], Item::Rec(_)),
             Held::Stored(stored) => stored.declared[place].group,
+            Held::Placed(placed) => entry(placed, place).is_group(),
         }
     }
 
@@ -138,14 +307,31 @@ impl Items {
 
     /// The items as a vector to change, every one restored where the module was stored.
     fn made(&mut self) -> &mut Vec<Item> {
-        if let Held::Stored(_) = &self.0 {
+        if !matches!(self.0, Held::Made(_)) {
             self.0 = Held::Made(self.iter().cloned().collect());
         }
         match &mut self.0 {
             Held::Made(items) => items,
-            Held::Stored(_) => unreachable!("made above"),
+            _ => unreachable!("made above"),
         }
     }
+}
+
+/// A place as a version's position.
+fn position(place: usize) -> i64 {
+    i64::try_from(place).expect("a place is counted in an i64")
+}
+
+/// The place a version's position is.
+fn place_of(position: i64) -> usize {
+    usize::try_from(position).expect("a version's places are not negative")
+}
+
+/// The entry a version holds at `place`, which it must hold.
+fn entry(placed: &Ordered<Entry>, place: usize) -> &Entry {
+    placed
+        .get(position(place))
+        .expect("a place the version holds")
 }
 
 impl Default for Items {
@@ -180,6 +366,7 @@ impl Index<usize> for Items {
         match &self.0 {
             Held::Made(items) => &items[place],
             Held::Stored(stored) => stored.cells[place].get_or_init(|| (stored.restore)(place)),
+            Held::Placed(placed) => entry(placed, place).item(),
         }
     }
 }
@@ -211,10 +398,9 @@ impl<'a> IntoIterator for &'a Items {
 }
 
 /// A module's items in order ([`Items::iter`]), each restored as it is reached.
-#[derive(Debug, Clone)]
 pub struct Iter<'a> {
     items: &'a Items,
-    places: Range<usize>,
+    places: ItemPlaces,
 }
 
 impl<'a> Iterator for Iter<'a> {
@@ -249,6 +435,10 @@ impl fmt::Debug for Items {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.0 {
             Held::Made(items) => items.fmt(formatter),
+            Held::Placed(placed) => formatter
+                .debug_map()
+                .entries(placed.iter().map(|(place, entry)| (place, entry.item())))
+                .finish(),
             Held::Stored(stored) => {
                 let read = stored.cells.iter().filter_map(OnceCell::get);
                 let unread = stored
@@ -278,7 +468,9 @@ impl curios_archive::Proxy<Items> for ItemVector {
     fn to_archivable(items: &Items) -> impl std::borrow::Borrow<Vec<Item>> {
         match &items.0 {
             Held::Made(items) => std::borrow::Cow::Borrowed(items),
-            Held::Stored(_) => std::borrow::Cow::Owned(items.iter().cloned().collect()),
+            Held::Stored(_) | Held::Placed(_) => {
+                std::borrow::Cow::Owned(items.iter().cloned().collect())
+            }
         }
     }
 

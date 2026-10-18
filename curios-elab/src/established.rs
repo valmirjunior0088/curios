@@ -77,9 +77,10 @@ impl<'a> Standing<'a> {
             return None;
         }
 
-        match self.places().place(name)? {
-            Place::Let(item) => {
-                let Item::Let(definition) = &self.module.items[item as usize] else {
+        let place = self.places().place(name)?;
+        match place {
+            Place::Let(_) => {
+                let Item::Let(definition) = &self.module.items[place.item()] else {
                     unreachable!("a definition's place is a definition's");
                 };
 
@@ -94,10 +95,10 @@ impl<'a> Standing<'a> {
                     island: definition.island,
                 })
             }
-            Place::Member { item, member, slot } => {
-                let rec = self.group(item as usize);
+            Place::Member { member, .. } => {
+                let rec = self.group(place.item());
                 let definition = &rec.definitions[member as usize];
-                let (type_, body) = self.places().member(rec, member, slot);
+                let (type_, body) = self.places().member(name, rec, member);
 
                 Some(Defined {
                     type_,
@@ -161,7 +162,8 @@ impl<'a> Standing<'a> {
     fn groups(&self) -> impl Iterator<Item = (RecGroup, Vec<Global>)> + '_ {
         let items = &self.module.items;
 
-        (0..items.len())
+        items
+            .places()
             .filter(|place| items.is_group(*place))
             .filter_map(|place| match &items[place] {
                 Item::Rec(rec) => {

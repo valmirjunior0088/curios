@@ -925,7 +925,7 @@ impl Reached {
                 reach(index, &mut reached.names, &mut frontier);
             }
         }
-        for place in 0..baseline.module.items.len() {
+        for place in baseline.module.items.places() {
             for name in baseline.module.items.names(place) {
                 if !item_of.contains_key(name) {
                     reached.lost.push(*name);

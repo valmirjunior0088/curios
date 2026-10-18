@@ -2,7 +2,7 @@
 //!
 //! A finished module is read by name: a later unit's elaboration asks for a definition's type, the certifier for what a name unfolds to, erasure for how one is bound. [`Places`] says where a name is held — the item that declares it and, for a group's member, which member — and is made once for a module and kept with whatever holds the module, so no reader keys a module again.
 //!
-//! **Looked up, never walked.** The table is a hash's, and nothing reads its order.
+//! **Looked up, never walked.** The table is a hash's, and nothing reads its order. It is persistent, so the places of a version of a module are its module's with the names of what the version changed placed again ([`Places::place_item`], [`Places::forget`]).
 //!
 //! **One place for a name.** A finished module declares each name once: lowering refuses a second declaration and the certifier a module that carries one. A table made of a module that did would hold the later declaration and say nothing of the earlier, to every reader alike, so such a module is its builder's fault and has no places — asserted, where a walk reports.
 
@@ -11,92 +11,102 @@ mod tests;
 
 use {
     super::{Global, Item, Module, RecGroup, RecItem, Term},
-    curios_utilities::Keyed,
-    std::{cell::OnceCell, collections::HashMap},
+    curios_utilities::{Keyed, Persistent},
+    std::{cell::OnceCell, collections::HashMap, rc::Rc},
 };
 
-/// Where a module holds one name: an item that is a definition, or a member of an item that is a group.
+/// Where a module holds one name: an item that is a definition, or a member of an item that is a group, each by the item's place ([`crate::Items::places`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Place {
-    Let(u32),
-    /// `slot` counts the module's group members in item order, which is where [`Places::member`] keeps what a member is read by.
-    Member {
-        item: u32,
-        member: u32,
-        slot: u32,
-    },
+    Let(u64),
+    Member { item: u64, member: u32 },
 }
 
 impl Place {
     /// The item that declares the name, as its place among the module's items.
     pub fn item(&self) -> usize {
         match self {
-            Place::Let(item) | Place::Member { item, .. } => *item as usize,
+            Place::Let(item) | Place::Member { item, .. } => {
+                usize::try_from(*item).expect("a place is counted in a usize")
+            }
         }
     }
 }
 
+/// Where a module holds a name, and, for a group's member, what it is read by: its type and its projection out of the group, terms the group does not hold as such, each made the first time the member is read.
+#[derive(Debug, Clone)]
+struct Held {
+    place: Place,
+    member: Option<Rc<OnceCell<(Term, Term)>>>,
+}
+
 /// Where a module holds each name it defines.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Places {
-    places: HashMap<Global, Place>,
-    /// A group's member is read by its type and by its projection out of the group, which are terms the group does not hold as such: each is made the first time its member is read.
-    members: Vec<OnceCell<(Term, Term)>>,
+    places: Persistent<Global, Held>,
     /// The item each of the module's groups is, made the first time a report asks which names a group's members go by.
-    groups: OnceCell<HashMap<Keyed<RecGroup>, u32>>,
+    groups: OnceCell<HashMap<Keyed<RecGroup>, usize>>,
 }
 
 impl Places {
     /// The places of `module`'s names: one for each definition and each member of a group, and nothing copied.
     pub fn of(module: &Module) -> Self {
-        const TWICE: &str = "a module declares one name twice";
-        let mut places = HashMap::with_capacity(module.items.len());
-        let mut slots = 0;
+        let mut places = Self::default();
         // Asked of what each place declares, which a stored module knows without its item: placing a unit's names reads none of its declarations.
-        for place in 0..module.items.len() {
-            let item = u32::try_from(place).expect("a unit's items are counted in a u32");
-            let names = module.items.names(place);
-            match module.items.is_group(place) {
-                false => {
-                    for name in names {
-                        let earlier = places.insert(*name, Place::Let(item));
-                        assert!(earlier.is_none(), "{TWICE}");
-                    }
-                }
-                true => {
-                    for (member, name) in names.into_iter().enumerate() {
-                        let member =
-                            u32::try_from(member).expect("a group's members are counted in a u32");
-                        let earlier = places.insert(
-                            *name,
-                            Place::Member {
-                                item,
-                                member,
-                                slot: slots,
-                            },
-                        );
-                        assert!(earlier.is_none(), "{TWICE}");
-                        slots += 1;
-                    }
-                }
-            }
+        for place in module.items.places() {
+            places.place_item(module, place);
         }
 
-        Self {
-            places,
-            members: (0..slots).map(|_| OnceCell::new()).collect(),
-            groups: OnceCell::new(),
+        places
+    }
+
+    /// Place the names the item at `place` of `module` declares there: what a version of a module's places is made with, of the items the version changed.
+    pub fn place_item(&mut self, module: &Module, place: usize) {
+        const TWICE: &str = "a module declares one name twice";
+        let item = u64::try_from(place).expect("a place is counted in a u64");
+        let group = module.items.is_group(place);
+        for (member, name) in module.items.names(place).into_iter().enumerate() {
+            let held = match group {
+                false => Held {
+                    place: Place::Let(item),
+                    member: None,
+                },
+                true => Held {
+                    place: Place::Member {
+                        item,
+                        member: u32::try_from(member)
+                            .expect("a group's members are counted in a u32"),
+                    },
+                    member: Some(Rc::new(OnceCell::new())),
+                },
+            };
+            let earlier = self.places.get(name).map(|earlier| earlier.place.item());
+            assert!(earlier.is_none_or(|earlier| earlier == place), "{TWICE}");
+            self.places.insert(*name, held);
         }
+        self.groups = OnceCell::new();
+    }
+
+    /// Hold `name` nowhere: a version of a module that no longer declares it, or declares it elsewhere.
+    pub fn forget(&mut self, name: &Global) {
+        self.places.remove(name);
+        self.groups = OnceCell::new();
     }
 
     /// Where the module holds `name`, where it defines it.
     pub fn place(&self, name: &Global) -> Option<Place> {
-        self.places.get(name).copied()
+        self.places.get(name).map(|held| held.place)
     }
 
-    /// The type and the projection the member at `member` of `rec` is read by, kept at `slot` from the first time it is asked for.
-    pub fn member(&self, rec: &RecItem, member: u32, slot: u32) -> &(Term, Term) {
-        self.members[slot as usize].get_or_init(|| {
+    /// The type and the projection `name`, the member at `member` of `rec`, is read by, kept from the first time it is asked for.
+    pub fn member(&self, name: &Global, rec: &RecItem, member: u32) -> &(Term, Term) {
+        let cell = self
+            .places
+            .get(name)
+            .and_then(|held| held.member.as_deref())
+            .expect("a member of a group the module holds");
+
+        cell.get_or_init(|| {
             let index = member as usize;
 
             (
@@ -111,20 +121,15 @@ impl Places {
         let groups = self.groups.get_or_init(|| {
             module
                 .items
-                .iter()
-                .enumerate()
-                .filter_map(|(item, declared)| match declared {
-                    Item::Rec(rec) => Some((
-                        Keyed::new(rec.group.clone()),
-                        u32::try_from(item).expect("a unit's items are counted in a u32"),
-                    )),
+                .places()
+                .filter(|place| module.items.is_group(*place))
+                .filter_map(|place| match &module.items[place] {
+                    Item::Rec(rec) => Some((Keyed::new(rec.group.clone()), place)),
                     Item::Let(_) => None,
                 })
                 .collect()
         });
 
-        groups
-            .get(&Keyed::new(group.clone()))
-            .map(|item| *item as usize)
+        groups.get(&Keyed::new(group.clone())).copied()
     }
 }

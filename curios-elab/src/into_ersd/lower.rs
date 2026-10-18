@@ -616,7 +616,8 @@ pub(super) fn erase_items<'s>(
     let mut asked = Traces::default();
     // The first name of each item erased here, whose trace is its own.
     let mut made = Vec::new();
-    for (place, item) in module.items.iter().enumerate() {
+    for place in module.items.places() {
+        let item = &module.items[place];
         let names = item.declared_names();
         let kept = over.as_mut().and_then(|over| over.keep(item, &unit));
         let trace = match kept {

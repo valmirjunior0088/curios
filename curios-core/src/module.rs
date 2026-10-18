@@ -320,7 +320,10 @@ impl Certification {
     pub fn covers(&self, module: &Module) -> bool {
         let classified = |name: &Global| self.totalities.contains_key(name);
 
-        (0..module.items.len()).all(|place| module.items.names(place).into_iter().all(classified))
+        module
+            .items
+            .places()
+            .all(|place| module.items.names(place).into_iter().all(classified))
     }
 
     /// Every classification this record holds.
@@ -954,12 +957,13 @@ impl Module {
 impl Module {
     /// The entry the definition `name` carries, read at the place `places` keeps for it: one item read, and of a stored module one item restored.
     pub fn nominal(&self, places: &Places, name: &Global) -> Option<&Nominal> {
-        match places.place(name)? {
-            Place::Let(item) => match &self.items[item as usize] {
+        let place = places.place(name)?;
+        match place {
+            Place::Let(_) => match &self.items[place.item()] {
                 Item::Let(definition) => definition.kind.nominal(),
                 Item::Rec(_) => None,
             },
-            Place::Member { item, member, .. } => match &self.items[item as usize] {
+            Place::Member { member, .. } => match &self.items[place.item()] {
                 Item::Rec(rec) => rec.definitions[member as usize].kind.nominal(),
                 Item::Let(_) => None,
             },
@@ -983,7 +987,8 @@ impl Module {
 
     /// The names the module declares a nominal under, each with which kind of declaration it is the former of, in the order the module stores them: read off what each place says it declares, with no item read.
     pub fn formers(&self) -> Vec<(Global, Declared)> {
-        (0..self.items.len())
+        self.items
+            .places()
             .flat_map(|place| {
                 let names = self.items.names(place).into_iter().copied();
 
@@ -1110,7 +1115,7 @@ impl Module {
     /// **Its own index, where [`Places`] would be the table.** A table of places is made of no module that declares a name twice, and such a module is refused in words that still have to be spelled; here the later declaration answers, as it does for every reader of a report.
     fn located(&self) -> Located {
         let mut located = HashMap::new();
-        for place in 0..self.items.len() {
+        for place in self.items.places() {
             for (member, name) in self.items.names(place).into_iter().enumerate() {
                 located.insert(*name, (place, member));
             }
@@ -1121,7 +1126,8 @@ impl Module {
 
     /// The names the module declares as a kind `wanted` holds of, in the order it stores them: read off what each place says it declares ([`Items::declared`]), with no item read.
     fn declared_as(&self, wanted: impl Fn(Declared) -> bool) -> Vec<Global> {
-        (0..self.items.len())
+        self.items
+            .places()
             .flat_map(|place| {
                 let names = self.items.names(place).into_iter();
 
@@ -1273,7 +1279,7 @@ impl Module {
     pub fn module_symbols(&self) -> Vec<Global> {
         let mut symbols = Vec::new();
         // Asked of what each place declares, which a stored module knows without its item.
-        for place in 0..self.items.len() {
+        for place in self.items.places() {
             symbols.extend(self.items.names(place).into_iter().copied());
         }
         symbols

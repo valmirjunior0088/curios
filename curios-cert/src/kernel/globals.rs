@@ -41,8 +41,9 @@ pub(crate) struct Held<'a> {
 ///
 /// One function, read wherever a finished module answers for a name — a unit in scope, a baseline — so no two readers can hold an item two ways.
 pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) -> Option<Held<'a>> {
-    match places.place(name)? {
-        Place::Let(item) => match &module.items[item as usize] {
+    let place = places.place(name)?;
+    match place {
+        Place::Let(_) => match &module.items[place.item()] {
             Item::Let(definition) => Some(Held {
                 type_: &definition.type_,
                 value: (!definition.proof).then_some(&definition.body),
@@ -50,9 +51,9 @@ pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) ->
             }),
             Item::Rec(_) => unreachable!("a definition's place is a definition's"),
         },
-        Place::Member { item, member, slot } => match &module.items[item as usize] {
+        Place::Member { member, .. } => match &module.items[place.item()] {
             Item::Rec(rec) => {
-                let (type_, body) = places.member(rec, member, slot);
+                let (type_, body) = places.member(name, rec, member);
 
                 Some(Held {
                     type_,
@@ -139,7 +140,7 @@ impl<'s> Mounted<'s> {
             false => (other, self),
         };
         let items = &smaller.module.items;
-        (0..items.len()).any(|place| {
+        items.places().any(|place| {
             items
                 .names(place)
                 .into_iter()

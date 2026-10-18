@@ -110,7 +110,8 @@ fn project_struct(declaration: &StructDecl) -> StructDecl {
 /// **Kept with the unit, as where it holds each name is.** A unit in scope of many compilations is asked for the same declarations by each, so what one projected the next finds, and making the cells is paid once for a unit and not once for a compile. It holds no reference to the module it is of: every read hands it the module, which is its unit's.
 #[derive(Debug, Default)]
 pub struct Projection {
-    items: Vec<OnceCell<Erasable>>,
+    /// By the item's place ([`curios_core::Items::places`]).
+    items: HashMap<usize, OnceCell<Erasable>>,
     inducts: HashMap<Global, OnceCell<InductDecl>>,
     structs: HashMap<Global, OnceCell<StructDecl>>,
 }
@@ -119,7 +120,11 @@ impl Projection {
     /// The cells of `module`, none filled.
     pub fn of(module: &Module) -> Self {
         Self {
-            items: (0..module.items.len()).map(|_| OnceCell::new()).collect(),
+            items: module
+                .items
+                .places()
+                .map(|place| (place, OnceCell::new()))
+                .collect(),
             // Which names declare a nominal is what each place says, so a cell is made for each with no entry read.
             inducts: module
                 .formers()
@@ -138,7 +143,7 @@ impl Projection {
 
     /// The item at `place` of `module`, out of its universes.
     fn item(&self, module: &Module, place: usize) -> &Erasable {
-        self.items[place].get_or_init(|| Erasable::of(&module.items[place]))
+        self.items[&place].get_or_init(|| Erasable::of(&module.items[place]))
     }
 }
 
@@ -179,11 +184,12 @@ impl<'a> Unit<'a> {
     }
 
     fn definition(&self, name: &Global) -> Option<Defined<'_>> {
-        let (item, member) = match self.places.place(name)? {
-            Place::Let(item) => (item, 0),
-            Place::Member { item, member, .. } => (item, member),
+        let place = self.places.place(name)?;
+        let member = match place {
+            Place::Let(_) => 0,
+            Place::Member { member, .. } => member,
         };
-        let erasable = self.projection.item(self.module, item as usize);
+        let erasable = self.projection.item(self.module, place.item());
         let (definition, body, universe_context) = match &erasable.item {
             Item::Let(definition) => (definition, &definition.body, &definition.universe_context),
             Item::Rec(rec) => {

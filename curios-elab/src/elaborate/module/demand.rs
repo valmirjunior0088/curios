@@ -419,7 +419,10 @@ impl<'a> Demand<'a> {
             .filter(|name| over.places.place(name).is_none())
             .copied()
             .collect::<Vec<_>>();
-        let lost = (0..over.baseline.items.len())
+        let lost = over
+            .baseline
+            .items
+            .places()
             .flat_map(|place| over.baseline.items.names(place))
             .filter(|name| !self.owner.contains_key(*name))
             .copied()
