@@ -9,8 +9,8 @@
 //! **A frame may hold a name twice.** An arm assumes its own payload binder again at the type its case's solution gives it (`retype_locals`), so the locals are a list, read by the later entry, with the assumptions beside them by name.
 
 use {
-    super::Window,
-    crate::{DeadArm, UniverseStateToken},
+    super::{Footing, Window},
+    crate::DeadArm,
     curios_core::{DefinitionKind, Free, Term, UniverseContext},
     curios_utilities::Keyed,
     std::{cell::RefCell, collections::HashMap, hash::Hash, rc::Rc},
@@ -77,12 +77,12 @@ pub(crate) struct Settled {
     pub(crate) unerased: Term,
 }
 
-/// What a settlement of one of a frame's entries remembered, beside the frames that stood when it was filed and how many times every spelling had been forgotten at once: it answers only while both stand.
+/// What a settlement of one of a frame's entries remembered, beside the frames that stood when it was filed and what else it rests on: it answers only while both stand.
 #[derive(Debug)]
 pub(super) struct KeptWindow {
     pub(super) window: Window,
     pub(super) stood: Prefix,
-    pub(super) forgotten: usize,
+    pub(super) footing: Footing,
 }
 
 /// The frames that stand at one moment, as a later moment can ask whether they all still do: the stand they stand in, how many there are, and the number the innermost took.
@@ -100,12 +100,8 @@ pub(super) struct Prefix {
 pub(super) struct Spelling {
     /// The reduced spelling, or `None` where reducing the key refused.
     pub(super) settled: Option<Settled>,
-    /// How many solutions had been committed when it settled, where the key or the spelling held an unsolved metavariable — `None` where neither did, and no solution can change what the key reduces to.
-    pub(super) solved: Option<usize>,
-    /// The universe solver's state when it settled, where a question put to conversion on the way was declined for a commit: the spelling is then what the key reduces to only while that state stands.
-    pub(super) levels: Option<UniverseStateToken>,
-    /// How many times every spelling had been forgotten at once when it settled ([`Frames::forget_spellings`](super::Frames::forget_spellings)): it is what its key reduces to only while that count stands.
-    pub(super) forgotten: usize,
+    /// What it rests on beyond the frames outside its entry: it is what its key reduces to while that stands.
+    pub(super) footing: Footing,
 }
 
 /// One projection refinement: the base as *written* (unerased, so a probe at another universe instance can be told apart from the spelling the arm actually scrutinized), and the arm's value.
@@ -215,7 +211,7 @@ pub(crate) struct Frame {
     pub(super) refinement_scrutinees: Recorded<Term, ScrutineeEntry>,
     /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
     ///
-    /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration and the exit of an inner frame leave it alone, and it is forgotten with its frame, where its key is registered again, at a redefinition, a rollback and a universe rewrite, and at a declaration's boundary, which nothing a budget paid for outlives: each of those advances a count every spelling is stamped with, so a frame only a parked problem holds forgets as the live ones do. A fresh definition forgets the spellings naming it, as it does the reducts; and one settled while its key or its reduct held an unsolved metavariable is asked for again once a solution has landed.
+    /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration and the exit of an inner frame leave it alone, and it is forgotten with its frame and where its key is registered again; otherwise it stands while what it read of the rest does, which it is filed with ([`Footing`]): the solutions committed when it settled, all of them while it held an unsolved metavariable, the levels where it holds a universe metavariable, the answers it was given where it asked a question, and the definitions in view. A footing is read against the stores rather than walked by them, so a frame only a parked problem holds forgets as the live ones do. A fresh definition forgets the spellings naming it, as it does the reducts.
     ///
     /// **It is the frame's, behind a cell.** The live context and every judgment that stands on the frame read one memo and settle a key once between them: a spelling rests on the frames below its own, and a frame stands on the same ones wherever it is held.
     ///
@@ -223,7 +219,7 @@ pub(crate) struct Frame {
     pub(super) scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
     /// What the last settlement of one of this frame's entries remembered, of each of the two reductions: the next settlement made here starts from it (`Caches::enter_window`).
     ///
-    /// **It rests on what a settled spelling rests on, and on the frames that stood when it was filed.** Every settlement of an entry registered here reads the frames outside this one under the same window, and those cannot change while this one stands. But what a settlement remembers is not its key's alone: a stuck form put to an entry is the probe's, and names what the frames inside stand for, a local definition under a label another frame may define again among them. So the window is filed with the frames that stand ([`Prefix`]) and answers only while they all still do, and it is forgotten as a spelling is.
+    /// **It rests on what a settled spelling rests on, and on the frames that stood when it was filed.** Every settlement of an entry registered here reads the frames outside this one under the same window, and those cannot change while this one stands. But what a settlement remembers is not its key's alone: a stuck form put to an entry is the probe's, and names what the frames inside stand for, a local definition under a label another frame may define again among them. So the window is filed with the frames that stand ([`Prefix`]) and answers only while they all still do, and with a footing that reads every part, since its reducts are many.
     ///
     /// **Shared by the frame's copies**, which the prefix tells apart where a stand holds one.
     pub(super) settled_windows: Rc<RefCell<[Option<KeptWindow>; 2]>>,

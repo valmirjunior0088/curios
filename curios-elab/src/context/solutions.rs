@@ -203,6 +203,13 @@ impl ParkedProblem {
     }
 }
 
+/// A prefix of the journal of solutions, as a later moment can ask whether it still stands ([`Solutions::holds`]): how many solutions it holds, and the serial of the last. A rollback past it removes that entry, and a restamp at or before it gives that entry another serial, so the prefix stands while the entry at its end holds its serial.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SolutionPrefix {
+    len: usize,
+    last: u64,
+}
+
 /// The flat, frame-independent unification stores. `Context` holds exactly one of these; see the module documentation for the frame-independence contract.
 #[derive(Debug)]
 pub(crate) struct Solutions {
@@ -215,7 +222,11 @@ pub(crate) struct Solutions {
     /// Ids solved since the last `wake_parked` sweep: the wake signal.
     newly_solved: Vec<MetavarId>,
     /// Journal of every committed solution id, in commit order — never consumed, only marked and rolled back. The watermark/rollback pair lets re-validation unwind solutions that landed while validating a candidate it then rejected.
-    solved_log: Vec<MetavarId>,
+    ///
+    /// **Each entry beside a serial no other commitment takes**, so a prefix of the journal is named by its length and the serial at its end ([`SolutionPrefix`]): what an answer read of the solutions, asked later whether it still stands.
+    solved_log: Vec<(MetavarId, u64)>,
+    /// How many serials the journal has handed out: the one before the next.
+    serials: u64,
     /// `Some` inside an oracle, where work may not park: elaboration is being asked a question (re-validation, a candidate's fit) and provisional success would leak into the answer. The flag is whether a site inside it wanted to park and was refused, which makes that oracle's refusal no verdict on the term it was asked about.
     oracle: Option<bool>,
     /// Whether a completing term is holding the spines of a conversion it awaits ([`Solutions::set_holding`]): conversion then takes what two spines of one definition would solve, which it otherwise leaves to that term.
@@ -240,6 +251,7 @@ impl Solutions {
             parked: Vec::new(),
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
+            serials: 0,
             oracle: None,
             holding: false,
             imitating: false,
@@ -585,7 +597,8 @@ impl Solutions {
         entry.solution = Some(term);
         self.link(mentioned.into_iter().chain([id]));
         self.newly_solved.push(id);
-        self.solved_log.push(id);
+        self.serials += 1;
+        self.solved_log.push((id, self.serials));
     }
 
     /// If `term` is a witness-resolution hole, its provenance and the concept goal it stands for (e.g. `Add(Nat)`). A conversion left stuck between two such holes is really an unresolved witness — reported as one rather than as a bare metavariable mismatch between two anonymous placeholders.
@@ -646,17 +659,48 @@ impl Solutions {
     pub(crate) fn solved_since(&self, solved_len: usize) -> Vec<(MetavarId, Term)> {
         self.solved_log[solved_len.min(self.solved_log.len())..]
             .iter()
-            .filter_map(|id| self.solution(*id).map(|solution| (*id, solution.clone())))
+            .filter_map(|(id, _)| self.solution(*id).map(|solution| (*id, solution.clone())))
             .collect()
     }
 
-    /// Replace a standing solution with `term`, a term it already denotes, logging no solve: nothing parked on it wakes, and a rollback past its first commitment unwinds it as before.
+    /// Replace a standing solution with `term`, a term it already denotes, logging no solve: nothing parked on it wakes, and a rollback past its first commitment unwinds it as before. Its entry in the journal, and every one after it, takes a serial of its own again: a prefix that held the solution as it was spelled is not one that stands.
     pub(crate) fn restamp(&mut self, id: MetavarId, term: Term) {
         if let Some(Some(entry)) = self.entries.get_mut(id.0)
             && entry.solution.is_some()
         {
             entry.solution = Some(term);
+            if let Some(at) = self
+                .solved_log
+                .iter()
+                .rposition(|(logged, _)| *logged == id)
+            {
+                for (_, serial) in &mut self.solved_log[at..] {
+                    self.serials += 1;
+                    *serial = self.serials;
+                }
+            }
         }
+    }
+
+    /// The journal as it stands, for [`Solutions::holds`] to be asked about later.
+    pub(crate) fn prefix(&self) -> SolutionPrefix {
+        SolutionPrefix {
+            len: self.solved_log.len(),
+            last: self.solved_log.last().map_or(0, |(_, serial)| *serial),
+        }
+    }
+
+    /// Whether every solution `prefix` held is still committed as it was, and where `exact`, whether none has been committed since.
+    pub(crate) fn holds(&self, prefix: SolutionPrefix, exact: bool) -> bool {
+        let end = match prefix.len.checked_sub(1) {
+            None => true,
+            Some(at) => self
+                .solved_log
+                .get(at)
+                .is_some_and(|(_, serial)| *serial == prefix.last),
+        };
+
+        end && (!exact || self.solved_log.len() == prefix.len)
     }
 
     /// Unwind every solution committed since the watermark and every link made since, removing the unwound ids from the wake signals. The façade clears the caches.
@@ -665,14 +709,15 @@ impl Solutions {
             .solved_log
             .split_off(solved_len.min(self.solved_log.len()));
 
-        for id in &unwound {
+        for (id, _) in &unwound {
             curios_profile::note!(target: "curios_elab::solve", meta = id.0, "solution unwound");
             if let Some(Some(entry)) = self.entries.get_mut(id.0) {
                 entry.solution = None;
             }
         }
 
-        self.newly_solved.retain(|id| !unwound.contains(id));
+        self.newly_solved
+            .retain(|id| !unwound.iter().any(|(gone, _)| gone == id));
 
         let relinked = self.held_log.split_off(held_len.min(self.held_log.len()));
         for (id, before) in relinked.into_iter().rev() {

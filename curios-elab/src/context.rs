@@ -748,7 +748,6 @@ impl<'s> Context<'s> {
     pub(crate) fn restore_budget(&mut self) {
         self.typing.spend.restore();
         self.typing.caches.begin_declaration();
-        self.typing.frames.forget_spellings();
     }
 
     /// What the declaration being elaborated has consumed so far ([`Spend::consumed`]), which this crate's measurements read between two judgments.
@@ -872,36 +871,63 @@ impl<'s> Context<'s> {
 
     /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frame::scrutinee_spellings`] carries how long one stands.
     pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<Option<Settled>> {
-        self.typing.frames.settled_spelling(
-            frame,
-            key,
-            self.typing.asking.plain(),
-            self.underway.attempt.solutions.solved_len(),
-            &self.underway.attempt.universe_solver.state_token(),
-        )
+        let spelling = self
+            .typing
+            .frames
+            .spelling(frame, key, self.typing.asking.plain())?;
+
+        self.stands(&spelling.footing).then_some(spelling.settled)
     }
 
-    /// Record a settlement. Every one is recorded, whatever its metavariables: the loop that asks the reduced spellings settles the innermost entry *not yet asked* (`reduce`'s `refined_reduct`), so an unrecorded settlement would be asked for again forever.
-    ///
-    /// `unsolved` says the key or its spelling held an unsolved metavariable, so the settlement is filed beside the solutions committed so far and asked for again once another lands. `levels` is the universe solver's state where a question was declined for a commit while it settled: it is then asked for again once either solver moves.
+    /// Record a settlement, on what it rests on ([`Context::footing`]). Every one is recorded, whatever its metavariables: the loop that asks the reduced spellings settles the innermost entry *not yet asked* (`reduce`'s `refined_reduct`), so an unrecorded settlement would be asked for again forever.
     pub(crate) fn record_settled_key(
         &mut self,
         frame: usize,
         key: Term,
         settled: Option<Settled>,
-        unsolved: bool,
-        levels: Option<UniverseStateToken>,
+        footing: Footing,
     ) {
-        let solved =
-            (unsolved || levels.is_some()).then(|| self.underway.attempt.solutions.solved_len());
         self.typing.frames.settle_spelling(
             frame,
             key,
             self.typing.asking.plain(),
             settled,
-            solved,
-            levels,
+            footing,
         );
+    }
+
+    /// What an answer taken now rests on beyond the frames it is read under ([`Footing`]): the solutions committed, and the definitions in view. `unsolved` says what it was taken of held an unsolved metavariable, so a solution committed since moves it; `levels` is the universe solver's state where a question was declined for a commit on the way, which moves it once either solver moves; `universes` says it holds a universe metavariable, which a rewrite of levels moves; `asked` says a question was put to conversion on the way, whose answer goes where its level constraints are withdrawn.
+    pub(crate) fn footing(
+        &self,
+        unsolved: bool,
+        levels: Option<UniverseStateToken>,
+        universes: bool,
+        asked: bool,
+    ) -> Footing {
+        self.typing.caches.footing(
+            self.underway.attempt.solutions.prefix(),
+            unsolved || levels.is_some(),
+            levels,
+            universes,
+            asked,
+        )
+    }
+
+    /// Whether everything `footing` rests on still stands: every solution it read is committed as it was, and none since where it was taken of an unsolved metavariable; the universe solver stands where it was where a question was declined; and no rewrite, withdrawal or redefinition it reads has landed since.
+    fn stands(&self, footing: &Footing) -> bool {
+        self.underway
+            .attempt
+            .solutions
+            .holds(footing.solutions, footing.exact)
+            && footing
+                .levels
+                .is_none_or(|levels| levels == self.underway.attempt.universe_solver.state_token())
+            && self.typing.caches.counts_stand(footing)
+    }
+
+    /// How many questions reduction has put to conversion.
+    pub(crate) fn questions(&self) -> u64 {
+        self.typing.asking.questions()
     }
 
     /// The elaboration-level counterpart of the reduction cache ([`Context::cached_reduced`] / [`Context::reduce`]): memoize `(term, expected) → (rebuilt, type)` for subterms whose elaboration can neither read nor write anything context-dependent. Eligibility is O(1) per call (the bits are cached per `Term` node): the term — and the expected type, when checking — must contain no metavariable, no unsolved universe metavariable and no local ([`Term::has_local_free`](curios_core::Term::has_local_free)), so every free name it holds is a global. Writes are detected by snapshotting `mutation_stamp` around the computation: an entry is inserted only when the run minted, solved, parked, defined, and refined nothing — a pure run whose replay would be the identity on the context. Errors are never cached. The one deliberate delta on a hit: the skipped run's `expect` does not drain `retry_parked` at that exact point — safe deferral, since retries re-run at every later `expect` and the module drain reports whatever survives.
@@ -1378,7 +1404,6 @@ impl<'s> Context<'s> {
             .frames
             .set_assumption_universe_context(name, universe_context);
         self.typing.caches.invalidate_for_redefinition();
-        self.typing.frames.forget_spellings();
     }
 
     fn is_defined(&self, name: &Free) -> bool {
@@ -1398,7 +1423,6 @@ impl<'s> Context<'s> {
         // A *redefinition* voids both arguments — the frame elaborators define under labels that can rebind or shadow, and the old value may sit consumed inside a reduct or an elaboration result that no longer mentions the label — so there both caches clear wholesale.
         if self.typing.frames.is_defined(&name) {
             self.typing.caches.invalidate_for_redefinition();
-            self.typing.frames.forget_spellings();
         } else {
             self.typing.caches.retain_reductions_without(&name);
             self.typing.frames.forget_spellings_naming(&name);
@@ -1440,7 +1464,6 @@ impl<'s> Context<'s> {
     pub(crate) fn forget(&mut self, name: &Free) {
         self.typing.frames.forget(name);
         self.typing.caches.invalidate_for_redefinition();
-        self.typing.frames.forget_spellings();
     }
 
     // === Refinements (see [`Frames`]) =======================================
@@ -1698,7 +1721,12 @@ impl<'s> Context<'s> {
         f: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let plain = self.typing.asking.plain();
-        let kept = self.typing.frames.take_settled_window(frame, plain);
+        let kept = self
+            .typing
+            .frames
+            .take_settled_window(frame, plain)
+            .filter(|kept| self.stands(&kept.footing))
+            .map(|kept| kept.window);
         self.typing
             .caches
             .enter_window(Bracket::Settlement { plain }, kept);
@@ -1706,7 +1734,10 @@ impl<'s> Context<'s> {
         let result = f(self);
         self.typing.frames.restore_withheld_refinements(previous);
         if let Some(own) = self.typing.caches.leave_window() {
-            self.typing.frames.keep_settled_window(frame, plain, own);
+            let footing = self.footing(false, None, true, true);
+            self.typing
+                .frames
+                .keep_settled_window(frame, plain, own, footing);
         }
 
         result
@@ -2655,7 +2686,6 @@ impl<'s> Context<'s> {
             self.underway.attempt.solutions.restamp(id, term);
         }
         self.typing.caches.invalidate_for_rollback();
-        self.typing.frames.forget_spellings();
     }
 
     /// Unwind every solution committed since `mark` — the transactional bracket around re-validation. Validating a candidate runs full elaboration, which can solve *other* metavariables along the way; if the candidate is ultimately rejected, those nested solutions were derived from an equation that never held and must not survive the verdict. Removes the unwound ids from the wake signals.
@@ -2678,17 +2708,17 @@ impl<'s> Context<'s> {
         // Nor does a term settled inside it settle anything. It belonged to a candidate that is discarded, and the type it settled at may be a metavariable whose solution has just been unwound: left recorded, the totality obligations would zonk it at the item's end and report an implicit argument of a call the program never kept.
         self.truncate_checked(mark.checked_len);
 
+        let universes_moved =
+            self.underway.attempt.universe_solver.state_token() != universes_before;
         if unwinds_terms {
             self.typing.caches.invalidate_for_rollback();
-            self.typing.frames.forget_spellings();
-        } else if self.underway.attempt.universe_solver.state_token() != universes_before {
+        } else if universes_moved {
             self.typing.caches.note_universe_write();
             self.typing.caches.invalidate_for_universe_transaction();
-            // A question asked inside the scope was answered on the level constraints it held, and a reduct or a settled spelling may rest on the answer: those go with the constraints. A scope that asked none leaves the reducts alone, which no rule of reduction reads a level for.
-            if self.typing.asking.questions() != mark.questions {
-                self.typing.caches.invalidate_for_withdrawn_answers();
-                self.typing.frames.forget_spellings();
-            }
+        }
+        // A question asked inside the scope was answered on the level constraints it held, and a reduct or a settled spelling may rest on the answer: those go with the constraints, whether or not a solution went with them. A scope that asked none leaves the reducts alone, which no rule of reduction reads a level for.
+        if universes_moved && self.typing.asking.questions() != mark.questions {
+            self.typing.caches.invalidate_for_withdrawn_answers();
         }
     }
 
@@ -2795,7 +2825,6 @@ impl<'s> Context<'s> {
             .map(|term| zonk_universe_levels_scoped(*term, &solver).map_err(Error::from))
             .collect::<Result<Vec<_>, _>>()?;
         self.typing.caches.invalidate_for_universe_rewrite();
-        self.typing.frames.forget_spellings();
         Ok(terms)
     }
 
@@ -2814,7 +2843,6 @@ impl<'s> Context<'s> {
         universe_context.quality_count = self.generalize_written_sorts()?;
         self.underway.scheme_open = false;
         self.typing.caches.invalidate_for_universe_rewrite();
-        self.typing.frames.forget_spellings();
         Ok(universe_context)
     }
 
@@ -2851,7 +2879,6 @@ impl<'s> Context<'s> {
             .map_err(Error::from)?;
         self.underway.scheme_open = false;
         self.typing.caches.invalidate_for_universe_rewrite();
-        self.typing.frames.forget_spellings();
         Ok(())
     }
 
@@ -2870,7 +2897,6 @@ impl<'s> Context<'s> {
         }
         .map_err(Error::from)?;
         self.typing.caches.invalidate_for_universe_rewrite();
-        self.typing.frames.forget_spellings();
         Ok(())
     }
 
@@ -2921,7 +2947,7 @@ impl<'s> Context<'s> {
             self.typing.caches.note_write();
         }
         if redefined {
-            self.typing.frames.forget_spellings();
+            self.typing.caches.note_redefinition();
         }
         for name in &fresh {
             self.typing.caches.retain_reductions_without(name);

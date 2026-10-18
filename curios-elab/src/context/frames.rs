@@ -8,11 +8,11 @@
 
 use {
     super::{
-        DefEntry, Defined, Frame, HeldFrames, InScope, ProjectionEntry, ScrutineeEntry, Settled,
-        SharedSpine, SharedTelescope, Window,
+        DefEntry, Defined, Footing, Frame, HeldFrames, InScope, ProjectionEntry, ScrutineeEntry,
+        Settled, SharedSpine, SharedTelescope, Window,
         frame::{KeptWindow, Prefix, Spelling, refinements_within, stand},
     },
-    crate::{DeadArm, UniverseStateToken},
+    crate::DeadArm,
     curios_core::{
         DefinitionKind, Free, Global, HeadTag, RecGroup, Term, UniverseContext,
         project_erased_universes,
@@ -43,8 +43,6 @@ pub(crate) struct Frames<'s> {
     ///
     /// The bracket the kernel has. A refinement key's *reduced* spelling must rest only on equations that outlive it, which are the frames outside its own: an inner arm's equation retracts first, and the entry's own frame is the equation itself, which a reduction of the key would otherwise meet at its first probe and answer with the case value it is assuming. `curios-cert`'s `Scope::hide_refinements_from` withholds the same span for the same two reasons.
     withhold_refinements_from: Option<usize>,
-    /// How many times every settled spelling has been forgotten at once ([`Frames::forget_spellings`]): a spelling is stamped with the count it settled under and missed under a later one, so a frame only a parked problem holds forgets as the live ones do, and no walk is made.
-    spellings_forgotten: usize,
     /// One tick per mutation of a frame's locals (assume, frame exit, reassume) — an `Entropy` used as a version stamp: `fresh()` bumps, `count()` reads. Invalidates `identity_cache`, which shares the frozen telescope and identity spine between every meta born under an unchanged Γ.
     locals_stamp: Entropy,
     identity_cache: Option<(u64, SharedTelescope, SharedSpine)>,
@@ -65,7 +63,6 @@ impl<'s> Frames<'s> {
             stood: 0,
             members: HashMap::new(),
             withhold_refinements_from: None,
-            spellings_forgotten: 0,
             locals_stamp: Entropy::new(),
             identity_cache: None,
             entered: 0,
@@ -533,53 +530,25 @@ impl<'s> Frames<'s> {
         }
         frame.refinement_scrutinees.insert(canonical, entry);
     }
-    /// The reduced spelling settled for the entry `key` registered in `frame`, by plain reduction where `plain` and by a judgment's otherwise: `None` where no probe has asked for it — or it held an unsolved metavariable and a solution has landed since, `solved` being how many are committed now — and `Some(None)` where reducing it refused.
-    pub(crate) fn settled_spelling(
-        &self,
-        frame: usize,
-        key: &Term,
-        plain: bool,
-        solved: usize,
-        levels: &UniverseStateToken,
-    ) -> Option<Option<Settled>> {
-        let spellings = self.frames.get(frame)?.scrutinee_spellings.borrow();
-        let spelling = spellings[usize::from(plain)].get(key)?;
-
-        (spelling.forgotten == self.spellings_forgotten
-            && spelling
-                .solved
-                .is_none_or(|settled_at| settled_at == solved)
-            && spelling
-                .levels
-                .as_ref()
-                .is_none_or(|settled_at| settled_at == levels))
-        .then(|| spelling.settled.clone())
+    /// What the entry `key` registered in `frame` settled to under the reduction `plain` names, where a probe has asked for it, beside what it rests on: the context reads whether that still stands (`Context::settled_key`).
+    pub(super) fn spelling(&self, frame: usize, key: &Term, plain: bool) -> Option<Spelling> {
+        self.frames.get(frame)?.scrutinee_spellings.borrow()[usize::from(plain)]
+            .get(key)
+            .cloned()
     }
-    /// File what the entry `key` registered in `frame` settled to under the reduction `plain` names. `solved` is how many solutions were committed, where the key or the spelling held an unsolved metavariable. Filed in the frame's own memo, which every holder of the frame reads: the live context and a judgment standing on the frame settle a key once between them.
+    /// File what the entry `key` registered in `frame` settled to under the reduction `plain` names, on what it rests on. Filed in the frame's own memo, which every holder of the frame reads: the live context and a judgment standing on the frame settle a key once between them.
     pub(crate) fn settle_spelling(
         &mut self,
         frame: usize,
         key: Term,
         plain: bool,
         settled: Option<Settled>,
-        solved: Option<usize>,
-        levels: Option<UniverseStateToken>,
+        footing: Footing,
     ) {
         if let Some(frame) = self.frames.get(frame) {
-            frame.scrutinee_spellings.borrow_mut()[usize::from(plain)].insert(
-                key,
-                Spelling {
-                    settled,
-                    solved,
-                    levels,
-                    forgotten: self.spellings_forgotten,
-                },
-            );
+            frame.scrutinee_spellings.borrow_mut()[usize::from(plain)]
+                .insert(key, Spelling { settled, footing });
         }
-    }
-    /// Forget every settled spelling: what a key reduces to may have changed everywhere. A count, which each spelling is stamped with and read against, so the frames a parked problem holds forget with the live ones.
-    pub(crate) fn forget_spellings(&mut self) {
-        self.spellings_forgotten += 1;
     }
     /// Forget the settled spellings a fresh definition of `name` can change: the ones naming it, which were stuck on its absence, and the ones that refused. Asked of the frames that stand and of those set aside: a frame that has left the context names no binder defined since.
     pub(crate) fn forget_spellings_naming(&mut self, name: &Free) {
@@ -598,22 +567,27 @@ impl<'s> Frames<'s> {
         }
     }
 
-    /// What the last settlement of an entry registered in `frame` remembered under the reduction `plain` names, taken for the next one to start from, where the frames that stood when it was filed all still stand and nothing has been forgotten since ([`Frame::settled_windows`](super::Frame)).
-    pub(crate) fn take_settled_window(&self, frame: usize, plain: bool) -> Option<Window> {
+    /// What the last settlement of an entry registered in `frame` remembered under the reduction `plain` names, taken for the next one to start from, where the frames that stood when it was filed all still stand ([`Frame::settled_windows`](super::Frame)): the context reads whether the rest of what it rests on does.
+    pub(super) fn take_settled_window(&self, frame: usize, plain: bool) -> Option<KeptWindow> {
         let kept =
             self.frames.get(frame)?.settled_windows.borrow_mut()[usize::from(plain)].take()?;
 
-        (kept.forgotten == self.spellings_forgotten && self.still_stand(kept.stood))
-            .then_some(kept.window)
+        self.still_stand(kept.stood).then_some(kept)
     }
 
-    /// File what a settlement of an entry registered in `frame` remembered under the reduction `plain` names, for the next one.
-    pub(crate) fn keep_settled_window(&self, frame: usize, plain: bool, window: Window) {
+    /// File what a settlement of an entry registered in `frame` remembered under the reduction `plain` names, on what it rests on, for the next one.
+    pub(crate) fn keep_settled_window(
+        &self,
+        frame: usize,
+        plain: bool,
+        window: Window,
+        footing: Footing,
+    ) {
         if let Some(frame) = self.frames.get(frame) {
             frame.settled_windows.borrow_mut()[usize::from(plain)] = Some(KeptWindow {
                 window,
                 stood: self.prefix(),
-                forgotten: self.spellings_forgotten,
+                footing,
             });
         }
     }

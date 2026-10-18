@@ -6,12 +6,13 @@
 //!
 //! **A reduct has one of two lives within it**, as the kernel's memos have them (`curios-cert`'s `memos` module). One whose term and reduct are both [`lasting`] reads nothing a scope holds: no equation is recorded under a spelling that names no local, reduction puts no question to conversion about a term that names none, and such a term names no local definition and no level a rewrite moves. It stands for the declaration, and only a change to a definition it may have read clears it: a redefinition, and a rollback, since a definition still being elaborated may hold a solution the rollback unwinds. Every other reduct goes at each boundary of the scope as well.
 //!
-//! **A bracket of the scope is no boundary of the window around it.** A settlement withholds the frames from its entry's inwards and restores them, and a judgment standing on held frames sets the live ones aside and takes them back; what the live window remembered is what asking again gives once either closes, so each sets it aside at its entry and hands it back at its exit ([`Caches::enter_window`]). What a settlement remembered is kept by its entry's frame for the next settlement made there, for as long as the frames that stood when it was filed all still stand (`Frame::settled_windows`).
+//! **A bracket of the scope is no boundary of the window around it.** A settlement withholds the frames from its entry's inwards and restores them, and a judgment standing on held frames sets the live ones aside and takes them back; what the live window remembered is what asking again gives once either closes, so each sets it aside at its entry and hands it back at its exit ([`Caches::enter_window`]). What a settlement remembered is kept by its entry's frame for the next settlement made there, for as long as the frames that stood when it was filed all still stand and what else it rests on does (`Frame::settled_windows`, [`Footing`]).
 //!
 //! The *policies* — what is cacheable, and what a probe's groundness gate admits — stay on `Context`, which alone can read the solution and universe stores they consult. This type owns the storage and the write discipline.
 
 use {
-    crate::Sort,
+    super::SolutionPrefix,
+    crate::{Sort, UniverseStateToken},
     curios_analysis::Classification,
     curios_core::{
         AsideAnswers, Bound, ClosedMemo, Enter, Families, Free, Global, InductDecl, Level,
@@ -55,6 +56,23 @@ pub(crate) enum ElabProbe {
     Hit((Term, Term)),
     Miss(ElaborationStamp),
     Uncacheable,
+}
+
+/// What a settled spelling or a settlement's kept window rests on beyond the frames it was read under, filed with it and asked later whether it all still stands (`Context::stands`). Each part is filed only where what it was taken of read what the part names, so a write reaches an answer only where the answer read what the write moves; under [`Caches::wholesale`] every part is filed.
+#[derive(Debug, Clone)]
+pub(crate) struct Footing {
+    /// The solutions committed when it was taken: it stands while they all still are.
+    pub(crate) solutions: SolutionPrefix,
+    /// Whether a solution committed since moves it: what it was taken of held an unsolved metavariable, or a question was declined on the way.
+    pub(crate) exact: bool,
+    /// The universe solver's state, where a question put to conversion on the way was declined for a commit: it stands while that state does.
+    pub(crate) levels: Option<UniverseStateToken>,
+    /// How many times levels had been rewritten in place, where what it holds names a universe metavariable: reduction reads no level, so a rewrite moves only an answer holding one it rewrites.
+    rewrites: Option<usize>,
+    /// How many times answers had been withdrawn, where a question was put to conversion on the way.
+    withdrawals: Option<usize>,
+    /// How many times the definitions in view had changed at once: at a redefinition, and at a declaration's boundary, which nothing a budget paid for outlives.
+    redefinitions: usize,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -115,6 +133,10 @@ pub(crate) struct Caches {
     wholesale: bool,
     /// The windows of the scope the brackets in progress set aside, innermost last ([`Caches::enter_window`]).
     windows: Vec<Window>,
+    /// How many times levels have been rewritten in place ([`Caches::invalidate_for_universe_rewrite`]), answers withdrawn with the level constraints they were given on ([`Caches::invalidate_for_withdrawn_answers`]), and the definitions in view changed at once ([`Caches::note_redefinition`]): what a [`Footing`] reads, each where what it was taken of read what the count counts.
+    rewrites: usize,
+    withdrawals: usize,
+    redefinitions: usize,
 }
 
 /// A bracket of the scope: a span in which the frames in view are not the ones around it, after which they are again.
@@ -208,6 +230,41 @@ impl Caches {
             wholesale: true,
             ..Self::default()
         }
+    }
+
+    /// The definitions in view changed at once: what a settled spelling or a kept window read of them may have, and nothing names what.
+    pub(crate) fn note_redefinition(&mut self) {
+        self.redefinitions += 1;
+    }
+
+    /// The footing of an answer taken now, under the journal of solutions as `solutions` names it ([`Footing`]): `exact` where a solution committed since moves it, `levels` the universe solver's state where a question was declined on the way, `universes` where it holds a universe metavariable, `asked` where a question was put to conversion on the way.
+    pub(crate) fn footing(
+        &self,
+        solutions: SolutionPrefix,
+        exact: bool,
+        levels: Option<UniverseStateToken>,
+        universes: bool,
+        asked: bool,
+    ) -> Footing {
+        Footing {
+            solutions,
+            exact: exact || self.wholesale,
+            levels,
+            rewrites: (universes || self.wholesale).then_some(self.rewrites),
+            withdrawals: (asked || self.wholesale).then_some(self.withdrawals),
+            redefinitions: self.redefinitions,
+        }
+    }
+
+    /// Whether no rewrite, withdrawal or redefinition `footing` reads has landed since it was taken.
+    pub(crate) fn counts_stand(&self, footing: &Footing) -> bool {
+        footing
+            .rewrites
+            .is_none_or(|rewrites| rewrites == self.rewrites)
+            && footing
+                .withdrawals
+                .is_none_or(|withdrawals| withdrawals == self.withdrawals)
+            && footing.redefinitions == self.redefinitions
     }
 
     /// Record a write to a kernel store, poisoning any elaboration-cache insert whose computation spans it.
@@ -487,6 +544,7 @@ impl Caches {
 
     /// A new declaration: every table is discarded — the reducts and the elaborations — so that what one declaration can afford is decided by nothing the declarations before it left behind.
     pub(crate) fn begin_declaration(&mut self) {
+        self.note_redefinition();
         self.proofs.clear();
         self.instances.clear();
         self.opened.get_mut().clear();
@@ -625,6 +683,7 @@ impl Caches {
 
     /// A name was *re*defined (or an assumption's universe scheme rewritten in place): the old value may sit consumed inside a reduct or an elaboration result that no longer mentions the name, leaving nothing for a selective retain to key on — both caches clear wholesale, and the write is stamped.
     pub(crate) fn invalidate_for_redefinition(&mut self) {
+        self.note_redefinition();
         self.note_write();
         self.clear_reductions();
         self.clear_elaborations();
@@ -774,6 +833,7 @@ impl Caches {
 
     /// Universe levels were rewritten in place (defaulting, finalization, instance closure): cached reducts and elaborations may embed the pre-rewrite levels, so the scoped reducts and the elaborations clear. A lasting reduct names no universe metavariable, so no rewrite reaches it. The solver write itself is stamped by the `UniverseMutation` guard.
     pub(crate) fn invalidate_for_universe_rewrite(&mut self) {
+        self.rewrites += 1;
         self.clear_scoped_reductions();
         self.clear_elaborations();
     }
@@ -808,6 +868,7 @@ impl Caches {
 
     /// Level constraints were withdrawn from a scope in which a judgment's reduction put a question to conversion: a reduct taken there may rest on an answer those constraints gave, so the scoped reducts go. A lasting one asked nothing: reduction puts no question to conversion about a term that names no local. No stamp: the withdrawal itself was stamped.
     pub(crate) fn invalidate_for_withdrawn_answers(&mut self) {
+        self.withdrawals += 1;
         // How many reducts the clear throws away.
         curios_profile::sample!(
             "caches::withdrawn_dropped",

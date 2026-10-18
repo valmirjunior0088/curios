@@ -87,7 +87,9 @@ fn settle(context: &mut Context, guard: &Term, probed: Term) -> (usize, Term) {
     at
 }
 
-/// A settled spelling is left alone by what cannot change what its key reduces to: a refinement registered in a frame inside its entry's, that frame's exit, and a suppression bracket. Each of the three cleared every spelling while they were kept in a table beside the reducts, and settling again after them was most of what the probe at a stuck reduct cost.
+/// A settled spelling is left alone by what cannot change what its key reduces to: a refinement registered in a frame inside its entry's, that frame's exit, a judgment standing on its frame, and a rewrite of levels where it holds no universe metavariable, since reduction reads no level. The first three cleared every spelling while they were kept in a table beside the reducts, and settling again after them was most of what the probe at a stuck reduct cost.
+///
+/// Mutation-checked: with a rewrite of levels forgetting every spelling, its row fails.
 #[test]
 fn a_settled_spelling_outlives_what_cannot_change_it() {
     let Guarded {
@@ -110,6 +112,12 @@ fn a_settled_spelling_outlives_what_cannot_change_it() {
         let held = context.hold_frames();
         context.standing_on(&held, |_| ());
         assert!(settled(context, &at), "a judgment standing on its frame");
+
+        context.default_universes(&[]).expect("no level to default");
+        assert!(
+            settled(context, &at),
+            "a rewrite of levels it holds none of"
+        );
     });
 }
 
@@ -213,6 +221,50 @@ fn a_spelling_that_held_an_unsolved_metavariable_is_settled_again_after_a_soluti
 
             assert!(!settled(context, &open_at));
             assert!(settled(context, &ground_at));
+        });
+    });
+}
+
+/// A rollback forgets a spelling settled after a solution it unwinds, which may be what its key reduced through, and leaves one settled before its mark: what a spelling read of the solutions is the ones committed when it settled.
+///
+/// Mutation-checked: with every spelling forgotten at a rollback, the one settled before the mark goes with it; with none, the one settled after the solution stays.
+#[test]
+fn a_rollback_forgets_only_the_spellings_settled_past_what_it_unwinds() {
+    let Guarded {
+        mut context,
+        small,
+        n,
+    } = guarded();
+    context.birth_metavar(
+        MetavarId(0),
+        Vec::new(),
+        Term::intrinsic(Intrinsic::NatType),
+    );
+    let later = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+
+    context.with_frame(|context| {
+        let before = settle(
+            context,
+            &Term::apply(Term::free_var(&small), [Term::free_var(&n)]),
+            carrier(Term::free_var(&n)),
+        );
+        let mark = context.solution_mark();
+        context.solve_metavar(MetavarId(0), nat(1));
+        context.with_frame(|context| {
+            let after = settle(
+                context,
+                &Term::apply(Term::free_var(&small), [later.clone()]),
+                carrier(later),
+            );
+
+            context.rollback_solutions(mark);
+            context.end_solutions(mark);
+
+            assert!(settled(context, &before), "settled before the mark");
+            assert!(
+                !settled(context, &after),
+                "settled after an unwound solution"
+            );
         });
     });
 }

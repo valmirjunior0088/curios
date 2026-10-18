@@ -100,7 +100,8 @@ fn a_settled_spelling_is_read_wherever_its_frame_is_held() {
     let held = context.with_frame(|context| {
         context.refine_scrutinee_spellings(vec![(guard.clone(), guard.clone(), false)], &truth());
         let (frame, key) = entry(context);
-        context.record_settled_key(frame, key, Some(settled), false, None);
+        let footing = context.footing(false, None, false, false);
+        context.record_settled_key(frame, key, Some(settled), footing);
         context.hold_frames()
     });
 
@@ -110,7 +111,7 @@ fn a_settled_spelling_is_read_wherever_its_frame_is_held() {
     });
     assert!(read, "the retry reads what the frame settled");
 
-    context.typing.frames.forget_spellings();
+    context.typing.caches.invalidate_for_redefinition();
     let read = context.standing_on(&held, |context| {
         let (frame, key) = entry(context);
         context.settled_key(frame, &key).is_some()

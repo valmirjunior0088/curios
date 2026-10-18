@@ -1199,7 +1199,7 @@ fn scan_settled(
 ///
 /// **Withheld for the kernel's two reasons.** The entry's own frame holds the equation being settled, which reducing its key would meet at the first probe and answer with the case value it is assuming; and an inner frame retracts before the entry does, so a spelling resting on one would outlive its justification. The frames outside are exactly the equations the entry may rest on, and `Frames::withhold_refinements_from` leaves them live.
 ///
-/// **Bounded by the declaration's budget alone**, as the kernel's settlement is. What a settlement spends reads what the tables remember, a hit being free, so a ceiling below the budget would make whether an entry settles follow when the tables were last cleared, and with it what the program elaborates to. A guard over a subject an accumulation built reduces that accumulation, which the declaration pays for as it pays for any reduction it asks. The kernel settles each entry once, and so does the elaborator while what its key reduces to cannot have changed: it settles one again where a redefinition, a rollback or a universe rewrite forgot it, and where it held an unsolved metavariable and a solution has landed (`Frame::scrutinee_spellings`). A refusal settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration propagates.
+/// **Bounded by the declaration's budget alone**, as the kernel's settlement is. What a settlement spends reads what the tables remember, a hit being free, so a ceiling below the budget would make whether an entry settles follow when the tables were last cleared, and with it what the program elaborates to. A guard over a subject an accumulation built reduces that accumulation, which the declaration pays for as it pays for any reduction it asks. The kernel settles each entry once, and so does the elaborator while what its key reduces to cannot have changed: it settles one again where what the spelling rests on has moved — a solution it read unwound, a level it holds rewritten, an answer it was given withdrawn, the definitions in view changed at once, or a solution landed where it held an unsolved metavariable (`Frame::scrutinee_spellings`). A refusal settles the entry as having no reduced spelling, so it is paid once; exhaustion of the declaration propagates.
 ///
 /// **To count settlements.** Under `profile` each call opens a `reduce::settle` span carrying its key and its frame. In the stream `cargo xtask profile-prelude elaboration <PATH>` files, a span is nested where another `reduce::settle` span is open on its thread as it opens, and one inside a `declaration` span is a repeat where an earlier one in that span carried its frame and key. Counted at `aa026bb2e`: 4,573 spans, 240 of them nested, and in elaboration 2,506 first settlements and 1,828 repeats.
 fn settle(
@@ -1211,6 +1211,7 @@ fn settle(
     // The key and its frame are what a hunt for repeated settlements needs: the same pair recurring is an entry settled again, and the costliest calls name the keys that pay.
     curios_profile::profile!("reduce::settle", key = %original, frame);
     let declined = context.declined();
+    let questions = context.questions();
     let settled = context.with_refinements_withheld_from(frame, |context| {
         reduce(context, original.clone())
             .and_then(|reduct| reduct_spelling(context, &reduct))
@@ -1223,6 +1224,8 @@ fn settle(
         .is_empty();
     // And what either solver could: a question declined for a commit while the key was reduced.
     let levels = (context.declined() != declined).then(|| context.universe_state());
+    // And what a withdrawal of level constraints could: an answer conversion gave while the key was reduced.
+    let asked = context.questions() != questions;
 
     match settled {
         Ok(reduct) => {
@@ -1230,15 +1233,20 @@ fn settle(
                 || reduct
                     .as_ref()
                     .is_some_and(|unerased| !unerased.metavars().is_empty());
+            // And what a rewrite of levels could: a universe metavariable the key or its spelling holds.
+            let universes = original.has_universe_meta()
+                || reduct.as_ref().is_some_and(Term::has_universe_meta);
+            let footing = context.footing(unsolved, levels, universes, asked);
             let settled = reduct.map(|unerased| Settled {
                 compared: project_erased_universes(&unerased),
                 unerased,
             });
-            context.record_settled_key(frame, key, settled, unsolved, levels);
+            context.record_settled_key(frame, key, settled, footing);
             Ok(())
         }
         Err(error) => {
-            context.record_settled_key(frame, key, None, unsolved, levels);
+            let footing = context.footing(unsolved, levels, original.has_universe_meta(), asked);
+            context.record_settled_key(frame, key, None, footing);
             Err(error)
         }
     }
