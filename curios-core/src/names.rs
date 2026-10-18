@@ -544,6 +544,11 @@ impl Imports {
         self.bodies.iter().flat_map(|(_, body)| body.iter())
     }
 
+    /// Every module body that holds an import.
+    pub fn bodies(&self) -> impl Iterator<Item = &Qualifier> {
+        self.bodies.iter().map(|(body, _)| body)
+    }
+
     /// Every binding some scope of the unit has imported, under each spelling it was imported by.
     pub fn everywhere(&self) -> impl Iterator<Item = Imported<'_>> {
         self.entries().flat_map(|import| self.brought(import))

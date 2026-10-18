@@ -453,6 +453,8 @@ pub(super) struct Shared {
     pub(super) lints: RefCell<Vec<Lint>>,
     // Where the unit's declarations lie, and the one being lowered — see `Anchoring`.
     pub(super) anchoring: Anchoring,
+    // The module bodies whose `use` declarations this lowering has recorded what they brought into scope of.
+    closed: RefCell<HashSet<Qualifier>>,
 }
 
 impl Shared {
@@ -476,6 +478,49 @@ impl Shared {
             reached: RefCell::default(),
             lints: RefCell::default(),
             anchoring: Anchoring::default(),
+            closed: RefCell::default(),
+        }
+    }
+
+    /// What a unit lowered over `baseline` starts from: what the baseline minted, its import scopes and where its declarations lie, which the lowering changes where it lowers a declaration again, and [`Shared::settle`] where it takes one away.
+    pub(super) fn over(baseline: &crate::PreparedText) -> Self {
+        let shared = Self::new();
+        *shared.minted.borrow_mut() = (**baseline.minted()).clone();
+        *shared.imports.borrow_mut() = baseline.imports().clone();
+        *shared.anchoring.anchors.borrow_mut() = baseline.anchors().clone();
+
+        shared
+    }
+
+    /// Take out of what a unit lowered over a baseline started from what the baseline holds and the unit does not: each kept witness named otherwise is minted under the name it takes now, and every name `dropped`, every text `gone` and every module body this lowering did not close is forgotten.
+    pub(super) fn settle(
+        &self,
+        renamed: &[(curios_core::Global, curios_core::Global)],
+        dropped: &BTreeSet<curios_core::Global>,
+        gone: &[(curios_core::Anchor, u32)],
+    ) {
+        let mut minted = self.minted.borrow_mut();
+        for (then, now) in renamed {
+            minted.rename(then, *now);
+        }
+        let mut imports = self.imports.borrow_mut();
+        let mut anchors = self.anchoring.anchors.borrow_mut();
+        for name in dropped {
+            minted.forget(name);
+            imports.forget(name);
+            anchors.unname(name);
+        }
+        for (anchor, stamp) in gone {
+            anchors.forget_text(*anchor, *stamp);
+        }
+        let closed = self.closed.borrow();
+        let open = imports
+            .bodies()
+            .filter(|body| !closed.contains(*body))
+            .copied()
+            .collect::<Vec<_>>();
+        for body in open {
+            imports.hold(body, Vec::new());
         }
     }
 }
@@ -714,16 +759,10 @@ impl<'a> Context<'a> {
 
     /// End the declaration begun last, which lowered to the items declaring `names`: record what it minted, for every one of them.
     pub(super) fn end_declaration(&self, names: impl IntoIterator<Item = curios_core::Global>) {
-        self.keep_declaration(Rc::new(self.mints()), names);
-    }
-
-    /// Record that the items declaring `names` are one declaration's, which minted `mints`: [`Context::end_declaration`], for a declaration whose lowering is taken from a baseline with what it minted there.
-    pub(super) fn keep_declaration(
-        &self,
-        mints: Rc<curios_core::Mints>,
-        names: impl IntoIterator<Item = curios_core::Global>,
-    ) {
-        self.shared.minted.borrow_mut().declare(&mints, names);
+        self.shared
+            .minted
+            .borrow_mut()
+            .declare(&Rc::new(self.mints()), names);
     }
 
     /// Mint a metavariable id for a surface hole, unique within its declaration.
@@ -1235,6 +1274,7 @@ impl<'a> Context<'a> {
             .imports
             .borrow_mut()
             .hold(self.prefix, self.in_scope.clone());
+        self.shared.closed.borrow_mut().insert(self.prefix);
     }
 
     // Snapshot the imports in scope of this body as the view of the declaration `owner` — what a goal inside it may be offered, and what a page resolves the names in its signature through. `None` is the entrypoint tail, which closes the root body.

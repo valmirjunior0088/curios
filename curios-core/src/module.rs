@@ -456,6 +456,15 @@ impl DefinitionKind {
         }
     }
 
+    /// The declaration a generated definition was generated from: a constructor's former, a method wrapper's concept. `None` for a written one.
+    pub fn generated_from(&self) -> Option<Qualifier> {
+        match self {
+            DefinitionKind::InductiveConstructor { owner, .. }
+            | DefinitionKind::ConceptMethod { owner } => Some(*owner),
+            _ => None,
+        }
+    }
+
     /// What the definition is declared as, with nothing of its entry in it.
     pub fn declared(&self) -> Declared {
         match self {
@@ -992,6 +1001,14 @@ impl Module {
             ArchivedDefinitionKind::Witness => Declared::Witness,
             ArchivedDefinitionKind::Test => Declared::Test,
         };
+        // The declaration a generated item was generated from is read off the archive as what it is declared as is.
+        let generated = |kind: &ArchivedDefinitionKind| match kind {
+            ArchivedDefinitionKind::InductiveConstructor { owner, .. }
+            | ArchivedDefinitionKind::ConceptMethod { owner } => pooled
+                .restore::<curios_utilities::Qualifier>(owner)
+                .map(|owner| Some(Global::Authored(owner))),
+            _ => Ok(None),
+        };
         let mut outlines = Outlines::default();
         for item in archived.items.iter() {
             match item {
@@ -999,6 +1016,7 @@ impl Module {
                     [pooled.restore::<Global>(&definition.name)?],
                     [declared(&definition.kind)],
                     false,
+                    generated(&definition.kind)?,
                 ),
                 ArchivedItem::Rec(rec) => outlines.push(
                     rec.definitions
@@ -1009,6 +1027,10 @@ impl Module {
                         .iter()
                         .map(|definition| declared(&definition.kind)),
                     true,
+                    match rec.definitions.first() {
+                        Some(definition) => generated(&definition.kind)?,
+                        None => None,
+                    },
                 ),
             }
         }

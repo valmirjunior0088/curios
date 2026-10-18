@@ -52,6 +52,9 @@ use witness::*;
 mod mention;
 pub use mention::*;
 
+mod revision;
+use revision::*;
+
 use {
     crate::{
         Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
@@ -67,7 +70,7 @@ use {
     std::{
         borrow::Cow,
         cell::OnceCell,
-        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
         sync::Arc,
     },
@@ -399,9 +402,9 @@ pub struct PreparedText {
     /// The declarations the unit's lowered items make, made the first time something asks: what its elaboration asks a declaration for by name.
     #[archived_with(curios_archive::Skip)]
     declarations: OnceCell<curios_core::Declarations>,
-    /// The bytes a baseline stored an item as, for each item this unit took from one whole ([`PreparedText::taken_from`]), by the item's place: what the item is stored as again, since it is the baseline's. Empty for a unit lowered over none.
+    /// What this unit, lowered over a baseline, holds otherwise than the baseline does ([`PreparedText::lowered_anew`], [`PreparedText::dropped`]). `None` for a unit lowered over none, and for one restored.
     #[archived_with(curios_archive::Skip)]
-    carried: Vec<Option<curios_archive::Bytes>>,
+    revision: Option<Revision>,
     /// What this unit's lowering minted, which its elaboration's counters start above, with the names of each declaration that resolved to nothing. A count within the unit: nothing here resumes above a predecessor. Shared with the elaboration that seeds from it.
     #[archived_with(curios_archive::Shared)]
     minted: Rc<curios_core::Minted>,
@@ -584,8 +587,8 @@ impl PreparedText {
         &self.minted
     }
 
-    /// What each source declaration of this unit lowered to beside its items — see the field. Read out of the unit's baseline half now, where the unit was restored and no lowering has asked before.
-    fn lowerings(&self) -> &[Rc<LoweredDeclaration>] {
+    /// What each source declaration of this unit lowered to beside its items, by the place of its first item — see the field. Read out of the unit's baseline half now, where the unit was restored and no lowering has asked before.
+    fn lowerings(&self) -> &Records {
         &self.half().declarations
     }
 
@@ -635,28 +638,23 @@ impl PreparedText {
         self
     }
 
-    /// The bytes of this unit's lowered items, each stored on its own behind how many they are and how long each is ([`joined`]): the ones an item was restored from where the unit holds it as it was read, those it carries of a baseline, and its archive, made now, otherwise.
+    /// The bytes of this unit's lowered items, each stored on its own behind how many they are and how long each is ([`joined`]): the ones an item was restored from where the unit holds it as it was read, of this unit or of a baseline it is a version of, and its archive, made now, otherwise.
     pub fn items_bytes(&self) -> Result<Vec<u8>, String> {
         let items = &self.core.items;
         items
             .places()
-            .enumerate()
-            .map(|(index, place)| {
-                let stored = items
-                    .part(place)
-                    .or_else(|| self.carried.get(index).and_then(Option::as_ref));
-                match stored {
-                    Some(stored) => {
-                        debug_assert!(
-                            curios_archive::to_bytes(&items[place])
-                                .is_ok_and(|made| *made == *stored.as_slice()),
-                            "an item kept as it was stored is stored as it was"
-                        );
+            .map(|place| match items.part(place) {
+                Some(stored) => {
+                    debug_assert!(
+                        curios_archive::to_bytes(&items[place])
+                            .is_ok_and(|made| *made == *stored.as_slice()),
+                        "an item kept as it was stored is stored as it was"
+                    );
 
-                        Ok(Cow::Borrowed(stored.as_slice()))
-                    }
-                    None => curios_archive::to_bytes(&items[place])
-                        .map(|made| Cow::Owned(made.to_vec())),
+                    Ok(Cow::Borrowed(stored.as_slice()))
+                }
+                None => {
+                    curios_archive::to_bytes(&items[place]).map(|made| Cow::Owned(made.to_vec()))
                 }
             })
             .collect::<Result<Vec<_>, String>>()
@@ -677,80 +675,16 @@ impl PreparedText {
             .get_or_init(|| curios_core::Declarations::of(self.core()))
     }
 
-    /// The names this unit declares by a lowering it did not take from `baseline` whole: each one's item is new to the unit, or lowered again. What a recompile over `baseline` makes again, every other declaration's item being the baseline's own under the same name, with the registry entries the baseline holds for it.
+    /// The names this unit declares by an item it does not hold as the baseline it was lowered over holds it: lowered again or new to the unit, or a kept witness named otherwise. What a recompile over that baseline makes again, every other declaration's item being the baseline's own under the same name, with the registry entries the baseline holds for it. `None` for a unit lowered over none.
     ///
-    /// **By the record, never by the text.** A declaration is the baseline's where this unit holds the very record the baseline does, which only a kept lowering leaves behind; and under the same name, since a kept witness is named anew and may take the name another held.
-    pub fn lowered_anew(&self, baseline: &PreparedText) -> BTreeSet<curios_core::Global> {
-        let taken = self
-            .taken_from(baseline)
-            .into_iter()
-            .map(|(ours, _)| ours)
-            .collect::<HashSet<_>>();
-
-        let items = &self.core.items;
-        items
-            .places()
-            .filter(|place| !taken.contains(place))
-            .flat_map(|place| items.names(place))
-            .copied()
-            .collect()
+    /// **By what the walk did, never by the text.** A declaration is the baseline's where the walk kept it, which a declaration lowered from the text and resolutions the baseline's was lowered from is; and under the same name, since a kept witness is named anew and may take the name another held.
+    pub fn lowered_anew(&self) -> Option<&BTreeSet<curios_core::Global>> {
+        self.revision.as_ref().map(|revision| &revision.anew)
     }
 
-    /// The names `baseline` declares and this unit does not.
-    pub fn dropped_from(&self, baseline: &PreparedText) -> BTreeSet<curios_core::Global> {
-        let items = &baseline.core.items;
-        items
-            .places()
-            .flat_map(|place| items.names(place))
-            .filter(|name| self.places().place(name).is_none())
-            .copied()
-            .collect()
-    }
-
-    /// The places of the items this unit took from `baseline` whole, each beside the baseline's place for it: an item of a declaration whose record is the baseline's own, under the names the baseline holds it under.
-    fn taken_from(&self, baseline: &PreparedText) -> Vec<(usize, usize)> {
-        let mut held = HashMap::with_capacity(baseline.lowerings().len());
-        let mut first = 0;
-        for declaration in baseline.lowerings() {
-            held.insert(Rc::as_ptr(declaration), first);
-            first += declaration.facts().len();
-        }
-
-        let mut taken = Vec::new();
-        let mut first = 0;
-        for declaration in self.lowerings() {
-            let count = declaration.facts().len();
-            if let Some(&from) = held.get(&Rc::as_ptr(declaration)) {
-                for place in 0..count {
-                    let ours = self.core.items.names(first + place);
-                    let theirs = baseline.core.items.names(from + place);
-                    if ours == theirs {
-                        taken.push((first + place, from + place));
-                    }
-                }
-            }
-            first += count;
-        }
-
-        taken
-    }
-
-    /// The bytes the item at `place` was stored as, where this unit holds them: the ones it was restored from, or the ones it carries of a baseline.
-    fn item_stored(&self, place: usize) -> Option<curios_archive::Bytes> {
-        self.core
-            .items
-            .part(place)
-            .or_else(|| self.carried.get(place).and_then(Option::as_ref))
-            .cloned()
-    }
-
-    /// Carry, for each item this unit took from `baseline` whole, the bytes the baseline stored it as: what [`PreparedText::items_bytes`] stores it as again.
-    fn carry(&mut self, baseline: &PreparedText) {
-        let mut carried = vec![None; self.core.items.len()];
-        for (ours, theirs) in self.taken_from(baseline) {
-            carried[ours] = baseline.item_stored(theirs);
-        }
-        self.carried = carried;
+    /// The names the baseline this unit was lowered over declares and this unit does not. `None` for a unit lowered over none.
+    pub fn dropped(&self) -> Option<&BTreeSet<curios_core::Global>> {
+        self.revision.as_ref().map(|revision| &revision.dropped)
     }
 
     /// What each `use` brought into scope, where, and under which spelling — the table `curios-elab`'s goal suggestions draw imported candidates from and spell them by.
@@ -1012,6 +946,8 @@ struct Lowering<'a> {
     broken: Vec<BrokenItem>,
     /// What the `use` declarations of each module body read, by the module ([`BaselineHalf::uses`]).
     uses: BTreeMap<Qualifier, Vec<Consulted>>,
+    /// Each declaration the walk met over the baseline, kept or lowered, in order ([`Step`]).
+    steps: Vec<Step>,
 }
 
 impl Lowering<'_> {
@@ -2037,6 +1973,13 @@ fn process_items(
                     .flat_map(FlatItem::names),
             );
             lowered.note(context, lowered_from);
+            if lowered.baseline.is_some() {
+                lowered.steps.push(Step {
+                    kept: None,
+                    record: lowered.declarations.len() - 1,
+                    from: lowered_from,
+                });
+            }
         }
     }
     // What the declarations of this body kept unasked read of its scope marks the `use` sites asking them would have.
@@ -2355,7 +2298,8 @@ fn into_core_unit_within(
         Scoped::over(&predecessor_public),
     )?;
 
-    let shared = Shared::new();
+    // Over a baseline, what the lowering mints, imports and anchors starts as the baseline's.
+    let shared = baseline.map_or_else(Shared::new, Shared::over);
     let mut context = Context::new(&table, &public, reach, &shared, syntax);
     // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what a predecessor already holds, and the predecessors' own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
     for mount in &mounts {
@@ -2433,6 +2377,7 @@ fn into_core_unit_within(
         foreigns,
         broken,
         uses,
+        steps,
     } = lowered;
     // The mounts the declarations kept unasked wrote a name under are reached, as asking their lookups would have reached them.
     if let Some(baseline) = &baseline {
@@ -2575,23 +2520,49 @@ fn into_core_unit_within(
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
     //
     // As they are written. No item is moved for another's sake: elaboration asks for each declaration when it is read, wherever it sits, refuses the ones that need one another by name, and stores the module in an order of its own (`curios_elab`'s `Demand`, `curios_core::Module::ordered`).
-    let items = flat_items
+    let made = flat_items
         .into_iter()
         .map(FlatItem::into_core)
         .collect::<Vec<_>>();
+    // Over a baseline, the unit is a version of the baseline's: its items, records, names and declarations, and what it minted, imported and anchored, the baseline's with what the walk changed.
+    let (items, records, places, declared, revision) = match &baseline {
+        Some(baseline) => {
+            let revised = revise(baseline.unit(), &steps, &declarations, &made);
+            shared.settle(
+                &revised.renamed,
+                &revised.revision.dropped,
+                &texts_gone(baseline.unit(), &declarations),
+            );
 
-    let mut unit = PreparedText {
+            (
+                revised.items,
+                revised.records,
+                OnceCell::from(revised.places),
+                OnceCell::from(revised.declarations),
+                Some(revised.revision),
+            )
+        }
+        None => (
+            made.into(),
+            in_walk_order(declarations),
+            OnceCell::new(),
+            OnceCell::new(),
+            None,
+        ),
+    };
+
+    let unit = PreparedText {
         mounts: own.clone(),
         foreigns,
         table: table.into_own().into_iter().collect(),
         public: public.into_own().into_iter().collect(),
         audiences: OnceCell::from(audiences),
         paths: OnceCell::new(),
-        places: OnceCell::new(),
-        declarations: OnceCell::new(),
-        carried: Vec::new(),
+        places,
+        declarations: declared,
+        revision,
         core: curios_core::Module {
-            items: items.into(),
+            items,
             mounts: own,
             witnesses,
             tests,
@@ -2615,15 +2586,12 @@ fn into_core_unit_within(
         reached: shared.reached.into_inner(),
         anchors: curios_archive::Deferred::held(shared.anchoring.into_anchors()),
         baseline: curios_archive::Deferred::held(BaselineHalf {
-            declarations,
+            declarations: records,
             scans,
             uses,
         }),
         lookups: lookups.map(OnceCell::from).unwrap_or_default(),
     };
-    if let Some(baseline) = &baseline {
-        unit.carry(baseline.unit());
-    }
 
     Ok((unit, entry))
 }

@@ -11,11 +11,12 @@
 use {
     super::{
         Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, ModuleInfo, PublicInterface,
-        Scan, Shared,
+        Scan, Shared, Step,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
-    curios_utilities::{Mount, Persistent, Qualifier, Report},
+    curios_utilities::{Mount, Ordered, Persistent, Qualifier, Report},
     std::{
+        borrow::Borrow,
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
@@ -23,7 +24,10 @@ use {
 };
 
 /// A lowered declaration as a later lowering finds it: by its anchor and the stamp of its text.
-type Key = (curios_core::Anchor, u32);
+pub(super) type Key = (curios_core::Anchor, u32);
+
+/// A unit's records, by the place of each declaration's first item among the unit's items ([`curios_core::Items::places`]): the declarations lie in the order their items do.
+pub(crate) type Records = Ordered<Rc<LoweredDeclaration>>;
 
 /// Who read each binding, of a unit's lowered declarations read backwards: what a lowering over the unit finds the declarations an edit could reach by, from the bindings it moved ([`Consulted`]).
 ///
@@ -37,11 +41,11 @@ pub(crate) struct LookupReaders {
 
 impl LookupReaders {
     /// Who read what, of `declarations`.
-    pub(super) fn of(declarations: &[Rc<LoweredDeclaration>]) -> Self {
+    pub(super) fn of(declarations: &Records) -> Self {
         curios_profile::profile!("lookup_readers::of", declarations = declarations.len());
         // Gathered whole first, so each binding's list is built once.
         let mut gathered = BTreeMap::<Consulted, Vec<Key>>::new();
-        for declaration in declarations {
+        for (_, declaration) in declarations.iter() {
             if let Some(key) = declaration.key {
                 for consulted in &declaration.consulted {
                     gathered.entry(*consulted).or_default().push(key);
@@ -223,7 +227,9 @@ struct Unused {
 #[curios_archive::archived]
 pub(crate) struct LoweredDeclaration {
     /// The text it was lowered from, by its anchor and the text's stamp. `None` for a declaration no later lowering may keep: one that was built rather than written, one a name of which resolved to nothing, and one whose findings could not be placed in its text.
-    key: Option<(curios_core::Anchor, u32)>,
+    key: Option<Key>,
+    /// The text it was lowered from, whether or not a later lowering may keep it: what the unit's anchors hold of it. `None` for one built rather than written.
+    text: Option<Key>,
     /// What the unit-wide passes read of each item it lowered to, in the unit's order.
     items: Vec<LoweredItem>,
     /// The definitions it recorded an import scope for, each by its place among the declaration's.
@@ -272,13 +278,15 @@ impl LoweredDeclaration {
             .zip(facts.iter().flat_map(|lowered| &lowered.definitions))
             .all(|(let_, declared)| let_.span.is_none() || declared.label.is_some());
 
+        let text = context.sited(|key, _| key);
         let key = match (unbound, placed, &scoped, &lints) {
-            (false, true, Some(_), Some(_)) => context.sited(|key, _| key),
+            (false, true, Some(_), Some(_)) => text,
             _ => None,
         };
 
         Self {
             key,
+            text,
             items: facts,
             scoped: scoped.unwrap_or_default(),
             lints: lints.unwrap_or_default(),
@@ -295,26 +303,67 @@ impl LoweredDeclaration {
     pub(super) fn facts(&self) -> &[LoweredItem] {
         &self.items
     }
+
+    /// The text this was lowered from. See the field.
+    pub(super) fn text(&self) -> Option<Key> {
+        self.text
+    }
+}
+
+/// How a unit's records are archived: as the records in the order their items stand, each restored at the index its first item has among the unit's.
+pub(crate) struct WalkOrder;
+
+/// The field adapter: `#[archived_with(InWalkOrder)]`.
+pub(crate) type InWalkOrder = curios_archive::Via<WalkOrder>;
+
+impl curios_archive::Proxy<Records> for WalkOrder {
+    type Archivable = Vec<Rc<LoweredDeclaration>>;
+
+    fn to_archivable(records: &Records) -> impl Borrow<Vec<Rc<LoweredDeclaration>>> {
+        records
+            .iter()
+            .map(|(_, record)| Rc::clone(record))
+            .collect::<Vec<_>>()
+    }
+
+    fn from_archivable(stored: Vec<Rc<LoweredDeclaration>>) -> Result<Records, String> {
+        Ok(in_walk_order(stored))
+    }
+}
+
+/// `records`, in the order their items stand, each at the index its first item has among the unit's.
+pub(super) fn in_walk_order(records: impl IntoIterator<Item = Rc<LoweredDeclaration>>) -> Records {
+    let mut ordered = Records::new();
+    let mut first = 0;
+    for record in records {
+        let count = record.items.len();
+        ordered.insert(
+            i64::try_from(first).expect("a unit's items are counted in an i64"),
+            record,
+        );
+        first += count;
+    }
+
+    ordered
 }
 
 /// A unit's baseline half: what a later lowering of the same sources reads of it, and nothing compiled after the unit does.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub(crate) struct BaselineHalf {
-    /// What each source declaration lowered to beside its items, one for each entry of the unit's `minted` declarations.
-    pub declarations: Vec<Rc<LoweredDeclaration>>,
+    /// What each source declaration lowered to beside its items, by the place of its first item ([`Records`]).
+    #[archived_with(InWalkOrder)]
+    pub declarations: Records,
     /// Each file-backed module's scan, by the module.
     pub scans: BTreeMap<Qualifier, Scan>,
     /// Every binding the `use` declarations of each module body read, by the module: what the scope of its body can move with.
     pub uses: BTreeMap<Qualifier, Vec<Consulted>>,
 }
 
-/// A unit an earlier text of the same sources lowered to, as a later one is lowered over it: its declarations by the text each was lowered from, and where each one's items lie in its module.
+/// A unit an earlier text of the same sources lowered to, as a later one is lowered over it: its declarations by the text each was lowered from, each by the place of its first item.
 pub(super) struct Baseline<'a> {
     unit: &'a PreparedText,
-    by_text: HashMap<(curios_core::Anchor, u32), usize>,
-    /// The place of each declaration's first item among the unit's.
-    first: Vec<usize>,
+    by_text: HashMap<Key, i64>,
     /// Whether the unit declares a foreign function at all, which the prelude does not: a row is looked up by its import name, spelled for the asking.
     foreign: bool,
     /// What the edit moved of what the lowering reads ([`Moved`]): `None` where a unit in scope moved, and every declaration is asked.
@@ -326,20 +375,15 @@ pub(super) struct Baseline<'a> {
 impl<'a> Baseline<'a> {
     pub(super) fn of(unit: &'a PreparedText) -> Self {
         let mut by_text = HashMap::with_capacity(unit.lowerings().len());
-        let mut first = Vec::with_capacity(unit.lowerings().len());
-        let mut next = 0;
-        for (index, declaration) in unit.lowerings().iter().enumerate() {
-            first.push(next);
-            next += declaration.items.len();
+        for (first, declaration) in unit.lowerings().iter() {
             if let Some(key) = declaration.key {
-                by_text.insert(key, index);
+                by_text.insert(key, first);
             }
         }
 
         Self {
             unit,
             by_text,
-            first,
             foreign: unit.foreigns.iter().next().is_some(),
             moved: None,
             unasked: RefCell::new(HashSet::new()),
@@ -351,8 +395,8 @@ impl<'a> Baseline<'a> {
         Self { moved, ..self }
     }
 
-    /// The declaration of this unit the one `context` stands at was lowered as, by its place, kept without asking: its module's text is the one the baseline lowered, so its own is, and no binding its lookups read moved. `None` where either may have, and the declaration is asked ([`Baseline::standing`]).
-    pub(super) fn unasked(&self, context: &Context) -> Option<usize> {
+    /// The declaration of this unit the one `context` stands at was lowered as, by the place of its first item, kept without asking: its module's text is the one the baseline lowered, so its own is, and no binding its lookups read moved. `None` where either may have, and the declaration is asked ([`Baseline::standing`]).
+    pub(super) fn unasked(&self, context: &Context) -> Option<i64> {
         let moved = self.moved.as_ref()?;
         if !self.stands(&context.prefix()) {
             return None;
@@ -429,9 +473,9 @@ impl<'a> Baseline<'a> {
             .unit
             .lowerings()
             .iter()
-            .map(Rc::as_ptr)
+            .map(|(_, declaration)| Rc::as_ptr(declaration))
             .collect::<HashSet<_>>();
-        for declaration in self.unit.lowerings() {
+        for (_, declaration) in self.unit.lowerings().iter() {
             if !now.contains(&Rc::as_ptr(declaration))
                 && let Some(key) = declaration.key
             {
@@ -454,30 +498,43 @@ impl<'a> Baseline<'a> {
         self.unit
     }
 
-    /// The declaration of this unit that the one `context` stands at was lowered as, by its place: the one lowered from the text that declaration is written in, where every name it resolved resolves here as it did.
-    pub(super) fn standing(&self, context: &Context) -> Option<usize> {
-        let index = context.sited(|key, text| {
-            let index = *self.by_text.get(&key)?;
+    /// The declaration of this unit that the one `context` stands at was lowered as, by the place of its first item: the one lowered from the text that declaration is written in, where every name it resolved resolves here as it did.
+    pub(super) fn standing(&self, context: &Context) -> Option<i64> {
+        let first = context.sited(|key, text| {
+            let first = *self.by_text.get(&key)?;
 
-            (self.unit.anchors().text(key.0, key.1) == Some(text)).then_some(index)
+            (self.unit.anchors().text(key.0, key.1) == Some(text)).then_some(first)
         })??;
 
-        let stands = self.unit.lowerings()[index]
+        let stands = self
+            .record(first)
             .trace
             .stands(|lookup, found| context.answers(lookup, found));
         context.forget_asked();
 
-        stands.then_some(index)
+        stands.then_some(first)
     }
 
-    /// Take the declaration at `index` whole into `lowered`, as lowering it again would have written it: its items under the names this lowering gives them, their registry entries and rows, what it minted, its import scopes and its lints.
-    pub(super) fn kept(&self, index: usize, context: &Context, lowered: &mut Lowering) {
-        let declaration = &self.unit.lowerings()[index];
-        let first = self.first[index];
+    /// The record of the declaration whose first item stands at `first`.
+    fn record(&self, first: i64) -> &'a Rc<LoweredDeclaration> {
+        self.unit
+            .lowerings()
+            .get(first)
+            .expect("a record the baseline holds")
+    }
+
+    /// Take the declaration whose first item stands at `first` into `lowered` as lowering it again would have written it, its items under the names this lowering gives them, their registry entries and rows, its import scopes and its lints: what the walk reads of the unit's declarations. What it minted, and its items and record as the unit holds them, are the baseline's, which the unit is a version of, and are left where they stand ([`Step`]).
+    pub(super) fn kept(&self, first: i64, context: &Context, lowered: &mut Lowering) {
+        let declaration = self.record(first);
+        let from = lowered.items.len();
 
         let mut names = Vec::new();
-        for place in first..first + declaration.items.len() {
-            let item = self.unit.lowered_item(place);
+        let items = &self.unit.core().items;
+        let mut place = usize::try_from(first).ok();
+        for _ in 0..declaration.items.len() {
+            let at = place.expect("a declaration's items stand together");
+            place = items.place_after(Some(at));
+            let item = self.unit.lowered_item(at);
             let kept = match item {
                 curios_core::Item::Let(definition) => {
                     FlatItem::Let(self.kept_let(definition, context, lowered))
@@ -523,15 +580,11 @@ impl<'a> Baseline<'a> {
                 ordinal: unused.ordinal,
             }),
         }));
-        let held = self
-            .unit
-            .lowered_item(first)
-            .declared_names()
-            .first()
-            .and_then(|name| self.unit.minted.shared(name))
-            .cloned()
-            .unwrap_or_default();
-        context.keep_declaration(held, names);
+        lowered.steps.push(Step {
+            kept: Some(first),
+            record: lowered.declarations.len(),
+            from,
+        });
         lowered.declarations.push(Rc::clone(declaration));
     }
 

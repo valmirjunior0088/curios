@@ -213,6 +213,16 @@ impl Anchors {
         self.labels.insert(name, label);
     }
 
+    /// Forget where `name` was written.
+    pub fn unname(&mut self, name: &Global) {
+        self.labels.remove(name);
+    }
+
+    /// Forget the text of `anchor` that carries `stamp`.
+    pub fn forget_text(&mut self, anchor: Anchor, stamp: u32) {
+        self.texts.remove(&(anchor, stamp));
+    }
+
     /// The span `name` was written at, by the first of `anchors` that names it: a unit's own table, then those of the units in its scope. `None` for a definition no name was written for, and for one whose text has since changed past resolving.
     pub fn label(anchors: &[&Anchors], name: &Global) -> Option<Span> {
         anchors

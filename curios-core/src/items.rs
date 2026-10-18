@@ -24,7 +24,7 @@ use {
 /// How far apart a version first places the items of a module that placed them at their indices: room for an item new to a later version between any two, many times over.
 const SPACING: usize = 1 << 20;
 
-/// What each of a module's items declares, flat: every name in the order of the items and of each item's own, what each is declared as — a former by which kind of declaration it is the former of, with nothing of its entry — where each item's names end, and which items are groups. What is known of the places of a stored module without its items.
+/// What each of a module's items declares, flat: every name in the order of the items and of each item's own, what each is declared as — a former by which kind of declaration it is the former of, with nothing of its entry — where each item's names end, which items are groups, and the declaration each item generated from one was generated from. What is known of the places of a stored module without its items.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Outlines {
@@ -33,6 +33,8 @@ pub struct Outlines {
     /// The end of each item's names in `names`.
     ends: Vec<u32>,
     groups: Vec<bool>,
+    /// The declaration each item was generated from, by the name its first definition says it was ([`Items::generated_from`]).
+    generated: Vec<Option<Global>>,
 }
 
 impl Outlines {
@@ -44,18 +46,20 @@ impl Outlines {
                 items.names(place).into_iter().copied(),
                 items.declared(place),
                 items.is_group(place),
+                items.generated_from(place),
             );
         }
 
         outlines
     }
 
-    /// The outline of an item after the others: the names it declares, what each is declared as, in their order, and whether it is a group.
+    /// The outline of an item after the others: the names it declares, what each is declared as, in their order, whether it is a group, and the declaration it was generated from.
     pub fn push(
         &mut self,
         names: impl IntoIterator<Item = Global>,
         declared: impl IntoIterator<Item = Declared>,
         group: bool,
+        generated: Option<Global>,
     ) {
         self.names.extend(names);
         self.declared.extend(declared);
@@ -63,6 +67,7 @@ impl Outlines {
         self.ends
             .push(u32::try_from(self.names.len()).expect("a module's names are counted in a u32"));
         self.groups.push(group);
+        self.generated.push(generated);
     }
 
     /// How many items are outlined.
@@ -95,6 +100,10 @@ impl Outlines {
     fn group(&self, index: usize) -> bool {
         self.groups[index]
     }
+
+    fn generated(&self, index: usize) -> Option<Global> {
+        self.generated[index]
+    }
 }
 
 /// The first name `item` declares.
@@ -103,6 +112,16 @@ fn first_name(item: &Item) -> Option<&Global> {
         Item::Let(definition) => Some(&definition.name),
         Item::Rec(rec) => rec.definitions.first().map(|definition| &definition.name),
     }
+}
+
+/// The declaration `item` was generated from, by the name it declares: a constructor's former, a method wrapper's concept. `None` for a written item.
+fn generated_by(item: &Item) -> Option<Global> {
+    let kind = match item {
+        Item::Let(definition) => &definition.kind,
+        Item::Rec(rec) => &rec.definitions[0].kind,
+    };
+
+    kind.generated_from().map(Global::Authored)
 }
 
 /// What `item` declares each of its names as, in the order it declares them.
@@ -214,6 +233,13 @@ impl Entry {
         match self {
             Entry::Made(_) => None,
             Entry::Stored(stored, index) => stored.part(*index),
+        }
+    }
+
+    fn generated_from(&self) -> Option<Global> {
+        match self {
+            Entry::Made(item) => generated_by(item),
+            Entry::Stored(stored, index) => stored.outlines.generated(*index),
         }
     }
 }
@@ -427,6 +453,19 @@ impl Items {
         Self(Held::Placed(placed))
     }
 
+    /// These items as a version placed apart again, each at its rank as a version made of a module that placed its items at their indices holds it, sharing every item: what a version with no place left between two items is made again as.
+    pub fn respaced(&self) -> Items {
+        let Held::Placed(placed) = &self.0 else {
+            return self.version();
+        };
+        let mut respaced = Ordered::new();
+        for (rank, (_, entry)) in placed.iter().enumerate() {
+            respaced.insert(position(spaced(rank)), entry.clone());
+        }
+
+        Self(Held::Placed(respaced))
+    }
+
     /// `item` at `place`, in place of what this version held there.
     pub fn replace(&mut self, place: usize, item: Item) {
         self.placed()
@@ -449,9 +488,50 @@ impl Items {
         Some(place_of(place))
     }
 
+    /// `items`, in their order, at places after `after`, or first where it is `None`, spread evenly up to the place that follows it, or spaced as a version first spaces its items where none follows: their places, or `None` where fewer places lie between the two than there are items, and the version is as it was. One item stands midway, so one put between the same two again stands where it stood.
+    pub fn insert_run(&mut self, after: Option<usize>, items: Vec<Item>) -> Option<Vec<usize>> {
+        let placed = self.placed();
+        let low = after.map_or(-1, position);
+        let count = i64::try_from(items.len()).ok()?;
+        let step = match placed.after(low) {
+            Some((high, _)) => (high - low) / (count + 1),
+            None => position(SPACING),
+        };
+        if step < 1 || low.checked_add(step.checked_mul(count)?).is_none() {
+            return None;
+        }
+        let mut places = Vec::with_capacity(items.len());
+        let mut at = low;
+        for item in items {
+            at += step;
+            placed.insert(at, Entry::Made(Rc::new(item)));
+            places.push(place_of(at));
+        }
+
+        Some(places)
+    }
+
     /// The item at `place`, taken out of this version.
     pub fn remove(&mut self, place: usize) {
         self.placed().remove(position(place));
+    }
+
+    /// The item at `place` moved to a place after `after`, or first where it is `None`, and before the place that follows it, read no more than it was: the place it is moved to, or `None` where no place lies between the two, and the version is as it was.
+    pub fn relocate(&mut self, place: usize, after: Option<usize>) -> Option<usize> {
+        let placed = self.placed();
+        let entry = placed.remove(position(place))?;
+        let low = after.map_or(-1, position);
+        let high = placed
+            .after(low)
+            .map_or(position(usize::MAX / 2), |(next, _)| next);
+        let moved = low + (high - low) / 2;
+        if moved <= low {
+            placed.insert(position(place), entry);
+            return None;
+        }
+        placed.insert(moved, entry);
+
+        Some(place_of(moved))
     }
 
     /// The items as a version's.
@@ -492,6 +572,15 @@ impl Items {
             Held::Made(items) => declared_by(&items[place]),
             Held::Stored(stored) => stored.outlines.declared(place).to_vec(),
             Held::Placed(placed) => entry(placed, place).declared(),
+        }
+    }
+
+    /// The declaration the item at `place` was generated from, by the name it declares, with nothing restored: a constructor's former, a method wrapper's concept, and `None` for a written item.
+    pub fn generated_from(&self, place: usize) -> Option<Global> {
+        match &self.0 {
+            Held::Made(items) => generated_by(&items[place]),
+            Held::Stored(stored) => stored.outlines.generated(place),
+            Held::Placed(placed) => entry(placed, place).generated_from(),
         }
     }
 

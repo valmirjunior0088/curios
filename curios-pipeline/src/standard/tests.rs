@@ -95,6 +95,16 @@ fn elaborated_over(
     let mut context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
+    // A unit lowered whole drops what the archived unit's lowering declares and it does not.
+    let dropped = lowered.dropped().cloned().unwrap_or_else(|| {
+        let items = &std.text().core().items;
+        items
+            .places()
+            .flat_map(|place| items.names(place))
+            .filter(|name| lowered.declared_as(name).is_none())
+            .copied()
+            .collect()
+    });
 
     elaborate_and_zonk_unit_over(
         &mut context,
@@ -106,7 +116,7 @@ fn elaborated_over(
             readers: std.readers(),
             declarations: lowered.declarations(),
             relowered,
-            dropped: &lowered.dropped_from(std.text()),
+            dropped: &dropped,
         },
         lowered.core(),
         lowered.minted(),
@@ -138,7 +148,10 @@ fn std_recompile_census() {
                 into_core_unit_over(&unit, &predecessors.text(), &SYNTAX, std.text(), true)
                     .expect("the edited library lowers");
             let lowered_in = start.elapsed();
-            let relowered = lowered.lowered_anew(std.text());
+            let relowered = lowered
+                .lowered_anew()
+                .expect("lowered over a baseline")
+                .clone();
             let start = Instant::now();
             let elaborated = elaborated_over(predecessors, std, &lowered, &relowered)
                 .unwrap_or_else(|error| panic!("the edited library elaborates: {error}"));
@@ -1376,7 +1389,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
                 predecessors,
                 std,
                 &lowered,
-                &lowered.lowered_anew(std.text()),
+                lowered.lowered_anew().expect("lowered over a baseline"),
             );
 
             (elaborated, beside, declined)

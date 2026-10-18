@@ -206,7 +206,7 @@ fn a_declaration_kept_from_an_earlier_text_answers_where_it_now_stands() {
     let unit = answers(&moved, Some(&baseline));
 
     assert_eq!(
-        unit.lowered_anew(&baseline).len(),
+        unit.lowered_anew().expect("lowered over a baseline").len(),
         1,
         "the declarations below the new one are the earlier lowering's"
     );

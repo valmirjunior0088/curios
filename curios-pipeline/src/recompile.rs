@@ -1,6 +1,6 @@
 //! One unit compiled over a baseline: lowered whole, and each declaration kept as the baseline holds it where nothing its elaboration asked there moved, with every other elaborated and judged; and each erased form kept where what its erasure asked is.
 //!
-//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand, and says which it lowered anew (`PreparedText::lowered_anew`). The elaborator walks what those could reach, through who asked what of the baseline's traces (`curios_elab::Traces`), keeps every declaration none of them reached without asking it, and keeps a reached one where nothing it asked moved, so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). Erasure keeps the erased form of a declaration the elaborator kept where every question its erasure put is answered as it was, of the declarations around it and of the erased forms it read a binding in (`curios_elab::ErasedBaseline`).
+//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand, makes the unit a version of the baseline's, and says which it lowered anew (`PreparedText::lowered_anew`). The elaborator walks what those could reach, through who asked what of the baseline's traces (`curios_elab::Traces`), keeps every declaration none of them reached without asking it, and keeps a reached one where nothing it asked moved, so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). Erasure keeps the erased form of a declaration the elaborator kept where every question its erasure put is answered as it was, of the declarations around it and of the erased forms it read a binding in (`curios_elab::ErasedBaseline`).
 //!
 //! **A declaration lowered again is elaborated again.** Nothing compares two lowerings: an edit that leaves a declaration's meaning alone costs that declaration's elaboration, and what it comes to is compared part by part with what the baseline holds, by whatever read it.
 
@@ -90,10 +90,16 @@ pub(crate) fn compile_lowered_over(
 
     // A mount says how every name of the unit is spelled, so a unit whose mounts moved keeps nothing.
     let relowered = match baseline.core().mounts == lowered.core().mounts {
-        true => lowered.lowered_anew(baseline.text()),
+        true => lowered
+            .lowered_anew()
+            .expect("a unit lowered over its baseline")
+            .clone(),
         false => lowered.declarations().names().copied().collect(),
     };
-    let dropped = lowered.dropped_from(baseline.text());
+    let dropped = lowered
+        .dropped()
+        .expect("a unit lowered over its baseline")
+        .clone();
 
     // The baseline is the scope's last layer, answering for each declaration from where the walk keeps it.
     let fixed = predecessors.fixed();

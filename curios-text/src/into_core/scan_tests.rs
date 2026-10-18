@@ -178,7 +178,8 @@ fn a_standing_file_is_parsed_where_a_declaration_of_it_is_lowered_again() {
 
     assert_eq!(over.core(), whole.core());
     assert_eq!(
-        over.lowered_anew(&baseline)
+        over.lowered_anew()
+            .expect("lowered over a baseline")
             .iter()
             .map(|name| name.faithful().to_string())
             .collect::<Vec<_>>(),

@@ -59,7 +59,7 @@ pub(super) struct Over<'a> {
     pub(super) traces: &'a Traces,
     /// The names whose lowered item is not the baseline's own: new to the unit, or lowered again (`PreparedText::lowered_anew`).
     pub(super) relowered: &'a BTreeSet<Global>,
-    /// The names the baseline declared and the new text's lowering does not (`PreparedText::dropped_from`).
+    /// The names the baseline declared and the new text's lowering does not (`PreparedText::dropped`).
     pub(super) dropped: &'a BTreeSet<Global>,
     /// Who asked what, of the baseline's traces: what the walk finds the declarations an edit could reach by.
     pub(super) readers: &'a Readers,
