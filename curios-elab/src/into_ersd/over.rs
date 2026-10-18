@@ -2,6 +2,8 @@
 //!
 //! **An erased form is kept where its declaration is the baseline's and everything its erasure asked is answered as it was.** An item's erased form is a function of its elaborated declaration and of what its erasure read of the declarations around it. The first is the baseline's where the elaborator kept the declaration; the second is the item's trace, which the baseline's erasure filed (`ErasedUnit`), asked again here. So an item is erased again where it was elaborated again, or where something its erasure read came out another way, and nowhere else: a body respelled to the same binding moves no item that calls it.
 //!
+//! **Asked only where an edit could have reached.** The baseline's traces read backwards (`Readers`) say which items read each name, so the walk finds from the edit which items it could reach: an item elaborated again or new, one whose trace erasure cannot keep by, a name the baseline declared and the unit does not, and, of a unit in scope that moved, a part read that digests otherwise now. An item that read one of them is reached, and so is one that read an item reached; every other item keeps its erased form unasked, nothing it read having moved.
+//!
 //! **Asked in the order the items are stored in, which is the order they are read in.** A module's items stand each after the items it reaches, and erasing one reads the erased form of another only where the other is already erased, so what a question is about is decided by the time it is asked: no item waits for another, and none is asked for.
 //!
 //! **A part is the elaborated declaration's, a binding the erased item's.** A question about a name's type, body or registry entry is answered as it was where the elaborator kept the declaration, and for one elaborated again where that part came out equal as it is stored ([`Same`]). A question about how a name is bound is answered as it was where the item declaring it kept its erased form, and for one erased again where an item naming it reads the two alike (`ErasedItem::read_alike`). A question about an erased form whole, which an item evaluated where it is erased asks of each item it ran (`evaluate`), is answered as it was where the item kept its erased form, and for one erased again where the two forms are stored as the same bytes. A name neither the unit nor its baseline declares is another unit's or no one's, and what was read of it stands where the unit that holds it is the one the baseline was erased after, or where it digests now to what the baseline recorded (`Foreign`).
@@ -44,6 +46,10 @@ pub(super) struct ErasedOver<'a> {
     scope: Erasures<'a>,
     /// Whether each part or binding a kept form's erasure read of a declaration the unit does not hold, in a scope that moved, is the one the baseline read: asked again once.
     read: HashMap<Global, Vec<(Question, bool)>>,
+    /// Whether an edit could have reached each item, by the baseline's traces read backwards: an item not reached keeps its erased form unasked.
+    reached: Vec<bool>,
+    /// The first names of the baseline's items the unit no longer declares.
+    lost: Vec<Global>,
 }
 
 impl<'a> ErasedOver<'a> {
@@ -65,7 +71,7 @@ impl<'a> ErasedOver<'a> {
             })
             .collect();
 
-        Self {
+        let mut over = Self {
             baseline,
             module,
             declared,
@@ -73,7 +79,90 @@ impl<'a> ErasedOver<'a> {
             same: HashMap::new(),
             scope,
             read: HashMap::new(),
+            reached: vec![false; module.items.len()],
+            lost: Vec::new(),
+        };
+        over.reach();
+
+        over
+    }
+
+    /// Mark every item an edit could have reached: each item the walk cannot keep by its trace, each that read a part of another unit that moved, and every item that read an item marked or a name the unit no longer declares.
+    fn reach(&mut self) {
+        let (module, baseline) = (self.module, self.baseline);
+        let readers = baseline.erased.readers();
+        let mut frontier = Vec::new();
+        let mark = |item: usize, reached: &mut Vec<bool>, frontier: &mut Vec<Global>| {
+            if !reached[item] {
+                reached[item] = true;
+                frontier.extend(module.items[item].declared_names().into_iter().copied());
+            }
+        };
+
+        // An item elaborated again or new, or one the baseline holds no erased form or trace of.
+        for (item, declared) in module.items.iter().enumerate() {
+            let names = declared.declared_names();
+            let keepable = names.first().is_some_and(|first| {
+                names.iter().all(|name| baseline.kept.contains(*name))
+                    && baseline.erased.held(first).is_some()
+                    && baseline.erased.asked(first).is_some()
+            });
+            if !keepable {
+                mark(item, &mut self.reached, &mut frontier);
+            }
         }
+        // An item whose trace asked something of the unit as a whole, which no erased form is kept by.
+        let whole = readers
+            .asked_whole()
+            .filter_map(|reader| self.declared.get(reader).map(|(item, _)| *item))
+            .collect::<Vec<_>>();
+        for item in whole {
+            mark(item, &mut self.reached, &mut frontier);
+        }
+        // A name the baseline declared and the unit does not.
+        for name in baseline.erased.names() {
+            if !self.declared.contains_key(name) {
+                frontier.push(*name);
+                if baseline.erased.asked(name).is_some() {
+                    self.lost.push(*name);
+                }
+            }
+        }
+        // A part of a declaration of another unit, where that unit moved and the part digests otherwise now, or the baseline recorded nothing of it.
+        if !self.scope.settled() {
+            let mut foreign = readers
+                .names()
+                .filter(|name| {
+                    !self.declared.contains_key(*name)
+                        && baseline.places.place(name).is_none()
+                        && baseline.erased.place(name).is_none()
+                })
+                .copied()
+                .collect::<Vec<_>>();
+            foreign.sort_unstable();
+            for name in foreign {
+                for (reader, read) in readers.of_name(&name) {
+                    let moved = read
+                        .questions(name)
+                        .any(|question| !self.read_stands(&name, &question));
+                    if moved && let Some(&(item, _)) = self.declared.get(reader) {
+                        mark(item, &mut self.reached, &mut frontier);
+                    }
+                }
+            }
+        }
+        while let Some(name) = frontier.pop() {
+            for (reader, _) in readers.of_name(&name) {
+                if let Some(&(item, _)) = self.declared.get(reader) {
+                    mark(item, &mut self.reached, &mut frontier);
+                }
+            }
+        }
+    }
+
+    /// The first names of the baseline's items the unit no longer declares.
+    pub(super) fn lost(&self) -> &[Global] {
+        &self.lost
     }
 
     /// Whether every item walked so far holds the baseline's own erased form.
@@ -131,6 +220,10 @@ impl<'a> ErasedOver<'a> {
         }
         let erased = self.baseline.erased.held(first)?;
         let trace = self.baseline.erased.asked(first)?;
+        // Nothing an item no edit reached read can have moved.
+        if !self.reached[self.kept.len()] {
+            return Some((erased, Rc::clone(trace)));
+        }
         for (question, answered) in trace.asked() {
             if !self.answered(question, answered, unit) {
                 return None;

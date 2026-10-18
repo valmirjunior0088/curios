@@ -614,6 +614,8 @@ pub(super) fn erase_items<'s>(
 ) -> Result<ErasedUnit, Error> {
     let mut unit = ErasedUnit::default();
     let mut asked = Traces::default();
+    // The first name of each item erased here, whose trace is its own.
+    let mut made = Vec::new();
     for (place, item) in module.items.iter().enumerate() {
         let names = item.declared_names();
         let kept = over.as_mut().and_then(|over| over.keep(item, &unit));
@@ -658,6 +660,7 @@ pub(super) fn erase_items<'s>(
                 curios_profile::sample!("erase::asked", trace.len());
 
                 unit.push(item, erased);
+                made.extend(names.first().map(|name| **name));
 
                 Rc::new(trace)
             }
@@ -667,8 +670,26 @@ pub(super) fn erase_items<'s>(
         }
     }
     note_foreign(&mut asked, &unit, scope, over.as_ref());
+    // Who asked what of the unit's traces: the baseline's, with the edges of every item erased again, or no longer held, replaced.
+    let readers = over.as_ref().map(|over| {
+        let earlier = over.earlier();
+        let mut readers = earlier.readers().clone();
+        for name in made.iter().chain(over.lost()) {
+            readers.replace(
+                *name,
+                earlier.asked(name).map(Rc::as_ref),
+                asked.held(name).map(Rc::as_ref),
+            );
+        }
 
-    Ok(unit.asking(asked))
+        readers
+    });
+    let unit = unit.asking(asked);
+
+    Ok(match readers {
+        Some(readers) => unit.reading(readers),
+        None => unit,
+    })
 }
 
 /// Record what erasing `unit`'s items read of declarations the unit does not hold, each part and each binding by the digest it has in `scope`: what a later erasure over this unit asks a read of another unit again by (`Foreign`).

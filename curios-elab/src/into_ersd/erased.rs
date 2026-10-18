@@ -10,12 +10,13 @@
 
 use {
     super::{Binding, Environment, Projection},
-    crate::{Answered, Foreign, Question, Traces, part_digest},
+    crate::{Answered, Foreign, Question, Readers, Traces, part_digest},
     curios_archive::{Bytes, Deferred, joined, parted},
     curios_core::{Extent, Free, Global, Item, Module, Places, Trace},
     curios_utilities::digest,
     std::{
         borrow::Cow,
+        cell::OnceCell,
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
     },
@@ -266,6 +267,9 @@ pub struct ErasedUnit {
     /// **The unit's baseline half**, as a lowered unit keeps its own: stored beside what the unit is for its successors ([`ErasedUnit::baseline_bytes`]), handed back as bytes where the unit is restored ([`ErasedUnit::with_baseline`]), and read out of them when an erasure over the unit first asks.
     #[archived_with(curios_archive::Skip)]
     asked: Deferred<Traces>,
+    /// Who asked what, of what erasing each item asked, read backwards the first time an erasure over the unit asks (`Readers`).
+    #[archived_with(curios_archive::Skip)]
+    readers: OnceCell<Readers>,
 }
 
 impl ErasedUnit {
@@ -365,6 +369,27 @@ impl ErasedUnit {
         self.asked
             .get()
             .unwrap_or_else(|error| panic!("an erased unit's traces failed to restore: {error}"))
+    }
+
+    /// Who asked what, of what erasing each item asked, read backwards the first time it is asked: what an erasure over the unit finds the items an edit could reach by.
+    pub(super) fn readers(&self) -> &Readers {
+        self.readers.get_or_init(|| Readers::of(self.traces()))
+    }
+
+    /// This unit holding `readers` as who asked what of its traces: the baseline's, with the edges of every item erased again or no longer held replaced.
+    pub(super) fn reading(self, readers: Readers) -> Self {
+        let held = OnceCell::new();
+        let _ = held.set(readers);
+
+        Self {
+            readers: held,
+            ..self
+        }
+    }
+
+    /// Every name an item of the unit declares.
+    pub(super) fn names(&self) -> impl Iterator<Item = &Global> {
+        self.declared.keys()
     }
 
     /// What erasing the item declaring `name` first asked, as the unit holds it.

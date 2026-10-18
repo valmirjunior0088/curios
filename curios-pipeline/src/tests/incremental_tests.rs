@@ -75,6 +75,35 @@ fn an_edited_body_reaches_the_value_computed_over_it() {
     assert_stored_alike(&unit_of(&edited), &incremental);
 }
 
+/// An edited value reaches a value computed over one computed over it: `b` is computed from `a` where the unit is erased, and `c` from `b`, so `a` respelled is erased again, `b` with it, and `c`, which ran what `b` erased to, with that. Each reads the one before it by its signature alone, so each is the declaration it was.
+///
+/// Mutation-checked: with the items that read an item erased again marked and theirs not, `c` is stored as the value it computed over `b`'s old form.
+#[test]
+fn an_edited_value_reaches_a_value_computed_over_one_computed_over_it() {
+    let base = "use /std/{Nat};
+
+pub let a: Nat = 1;
+
+pub let b: Nat = a + 1;
+
+pub let c: Nat = b + 1;
+
+pub let unrelated: Nat = 7;
+";
+    let edited = base.replace("a: Nat = 1", "a: Nat = 2");
+    let baseline = unit_of(base);
+
+    let incremental = recompile_over(&edited, &baseline).unwrap();
+
+    for name in ["b", "c", "unrelated"] {
+        assert!(
+            reuses_body(&baseline, &incremental, name),
+            "{name} was elaborated again"
+        );
+    }
+    assert_stored_alike(&unit_of(&edited), &incremental);
+}
+
 /// An edited body reaches the declaration that unfolded it: `two` is checked by computing `double(1)`, so what it asked of `double`'s body is answered another way, and it is elaborated again. `four` reads `two` by its signature, which came out as it was, and is reused: the edit stops where what it changed was read.
 #[test]
 fn an_edited_body_reaches_the_declaration_that_unfolded_it_and_stops_there() {

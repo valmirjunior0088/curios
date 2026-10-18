@@ -430,6 +430,14 @@ impl Readers {
         self.parts.iter().map(|(name, _)| name)
     }
 
+    /// Every declaration that asked something of the unit as a whole — the witness at a key, whether one is declared there, whether lemmas are on offer — in no stated order: erasure asks none of them, and keeps no form whose trace holds one.
+    pub(crate) fn asked_whole(&self) -> impl Iterator<Item = &Global> {
+        self.keys
+            .iter()
+            .flat_map(|(_, keyed)| keyed.readers.iter())
+            .chain(self.lemmas.iter().map(|(reader, _)| reader))
+    }
+
     /// Every witness key asked at, with what it was answered and who asked: what a unit in scope that moved may answer otherwise.
     pub(crate) fn keys(&self) -> impl Iterator<Item = (&(Global, WitnessKey), &Keyed)> {
         self.keys.iter()
