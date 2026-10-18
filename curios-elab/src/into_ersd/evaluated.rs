@@ -11,10 +11,7 @@
 //! **An item that declares a row is not evaluated.** What is taken back out holds a schema as an import holds one, and a declared row is its fields.
 
 use {
-    super::{
-        Binding, ConstructorRow, Environment, ErasedItem, ErasedUnit, Erasures, Export, FamilyRow,
-        Linking, ProductRow, reached,
-    },
+    super::{Binding, Environment, ErasedItem, ErasedUnit, Erasures, Export, Linking, reached},
     curios_core::{Free, Global},
     std::collections::BTreeMap,
 };
@@ -142,40 +139,21 @@ fn taken(
         .collect();
     for (held, schema) in taken.landed.products() {
         match structs.get(&held) {
-            Some(name) => {
-                let declared = declaring(name)?.environment().declared_struct_row(name)?;
-                environment.import_struct_row(
-                    name,
-                    ProductRow {
-                        schema: Some(schema),
-                        mask: declared.mask.clone(),
-                    },
-                );
-            }
+            Some(name) => environment.import_struct_row(name, Some(schema)),
             None => environment.register_tuple_schema(*tuples.get(&held)?, schema),
         }
     }
+    let positions = taken.module.imports().constructors();
     for (held, family) in taken.landed.families() {
         let name = families.get(&held)?;
-        let declared = declaring(name)?.environment().declared_induct_row(name)?;
-        let constructors = taken
-            .module
-            .family(family)?
-            .constructors
-            .iter()
-            .zip(&declared.constructors)
-            .map(|(&id, row)| ConstructorRow {
-                id,
-                mask: row.mask.clone(),
-            })
-            .collect();
-        environment.import_induct_row(
-            name,
-            FamilyRow {
-                family,
-                constructors,
-            },
-        );
+        environment.import_induct_family(name, family);
+        for constructor in &taken.module.family(family)?.constructors {
+            environment.import_induct_constructor(
+                name,
+                *positions.get(constructor)? as usize,
+                *constructor,
+            );
+        }
     }
 
     let values = taken

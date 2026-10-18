@@ -586,3 +586,41 @@ entry =
 "
     );
 }
+
+/// An imported row prints what its import states: a product its width, and a family its count and each constructor the fragment holds at its position.
+#[test]
+fn an_imported_row_prints_what_its_import_states() {
+    let mut builder = ErsdBuilder::new();
+    let triple = builder.import_product(Some("Triple".into()), 3, false);
+    let family = builder.import_family(Some("Tri".into()), 3);
+    let last = builder.import_constructor(family, 2, Some("c".into()), 0);
+    let product = builder.import_value(Some("triple".into()));
+    builder.item_value(
+        None,
+        Rhs::Project {
+            schema: triple,
+            product: Atom::Value(product),
+            field: 0,
+        },
+    );
+    builder.item_value(
+        None,
+        Rhs::Construct {
+            constructor: last,
+            fields: Vec::new(),
+        },
+    );
+    let printed = builder
+        .into_module()
+        .expect("the fragment verifies")
+        .to_string();
+
+    assert!(
+        printed.contains("product ~p0$Triple of width 3, imported\n"),
+        "{printed}"
+    );
+    assert!(
+        printed.contains("family ~d0$Tri of 3, imported { 2:~t0$c() }\n"),
+        "{printed}"
+    );
+}

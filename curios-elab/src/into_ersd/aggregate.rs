@@ -1,6 +1,6 @@
 //! Products, structs, variants, and projections — schema registration and the construction/projection sites.
 //!
-//! A declaration's post-erasure shape is registered once, by the item that declares it, from the opaque signature view: parameters opened as fresh abstract variables, each field classified against the preceding binders. Every other item holds the row as an import, read off that item's erased form (the order a module's items are stored in puts it first): the same mask, and a schema of the same widths that says nothing of its fields, which a program resolves to the declaration's own. The mask is therefore fixed per declaration, so construction, matching, and projection agree on the relevant-field arithmetic at every instantiation; a kept slot whose *instantiation* is a proof is filled with the unit constant at the site instead ([`Lowering::kept_operand`]).
+//! A declaration's post-erasure shape is registered once, by the item that declares it, from the opaque signature view: parameters opened as fresh abstract variables, each field classified against the preceding binders. Every other item imports what it reads of the row, off that item's erased form (the order a module's items are stored in puts it first), which a program resolves to the declaration's own: a structure's schema at its width, and an inductive's family with each constructor the item names, at its position and width. Neither says anything of a field, and a mask is read where the declaring item holds it, so an item holds of a row what it names of it. The mask is therefore fixed per declaration, so construction, matching, and projection agree on the relevant-field arithmetic at every instantiation; a kept slot whose *instantiation* is a proof is filled with the unit constant at the site instead ([`Lowering::kept_operand`]).
 //!
 //! Collapses: a structure or subset tuple left with a single relevant field erases to that bare field (no product, no projection); anonymous tuples share one interned schema per relevant width.
 
@@ -11,7 +11,21 @@ use {
         emitted,
     },
     curios_core::{Bound, Quality},
+    std::borrow::Cow,
 };
+
+/// A structure's row as erasure reads it: its schema, and its mask, borrowed from the item that declares the row where another item does.
+pub(super) struct StructRow<'s> {
+    pub(super) schema: Option<curios_ersd::ProductId>,
+    pub(super) mask: Cow<'s, [bool]>,
+}
+
+impl StructRow<'_> {
+    /// The runtime projection index of declared field `index`: the count of relevant fields before it.
+    fn relevant_before(&self, index: usize) -> u32 {
+        self.mask[..index].iter().filter(|&&erased| !erased).count() as u32
+    }
+}
 
 /// Open a parameter telescope with fresh assumed variables, handing back the abstract parameter terms a declaration's fields are instantiated at.
 fn open_opaque<B: Bound>(context: &mut Retyping, telescope: Telescope<B>) -> Vec<Term> {
@@ -22,15 +36,18 @@ fn open_opaque<B: Bound>(context: &mut Retyping, telescope: Telescope<B>) -> Vec
     cursor.into_args()
 }
 
-impl Lowering<'_> {
+impl<'s> Lowering<'s> {
     /// The memoized layout of a registered structure.
     pub(super) fn struct_row(
         &mut self,
         context: &mut Retyping,
         name: &curios_core::Global,
-    ) -> Result<ProductRow, Error> {
-        if let Some(row) = self.environment.struct_row(name) {
-            return Ok(row.clone());
+    ) -> Result<StructRow<'s>, Error> {
+        if let Some(row) = self.environment.declared_struct_row(name) {
+            return Ok(StructRow {
+                schema: row.schema,
+                mask: Cow::Owned(row.mask.clone()),
+            });
         }
         if let Some(row) = self.imported_struct_row(name) {
             return Ok(row);
@@ -63,53 +80,55 @@ impl Lowering<'_> {
                 shared: false,
             })
         });
-        let row = ProductRow { schema, mask };
-        self.environment.register_struct_row(name, row.clone());
+        let row = StructRow {
+            schema,
+            mask: Cow::Owned(mask.clone()),
+        };
+        self.environment
+            .register_struct_row(name, ProductRow { schema, mask });
         Ok(row)
     }
 
-    /// The memoized layout of a registered inductive.
-    pub(super) fn induct_row(
-        &mut self,
-        context: &mut Retyping,
-        name: &curios_core::Global,
-    ) -> Result<FamilyRow, Error> {
-        Ok(self.registered_induct_row(context, name)?.clone())
-    }
-
-    /// The family `name`'s row is erased into, its row registered where it is not yet: a read of the family alone, which copies none of its constructors.
+    /// The family `name`'s row is erased into: a read of the family alone, which imports none of its constructors where another item declares it, and registers the row where this one does.
     pub(super) fn induct_family(
         &mut self,
         context: &mut Retyping,
         name: &curios_core::Global,
     ) -> Result<curios_ersd::FamilyId, Error> {
-        Ok(self.registered_induct_row(context, name)?.family)
+        if let Some(row) = self.environment.declared_induct_row(name) {
+            return Ok(row.family);
+        }
+        if let Some(family) = self.imported_induct_family(name) {
+            return Ok(family);
+        }
+        self.build_induct_row(context, name)?;
+
+        Ok(self.declared_induct_row(name).family)
     }
 
-    /// The row of `name`'s constructor at `index`, the family's row registered where it is not yet: a read of the one constructor, where [`Self::induct_row`] copies every one.
+    /// The row of `name`'s constructor at `index`: a read of the one constructor, which imports it alone where another item declares the family, and registers the row where this one does.
     pub(super) fn induct_constructor(
         &mut self,
         context: &mut Retyping,
         name: &curios_core::Global,
         index: usize,
     ) -> Result<ConstructorRow, Error> {
-        Ok(self.registered_induct_row(context, name)?.constructors[index].clone())
+        if let Some(row) = self.environment.declared_induct_row(name) {
+            return Ok(row.constructors[index].clone());
+        }
+        if let Some(row) = self.imported_induct_constructor(name, index) {
+            return Ok(row);
+        }
+        self.build_induct_row(context, name)?;
+
+        Ok(self.declared_induct_row(name).constructors[index].clone())
     }
 
-    /// `name`'s row as registered, built from its declaration or imported from the item that declares it where it is not registered yet.
-    fn registered_induct_row(
-        &mut self,
-        context: &mut Retyping,
-        name: &curios_core::Global,
-    ) -> Result<&FamilyRow, Error> {
-        if self.environment.induct_row(name).is_none() && self.imported_induct_row(name).is_none() {
-            self.build_induct_row(context, name)?;
-        }
-
-        Ok(self
-            .environment
-            .induct_row(name)
-            .expect("erase: a registered row"))
+    /// The row this item has just registered for `name`.
+    fn declared_induct_row(&self, name: &curios_core::Global) -> &FamilyRow {
+        self.environment
+            .declared_induct_row(name)
+            .expect("erase: a registered row")
     }
 
     /// Build and register `name`'s row from its declaration, each constructor read where the walk over them stands.
@@ -164,66 +183,94 @@ impl Lowering<'_> {
         Ok(())
     }
 
-    /// The row the item declaring the structure `name` registered, held here as an import: its mask, and a schema of its width whose fields say nothing, since what a field is is the declaration's to say and the row a program holds is the declaration's. `None` where no item in reach declares the row, which is this item declaring it.
-    fn imported_struct_row(&mut self, name: &curios_core::Global) -> Option<ProductRow> {
+    /// The row the item declaring the structure `name` registered, as this item reads it: its schema imported at its width, the first time it is read, and its mask borrowed where that item holds it. `None` where no item in reach declares the row, which is this item declaring it.
+    fn imported_struct_row(&mut self, name: &curios_core::Global) -> Option<StructRow<'s>> {
         let declaring = self.declaring(name)?;
         let declared = declaring.environment().declared_struct_row(name)?;
-        let schema = declared.schema.map(|schema| {
-            let held = declaring
-                .module()
-                .product(schema)
-                .expect("a declared row's schema is its fragment's");
-            self.builder.product(curios_ersd::ProductSchema {
-                debug_name: held.debug_name.clone(),
-                fields: vec![curios_ersd::Field::opaque(None); held.width()],
-                shared: held.shared,
-            })
-        });
-        let row = ProductRow {
-            schema,
-            mask: declared.mask.clone(),
+        let schema = match self.environment.imported_struct_row(name) {
+            Some(schema) => schema,
+            None => {
+                let schema = declared.schema.map(|schema| {
+                    let held = declaring
+                        .module()
+                        .product(schema)
+                        .expect("a declared row's schema is its fragment's");
+                    self.builder
+                        .import_product(held.debug_name.clone(), held.width(), held.shared)
+                });
+                self.environment.import_struct_row(name, schema);
+                schema
+            }
         };
-        self.environment.import_struct_row(name, row.clone());
 
-        Some(row)
+        Some(StructRow {
+            schema,
+            mask: Cow::Borrowed(&declared.mask),
+        })
     }
 
-    /// [`imported_struct_row`](Self::imported_struct_row) for the inductive `name`: its family and each constructor at its width, under the declaration's masks.
-    fn imported_induct_row(&mut self, name: &curios_core::Global) -> Option<FamilyRow> {
+    /// The family of the inductive `name` as this item imports it, of as many constructors as its declaration has, imported the first time it is read. `None` where no item in reach declares the row, which is this item declaring it.
+    fn imported_induct_family(
+        &mut self,
+        name: &curios_core::Global,
+    ) -> Option<curios_ersd::FamilyId> {
+        if let Some(row) = self.environment.imported_induct_row(name) {
+            return Some(row.family);
+        }
         let declaring = self.declaring(name)?;
         let declared = declaring.environment().declared_induct_row(name)?;
-        let held = declaring.module();
-        let family = self.builder.family(
-            held.family(declared.family)
+        let family = self.builder.import_family(
+            declaring
+                .module()
+                .family(declared.family)
                 .expect("a declared row's family is its fragment's")
                 .debug_name
                 .clone(),
+            declared.constructors.len(),
         );
-        let constructors = declared
-            .constructors
-            .iter()
-            .map(|constructor| {
-                let held = held
-                    .constructor(constructor.id)
+        self.environment.import_induct_family(name, family);
+
+        Some(family)
+    }
+
+    /// The constructor at `index` of the inductive `name` as this item imports it: at its position and width, imported the first time it is read, under the declaration's mask.
+    fn imported_induct_constructor(
+        &mut self,
+        name: &curios_core::Global,
+        index: usize,
+    ) -> Option<ConstructorRow> {
+        let family = self.imported_induct_family(name)?;
+        let declaring = self.declaring(name)?;
+        let declared = &declaring
+            .environment()
+            .declared_induct_row(name)?
+            .constructors[index];
+        let imported = self
+            .environment
+            .imported_induct_row(name)
+            .and_then(|row| row.constructors.get(&index).copied());
+        let id = match imported {
+            Some(id) => id,
+            None => {
+                let held = declaring
+                    .module()
+                    .constructor(declared.id)
                     .expect("a declared row's constructor is its fragment's");
-
-                ConstructorRow {
-                    id: self.builder.constructor(
-                        family,
-                        held.debug_name.clone(),
-                        vec![curios_ersd::Field::opaque(None); held.width()],
-                    ),
-                    mask: constructor.mask.clone(),
-                }
-            })
-            .collect();
-        let row = FamilyRow {
-            family,
-            constructors,
+                let id = self.builder.import_constructor(
+                    family,
+                    index,
+                    held.debug_name.clone(),
+                    held.width(),
+                );
+                self.environment.import_induct_constructor(name, index, id);
+                id
+            }
         };
-        self.environment.import_induct_row(name, row.clone());
 
-        Some(row)
+        Some(ConstructorRow {
+            id,
+            mask: declared.mask.clone(),
+        })
     }
 
     /// Whether `name`'s structure row is being registered right now — see [`Lowering::in_flight`].
@@ -237,13 +284,10 @@ impl Lowering<'_> {
         context: &mut Retyping,
         name: &curios_core::Global,
     ) -> Result<curios_ersd::FamilyId, Error> {
-        if let Some(row) = self.environment.induct_row(name) {
-            return Ok(row.family);
-        }
         if let Some(&family) = self.pending_families.get(name) {
             return Ok(family);
         }
-        Ok(self.induct_row(context, name)?.family)
+        self.induct_family(context, name)
     }
 
     /// The interned anonymous product schema of the given relevant width.
@@ -332,7 +376,7 @@ impl Lowering<'_> {
         }
     }
 
-    /// Lower a constructor value to a schema-carrying `Construct`; the discriminant is the constructor's registry position, recorded in the registered family.
+    /// Lower a constructor value to a schema-carrying `Construct`; the discriminant is the constructor's registry position, which the declaring item's family lists it at and an importing item's import states.
     pub(super) fn erase_variant(
         &mut self,
         context: &mut Retyping,
@@ -388,27 +432,26 @@ impl Lowering<'_> {
         // Projecting an *erased* field yields proof content only: the unit constant, never a runtime projection (the field has no slot).
         let erased_field = |mask: &[bool], index: usize| mask.get(index).copied().unwrap_or(false);
 
-        let (row, width) = match &*head_type {
+        // A tuple keeps every field, so its slot is the field's index; a structure's is the count of relevant fields before it.
+        let (schema, field) = match &*head_type {
             Subterm::TupleType(TupleType { telescope }) => {
                 let width = telescope.len();
+                assert!(index < width, "erase: projection out of range");
                 let schema = (!ProductRow::collapses(width)).then(|| self.tuple_schema(width));
-                let mask = vec![false; width];
-                (ProductRow { schema, mask }, width)
+                (schema, index as u32)
             }
             Subterm::StructType(StructType { name, .. }) => {
                 let row = self.struct_row(context, name)?;
-                let width = row.mask.len();
-                (row, width)
+                assert!(index < row.mask.len(), "erase: projection out of range");
+                if erased_field(&row.mask, index) {
+                    return Ok(Outcome::Emitted(self.unit()));
+                }
+                (row.schema, row.relevant_before(index))
             }
             _ => unreachable!("erase: projected a non-tuple/struct"),
         };
-        assert!(index < width, "erase: projection out of range");
 
-        if erased_field(&row.mask, index) {
-            return Ok(Outcome::Emitted(self.unit()));
-        }
-
-        match row.schema {
+        match schema {
             // The head collapsed to its single relevant field.
             None => self.walk(context, head, &head_type, hint),
             Some(schema) => {
@@ -419,7 +462,7 @@ impl Lowering<'_> {
                     curios_ersd::Rhs::Project {
                         schema,
                         product,
-                        field: row.relevant_before(index),
+                        field,
                     },
                     expected,
                 )

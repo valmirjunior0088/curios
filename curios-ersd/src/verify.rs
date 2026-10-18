@@ -1,6 +1,6 @@
 //! The module verifier — the finalize/test gate of every construction and transformation, checking exactly the language contract.
 //!
-//! Structural rules: every referenced identity resolves to a live slot of its kind; every value use is dominated by its unique binding in the lexical scope structure; every live block, statement, value, function, and recursive group has exactly one structural owner (an unowned or doubly owned one is an error, which also rejects ownership cycles); operand counts agree with each operation's own arity; products, constructors, and matches agree with their registered schemas; matches are exhaustive or defaulted.
+//! Structural rules: every referenced identity resolves to a live slot of its kind; every value use is dominated by its unique binding in the lexical scope structure; every live block, statement, value, function, and recursive group has exactly one structural owner (an unowned or doubly owned one is an error, which also rejects ownership cycles); operand counts agree with each operation's own arity; products, constructors, and matches agree with their registered schemas, an imported one with what its import states; matches are exhaustive or defaulted.
 //!
 //! Recursion admission mirrors the language: recursion through functions is unrestricted, and a group's computed members are forced by need, so a member may reference any other, in any order — what no order can satisfy is an *evaluation cycle*, an initializer that evaluates itself directly or through the functions it applies, and [`eager`] refuses that by summarizing what each reachable function reads and applies. A reference from inside a function body constructed during initialization is dormant; what the summary cannot see through stays dormant too, and its module states the limit. The other rule by need rests on is purity: an initializer performs no effect, so forcing it later, or never, is unobservable — [`eager`] holds it to that as well. Together these admit the corpus's value-recursion idioms (a `join_all`-shaped knot whose initializer calls a group function, a value-only self-referential lazy value whose knot closes through a constructed closure, a parser built over a member declared after it) while refusing exactly what forcing could not make right. Every rule is corpus-certified: a rule that rejects a supported program is a bug in the rule.
 //!
@@ -13,6 +13,9 @@ use eager::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod import_tests;
 
 use {
     super::{
@@ -150,6 +153,7 @@ pub(crate) enum StructuralRule {
     StatedCarrier,
     FunctionBoundTwice,
     BrokenSchemaLink,
+    BrokenRowImport,
     UnsealedBlock,
     DanglingReservation,
     UnresolvedImport,
@@ -499,7 +503,7 @@ impl<'m> Verifier<'m> {
                 }
             }
             Rhs::Product { schema, fields } => {
-                let width = self.product(schema)?.width();
+                let width = self.product_width(schema)?;
                 if fields.len() != width {
                     return Err(fault(
                         StructuralRule::ProductWidth,
@@ -537,7 +541,7 @@ impl<'m> Verifier<'m> {
                 product,
                 field,
             } => {
-                let width = self.product(schema)?.width();
+                let width = self.product_width(schema)?;
                 if field as usize >= width {
                     return Err(fault(
                         StructuralRule::ProjectionWidth,
@@ -555,7 +559,7 @@ impl<'m> Verifier<'m> {
                 default,
             } => {
                 self.check_atom(id, scrutinee)?;
-                let constructors = self.family(family)?.constructors.clone();
+                let count = self.constructor_count(family)?;
                 let mut covered = HashSet::new();
                 for arm in &arms {
                     let constructor = self.constructor(arm.constructor)?;
@@ -591,16 +595,21 @@ impl<'m> Verifier<'m> {
                         ));
                     }
                 }
-                if default.is_none()
-                    && let Some(missing) = constructors
+                // Each arm is a distinct constructor of the family, so they cover it when there are as many as it declares: an imported family lists only the constructors a module names.
+                if default.is_none() && covered.len() != count {
+                    let missing = match self
+                        .family(family)?
+                        .constructors
                         .iter()
                         .find(|constructor| !covered.contains(constructor))
-                {
+                    {
+                        Some(constructor) => format!("constructor {constructor}"),
+                        None => format!("{} of its {count} constructors", count - covered.len()),
+                    };
                     return Err(fault(
                         StructuralRule::NonExhaustiveMatch,
                         format!(
-                            "statement {id} matches {family} without arm or default \
-                             for constructor {missing}"
+                            "statement {id} matches {family} without arm or default for {missing}"
                         ),
                     ));
                 }
@@ -966,6 +975,49 @@ impl<'m> Verifier<'m> {
                 ));
             }
         }
+        self.check_row_imports()
+    }
+
+    /// Cross-check the rows this module imports against what each import states: an imported product lists no field, since its width is all the module reads of it, and an imported family holds only imported constructors, each at a distinct position its declaration has.
+    fn check_row_imports(&self) -> Result<(), StructuralFault> {
+        let imports = self.module.imports();
+        for &product in imports.products().keys() {
+            if !self.product(product)?.fields.is_empty() {
+                return Err(fault(
+                    StructuralRule::BrokenRowImport,
+                    format!("imported {product} lists fields of its own"),
+                ));
+            }
+        }
+        for (&family, &count) in imports.families() {
+            let mut positions = HashSet::new();
+            for &constructor in &self.family(family)?.constructors {
+                let Some(&position) = imports.constructors().get(&constructor) else {
+                    return Err(fault(
+                        StructuralRule::BrokenRowImport,
+                        format!("imported {family} holds {constructor}, which states no position"),
+                    ));
+                };
+                if position >= count || !positions.insert(position) {
+                    return Err(fault(
+                        StructuralRule::BrokenRowImport,
+                        format!(
+                            "{constructor} of imported {family} stands at position {position}, \
+                             which its {count} constructors do not leave it"
+                        ),
+                    ));
+                }
+            }
+        }
+        for &constructor in imports.constructors().keys() {
+            let family = self.constructor(constructor)?.family;
+            if !imports.families().contains_key(&family) {
+                return Err(fault(
+                    StructuralRule::BrokenRowImport,
+                    format!("{constructor} states a position, and its {family} is declared here"),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -1071,6 +1123,24 @@ impl<'m> Verifier<'m> {
                 format!("dead {id} is referenced"),
             )
         })
+    }
+
+    /// The width of a live product: its own where this module declares it, its import's where it imports it.
+    fn product_width(&self, id: ProductId) -> Result<usize, StructuralFault> {
+        self.product(id)?;
+        Ok(self
+            .module
+            .product_width(id)
+            .expect("a live product has a width"))
+    }
+
+    /// How many constructors a live family declares.
+    fn constructor_count(&self, id: FamilyId) -> Result<usize, StructuralFault> {
+        self.family(id)?;
+        Ok(self
+            .module
+            .constructor_count(id)
+            .expect("a live family has a count"))
     }
 
     fn outcome(&self, id: ConstructorId, payload: usize) -> Result<(), StructuralFault> {

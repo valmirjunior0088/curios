@@ -1,6 +1,7 @@
 //! Fragments linked into programs: what an import stands for, what is interned, and what a fragment is held to through an interface.
 
 use {
+    super::test_support::{digit, digits},
     crate::{test_support::shape, *},
     curios_num::Natural,
 };
@@ -179,6 +180,50 @@ fn a_schema_is_registered_once_where_the_resolution_says_it_is_held() {
     apart.link(&first, &Resolution::default());
     apart.link(&second, &Resolution::default());
     assert_eq!(apart.products().len(), 2);
+}
+
+/// A fragment holds of a family it imports the constructors it names, and each stands for the program's constructor at the position its import states.
+#[test]
+fn an_imported_constructor_stands_for_the_one_at_its_position() {
+    let (declaring, family, _) = digits(5);
+    let (using, imported) = digit(5, 3);
+    assert_eq!(
+        using
+            .family(imported)
+            .map(|family| family.constructors.len()),
+        Some(1)
+    );
+
+    let mut program = Module::new();
+    let declared = program.link(&declaring, &Resolution::default());
+    program.link(
+        &using,
+        &Resolution {
+            families: [(imported, declared.family(family))].into(),
+            ..Default::default()
+        },
+    );
+
+    let held = &program
+        .family(declared.family(family))
+        .expect("the family is the program's")
+        .constructors;
+    let item = *program.items().last().expect("the construction is an item");
+    assert!(matches!(
+        program.statement(item),
+        Some(Statement::Let {
+            rhs: Rhs::Construct { constructor, .. },
+            ..
+        }) if *constructor == held[3]
+    ));
+    assert_eq!(program.constructors().len(), 5);
+}
+
+#[test]
+#[should_panic(expected = "an imported row is one the program holds")]
+fn an_imported_row_the_program_does_not_hold_is_not_linked() {
+    let (using, _) = digit(5, 3);
+    Module::new().link(&using, &Resolution::default());
 }
 
 #[test]

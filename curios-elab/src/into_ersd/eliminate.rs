@@ -671,7 +671,7 @@ impl Lowering<'_> {
             return self.erase_erasable_scrutinee(context, &m, &induct_decl, cases, default);
         }
 
-        let row = self.induct_row(context, &name)?;
+        let family = self.induct_family(context, &name)?;
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         // Each arm found by its tag once, rather than the arms searched again at every constructor: a match of many cases erases in its size.
@@ -682,9 +682,14 @@ impl Lowering<'_> {
             .collect::<HashMap<_, _>>();
         let mut arms = Vec::new();
         for (index, tag) in induct_decl.constructor_order().enumerate() {
-            let constructor = row.constructors[index].id;
-            let mask = row.constructors[index].mask.clone();
-            match by_tag.get(tag).copied() {
+            let arm = by_tag.get(tag).copied();
+            // A constructor the default covers is no arm, and is read of the family only where one is written.
+            if arm.is_none() && default.is_some() {
+                continue;
+            }
+            let row = self.induct_constructor(context, &name, index)?;
+            let (constructor, mask) = (row.id, row.mask);
+            match arm {
                 Some(arm) => {
                     let telescope = induct_decl
                         .instantiate(tag, m.params)
@@ -701,7 +706,7 @@ impl Lowering<'_> {
                     arms.push(arm);
                 }
                 // A missing constructor without a default is provably impossible: an `Unreachable` arm, still declaring its payload binders to satisfy the constructor's arity.
-                None if default.is_none() => {
+                None => {
                     let bindings = mask
                         .iter()
                         .filter(|&&erased| !erased)
@@ -717,7 +722,6 @@ impl Lowering<'_> {
                         block,
                     });
                 }
-                None => {}
             }
         }
 
@@ -728,7 +732,7 @@ impl Lowering<'_> {
         Ok(self.bind(
             hint,
             curios_ersd::Rhs::MatchVariant {
-                family: row.family,
+                family,
                 scrutinee,
                 arms,
                 default,

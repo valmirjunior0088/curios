@@ -2,7 +2,7 @@
 //!
 //! A declaration is erased into a module of its own, a *fragment*, whose identities count from zero and whose references to what other declarations bind are [`Imports`](crate::Imports). A program is the fragments it reaches appended to one module in the order their items evaluate, each import standing for where the fragment that defines it landed. Nothing of a fragment is rewritten in place and no index is patched: every identity it holds is minted again in the program, and its contents are written through the old-to-new maps, as a deep copy's are.
 //!
-//! **What a module keeps outside its arenas is interned, not appended.** A constant, a foreign row and a schema are each one in a program however many fragments spell them. Constants and rows intern by their own identity. A schema has none a module can read — two structures of one shape are two schemas — so whoever links says which of a fragment's schemas the program already holds ([`Resolution::products`], [`Resolution::families`]), and every other is registered as new.
+//! **What a module keeps outside its arenas is interned, not appended.** A constant, a foreign row and a schema are each one in a program however many fragments spell them. Constants and rows intern by their own identity. A schema has none a module can read — two structures of one shape are two schemas — so whoever links says which of a fragment's schemas the program already holds ([`Resolution::products`], [`Resolution::families`]), and every other is registered as new. A schema the fragment imports is one the program holds, since what the fragment holds of it is what it reads: a constructor of it stands for the program's constructor at the position its import states.
 //!
 //! **An imported function's stub is not linked.** Its parameters and its body exist so that the fragment verifies alone; in a program the identity is the function it stands for.
 //!
@@ -12,6 +12,9 @@
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod test_support;
 
 mod taken;
 pub use taken::*;
@@ -35,9 +38,9 @@ pub struct Resolution {
     pub values: Vec<Atom>,
     /// The function each imported function stands for, in the order the fragment imported them.
     pub functions: Vec<FunctionId>,
-    /// The fragment's product schemas the program already holds, each with where.
+    /// The fragment's product schemas the program already holds, each with where: every one it imports, and any other the program holds.
     pub products: BTreeMap<ProductId, ProductId>,
-    /// The fragment's variant families the program already holds, each with where. A family's constructors are its positions, so they follow it.
+    /// The fragment's variant families the program already holds, each with where: every one it imports, and any other the program holds. A constructor is its position in its family's declaration, so it follows the family.
     pub families: BTreeMap<FamilyId, FamilyId>,
 }
 
@@ -310,6 +313,7 @@ impl Module {
 
     /// The schema half of [`link_tables`](Self::link_tables), written into `tables`.
     fn link_schemas(&mut self, fragment: &Module, resolution: &Resolution, tables: &mut Tables) {
+        let imports = fragment.imports();
         // Every schema's place before any schema's fields: a field's shape names a schema, its own among them.
         let mut registered = Vec::new();
         for (index, schema) in fragment.products().iter().enumerate() {
@@ -317,6 +321,10 @@ impl Module {
             let linked = match resolution.products.get(&id) {
                 Some(&held) => held,
                 None => {
+                    assert!(
+                        !imports.products().contains_key(&id),
+                        "an imported row is one the program holds"
+                    );
                     let linked = self.add_product(ProductSchema {
                         debug_name: schema.debug_name.clone(),
                         fields: Vec::new(),
@@ -337,16 +345,28 @@ impl Module {
                         .expect("a family a resolution names is this module's")
                         .constructors;
                     assert_eq!(
-                        constructors.len(),
-                        family.constructors.len(),
-                        "one family has one list of constructors wherever it is spelled",
+                        Some(constructors.len()),
+                        fragment.constructor_count(id),
+                        "one family declares one count of constructors wherever it is spelled",
                     );
-                    for (&constructor, &held) in family.constructors.iter().zip(constructors) {
-                        tables.constructors.insert(constructor, held);
+                    for (place, &constructor) in family.constructors.iter().enumerate() {
+                        let position = match imports.constructors().get(&constructor) {
+                            Some(&position) => position as usize,
+                            None => place,
+                        };
+                        tables
+                            .constructors
+                            .insert(constructor, constructors[position]);
                     }
                     held
                 }
-                None => self.add_family(family.debug_name.clone()),
+                None => {
+                    assert!(
+                        !imports.families().contains_key(&id),
+                        "an imported row is one the program holds"
+                    );
+                    self.add_family(family.debug_name.clone())
+                }
             };
             tables.families.insert(id, linked);
         }

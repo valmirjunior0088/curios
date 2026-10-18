@@ -17,7 +17,7 @@ use {
     curios_abi::ForeignFunction,
     curios_utilities::Arena,
     std::{
-        collections::{BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap},
         sync::Arc,
     },
 };
@@ -58,14 +58,17 @@ pub struct ImportedFunction {
     pub interface: Interface,
 }
 
-/// What a module uses and does not define, each in the order it was first used: the place of an import here is how whoever links the module says what it stands for.
+/// What a module uses and does not define. A value and a function each in the order it was first used: the place of one here is how whoever links the module says what it stands for. A row another module declares by its identity here, with what this module reads of it, which is all the module holds of the row: a product its width, a family how many constructors it declares, and each constructor of it the module names its position in the declaration.
 ///
-/// A module with imports is a fragment: it verifies with no entry ([`Module::verify_fragment`]), every import bound before its first item, and it is never optimized, analysed or lowered. Linking resolves every one ([`Module::link`]), so the program a back end is handed has none.
+/// A module with imports is a fragment: it verifies with no entry ([`Module::verify_fragment`]), every import bound before its first item, and it is never optimized, analysed or lowered. Linking resolves every one ([`Module::link`]), so the program a back end is handed has none, and holds every row it names whole.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Imports {
     values: Vec<ValueId>,
     functions: Vec<ImportedFunction>,
+    products: BTreeMap<ProductId, u32>,
+    families: BTreeMap<FamilyId, u32>,
+    constructors: BTreeMap<ConstructorId, u32>,
 }
 
 impl Imports {
@@ -79,8 +82,27 @@ impl Imports {
         &self.functions
     }
 
+    /// The imported product schemas, each with its width. Its schema lists no field: what a field is is the declaring module's to say.
+    pub fn products(&self) -> &BTreeMap<ProductId, u32> {
+        &self.products
+    }
+
+    /// The imported variant families, each with how many constructors its declaration has, which a match without a default covers.
+    pub fn families(&self) -> &BTreeMap<FamilyId, u32> {
+        &self.families
+    }
+
+    /// The constructors of imported families this module names, each with its position in its family's declaration, which is its discriminant.
+    pub fn constructors(&self) -> &BTreeMap<ConstructorId, u32> {
+        &self.constructors
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.values.is_empty() && self.functions.is_empty()
+        self.values.is_empty()
+            && self.functions.is_empty()
+            && self.products.is_empty()
+            && self.families.is_empty()
+            && self.constructors.is_empty()
     }
 }
 
@@ -314,6 +336,33 @@ impl Module {
         self.constructors.get(id.index())
     }
 
+    /// The width of `id`: the fields it lists where this module declares it, and what its import states where it imports it.
+    pub fn product_width(&self, id: ProductId) -> Option<usize> {
+        match self.imports.products.get(&id) {
+            Some(&width) => Some(width as usize),
+            None => Some(self.product(id)?.width()),
+        }
+    }
+
+    /// How many constructors `id` declares: those it lists where this module declares it, and what its import states where it imports it.
+    pub fn constructor_count(&self, id: FamilyId) -> Option<usize> {
+        match self.imports.families.get(&id) {
+            Some(&count) => Some(count as usize),
+            None => Some(self.family(id)?.constructors.len()),
+        }
+    }
+
+    /// The position of `id` in its family's declaration, which is its discriminant: what its import states where this module imports the family, and its index in the family's list where it declares it, which this finds by a scan of the list.
+    pub fn constructor_position(&self, id: ConstructorId) -> Option<usize> {
+        if let Some(&position) = self.imports.constructors.get(&id) {
+            return Some(position as usize);
+        }
+        self.family(self.constructor(id)?.family)?
+            .constructors
+            .iter()
+            .position(|&listed| listed == id)
+    }
+
     pub fn foreign(&self, id: ForeignId) -> Option<&Arc<ForeignFunction>> {
         self.foreigns.get(id.index())
     }
@@ -368,6 +417,49 @@ impl Module {
             interface,
         });
         function
+    }
+
+    /// Register a product schema another module declares, at its width: it lists no field.
+    pub(crate) fn import_product(
+        &mut self,
+        debug_name: Option<String>,
+        width: usize,
+        shared: bool,
+    ) -> ProductId {
+        let id = self.add_product(ProductSchema {
+            debug_name,
+            fields: Vec::new(),
+            shared,
+        });
+        self.imports
+            .products
+            .insert(id, u32::try_from(width).expect("product width exhausted"));
+        id
+    }
+
+    /// Register a variant family another module declares, of `count` constructors, none of which this module holds yet: each follows through [`import_constructor`](Self::import_constructor) where the module names it.
+    pub(crate) fn import_family(&mut self, debug_name: Option<String>, count: usize) -> FamilyId {
+        let id = self.add_family(debug_name);
+        self.imports
+            .families
+            .insert(id, u32::try_from(count).expect("family count exhausted"));
+        id
+    }
+
+    /// Register the constructor at `position` of the imported `family`, of `width` payload fields, each a field that says nothing of itself: what a field is is the declaring module's to say.
+    pub(crate) fn import_constructor(
+        &mut self,
+        family: FamilyId,
+        position: usize,
+        debug_name: Option<String>,
+        width: usize,
+    ) -> ConstructorId {
+        let id = self.add_constructor(family, debug_name, vec![Field::opaque(None); width]);
+        self.imports.constructors.insert(
+            id,
+            u32::try_from(position).expect("constructor position exhausted"),
+        );
+        id
     }
 
     /// Mint a function identity whose definition follows later, so recursive bodies can reference their own or a sibling's identity. A reserved slot is `None` until [`define_function`](Self::define_function) fills it; finalization requires every reservation to have been defined.

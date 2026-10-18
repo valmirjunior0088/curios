@@ -1046,7 +1046,7 @@ entry
     );
 }
 
-/// A row is its declaration's. The item declaring `Opt` registers the family, each field's shape with it; an item that constructs an `Opt` holds the family as an import, at its widths and saying nothing of a field; and a program holds one family, the declaration's.
+/// A row is its declaration's. The item declaring `Opt` registers the family, each field's shape with it; an item that constructs an `Opt` imports what it reads of the family, its count and the one constructor it builds, at its position and width and saying nothing of a field; and a program holds one family, the declaration's.
 #[test]
 fn a_row_is_registered_by_the_item_that_declares_it() {
     let mut induct_decls = BTreeMap::new();
@@ -1090,14 +1090,17 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
             type_: None,
         },
     };
-    // The shapes of `some`'s payload in the one family `module` holds.
+    // The shapes of `some`'s payload in the one family `module` holds, the constructor at its second position.
     let payload = |module: &curios_ersd::Module| {
         let [family] = module.families() else {
             panic!("the module holds one family");
         };
-        let [_, some] = family.constructors[..] else {
-            panic!("Opt has two constructors");
-        };
+        let some = family
+            .constructors
+            .iter()
+            .copied()
+            .find(|&constructor| module.constructor_position(constructor) == Some(1))
+            .expect("the module holds some");
 
         module
             .constructor(some)
@@ -1122,6 +1125,12 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
     };
     assert_eq!(payload(fragment("Opt")), vec![FieldShape::Number]);
     assert_eq!(payload(fragment("six")), vec![FieldShape::Opaque]);
+    let imported = fragment("six");
+    assert_eq!(imported.families()[0].constructors.len(), 1);
+    assert_eq!(
+        imported.imports().families().values().collect::<Vec<_>>(),
+        [&2]
+    );
 
     assert_eq!(
         payload(&erase(&fixture, opt_type())),

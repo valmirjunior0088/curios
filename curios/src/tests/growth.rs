@@ -348,6 +348,12 @@ fn a_wide_scope_elaborates_in_its_size() {
     }
 }
 
+/// A family of four thousand constructors compiles in its size: each constructor is an item of its own, and each imports the one constructor it reads of the family's row, at its position, rather than the row.
+#[test]
+fn a_family_of_many_constructors_compiles_in_its_size() {
+    assert_eq!(compiles(&grown(Growth::Constructors, 4_000)), Ok(()));
+}
+
 /// Nesting ten thousand deep compiles on a test thread's stack: parentheses, each a nonterminal the parser re-enters, and an arrow, each parameter a term the lowering lowers inside the one before. The depth is bought with stack where it is spent, so no stage's acceptance follows the thread it runs on.
 #[test]
 fn nesting_ten_thousand_deep_compiles_on_a_test_thread() {

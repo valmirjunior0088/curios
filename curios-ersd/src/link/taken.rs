@@ -4,7 +4,7 @@
 //!
 //! **What it names of the rest of the program is an import.** A value or a function before the mark is one another fragment bound. Whoever takes the module says which of them a module may name, and under what interface a function is applied; a suffix that names any other is not taken, since nothing a module holds could stand for it.
 //!
-//! **A schema is held as an import holds one**: a product at its width, a family with each constructor at its width, and nothing of a field, which is the row's declaration to say. So a suffix that declares a row is not what this takes; whoever calls it knows which fragments declare one.
+//! **A schema is an import** ([`Imports`](crate::Imports)): a product at its width, a family at its count with each constructor the suffix names at its position, and nothing of a field, which is the row's declaration to say. An anonymous row is no declaration's, so it is the module's own, at its width. So a suffix that declares a row is not what this takes; whoever calls it knows which fragments declare one.
 
 #[cfg(test)]
 mod tests;
@@ -66,6 +66,7 @@ struct Named {
     foreigns: Firsts<ForeignId>,
     products: Firsts<ProductId>,
     families: Firsts<FamilyId>,
+    constructors: Firsts<ConstructorId>,
 }
 
 impl Named {
@@ -82,6 +83,7 @@ impl Named {
 
     fn constructor(&mut self, module: &Module, constructor: ConstructorId) -> Option<()> {
         self.families.note(module.constructor(constructor)?.family);
+        self.constructors.note(constructor);
 
         Some(())
     }
@@ -287,26 +289,39 @@ impl Module {
         }
         for &product in &named.products.order {
             let held = self.product(product)?;
-            let registered = module.add_product(ProductSchema {
-                debug_name: held.debug_name.clone(),
-                fields: vec![Field::opaque(None); held.width()],
-                shared: held.shared,
-            });
+            let registered = match held.shared {
+                true => module.add_product(ProductSchema {
+                    debug_name: held.debug_name.clone(),
+                    fields: vec![Field::opaque(None); held.width()],
+                    shared: true,
+                }),
+                false => module.import_product(held.debug_name.clone(), held.width(), false),
+            };
             tables.products.insert(product, registered);
         }
+        // A family's list read once for every constructor named of it: the program declares each family it holds, so a constructor's place in the list is its position.
+        let mut positions = BTreeMap::new();
         for &family in &named.families.order {
             let held = self.family(family)?;
-            let registered = module.add_family(held.debug_name.clone());
-            for &constructor in &held.constructors {
-                let row = self.constructor(constructor)?;
-                let landed = module.add_constructor(
-                    registered,
-                    row.debug_name.clone(),
-                    vec![Field::opaque(None); row.width()],
-                );
-                tables.constructors.insert(constructor, landed);
-            }
+            let registered = module.import_family(held.debug_name.clone(), held.constructors.len());
+            positions.extend(
+                held.constructors
+                    .iter()
+                    .enumerate()
+                    .filter(|&(_, constructor)| named.constructors.seen.contains(constructor))
+                    .map(|(position, &constructor)| (constructor, position)),
+            );
             tables.families.insert(family, registered);
+        }
+        for &constructor in &named.constructors.order {
+            let row = self.constructor(constructor)?;
+            let landed = module.import_constructor(
+                tables.families[&row.family],
+                positions[&constructor],
+                row.debug_name.clone(),
+                row.width(),
+            );
+            tables.constructors.insert(constructor, landed);
         }
 
         // Every identity first, in this module's order, and contents after, as a fragment is linked.

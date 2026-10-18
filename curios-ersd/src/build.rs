@@ -106,6 +106,33 @@ impl ErsdBuilder {
         self.module.add_constructor(family, debug_name, fields)
     }
 
+    /// Import a product schema another module declares, at its width — see [`Imports`](super::Imports).
+    pub fn import_product(
+        &mut self,
+        debug_name: Option<String>,
+        width: usize,
+        shared: bool,
+    ) -> ProductId {
+        self.module.import_product(debug_name, width, shared)
+    }
+
+    /// Import a variant family another module declares, of `count` constructors; each this module names follows through [`import_constructor`](Self::import_constructor).
+    pub fn import_family(&mut self, debug_name: Option<String>, count: usize) -> FamilyId {
+        self.module.import_family(debug_name, count)
+    }
+
+    /// Import the constructor at `position` of the imported `family`, of `width` payload fields.
+    pub fn import_constructor(
+        &mut self,
+        family: FamilyId,
+        position: usize,
+        debug_name: Option<String>,
+        width: usize,
+    ) -> ConstructorId {
+        self.module
+            .import_constructor(family, position, debug_name, width)
+    }
+
     /// Mint a function identity whose definition follows later, so recursive bodies can reference their own or a sibling's identity. Finalization rejects a reservation that was never defined.
     pub fn reserve_function(&mut self) -> FunctionId {
         let id = self.module.reserve_function();

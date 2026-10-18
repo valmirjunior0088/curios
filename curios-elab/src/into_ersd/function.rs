@@ -126,7 +126,7 @@ impl Lowering<'_> {
             return Ok(Outcome::Emitted(self.unit()));
         }
 
-        // A `Prop` family's constructor is the one direct call that *has* to be dropped here: its layout keeps no payload (see `induct_row`), and its arguments exist only to fill fields erasure has already removed — and they may mention binders erasure dropped, so walking them would compute over placeholder units.
+        // A `Prop` family's constructor is the one direct call that *has* to be dropped here: its layout keeps no payload (see `build_induct_row`), and its arguments exist only to fill fields erasure has already removed — and they may mention binders erasure dropped, so walking them would compute over placeholder units.
         if is_proof_constructor(context, head)? {
             return Ok(Outcome::Emitted(self.unit()));
         }
@@ -231,12 +231,16 @@ fn is_proof_constructor(context: &mut Retyping, head: &Term) -> Result<bool, Err
     else {
         return Ok(false);
     };
-    let Some(declaration) = context.induct_decl(&Global::Authored(*owner)).cloned() else {
+    // The sort alone, rather than the declaration with every constructor: a call is erased in its own size.
+    let Some(result_sort) = context
+        .induct_decl(&Global::Authored(*owner))
+        .map(|declaration| declaration.result_sort.clone())
+    else {
         return Ok(false);
     };
 
     Ok(matches!(
-        &*context.reduce_with(&declaration.result_sort)?,
+        &*context.reduce_with(&result_sort)?,
         Subterm::Sort(Quality::Prop, _)
     ))
 }

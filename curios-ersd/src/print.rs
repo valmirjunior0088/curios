@@ -270,13 +270,13 @@ impl Printer<'_, '_, '_, '_> {
                 continue;
             }
             let shared = if schema.shared { " shared" } else { "" };
+            let row = match self.module.imports().products().get(&id) {
+                Some(width) => format!(" of width {width}, imported"),
+                None => format!("({})", fields(&schema.fields)),
+            };
             self.line(
                 0,
-                format!(
-                    "product {id}{}({}){shared}",
-                    hint(&schema.debug_name),
-                    fields(&schema.fields)
-                ),
+                format!("product {id}{}{row}{shared}", hint(&schema.debug_name)),
             )?;
         }
         for (index, family) in self.module.families().iter().enumerate() {
@@ -284,23 +284,32 @@ impl Printer<'_, '_, '_, '_> {
             if !self.reach.families.contains(&id) {
                 continue;
             }
+            let imports = self.module.imports();
             let constructors = family
                 .constructors
                 .iter()
                 .map(|&constructor| {
                     let definition = self.module.constructor(constructor).expect("live");
+                    let position = match imports.constructors().get(&constructor) {
+                        Some(position) => format!("{position}:"),
+                        None => String::new(),
+                    };
                     format!(
-                        "{constructor}{}({})",
+                        "{position}{constructor}{}({})",
                         hint(&definition.debug_name),
                         fields(&definition.fields)
                     )
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
+            let count = match imports.families().get(&id) {
+                Some(count) => format!(" of {count}, imported"),
+                None => String::new(),
+            };
             self.line(
                 0,
                 format!(
-                    "family {id}{} {{ {constructors} }}",
+                    "family {id}{}{count} {{ {constructors} }}",
                     hint(&family.debug_name)
                 ),
             )?;

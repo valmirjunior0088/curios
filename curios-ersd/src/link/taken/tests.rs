@@ -1,6 +1,7 @@
 //! The fragment linked last taken back out of a program, as it was linked and after its items were evaluated where it stood.
 
 use {
+    super::super::test_support::{digit, digits},
     crate::{test_support::shape, *},
     curios_num::Natural,
 };
@@ -73,6 +74,37 @@ fn linked() -> (Module, Mark, Linked, FunctionId, Interface) {
     );
 
     (program, mark, landed, function, interface)
+}
+
+/// What a suffix holds of a row the program declares is what it reads: the family at its count, and the one constructor it names at its position.
+#[test]
+fn a_suffix_imports_the_constructors_it_names_at_their_positions() {
+    let (declaring, family, _) = digits(5);
+    let (using, imported) = digit(5, 3);
+
+    let mut program = Module::new();
+    let declared = program.link(&declaring, &Resolution::default());
+    let mark = program.mark();
+    program.link(
+        &using,
+        &Resolution {
+            families: [(imported, declared.family(family))].into(),
+            ..Default::default()
+        },
+    );
+
+    let taken = program
+        .taken(&mark, &[], |_| false, |_| None)
+        .expect("the suffix names no value or function");
+    taken
+        .module
+        .verify_fragment()
+        .expect("what is taken is a fragment");
+
+    let imports = taken.module.imports();
+    assert_eq!(imports.families().values().collect::<Vec<_>>(), [&5]);
+    assert_eq!(imports.constructors().values().collect::<Vec<_>>(), [&3]);
+    assert_eq!(shape(&taken.module), shape(&using));
 }
 
 #[test]

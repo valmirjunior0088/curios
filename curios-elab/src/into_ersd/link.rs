@@ -110,8 +110,8 @@ impl Linking {
         let environment = erased.environment();
         for name in environment.imported_rows() {
             // A newtype's row has no schema, so nothing of it is resolved.
-            let held = match environment.struct_row(name) {
-                Some(row) => row.schema.is_none() || self.structs.contains_key(name),
+            let held = match environment.imported_struct_row(name) {
+                Some(schema) => schema.is_none() || self.structs.contains_key(name),
                 None => self.families.contains_key(name),
             };
             assert!(

@@ -1,10 +1,10 @@
 //! The erasure environment: the maps from Core identities to the arena identities they lower to.
 //!
-//! One environment serves one item's erasure, and its identities are that item's fragment's. Opened binders receive fresh Core labels and top-level names are module-unique, so one flat value map is unambiguous without scope save/restore while the erasure runs; what it hands on keeps the names the item declares and no other ([`Environment::exporting`]). The schema maps hold the fragment's identity for each Core declaration it lowers a row of. A row is its declaration's: the item that declares a structure or an inductive registers the row, from the registry entry, and every other item holds it as an import, a schema of the row's widths that says nothing of its fields and stands, in a program, for the declaration's own. An anonymous row is declared by no item and is each fragment's, one for a width.
+//! One environment serves one item's erasure, and its identities are that item's fragment's. Opened binders receive fresh Core labels and top-level names are module-unique, so one flat value map is unambiguous without scope save/restore while the erasure runs; what it hands on keeps the names the item declares and no other ([`Environment::exporting`]). The schema maps hold the fragment's identity for each Core declaration it lowers a row of. A row is its declaration's: the item that declares a structure or an inductive registers the row, from the registry entry, with its masks; every other item holds it as an import of what it reads, which stands, in a program, for the declaration's own — a structure's schema at its width, an inductive's family and the constructors the item names, each at its position — and reads a mask where the declaring item holds it. An anonymous row is declared by no item and is each fragment's, one for a width.
 
 use {
     curios_core::{Free, Global},
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeMap,
 };
 
 /// What a Core name erases to.
@@ -30,11 +30,6 @@ impl ProductRow {
     pub(super) fn collapses(relevant: usize) -> bool {
         relevant == 1
     }
-
-    /// The runtime projection index of declared field `index`: the count of relevant fields before it.
-    pub(super) fn relevant_before(&self, index: usize) -> u32 {
-        self.mask[..index].iter().filter(|&&erased| !erased).count() as u32
-    }
 }
 
 /// A registered constructor: its arena identity and the declaration's opaque signature mask over its payload fields (`true` where a field is erased).
@@ -53,14 +48,24 @@ pub(super) struct FamilyRow {
     pub(super) constructors: Vec<ConstructorRow>,
 }
 
+/// An inductive's row as an item that imports it holds it: the family, and each constructor the item names, by its position in the declaration.
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub(super) struct ImportedFamily {
+    pub(super) family: curios_ersd::FamilyId,
+    pub(super) constructors: BTreeMap<usize, curios_ersd::ConstructorId>,
+}
+
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub(super) struct Environment {
     values: BTreeMap<Free, Binding>,
+    /// The rows this fragment's item declares.
     struct_decls: BTreeMap<Global, ProductRow>,
     induct_decls: BTreeMap<Global, FamilyRow>,
-    /// The declarations whose rows above are imports: another item declares them, and this fragment's schema for one stands for that item's.
-    imported: BTreeSet<Global>,
+    /// The rows another item declares, as this fragment imports them: a structure's schema, which a newtype has none of, and an inductive's family with the constructors named of it. Each stands for that item's.
+    struct_imports: BTreeMap<Global, Option<curios_ersd::ProductId>>,
+    induct_imports: BTreeMap<Global, ImportedFamily>,
     /// Anonymous tuple schemas, interned by relevant-field width — an arity-`n` product is one untyped layout regardless of which tuple built it.
     tuples: BTreeMap<usize, curios_ersd::ProductId>,
 }
@@ -97,37 +102,44 @@ impl Environment {
             .filter_map(|(name, binding)| Some((name.as_global()?, *binding)))
     }
 
-    pub(super) fn struct_row(&self, name: &Global) -> Option<&ProductRow> {
-        self.struct_decls.get(name)
-    }
-
     /// File the row this fragment's item declares for `name`.
     pub(super) fn register_struct_row(&mut self, name: &Global, row: ProductRow) {
         self.struct_decls.insert(*name, row);
     }
 
-    /// File the row another item declares for `name`, as this fragment holds it.
-    pub(super) fn import_struct_row(&mut self, name: &Global, row: ProductRow) {
-        self.struct_decls.insert(*name, row);
-        self.imported.insert(*name);
+    /// File the schema of the row another item declares for `name`, as this fragment imports it: `None` for a newtype, which has none.
+    pub(super) fn import_struct_row(
+        &mut self,
+        name: &Global,
+        schema: Option<curios_ersd::ProductId>,
+    ) {
+        self.struct_imports.insert(*name, schema);
     }
 
     /// The row this fragment's item declares for `name`: what another item's import of it is read off.
     pub(super) fn declared_struct_row(&self, name: &Global) -> Option<&ProductRow> {
-        self.struct_decls
-            .get(name)
-            .filter(|_| !self.imported.contains(name))
+        self.struct_decls.get(name)
     }
 
-    /// Every structure this fragment holds a schema of, by the declaration it is the row of. A newtype's row has none.
+    /// The schema this fragment imports the structure `name`'s row as, where it imports it: `Some(None)` for a newtype.
+    pub(super) fn imported_struct_row(
+        &self,
+        name: &Global,
+    ) -> Option<Option<curios_ersd::ProductId>> {
+        self.struct_imports.get(name).copied()
+    }
+
+    /// Every structure this fragment holds a schema of, declared or imported, by the declaration it is the row of. A newtype's row has none.
     pub(super) fn struct_schemas(&self) -> impl Iterator<Item = (&Global, curios_ersd::ProductId)> {
         self.struct_decls
             .iter()
-            .filter_map(|(name, row)| Some((name, row.schema?)))
-    }
-
-    pub(super) fn induct_row(&self, name: &Global) -> Option<&FamilyRow> {
-        self.induct_decls.get(name)
+            .map(|(name, row)| (name, row.schema))
+            .chain(
+                self.struct_imports
+                    .iter()
+                    .map(|(name, schema)| (name, *schema)),
+            )
+            .filter_map(|(name, schema)| Some((name, schema?)))
     }
 
     /// File the row this fragment's item declares for `name`.
@@ -135,46 +147,67 @@ impl Environment {
         self.induct_decls.insert(*name, row);
     }
 
-    /// File the row another item declares for `name`, as this fragment holds it.
-    pub(super) fn import_induct_row(&mut self, name: &Global, row: FamilyRow) {
-        self.induct_decls.insert(*name, row);
-        self.imported.insert(*name);
+    /// File the family of the row another item declares for `name`, as this fragment imports it, with none of its constructors yet.
+    pub(super) fn import_induct_family(&mut self, name: &Global, family: curios_ersd::FamilyId) {
+        self.induct_imports.insert(
+            *name,
+            ImportedFamily {
+                family,
+                constructors: BTreeMap::new(),
+            },
+        );
+    }
+
+    /// File the constructor at `position` of the imported inductive `name`, as this fragment imports it.
+    pub(super) fn import_induct_constructor(
+        &mut self,
+        name: &Global,
+        position: usize,
+        constructor: curios_ersd::ConstructorId,
+    ) {
+        self.induct_imports
+            .get_mut(name)
+            .expect("a constructor is imported with its family")
+            .constructors
+            .insert(position, constructor);
+    }
+
+    /// The inductive `name`'s row as this fragment imports it, where it does.
+    pub(super) fn imported_induct_row(&self, name: &Global) -> Option<&ImportedFamily> {
+        self.induct_imports.get(name)
+    }
+
+    /// The row of each inductive this item declares.
+    #[cfg(feature = "test-support")]
+    pub(super) fn declared_induct_rows(&self) -> impl Iterator<Item = &FamilyRow> {
+        self.induct_decls.values()
     }
 
     /// The row this fragment's item declares for `name`: what another item's import of it is read off.
-    /// The row of each inductive this item declares, imports left out.
-    #[cfg(feature = "test-support")]
-    pub(super) fn declared_induct_rows(&self) -> impl Iterator<Item = &FamilyRow> {
-        self.induct_decls
-            .iter()
-            .filter(|(name, _)| !self.imported.contains(*name))
-            .map(|(_, row)| row)
-    }
-
     pub(super) fn declared_induct_row(&self, name: &Global) -> Option<&FamilyRow> {
-        self.induct_decls
-            .get(name)
-            .filter(|_| !self.imported.contains(name))
+        self.induct_decls.get(name)
     }
 
     /// Whether this fragment's item declares a row.
     pub(super) fn declares_rows(&self) -> bool {
-        self.struct_decls
-            .keys()
-            .chain(self.induct_decls.keys())
-            .any(|name| !self.imported.contains(name))
+        !self.struct_decls.is_empty() || !self.induct_decls.is_empty()
     }
 
     /// The declarations whose rows this fragment holds as imports: the items a program links before it.
     pub(super) fn imported_rows(&self) -> impl Iterator<Item = &Global> {
-        self.imported.iter()
+        self.struct_imports.keys().chain(self.induct_imports.keys())
     }
 
-    /// Every inductive this fragment holds the family of, by its declaration.
+    /// Every inductive this fragment holds the family of, declared or imported, by its declaration.
     pub(super) fn families(&self) -> impl Iterator<Item = (&Global, curios_ersd::FamilyId)> {
         self.induct_decls
             .iter()
             .map(|(name, row)| (name, row.family))
+            .chain(
+                self.induct_imports
+                    .iter()
+                    .map(|(name, row)| (name, row.family)),
+            )
     }
 
     pub(super) fn tuple_schema(&self, width: usize) -> Option<curios_ersd::ProductId> {

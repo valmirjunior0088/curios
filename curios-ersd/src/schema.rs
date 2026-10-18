@@ -1,6 +1,8 @@
 //! Product schemas, variant families, and constructors.
 //!
 //! Structures and inductives register their post-erasure shape here exactly once, from their declarations: a product schema is the ordered row of relevant fields, a variant family is the ordered set of its constructors, and a constructor is its payload row plus its position in the family — the position *is* the discriminant. Construction, projection, and matching reference these identities, which is what keeps the semantic shapes legible to the transformations and hands the lowering everything a tag layout needs.
+//!
+//! **A row another module declares is an import** ([`Imports`](crate::Imports)), and holds what this module reads of it: a product its width alone, a family the constructors this module names, each at the position its import states. Only the module that declares a row lists it whole, and a program, which has no import, holds every row it names whole.
 
 use {
     super::{ConstructorId, FamilyId, ProductId},
@@ -21,13 +23,13 @@ pub struct ProductSchema {
 }
 
 impl ProductSchema {
-    /// The number of fields.
+    /// The number of fields it lists: its width where the module declares it, and none where the module imports it, whose width the import states ([`Module::product_width`](crate::Module::product_width)).
     pub fn width(&self) -> usize {
         self.fields.len()
     }
 }
 
-/// The post-erasure shape of an inductive type: its constructors in declaration order. A constructor's index in this list is its discriminant.
+/// The post-erasure shape of an inductive type: the constructors the module holds of it. Where the module declares the family, that is every one in declaration order, and a constructor's index in the list is its discriminant; where it imports the family, the ones it names, each at the position its import states ([`Module::constructor_position`](crate::Module::constructor_position)).
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct VariantFamily {
@@ -35,7 +37,7 @@ pub struct VariantFamily {
     pub constructors: Vec<ConstructorId>,
 }
 
-/// One constructor of a [`VariantFamily`]: its payload row and a back-link to its family. The discriminant is the constructor's position in the family's list, not stored here.
+/// One constructor of a [`VariantFamily`]: its payload row and a back-link to its family. The discriminant is the constructor's position in its family's declaration, not stored here: its index in the list where the module declares the family, and what its import states otherwise.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct Constructor {
