@@ -107,6 +107,10 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
         let mut visit = Visit::rewriting_shared(
             |_, _| None,
             Box::new(move |_, term| {
+                // A subterm that holds no metavariable materializes to itself, and is handed back unwalked: a body closed over a lambda that still holds one metavariable deep inside costs the path to it, where each enclosing close would otherwise walk all of it again.
+                if !term.has_metavar() {
+                    return Some(term.clone());
+                }
                 let Subterm::Metavar(Metavar { id, spine, origin }) = &**term else {
                     return None;
                 };
