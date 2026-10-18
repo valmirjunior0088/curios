@@ -1,6 +1,6 @@
 -- `/std/Flt` against IEEE 754-2019: the total order `ord` follows, the decimal text `to_str` writes and `of_str` reads back, and the operations built over the primitives. Each claim a type may depend on is stated twice: as a `let` whose type is the claim, which the kernel checks by reducing it on every build, and as a test that runs it in the compiled program.
 use /std/{Flt, Nat, Ordering, List, Str, Option, Eq, Test, State, Spell, Toml, Map, Result, Bool,
-    Hash, Show, Vec};
+    Vec};
 use /std/Bool/{True};
 use /std/Flt/{Rounding, rounded, signals, Exceptions, Env, Class};
 
