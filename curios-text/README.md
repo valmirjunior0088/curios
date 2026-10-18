@@ -70,6 +70,14 @@ The Curios surface language: the scannerless parser, surface AST, printer and fo
 
 **Rejected.** Stacking every element when a list outgrows one line, forcing complex elements flat merely to pack the gaps between them, and attaching a sibling to the closing line of a multiline element.
 
+### A curried call is one call
+
+**Decision.** A head followed by two or more argument lists, `h(a)(b)(c)` with `h` a name or a projection off one, is laid out as the call its arguments would make written in one list, `)(` standing where a comma would, with one exception: the first list hugs the head. Flat when the whole chain fits; otherwise the head and its first list stand on one line, the first list breaking inside only where it cannot fit there, and each later list's arguments go one level in, one per line, every closer riding its list's last argument and the next opener riding that closer, so `)(` ends a line as a comma does, and whatever follows the chain rides the last closer. The chain hugs its last argument where that call would — a lambda, a list or a tuple after nothing but atoms, in every list — with all its lists on the head's line, and a chain whose head is a ladder keeps the ladder's layout, below.
+
+**Rationale.** A curried call is how `Fmt/render` and every function answering a function is applied, and its argument lists are one call's arguments written apart. Decided apart, only the last list breaks, wherever the line runs out: `)(` lands mid-line with the lists before it, an argument hangs below it, and two chains of one shape come out in two layouts by where their widths fall. Broken at every seam, a chain whose first list breaks is laid out exactly as the call written in one list, and one whose first list fits differs from it only where the first list hugs the head, which keeps a template's text beside the name that renders it.
+
+**Rejected.** Each later list on a line of its own, `(` opening the line: a list that must break inside itself then leaves `(` alone on its line, which most of `/std`'s chains — `Eq()(a, b)` among them — would come to. Starting the first list on a line of its own too, which leaves the head alone on a line.
+
 ### An applied ladder measures its calls with its arms
 
 **Decision.** A `match` or `choose` stays flat only when its whole postfix chain fits. Otherwise its arms and `end` take separate lines, and each attached call lays out its arguments within the room left after `end`. Short arguments stay attached as `end(p)`; longer argument lists may wrap in their ordinary shape.

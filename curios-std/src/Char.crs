@@ -45,7 +45,8 @@ pub let eq_of_code(a: Char, b: Char, proof: Eq()(a.code, b.code)) -> Eq()(a, b) 
     Eq/subst(
         (code: Nat) => (valid: Valid(code)) -> Eq()(a, Char { code = code }),
         proof,
-        (_: Valid(a.code)) => Eq/refl())(b.valid);
+        (_: Valid(a.code)) => Eq/refl())(
+        b.valid);
 
 --- Whether the two are equal.
 pub let eql(a: Char, b: Char) -> Bool =

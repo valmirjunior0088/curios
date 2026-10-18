@@ -56,7 +56,8 @@ let word_back(s: Str, at: Str/At(s)) -> Str/At(s) =
                     | false => again(b.past, b.progress)(in_word || Bool/not(blank))
                     end
                 end,
-        at)(false);
+        at)(
+        false);
 
 -- Where the word at or after `at` ends: on over the spaces before it, then over the word.
 let word_forth(s: Str, at: Str/At(s)) -> Str/At(s) =
@@ -73,7 +74,8 @@ let word_forth(s: Str, at: Str/At(s)) -> Str/At(s) =
                     | false => again(f.past, f.progress)(in_word || Bool/not(blank))
                     end
                 end,
-        at)(false);
+        at)(
+        false);
 
 -- What a key with Ctrl does, as readline has it: A and E to either end, B and F a cluster back and on, K and U the text cut to either end, and W the word before the cursor cut.
 let controlled(i: Field, c: Char) -> Field =
@@ -137,7 +139,8 @@ let scrolled(s: Str, at: Str/At(s), room: Nat) -> Str/At(s) =
                     | false => here
                     end
                 end,
-        at)(0);
+        at)(
+        0);
 
 --- The text in `style` on the first row, scrolled so the cursor is in view, and the terminal's cursor asked for where the field's stands.
 pub let view(i: Field, style: Style) -> Pane =

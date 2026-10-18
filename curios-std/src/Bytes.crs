@@ -140,7 +140,9 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq
                         rejoined
                     end
                 end,
-        a)(b, same);
+        a)(
+        b,
+        same);
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
 pub let drop(b: Bytes, k: Nat, @ok: Holds(k <= len(b))) -> Bytes =

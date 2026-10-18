@@ -44,7 +44,8 @@ pub let of(a: Nat, b: Nat) -> Gcd(a, b) =
                         greatest(_, p, _) = p }
                 | yp + 1 => step(x, yp + 1, ih(x % (yp + 1), True/qed())(yp + 1))
                 end,
-        b)(a);
+        b)(
+        a);
 
 --- A value with the three properties is the greatest common divisor: each of two such values divides the other.
 ---
@@ -101,7 +102,10 @@ let common(
                         Eq/sym(euclid(x, yp + 1)),
                         ih(x % (yp + 1), True/qed())(yp + 1, q, rest))
                 end,
-        b)(a, p, q);
+        b)(
+        a,
+        p,
+        q);
 
 -- A divisor scaled divides what it divides, scaled.
 let scale(@d: Nat, @a: Nat, p: Divides(d, a), c: Nat) -> Divides(d * c, a * c) =

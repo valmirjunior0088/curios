@@ -75,7 +75,8 @@ pub let to_after(
                     (within: Holds(n <= Bytes/len(s.bytes))) -> Holds(
                         starts(Bytes/drop(s.bytes, n, @within))),
                 back,
-                (_) => p.boundary)(True/proved()) };
+                (_) => p.boundary)(
+                True/proved()) };
 
 --- How many bytes continuing a character open `rest`.
 let run(rest: Bytes) -> Nat =
@@ -222,7 +223,9 @@ pub let next_grapheme(
                             grapheme/after(run, step.char, class))
                     end
                 end,
-        first.past)(opening, grapheme/opening(first.char, opening));
+        first.past)(
+        opening,
+        grapheme/opening(first.char, opening));
 
 --- The position past the extended grapheme cluster that begins at `at` and the proof that it lies past, or `none` at the end of `s`.
 pub let try_next_grapheme(

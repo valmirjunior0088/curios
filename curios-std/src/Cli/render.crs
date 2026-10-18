@@ -170,7 +170,9 @@ let complaint(f: Failure) -> Str =
     | bad_value(n, r) => Fmt/render("invalid value for '%': %")(n)(r)
     | conflict(names) => Str/concat("conflicting arguments: ", Str/join(", ", names))
     | unknown_command(n, near, known) =>
-        Fmt/render("unrecognized subcommand '%'%\n  available: %")(n)(tip(near, "subcommand"))(
+        Fmt/render("unrecognized subcommand '%'%\n  available: %")(
+            n)(
+            tip(near, "subcommand"))(
             Str/join(", ", known))
     | missing_command(known) =>
         Str/flatten(["a subcommand is required\n  available: ", Str/join(", ", known)])
@@ -178,5 +180,6 @@ let complaint(f: Failure) -> Str =
 
 --- A refusal: what the line got wrong, the usage line of the command `path` names, and where help is.
 pub let report(c: Command, path: List(Str), f: Failure) -> Str =
-    Fmt/render("error: %\n\n%\n\nFor more information, try '--help'.\n")(complaint(f))(
+    Fmt/render("error: %\n\n%\n\nFor more information, try '--help'.\n")(
+        complaint(f))(
         usage(c, path));

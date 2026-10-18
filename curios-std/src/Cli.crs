@@ -414,7 +414,8 @@ pub let main(cli: Cli, run: (Parsed(cli.command)) -> Io({})) -> Io({}) =
         refuse(
             Fmt/render(
                 "error: argument % is not valid UTF-8\n\n%\n\nFor more information, try '--help'.\n")(
-                at + 1)(usage(cli, [name(cli.command)])))
+                at + 1)(
+                usage(cli, [name(cli.command)])))
     | success(argv) =>
         let env = environment(variables(cli.command))!;
         match parse(cli, argv, env)

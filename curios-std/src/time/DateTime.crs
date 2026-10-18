@@ -160,6 +160,11 @@ let digits(n: Nat, width: Nat) -> Str =
 
 --- The date as the Internet message format's fixed-length form spells it, `Sun, 06 Nov 1994 08:49:37 GMT`: the form HTTP sends a date in (RFC 9110 §5.6.7). A year past 9999 takes the digits it needs.
 pub let to_imf_fixdate(d: DateTime) -> Str =
-    Fmt/render("%, % % % %:%:% GMT")(weekday_name(d.weekday))(digits(d.day, 2))(
-        month_name(d.month))(digits(d.year, 4))(digits(d.hour, 2))(digits(d.minute, 2))(
+    Fmt/render("%, % % % %:%:% GMT")(
+        weekday_name(d.weekday))(
+        digits(d.day, 2))(
+        month_name(d.month))(
+        digits(d.year, 4))(
+        digits(d.hour, 2))(
+        digits(d.minute, 2))(
         digits(d.second, 2));

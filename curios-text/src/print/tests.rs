@@ -295,6 +295,51 @@ fn long_arguments_can_wrap_after_a_ladders_arms_break() {
 }
 
 #[test]
+fn a_curried_call_that_fits_stays_on_one_line() {
+    assert_eq!(render("f(a, b)(c)(d)", 80), "f(a, b)(c)(d)");
+}
+
+#[test]
+fn a_curried_call_that_breaks_ends_a_line_at_every_seam() {
+    assert_eq!(
+        render("format(alpha, beta)(gamma, epsilon)(delta)", 24),
+        "format(alpha, beta)(\n    gamma,\n    epsilon)(\n    delta)"
+    );
+}
+
+#[test]
+fn a_curried_calls_first_list_breaks_inside_itself_only_where_it_cannot_fit() {
+    assert_eq!(
+        render("format(alphabetical, betatron)(gamma)", 24),
+        "format(\n    alphabetical,\n    betatron)(\n    gamma)"
+    );
+}
+
+#[test]
+fn what_follows_a_curried_call_rides_its_last_closer() {
+    assert_eq!(
+        render("format(alpha, beta)(gamma)!", 24),
+        "format(alpha, beta)(\n    gamma)!"
+    );
+}
+
+#[test]
+fn a_curried_call_hugs_its_last_argument_after_nothing_but_atoms() {
+    assert_eq!(
+        render("f(a, b)(c)((x) => body_of_the_lambda)", 24),
+        "f(a, b)(c)((x) =>\n    body_of_the_lambda)"
+    );
+}
+
+#[test]
+fn a_curried_call_breaks_at_its_seams_before_a_lambda_that_follows_more_than_atoms() {
+    assert_eq!(
+        render("f(g(a), b)((x) => body_of_the_lambda)", 24),
+        "f(g(a), b)(\n    (x) =>\n        body_of_the_lambda)"
+    );
+}
+
+#[test]
 fn every_call_in_a_postfix_chain_participates_in_the_ladders_layout() {
     for (ladder, broken) in [
         (

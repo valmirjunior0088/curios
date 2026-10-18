@@ -142,7 +142,8 @@ let encode_table(prefix: List(Str), m: Map(Str, Toml)) -> Str =
                 let k = spell_key(entry.0);
                 [
                     ..blocks,
-                    Fmt/render("[%]\n%")(Str/join(".", [..prefix, k]))(
+                    Fmt/render("[%]\n%")(
+                        Str/join(".", [..prefix, k]))(
                         encode_table([..prefix, k], sub))]
             | _ => blocks
             end);

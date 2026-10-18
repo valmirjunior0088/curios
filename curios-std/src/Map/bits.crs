@@ -893,7 +893,8 @@ pub let before(
                                 Eq/subst(
                                     (v: Bool) => Holds(Bool/not(v)),
                                     onward(h, t, c, True/proved()),
-                                    clear)))(apart)
+                                    clear)))(
+                        apart)
                 | true =>
                     match c: (n) =>
                         (

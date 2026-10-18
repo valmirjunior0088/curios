@@ -163,7 +163,9 @@ test a_wave_joins_its_readings_and_leaves_a_gap_blank =
                     Style/plain,
                     [+0.0, +0.0, +2.0, +2.0, +9.0, +nan.0, +1.0, +0.0],
                     +0.0,
-                    +2.0)(8, 3)),
+                    +2.0)(
+                    8,
+                    3)),
             "  ╭──   /  │   ─╮/──╯    ╰"),
         Test/equal(shown(Pane/wave(Style/plain, [+0.0, +1.0, +1.0], +0.0, +1.0)(2, 2)), "──/  "),
         Test/equal(shown(Pane/wave(Style/plain, [+1.0], +0.0, +1.0)(3, 2)), "─  /   ")]);

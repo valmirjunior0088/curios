@@ -45,7 +45,8 @@ pub let eq_of_list(
     Eq/subst(
         (l: List(T)) => (counted: Counted(l, n)) -> Eq()(v, Vec { list = l, counted = counted }),
         p,
-        (_: Counted(v.list, n)) => Eq/refl())(w.counted);
+        (_: Counted(v.list, n)) => Eq/refl())(
+        w.counted);
 
 --- No elements.
 pub let nil(@T: Type) -> Vec(T, 0) =

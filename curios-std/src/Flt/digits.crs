@@ -26,7 +26,9 @@ pub let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Holds(0 < s)) -> Scaled =
                 | true => ih(rpm - s * 10, True/proved())(s * 10, k + 1)
                 | false => (s = s, k = k, positive = positive)
                 end,
-        rpm - s)(s, k);
+        rpm - s)(
+        s,
+        k);
 
 -- A remainder and the two half-gaps beside it, lowered to the decimal exponent they stand at, the gap below positive.
 pub let Lowered: Type =
@@ -59,7 +61,11 @@ pub let scale_down(
                 | true => ih(s - (r * 10 + mp * 10), True/proved())(r * 10, mp * 10, mm * 10, k - 1)
                 | false => (r = r, mp = mp, mm = mm, k = k, below = below)
                 end,
-        s - (r + mp))(r, mp, mm, k);
+        s - (r + mp))(
+        r,
+        mp,
+        mm,
+        k);
 
 -- The digit that ends a spelling: `d`, or the one above it. Where the interval admits one of the two, that one; where it admits both, the nearer to the remainder `rem` of `s`, a tie going up.
 pub let closing(d: Nat, rem: Nat, s: Nat, low: Bool, high: Bool) -> Nat =
@@ -104,7 +110,10 @@ pub let generate(
                     | false => [d, ..ih(s - mm10, True/proved())(rem, mp10, mm10)]
                     end
                 end,
-        s - mm)(r, mp, mm);
+        s - mm)(
+        r,
+        mp,
+        mm);
 
 pub let digits_to_str(ds: List(Nat)) -> Str =
     List/fold(ds, "", (d, acc) => Str/concat(acc, Nat/to_str(d)));
@@ -202,7 +211,8 @@ pub let layout(ds: List(Nat), k: Int) -> Str =
         | false =>
             match Nat/lt/try(kn, len)
             | some(inside) =>
-                Fmt/render("%.%")(digits_to_str(List/take(ds, kn)))(
+                Fmt/render("%.%")(
+                    digits_to_str(List/take(ds, kn)))(
                     digits_to_str(List/drop(@Nat, ds, kn)))
             | none() => Str/concat(digits_to_str(ds), Str/repeat("0", kn - len))
             end

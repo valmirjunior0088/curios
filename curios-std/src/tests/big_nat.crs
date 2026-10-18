@@ -174,7 +174,8 @@ pub let eq(a: BigNat, b: BigNat, p: Eq()(a.bits, b.bits)) -> Eq()(a, b) =
     Eq/subst(
         (r: Bits) => (c: Canonical(r)) -> Eq()(a, BigNat { bits = r, canonical = c }),
         p,
-        (_: Canonical(a.bits)) => Eq/refl())(b.canonical);
+        (_: Canonical(a.bits)) => Eq/refl())(
+        b.canonical);
 
 --- Congruence of `combine` in its tail.
 pub let cong_combine(

@@ -43,7 +43,9 @@ pub let meets(
                     | none() => Option/none()
                     end
                 end,
-        from)(p, Nat/le/refl(from.offset));
+        from)(
+        p,
+        Nat/le/refl(from.offset));
 
 --- Where `s` holds `piece` up to `from`, stepping both back a character at a time from `p`: the position where it starts, or `none`.
 pub let meets_back(s: Str, from: At(s), piece: Str, p: At(piece)) -> Option(At(s)) =
@@ -63,7 +65,8 @@ pub let meets_back(s: Str, from: At(s), piece: Str, p: At(piece)) -> Option(At(s
                     | none() => Option/none()
                     end
                 end,
-        from)(p);
+        from)(
+        p);
 
 --- An occurrence of a needle at or after `from`: where it starts, which is not before `from`, and the position past it, which is past the start — the needle holds a character.
 pub let Found(s: Str, from: At(s)) -> Type =
@@ -121,7 +124,8 @@ pub let occurrence(
                         end
                     end
                 end,
-        from)(Nat/le/refl(from.offset));
+        from)(
+        Nat/le/refl(from.offset));
 
 --- The first occurrence of `needle` in `s`: where it starts and the position past it, or `none`. An empty needle occurs at the start.
 pub let first_occurrence(s: Str, needle: Str) -> Option({start: At(s), past: At(s)}) =

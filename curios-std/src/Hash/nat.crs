@@ -59,7 +59,8 @@ let from_count(
                         (z: Bytes) => x[..z, Nat/to_byte(m % 256)],
                         ih(m / 256, True/proved())(l + 1))
                 end,
-        n)(l);
+        n)(
+        l);
 
 -- A smaller number has no more bytes.
 let rank_mono(a: Nat, b: Nat, le: Holds(a <= b)) -> Holds(rank(a) <= rank(b)) =
@@ -79,7 +80,9 @@ let rank_mono(a: Nat, b: Nat, le: Holds(a <= b)) -> Holds(rank(a) <= rank(b)) =
                         True/proved()
                     end
                 end,
-        a)(b, le);
+        a)(
+        b,
+        le);
 
 -- Of two numbers of one rank, the smaller has no greater a top.
 let top_mono(
@@ -107,7 +110,10 @@ let top_mono(
                     | false => ih(m / 256, True/proved())(b / 256, True/proved(), True/proved())
                     end
                 end,
-        a)(b, le, ranks);
+        a)(
+        b,
+        le,
+        ranks);
 
 -- A first byte of a lower rank is below one of a higher, whatever follows each.
 let first_ranks(
@@ -152,7 +158,9 @@ let first_ranks(
                     | false => ih(l - 7, True/proved())(lb - 7, True/proved())
                     end
                 end,
-        la)(lb, under);
+        la)(
+        lb,
+        under);
 
 -- Of two first bytes of one rank, the one of the lower top is below the other, whatever follows each.
 let first_tops(
@@ -198,7 +206,9 @@ let first_tops(
                                 True/qed()))
                     end
                 end,
-        la)(lb, ranks);
+        la)(
+        lb,
+        ranks);
 
 -- Two first bytes of one rank and one top are one, so what follows them decides.
 let first_same(
@@ -257,7 +267,9 @@ let first_same(
                                 True/qed()))
                     end
                 end,
-        la)(lb, ranks);
+        la)(
+        lb,
+        ranks);
 
 -- Of two numbers of one rank and one top, the smaller's bytes are below the larger's.
 let tails(
@@ -320,7 +332,11 @@ let tails(
                         end
                     end
                 end,
-        a)(b, under, ranks, tops);
+        a)(
+        b,
+        under,
+        ranks,
+        tops);
 
 -- Two numbers each at most the other are equal, as the decision an arithmetic fact is read from.
 let level(x: Nat, y: Nat, le: Holds(x <= y), ge: Holds(y <= x)) -> Holds(x == y) =

@@ -127,8 +127,8 @@ pub let joined(
     match a: (m) =>
         (
             first: Pairwise(le)(m),
-            across: (x: T, y: T, Member()(x, m), Member()(y, b)) -> Holds(le(x, y))) -> Pairwise(
-            le)([..m, ..b])
+            across: (x: T, y: T, Member()(x, m), Member()(y, b)) -> Holds(
+                le(x, y))) -> Pairwise(le)([..m, ..b])
     | [] => (_, _) => second
     | [h, ..t]; ih =>
         (first, across) =>

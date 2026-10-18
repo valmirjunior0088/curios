@@ -193,41 +193,117 @@ fn carries_its_own_break(term: &Term) -> bool {
 /// The hug is bounded by what the leading arguments can do. An unbounded trailing-lambda hug would make the layout depend on the *kind* of the final argument, and a leading argument that then broke — a lambda too wide for the line, a `let` in a nested call — would strand the block after its own closing bracket. Atoms cannot break, so a hugged argument's opener is always on the head's line, and that argument's own group is the only decision the call makes; a call led by anything else keeps the one shape.
 ///
 /// It is `listed` minus two things: no trailing comma, and no break before the closer. The last argument already ends the call, and saying so with `,` and a lone `)` spends two lines on punctuation.
+///
+/// A head under two or more argument lists over an atom is [`curried_call`]'s: the lists are one call's arguments written apart, and decided apart they leave `)(` mid-line with an argument hanging below it.
 fn riding_call(head: Term, arguments: Vec<Argument>, suffix: Printer) -> Printer {
-    let hugs = arguments.split_last().is_some_and(|(last, leading)| {
+    if matches!(head.as_subterm(), Subterm::Apply(_)) && is_atom(chain_base(&head)) {
+        return curried_call(head, arguments, suffix);
+    }
+    print_suffix_head(head, flat([argument_list(arguments), suffix]))
+}
+
+/// Whether an argument list hands its break to its last argument: one that carries a break of its own, after nothing but atoms.
+fn hugs(arguments: &[Argument]) -> bool {
+    arguments.split_last().is_some_and(|(last, leading)| {
         carries_its_own_break(&last.term) && leading.iter().all(|argument| is_atom(&argument.term))
-    });
+    })
+}
+
+/// What a chain of applications is applied to: the head under every argument list.
+fn chain_base(term: &Term) -> &Term {
+    match term.as_subterm() {
+        Subterm::Apply(Apply { head, .. }) => chain_base(head),
+        _ => term,
+    }
+}
+
+/// One argument list as [`riding_call`] writes it: hugging its last argument where [`hugs`] says so, and otherwise flat when it fits, its arguments one per line with the closer riding the last when it does not.
+fn argument_list(arguments: Vec<Argument>) -> Printer {
+    let hugged = hugs(&arguments);
     let items = arguments
         .into_iter()
         .map(print_argument)
         .collect::<Vec<_>>();
-    if hugs {
-        return print_suffix_head(
-            head,
-            flat([
-                pure("("),
-                sep_flat(items, || pure(", ")),
-                indent(ends()),
-                pure(")"),
-                suffix,
-            ]),
-        );
+    match hugged {
+        true => unbroken(items),
+        false => group(argument_lines(items)),
     }
-    print_suffix_head(
-        head,
-        flat([
-            group(flat([
-                pure("("),
-                indent(flat([
-                    soft_line(),
-                    sep_flat(items, || flat([pure(","), line()])),
-                    ends(),
-                ])),
-                pure(")"),
-            ])),
-            suffix,
-        ]),
-    )
+}
+
+/// An argument list with no break of its own: its arguments joined by `, `, any break left to what they carry.
+fn unbroken(items: Vec<Printer>) -> Printer {
+    flat([
+        pure("("),
+        sep_flat(items, || pure(", ")),
+        indent(ends()),
+        pure(")"),
+    ])
+}
+
+/// An argument list's parentheses with a break after the opener and between its arguments, one level in, and the closer riding the last: flat or broken as the group around it is.
+fn argument_lines(items: Vec<Printer>) -> Printer {
+    flat([
+        pure("("),
+        indent(flat([
+            soft_line(),
+            sep_flat(items, || flat([pure(","), line()])),
+            ends(),
+        ])),
+        pure(")"),
+    ])
+}
+
+/// A curried call, `h(a)(b)(c)` over an atom `h`, laid out as the call its arguments would make written in one list, `)(` standing where a comma would, but for the first list, which hugs the head. Flat when the chain fits; otherwise `h(a)(` stands on the head's line, the first list a group of its own that breaks inside only where it cannot fit there, and each later list's arguments go one level in, one per line, every closer riding its list's last argument and the next opener riding that closer, whatever follows the chain riding the last. The chain hugs its last argument where that call would: where the argument carries a break of its own and every argument before it, in every list, is an atom, all of its lists then written on the head's line. Each inner application leaves its source marks where the nested printing would, its start before the head and its end after its own list, so a comment meets the same token boundaries.
+fn curried_call(head: Term, arguments: Vec<Argument>, suffix: Printer) -> Printer {
+    // Innermost list first once reversed; the outermost list's end is already in `suffix`, which the caller marked.
+    let mut lists = vec![(arguments, None)];
+    let mut starts = Vec::new();
+    let mut current = head;
+    while matches!(current.as_subterm(), Subterm::Apply(_)) {
+        let span = current.span().map(|span| (span.start, span.end));
+        let Subterm::Apply(Apply { head, arguments }) = current.into_subterm() else {
+            unreachable!("matched as an application")
+        };
+        starts.extend(span.map(|(start, _)| start));
+        lists.push((arguments, span.map(|(_, end)| end)));
+        current = head;
+    }
+    lists.reverse();
+    let marked = |end: Option<usize>| end.map_or_else(|| flat([]), reached);
+    let hugged = lists.split_last().is_some_and(|((last, _), earlier)| {
+        hugs(last)
+            && earlier
+                .iter()
+                .all(|(arguments, _)| arguments.iter().all(|argument| is_atom(&argument.term)))
+    });
+    if hugged {
+        let written = lists
+            .into_iter()
+            .map(|(arguments, end)| {
+                let items = arguments.into_iter().map(print_argument).collect();
+                flat([unbroken(items), marked(end)])
+            })
+            .collect::<Vec<_>>();
+        return flat([
+            flat(starts.into_iter().map(reached)),
+            print_suffix_head(current, flat([flat(written), suffix])),
+        ]);
+    }
+    let mut lists = lists.into_iter();
+    let (first, first_end) = lists.next().expect("a chain has a first list");
+    // Ungrouped, so every break of a later list is the chain's own.
+    let later = lists
+        .map(|(arguments, end)| {
+            let items = arguments.into_iter().map(print_argument).collect();
+            flat([argument_lines(items), marked(end)])
+        })
+        .collect::<Vec<_>>();
+    group(flat([
+        flat(starts.into_iter().map(reached)),
+        print_suffix_head(current, flat([argument_list(first), marked(first_end)])),
+        flat(later),
+        suffix,
+    ]))
 }
 
 /// A block string literal, printed as the lines of its value one level in from the opener's line, with the closer at that level. Each line prints as itself: the leading whitespace lines share puts them right of the closer, which is exactly what a reader strips, so nothing is removed here — while trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form, but for any other control character, which prints as its braced escape.
