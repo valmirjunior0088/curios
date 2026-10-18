@@ -115,6 +115,31 @@ pub(super) fn revise(
     }
 }
 
+/// Each of `baseline`'s declarations the walk did not keep, `steps` being the ones it met, with the names its items declared.
+pub(super) fn gone<'b>(
+    baseline: &'b PreparedText,
+    steps: &[Step],
+) -> Vec<(&'b Rc<LoweredDeclaration>, Vec<curios_core::Global>)> {
+    let kept = steps
+        .iter()
+        .filter_map(|step| step.kept)
+        .collect::<HashSet<_>>();
+    let items = &baseline.core().items;
+
+    baseline
+        .lowerings()
+        .iter()
+        .filter(|(first, _)| !kept.contains(first))
+        .map(|(first, record)| {
+            let names = run(items, place_of(first), record.facts().len())
+                .into_iter()
+                .flat_map(|place| names_at(items, place))
+                .collect();
+            (record, names)
+        })
+        .collect()
+}
+
 /// The texts of `baseline`'s declarations no record of `records` was lowered from or kept by: what the unit's anchors no longer hold.
 pub(super) fn texts_gone(baseline: &PreparedText, records: &[Rc<LoweredDeclaration>]) -> Vec<Key> {
     let sited = records

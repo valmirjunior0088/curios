@@ -1,9 +1,9 @@
 use {
     super::{Consulted, Head, Headed, Loaded, ModuleInfo, PreparedText, Reach, Scoped, Table},
     crate::{Error, GroupItem, Name, OrderedMap, UseGroup},
-    curios_utilities::{Mount, Qualifier, RootKind, nearest},
+    curios_utilities::{Mount, Persistent, Qualifier, RootKind, nearest},
     std::{
-        collections::{BTreeSet, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
     },
 };
@@ -93,16 +93,20 @@ impl PubUse {
 /// Module audiences are a fixed point (a `pub use` chain may cycle, and cyclic module dependencies are supported); binding audiences read off the converged module map in one pass.
 ///
 /// **A unit decides the audience of each name it declares, and of no other.** Its audiences are a function of its own direct interface and export view ([`Audiences::of`]), so they are made once for the unit and kept with it, and a unit lowered after it reads them as they stand ([`AudienceScope`]): no later unit widens one. None needs to: a unit reaches another's name through public hops from the compilation root alone, and its own unit already shows a name so reached to everyone, which every lowering asserts of its exports ([`AudienceScope::widens_nothing`]).
+///
+/// **Persistent, and revised by what changed** ([`Audiences::revised`]): a unit lowered over a baseline holds the baseline's audiences with those of the names its changed modules declare or export read again.
 #[derive(Clone)]
 pub(super) struct Audiences {
-    modules: HashMap<Qualifier, Vec<Qualifier>>,
-    bindings: HashMap<Qualifier, Vec<Qualifier>>,
+    modules: Persistent<Qualifier, Vec<Qualifier>>,
+    bindings: Persistent<Qualifier, Vec<Qualifier>>,
     /// Each name one of this unit's exports shows at a path other than its own, with every such export: what a name under an internal root is seen through ([`AudienceScope::seen`]). Recorded beside the audiences, never folded into one: a name's own audience stays its declaring unit's.
-    relayed: HashMap<Qualifier, Vec<Relay>>,
+    relayed: Persistent<Qualifier, Vec<Relay>>,
+    /// Each name the unit's export view exports a binding as, with every module and label it is exported under: what its audience and its relays are read again by.
+    exports: Persistent<Qualifier, Vec<(Qualifier, String)>>,
 }
 
 /// One export of a name at a path other than its own: the path the export stands at, and who sees that path.
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(super) struct Relay {
     site: Qualifier,
     exposure: Vec<Qualifier>,
@@ -194,12 +198,157 @@ impl Audiences {
         relayed
             .values_mut()
             .for_each(|relays| relays.sort_by_key(|relay| relay.site));
+        let mut exports = HashMap::<Qualifier, Vec<(Qualifier, String)>>::new();
+        for (module, interface) in public.iter() {
+            #[expect(
+                clippy::iter_over_hash_type,
+                reason = "each name's exports are looked up, never read in order"
+            )]
+            for (label, entry) in &interface.bindings {
+                exports
+                    .entry(entry.target)
+                    .or_default()
+                    .push((*module, label.clone()));
+            }
+        }
 
         Self {
-            modules,
-            bindings,
-            relayed,
+            modules: persistent(modules),
+            bindings: persistent(bindings),
+            relayed: persistent(relayed),
+            exports: persistent(exports),
         }
+    }
+
+    /// These audiences, of a unit whose tables were `earlier_table` and `earlier_public`, made those of `table` and `public`, which differ from them at `changed`'s modules alone. Every module's audience stands where no changed module declares or exports a child otherwise, and the audience and the relays of each name a changed module declares or exports, then or now, are read again; where a child moved, every audience is made again ([`Audiences::of`]). Beside them, the names whose audience or relays were read again, `None` where every one was.
+    pub(super) fn revised(
+        &self,
+        earlier_table: &Table<ModuleInfo>,
+        earlier_public: &Table<PublicInterface>,
+        table: &Table<ModuleInfo>,
+        public: &Table<PublicInterface>,
+        changed: &BTreeSet<Qualifier>,
+    ) -> (Self, Option<BTreeSet<Qualifier>>) {
+        let children = |table: &Table<ModuleInfo>, module: &Qualifier| {
+            table.get(module).map(|info| {
+                info.children()
+                    .map(|(label, child)| (label.to_string(), child))
+                    .collect::<BTreeMap<_, _>>()
+            })
+        };
+        let exported = |public: &Table<PublicInterface>, module: &Qualifier| {
+            public.get(module).map(|interface| {
+                interface
+                    .children
+                    .iter()
+                    .map(|(label, entry)| (label.clone(), entry.clone()))
+                    .collect::<BTreeMap<_, _>>()
+            })
+        };
+        if changed.iter().any(|module| {
+            children(earlier_table, module) != children(table, module)
+                || exported(earlier_public, module) != exported(public, module)
+        }) {
+            return (Self::of(table, public), None);
+        }
+
+        let mut revised = self.clone();
+        let mut names = BTreeSet::new();
+        // Every export a changed module made is taken out of the index before any it makes now is put in.
+        for (public, now) in [(earlier_public, false), (public, true)] {
+            for module in changed {
+                let Some(interface) = public.get(module) else {
+                    continue;
+                };
+                #[expect(
+                    clippy::iter_over_hash_type,
+                    reason = "a name's exports are looked up, and its relays sorted where they are read again"
+                )]
+                for (label, entry) in &interface.bindings {
+                    names.insert(entry.target);
+                    let mut held = revised
+                        .exports
+                        .get(&entry.target)
+                        .cloned()
+                        .unwrap_or_default();
+                    held.retain(|(held, held_label)| !(held == module && held_label == label));
+                    if now {
+                        held.push((*module, label.clone()));
+                    }
+                    match held.is_empty() {
+                        true => {
+                            revised.exports.remove(&entry.target);
+                        }
+                        false => revised.exports.insert(entry.target, held),
+                    }
+                }
+            }
+        }
+        for table in [earlier_table, table] {
+            for module in changed {
+                if let Some(info) = table.get(module) {
+                    names.extend(info.bindings().map(|(label, _)| module.with(label)));
+                }
+            }
+        }
+        for name in &names {
+            revised.read_again(name, table);
+        }
+
+        (revised, Some(names))
+    }
+
+    /// The audience and the relays of `name` read again of `table` and the index of exports, every module's audience standing: as [`Audiences::of`] reads them.
+    fn read_again(&mut self, name: &Qualifier, table: &Table<ModuleInfo>) {
+        let module = name.without_last();
+        let declared = table
+            .get(&module)
+            .and_then(|info| info.get_binding(name.last()));
+        let mut audience = Vec::new();
+        if declared == Some(false) {
+            widen_one(&mut audience, module);
+        }
+        let mut relays = Vec::new();
+        for (exporter, label) in self.exports.get(name).into_iter().flatten() {
+            let exposure = self.modules.get(exporter).cloned().unwrap_or_default();
+            let site = exporter.with(label);
+            if site != *name {
+                relays.push(Relay {
+                    site,
+                    exposure: exposure.clone(),
+                });
+            }
+            if declared.is_some() {
+                for root in exposure {
+                    widen_one(&mut audience, root);
+                }
+            }
+        }
+        audience.sort();
+        relays.sort_by_key(|relay| relay.site);
+        match audience.is_empty() {
+            true => {
+                self.bindings.remove(name);
+            }
+            false => self.bindings.insert(*name, audience),
+        }
+        match relays.is_empty() {
+            true => {
+                self.relayed.remove(name);
+            }
+            false => self.relayed.insert(*name, relays),
+        }
+    }
+
+    /// Whether `name` is seen in `other` as in these: by the same audience, through the same exports.
+    pub(super) fn same_as(&self, other: &Audiences, name: &Qualifier) -> bool {
+        self.bindings.get(name) == other.bindings.get(name)
+            && self.relayed.get(name) == other.relayed.get(name)
+    }
+
+    /// Every module and label the unit's export view exports `name` as a binding under.
+    pub(super) fn exported_at(&self, name: &Qualifier) -> Vec<(Qualifier, String)> {
+        self.exports.get(name).cloned().unwrap_or_default()
     }
 
     /// The audience of the module `qualifier` names, one of the unit's. A namespace the interface never mentions (a synthetic one built during lowering) inherits its parent's audience.
@@ -348,6 +497,29 @@ impl<'a> AudienceScope<'a> {
             children && bindings
         })
     }
+}
+
+/// `map`, persistent.
+fn persistent<V: Clone>(map: HashMap<Qualifier, V>) -> Persistent<Qualifier, V> {
+    let mut persistent = Persistent::new();
+    #[expect(
+        clippy::iter_over_hash_type,
+        reason = "a persistent map holds the same entries whatever order they arrive in"
+    )]
+    for (key, value) in map {
+        persistent.insert(key, value);
+    }
+
+    persistent
+}
+
+/// [`widen`] for one audience in hand.
+fn widen_one(audience: &mut Vec<Qualifier>, root: Qualifier) {
+    if audience.iter().any(|existing| root.is_within(existing)) {
+        return;
+    }
+    audience.retain(|existing| !existing.is_within(&root));
+    audience.push(root);
 }
 
 // Add `root` to `key`'s audience unless an existing root already contains it, dropping any it subsumes so the set stays an antichain and the fixed point terminates. Returns whether the audience grew.
@@ -582,7 +754,7 @@ pub(super) fn resolve_unit<'a>(
     Ok(public)
 }
 
-/// [`resolve_unit`] over the export view of `baseline`, the unit an earlier text of the same sources lowered to, `public` holding it as the unit's own half: every module whose text `touched` holds is seeded again, with every module whose `use` declarations read a binding that moved and every one after them, until nothing more moved; every other module's view is the baseline's. `removed` holds what discovery took away, each module with every one under it. Beside the view, the modules seeded again and the bindings that moved.
+/// [`resolve_unit`] over the export view of `baseline`, the unit an earlier text of the same sources lowered to, `public` holding it as the unit's own half: every module whose text `touched` holds is seeded again, with every module whose `use` declarations read a binding that moved and every one after them, until nothing more moved; every other module's view is the baseline's. `removed` holds every module discovery took away. Beside the view, the modules seeded again, the bindings that moved and the modules whose tables are not the baseline's.
 ///
 /// **A view seeded again is the one a whole resolution makes**, since a module's view is its own seed and what its `pub use` declarations select, and a module none of whose selections read a moved binding selects what it did.
 #[expect(
@@ -602,7 +774,7 @@ pub(super) fn resolve_unit_over<'a>(
 ) -> Result<(Scoped<'a, PublicInterface>, Resolution), Error> {
     curios_profile::profile!("resolve_unit_over");
     for module in removed {
-        public.remove_subtree(module);
+        public.remove(module);
     }
     let readers = baseline.lookup_readers();
     let in_order = |modules: &mut Vec<Qualifier>| {
@@ -613,6 +785,7 @@ pub(super) fn resolve_unit_over<'a>(
     let mut seeded = BTreeSet::new();
     let mut pub_uses = Vec::new();
     let mut moved = HashSet::new();
+    let mut changed;
     let mut pending = touched.iter().copied().collect::<Vec<_>>();
     loop {
         in_order(&mut pending);
@@ -635,7 +808,8 @@ pub(super) fn resolve_unit_over<'a>(
         pub_uses.sort_by_key(|use_| order.get(&use_.module).copied());
         fixed_point(&mut public, table, reach, &pub_uses)?;
 
-        let found = moved_between(
+        let found;
+        (found, changed) = moved_between(
             baseline,
             table.own(),
             public.own(),
@@ -655,13 +829,21 @@ pub(super) fn resolve_unit_over<'a>(
     }
     classify_dead(&public, table, reach, &pub_uses)?;
 
-    Ok((public, Resolution { affected, moved }))
+    Ok((
+        public,
+        Resolution {
+            affected,
+            moved,
+            changed,
+        },
+    ))
 }
 
 /// What resolving a unit's export view over a baseline's found ([`resolve_unit_over`]): the modules it seeded again, and the bindings whose entries are not the baseline's ([`Consulted`]).
 pub(super) struct Resolution {
     pub affected: HashSet<Qualifier>,
     pub moved: HashSet<Consulted>,
+    pub changed: BTreeSet<Qualifier>,
 }
 
 /// What `module`'s items declare: the compilation root's are `root`, a file module's its file's, and an inline module's its parent's for it. `None` for a namespace a declaration makes, which its module seeds.
@@ -687,7 +869,7 @@ fn heads_of<'h>(
     })
 }
 
-/// The bindings whose entries in `table` and `public`, the unit's own halves, are not `baseline`'s, among `modules`: what a resolution reads of a module, read off the labels each declares or exports, and the labels a glob reads.
+/// The bindings whose entries in `table` and `public`, the unit's own halves, are not `baseline`'s, among `modules`, beside the modules whose entries are not: what a resolution reads of a module, read off the labels each declares or exports, and the labels a glob reads.
 ///
 /// **A binding moved where its entry did.** A step of a path reads one module's entry for one label, its export's target and representation and how the module declares it; a glob reads which labels a module exports. So the bindings that moved are read off the modules whose tables are not the baseline's, a label at a time.
 pub(super) fn moved_between<'m>(
@@ -695,14 +877,16 @@ pub(super) fn moved_between<'m>(
     table: &Table<ModuleInfo>,
     public: &Table<PublicInterface>,
     modules: impl IntoIterator<Item = &'m Qualifier>,
-) -> HashSet<Consulted> {
+) -> (HashSet<Consulted>, BTreeSet<Qualifier>) {
     let mut moved = HashSet::new();
+    let mut changed = BTreeSet::new();
     for module in modules.into_iter().copied().collect::<BTreeSet<_>>() {
         let (table_now, table_then) = (table.get(&module), baseline.table.get(&module));
         let (public_now, public_then) = (public.get(&module), baseline.public.get(&module));
         if same(table_now, table_then) && same(public_now, public_then) {
             continue;
         }
+        changed.insert(module);
         let (table_now, table_then) = (table_now.map(|now| &**now), table_then.map(|then| &**then));
         let (public_now, public_then) = (
             public_now.map(|now| &**now),
@@ -749,7 +933,7 @@ pub(super) fn moved_between<'m>(
         }
     }
 
-    moved
+    (moved, changed)
 }
 
 /// The labels `public` exports, children and bindings: what a glob reads of a module.

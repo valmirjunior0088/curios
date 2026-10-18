@@ -6,7 +6,7 @@ use {
     super::{FlatItem, FlatLet},
     curios_core::Bound,
     curios_utilities::{Span, SyntaxRegistry},
-    std::collections::{BTreeMap, HashMap, HashSet},
+    std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
 
 /// What the unit-wide passes read of one lowered item, taken once, where it is lowered and its terms are open: the passes then read no term, so an item a later lowering keeps answers them as one it lowers does.
@@ -221,14 +221,58 @@ fn alias_of(let_: &FlatLet) -> Option<AliasEdge> {
 }
 
 /// Every alias among `items`, by the name that is one, read off the facts taken of each.
-pub(super) fn aliases<'a>(
-    items: &[FlatItem],
-    facts: &[&'a LoweredItem],
-) -> BTreeMap<curios_core::Global, &'a AliasEdge> {
-    items
-        .iter()
-        .zip(facts)
-        .flat_map(|(item, lowered)| item.declared().zip(&lowered.definitions))
-        .filter_map(|((name, _, _), declared)| Some((name, declared.alias.as_ref()?)))
-        .collect()
+pub(super) fn aliases<'f>(
+    items: impl IntoIterator<Item = (Vec<curios_core::Global>, &'f LoweredItem)>,
+) -> Aliases {
+    let edges = items
+        .into_iter()
+        .flat_map(|(names, lowered)| names.into_iter().zip(&lowered.definitions))
+        .filter_map(|(name, declared)| Some((name, declared.alias.clone()?)))
+        .collect::<BTreeMap<_, _>>();
+    let sources = alias_sources(&edges);
+
+    Aliases { edges, sources }
+}
+
+/// A unit's bare, transparent aliases: what each stands for, and for each name every alias that reaches it, which the exposure audit reads an audience through. Made once for the unit and kept with it: a unit lowered over a baseline that changed no alias holds the baseline's.
+pub(crate) struct Aliases {
+    pub(super) edges: BTreeMap<curios_core::Global, AliasEdge>,
+    pub(super) sources: BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>>,
+}
+
+/// Invert the alias map to its transitive closure: for each canonical name, the bare transparent aliases that reach it. A name is as visible as the widest alias that stands for it, so an exported alias carries its target's audience even when the target itself is never exported.
+fn alias_sources(
+    aliases: &BTreeMap<curios_core::Global, AliasEdge>,
+) -> BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>> {
+    let mut sources: BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>> = BTreeMap::new();
+
+    for (name, edge) in aliases {
+        sources.entry(edge.target).or_default().insert(*name);
+    }
+
+    loop {
+        let mut changed = false;
+        let pairs: Vec<(curios_core::Global, Vec<curios_core::Global>)> = sources
+            .iter()
+            .map(|(target, names)| (*target, names.iter().cloned().collect()))
+            .collect();
+
+        for (target, names) in pairs {
+            for name in names {
+                let Some(indirect) = sources.get(&name).cloned() else {
+                    continue;
+                };
+                let direct = sources.entry(target).or_default();
+                for hop in indirect {
+                    changed |= direct.insert(hop);
+                }
+            }
+        }
+
+        if !changed {
+            break;
+        }
+    }
+
+    sources
 }

@@ -155,6 +155,11 @@ fn same_unit(over: &PreparedText, whole: &PreparedText) {
     assert!(over.table == whole.table, "the direct interfaces differ");
     assert!(over.public == whole.public, "the export views differ");
     assert_eq!(over.core(), whole.core());
+    assert_eq!(
+        over.paths(),
+        whole.paths(),
+        "the paths each name is written at, and who may write each, differ"
+    );
 }
 
 /// A binding added to a module another re-exports by a glob is exported by both, the module that re-exports it resolved again for what its `pub use` read.
@@ -216,4 +221,79 @@ fn a_family_taken_away_takes_its_namespace() {
     let (over, whole) = rewritten(&root, "a.crs", "pub let x: Type = Type;\n", &baseline);
 
     same_unit(&over, &whole);
+}
+
+/// A binding made private is seen by its module alone, and a binding added is seen as a whole lowering decides.
+#[test]
+fn a_binding_made_private_is_seen_by_its_module_alone() {
+    let root = files(
+        "private",
+        &[
+            ("lib.crs", "pub mod a;\npub mod b;\n"),
+            ("a.crs", "pub let x: Type = Type;\n\npub let y: Type = x;\n"),
+            ("b.crs", "pub use /lib/a/{y};\n"),
+        ],
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = rewritten(
+        &root,
+        "a.crs",
+        "let x: Type = Type;\n\npub let y: Type = Type;\n\npub let z: Type = y;\n",
+        &baseline,
+    );
+
+    same_unit(&over, &whole);
+}
+
+/// The refusal of the file `path` under `root` written as `text`, lowered over `baseline` and lowered whole, each as a report prints it.
+fn refusals(root: &Path, path: &str, text: &str, baseline: &PreparedText) -> (String, String) {
+    fs::write(root.join(path), text).unwrap();
+    let source = library(root);
+    let over = into_core_unit_over(&UnitSource::mounted(&source), &[], syntax(), baseline, true)
+        .err()
+        .expect("the edit is refused over the baseline");
+    let whole = into_core_unit(&UnitSource::mounted(&source), &[], syntax())
+        .err()
+        .expect("the edit is refused whole");
+
+    (over.to_string(), whole.to_string())
+}
+
+/// A declaration lowered now whose signature names what its readers cannot see is refused as a whole lowering refuses it.
+#[test]
+fn a_declaration_lowered_now_exposing_a_private_name_is_refused() {
+    let root = written(
+        "exposing",
+        "let hidden: Type = Type;\n\npub let shown: Type = Type;\n",
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = refusals(
+        &root,
+        "a.crs",
+        "let hidden: Type = Type;\n\npub let shown(x: hidden) -> Type = Type;\n",
+        &baseline,
+    );
+
+    assert_eq!(over, whole);
+}
+
+/// A name made private is refused where a kept declaration exposes it, as a whole lowering refuses it: what a name is seen by moved, so every signature is audited again.
+#[test]
+fn a_name_made_private_refuses_what_exposes_it() {
+    let root = written(
+        "hidden",
+        "pub let hidden: Type = Type;\n\npub let shown(x: hidden) -> Type = Type;\n",
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = refusals(
+        &root,
+        "a.crs",
+        "let hidden: Type = Type;\n\npub let shown(x: hidden) -> Type = Type;\n",
+        &baseline,
+    );
+
+    assert_eq!(over, whole);
 }

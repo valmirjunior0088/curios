@@ -376,7 +376,7 @@ struct Resolved<'a> {
     table: Scoped<'a, ModuleInfo>,
     /// The modules whose direct interface was read off their text now: every one, where no baseline's was carried, and otherwise each whose text the edit touched or the baseline does not hold, with the compilation root.
     touched: HashSet<Qualifier>,
-    /// What the carried table held that the unit no longer declares, each module with every one under it: modules taken away, and the namespaces of the declarations of a touched module, which are read off its text again.
+    /// What the carried table held that the unit no longer declares: modules taken away with every one under them, and the namespaces of the declarations of a touched module, which are read off its text again.
     removed: Vec<Qualifier>,
     /// Each module the unit declares, by where the walk over the module tree meets it.
     order: HashMap<Qualifier, usize>,
@@ -396,6 +396,9 @@ pub struct PreparedText {
     /// Who can see each declaration of this unit: decided where it was lowered, or the first time something asks of a restored one, and kept. Never stored, being read off `table` and `public`.
     #[archived_with(curios_archive::Skip)]
     audiences: OnceCell<Audiences>,
+    /// The unit's aliases, made the first time an audit asks and kept: a unit lowered over this one that changes no alias holds the same. Never stored, being read off the records.
+    #[archived_with(curios_archive::Skip)]
+    aliases: OnceCell<Rc<Aliases>>,
     /// Every absolute path this unit gives a global, made the first time a report spells a name over it and kept — see [`PreparedText::paths`]. Never stored, being read off `table`, `public` and `audiences`.
     #[archived_with(curios_archive::Skip)]
     paths: OnceCell<Rc<BTreeMap<curios_core::Global, Vec<curios_core::WritablePath>>>>,
@@ -702,6 +705,22 @@ impl PreparedText {
             .unwrap_or_else(|error| panic!("a unit's import scopes failed to restore: {error}"))
     }
 
+    /// The unit's aliases. See the field.
+    fn aliases(&self) -> &Rc<Aliases> {
+        self.aliases.get_or_init(|| {
+            let items = &self.core.items;
+            let names = items
+                .places()
+                .map(|place| items.names(place).into_iter().copied().collect::<Vec<_>>());
+            let facts = self
+                .lowerings()
+                .iter()
+                .flat_map(|(_, record)| record.facts());
+
+            Rc::new(aliases(names.zip(facts)))
+        })
+    }
+
     /// Who can see each declaration of this unit. See the field.
     fn audiences(&self) -> &Audiences {
         self.audiences
@@ -795,8 +814,8 @@ impl<'a> Resolved<'a> {
                     let path = module.with(label);
                     // A mounted prefix the root lists is another unit's, and the carried table holds nothing of it.
                     if !resolved.order.contains_key(&path) && carried.contains_key(&path) {
-                        resolved.table.remove_subtree(&path);
-                        resolved.removed.push(path);
+                        let gone = resolved.table.remove_subtree(&path);
+                        resolved.removed.extend(gone);
                     }
                 }
             }
@@ -2393,6 +2412,35 @@ fn into_core_unit_within(
     }
 
     // What the edit moved of what the lowering reads, found from the edit where the units in scope are the ones the baseline was lowered against: the modules whose text it touched or whose scope a binding that moved is read in, and the bindings whose entries are not the baseline's.
+    // Who can see each name: the baseline's audiences, with those of the names the modules whose tables changed declare or export read again.
+    let (audiences, reread) = match (settled, &revised) {
+        (Some(baseline), Some(revised)) => baseline.audiences().revised(
+            &baseline.table,
+            &baseline.public,
+            table.own(),
+            public.own(),
+            &revised.changed,
+        ),
+        _ => (Audiences::of(table.own(), public.own()), None),
+    };
+    // The re-exports the modules whose tables changed now make otherwise: what the audit reads again of them.
+    let reexported = match (settled, &revised) {
+        (Some(baseline), Some(revised)) => revised
+            .changed
+            .iter()
+            .flat_map(|module| {
+                let now = public.own().get(module);
+                let then = baseline.public.get(module);
+                now.into_iter()
+                    .flat_map(|interface| &interface.bindings)
+                    .filter(move |(label, entry)| {
+                        then.and_then(|interface| interface.bindings.get(*label)) != Some(*entry)
+                    })
+                    .map(move |(label, _)| (*module, label.clone()))
+            })
+            .collect::<BTreeSet<_>>(),
+        _ => BTreeSet::new(),
+    };
     let moved = settled
         .zip(revised)
         .map(|(baseline, revised)| Moved::found(baseline, revised));
@@ -2525,8 +2573,7 @@ fn into_core_unit_within(
     };
     let entry_mints = context.mints();
 
-    // Decided here, of the unit's own layers, and kept with the unit: the audit below and every report after read the one answer.
-    let audiences = Audiences::of(table.own(), public.own());
+    // Decided above, of the unit's own layers, and kept with the unit: the audit below and every report after read the one answer.
     let in_scope = AudienceScope::over(&audiences, &own, &visible_mounts, predecessors);
     debug_assert!(
         in_scope.widens_nothing(public.own()),
@@ -2555,14 +2602,101 @@ fn into_core_unit_within(
             behind: behind.map(|module| module.join()),
         }
     };
+    // Over a baseline, what could fail now that did not: each definition lowered now, each re-export made otherwise, and each export of a former lowered now or taken away, where no alias was lowered or taken away and no name the baseline declared is seen otherwise. A whole audit otherwise.
+    let made = steps
+        .iter()
+        .zip(
+            steps
+                .iter()
+                .skip(1)
+                .map(|step| step.from)
+                .chain([flat_items.len()]),
+        )
+        .filter(|(step, _)| step.kept.is_none())
+        .flat_map(|(step, end)| step.from..end)
+        .collect::<HashSet<_>>();
+    let gone = baseline
+        .as_ref()
+        .map(|baseline| revision::gone(baseline.unit(), &steps))
+        .unwrap_or_default();
+    let alias = |lowered: &LoweredItem| {
+        lowered
+            .definitions
+            .iter()
+            .any(|declared| declared.alias.is_some())
+    };
+    let aliases_moved = made.iter().any(|index| alias(facts[*index]))
+        || gone
+            .iter()
+            .any(|(record, _)| record.facts().iter().any(alias));
+    let aliases = match (&baseline, aliases_moved) {
+        (Some(baseline), false) => Rc::clone(baseline.unit().aliases()),
+        _ => Rc::new(aliases(
+            flat_items
+                .iter()
+                .map(|item| item.declared().map(|(name, _, _)| name).collect())
+                .zip(facts.iter().copied()),
+        )),
+    };
+    let only = match (&baseline, reread) {
+        (Some(baseline), Some(reread)) if !aliases_moved => {
+            let made_names = made
+                .iter()
+                .flat_map(|index| flat_items[*index].names())
+                .collect::<HashSet<_>>();
+            let earlier = baseline.unit().audiences();
+            // A name seen otherwise is one the unit declares now and the baseline did not, which nothing kept reads.
+            let seen_otherwise = reread.iter().any(|name| {
+                let global = curios_core::Global::Authored(*name);
+                !earlier.same_as(&audiences, name)
+                    && (baseline.unit().declared_as(&global).is_some()
+                        || !made_names.contains(&global))
+            });
+            (!seen_otherwise).then(|| {
+                let formers = made
+                    .iter()
+                    .flat_map(|index| flat_items[*index].declared())
+                    .filter(|(_, kind, _)| kind.declared().is_former())
+                    .map(|(name, _, _)| name)
+                    .chain(
+                        gone.iter()
+                            .flat_map(|(_, names)| names)
+                            .filter(|name| {
+                                baseline
+                                    .unit()
+                                    .declared_as(name)
+                                    .is_some_and(|declared| declared.is_former())
+                            })
+                            .copied(),
+                    )
+                    .filter_map(|name| name.qualifier().copied())
+                    .collect::<Vec<_>>();
+                Only {
+                    items: made.clone(),
+                    reexports: reexported
+                        .iter()
+                        .cloned()
+                        .chain(
+                            formers
+                                .iter()
+                                .flat_map(|former| audiences.exported_at(former)),
+                        )
+                        .collect(),
+                }
+            })
+        }
+        _ => None,
+    };
     audit_public_exposures(
         &public,
         in_scope,
         &flat_items,
         &facts,
+        &aliases,
         NominalScope::new(predecessors, &induct_decls, &struct_decls),
         &|extent| shared.anchoring.resolved(extent),
         &refused,
+        only.as_ref(),
     )?;
 
     let dead = unused_declarations(&Declarations {
@@ -2627,6 +2761,7 @@ fn into_core_unit_within(
         table: table.into_own(),
         public: public.into_own(),
         audiences: OnceCell::from(audiences),
+        aliases: OnceCell::from(aliases),
         paths: OnceCell::new(),
         places,
         declarations: declared,

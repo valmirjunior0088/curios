@@ -4,8 +4,8 @@
 
 use {
     super::{
-        AliasEdge, AudienceScope, Audiences, Entry, FlatItem, LoweredItem, PreparedText,
-        PublicInterface, Scoped, aliases, globals,
+        AliasEdge, Aliases, AudienceScope, Audiences, Entry, FlatItem, LoweredItem, PreparedText,
+        PublicInterface, Scoped, globals,
     },
     crate::Error,
     curios_core::Bound,
@@ -16,7 +16,7 @@ use {
 /// Follow a directly attached representation provenance or a chain of bare, transparent type aliases to the underlying nominal registry entry.
 fn exposed_nominal<'a>(
     entry: &Entry,
-    aliases: &BTreeMap<curios_core::Global, &'a AliasEdge>,
+    aliases: &'a BTreeMap<curios_core::Global, AliasEdge>,
     scope: NominalScope<'_>,
 ) -> Option<(curios_core::Global, Vec<&'a AliasEdge>)> {
     let mut current =
@@ -31,7 +31,7 @@ fn exposed_nominal<'a>(
         if !seen.insert(current) {
             return None;
         }
-        let edge = *aliases.get(&current)?;
+        let edge = aliases.get(&current)?;
         current = edge.target;
         traversed.push(edge);
     }
@@ -83,43 +83,6 @@ impl<'a> NominalScope<'a> {
                 .find_map(|base| base.nominal(name)?.record())
         })
     }
-}
-
-/// Invert the alias map to its transitive closure: for each canonical name, the bare transparent aliases that reach it. A name is as visible as the widest alias that stands for it, so an exported alias carries its target's audience even when the target itself is never exported.
-fn alias_sources(
-    aliases: &BTreeMap<curios_core::Global, &AliasEdge>,
-) -> BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>> {
-    let mut sources: BTreeMap<curios_core::Global, BTreeSet<curios_core::Global>> = BTreeMap::new();
-
-    for (name, edge) in aliases {
-        sources.entry(edge.target).or_default().insert(*name);
-    }
-
-    loop {
-        let mut changed = false;
-        let pairs: Vec<(curios_core::Global, Vec<curios_core::Global>)> = sources
-            .iter()
-            .map(|(target, names)| (*target, names.iter().cloned().collect()))
-            .collect();
-
-        for (target, names) in pairs {
-            for name in names {
-                let Some(indirect) = sources.get(&name).cloned() else {
-                    continue;
-                };
-                let direct = sources.entry(target).or_default();
-                for hop in indirect {
-                    changed |= direct.insert(hop);
-                }
-            }
-        }
-
-        if !changed {
-            break;
-        }
-    }
-
-    sources
 }
 
 /// Everyone who can see `referent`, whether by its own name, through a transparent alias that stands for it, or, for a name under an internal root, through an export that shows it ([`AudienceScope::seen`]) — beside the paths of those exports.
@@ -210,23 +173,37 @@ fn audit_dependencies(
     Ok(())
 }
 
+/// What an audit over a baseline reads again, where nothing else a whole audit reads could fail now ([`audit_public_exposures`]): the definitions of the items at `items`, by their place among those it is handed, and each re-export `reexports` names, by its module and label.
+pub(super) struct Only {
+    pub items: HashSet<usize>,
+    pub reexports: BTreeSet<(Qualifier, String)>,
+}
+
 /// Audit every declared signature and every exposed representation against the audience of the item carrying it. This runs after lowering because registry telescopes contain the complete signatures and transparent aliases have become canonical free-variable references. Re-export entries retain their representation provenance through the fixed point, so no `pub use` can upgrade an opaque declaration.
 ///
 /// The declared type of every definition is audited here rather than during lowering: only the converged interface graph knows where a name ends up visible, so a signature naming an item re-exported out of a private child is accepted, while one naming something its own consumers cannot reach is not.
 ///
 /// A refusal is placed at the name of the item that exposes: the declaration's own, or, for a binding a module re-exports, the declaration it stands for where this unit wrote it. `placed` gives the span an extent of one of the unit's declarations lies on. `refused` makes the refusal of the item whose path it is handed, for the name one of its readers cannot see: it holds the tables that say how a reader standing at the item writes each, and which declaration keeps the name from the rest.
+///
+/// **Over a baseline, `only` the definitions and the re-exports an edit could have made fail are audited** ([`Only`]); every other one passed where the baseline was lowered and reads nothing that moved. The first refusal a whole audit would find is then the first of these.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the tables an audit reads, and what it audits of them"
+)]
 pub(super) fn audit_public_exposures(
     public: &Scoped<'_, PublicInterface>,
     audiences: AudienceScope<'_>,
     items: &[FlatItem],
     facts: &[&LoweredItem],
+    aliases: &Aliases,
     scope: NominalScope<'_>,
     placed: &dyn Fn(&curios_core::Extent) -> Option<Span>,
     refused: &dyn Fn(&Qualifier, &Unseen) -> Error,
+    only: Option<&Only>,
 ) -> Result<(), Error> {
     curios_profile::profile!("audit_public_exposures");
-    let aliases = aliases(items, facts);
-    let sources = alias_sources(&aliases);
+    let sources = &aliases.sources;
+    let aliases = &aliases.edges;
 
     let definitions = || {
         items
@@ -246,7 +223,13 @@ pub(super) fn audit_public_exposures(
         None => error,
     };
 
-    for ((name, _, island), declared) in definitions() {
+    let audited = items
+        .iter()
+        .zip(facts)
+        .enumerate()
+        .filter(|(index, _)| only.is_none_or(|only| only.items.contains(index)))
+        .flat_map(|(_, (item, lowered))| item.declared().zip(&lowered.definitions));
+    for ((name, _, island), declared) in audited {
         // Only definitions the source actually wrote. A member synthesized into a nested namespace — an inductive's constructor, a concept's method wrapper — sits below its declaring module rather than in it, and is audited through the declaration that produced it.
         //
         // A witness has no authored path at all, which is the same answer arrived at structurally: "who can see this by its name" is not a question an anonymous declaration has. Its reach is the coherence check's.
@@ -261,7 +244,7 @@ pub(super) fn audit_public_exposures(
         let item = *path;
         audit_dependencies(
             audiences,
-            &sources,
+            sources,
             &exposure,
             &item,
             declared.signature.iter().copied(),
@@ -281,7 +264,10 @@ pub(super) fn audit_public_exposures(
         let mut bindings = interface.bindings.iter().collect::<Vec<_>>();
         bindings.sort_by(|left, right| left.0.cmp(right.0));
         for (label, entry) in bindings {
-            let Some((nominal, traversed)) = exposed_nominal(entry, &aliases, scope) else {
+            if only.is_some_and(|only| !only.reexports.contains(&(*module, label.clone()))) {
+                continue;
+            }
+            let Some((nominal, traversed)) = exposed_nominal(entry, aliases, scope) else {
                 continue;
             };
             let item = module.with(label);
@@ -297,7 +283,7 @@ pub(super) fn audit_public_exposures(
                 if let Some(dependencies) = &alias.dependencies {
                     audit_dependencies(
                         audiences,
-                        &sources,
+                        sources,
                         &exposure,
                         &item,
                         dependencies.iter().copied(),
@@ -308,13 +294,13 @@ pub(super) fn audit_public_exposures(
 
             if let Some(induct_decl) = scope.induct(&nominal) {
                 let nominal_dependencies = globals(induct_decl.arity.free_vars());
-                audit_dependencies(audiences, &sources, &exposure, &item, nominal_dependencies)
+                audit_dependencies(audiences, sources, &exposure, &item, nominal_dependencies)
                     .map_err(exposed)?;
 
                 if induct_decl.rep_public {
                     audit_dependencies(
                         audiences,
-                        &sources,
+                        sources,
                         &exposure,
                         &item,
                         globals(
@@ -336,7 +322,7 @@ pub(super) fn audit_public_exposures(
                 }
                 audit_dependencies(
                     audiences,
-                    &sources,
+                    sources,
                     &exposure,
                     &item,
                     globals(param_dependencies),
@@ -346,7 +332,7 @@ pub(super) fn audit_public_exposures(
                 if struct_decl.rep_public {
                     audit_dependencies(
                         audiences,
-                        &sources,
+                        sources,
                         &exposure,
                         &item,
                         globals(struct_decl.fields().free_vars()),
