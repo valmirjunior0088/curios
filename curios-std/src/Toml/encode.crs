@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Char, Str, List, Map, Option, Toml};
+use /std/{Nat, Int, Flt, Bool, Char, Str, List, Map, Option, Toml, Fmt};
 use /std/Toml/{Date, Time};
 use /std/Toml/scan/{is_bare_char};
 
@@ -54,7 +54,7 @@ let ns_str(ns: Nat) -> Str =
     end;
 
 let date_str(d: Date) -> Str =
-    Str/flatten([pad(d.year, 4), "-", pad(d.month, 2), "-", pad(d.day, 2)]);
+    Fmt/render("%-%-%")(pad(d.year, 4))(pad(d.month, 2))(pad(d.day, 2));
 
 let time_str(t: Time) -> Str =
     Str/flatten([
@@ -112,18 +112,18 @@ let value_str(v: Toml) -> Str =
     | arr(items) =>
         let start: List(Str) = [];
         let parts = List/fold(items, start, (item, parts) => [..parts, value_str(item)]);
-        Str/flatten(["[", Str/join(", ", parts), "]"])
+        Fmt/render("[%]")(Str/join(", ", parts))
     | table(m) =>
         match List/len(Map/to_list(m)) == 0
         | true => "{}"
-        | false => Str/flatten(["{ ", pairs_str(Map/to_list(m)), " }"])
+        | false => Fmt/render("{ % }")(pairs_str(Map/to_list(m)))
         end
     end
 and pairs_str(entries: List({Str, Toml})) -> Str =
     let start: List(Str) = [];
     let parts =
         List/fold(entries, start, (entry, parts) =>
-            [..parts, Str/flatten([spell_key(entry.0), " = ", value_str(entry.1)])]);
+            [..parts, Fmt/render("% = %")(spell_key(entry.0))(value_str(entry.1))]);
     Str/join(", ", parts);
 
 let encode_table(prefix: List(Str), m: Map(Str, Toml)) -> Str =
@@ -133,7 +133,7 @@ let encode_table(prefix: List(Str), m: Map(Str, Toml)) -> Str =
         List/fold(entries, start, (entry, lines) =>
             match entry.1
             | table(_) => lines
-            | _ => [..lines, Str/flatten([spell_key(entry.0), " = ", value_str(entry.1), "\n"])]
+            | _ => [..lines, Fmt/render("% = %\n")(spell_key(entry.0))(value_str(entry.1))]
             end);
     let table_blocks =
         List/fold(entries, start, (entry, blocks) =>
@@ -142,11 +142,8 @@ let encode_table(prefix: List(Str), m: Map(Str, Toml)) -> Str =
                 let k = spell_key(entry.0);
                 [
                     ..blocks,
-                    Str/flatten([
-                        "[",
-                        Str/join(".", [..prefix, k]),
-                        "]\n",
-                        encode_table([..prefix, k], sub)])]
+                    Fmt/render("[%]\n%")(Str/join(".", [..prefix, k]))(
+                        encode_table([..prefix, k], sub))]
             | _ => blocks
             end);
     Str/concat(Str/flatten(value_lines), Str/flatten(table_blocks));

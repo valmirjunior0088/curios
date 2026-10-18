@@ -1,4 +1,4 @@
-use /std/{Str, List, Parse, Show, Spell};
+use /std/{Str, List, Parse, Show, Spell, Fmt};
 use /std/ops/{Eql};
 
 --- A table-construction rule a document breaks; `invariant` is a state the builder cannot reach, named so that it is reported rather than swallowed if it ever is.
@@ -80,7 +80,7 @@ pub let message(e: Error) -> Str =
 pub let to_str(e: Error) -> Str =
     match e
     | syntax(p) => Parse/Error/to_str(p)
-    | rule(path, r) => Str/flatten([rule_message(r), " at key ", Str/join(".", path)])
+    | rule(path, r) => Fmt/render("% at key %")(rule_message(r))(Str/join(".", path))
     end;
 
 --- Shown as `to_str` spells it.

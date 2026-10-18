@@ -1,4 +1,4 @@
-use /std/{Str, Char, Bool, List, Option, Spell, Show};
+use /std/{Str, Char, Bool, List, Option, Spell, Show, Fmt};
 use /std/ops/{Eql};
 
 --- An HTML tree: an element with its attributes and children, written `<name></name>`; one written `<name/>`, as the void elements are; text; a comment; or a run of trees standing where one does. Text is written escaped, so no value that lands in it can be read as markup. The shape of the tree is the author's, as it is in the browser: no element name is consulted, so whether `void` suits the element is theirs to know.
@@ -85,7 +85,7 @@ let attr_value(a: Attr) -> Str =
 
 let render_attr(a: Attr) -> Str =
     match a
-    | attr(name, value) => Str/flatten([" ", name, "=\"", escape(value), "\""])
+    | attr(name, value) => Fmt/render(" %=\"%\"")(name)(escape(value))
     | flag(name) => Str/concat(" ", name)
     end;
 
@@ -117,7 +117,7 @@ pub let render(h: Html) -> Str =
 let render_tree(h: Html) -> Str =
     match h
     | text(s) => escape(s)
-    | comment(s) => Str/flatten(["<!--", Str/replace(s, "--", "- -"), "-->"])
+    | comment(s) => Fmt/render("<!--%-->")(Str/replace(s, "--", "- -"))
     | fragment(children) => render_all(children)
     | void(name, attrs) => Str/flatten(["<", name, render_attrs(attrs), "/>"])
     | element(name, attrs, children) =>

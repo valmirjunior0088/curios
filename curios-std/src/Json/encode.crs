@@ -1,4 +1,4 @@
-use /std/{Str, Bool, Char, Flt, Option, List, Json};
+use /std/{Str, Bool, Char, Flt, Option, List, Json, Fmt};
 
 --- A finite number as `Flt/to_str` writes its digits, without the sign that marks a positive one: a positional decimal, which the grammar spells.
 let encode_num(n: Flt) -> Str =
@@ -38,14 +38,11 @@ pub let encode(v: Json) -> Str =
     | bool(b) => Bool/to_str(b)
     | num(n) => encode_num(n)
     | str(s) => encode_str(s)
-    | arr(xs) => Str/concat(Str/concat("[", Str/join(",", List/map(xs, encode))), "]")
+    | arr(xs) => Fmt/render("[%]")(Str/join(",", List/map(xs, encode)))
     | obj(ps) =>
-        Str/concat(
-            Str/concat(
-                "{",
-                Str/join(
-                    ",",
-                    List/map(ps, (pair: {Str, Json}) =>
-                        Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1))))),
-            "}")
+        Fmt/render("{%}")(
+            Str/join(
+                ",",
+                List/map(ps, (pair: {Str, Json}) =>
+                    Fmt/render("%:%")(encode_str(pair.0))(encode(pair.1)))))
     end;
