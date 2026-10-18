@@ -968,43 +968,6 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
-        name: "Bits, the free monoid",
-        binders: "ts: Bits, us: Bits, ws: Bits, v: Bool, s: Nat, l: Nat, ok: Holds(s + l <= Bits/len(ts)), head: Holds(0 < Bits/len(us)), into: Holds(s < Bits/len(us)), fits: Holds(l <= Bits/len(us))",
-        held: &[
-            // The byte grain's laws, stated again here: one grain's fold arm is not evidence for the other's, and a law held at one grain and unstated at the other is a copy with nothing checking it. The explanations are the byte group's, above.
-            "Eq()(b[..b[..ts, ..us], ..ws], b[..ts, ..us, ..ws])",
-            "Eq()(Bits/len(b[v, ..ts]), Bits/len(ts) + 1)",
-            "Eq()(Bits/len(b[1, 0, ..ts]), Bits/len(ts) + 2)",
-            "Eq()(Bits/slice(ts, 0, Bits/len(ts)), ts)",
-            "Eq()(Bits/slice(ts, 0, 0), b[])",
-            "Eq()(Bits/slice(b[v, ..ts], 1, Bits/len(ts)), ts)",
-            "Eq()(Bits/get(b[v, ..ts], 0), v)",
-            "Eq()(Bits/eql(ts, ts), true)",
-            "Eq()(Bits/slice(b[..ts, ..us], 0, Bits/len(ts)), ts)",
-            "Eq()(Bits/slice(b[..ts, ..us], Bits/len(ts), Bits/len(us)), us)",
-            "Eq()(Bits/slice(b[..ts, ..us, ..ws], Bits/len(ts), Bits/len(us)), us)",
-            "Eq()(Bits/get(b[..ts, v, ..us], Bits/len(ts)), v)",
-            "Eq()(Bits/get(b[..ts, v], Bits/len(ts)), v)",
-            "Eq()(Bits/slice(b[..ts, v], 0, Bits/len(ts)), ts)",
-            "Eq()(Bits/len(Bits/slice(ts, s, l, @ok)), l)",
-            "Eq()(Bits/get(b[..ts, ..us], Bits/len(ts), @head), Bits/get(us, 0, @head))",
-            "Eq()(Bits/get(b[..ts, ..us], Bits/len(ts) + s, @into), Bits/get(us, s, @into))",
-            "Eq()(Bits/slice(b[..ts, ..us], Bits/len(ts), l, @fits), Bits/slice(us, 0, l, @fits))",
-            "Eq()(b[..ts, v] == b[], false)",
-            "Eq()(b[..ts, 1] == b[], false)",
-            "Eq()(b[..ts, v] == ts, false)",
-            "Eq()(Bits/replicate(l + 1, v), b[v, ..Bits/replicate(l, v)])",
-            "Eq()(Bits/len(Bits/replicate(l, v)), l)",
-            "Eq()(Bits/replicate(l + 1, v) == b[], false)",
-        ],
-        refused: &[
-            // The byte group's controls and candidate.
-            "Eq()(Bits/replicate(l, v), b[v, ..Bits/replicate(l - 1, v)])",
-            "Eq()(Bits/replicate(l, v) == b[], false)",
-            "Eq()(Bits/replicate(l + 1, v), b[..Bits/replicate(l, v), v])",
-        ],
-    },
-    Carrier {
         name: "List, through a window",
         binders: "xs: List(Nat), ys: List(Nat), s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Holds(s + l <= List/len(xs)), first: Holds(0 < l), at: Holds(s < List/len(xs)), inside: Holds(i < l), deep: Holds(s + i < List/len(xs)), next: Holds(s + 1 < List/len(xs)), other: Holds(s < List/len(ys)), inner: Holds(t + m <= l), whole: Holds(s + t + m <= List/len(xs))",
         held: &[
@@ -1035,21 +998,6 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
-        name: "Bits, through a window",
-        binders: "ts: Bits, us: Bits, s: Nat, l: Nat, i: Nat, t: Nat, m: Nat, ok: Holds(s + l <= Bits/len(ts)), first: Holds(0 < l), at: Holds(s < Bits/len(ts)), inside: Holds(i < l), deep: Holds(s + i < Bits/len(ts)), next: Holds(s + 1 < Bits/len(ts)), other: Holds(s < Bits/len(us)), inner: Holds(t + m <= l), whole: Holds(s + t + m <= Bits/len(ts))",
-        held: &[
-            // The `List` rows, at the bit grain: one grain's arm is not evidence for the other's.
-            "Eq()(Bits/get(Bits/slice(ts, s, l, @ok), 0, @first), Bits/get(ts, s, @at))",
-            "Eq()(Bits/get(Bits/slice(ts, s, l, @ok), i, @inside), Bits/get(ts, s + i, @deep))",
-            "Eq()(Bits/slice(Bits/slice(ts, s, l, @ok), t, m, @inner), Bits/slice(ts, s + t, m, @whole))",
-        ],
-        refused: &[
-            // The `List` controls, at the bit grain.
-            "Eq()(Bits/get(Bits/slice(ts, s, l, @ok), 0, @first), Bits/get(ts, s + 1, @next))",
-            "Eq()(Bits/get(Bits/slice(ts, s, l, @ok), 0, @first), Bits/get(us, s, @other))",
-        ],
-    },
-    Carrier {
         name: "List, through a concatenation",
         binders: "xs: List(Nat), ys: List(Nat), i: Nat, s: Nat, l: Nat, joined: Holds(i < List/len([..xs, ..ys])), left: Holds(i < List/len(xs)), right: Holds(i < List/len(ys)), spans: Holds(s + l <= List/len([..xs, ..ys])), inside: Holds(s + l <= List/len(xs))",
         held: &[
@@ -1074,32 +1022,6 @@ const CARRIERS: &[Carrier] = &[
             // The `List` control, at the byte grain.
             "Eq()(Bytes/get(x[..bs, ..cs], i, @joined), Bytes/get(cs, i, @right))",
         ],
-    },
-    Carrier {
-        name: "Bits, through a concatenation",
-        binders: "ts: Bits, us: Bits, i: Nat, s: Nat, l: Nat, joined: Holds(i < Bits/len(b[..ts, ..us])), left: Holds(i < Bits/len(ts)), right: Holds(i < Bits/len(us)), spans: Holds(s + l <= Bits/len(b[..ts, ..us])), inside: Holds(s + l <= Bits/len(ts))",
-        held: &[
-            // The `List` rows, at the bit grain: one grain's arm is not evidence for the other's.
-            "Eq()(Bits/get(b[..ts, ..us], i, @joined), Bits/get(ts, i, @left))",
-            "Eq()(Bits/slice(b[..ts, ..us], s, l, @spans), Bits/slice(ts, s, l, @inside))",
-        ],
-        refused: &[
-            // The `List` control, at the bit grain.
-            "Eq()(Bits/get(b[..ts, ..us], i, @joined), Bits/get(us, i, @right))",
-        ],
-    },
-    Carrier {
-        name: "Bits against Bytes",
-        binders: "bs: Bytes, ts: Bits, a: Holds(Nat/eql(Nat/rem(Bits/len(ts), 8), 0))",
-        held: &[
-            // Regrouping moves no bit, so each reinterpretation reduces back through the other, in both orders.
-            "Eq()(Bits/to_bytes(Bytes/to_bits(bs)), bs)",
-            "Eq()(Bytes/to_bits(Bits/to_bytes(ts, @a)), ts)",
-            // A reinterpretation's length is a shift of its operand's. A left shift by a literal count is a coefficient the Euclidean split reads, which is what discharges the byte-first trip's alignment bound above with no proof beside it; a right shift joins no division, so the other length stays one.
-            "Eq()(Bits/len(Bytes/to_bits(bs)), 8 * Bytes/len(bs))",
-            "Eq()(Bytes/len(Bits/to_bytes(ts, @a)), Nat/shr(Bits/len(ts), 3))",
-        ],
-        refused: &[],
     },
     Carrier {
         name: "Flt against Bytes",

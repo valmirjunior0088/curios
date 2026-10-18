@@ -421,7 +421,7 @@ fn a_struct_field_over_a_total_application_still_compiles() {
     assert_eq!(run(&source), b"7");
 }
 
-// A prelude shape the design is keyed to, exercised through the replay path rather than the prelude build: `Fmt/print`'s result type is `format_type_with(parse(s))`, a type-level `rec` over a parsed format. The other, recursion that descends on *either* of two `Bits` depending on the arm — a shape only match refinement can see — is the corpus fixture `big_nat`'s `add/raw`, which that unit's own compile exercises.
+// A prelude shape the design is keyed to, exercised through the replay path rather than the prelude build: `Fmt/print`'s result type is `format_type_with(parse(s))`, a type-level `rec` over a parsed format. The other, recursion that descends on *either* of two lists depending on the arm — a shape only match refinement can see — is `/std/List/sort_by`'s `merge`, which the prelude's own build exercises.
 #[test]
 fn the_prelude_shapes_a_user_program_leans_on_still_elaborate() {
     let source = r#"

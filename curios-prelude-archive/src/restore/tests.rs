@@ -187,7 +187,6 @@ const PURITY: &[(&str, Purity)] = &[
     ("Nat", Purity::Pure),
     ("Int", Purity::Pure),
     ("Flt", Purity::Pure),
-    ("Bits", Purity::Pure),
     ("Bytes", Purity::Pure),
     ("Char", Purity::Pure),
     ("Str", Purity::Pure),

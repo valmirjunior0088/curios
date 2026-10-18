@@ -3,7 +3,7 @@
 use {
     crate::tests::{run, run_text},
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{Bits, ForeignBindings, MockHost, SocketEvent, Termination},
+    curios_runtime::{ForeignBindings, MockHost, SocketEvent, Termination},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::{fill, test_support::Temporary},
 };
@@ -501,42 +501,6 @@ fn a_foreign_record_may_answer_references_in_any_slot() {
     crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
 
     assert_eq!(io.output(), b"1 7 2,3");
-}
-
-/// A `List(Bits)` in both directions, which is the one `Bits` path a plugin cannot reach — `crossing` refuses every list — so the deep force and embed the grain needed are exercised here or nowhere.
-///
-/// **The host closure is `Vec<Bits>`, where a `List(Bytes)` binds through `Vec<Vec<u8>>`.** The grains share a payload and are two types on both sides of the wire, so a binding states the one its row does, and what differs in the crossing is only the length each embedded element is sealed at. The run is sixteen bits so it returns as it went, the padding case being pinned in `plugin_tests`.
-#[test]
-fn a_list_of_bit_runs_crosses_in_both_directions() {
-    let source = r#"
-        foreign echo(List(Bits)) -> List(Bits);
-        let entry() -> /std/Io({}) =
-            let run = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
-            let answered = echo([run, b[]])!;
-            let first = match answered | [] => b[] | [head, .._] => head end;
-            let matched = /std/Bits/eql(first, run);
-            let _ = /std/Process/exit(@{}, match matched | true => /std/Nat/to_byte((/std/List/len(answered) + 3) % 256) | false => 1 end)!;
-            /std/Io/pure(());
-        entry()
-        "#
-    .parse::<Entrypoint>()
-    .expect("failed to parse source");
-
-    let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
-        &source,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
-
-    let mut bindings = ForeignBindings::empty();
-    bindings.define("/echo", |runs: Vec<Bits>| runs);
-
-    let (system, _io) = MockHost::builder().build();
-    let code = crate::run_wasm(&module, foreigns, system, bindings).expect("execution succeeded");
-
-    assert_eq!(code, 5, "both runs came back as they went in");
 }
 
 /// A list of scalars crosses one flat element per value, narrowed on the way out and boxed on the way back as a lone scalar is, so the host reads and answers plain numbers: a `Nat` the host doubles past `2⁶³` comes back whole, an `Int` past the 32-bit word crosses zero both ways, and a `Bool` list keeps its order.

@@ -134,7 +134,7 @@ fn a_constructor_payload_a_self_calling_rec_computes_is_admitted() {
     assert_eq!(run(source), b"boxed");
 }
 
-// A user's own refinement over a packed carrier — the shape the corpus fixture `/big_nat` declares, with nothing of `BigNat` in it: a struct field whose proposition applies a self-calling fold to an earlier field.
+// A user's own refinement over a packed carrier — the shape `/std/Cli` declares, a struct field whose proposition is computed from an earlier field: a self-calling fold applied to it.
 //
 // The cost is the positivity walk's, not the declaration checker's, and it is spent where the declaration is published, on a budget restored for that walk. Nothing here turns on how much native stack a thread has, and the tree sets none anywhere. What keeps a fold clear of this shape is the contrast in the test below.
 #[test]
@@ -164,7 +164,7 @@ fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
     assert_eq!(run(source), b"certified");
 }
 
-// The green row: a fold like the corpus fixture's `/big_nat/is_trimmed` trips none of the above, and the `; ih` binding is why: a fold hypothesis is a *binder*, not a self-application, so forcing the member exposes no recursive call to force again. Swap this one arm for the explicit `always(t)` of the test above and the identical program diverges.
+// The green row: a fold like `/std/Bytes/to_nat` trips none of the above, and the `; ih` binding is why: a fold hypothesis is a *binder*, not a self-application, so forcing the member exposes no recursive call to force again. Swap this one arm for the explicit `always(t)` of the test above and the identical program diverges.
 #[test]
 fn a_refinement_field_over_a_fold_hypothesis_is_admitted() {
     let source = r#"

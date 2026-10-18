@@ -103,16 +103,16 @@ fn higher_kinded_implicit_infers_by_imitation() {
 #[test]
 fn an_implicit_solves_by_spine_agreement_before_the_head_unfolds() {
     let source = r#"
-        use /std/{Nat, Bool, Bits, Eq, Str, Io};
-        let combine(head : Bool, t : Bits) -> Bits =
+        use /std/{Nat, Bool, List, Eq, Str, Io};
+        let combine(head : Bool, t : List(Bool)) -> List(Bool) =
             match t
-            | b[] => match head | true => b[head] | false => b[] end
-            | b[_, .._] => b[head, ..t]
+            | [] => match head | true => [head] | false => [] end
+            | [_, .._] => [head, ..t]
             end;
-        let trim(bits : Bits) -> Bits =
-            match bits | b[] => b[] | b[head, ..tail]; ih => combine(head, ih) end;
-        let through(@t : Bits, q : Eq()(trim(t), b[])) -> Eq()(trim(t), b[]) = q;
-        let probe(x : Bits, q : Eq()(trim(b[0, ..x]), b[])) -> Eq()(trim(b[0, ..x]), b[]) = through(q);
+        let trim(bits : List(Bool)) -> List(Bool) =
+            match bits | [] => [] | [head, ..tail]; ih => combine(head, ih) end;
+        let through(@t : List(Bool), q : Eq()(trim(t), [])) -> Eq()(trim(t), []) = q;
+        let probe(x : List(Bool), q : Eq()(trim([false, ..x]), [])) -> Eq()(trim([false, ..x]), []) = through(q);
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
             /std/Io/pure(());

@@ -112,9 +112,9 @@ pub struct Call {
 
 /// Close the call matrices transitively, or `None` if the closure outgrows [`closure_limit`] for the members the calls name.
 ///
-/// The closure is what makes mutual recursion work without the analysis knowing which members were declared together: `raw_comm` calls `raw_swap_step` which calls back, and only the composite path is a cycle.
+/// The closure is what makes mutual recursion work without the analysis knowing which members were declared together: `/std/Cli/check`'s `problems` calls `beneath` which calls back, and only the composite path is a cycle.
 ///
-/// By generator extension: every product of call matrices is a shorter product followed by its last factor, so extending each discovered element by the *generators* alone reaches the whole closure — `|closure| × |calls|` compositions, not `|closure|²`. The group that makes the difference matter is the corpus's `/big_nat/add/raw_assoc`, whose closure dwarfs its calls. The set is hashed rather than ordered because its one consumer runs an order-independent `all`.
+/// By generator extension: every product of call matrices is a shorter product followed by its last factor, so extending each discovered element by the *generators* alone reaches the whole closure — `|closure| × |calls|` compositions, not `|closure|²`. The difference matters for a group whose closure dwarfs its calls, as one member handing its parameters on permuted closes to every permutation of them. The set is hashed rather than ordered because its one consumer runs an order-independent `all`.
 pub(super) fn close(calls: Vec<Call>) -> Option<Vec<Call>> {
     let members = calls
         .iter()

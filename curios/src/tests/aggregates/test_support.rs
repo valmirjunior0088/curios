@@ -26,22 +26,6 @@ pub(super) const BYTES: Carrier = Carrier {
     settled: "Bytes/xor(run, Bytes/replicate(Bytes/len(run), 0x00))",
 };
 
-pub(super) const BITS: Carrier = Carrier {
-    run: "Bits",
-    open: "b[",
-    len: "Bits/len",
-    slice: "Bits/slice",
-    at: "match Bits/try_get(run, i) | some(bit) => match bit | true => 2 | false => 1 end | none() => 0 end",
-    leaf: "Bytes/to_bits(l)",
-    settled: "Bits/xor(run, Bits/replicate(Bits/len(run), false))",
-};
-
-/// The bit carrier over a leaf of 317 bits, so every run it builds ends off a byte boundary, where a flattening claims no room.
-pub(super) const ODD_BITS: Carrier = Carrier {
-    leaf: "match Nat/le/try(317, Bits/len(Bytes/to_bits(l))) | some(fits) => Bits/slice(Bytes/to_bits(l), 0, 317) | none() => Bytes/to_bits(l) end",
-    ..BITS
-};
-
 pub(super) const LIST: Carrier = Carrier {
     run: "List(Nat)",
     open: "[",
@@ -57,7 +41,7 @@ pub(super) const LIST: Carrier = Carrier {
 /// Each read is of a run built for it, so the upward walk meets every node unread and the downward one does too: a read that flattened the run for the one would otherwise hide what the other answers.
 pub(super) fn reads_in_every_shape(carrier: &Carrier) -> String {
     r#"
-    use /std/{Nat, Byte, Bytes, Bits, Bool, List, Option, Str, Io, print, Try, Process};
+    use /std/{Nat, Byte, Bytes, Bool, List, Option, Str, Io, print, Try, Process};
 
     let at(run: %RUN%, i: Nat) -> Nat =
         %AT%;
@@ -141,7 +125,7 @@ pub(super) fn extends_in_place(carrier: &Carrier) -> String {
     );
     fill!(
         r#"
-    use /std/{Nat, Byte, Bytes, Bits, Bool, List, Option, Str, Io, print, Try, Process};
+    use /std/{Nat, Byte, Bytes, Bool, List, Option, Str, Io, print, Try, Process};
 
     let at(run: ${run}, i: Nat) -> Nat =
         ${at};

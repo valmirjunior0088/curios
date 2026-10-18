@@ -109,31 +109,31 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
 
 #[test]
 fn a_packed_literal_decomposes_against_its_folded_spine() {
-    // The packed-literal view's acceptance shape, distilled from the corpus fixture's `big_nat/succ.crs`: `raw(b[])` folds to the literal `b[1]`, so recovering the injectivity lemma's implicits needs `append(b[], ?h) ≡ b[1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bin` to `BinAppend`/`BinConcat`.
+    // The packed-literal view's acceptance shape: `raw(x[])` folds to the literal `x[1]`, so recovering the injectivity lemma's implicits needs `append(x[], ?h) ≡ x[1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bin` to `BinAppend`/`BinConcat`.
     let source = r#"
-        use /std/{Bool, Bits, Eq, Io};
-        use /std/Bool/{false_neq_true, False};
+        use /std/{Byte, Bytes, Eq, Io};
+        use /std/Bool/{True, False, Holds};
 
-        let head_of(x: Bits) -> Bool =
-            match x | b[] => false | b[h, .._] => h end;
+        let head_of(x: Bytes) -> Byte =
+            match x | x[] => 0 | x[h, .._] => h end;
 
         let cons_inj_head(
-            @h1: Bool,
-            @t1: Bits,
-            @h2: Bool,
-            @t2: Bits,
-            p: Eq()(b[h1, ..t1], b[h2, ..t2]),
+            @h1: Byte,
+            @t1: Bytes,
+            @h2: Byte,
+            @t2: Bytes,
+            p: Eq()(x[h1, ..t1], x[h2, ..t2]),
         ) -> Eq()(h1, h2) =
             match p: (s, t, q) => Eq()(head_of(s), head_of(t)) | refl(@z) => Eq/refl() end;
 
-        let raw(x: Bits) -> Bits =
+        let raw(x: Bytes) -> Bytes =
             match x
-            | b[] => b[1]
-            | b[h, ..t] => match h | true => b[0, ..raw(t)] | false => b[1, ..t] end
+            | x[] => x[1]
+            | x[h, ..t] => match h == 1 | true => x[0, ..raw(t)] | false => x[1, ..t] end
             end;
 
-        let probe(zt: Bits, p: Eq()(raw(b[]), raw(b[true, ..zt]))) -> False =
-            false_neq_true(Eq/sym(cons_inj_head(p)));
+        let probe(zt: Bytes, p: Eq()(raw(x[]), raw(x[1, ..zt]))) -> False =
+            Eq/subst((m: Byte) => Holds(m == 1), cons_inj_head(p), True/qed());
 
         Io/pure(())
     "#;

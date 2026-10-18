@@ -61,7 +61,7 @@ type mismatch
 - A proof-irrelevant `Prop`, so proofs weigh nothing at runtime
 - Erased arguments — type-level information that guides checking and then vanishes from the output
 - Concepts and witnesses for ad-hoc polymorphism
-- Packed `Bits` and `Bytes` as primitive carriers, level with each other across a full bitwise vocabulary — `not`, `shl`, `shr`, `rotl` and `rotr` at both grains
+- Packed `Bytes` as a primitive carrier, with a full bitwise vocabulary — `not`, `shl`, `shr`, `rotl` and `rotr`
 - A standard library for collections, formatting, IO, networking, tasks, time, randomness, arbitrary-precision integers, JSON, and TOML
 - One lowering pipeline from source to WebAssembly, whether you run it natively or in a browser tab
 - Foreign declarations answered by a WebAssembly module the manifest names and pins by hash, folded into the executable by `curios compile`

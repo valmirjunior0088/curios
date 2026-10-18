@@ -289,51 +289,6 @@ fn a_byte_string_crosses_through_the_plugins_memory() {
     assert_eq!(code, 9, "the bytes came back as they went in");
 }
 
-/// A bit run reaching a plugin and coming back, over the export a byte string already crosses — which is the claim the wire type makes: `Bits` and `Bytes` hand the plugin the same `(ptr, len)` pair, and only the length the guest seals on the way back differs.
-#[test]
-fn a_bit_run_crosses_through_the_plugins_memory() {
-    let code = run_against(
-        r#"
-        foreign echo(Bits) -> Bits;
-        let entry() -> /std/Io({}) =
-            let sent = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
-            let answered = echo(sent)!;
-            let matched = /std/Bits/eql(answered, sent);
-            let _ = /std/Process/exit(@{}, match matched | true => 9 | false => 1 end)!;
-            /std/Io/pure(());
-        entry()
-        "#,
-        &[("echo", "/echo")],
-    )
-    .expect("execution succeeded");
-
-    assert_eq!(code, 9, "the bits came back as they went in");
-}
-
-/// A run whose length is not a multiple of eight comes back at `8n`, because the wire has no slot for a bit length — the one thing a `Bits` row does not preserve, pinned here rather than left to the prose that states it. Twelve bits cross as their two packed bytes and return as sixteen, the trailing four zero because the representation keeps a run's padding zeroed.
-#[test]
-fn a_run_shorter_than_its_bytes_returns_padded_to_them() {
-    let code = run_against(
-        r#"
-        foreign echo(Bits) -> Bits;
-        let entry() -> /std/Io({}) =
-            let answered = echo(b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1])!;
-            let padded = b[1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0];
-            let matched = /std/Bits/eql(answered, padded);
-            let _ = /std/Process/exit(@{}, match matched | true => /std/Nat/to_byte(/std/Bits/len(answered) % 256) | false => 1 end)!;
-            /std/Io/pure(());
-        entry()
-        "#,
-        &[("echo", "/echo")],
-    )
-    .expect("execution succeeded");
-
-    assert_eq!(
-        code, 16,
-        "twelve bits returned as the sixteen they packed into"
-    );
-}
-
 /// A declaration a program reaches that neither a module nor the host answers is refused before the program starts, naming it.
 #[test]
 fn a_declaration_nothing_answers_is_refused_where_a_program_reaches_it() {

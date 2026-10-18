@@ -36,15 +36,15 @@ fn float_constants_intern_by_bit_pattern() {
 }
 
 #[test]
-fn binary_constants_intern_by_logical_bits_across_windows() {
+fn binary_constants_intern_by_their_contents_across_windows() {
     let mut module = Module::new();
-    let direct = Binary::from_bits([true, false, true]);
-    let framed = Binary::from_bits([false, true, false, true, true])
-        .window(1, 3)
+    let direct = Binary::from_bytes(vec![1, 0, 1]);
+    let framed = Binary::from_bytes(vec![0, 1, 0, 1, 1])
+        .window(8, 24)
         .unwrap();
-    let a = module.intern_constant(Constant::Bin(Grain::B, direct));
-    let b = module.intern_constant(Constant::Bin(Grain::B, framed));
-    assert_eq!(a, b, "equal logical bits share one identity");
+    let a = module.intern_constant(Constant::Bin(Grain::X, direct));
+    let b = module.intern_constant(Constant::Bin(Grain::X, framed));
+    assert_eq!(a, b, "equal contents share one identity");
 }
 
 #[test]

@@ -1,7 +1,7 @@
 //! Indexed vectors a program declares for itself: the type-level `Vec` over `Nat` induction, and the indexed inductive whose `append` is executed rather than only compiled. The packed splices and folds are the corpus's `/aggregates/packed`.
 
 use {
-    super::test_support::{ARRIVAL, BITS, BYTES, ODD_BITS, extends_in_place, reads_in_every_shape},
+    super::test_support::{ARRIVAL, BYTES, extends_in_place, reads_in_every_shape},
     crate::tests::{run, run_text},
     curios_runtime::MockHost,
 };
@@ -62,17 +62,14 @@ fn indexed_vec_append_executes() {
     assert_eq!(run(source), b"7");
 }
 
-/// **A packed value joined from two is the run its parts spell, at every length on either side of an immediate's envelope.** A concatenation of two immediates that fit one is arithmetic on their payloads and lengths, and any other the rope's node, so every cut of every prefix of a run is put to both and to the seam between them: three bytes and twenty-six bits are where one gives way to the other. The run arrives on standard input, so nothing here folds, and a cons a byte, a join of three and a literal that leads with a constant are the same lowering.
+/// **A packed value joined from two is the run its parts spell, at every length on either side of an immediate's envelope.** A concatenation of two immediates that fit one is arithmetic on their payloads and lengths, and any other the rope's node, so every cut of every prefix of a run is put to both and to the seam between them: three bytes are where one gives way to the other. The run arrives on standard input, so nothing here folds, and a cons a byte, a join of three and a literal that leads with a constant are the same lowering.
 #[test]
 fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
     let source = r#"
-        use /std/{Nat, Byte, Bytes, Bits, Bool, Str, Option, Io};
+        use /std/{Nat, Byte, Bytes, Bool, Str, Option, Io};
 
         let front(b: Bytes) -> Bytes =
             match b | x[] => x[] | x[h, .._]; rest => x[h, ..rest] end;
-
-        let front_bits(b: Bits) -> Bits =
-            match b | b[] => b[] | b[h, .._]; rest => b[h, ..rest] end;
 
         let cut(b: Bytes, k: Nat) -> Bool =
             match k <= Bytes/len(b)
@@ -84,17 +81,6 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
 
         let cuts(b: Bytes, k: Nat) -> Bool =
             match k | 0 => cut(b, 0) | j + 1; rest => cut(b, j + 1) && rest end;
-
-        let cut_bits(b: Bits, k: Nat) -> Bool =
-            match k <= Bits/len(b)
-            | true =>
-                let joined = b[..Bits/slice(b, 0, k), ..Bits/drop(b, k)];
-                joined == b && Bits/len(joined) == Bits/len(b)
-            | false => false
-            end;
-
-        let cuts_bits(b: Bits, k: Nat) -> Bool =
-            match k | 0 => cut_bits(b, 0) | j + 1; rest => cut_bits(b, j + 1) && rest end;
 
         let thirds(b: Bytes, k: Nat) -> Bool =
             match 2 * k <= Bytes/len(b)
@@ -111,18 +97,6 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
                 | true =>
                     let b = Bytes/slice(whole, 0, j + 1);
                     cuts(b, j + 1) && front(b) == b && thirds(b, 1) && thirds(b, 2) && rest
-                | false => false
-                end
-            end;
-
-        let prefixes_bits(whole: Bits, n: Nat) -> Bool =
-            match n
-            | 0 => true
-            | j + 1; rest =>
-                match j + 1 <= Bits/len(whole)
-                | true =>
-                    let b = Bits/slice(whole, 0, j + 1);
-                    cuts_bits(b, j + 1) && front_bits(b) == b && rest
                 | false => false
                 end
             end;
@@ -151,7 +125,6 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
                 /std/print(
                     Str/join(" ", [
                         Bool/to_str(prefixes(bytes, Bytes/len(bytes))),
-                        Bool/to_str(prefixes_bits(Bytes/to_bits(bytes), 8 * Bytes/len(bytes))),
                         Bool/to_str(led(bytes))]))
             | none() => /std/print("no input")
             end;
@@ -163,29 +136,25 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
         .build();
     run_text(source, system).expect("the program runs");
 
-    assert_eq!(io.output(), b"true true true");
+    assert_eq!(io.output(), b"true true");
 }
 
 /// **A packed run reads as its flat copy does, whatever its node's children are.** A read of a node that was never flattened answers from the child that holds its index where that child is flat — a leaf, a window, a flattened node — and flattens the node where it is not, so each shape takes a different arm of the read: every element of each, read upward and then downward, is the settled run's.
 #[test]
 fn a_packed_run_reads_as_its_flat_copy_in_every_shape_its_children_take() {
-    for carrier in [&BYTES, &BITS] {
-        let (system, io) = MockHost::builder().stdin_chunks(vec![ARRIVAL]).build();
+    let (system, io) = MockHost::builder().stdin_chunks(vec![ARRIVAL]).build();
 
-        run_text(&reads_in_every_shape(carrier), system).expect("the reads run");
-        assert_eq!(io.output(), b"111111111", "{}", carrier.run);
-    }
+    run_text(&reads_in_every_shape(&BYTES), system).expect("the reads run");
+    assert_eq!(io.output(), b"111111111");
 }
 
-/// **A packed run read after another extended its payload in place reads as it was written.** A flattening over a run that ends at its payload's written extent writes into the room past it, so the older run, a window of it, a second run over it that finds the extent moved, and a run appended to itself each read element by element as the copies of the leaf they are — at the bit grain from a byte boundary, and, over a leaf of 317 bits, where every run ends off one and no flattening claims.
+/// **A packed run read after another extended its payload in place reads as it was written.** A flattening over a run that ends at its payload's written extent writes into the room past it, so the older run, a window of it, a second run over it that finds the extent moved, and a run appended to itself each read element by element as the copies of the leaf they are.
 #[test]
 fn a_packed_run_extended_in_place_reads_as_it_was_written() {
-    for carrier in [&BYTES, &BITS, &ODD_BITS] {
-        let (system, io) = MockHost::builder().stdin_chunks(vec![ARRIVAL]).build();
+    let (system, io) = MockHost::builder().stdin_chunks(vec![ARRIVAL]).build();
 
-        run_text(&extends_in_place(carrier), system).expect("the reads run");
-        assert_eq!(io.output(), b"111111", "{}", carrier.leaf);
-    }
+    run_text(&extends_in_place(&BYTES), system).expect("the reads run");
+    assert_eq!(io.output(), b"111111");
 }
 
 /// **A run whose payload holds room crosses to a host as its run.** `left` claims the room a flattening gave `three`, so its payload is longer than it is, and the host is handed the bytes of the run and nothing past them.

@@ -356,7 +356,7 @@ pub let split_once(s: Str, sep: Str) -> Option({Str, Str}) =
 
 --- Whether `needle` occurs in `s` as a run of characters.
 ---
---- Named apart from [`contains`], which is the element reading `/std/List`, `/std/Bytes` and `/std/Bits` all give that word. The substring family beside it — `starts_with`, `ends_with`, `strip_prefix`, `strip_suffix`, `split_once`, `split`, `replace` and `index_of_substr` — takes a `Str` needle too and needs no such mark, because none of them names an operation another carrier spells differently.
+--- Named apart from [`contains`], which is the element reading `/std/List` and `/std/Bytes` both give that word. The substring family beside it — `starts_with`, `ends_with`, `strip_prefix`, `strip_suffix`, `split_once`, `split`, `replace` and `index_of_substr` — takes a `Str` needle too and needs no such mark, because none of them names an operation another carrier spells differently.
 pub let has_substr(s: Str, needle: Str) -> Bool =
     Option/is_some(first_occurrence(s, needle));
 

@@ -58,7 +58,7 @@ The cap is also a place conversion is not transitive, by design: with `A` the co
 
 ## One internal sequence carrier
 
-**Capability wanted.** One internal sequence carrier and common operations, preserving `List`, `Bits` and `Bytes` for the guest.
+**Capability wanted.** One internal sequence carrier and common operations, preserving `List` and `Bytes` for the guest.
 
 **Previously discussed.** A carrier and kind pair, with representation changes through the erased and continuation IRs, emission and stored archives. [The carriers' algebra](../../design/arithmetic/the-carriers-algebra-stays-in-conversion.md) shares one word algebra, which deliberately works over today's three representations.
 

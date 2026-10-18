@@ -125,14 +125,11 @@ fn a_literal_run_is_the_same_value_however_it_is_grouped() {
     //
     // **Each law carries a symbolic tail, and that is what makes this a test.** Without it both sides are all-literal, reduction fuses each into one value on the way in, and `refl` checks without the peel having decided anything. With it neither side fuses, so the peel is the only thing that can equate them. `curios-core`'s `spine` tests state the same premise directly against the peel; this states it where *both* checkers see it, since a program here is elaborated and then certified.
     //
-    // All three carriers, because each flattens in its own representation: two `Bin` grains over packed runs, and `List` over element vectors whose entries are compared syntactically.
+    // Both carriers, because each flattens in its own representation: `Bytes` over packed runs, and `List` over element vectors whose entries are compared syntactically.
     let source = r#"
-        use /std/{Str, Eq, Bits, Bytes, Bool, List, Io};
+        use /std/{Str, Eq, Bytes, Bool, List, Io};
         let bytes_law(rest : Bytes)
             -> Eq()(x[..x[0x30, 0x31], ..x[0x32, 0x33], ..rest], x[..x[0x30, 0x31, 0x32, 0x33], ..rest]) =
-            Eq/refl();
-        let bits_law(rest : Bits)
-            -> Eq()(b[..b[1, 0], ..b[1, 1], ..b[0], ..rest], b[..b[1, 0, 1, 1, 0], ..rest]) =
             Eq/refl();
         let list_law(@T : Type, xs : List(T), p : T, q : T, r : T)
             -> Eq()([..[p, q], ..[r], ..xs], [..[p, q, r], ..xs]) =
@@ -364,10 +361,9 @@ fn bin_len_reduces_across_a_cons_spine() {
 fn an_append_over_a_nonempty_base_still_decodes_its_first_atom() {
     // `peel_front` (`core::free_monoid`) recognises an append over any base, as `core::spine`'s two-value peel does: `append(x[0x48], b)` — what `x[0x48, b]` lowers to — peels its first generator and rejoins the residual, as the `BinConcat` arm beside it does. `get` at index 0 is the sharp probe: it reduces only where the leading generator is exposed, and every appended atom here is SYMBOLIC, so nothing is literal folding. `chained` is the recursive case — adjacent atoms lower to `append(append(...))`, whose first generator sits two bases down.
     let source = r#"
-        use /std/{Str, Eq, Byte, Bytes, Bool, Bits, Option, Io};
+        use /std/{Str, Eq, Byte, Bytes, Bool, Option, Io};
         let lead : Byte = 0x48;
         let byte_head(b : Byte) -> Eq()(Bytes/try_get(x[0x48, b], 0), Option/some(lead)) = Eq/refl();
-        let bit_head(b : Bool) -> Eq()(Bits/try_get(b[1, b], 0), Option/some(true)) = Eq/refl();
         let chained(a : Byte, b : Byte) -> Eq()(Bytes/try_get(x[0x48, a, b], 0), Option/some(lead)) = Eq/refl();
         let chained_len(a : Byte, b : Byte) -> Eq()(Bytes/len(x[a, b]), 2) = Eq/refl();
         let entry() -> /std/Io({}) =

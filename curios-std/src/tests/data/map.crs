@@ -1,6 +1,5 @@
 -- `Map`, the crit-bit trie over `Key`-encoded bytes, and `Set` over it: lookups, the canonical shape, and the rewriting functions.
-use /std/{Str, Nat, Int, Bool, Byte, Bytes, Bits, List, Option, Eq, Hash, Ord, Ordering, Map, Set,
-    Test};
+use /std/{Str, Nat, Int, Bool, Byte, Bytes, List, Option, Eq, Hash, Ord, Ordering, Map, Set, Test};
 
 test a_key_an_empty_map_lacks_is_tried_as_none =
     let m: Map(Str, Str) = Map/empty();
@@ -165,7 +164,6 @@ test the_least_and_the_greatest_key_are_the_ends_of_the_sorted_keys =
     let runs: List(Bytes) = [x[0x01, 0x00], x[], x[0xFF], x[0x01]];
     let bytes: List(Byte) = [0x7F, 0x00, 0xFF, 0x80];
     let truths: List(Bool) = [true, false];
-    let bits: List(Bits) = [b[true, false], b[], b[false], b[true]];
     let none: List(Nat) = [];
     Test/all([
         Test/equal(ends(naturals), sorted_ends(naturals)),
@@ -174,7 +172,6 @@ test the_least_and_the_greatest_key_are_the_ends_of_the_sorted_keys =
         Test/equal(ends(runs), sorted_ends(runs)),
         Test/equal(ends(bytes), sorted_ends(bytes)),
         Test/equal(ends(truths), sorted_ends(truths)),
-        Test/equal(ends(bits), sorted_ends(bits)),
         Test/equal(ends(none), [Option/none(), Option/none()])]);
 
 -- No key of a map is below its least or above its greatest, and each of the two is a key of the map: the theorems beside the two walks, read under the map's key alone.

@@ -227,16 +227,15 @@ fn text_spells_quoted_and_escaped() {
 fn sequences_spell_as_their_bracketed_literals() {
     assert_eq!(
         run(r#"
-        use /std/{Nat, Str, Bits, Bytes, List, Io, Spell, print};
+        use /std/{Nat, Str, Bytes, List, Io, Spell, print};
         let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
         let entry() -> /std/Io({}) =
-            let _ = line(Spell/spell(b[0, 1]))!;
             let _ = line(Spell/spell(x[72, 255]))!;
             let _ = line(Spell/spell([1, 2, 3]))!;
             Io/pure(());
         entry()
         "#),
-        b"b[0, 1]\nx[72, 255]\n[1, 2, 3]\n"
+        b"x[72, 255]\n[1, 2, 3]\n"
     );
 }
 

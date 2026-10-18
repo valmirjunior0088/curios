@@ -48,23 +48,6 @@ fn flat_option_match_lowers_without_synthetic_indirection() {
     assert_eq!(run(source), b"5");
 }
 
-#[test]
-fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
-    let source = r#"
-        use /std/{Bits, Nat};
-        let value(bits : Bits) -> Nat =
-            match bits
-            | b[] => 0
-            | b[head, ..tail]; ih =>
-                let digit : Nat = match head | false => 0 | true => 1 end;
-                digit + 2 * ih
-            end;
-        /std/print(Nat/to_str(value(b[1, 0, 1, 1, 0, 0, 1, 0, 1, 1])))
-        "#;
-
-    assert_eq!(run(source), b"845");
-}
-
 // A single tupled head, fully enumerated over two independent `Option`-shaped columns.
 #[test]
 fn nested_ctor_pattern_dispatches_by_shape() {

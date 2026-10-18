@@ -4,7 +4,7 @@
 //!
 //! Three arms divide that cost, and the division is the point: the middle arm performs the same number of transitions as the last one and constructs nothing, so whatever separates them is construction rather than machinery.
 //!
-//! Both carriers are measured, and `Bytes` covers the byte grain only. `Bits` shares `normalize_concat` and `Binary::concat` with it at a different generator width, so it would report the same shape eight times smaller per step; the two carriers here are the ones whose *representations* differ.
+//! Both sequence carriers are measured, `Bytes` and `List`, whose *representations* differ.
 //!
 //! A second probe reads the same programs the other way round. [`type_level_sequence_cost_measurements`] divides one checker's cost into machinery and construction; [`kernel_memo_charge_measurements`] holds the program fixed and divides the *checkers*, because the compile path puts one budget to both and a user meets whichever demands more.
 
@@ -771,7 +771,7 @@ fn a_growing_accumulation_is_bounded_by_what_it_has_already_built() {
     );
 }
 
-/// A `Bits` fold over `width` bits returning a pair, and its single-value twin. `let (a, b) = go(…)` is projection sugar, so the pair form demands the *same* recursive call once per component; the twin demands it once. Everything else about the two is identical, so the gap between their curves is the cost of that second demand and nothing else.
+/// A `Bytes` fold over `width` bytes returning a pair, and its single-value twin. `let (a, b) = go(…)` is projection sugar, so the pair form demands the *same* recursive call once per component; the twin demands it once. Everything else about the two is identical, so the gap between their curves is the cost of that second demand and nothing else.
 ///
 /// Each program claims the fold's length, an equation the claim's check decides by running the fold. A call that only handed the fold's result on would not be run by a type at all: a divisor's bound over it is decided by what the sum is, whatever its operand comes to.
 fn paired_fold(width: usize, paired: bool) -> String {
@@ -779,21 +779,16 @@ fn paired_fold(width: usize, paired: bool) -> String {
     match paired {
         true => fill!(
             r#"
-            use /std/{Nat, Bool, Bits, Eq};
-            let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
-                match a
-                | true => match b | true => c | false => Bool/not(c) end
-                | false => match b | true => Bool/not(c) | false => c end
-                end;
-            let go(x: Bits, c: Bool) -> {Bits, Bool} =
+            use /std/{Nat, Byte, Bytes, Eq};
+            let go(x: Bytes, c: Byte) -> {Bytes, Byte} =
                 match x
-                | b[] => (b[], c)
-                | b[h, ..t] =>
-                    let (rest, out) = go(t, xor3(h, c, c));
-                    (b[xor3(h, c, c), ..rest], out)
+                | x[] => (x[], c)
+                | x[h, ..t] =>
+                    let (rest, out) = go(t, Byte/xor(h, c));
+                    (x[Byte/xor(h, c), ..rest], out)
                 end;
-            let (bits, _) = go(Bits/slice(b[${ones}], 0, ${width}), false);
-            let _counted: Eq()(Bits/len(bits), ${width}) = Eq/refl();
+            let (bytes, _) = go(Bytes/slice(x[${ones}], 0, ${width}), 0);
+            let _counted: Eq()(Bytes/len(bytes), ${width}) = Eq/refl();
             /std/print("")
             "#,
             ones,
@@ -801,18 +796,13 @@ fn paired_fold(width: usize, paired: bool) -> String {
         ),
         false => fill!(
             r#"
-            use /std/{Nat, Bool, Bits, Eq};
-            let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
-                match a
-                | true => match b | true => c | false => Bool/not(c) end
-                | false => match b | true => Bool/not(c) | false => c end
-                end;
-            let go(x: Bits, c: Bool) -> Bits =
+            use /std/{Nat, Byte, Bytes, Eq};
+            let go(x: Bytes, c: Byte) -> Bytes =
                 match x
-                | b[] => b[]
-                | b[h, ..t] => b[xor3(h, c, c), ..go(t, xor3(h, c, c))]
+                | x[] => x[]
+                | x[h, ..t] => x[Byte/xor(h, c), ..go(t, Byte/xor(h, c))]
                 end;
-            let _counted: Eq()(Bits/len(go(Bits/slice(b[${ones}], 0, ${width}), false)), ${width}) = Eq/refl();
+            let _counted: Eq()(Bytes/len(go(Bytes/slice(x[${ones}], 0, ${width}), 0)), ${width}) = Eq/refl();
             /std/print("")
             "#,
             ones,
@@ -825,9 +815,9 @@ fn paired_fold(width: usize, paired: bool) -> String {
 ///
 /// The machine records a forced application's value under the application itself, the path whose head is a recursive member included. That *a member selection's calls never repeat within a run because the fold argument strictly shrinks* is false for every tuple-returning recursion: `let (a, b) = go(…)` lowers to two projections of one call, so without the record each level would demand the same call twice and the fold would cost `2^n`.
 ///
-/// What this asserts is the *shape* rather than a figure: the pair form's increment per four bits must not grow. The single-value twin is the control — it makes one demand per level, so it grows by the same amount every four bits, and a regression that slowed both equally would not read as this defect. What is read is the heaviest single judgment, which here is the elaboration of the declaration that claims the fold's length.
+/// What this asserts is the *shape* rather than a figure: the pair form's increment per byte must not grow. The single-value twin is the control — it makes one demand per level, so it grows by the same amount every byte, and a regression that slowed both equally would not read as this defect. What is read is the heaviest single judgment, which here is the elaboration of the declaration that claims the fold's length. The widths stay within the eight bytes one unit of a packed payload is charged for, so no run the fold builds adds a term in its length to either curve.
 ///
-/// **Run against the defect and observed to fail**, which is what makes it a detector rather than a description: with the record removed the pair form's increments grow with every four bits, and the assertion names them. Reproduce by deleting the `Frame::Memo` push at the head frame's entry in `curios-core`'s machine.
+/// **Run against the defect and observed to fail**, which is what makes it a detector rather than a description: with the records removed the pair form's increments double with every byte, and the assertion names them. The match a member's body opens to is recorded too, and serves the second demand where the application's record is gone, so reproduce by deleting both `Frame::Memo` pushes in `curios-core`'s machine, at the head frame's entry and at a match's; deleting the head frame's alone leaves the fold linear.
 #[test]
 fn a_recursive_call_read_twice_is_evaluated_once() {
     let units = |width: usize, paired: bool| {
@@ -839,17 +829,17 @@ fn a_recursive_call_read_twice_is_evaluated_once() {
             .units()
     };
 
-    let paired = [4usize, 8, 12, 16].map(|width| units(width, true));
-    let single = [4usize, 8, 12, 16].map(|width| units(width, false));
+    let paired = [5usize, 6, 7, 8].map(|width| units(width, true));
+    let single = [5usize, 6, 7, 8].map(|width| units(width, false));
 
     // The control grows by one demand a level and no more, so what the pair form adds to it is the second demand rather than the fold.
     assert_eq!(
         single[1] - single[0],
         single[3] - single[2],
-        "the single-value twin should grow by the same amount every four bits: {single:?}"
+        "the single-value twin should grow by the same amount every byte: {single:?}"
     );
 
-    // Linear growth: each further four bits costs about what the previous four did. Doubling per bit makes the later increments explode, which is exactly what this refuses.
+    // Linear growth: each further byte costs about what the previous one did. Doubling per byte makes the later increments explode, which is exactly what this refuses.
     let increments = [
         paired[1] - paired[0],
         paired[2] - paired[1],

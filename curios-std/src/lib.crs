@@ -61,10 +61,6 @@ pub use Int/{let Int};
 pub mod Flt;
 pub use Flt/{let Flt};
 
---- A packed bit string, least-significant first, written `b[...]`.
-pub mod Bits;
-pub use Bits/{let Bits};
-
 --- A packed byte string, least-significant first, written `x[...]`: what every host operation hands over and takes.
 pub mod Bytes;
 pub use Bytes/{let Bytes};

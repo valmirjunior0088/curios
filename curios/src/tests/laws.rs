@@ -45,7 +45,8 @@ mod written;
 const SENTINEL: &str = "Eq()(0, 0)";
 
 /// What a program of the carriers' rows states ahead of them. Every reader below takes the header its rows are stated under, since a seed's program declares what its rows are over.
-const IMPORTS: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Bits, List, Str, Char, Flt, Eq, Io}; use /std/Bool/{Holds};";
+const IMPORTS: &str =
+    "use /std/{Nat, Int, Bool, Byte, Bytes, List, Str, Char, Flt, Eq, Io}; use /std/Bool/{Holds};";
 
 /// One program stating each row — its binders, and its claim — as an item with `body`, in order, under `header` and over a unit tail.
 fn program(header: &str, rows: &[(String, String)], body: &str) -> String {

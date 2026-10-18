@@ -406,63 +406,57 @@ fn bin_eql_decides_structurally() {
 }
 
 #[test]
-fn bits_reduce_through_symbolic_free_monoid_spines() {
+fn bytes_reduce_through_symbolic_free_monoid_spines() {
     let mut context = context();
     let tail_binder = context.fresh(Some("tail"));
-    let bits = |values: &[bool]| {
+    let bytes = |values: &[u8]| {
         Term::intrinsic(Intrinsic::Bin(
-            Grain::B,
-            Binary::from_bits(values.iter().copied()),
+            Grain::X,
+            Binary::from_bytes(values.to_vec()),
         ))
     };
     let tail = Term::free_var(&tail_binder);
-    let cons = Term::intrinsic(Intrinsic::bin_concat(
-        Grain::B,
-        [bits(&[true]), tail.clone()],
-    ));
+    let cons = Term::intrinsic(Intrinsic::bin_concat(Grain::X, [bytes(&[1]), tail.clone()]));
 
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_get(Grain::B, cons.clone(), lit(0), qed()))
+            Term::intrinsic(Intrinsic::bin_get(Grain::X, cons.clone(), lit(0), qed()))
         ),
-        Subterm::Intrinsic(Intrinsic::Bool(true)),
+        Subterm::Intrinsic(Intrinsic::Byte(1)),
     );
     assert_eq!(
         reduced(
             &mut context,
             Term::intrinsic(Intrinsic::bin_slice(
-                Grain::B,
+                Grain::X,
                 cons.clone(),
                 lit(0),
                 lit(1),
                 qed(),
             ))
         ),
-        Term::unwrap_or_clone(bits(&[true])),
+        Term::unwrap_or_clone(bytes(&[1])),
     );
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_len(Grain::B, cons.clone()))
+            Term::intrinsic(Intrinsic::bin_len(Grain::X, cons.clone()))
         ),
         reduced(
             &mut context,
             Term::intrinsic(Intrinsic::nat_add(
                 lit(1),
-                Term::intrinsic(Intrinsic::bin_len(Grain::B, tail.clone())),
+                Term::intrinsic(Intrinsic::bin_len(Grain::X, tail.clone())),
             ))
         ),
     );
 
-    let false_cons = Term::intrinsic(Intrinsic::bin_concat(
-        Grain::B,
-        [bits(&[false]), tail.clone()],
-    ));
+    let other_cons = Term::intrinsic(Intrinsic::bin_concat(Grain::X, [bytes(&[0]), tail.clone()]));
     assert_eq!(
         reduced(
             &mut context,
-            Term::intrinsic(Intrinsic::bin_eql(Grain::B, cons, false_cons))
+            Term::intrinsic(Intrinsic::bin_eql(Grain::X, cons, other_cons))
         ),
         Subterm::Intrinsic(Intrinsic::Bool(false)),
     );
@@ -470,8 +464,8 @@ fn bits_reduce_through_symbolic_free_monoid_spines() {
         reduced(
             &mut context,
             Term::intrinsic(Intrinsic::bin_concat(
-                Grain::B,
-                [bits(&[]), tail.clone(), bits(&[])],
+                Grain::X,
+                [bytes(&[]), tail.clone(), bytes(&[])],
             ))
         ),
         Term::unwrap_or_clone(tail),

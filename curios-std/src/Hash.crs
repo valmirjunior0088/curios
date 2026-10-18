@@ -4,7 +4,7 @@ pub mod nat;
 --- An integer's encoding in the order of the numbers, with the laws that say so.
 pub mod int;
 
-use /std/{Nat, Byte, Bytes, Bits, Bool, Str, List, Option, Int, Flt};
+use /std/{Nat, Byte, Bytes, Bool, Str, List, Option, Int, Flt};
 use /std/Bool/{Holds};
 
 --- How a value encodes to the bytes that identify it.
@@ -59,15 +59,6 @@ pub let of(@T: Type, use Hash(T), v: T) -> Bytes =
 --- The identity encoding.
 satisfy Hash(Bytes) {
     hash(b) = b,
-}
-
---- One byte per bit, least significant first as the carrier reads, so a run's own extent is its length.
-satisfy Hash(Bits) {
-    hash(b) =
-        match b
-        | b[] => x[]
-        | b[h, .._]; ih => x[match h | true => 0x1 | false => 0x0 end, ..ih]
-        end,
 }
 
 --- The UTF-8 bytes.

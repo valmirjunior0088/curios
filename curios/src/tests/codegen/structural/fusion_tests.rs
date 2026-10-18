@@ -5,19 +5,17 @@ use {
     curios_num::Grain,
 };
 
-/// A packed literal's non-constant atoms fuse into one flat chunk build (`fuse_append_chains` in `curios-cont`): the byte literal's two runtime atoms become a `BinChunk(X, 2)` and the bit literal's one a `BinChunk(B, 1)`, in place of the append-per-atom chains the lowering honestly writes, and the program still prints what the chains would. The taint keeps every atom out of constant folding, so the chunks survive to emission and the equality runs over runtime-built values.
+/// A packed literal's non-constant atoms fuse into one flat chunk build (`fuse_append_chains` in `curios-cont`): the byte literal's two runtime atoms become a `BinChunk(X, 2)`, in place of the append-per-atom chains the lowering honestly writes, and the program still prints what the chains would. The taint keeps every atom out of constant folding, so the chunks survive to emission and the equality runs over runtime-built values.
 #[test]
 fn tainted_packed_literals_fuse_to_flat_chunks() {
     let source = r#"
-        use /std/{Nat, List, Byte, Bytes, Bits, Bool, Str, Process};
+        use /std/{Nat, List, Byte, Bytes, Str, Process};
         let entry() -> /std/Io({}) =
             let taint = List/len(Process/args()!);
             let a: Byte = match taint | 0 => 7 | _ => 9 end;
             let y: Byte = match taint | 0 => 8 | _ => 10 end;
             let bytes = x[a, y, 0x21];
-            let t: Bool = taint == 0;
-            let bits = b[t, 1];
-            match bytes == x[7, 8, 0x21] && bits == b[1, 1]
+            match bytes == x[7, 8, 0x21]
             | true => /std/print("ok\n")
             | false => /std/print("bad\n")
             end;
@@ -29,11 +27,6 @@ fn tainted_packed_literals_fuse_to_flat_chunks() {
         emits(&module, |op| *op
             == curios_cont::Intrinsic::BinChunk(Grain::X, 2)),
         "the byte atoms fuse into one chunk: {module}"
-    );
-    assert!(
-        emits(&module, |op| *op
-            == curios_cont::Intrinsic::BinChunk(Grain::B, 1)),
-        "the bit atom fuses into one chunk: {module}"
     );
 
     assert_eq!(run(source), b"ok\n");

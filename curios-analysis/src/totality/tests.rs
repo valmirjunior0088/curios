@@ -203,7 +203,7 @@ fn a_guard_excludes_zero_only_when_its_arm_does() {
     // ...but the true arm gives `n < 10`, which admits zero.
     assert!(!guard(Relation::Lt, 10).establishes_nonzero(true));
 
-    // `/big_nat/of_nat`, in `curios`'s corpus: the false arm of `n == 0` gives `n != 0`.
+    // `/std/Bytes/of_nat`: the false arm of `n == 0` gives `n != 0`.
     assert!(guard(Relation::Eql, 0).establishes_nonzero(false));
     assert!(!guard(Relation::Eql, 0).establishes_nonzero(true));
 
@@ -226,8 +226,8 @@ fn a_guard_written_with_its_literal_first_reads_the_same() {
 }
 
 #[test]
-fn add_raw_is_accepted_only_because_arms_refine_the_scrutinee() {
-    // The three call matrices of `/big_nat/add/raw`, over `(x, y, carry)`. In the empty-`x` arm the literal argument `b[]` grades `Same` against `x` *because* the arm refined `x` to `b[]`.
+fn a_descent_on_either_argument_is_accepted_only_because_arms_refine_the_scrutinee() {
+    // The three call matrices of an addition of two packed words, `add(x, y, carry)`, which descends on either word by arm. In the empty-`x` arm the literal argument `x[]` grades `Same` against `x` *because* the arm refined `x` to `x[]`.
     let refined = [
         matrix(&[
             &[SAME, NONE, NONE],
@@ -339,7 +339,7 @@ fn a_ring_is_judged_whatever_its_size() {
 
 #[test]
 fn a_peeled_prefix_keeps_its_binder_tail() {
-    // The `/big_nat/add/raw_trimmed` pattern: `b[h, ..t]` rebuilt from arm binders peels its head and sticks on the binder `t`. The remainder must take the full `shape_of` dispatch — a binder reads as its atom — not a force, which cannot move a local and would file the tail as unread, losing the suffix agreement the descent grades by.
+    // A cons `x[h, ..t]` rebuilt from arm binders peels its head and sticks on the binder `t`. The remainder must take the full `shape_of` dispatch — a binder reads as its atom — not a force, which cannot move a local and would file the tail as unread, losing the suffix agreement the descent grades by.
     let mut kernel = Probe::default();
     let h = Free::local(2, Some("h"));
     let t = Free::local(3, Some("t"));

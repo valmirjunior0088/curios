@@ -11,7 +11,7 @@ struct Edge {
     outside: &'static str,
 }
 
-const HEADER: &str = "use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Bits, List, Io, Channel};";
+const HEADER: &str = "use /std/{Nat, Int, Flt, Bool, Byte, Bytes, List, Io, Channel};";
 
 const EDGES: &[Edge] = &[
     Edge {
@@ -91,11 +91,6 @@ const EDGES: &[Edge] = &[
         outside: "let edge: Byte = Bytes/get(x[7], 1);",
     },
     Edge {
-        operation: "Bits/get",
-        inside: "let edge: Bool = Bits/get(b[1], 0);",
-        outside: "let edge: Bool = Bits/get(b[1], 1);",
-    },
-    Edge {
         operation: "List/get",
         inside: "let edge: Nat = List/get([7], 0);",
         outside: "let edge: Nat = List/get([7], 1);",
@@ -105,11 +100,6 @@ const EDGES: &[Edge] = &[
         operation: "Bytes/slice",
         inside: "let edge: Bytes = Bytes/slice(x[7], 1, 0);",
         outside: "let edge: Bytes = Bytes/slice(x[7], 1, 1);",
-    },
-    Edge {
-        operation: "Bits/slice",
-        inside: "let edge: Bits = Bits/slice(b[1], 1, 0);",
-        outside: "let edge: Bits = Bits/slice(b[1], 1, 1);",
     },
     Edge {
         operation: "List/slice",
@@ -130,32 +120,6 @@ const EDGES: &[Edge] = &[
         operation: "Bytes/xor",
         inside: "let edge: Bytes = Bytes/xor(x[], x[]);",
         outside: "let edge: Bytes = Bytes/xor(x[], x[7]);",
-    },
-    Edge {
-        operation: "Bits/and",
-        inside: "let edge: Bits = Bits/and(b[1], b[1]);",
-        outside: "let edge: Bits = Bits/and(b[1], b[1, 1]);",
-    },
-    Edge {
-        operation: "Bits/or",
-        inside: "let edge: Bits = Bits/or(b[1], b[1]);",
-        outside: "let edge: Bits = Bits/or(b[1, 1], b[1]);",
-    },
-    Edge {
-        operation: "Bits/xor",
-        inside: "let edge: Bits = Bits/xor(b[], b[]);",
-        outside: "let edge: Bits = Bits/xor(b[], b[1]);",
-    },
-    // A whole number of bytes on one side, one bit short and one bit over on the other.
-    Edge {
-        operation: "Bits/to_bytes",
-        inside: "let edge: Bytes = Bits/to_bytes(b[1, 0, 0, 0, 0, 0, 0, 0]);",
-        outside: "let edge: Bytes = Bits/to_bytes(b[1, 0, 0, 0, 0, 0, 0]);",
-    },
-    Edge {
-        operation: "Bits/to_bytes",
-        inside: "let edge: Bytes = Bits/to_bytes(b[]);",
-        outside: "let edge: Bytes = Bits/to_bytes(b[1, 0, 0, 0, 0, 0, 0, 0, 1]);",
     },
 ];
 

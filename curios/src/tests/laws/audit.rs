@@ -155,8 +155,7 @@ let int_of(@K: Type, t: Tree(K)) -> Int = match t | tip(_) => +1 | join(l, r) =>
 let bool_of(@K: Type, t: Tree(K)) -> Bool = match t | tip(_) => true | join(l, r) => bool_of(l) && bool_of(r) end;
 let byte_of(@K: Type, t: Tree(K)) -> Byte = match t | tip(_) => 1 | join(l, r) => Byte/and(byte_of(l), byte_of(r)) end;
 let flt_of(@K: Type, t: Tree(K)) -> Flt = match t | tip(_) => 1.0 | join(l, r) => flt_of(l) + flt_of(r) end;
-let bytes_of(@K: Type, t: Tree(K)) -> Bytes = match t | tip(_) => x[1] | join(l, r) => x[..bytes_of(l), ..bytes_of(r)] end;
-let bits_of(@K: Type, t: Tree(K)) -> Bits = match t | tip(_) => b[1] | join(l, r) => b[..bits_of(l), ..bits_of(r)] end;";
+let bytes_of(@K: Type, t: Tree(K)) -> Bytes = match t | tip(_) => x[1] | join(l, r) => x[..bytes_of(l), ..bytes_of(r)] end;";
 
 /// The definition of [`INSTANCES`] that answers a value of `carrier`, where the carrier's values hold no type.
 fn answering(carrier: Carrier) -> Option<&'static str> {
@@ -167,7 +166,7 @@ fn answering(carrier: Carrier) -> Option<&'static str> {
         Carrier::Byte => Some("byte_of"),
         Carrier::Float => Some("flt_of"),
         Carrier::Packed(Grain::X) => Some("bytes_of"),
-        Carrier::Packed(Grain::B) => Some("bits_of"),
+        Carrier::Packed(Grain::B) => unreachable!("the grid states no row at the bit grain"),
         Carrier::List => None,
     }
 }
@@ -487,9 +486,7 @@ fn distinct_constructors_stay_distinct() {
     let words = [
         ("a: Nat, xs: List(Nat)", "Eq()([a, ..xs], [])"),
         ("k: Byte, bs: Bytes", "Eq()(x[k, ..bs], x[])"),
-        ("v: Bool, ts: Bits", "Eq()(b[v, ..ts], b[])"),
         ("bs: Bytes, cs: Bytes", "Eq()(x[0, ..bs], x[1, ..cs])"),
-        ("ts: Bits, us: Bits", "Eq()(b[0, ..ts], b[1, ..us])"),
     ];
     let items = equations
         .iter()
