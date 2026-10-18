@@ -1,10 +1,10 @@
 use {
     super::{Running, SerialPort, Spawned, Table, os_child, serial_devices},
     crate::{
-        Answer, ChildExit, ChildHandles, Direction, Failure, FileKind, FileStat, Handle, HostOps,
-        Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
-        Timestamp, TtySize, blocking, failure_from_error, lookup_address, names_a_variable,
-        serial_frame, serial_speed,
+        Answer, ChildExit, ChildHandles, ClockReading, Direction, Failure, FileKind, FileStat,
+        Handle, HostOps, Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled,
+        StdioMode, Termination, TtySize, blocking, failure_from_error, lookup_address,
+        names_a_variable, serial_frame, serial_speed,
     },
     curios_abi::event,
     rustix::{
@@ -52,6 +52,55 @@ use {
     },
     webpki_roots::TLS_SERVER_ROOTS,
 };
+
+/// What `file_stat` answers of `metadata`, read as `kind`: its size and its modification time as the wall clock reads it. A platform that keeps no modification time fails as it reports, and one a signed 64-bit count of seconds cannot carry fails as `stat(2)` does, with `EOVERFLOW`.
+fn stat(kind: FileKind, metadata: &fs::Metadata) -> Result<FileStat, Failure> {
+    let modified = metadata.modified().map_err(failure_from_error)?;
+    let mtime = since_epoch(modified)
+        .ok_or_else(|| Failure::Other(rustix::io::Errno::OVERFLOW.raw_os_error() as u32))?;
+
+    Ok(FileStat {
+        kind,
+        size: metadata.len(),
+        mtime_secs: mtime.secs,
+        mtime_nanos: mtime.nanos,
+    })
+}
+
+/// `t` as a reading of the clock whose origin is the Unix epoch: a moment before it is its seconds below zero and its nanoseconds counting forward, as a reading crosses the wire. None past what a signed 64-bit count of seconds holds, which no platform's `SystemTime` reaches.
+fn since_epoch(t: SystemTime) -> Option<ClockReading> {
+    match t.duration_since(UNIX_EPOCH) {
+        Ok(after) => reading_after(after),
+        Err(before) => {
+            let before = before.duration();
+            let borrowed = before.subsec_nanos() != 0;
+            let secs = i64::try_from(before.as_secs()).ok()?;
+
+            Some(ClockReading {
+                secs: secs.checked_neg()?.checked_sub(i64::from(borrowed))?,
+                nanos: match borrowed {
+                    true => u64::from(1_000_000_000 - before.subsec_nanos()),
+                    false => 0,
+                },
+            })
+        }
+    }
+}
+
+/// `after` as a reading so long past its clock's origin; none past a signed 64-bit count of seconds.
+fn reading_after(after: Duration) -> Option<ClockReading> {
+    Some(ClockReading {
+        secs: i64::try_from(after.as_secs()).ok()?,
+        nanos: u64::from(after.subsec_nanos()),
+    })
+}
+
+/// Why a clock row answers nothing: a reading the wire's signed 64-bit seconds cannot carry.
+fn past_the_wire(clock: &str) -> Refusal {
+    Refusal(format!(
+        "{clock} reads past what a signed 64-bit count of seconds holds"
+    ))
+}
 
 /// The accept queue `socket_listen` asks for, which the kernel clamps to `somaxconn`: how many connections may wait for a `socket_accept` before the system turns the next away.
 const ACCEPT_QUEUE: i32 = 128;
@@ -115,8 +164,8 @@ enum OsResource {
         target: Handle,
         asked: PollFlags,
     },
-    /// A timer minted by `clock_timer`: the instant it is ready at, its interval counted from when it was minted, or none for an instant past what an `Instant` holds, which never comes.
-    Timer(Option<Instant>),
+    /// A deadline minted by `clock_deadline`: the instant it is ready at on the clock `clock_mono` reads, or none for one past what an `Instant` holds, which never comes.
+    Deadline(Option<Instant>),
 }
 
 /// The standard streams' owners, kept alive while a poll borrows their descriptors: none for one the program closed.
@@ -132,7 +181,7 @@ fn standard(handle: &Handle) -> Option<usize> {
     }
 }
 
-/// The descriptor a wait on `handle` polls, and the flags polled on its behalf for `asked`: a standard stream's own, a filed resource's, and none for a handle that names nothing a poll can watch — closed, a standard stream included, a config token, a watch or a timer — so its waiter wakes at once into the call that says why.
+/// The descriptor a wait on `handle` polls, and the flags polled on its behalf for `asked`: a standard stream's own, a filed resource's, and none for a handle that names nothing a poll can watch — closed, a standard stream included, a config token, a watch or a deadline — so its waiter wakes at once into the call that says why.
 fn descriptor<'a>(
     table: &'a Table<OsResource>,
     streams: &'a Streams,
@@ -163,7 +212,7 @@ fn descriptor<'a>(
             }
             OsResource::TlsConfig(_)
             | OsResource::Watch { .. }
-            | OsResource::Timer(_)
+            | OsResource::Deadline(_)
             | OsResource::Later { .. }
             | OsResource::Settled(_) => None,
         }),
@@ -358,7 +407,7 @@ fn selected(watched: &[Watched<'_>], deadline: Option<Instant>) -> Result<Vec<us
         .collect())
 }
 
-/// What a wait on some handles holds out for: each watch's descriptor and what it asks of it, beside the watch's place among the handles, then the wake pipe where a reply to come is waited on, and the earliest instant one of the timers fires at.
+/// What a wait on some handles holds out for: each watch's descriptor and what it asks of it, beside the watch's place among the handles, then the wake pipe where a reply to come is waited on, and the soonest of the deadlines.
 struct Waits<'a> {
     watched: Vec<Watched<'a>>,
     places: Vec<usize>,
@@ -368,7 +417,7 @@ struct Waits<'a> {
 }
 
 impl<'a> Waits<'a> {
-    /// The waits `on` holds out for at `now`, beside a report for each handle that is ready already: a timer past its instant, a watch of a handle no poll can watch, a reply that has come, and every handle that is none of these, which nothing would hold. A reply still to come is waited on through `wake`, the read end of the pipe its waker writes.
+    /// The waits `on` holds out for at `now`, beside a report for each handle that is ready already: a deadline the clock has reached, a watch of a handle no poll can watch, a reply that has come, and every handle that is none of these, which nothing would hold. A reply still to come is waited on through `wake`, the read end of the pipe its waker writes.
     fn of(
         table: &'a Table<OsResource>,
         streams: &'a Streams,
@@ -397,11 +446,11 @@ impl<'a> Waits<'a> {
                         None => reports[place] = event::READY,
                     }
                 }
-                Some(OsResource::Timer(Some(at))) if *at <= now => reports[place] = event::READY,
-                Some(OsResource::Timer(Some(at))) => {
+                Some(OsResource::Deadline(Some(at))) if *at <= now => reports[place] = event::READY,
+                Some(OsResource::Deadline(Some(at))) => {
                     waits.deadline = Some(waits.deadline.map_or(*at, |soonest| soonest.min(*at)));
                 }
-                Some(OsResource::Timer(None)) => {}
+                Some(OsResource::Deadline(None)) => {}
                 _ => reports[place] = event::READY,
             }
         }
@@ -995,7 +1044,7 @@ impl HostOps for OsHost {
         let mut table = self.table.lock().unwrap();
         let streams = self.streams();
 
-        // A poll ends at a watch's event, at the soonest timer's instant or where a reply to come wakes; one that ends with nothing of `on` ready looks again.
+        // A poll ends at a watch's event, at the soonest deadline or where a reply to come wakes; one that ends with nothing of `on` ready looks again.
         loop {
             let wake = self.looked();
             settle_woken(&mut table, &on);
@@ -1223,32 +1272,24 @@ impl HostOps for OsHost {
         }
     }
 
-    fn clock_wall(&self) -> Timestamp {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-
-        Timestamp {
-            secs: now.as_secs(),
-            nanos: u64::from(now.subsec_nanos()),
-        }
+    fn clock_wall(&self) -> Result<ClockReading, Refusal> {
+        since_epoch(SystemTime::now()).ok_or_else(|| past_the_wire("the wall clock"))
     }
 
-    fn clock_mono(&self) -> Timestamp {
-        let elapsed = self.start.elapsed();
-
-        Timestamp {
-            secs: elapsed.as_secs(),
-            nanos: u64::from(elapsed.subsec_nanos()),
-        }
+    fn clock_mono(&self) -> Result<ClockReading, Refusal> {
+        reading_after(self.start.elapsed()).ok_or_else(|| past_the_wire("the monotonic clock"))
     }
 
-    fn clock_timer(&self, secs: u64, nanos: u64) -> Handle {
-        let at = Duration::from_secs(secs)
-            .checked_add(Duration::from_nanos(nanos))
-            .and_then(|interval| Instant::now().checked_add(interval));
+    fn clock_deadline(&self, secs: i64, nanos: u64) -> Handle {
+        // A deadline before the clock's origin has passed already; one past what an `Instant` holds never comes.
+        let at = match u64::try_from(secs) {
+            Ok(secs) => Duration::from_secs(secs)
+                .checked_add(Duration::from_nanos(nanos))
+                .and_then(|after| self.start.checked_add(after)),
+            Err(_) => Some(self.start),
+        };
 
-        self.mint(OsResource::Timer(at))
+        self.mint(OsResource::Deadline(at))
     }
 
     fn rand_bytes(&self, count: u64) -> Result<Vec<u8>, Refusal> {
@@ -1409,12 +1450,7 @@ impl HostOps for OsHost {
             // Following the link found nothing. `symlink_metadata` tells a dangling link from a path with nothing at all, and it is the one case the `symlink` kind is reported.
             Err(error) if error.kind() == ErrorKind::NotFound => {
                 return match fs::symlink_metadata(path) {
-                    Ok(link) if link.file_type().is_symlink() => Ok(FileStat {
-                        kind: FileKind::Symlink,
-                        size: 0,
-                        mtime_secs: 0,
-                        mtime_nanos: 0,
-                    }),
+                    Ok(link) if link.file_type().is_symlink() => stat(FileKind::Symlink, &link),
                     _ => Err(failure_from_error(error)),
                 };
             }
@@ -1427,19 +1463,7 @@ impl HostOps for OsHost {
             () if file_type.is_file() => FileKind::File,
             () => FileKind::Other,
         };
-        let (mtime_secs, mtime_nanos) = metadata
-            .modified()
-            .ok()
-            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
-            .map(|since_epoch| (since_epoch.as_secs(), u64::from(since_epoch.subsec_nanos())))
-            .unwrap_or((0, 0));
-
-        Ok(FileStat {
-            kind,
-            size: metadata.len(),
-            mtime_secs,
-            mtime_nanos,
-        })
+        stat(kind, &metadata)
     }
 
     fn file_remove(&self, path: Vec<u8>) -> Result<(), Failure> {

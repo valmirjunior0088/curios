@@ -689,9 +689,9 @@ fn an_open_peer_stays_open_once_this_side_has_finished() {
     );
 }
 
-/// A wait that readies nothing sleeps until its soonest timer, after which that timer is ready and a later one is not; a wait on watches alone that readies nothing is refused, since nothing would end it.
+/// A wait that readies nothing sleeps until its soonest deadline, after which that deadline is ready and a later one is not; a wait on watches alone that readies nothing is refused, since nothing would end it.
 #[test]
-fn a_wait_sleeps_to_its_soonest_timer_and_one_nothing_can_end_is_refused() {
+fn a_wait_sleeps_to_its_soonest_deadline_and_one_nothing_can_end_is_refused() {
     let (host, _io) = MockHost::builder().inbound_open([vec!["ping"]]).build();
     let listener = host.socket_listen(b"0.0.0.0:8080".to_vec()).unwrap();
     let conn = host.socket_accept(listener).unwrap();
@@ -701,7 +701,7 @@ fn a_wait_sleeps_to_its_soonest_timer_and_one_nothing_can_end_is_refused() {
     );
 
     let watch = host.handle_watch(conn, true, false);
-    let (soon, late) = (host.clock_timer(1, 0), host.clock_timer(2, 0));
+    let (soon, late) = (host.clock_deadline(1, 0), host.clock_deadline(2, 0));
     assert_eq!(host.handle_ready(vec![soon.clone(), late.clone()]), [0, 0]);
     assert!(
         host.wait(vec![watch.clone(), late.clone(), soon.clone()])
@@ -841,8 +841,8 @@ fn a_watch_is_ready_for_what_it_asks() {
 fn a_clock_answers_the_nanoseconds_within_a_second() {
     let (host, _io) = MockHost::builder().build();
 
-    assert!(host.clock_wall().nanos < 1_000_000_000);
-    assert!(host.clock_mono().nanos < 1_000_000_000);
+    assert!(host.clock_wall().unwrap().nanos < 1_000_000_000);
+    assert!(host.clock_mono().unwrap().nanos < 1_000_000_000);
 }
 
 /// A standard stream the program closed names nothing, as a closed handle does: a read, a write and a flush answer `NotFound`, a watch of it is ready so a waiter wakes into the call that says why, and the streams left open answer as before.
@@ -864,4 +864,18 @@ fn a_closed_standard_stream_names_nothing() {
 
     assert_eq!(host.handle_write(Handle::Stderr, b"kept".to_vec()), Ok(4));
     assert_eq!(io.output(), b"kept");
+}
+
+/// The mock keeps one timeline: a scripted reading moves it forward, a deadline it has passed is ready at once, and a reading after a wait is never before the deadline the wait slept to.
+#[test]
+fn a_reading_and_a_deadline_share_one_timeline() {
+    let (host, _io) = MockHost::builder().mono([(5, 0), (1, 0)]).build();
+
+    assert_eq!(host.clock_mono().unwrap().secs, 5);
+    let passed = host.clock_deadline(3, 0);
+    assert_eq!(host.handle_ready(vec![passed]), [event::READY]);
+
+    let ahead = host.clock_deadline(9, 0);
+    assert!(host.wait(vec![ahead]).is_ok());
+    assert_eq!(host.clock_mono().unwrap().secs, 9);
 }

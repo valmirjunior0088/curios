@@ -146,7 +146,10 @@ fn a_pause_in_the_keys_lets_the_loop_ask_the_size_and_read_a_resize() {
         .stdin_chunks(vec![SYNCHRONIZED.to_vec(), b"\x1b[B".to_vec()])
         .stdin_pause()
         .stdin_chunks(vec![b"\x1b[A".to_vec(), b"q".to_vec()])
-        .mono((0..1_000).map(|millis| (millis / 1_000, millis % 1_000 * 1_000_000)))
+        .mono(
+            (0..1_000i64)
+                .map(|millis| (millis / 1_000, (millis % 1_000 * 1_000_000).unsigned_abs())),
+        )
         .build();
     run_text(LISTING_PROGRAM, system).expect("expected result");
     let output = String::from_utf8_lossy(&io.output()).into_owned();
@@ -594,7 +597,10 @@ fn a_whole_program_of_widgets_runs_against_the_scripted_terminal() {
         .stdin_chunks(vec![SYNCHRONIZED.to_vec(), b"b".to_vec()])
         .stdin_pause()
         .stdin_chunks(vec![b"\t".to_vec(), b"\x1b[B".to_vec(), b"\x13".to_vec()])
-        .mono((0..1_000).map(|millis| (millis / 1_000, millis % 1_000 * 1_000_000)))
+        .mono(
+            (0..1_000i64)
+                .map(|millis| (millis / 1_000, (millis % 1_000 * 1_000_000).unsigned_abs())),
+        )
         .build();
     run_text(PICKER_PROGRAM, host).expect("the run ends");
     let output = String::from_utf8_lossy(&io.output()).into_owned();

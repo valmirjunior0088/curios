@@ -3,8 +3,8 @@
 //! The wire contract — the [`Handle`]/[`Failure`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
 pub use curios_abi::{
-    Answer, ChildExit, ChildHandles, Failure, FileKind, FileStat, Handle, HostOps, Later, Mode,
-    Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination, Timestamp,
+    Answer, ChildExit, ChildHandles, ClockReading, Failure, FileKind, FileStat, Handle, HostOps,
+    Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
     TtySize,
 };
 

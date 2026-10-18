@@ -4,9 +4,9 @@
 //
 // A handle crosses as its token's bytes, and this harness keys a token on the hex of exactly those bytes, never on a number decoded from them: the empty token is not stdin's `00`, a padded `0100` is not stdout's `01`, and a token longer than any number stays itself.
 //
-// The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. The only handles it mints are what a program suspends on: watches, timers, and the replies a hook's promise answers later. A handle this host never minted names nothing: a row the host serves answers NOT_FOUND for it, as a closed one does on every host, and a row it denies answers PERMISSION_DENIED whatever it is handed.
+// The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. The only handles it mints are what a program suspends on: watches, deadlines, and the replies a hook's promise answers later. A handle this host never minted names nothing: a row the host serves answers NOT_FOUND for it, as a closed one does on every host, and a row it denies answers PERMISSION_DENIED whatever it is handed.
 //
-// A program that can suspend exports `func/advance` beside its entry, and both answer turns: whether it suspended, what it yielded, the handles it waits on, its cancel and its rest. The run advances turn after turn, awaiting a timer or a hook's promise between them, so the event loop runs while the program waits.
+// A program that can suspend exports `func/advance` beside its entry, and both answer turns: whether it suspended, what it yielded, the handles it waits on, its cancel and its rest. The run advances turn after turn, awaiting a deadline or a hook's promise between them, so the event loop runs while the program waits.
 
 /** Thrown by the `proc_exit` import to unwind the wasm stack with an exit code. */
 export class ExitSignal extends Error {
@@ -105,7 +105,7 @@ export async function run(config) {
   // The standard streams the program closed: each names nothing after, as a closed handle does on every host.
   const closed = new Set();
 
-  // The handles this host mints — watches and timers — keyed as every token is, each beside whether it is ready now and, for a timer, the instant it is ready at. A token is the minimal little-endian bytes of a count from `seed` up, as every host mints them, so it collides with no constant token.
+  // The handles this host mints — watches and deadlines — keyed as every token is, each beside whether it is ready now and, for a deadline, the instant it is ready at. A token is the minimal little-endian bytes of a count from `seed` up, as every host mints them, so it collides with no constant token.
   const minted = new Map();
   let next = BigInt(config.seed);
 
@@ -122,7 +122,7 @@ export async function run(config) {
     return encodeBytes(Uint8Array.from(token));
   };
 
-  // A handle is ready unless it is a timer whose instant has not passed: a watch is, since the standard streams always are and nothing else here is a stream, and so is any other handle, which nothing would hold.
+  // A handle is ready unless it is a deadline the clock has not reached: a watch is, since the standard streams always are and nothing else here is a stream, and so is any other handle, which nothing would hold.
   const ready = (key) => minted.get(key)?.ready() ?? true;
 
   const output = { stdout: [], stderr: [] };
@@ -206,7 +206,7 @@ export async function run(config) {
 
       return encodeBytes(reports);
     },
-    // Closing a standard stream leaves it naming nothing; closing a watch, a timer or a reply to come forgets it, aborting the hook's signal for the last; closing anything else does nothing, as closing an unknown handle does on every host.
+    // Closing a standard stream leaves it naming nothing; closing a watch, a deadline or a reply to come forgets it, aborting the hook's signal for the last; closing anything else does nothing, as closing an unknown handle does on every host.
     handle_close: (handle) => {
       const key = keyOf(handle);
 
@@ -229,13 +229,12 @@ export async function run(config) {
     },
     // No stream here has a sending half of its own to end: the standard streams are not sockets, and no other handle exists.
     handle_finish: () => status.NOT_FOUND,
+    // Seconds floored and the nanoseconds past them, so a clock before 1970 reads as itself: its seconds below zero, its nanoseconds counting forward.
     clock_wall: () => {
       const millis = Date.now();
+      const secs = Math.floor(millis / 1000);
 
-      return [
-        BigInt(Math.floor(millis / 1000)),
-        BigInt((millis % 1000) * 1_000_000),
-      ];
+      return [BigInt(secs), BigInt((millis - secs * 1000) * 1_000_000)];
     },
     clock_mono: () => {
       const millis = performance.now();
@@ -246,10 +245,9 @@ export async function run(config) {
         BigInt(Math.floor((millis % 1000) * 1_000_000)),
       ];
     },
-    // A timer so long after it is minted, on the clock `clock_mono` reads.
-    clock_timer: (secs, nanos) => {
-      const at =
-        performance.now() + Number(secs) * 1000 + Number(nanos) / 1_000_000;
+    // A deadline at an instant of the clock `clock_mono` reads: one already past is ready at once.
+    clock_deadline: (secs, nanos) => {
+      const at = Number(secs) * 1000 + Number(nanos) / 1_000_000;
 
       return mint({ ready: () => performance.now() >= at, at });
     },
@@ -723,7 +721,7 @@ export async function run(config) {
       keyOf(bridge.list_get(list, i)),
     );
 
-  // Hold out until a handle of `on` is ready: at once where one is, and otherwise until the soonest of its timers or the first of its hooks' promises to settle, the things here that become ready with time — asking again after each, since a timeout may fire before the clock `clock_mono` reads has reached its instant. A wait on neither could never end, and is refused.
+  // Hold out until a handle of `on` is ready: at once where one is, and otherwise until the soonest of its deadlines or the first of its hooks' promises to settle, the things here that become ready with time — asking again after each, since a timeout may fire before the clock `clock_mono` reads has reached its instant. A wait on neither could never end, and is refused.
   const waited = async (on) => {
     while (!on.some(ready)) {
       const entries = on
@@ -742,7 +740,7 @@ export async function run(config) {
         );
       }
 
-      // A sleep a reply ends first is cleared, so no timer outlives the wait it was set for.
+      // A sleep a reply ends first is cleared, so no browser timer outlives the wait it was set for.
       let timeout;
       const slept =
         instants.length === 0

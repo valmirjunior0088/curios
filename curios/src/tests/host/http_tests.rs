@@ -227,7 +227,7 @@ fn a_request_that_stops_arriving_is_answered_408(server: &Compiled) {
         .inbound_waiting([vec![
             "POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nhel",
         ]])
-        .mono((0..200u64).map(|s| (s, 0)));
+        .mono((0..200i64).map(|s| (s, 0)));
 
     let (reply, _) = served(server, host);
 
@@ -347,7 +347,7 @@ fn a_reply_is_written_finished_and_read_past_before_the_close(server: &Compiled)
         server,
         MockHost::builder()
             .inbound_open([vec!["GET /x HTTP/1.1\r\nHost: h\r\n\r\n"]])
-            .mono((0..200u64).map(|s| (s, 0))),
+            .mono((0..200i64).map(|s| (s, 0))),
     );
 
     assert_eq!(status(&reply), "HTTP/1.1 200 OK");

@@ -49,7 +49,7 @@ pub struct Metadata: pub Type {
 }
 
 --- What is at this path: `ok` beside its kind, one of `/sys/file_kind`'s codes, its size in bytes and when its contents last changed, or the status of the failure.
-foreign file_stat(Bytes) -> {status: Nat, kind: Nat, size: Nat, mtime_secs: Nat, mtime_nanos: Nat};
+foreign file_stat(Bytes) -> {status: Nat, kind: Nat, size: Nat, mtime_secs: Int, mtime_nanos: Nat};
 
 --- What is at `path`. A kind the host names by no code this library knows is a failure no errno names.
 pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
@@ -63,8 +63,7 @@ pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
                 size = reply.size,
                 mtime =
                     Timestamp/of_unix_nanos(
-                        Nat/to_int(reply.mtime_secs) * 1000000000
-                            + Nat/to_int(reply.mtime_nanos)) })
+                        reply.mtime_secs * 1000000000 + Nat/to_int(reply.mtime_nanos)) })
     | none() => Try/raise(unnamed)
     end;
 

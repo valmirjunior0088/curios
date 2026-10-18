@@ -53,7 +53,7 @@ let each_ready(reports: Bytes) -> List(Bool) =
     | x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)]
     end;
 
---- Whether each handle of `on` is ready now, in its order, without waiting: a watch as its handle is, a timer once its instant has passed, and any other handle at once.
+--- Whether each handle of `on` is ready now, in its order, without waiting: a watch as its handle is, a deadline once the monotonic clock has reached it, and any other handle at once.
 pub let ready_now(on: List(Handle)) -> Io(List(Bool)) =
     let reports = handle_ready(on)!;
     Io/pure(each_ready(reports));

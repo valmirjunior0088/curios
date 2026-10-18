@@ -20,7 +20,7 @@ pub let new(@A: Type, try: Io(Option(A)), wait: Io(Waiting)) -> Offer(A) =
 pub let map(@A: Type, @B: Type, o: Offer(A), f: (A) -> B) -> Offer(B) =
     new(Io/bind(o.try, (m) => Io/pure(Option/map(m, f))), o.wait);
 
---- An offer that yields once `d` has passed, on a timer of its own for the time still left each time it is waited on.
+--- An offer that yields once `d` has passed from its making: the clock read once for the instant it is due, and a deadline at that instant each time it is waited on.
 pub let after(d: Duration) -> Io(Offer({})) =
     let start = Instant/now()!;
     let due = Instant/add(start, d);
@@ -31,13 +31,7 @@ pub let after(d: Duration) -> Io(Offer({})) =
                 (t) =>
                     Io/pure(match t < due | true => Option/none() | false => Option/some(()) end)),
             Io/bind(
-                Instant/now(),
-                (t) =>
-                    Io/bind(
-                        Io/timer(Instant/diff(due, t)),
-                        (timer) =>
-                            Io/pure(
-                                Waiting {
-                                    on = [timer],
-                                    filled = [],
-                                    release = Io/close(timer) })))));
+                Io/deadline(due),
+                (deadline) =>
+                    Io/pure(
+                        Waiting { on = [deadline], filled = [], release = Io/close(deadline) }))));

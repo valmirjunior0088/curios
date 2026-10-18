@@ -97,7 +97,7 @@ fn a_scope_cancels_a_started_child_before_propagating_the_tests_failure() {
 
 #[test]
 fn a_timeout_cancels_and_releases_before_reporting_its_failure() {
-    let (system, io) = MockHost::builder().mono((0..40u64).map(|s| (s, 0))).build();
+    let (system, io) = MockHost::builder().mono((0..40i64).map(|s| (s, 0))).build();
     run_text(
         r#"
         use /std/{Io, Test, print};
@@ -126,7 +126,7 @@ fn a_timeout_cancels_and_releases_before_reporting_its_failure() {
 
 #[test]
 fn a_timeout_keeps_the_successful_payload_when_the_body_wins() {
-    let (system, io) = MockHost::builder().mono((0..40u64).map(|s| (s, 0))).build();
+    let (system, io) = MockHost::builder().mono((0..40i64).map(|s| (s, 0))).build();
     run_text(
         r#"
         use /std/{Nat, Io, Test};

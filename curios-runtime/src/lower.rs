@@ -351,6 +351,7 @@ fn written(
 
         match value {
             WireValue::Nat(value) => value.lower(caller, slot)?,
+            WireValue::Int(value) => value.lower(caller, slot)?,
             WireValue::Bytes(bytes) => bytes.lower(caller, slot)?,
             WireValue::Handle(handle) => handle.lower(caller, slot)?,
             WireValue::BytesList(list) => list.lower(caller, slot)?,

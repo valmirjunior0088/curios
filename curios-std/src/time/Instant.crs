@@ -26,13 +26,17 @@ satisfy Cmp(Instant) {
     ge(a, b) = a.nanos >= b.nanos,
 }
 
---- The monotonic clock: seconds since a fixed origin, and the nanoseconds within the second.
-foreign clock_mono() -> {secs: Nat, nanos: Nat};
+--- The monotonic clock: seconds since a fixed origin, signed, and the nanoseconds past them.
+foreign clock_mono() -> {secs: Int, nanos: Nat};
 
 --- The clock now.
 pub let now() -> Io(Instant) =
     let r = clock_mono()!;
-    Io/pure(Instant { nanos = Nat/to_int(r.secs) * 1000000000 + Nat/to_int(r.nanos) });
+    Io/pure(Instant { nanos = r.secs * 1000000000 + Nat/to_int(r.nanos) });
+
+--- The nanoseconds since the clock's origin: what a deadline is handed to the host as.
+pub let to_nanos(i: Instant) -> Int =
+    i.nanos;
 
 --- The instant `d` after `t`.
 pub let add(t: Instant, d: Duration) -> Instant =

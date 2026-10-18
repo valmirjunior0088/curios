@@ -43,10 +43,11 @@ fn watched(host: &OsHost, handle: &Handle, readable: bool, writable: bool) -> bo
     ready == [event::READY]
 }
 
-/// Whether a watch of `handle`, asking to read or to write as said, is ready within five seconds: a program's wait, beside a timer so that a handle never readied fails its test rather than holding it.
+/// Whether a watch of `handle`, asking to read or to write as said, is ready within five seconds: a program's wait, beside a deadline so that a handle never readied fails its test rather than holding it.
 fn awaited(host: &OsHost, handle: &Handle, readable: bool, writable: bool) -> bool {
     let watch = host.handle_watch(handle.clone(), readable, writable);
-    let deadline = host.clock_timer(5, 0);
+    let now = host.clock_mono().unwrap();
+    let deadline = host.clock_deadline(now.secs + 5, now.nanos);
     host.wait(vec![watch.clone(), deadline.clone()]).unwrap();
     let ready = host.handle_ready(vec![watch.clone()]);
     host.handle_close(watch);
@@ -1199,8 +1200,8 @@ fn a_tls_upgrade_that_cannot_start_leaves_the_socket_connected() {
 fn a_clock_answers_the_nanoseconds_within_a_second() {
     let host = OsHost::with_args(vec![]);
 
-    assert!(host.clock_wall().nanos < 1_000_000_000);
-    assert!(host.clock_mono().nanos < 1_000_000_000);
+    assert!(host.clock_wall().unwrap().nanos < 1_000_000_000);
+    assert!(host.clock_mono().unwrap().nanos < 1_000_000_000);
 }
 
 /// A write accepts no more than it was offered, and at least a byte of a buffer that holds one.
@@ -1219,11 +1220,15 @@ fn a_write_accepts_within_what_it_was_offered() {
     host.handle_close(file);
 }
 
-/// A look answers a byte for each handle, in their order: a timer of no time is ready and one an hour long is not, and a handle that is neither a watch nor a timer, which nothing would hold, is ready at once.
+/// A look answers a byte for each handle, in their order: a deadline at the clock's origin is ready and one an hour on is not, and a handle that is neither a watch nor a deadline, which nothing would hold, is ready at once.
 #[test]
 fn a_look_answers_each_handle_in_its_order() {
     let host = OsHost::with_args(vec![]);
-    let (passed, later) = (host.clock_timer(0, 0), host.clock_timer(3_600, 0));
+    let now = host.clock_mono().unwrap();
+    let (passed, later) = (
+        host.clock_deadline(0, 0),
+        host.clock_deadline(now.secs + 3_600, 0),
+    );
 
     assert_eq!(
         host.handle_ready(vec![later.clone(), passed.clone(), Handle::Stderr]),
@@ -1318,4 +1323,21 @@ fn a_closed_standard_input_names_nothing() {
     assert_eq!(host.handle_read(Handle::Stdin, 8), Err(Failure::NotFound));
     let watch = host.handle_watch(Handle::Stdin, true, false);
     assert_eq!(host.handle_ready(vec![watch]), [event::READY]);
+}
+
+/// A file dated before 1970 crosses as itself: its seconds below zero and its nanoseconds counting forward, where it once crossed as the epoch.
+#[test]
+fn a_modification_time_before_the_epoch_crosses_as_itself() {
+    let host = OsHost::with_args(vec![]);
+    let dir = Temporary::new("runtime-stat", "before-the-epoch");
+    fs::create_dir(&dir).expect("a fresh temporary directory");
+    let path = dir.join("old");
+    let file = fs::File::create(&path).expect("a fresh file");
+    let before = std::time::UNIX_EPOCH - std::time::Duration::from_millis(1_500);
+    file.set_modified(before)
+        .expect("a modification time before 1970");
+
+    let stat = host.file_stat(path.into_os_string().into_vec()).unwrap();
+
+    assert_eq!((stat.mtime_secs, stat.mtime_nanos), (-2, 500_000_000));
 }

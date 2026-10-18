@@ -114,7 +114,7 @@ code_sets! {
 
     /// What `handle_ready` reports of one handle, a byte mirrored by `/sys/event`.
     event: u8 as Byte {
-        /// The handle is ready now: a watch whose handle is ready for what it asks, a timer past its instant, or any other handle.
+        /// The handle is ready now: a watch whose handle is ready for what it asks, a deadline the monotonic clock has reached, or any other handle.
         READY = 0b001 => ready;
     }
 

@@ -114,7 +114,7 @@ fn a_line_a_deadline_abandons_is_read_whole_by_the_next_read() {
         WIRE
     );
     let (system, io) = MockHost::builder()
-        .mono((0..40u64).map(|second| (second, 0)))
+        .mono((0..40i64).map(|second| (second, 0)))
         .build();
 
     run_text(&source, system).expect("the reads run");

@@ -8,8 +8,8 @@
 
 use {
     super::{
-        ChildExit, ChildHandles, Failure, FileStat, Handle, Mode, Refusal, SerialFlow, SerialOp,
-        SerialParity, StdioMode, Termination, Timestamp, TtySize, WireLeaf, WireResults,
+        ChildExit, ChildHandles, ClockReading, Failure, FileStat, Handle, Mode, Refusal,
+        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, TtySize, WireLeaf, WireResults,
         WireReturn, WireType,
     },
     crate::status,
@@ -84,6 +84,7 @@ impl WireOperand for SerialOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WireValue {
     Nat(u64),
+    Int(i64),
     Bytes(Vec<u8>),
     Handle(Handle),
     BytesList(Vec<Vec<u8>>),
@@ -250,23 +251,23 @@ impl WirePayload for Vec<Vec<u8>> {
     }
 }
 
-impl WirePayload for Timestamp {
+impl WirePayload for ClockReading {
     type Label = ();
 
     fn slots() -> PayloadSlots<()> {
         PayloadSlots::Fields(
-            ("secs", WireType::Nat),
+            ("secs", WireType::Int),
             ("nanos", WireType::Nat),
             Vec::new(),
         )
     }
 
     fn encode(self, values: &mut Vec<WireValue>) {
-        values.extend([WireValue::Nat(self.secs), WireValue::Nat(self.nanos)]);
+        values.extend([WireValue::Int(self.secs), WireValue::Nat(self.nanos)]);
     }
 
     fn pad(values: &mut Vec<WireValue>) {
-        values.extend([WireValue::Nat(0), WireValue::Nat(0)]);
+        values.extend([WireValue::Int(0), WireValue::Nat(0)]);
     }
 }
 
@@ -295,7 +296,7 @@ impl WirePayload for FileStat {
             ("kind", WireType::Nat),
             ("size", WireType::Nat),
             vec![
-                ("mtime_secs", WireType::Nat),
+                ("mtime_secs", WireType::Int),
                 ("mtime_nanos", WireType::Nat),
             ],
         )
@@ -305,13 +306,18 @@ impl WirePayload for FileStat {
         values.extend([
             WireValue::Nat(self.kind.code()),
             WireValue::Nat(self.size),
-            WireValue::Nat(self.mtime_secs),
+            WireValue::Int(self.mtime_secs),
             WireValue::Nat(self.mtime_nanos),
         ]);
     }
 
     fn pad(values: &mut Vec<WireValue>) {
-        values.extend([0, 0, 0, 0].map(WireValue::Nat));
+        values.extend([
+            WireValue::Nat(0),
+            WireValue::Nat(0),
+            WireValue::Int(0),
+            WireValue::Nat(0),
+        ]);
     }
 }
 

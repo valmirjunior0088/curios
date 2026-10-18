@@ -14,9 +14,9 @@
 
 use {
     super::{
-        ChildExit, ChildHandles, Failure, FileStat, Handle, Later, Mode, Refusal, RowReply,
-        SerialFlow, SerialOp, SerialParity, StdioMode, Termination, Timestamp, TtySize,
-        WireOperand, WireReply, WireSignature,
+        ChildExit, ChildHandles, ClockReading, Failure, FileStat, Handle, Later, Mode, Refusal,
+        RowReply, SerialFlow, SerialOp, SerialParity, StdioMode, Termination, TtySize, WireOperand,
+        WireReply, WireSignature,
     },
     std::{any::Any, pin::Pin, sync::LazyLock},
 };
@@ -74,20 +74,20 @@ macro_rules! for_each_host_op {
             /// A handle that is ready once `h` is ready to read where `readable` asks, to write where `writable` asks, or has failed or hung up: what a description suspends on to wait for a stream. A watch of a handle that names nothing a wait can watch — closed, say — is ready at once, so its waiter wakes into the call that says why. Closing the watch leaves `h` as it is.
             HandleWatch: fn handle_watch(h: Handle, readable: bool, writable: bool) -> Handle { module: internal/Handle }
 
-            /// Whether each handle of `on` is ready now, without waiting: one byte for each, in the list's order, [`event::READY`](crate::event::READY) or nothing. A watch is ready as its handle is, a timer once its instant has passed, and any other handle at once, since nothing would hold a wait on it.
+            /// Whether each handle of `on` is ready now, without waiting: one byte for each, in the list's order, [`event::READY`](crate::event::READY) or nothing. A watch is ready as its handle is, a deadline once the monotonic clock has reached it, and any other handle at once, since nothing would hold a wait on it.
             HandleReady: fn handle_ready(on: Vec<Handle>) -> Vec<u8> { module: internal/Handle }
 
             /// Close `h`. Closing an unknown handle is a no-op. A standard stream closes too: the process lets go of it, so the reader of an output reads its end, and the writer of an input meets a broken pipe, once nothing else holds the stream — a child that inherited it holds it until it ends — while its descriptor is kept by the null device, so nothing opened later is read or written through that number, and a child started afterwards inherits the null device. The standard handle then names nothing, as any closed handle does.
             HandleClose: fn handle_close(h: Handle) -> () { module: internal/Handle }
 
-            /// Read the wall clock. `(secs, nanos)`: seconds since the Unix epoch, and the nanoseconds within the second.
-            ClockWall: fn clock_wall() -> Timestamp { module: time/Timestamp }
+            /// Read the wall clock: seconds since the Unix epoch, signed, and the nanoseconds past them, a moment before 1970 as itself. A host whose clock reads past a signed 64-bit count of seconds refuses the call rather than answer another reading.
+            ClockWall: fn clock_wall() -> Result<ClockReading, Refusal> { module: time/Timestamp }
 
-            /// Read the monotonic clock. `(secs, nanos)` elapsed since a fixed origin; only differences are meaningful.
-            ClockMono: fn clock_mono() -> Timestamp { module: time/Instant }
+            /// Read the monotonic clock: seconds since a fixed origin and the nanoseconds past them; only readings of one run compare. Whether a suspended machine's time counts is the host's. Refused, as `clock_wall` is, past a signed 64-bit count of seconds.
+            ClockMono: fn clock_mono() -> Result<ClockReading, Refusal> { module: time/Instant }
 
-            /// A handle that is ready once `secs` seconds and `nanos` nanoseconds have passed from the call, on the monotonic clock `clock_mono` reads: what a description suspends on to sleep. Nanoseconds past a second carry into the seconds, and a timer of no time is ready at once.
-            ClockTimer: fn clock_timer(secs: u64, nanos: u64) -> Handle { module: Io }
+            /// A handle that is ready once the monotonic clock `clock_mono` reads is at `secs` seconds and `nanos` nanoseconds or past them: what a description suspends on to wait until a deadline. Nanoseconds past a second carry into the seconds. A deadline already past is ready at once, and one past what the host's clock can hold is never ready.
+            ClockDeadline: fn clock_deadline(secs: i64, nanos: u64) -> Handle { module: Io }
 
             /// Exactly `n` random bytes. A host that cannot find the memory or the entropy for them refuses the call, naming why, rather than answer fewer.
             RandBytes: fn rand_bytes(n: u64) -> Result<Vec<u8>, Refusal> { module: rand }
@@ -122,7 +122,7 @@ macro_rules! for_each_host_op {
             /// The serial devices the system has, each by a path `serial_open` takes, sorted so two listings agree; none is the empty list. On Linux, every terminal with a device behind it whose port the driver found, by its `/dev/serial/by-id` name where the system keeps one — a name that says what the device is and outlives the order it was plugged in — and by its node otherwise, as an onboard port is; on macOS, the callout devices, `/dev/cu.*`.
             SerialList: fn serial_list() -> Result<Vec<Vec<u8>>, Failure> { module: Serial, yields: paths }
 
-            /// What is at `path`, following symbolic links. `kind` is a [`file_kind`](crate::file_kind) tag, `size` the size in bytes, and `mtime_secs` and `mtime_nanos` the modification time as `clock_wall` reads the clock. A dangling link reports the `SYMLINK` kind with zero sizes.
+            /// What is at `path`, following symbolic links. `kind` is a [`file_kind`](crate::file_kind) tag, `size` the size in bytes, and `mtime_secs` and `mtime_nanos` the modification time as `clock_wall` reads the clock, a moment before 1970 as itself. A dangling link reports the `SYMLINK` kind with what the link itself holds. A time a signed 64-bit count of seconds cannot carry fails with `EOVERFLOW`, as `stat(2)` does, and a platform that keeps no modification time fails as it reports.
             FileStat: fn file_stat(path: Vec<u8>) -> Result<FileStat, Failure> { module: fs }
 
             /// Remove the file at `path`. `IsDirectory` on a directory.

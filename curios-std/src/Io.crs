@@ -13,7 +13,7 @@ pub use Offer/{let Offer};
 pub mod Future;
 pub use Future/{let Future};
 
---- A flag one branch raises and another waits on: a wait on no handle and no timer.
+--- A flag one branch raises and another waits on: a wait on no handle and no deadline.
 pub mod Signal;
 pub use Signal/{let Signal};
 
@@ -28,7 +28,7 @@ pub use Scope/{let Scope};
 use /std/{Monad, Bytes, Nat, Int, Bool, List, Option, Cell, Program, Try};
 use /std/internal/{Handle};
 use /std/Bool/{Holds};
-use /std/time/{Duration};
+use /std/time/{Duration, Instant};
 
 -- `Waiting` is declared here and not in `Offer`, so that `select` reads it and an offer builds it, and nothing outside `Io` does: the handles it names are the library's.
 --- What an offer waits on while it declines: handles a host makes ready and cells the program fills, and what releases the handles the wait made for itself, whether the wait ends or is cancelled. A program's offer waits on cells, through `Offer/on_filled`.
@@ -57,19 +57,31 @@ satisfy Program(Io({})) {
 pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
     /sys/Io/suspend([], cells, pure(()), pure(()));
 
---- A handle ready once so many seconds and nanoseconds have passed.
-foreign clock_timer(Nat, Nat) -> Handle;
+--- A handle ready once the monotonic clock reads at least so many seconds and nanoseconds.
+foreign clock_deadline(Int, Nat) -> Handle;
 
---- A handle ready once `d` has passed: what a description suspends on to wait that long. One of no time, or of less, is ready at once.
-let timer(d: Duration) -> Io(Handle) =
-    let n = Duration/to_nanos(d);
-    let left = match n >= +0 | true => Int/to_nat(n) | false => 0 end;
-    clock_timer(left / 1000000000, left % 1000000000);
+-- The most seconds the wire carries: a deadline past them is one no clock reaches, and is waited on as the furthest the wire states.
+let furthest: Int =
+    +9223372036854775807;
 
---- Until `d` has passed, on a timer of its own, closed whether the wait ends or is cancelled.
-pub let sleep(d: Duration) -> Io({}) =
-    let h = timer(d)!;
+--- A handle ready once the monotonic clock has reached `i`: what a description suspends on to wait until then. One already past is ready at once; one before the clock's origin crosses as the origin, which has passed too.
+let deadline(i: Instant) -> Io(Handle) =
+    let split = Int/DivMod/of(Instant/to_nanos(i), 1000000000);
+    choose
+    | split.quotient < +0 => clock_deadline(+0, 0)
+    | split.quotient > furthest => clock_deadline(furthest, 0)
+    | _ => clock_deadline(split.quotient, split.remainder)
+    end;
+
+--- Until the monotonic clock has reached `i`, on a deadline of its own, closed whether the wait ends or is cancelled. An instant already past ends the wait at once.
+pub let sleep_until(i: Instant) -> Io({}) =
+    let h = deadline(i)!;
     /sys/Io/suspend([h], [], Close/close(h), Close/close(h));
+
+--- Until `d` has passed from now: the clock read once, and a wait until then. A length of no time, or of less, ends at once.
+pub let sleep(d: Duration) -> Io({}) =
+    let now = Instant/now()!;
+    sleep_until(Instant/add(now, d));
 
 -- A cell filled already: what a suspension that may go on at once waits on. Private to the subtree, which is where every such suspension is made.
 let ready() -> Io(Cell({})) =

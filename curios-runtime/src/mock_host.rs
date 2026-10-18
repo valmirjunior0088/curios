@@ -1,9 +1,10 @@
 use {
     super::Table,
     crate::{
-        Answer, ChildExit, ChildHandles, Direction, Failure, FileKind, FileStat, Handle, HostOps,
-        Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
-        Timestamp, TtySize, lookup_address, names_a_variable, serial_frame, serial_speed,
+        Answer, ChildExit, ChildHandles, ClockReading, Direction, Failure, FileKind, FileStat,
+        Handle, HostOps, Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled,
+        StdioMode, Termination, TtySize, lookup_address, names_a_variable, serial_frame,
+        serial_speed,
     },
     curios_abi::{ClosedCode, errno, event},
     std::{
@@ -280,27 +281,27 @@ struct Chunked {
     deaf: bool,
 }
 
-/// Where scripted standard input pauses: nothing more is ready there until a wait has slept past a timer, as a person who stops typing hands a program's timers their turn.
+/// Where scripted standard input pauses: nothing more is ready there until a wait has slept past a deadline, as a person who stops typing hands a program's deadlines their turn.
 #[derive(Default)]
 struct Pauses {
     /// Each pause, as how many chunks are left when it is met, in order.
     left: VecDeque<usize>,
-    /// The instant the waits had slept until where the front pause was met, so it ends once they sleep past it.
-    met_at: Option<(u64, u64)>,
+    /// Where the clock stood when the front pause was met, so it ends once a wait sleeps past it.
+    met_at: Option<i128>,
 }
 
 impl Pauses {
-    /// Whether a pause holds back the next of `left` chunks, the waits having slept until `slept_until`.
-    fn holds(&mut self, left: usize, slept_until: (u64, u64)) -> bool {
+    /// Whether a pause holds back the next of `left` chunks, the clock standing at `now`.
+    fn holds(&mut self, left: usize, now: i128) -> bool {
         if self.left.front() != Some(&left) {
             return false;
         }
         match self.met_at {
             None => {
-                self.met_at = Some(slept_until);
+                self.met_at = Some(now);
                 true
             }
-            Some(at) if slept_until > at => {
+            Some(at) if now > at => {
                 self.left.pop_front();
                 self.met_at = None;
                 false
@@ -474,9 +475,9 @@ enum MockResource {
         readable: bool,
         writable: bool,
     },
-    /// A timer minted by `clock_timer`, at its instant: its interval counted from how far the waits had slept when it was minted. Nothing but the program moves a script, so a wait that finds nothing ready sleeps until the soonest timer it holds out for, and every timer at or before that instant is due.
-    Timer {
-        at: (u64, u64),
+    /// A deadline minted by `clock_deadline`, at its instant on the mock's one timeline, in nanoseconds. Nothing but the program moves a script, so a wait that finds nothing ready sleeps until the soonest deadline it holds out for, and every deadline at or before that instant is due.
+    Deadline {
+        at: i128,
     },
 }
 
@@ -519,11 +520,11 @@ pub struct MockHost {
     /// What happened on the scripted connections, in order. Shared with [`MockIo::socket_events`], so a test can see that a stream was finished before it was closed, and read to its end between the two.
     socket_events: Arc<Mutex<Vec<SocketEvent>>>,
     /// Scripted wall-clock readings, served in order by `clock_wall`.
-    clock_wall_seq: Mutex<VecDeque<(u64, u64)>>,
-    /// Scripted monotonic readings, served in order by `clock_mono`.
-    clock_mono_seq: Mutex<VecDeque<(u64, u64)>>,
-    /// The instant the waits have slept until: a timer at or before it is due.
-    slept_until: Mutex<(u64, u64)>,
+    clock_wall_seq: Mutex<VecDeque<(i64, u64)>>,
+    /// Scripted monotonic readings, served in order by `clock_mono`, each moving the clock forward to it.
+    clock_mono_seq: Mutex<VecDeque<(i64, u64)>>,
+    /// The mock's one timeline, in nanoseconds: what `clock_mono` reads and deadlines are due on. A scripted reading moves it forward, and a wait moves it to the soonest deadline it holds out for, so no reading after a wait is before the deadline it woke for.
+    clock: Mutex<i128>,
     /// Which standard streams the program closed, by their place among input, output and error: a closed one's token names nothing, as the native host answers it.
     closed: Mutex<[bool; 3]>,
     /// Deterministic xorshift64 state backing `rand_bytes`.
@@ -745,13 +746,8 @@ impl MockHost {
     /// Whether scripted standard input is ready to read, as the stream or the terminal behind it. It is armed like a scripted stream, so one look of a watch is one chunk of progress and a reader waiting on `WouldBlock` resumes into the next chunk.
     fn input_ready(&self) -> bool {
         let mut input = self.input.lock().unwrap();
-        let slept_until = *self.slept_until.lock().unwrap();
-        if self
-            .input_pauses
-            .lock()
-            .unwrap()
-            .holds(input.left(), slept_until)
-        {
+        let now = *self.clock.lock().unwrap();
+        if self.input_pauses.lock().unwrap().holds(input.left(), now) {
             return false;
         }
         input.arm();
@@ -798,7 +794,7 @@ impl MockHost {
         }
     }
 
-    /// Whether `handle` is ready now, as `handle_ready` reports it: a watch once its handle is ready for what it asks, a timer once a wait has passed its instant, a reply filed for later once it has come, and anything else at once.
+    /// Whether `handle` is ready now, as `handle_ready` reports it: a watch once its handle is ready for what it asks, a deadline once the clock has reached it, a reply filed for later once it has come, and anything else at once.
     fn ready(&self, table: &mut Table<MockResource>, handle: &Handle) -> bool {
         match table.get(handle) {
             Some(MockResource::Watch {
@@ -811,7 +807,7 @@ impl MockHost {
                 readable && self.read_ready(table, &target)
                     || writable && Self::write_ready(table, &target)
             }
-            Some(MockResource::Timer { at }) => *at <= *self.slept_until.lock().unwrap(),
+            Some(MockResource::Deadline { at }) => *at <= *self.clock.lock().unwrap(),
             Some(MockResource::Later { .. }) => Self::come(table, handle),
             _ => true,
         }
@@ -1087,18 +1083,18 @@ impl HostOps for MockHost {
                 return Ok(());
             }
 
-            // The wait sleeps until the soonest timer it holds out for, and every timer at or before it is due.
+            // The wait sleeps until the soonest deadline it holds out for, and every deadline at or before it is due.
             let soonest = on
                 .iter()
                 .filter_map(|handle| match table.get(handle) {
-                    Some(MockResource::Timer { at }) => Some(*at),
+                    Some(MockResource::Deadline { at }) => Some(*at),
                     _ => None,
                 })
                 .min();
 
             if let Some(at) = soonest {
-                let mut slept_until = self.slept_until.lock().unwrap();
-                *slept_until = (*slept_until).max(at);
+                let mut clock = self.clock.lock().unwrap();
+                *clock = (*clock).max(at);
 
                 return Ok(());
             }
@@ -1291,24 +1287,30 @@ impl HostOps for MockHost {
         }
     }
 
-    fn clock_wall(&self) -> Timestamp {
-        reading(self.clock_wall_seq.lock().unwrap().pop_front())
+    fn clock_wall(&self) -> Result<ClockReading, Refusal> {
+        let scripted = self
+            .clock_wall_seq
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or((0, 0));
+
+        reading(nanoseconds(scripted)).ok_or_else(|| past_the_wire("the wall clock"))
     }
 
-    fn clock_timer(&self, secs: u64, nanos: u64) -> Handle {
-        let (from_secs, from_nanos) = *self.slept_until.lock().unwrap();
-        let nanos = from_nanos + nanos % 1_000_000_000;
-        let secs = from_secs
-            .saturating_add(secs)
-            .saturating_add(nanos / 1_000_000_000);
-
-        self.mint(MockResource::Timer {
-            at: (secs, nanos % 1_000_000_000),
+    fn clock_deadline(&self, secs: i64, nanos: u64) -> Handle {
+        self.mint(MockResource::Deadline {
+            at: nanoseconds((secs, nanos)),
         })
     }
 
-    fn clock_mono(&self) -> Timestamp {
-        reading(self.clock_mono_seq.lock().unwrap().pop_front())
+    fn clock_mono(&self) -> Result<ClockReading, Refusal> {
+        let mut clock = self.clock.lock().unwrap();
+        if let Some(scripted) = self.clock_mono_seq.lock().unwrap().pop_front() {
+            *clock = (*clock).max(nanoseconds(scripted));
+        }
+
+        reading(*clock).ok_or_else(|| past_the_wire("the monotonic clock"))
     }
 
     fn rand_bytes(&self, count: u64) -> Result<Vec<u8>, Refusal> {
@@ -1561,10 +1563,27 @@ impl HostOps for MockHost {
 }
 
 /// A scripted clock reading, or the epoch once the script is spent.
-fn reading(scripted: Option<(u64, u64)>) -> Timestamp {
-    let (secs, nanos) = scripted.unwrap_or((0, 0));
+/// A scripted `(secs, nanos)` as nanoseconds on the mock's timeline.
+fn nanoseconds((secs, nanos): (i64, u64)) -> i128 {
+    i128::from(secs) * NANOS_PER_SECOND + i128::from(nanos)
+}
 
-    Timestamp { secs, nanos }
+/// A point of the timeline as the reading the wire carries: the seconds floored and the nanoseconds past them. None past a signed 64-bit count of seconds, which the clock rows refuse.
+fn reading(at: i128) -> Option<ClockReading> {
+    Some(ClockReading {
+        secs: i64::try_from(at.div_euclid(NANOS_PER_SECOND)).ok()?,
+        nanos: u64::try_from(at.rem_euclid(NANOS_PER_SECOND)).ok()?,
+    })
+}
+
+/// The nanoseconds of a second.
+const NANOS_PER_SECOND: i128 = 1_000_000_000;
+
+/// Why a mock clock row answers nothing: a reading the wire's signed 64-bit seconds cannot carry.
+fn past_the_wire(clock: &str) -> Refusal {
+    Refusal(format!(
+        "{clock} reads past what a signed 64-bit count of seconds holds"
+    ))
 }
 
 /// Serve up to `count` bytes of `contents` from `*position`, advancing the cursor; the end of the stream once it reaches the end. The shape of a file read, which is always ready; a stream reads through [`Chunked`] instead.
@@ -1686,8 +1705,8 @@ pub struct MockHostBuilder {
     connect_pending: bool,
     pending_flushes: u64,
     pending_finishes: u64,
-    clock_wall_seq: VecDeque<(u64, u64)>,
-    clock_mono_seq: VecDeque<(u64, u64)>,
+    clock_wall_seq: VecDeque<(i64, u64)>,
+    clock_mono_seq: VecDeque<(i64, u64)>,
     args: Vec<Vec<u8>>,
     env: HashMap<Vec<u8>, Vec<u8>>,
     tty_sizes: VecDeque<(u64, u64)>,
@@ -1791,7 +1810,7 @@ impl MockHostBuilder {
         self
     }
 
-    /// Pause standard input before the chunks appended after this: nothing more is ready until a wait has slept past a timer, so a program that waits on its input and a timer at once has the timer fire there, as it would where a person stops typing.
+    /// Pause standard input before the chunks appended after this: nothing more is ready until a wait has slept past a deadline, so a program that waits on its input and a deadline at once has the deadline come there, as it would where a person stops typing.
     pub fn stdin_pause(mut self) -> Self {
         self.input_pauses.push(self.input_chunks.len());
 
@@ -1980,14 +1999,14 @@ impl MockHostBuilder {
     }
 
     /// Script the wall-clock readings served by `clock_wall`, in order, each `(secs, nanos)`. When the script is exhausted `clock_wall` falls back to `(0, 0)`.
-    pub fn wall<I: IntoIterator<Item = (u64, u64)>>(mut self, readings: I) -> Self {
+    pub fn wall<I: IntoIterator<Item = (i64, u64)>>(mut self, readings: I) -> Self {
         self.clock_wall_seq.extend(readings);
 
         self
     }
 
-    /// Script the monotonic readings served by `clock_mono`, in order.
-    pub fn mono<I: IntoIterator<Item = (u64, u64)>>(mut self, readings: I) -> Self {
+    /// Script the monotonic readings served by `clock_mono`, in order, each `(secs, nanos)`: each moves the mock's one timeline forward to it, and one behind where a wait has slept reads where the wait left it. When the script is exhausted `clock_mono` reads the timeline.
+    pub fn mono<I: IntoIterator<Item = (i64, u64)>>(mut self, readings: I) -> Self {
         self.clock_mono_seq.extend(readings);
 
         self
@@ -2066,7 +2085,7 @@ impl MockHostBuilder {
             captures,
             clock_wall_seq: Mutex::new(self.clock_wall_seq),
             clock_mono_seq: Mutex::new(self.clock_mono_seq),
-            slept_until: Mutex::new((0, 0)),
+            clock: Mutex::new(0),
             closed: Mutex::new([false; 3]),
             // A fixed non-zero xorshift64 seed: deterministic across runs.
             rng: Mutex::new(0x2545_F491_4F6C_DD1D),

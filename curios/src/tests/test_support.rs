@@ -2,8 +2,8 @@
 
 use {
     curios_abi::{
-        Answer, ChildExit, ChildHandles, Failure, FileStat, Handle, HostOp, HostOps, Later, Mode,
-        Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination, Timestamp,
+        Answer, ChildExit, ChildHandles, ClockReading, Failure, FileStat, Handle, HostOp, HostOps,
+        Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
         TtySize, for_each_host_op,
     },
     curios_runtime::MockHost,

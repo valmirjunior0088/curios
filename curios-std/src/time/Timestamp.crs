@@ -54,13 +54,13 @@ pub let to_unix_secs(t: Timestamp) -> Int =
 pub let to_unix_nanos(t: Timestamp) -> Int =
     t.nanos;
 
---- The wall clock: seconds since the Unix epoch, and the nanoseconds within the second.
-foreign clock_wall() -> {secs: Nat, nanos: Nat};
+--- The wall clock: seconds since the Unix epoch, signed, and the nanoseconds past them.
+foreign clock_wall() -> {secs: Int, nanos: Nat};
 
 --- The wall clock now.
 pub let now() -> Io(Timestamp) =
     let r = clock_wall()!;
-    Io/pure(Timestamp { nanos = Nat/to_int(r.secs) * 1000000000 + Nat/to_int(r.nanos) });
+    Io/pure(Timestamp { nanos = r.secs * 1000000000 + Nat/to_int(r.nanos) });
 
 --- The moment `d` after `t`.
 pub let add(t: Timestamp, d: Duration) -> Timestamp =

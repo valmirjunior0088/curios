@@ -26,7 +26,10 @@ pub(super) fn listing_host() -> (MockHost, MockIo) {
         .stdin_pause()
         .stdin_chunks(pair())
         .stdin_chunks(rest)
-        .mono((0..100_000).map(|millis| (millis / 1_000, millis % 1_000 * 1_000_000)))
+        .mono(
+            (0..100_000i64)
+                .map(|millis| (millis / 1_000, (millis % 1_000 * 1_000_000).unsigned_abs())),
+        )
         .build()
 }
 

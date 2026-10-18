@@ -1,6 +1,6 @@
 //! The semantic Rust types a host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
-//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Mode`] its [`open_mode`] tag, and [`Timestamp`], [`TtySize`], [`FileStat`], [`ChildExit`] and [`ChildHandles`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a wait on the platform's descriptors — live with the adapter (`curios-runtime`), not here.
+//! [`Termination`] is how a diverging row answers, and [`Failure`] how a fallible one says why it failed. The rest mirror guest-side notions: a [`Handle`] is its token bytes (a `Bytes`), a [`Mode`] its [`open_mode`] tag, and [`ClockReading`], [`TtySize`], [`FileStat`], [`ChildExit`] and [`ChildHandles`] the payloads whose several fields the guest projects by label. How each crosses the wire is its [`WireOperand`](super::WireOperand), [`WirePayload`](super::WirePayload) or [`WireReply`](super::WireReply) impl's to say; the native adapter's own concerns — mapping an `io::Error` to a `Failure`, a wait on the platform's descriptors — live with the adapter (`curios-runtime`), not here.
 
 use {
     crate::{file_kind, open_mode, serial_flow, serial_op, serial_parity, stdio, stdio_mode},
@@ -137,10 +137,10 @@ pub enum Failure {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refusal(pub String);
 
-/// A clock reading, as `clock_wall` and `clock_mono` answer it: whole seconds, and the nanoseconds within the second.
+/// A clock reading, as `clock_wall` and `clock_mono` answer it: whole seconds from the clock's origin, signed, and the nanoseconds past them, below 10⁹. A moment before the origin is its seconds below zero and the nanoseconds counting forward, as WASI's `system-clock` instant is: one nanosecond before is `{ secs: -1, nanos: 999_999_999 }`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Timestamp {
-    pub secs: u64,
+pub struct ClockReading {
+    pub secs: i64,
     pub nanos: u64,
 }
 
@@ -181,12 +181,12 @@ impl FileKind {
     }
 }
 
-/// What `file_stat` answers: the kind, the size in bytes, and the modification time as `clock_wall` reads the clock.
+/// What `file_stat` answers: the kind, the size in bytes, and the modification time as a [`ClockReading`] of the wall clock.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileStat {
     pub kind: FileKind,
     pub size: u64,
-    pub mtime_secs: u64,
+    pub mtime_secs: i64,
     pub mtime_nanos: u64,
 }
 
