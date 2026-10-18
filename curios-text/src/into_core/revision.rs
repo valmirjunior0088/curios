@@ -16,12 +16,20 @@ use {
     },
 };
 
-/// One declaration as a walk over a baseline met it, in the order it met them: what its record and its first item are among the walk's, and where the baseline holds its first item, for a declaration the walk kept.
+/// One declaration as a walk over a baseline met it, in the order it met them: what its record and its first item are among the walk's, and where the baseline holds its first item, for a declaration the walk kept. Or a module the walk passed unentered, with everything under it, by where the baseline holds the first item of its last declaration (`passed`): what is put in after it stands after that.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Step {
     pub kept: Option<i64>,
+    pub passed: Option<i64>,
     pub record: usize,
     pub from: usize,
+}
+
+impl Step {
+    /// Whether the walk lowered this declaration now.
+    pub(super) fn made(&self) -> bool {
+        self.kept.is_none() && self.passed.is_none()
+    }
 }
 
 /// What a unit lowered over a baseline holds otherwise than the baseline does.
@@ -67,6 +75,9 @@ pub(super) fn revise(
     let mut named = HashSet::new();
     for (step, end) in steps.iter().zip(&ends) {
         let made = &made[step.from..*end];
+        if step.passed.is_some() {
+            continue;
+        }
         let Some(first) = step.kept else {
             anew.extend(made.iter().flat_map(|item| item.declared_names()).copied());
             continue;
@@ -233,6 +244,26 @@ impl Bodies {
     /// The declarations of the body `module`, where it holds any.
     pub(super) fn get(&self, module: &Qualifier) -> Option<&Body> {
         self.by.get(module).map(Rc::as_ref)
+    }
+
+    /// Every body that holds a declaration, with its declarations.
+    pub(super) fn iter(&self) -> impl Iterator<Item = (&Qualifier, &Body)> {
+        self.by.iter().map(|(module, body)| (module, &**body))
+    }
+
+    /// The first item's place of the last declaration `root` or a module under it holds, where they hold any: what a walk that passes them unentered places what follows after.
+    pub(super) fn last_within(&self, root: &Qualifier) -> Option<i64> {
+        let mut last = self.get(root).and_then(|body| body.firsts.last().copied());
+        let mut at = *root;
+        while let Some((module, body)) = self.by.after(&at) {
+            if !module.is_within(root) {
+                break;
+            }
+            last = last.max(body.firsts.last().copied());
+            at = *module;
+        }
+
+        last
     }
 
     /// `record`, whose first item stands at `first`, among its body's declarations.
@@ -419,14 +450,21 @@ impl Walk<'_> {
         let mut cursor: Option<usize> = None;
         let mut index = 0;
         while let Some(step) = self.steps.get(index) {
+            // A module passed unentered stands where it stood, and what follows stands after it.
+            if let Some(last) = step.passed {
+                let first = tables.place(place_of(last));
+                let count = tables
+                    .records
+                    .get(position(first))
+                    .map_or(1, |record| record.facts().len());
+                cursor = run(&tables.items, first, count).last().copied().max(cursor);
+                index += 1;
+                continue;
+            }
             let Some(first) = step.kept else {
                 // A run of declarations lowered now, put between the last item passed and the next kept one together, so the room between the two is shared among them.
                 let run = index;
-                while self
-                    .steps
-                    .get(index)
-                    .is_some_and(|step| step.kept.is_none())
-                {
+                while self.steps.get(index).is_some_and(Step::made) {
                     index += 1;
                 }
                 let steps = &self.steps[run..index];

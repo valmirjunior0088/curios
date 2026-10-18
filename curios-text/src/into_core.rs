@@ -1088,9 +1088,31 @@ struct Lowering<'a> {
     relisted: Vec<Qualifier>,
     /// Each declaration the walk met over the baseline, kept or lowered, in order ([`Step`]).
     steps: Vec<Step>,
+    /// The modules the walk enters, over a baseline whose units in scope stand ([`Baseline::entered`]): `None` where it enters every one.
+    entered: Option<HashSet<Qualifier>>,
 }
 
 impl Lowering<'_> {
+    /// Whether the walk passes the module `module` unentered, with everything under it: noted as a step, so what is put in after it stands after it.
+    fn passes(&mut self, module: &Qualifier) -> bool {
+        let (Some(entered), Some(baseline)) = (&self.entered, self.baseline) else {
+            return false;
+        };
+        if entered.contains(module) {
+            return false;
+        }
+        if let Some(last) = baseline.unit().bodies().last_within(module) {
+            self.steps.push(Step {
+                kept: None,
+                passed: Some(last),
+                record: 0,
+                from: self.items.len(),
+            });
+        }
+
+        true
+    }
+
     /// Record what the declaration `context` has just lowered to, the unit's items from `from` on: what the unit-wide passes read of each, taken while its registry entries and the text it was written in are at hand, and what the declaration asked of its scope.
     fn note(&mut self, context: &Context, from: usize, foreign: bool) {
         let facts = self.items[from..]
@@ -1231,6 +1253,10 @@ fn process_items(
                 continue;
             }
             Head::Mod { label, inline, .. } => {
+                let path = context.prefixed(label);
+                if lowered.passes(&path) {
+                    continue;
+                }
                 match inline {
                     Some(heads) => process_items(
                         heads,
@@ -2118,6 +2144,7 @@ fn process_items(
             if lowered.baseline.is_some() {
                 lowered.steps.push(Step {
                     kept: None,
+                    passed: None,
                     record: lowered.declarations.len() - 1,
                     from: lowered_from,
                 });
@@ -2522,6 +2549,7 @@ fn into_core_unit_within(
         .map(|(baseline, revised)| Moved::found(baseline, revised));
     let baseline = baseline.map(|baseline| Baseline::of(baseline).moving(moved));
     let mut lowered = Lowering {
+        entered: baseline.as_ref().and_then(Baseline::entered),
         baseline: baseline.as_ref(),
         uses: baseline
             .as_ref()
@@ -2545,6 +2573,9 @@ fn into_core_unit_within(
         let content = modules
             .get(&mount.prefix)
             .expect("a mounted prefix was loaded during discovery");
+        if lowered.passes(&mount.prefix) {
+            continue;
+        }
 
         let mut nested = context.nested(mount.prefix.head());
 
@@ -2571,6 +2602,7 @@ fn into_core_unit_within(
         mut uses,
         relisted,
         steps,
+        entered: _,
     } = lowered;
     // A body the unit no longer holds keeps no record of what its `use` declarations read.
     let unwalked = removed
@@ -2606,7 +2638,7 @@ fn into_core_unit_within(
                 .map(|step| step.from)
                 .chain([flat_items.len()]),
         )
-        .filter(|(step, _)| step.kept.is_none())
+        .filter(|(step, _)| step.made())
         .flat_map(|(step, end)| step.from..end)
         .collect::<HashSet<_>>();
     let gone = baseline
@@ -2735,7 +2767,7 @@ fn into_core_unit_within(
             gone.iter().map(|gone| gone.record),
             steps
                 .iter()
-                .filter(|step| step.kept.is_none())
+                .filter(|step| step.made())
                 .map(|step| &declarations[step.record]),
             &uses,
             relisted.into_iter().chain(unwalked),
@@ -3080,6 +3112,56 @@ fn into_core_unit_within(
         }
         for body in &removed {
             body_lints.remove(body);
+        }
+        // A lint carried of a body the walk passed lies in the text its file is read as now: the source a restored baseline read it from is another, though its text is the one.
+        if baseline.is_some() {
+            let read = modules
+                .values()
+                .filter_map(|loaded| loaded.source.clone())
+                .filter_map(|source| Some((source.path.clone()?, source)))
+                .collect::<HashMap<_, _>>();
+            let now = |span: &Span| {
+                let source = read.get(span.source.path.as_ref()?)?;
+                (!Arc::ptr_eq(source, &span.source) && source.text == span.source.text)
+                    .then(|| Span::new(Arc::clone(source), span.start, span.end))
+            };
+            let moved = |lint: &Lint| {
+                lint.report
+                    .span
+                    .as_ref()
+                    .is_some_and(|span| now(span).is_some())
+                    || lint
+                        .report
+                        .notes
+                        .iter()
+                        .any(|note| now(&note.span).is_some())
+            };
+            let carried = body_lints
+                .iter()
+                .filter(|(_, lints)| lints.iter().any(moved))
+                .map(|(body, _)| *body)
+                .collect::<Vec<_>>();
+            for body in carried {
+                let Some(lints) = body_lints.get(&body) else {
+                    continue;
+                };
+                let lints = lints
+                    .iter()
+                    .map(|lint| {
+                        let mut lint = lint.clone();
+                        if let Some(span) = lint.report.span.as_ref().and_then(now) {
+                            lint.report.span = Some(span);
+                        }
+                        for note in &mut lint.report.notes {
+                            if let Some(span) = now(&note.span) {
+                                note.span = span;
+                            }
+                        }
+                        lint
+                    })
+                    .collect::<Vec<_>>();
+                body_lints.insert(body, Rc::new(lints));
+            }
         }
     }
 

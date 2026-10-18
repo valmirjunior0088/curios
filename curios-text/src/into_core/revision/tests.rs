@@ -487,3 +487,36 @@ fn an_alias_lowered_again_is_audited_with_the_whole_unit() {
         assert_eq!(over, whole, "after writing {text:?}");
     }
 }
+
+/// A witness of a file no edit touched whose key read a declaration of another file lowered again is named by what its key reads now: its module is entered though its text and scope stand.
+#[test]
+fn a_witness_of_a_standing_file_whose_key_read_moved_is_named_again() {
+    let declared = |shown: &str| {
+        [
+            "pub concept Show(A: Type): pub Type { show: A }\n\n",
+            "pub struct Foo: pub Type { }\n\n",
+            "pub struct Bar: pub Type { }\n\n",
+            "pub let Shown: Type = ",
+            shown,
+            ";\n",
+        ]
+        .concat()
+    };
+    let root = files(
+        "witness-file",
+        &[
+            ("lib.crs", "pub mod a;\npub mod b;\n"),
+            ("a.crs", &declared("Foo")),
+            (
+                "b.crs",
+                "satisfy /lib/a/Show(/lib/a/Shown) { show = /lib/a/Foo { } }\n",
+            ),
+        ],
+    );
+    let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
+
+    let (over, whole) = rewritten(&root, "a.crs", &declared("Bar"), &baseline);
+
+    same_unit(&over, &whole);
+    same_keys(&over, &whole);
+}

@@ -452,6 +452,70 @@ impl<'a> Baseline<'a> {
         Self { moved, ..self }
     }
 
+    /// The modules a walk over this baseline enters, every other being passed unentered with everything under it: each whose text the edit touched or whose scope a binding that moved is read in, each holding a declaration whose lookups read a binding that moved, each holding a kept witness whose key read a declaration of those, and each holding a declaration no later lowering may keep or a `foreign` row, with every module above each. `None` where a unit in scope moved, and every module is entered.
+    ///
+    /// **A module passed unentered is the baseline's whole**: its text stands, its scope stands, and nothing any of its declarations read moved, so lowering it again would write what the baseline holds.
+    pub(super) fn entered(&self) -> Option<HashSet<Qualifier>> {
+        let moved = self.moved.as_ref()?;
+        let bodies = self.unit.bodies();
+        let items = &self.unit.core().items;
+        let mut entered = moved.touched.iter().copied().collect::<Vec<_>>();
+        // The names a declaration lowered now or taken away can hold: those of every declaration of a touched module and of every one an edit reached.
+        let mut names = Vec::new();
+        let declared = |first: i64, names: &mut Vec<curios_core::Global>| {
+            let record = self.unit.lowerings().get(first)?;
+            let mut place = usize::try_from(first).ok();
+            for _ in 0..record.facts().len() {
+                let at = place?;
+                names.extend(items.names(at).into_iter().copied());
+                place = items.place_after(Some(at));
+            }
+            Some(record.body())
+        };
+        #[expect(clippy::iter_over_hash_type, reason = "the modules entered are a set")]
+        for key in &moved.reached {
+            if let Some(&first) = self.by_text.get(key)
+                && let Some(body) = declared(first, &mut names)
+            {
+                entered.push(body);
+            }
+        }
+        #[expect(
+            clippy::iter_over_hash_type,
+            reason = "the names gathered are read as a set"
+        )]
+        for module in &moved.touched {
+            if let Some(body) = bodies.get(module) {
+                for &first in &body.firsts {
+                    declared(first, &mut names);
+                }
+            }
+        }
+        entered.extend(
+            bodies
+                .iter()
+                .filter(|(_, body)| body.unkeyable > 0 || body.foreign > 0)
+                .map(|(module, _)| *module),
+        );
+        let readers = self.unit.lookup_readers();
+        for name in &names {
+            for witness in readers.of_key(name) {
+                if let curios_core::Global::Witness(id) = witness {
+                    entered.push(*id.module());
+                }
+            }
+        }
+
+        let mut closed = HashSet::new();
+        for module in entered {
+            let mut at = module;
+            while closed.insert(at) && !at.is_root() {
+                at = at.without_last();
+            }
+        }
+        Some(closed)
+    }
+
     /// The declaration of this unit the one `context` stands at was lowered as, by the place of its first item, kept without asking: its module's text is the one the baseline lowered, so its own is, and no binding its lookups read moved. `None` where either may have, and the declaration is asked ([`Baseline::standing`]).
     pub(super) fn unasked(&self, context: &Context) -> Option<i64> {
         let moved = self.moved.as_ref()?;
@@ -638,6 +702,7 @@ impl<'a> Baseline<'a> {
         }));
         lowered.steps.push(Step {
             kept: Some(first),
+            passed: None,
             record: lowered.declarations.len(),
             from,
         });
