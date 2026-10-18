@@ -335,6 +335,19 @@ fn deep_expressions_elaborate_in_their_size() {
     }
 }
 
+/// Elaboration takes a scope in its size: a `let` chain of six thousand bindings, each operator minting its metavariables under every binding before it; an `Io` block of two thousand statements, each a frame over the last; a function summing a thousand parameters; and two thousand nested lambdas. A judgment reads its scope through the frames' persistent maps, and a metavariable is born over its scope's telescope and identity spine, shared, so none pays the binders above it; and a close or a materialization passes over what it cannot change, so none pays the statements or the lambdas within it.
+#[test]
+fn a_wide_scope_elaborates_in_its_size() {
+    for (growth, size) in [
+        (Growth::LetPlus, 6_000),
+        (Growth::Statements, 2_000),
+        (Growth::ParametersSummed, 1_000),
+        (Growth::Lambdas, 2_000),
+    ] {
+        assert_eq!(elaborates(&grown(growth, size)), Ok(()), "{growth:?}");
+    }
+}
+
 /// Nesting ten thousand deep compiles on a test thread's stack: parentheses, each a nonterminal the parser re-enters, and an arrow, each parameter a term the lowering lowers inside the one before. The depth is bought with stack where it is spent, so no stage's acceptance follows the thread it runs on.
 #[test]
 fn nesting_ten_thousand_deep_compiles_on_a_test_thread() {
