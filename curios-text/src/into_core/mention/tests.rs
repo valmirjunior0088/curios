@@ -121,8 +121,8 @@ fn answers(marked: &str, baseline: Option<&PreparedText>) -> PreparedText {
     let minted = unit.minted();
     assert!(
         minted
-            .declarations
-            .iter()
+            .each()
+            .map(|(_, mints)| mints)
             .chain([&minted.entry])
             .all(|mints| mints.unbound.is_empty()),
         "every name the program writes resolves"

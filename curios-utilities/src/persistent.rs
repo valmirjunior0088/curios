@@ -634,6 +634,16 @@ impl<K: Ord + Hash + Clone, V: Clone> Sorted<K, V> {
         Some(removed)
     }
 
+    /// The entry of the greatest key below `key`.
+    pub fn before(&self, key: &K) -> Option<(&K, &V)> {
+        self.tree.before(key)
+    }
+
+    /// The entry of the least key above `key`.
+    pub fn after(&self, key: &K) -> Option<(&K, &V)> {
+        self.tree.after(key)
+    }
+
     /// Every entry, the least key first.
     pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
         self.tree.iter()
@@ -674,6 +684,31 @@ impl<K: Ord + Hash + Clone, V: Clone> curios_archive::Proxy<Sorted<K, V>> for Ke
         let mut map = Sorted::new();
         for (key, value) in entries {
             map.insert(key, value);
+        }
+
+        Ok(map)
+    }
+}
+
+/// How a [`Sorted`] map whose values are held behind an `Rc` is archived: as [`KeyOrder`] archives one, each value stored as itself, so a value two versions share is stored as one held alone would be.
+pub struct SharedKeyOrder;
+
+/// The field adapter: `#[archived_with(InSharedKeyOrder)]`.
+pub type InSharedKeyOrder = curios_archive::Via<SharedKeyOrder>;
+
+impl<K: Ord + Hash + Clone, V: Clone> curios_archive::Proxy<Sorted<K, Rc<V>>> for SharedKeyOrder {
+    type Archivable = Vec<(K, V)>;
+
+    fn to_archivable(map: &Sorted<K, Rc<V>>) -> impl std::borrow::Borrow<Vec<(K, V)>> {
+        map.iter()
+            .map(|(key, value)| (key.clone(), (**value).clone()))
+            .collect::<Vec<_>>()
+    }
+
+    fn from_archivable(entries: Vec<(K, V)>) -> Result<Sorted<K, Rc<V>>, String> {
+        let mut map = Sorted::new();
+        for (key, value) in entries {
+            map.insert(key, Rc::new(value));
         }
 
         Ok(map)

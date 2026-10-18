@@ -8,6 +8,7 @@ use {
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        rc::Rc,
     },
 };
 
@@ -490,8 +491,8 @@ pub(super) struct Context<'a> {
     bindings: HashMap<String, Qualifier>,
     // What the unit's lowering writes and mints from, shared with every nested context — see `Shared`.
     shared: &'a Shared,
-    // The scope is this body's alone: `use` binds from its position to the end of the body it is written in, and a nested body starts empty, so `in_scope` is per context and a snapshot of it is taken at each item.
-    in_scope: Vec<usize>,
+    // The scope is this body's alone: `use` binds from its position to the end of the body it is written in, and a nested body starts empty, so `in_scope` is per context, and an item records how much of it stands before it.
+    in_scope: Vec<curios_core::Import>,
     // Per lexical scope, the site each imported label came through — a reference resolving through a label marks its site used. Declarations enter `bindings` and `qualifiers` without a site, so nothing marks for them.
     current_site: Option<usize>,
     binding_sites: HashMap<String, usize>,
@@ -713,21 +714,16 @@ impl<'a> Context<'a> {
 
     /// End the declaration begun last, which lowered to the items declaring `names`: record what it minted, for every one of them.
     pub(super) fn end_declaration(&self, names: impl IntoIterator<Item = curios_core::Global>) {
-        self.keep_declaration(self.mints(), names);
+        self.keep_declaration(Rc::new(self.mints()), names);
     }
 
     /// Record that the items declaring `names` are one declaration's, which minted `mints`: [`Context::end_declaration`], for a declaration whose lowering is taken from a baseline with what it minted there.
     pub(super) fn keep_declaration(
         &self,
-        mints: curios_core::Mints,
+        mints: Rc<curios_core::Mints>,
         names: impl IntoIterator<Item = curios_core::Global>,
     ) {
-        let mut minted = self.shared.minted.borrow_mut();
-        let declaration = minted.declarations.len();
-        minted.declarations.push(mints);
-        minted
-            .from
-            .extend(names.into_iter().map(|name| (name, declaration)));
+        self.shared.minted.borrow_mut().declare(&mints, names);
     }
 
     /// Mint a metavariable id for a surface hole, unique within its declaration.
@@ -1230,9 +1226,15 @@ impl<'a> Context<'a> {
     }
 
     fn record(&mut self, import: curios_core::Import) {
-        let mut imports = self.shared.imports.borrow_mut();
-        imports.entries.push(import);
-        self.in_scope.push(imports.entries.len() - 1);
+        self.in_scope.push(import);
+    }
+
+    /// Record what this body's `use` declarations brought into scope, once every item of it is lowered.
+    pub(super) fn close_body(&self) {
+        self.shared
+            .imports
+            .borrow_mut()
+            .hold(self.prefix, self.in_scope.clone());
     }
 
     // Snapshot the imports in scope of this body as the view of the declaration `owner` — what a goal inside it may be offered, and what a page resolves the names in its signature through. `None` is the entrypoint tail, which closes the root body.
@@ -1240,9 +1242,14 @@ impl<'a> Context<'a> {
     // Keyed by `Global` rather than by `Qualifier`, because a `satisfy` is anonymous: its identity is a `Global::Witness` and there is no name to hand over. Every other declaration wraps its own qualifier at the call site.
     pub(super) fn record_import_scope(&self, owner: Option<&curios_core::Global>) {
         let mut imports = self.shared.imports.borrow_mut();
+        let in_scope = curios_core::InScope {
+            body: self.prefix,
+            count: u32::try_from(self.in_scope.len())
+                .expect("a body's imports are counted in a u32"),
+        };
         match owner {
             Some(owner) => {
-                imports.by_item.insert(*owner, self.in_scope.clone());
+                imports.scope(*owner, in_scope);
                 self.shared
                     .anchoring
                     .journal
@@ -1250,7 +1257,7 @@ impl<'a> Context<'a> {
                     .scoped
                     .push(*owner);
             }
-            None => imports.tail = self.in_scope.clone(),
+            None => imports.scope_tail(in_scope),
         }
     }
 

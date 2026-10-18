@@ -248,12 +248,19 @@ fn elaborated(
 ) -> Module {
     let lowered = curios_text::into_core_unit(source, &predecessors.text(), &SYNTAX)
         .expect("the unit lowers");
-    let mut minted = Rc::clone(lowered.minted());
-    let raised = Rc::make_mut(&mut minted);
-    for declaration in &mut raised.declarations {
-        declaration.binders += floor;
+    let mut raised = curios_core::Minted::default();
+    for (name, mints) in lowered.minted().each() {
+        let mints = curios_core::Mints {
+            binders: mints.binders + floor,
+            ..mints.clone()
+        };
+        raised.declare(&Rc::new(mints), [*name]);
     }
-    raised.entry.binders += floor;
+    raised.entry = curios_core::Mints {
+        binders: lowered.minted().entry.binders + floor,
+        ..lowered.minted().entry.clone()
+    };
+    let minted = Rc::new(raised);
 
     let placed = predecessors.placed();
     let fixed = predecessors.fixed();

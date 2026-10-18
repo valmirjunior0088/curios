@@ -11,8 +11,14 @@ mod tests;
 
 use {
     crate::{UniverseConstraintOrigin, UniverseSeed, Unresolved, WitnessId, WitnessKey},
-    curios_utilities::{InfixOp, Qualifier, Symbol, name},
-    std::{cmp::Ordering, collections::BTreeMap, fmt, hash, rc::Rc},
+    curios_utilities::{InKeyOrder, InSharedKeyOrder, InfixOp, Qualifier, Sorted, Symbol, name},
+    std::{
+        borrow::Borrow,
+        cmp::Ordering,
+        collections::{BTreeMap, HashMap},
+        fmt, hash,
+        rc::Rc,
+    },
 };
 
 name!(Atom; archive);
@@ -172,13 +178,14 @@ pub struct Mints {
 /// **Within the declaration, never across declarations.** Every counter starts at zero for each source declaration, and the items one declaration lowers to — a type former with its constructors, a concept with its method wrappers — share its identities, a written type copied into several of them being one level. So what a declaration's lowered form holds depends on nothing written before it, and neither does what its elaboration mints above it: an edit to one declaration renumbers no other. No stored term carries a local, a metavariable or a universe metavariable (`validate_stored_identities`, `validate_universes`), so nothing another declaration or a predecessor minted can meet a declaration's walk.
 ///
 /// **Beside the module, never on it.** A seed is read once, where elaboration seeds its solver, and means nothing to any stage after it; carried on the [`Module`](crate::Module) every stage shares, it would be a field each later one had to prove empty, and one the certifier could reach.
+///
+/// **By name, persistent**, so what a unit lowered over a baseline minted is the baseline's with the names of what it lowered again placed again; the names of one declaration share its entry.
 #[derive(Debug, Clone, Default, PartialEq)]
 #[curios_archive::archived]
 pub struct Minted {
-    /// What each source declaration minted, in the order the lowering met them.
-    pub declarations: Vec<Mints>,
-    /// The declaration each top-level name was lowered from: an entry of `declarations` by its place.
-    pub from: BTreeMap<Global, usize>,
+    /// What the declaration each top-level name was lowered from minted.
+    #[archived_with(ByDeclaration)]
+    from: Sorted<Global, Rc<Mints>>,
     /// What the entry minted, the term a program closes with.
     pub entry: Mints,
 }
@@ -194,9 +201,88 @@ impl Minted {
             qualities: Vec::new(),
         };
 
-        self.from
-            .get(name)
-            .map_or(&NOTHING, |declaration| &self.declarations[*declaration])
+        self.from.get(name).map_or(&NOTHING, Rc::as_ref)
+    }
+
+    /// The entry the declaration `name` was lowered from shares among its names, where a lowering recorded one.
+    pub fn shared(&self, name: &Global) -> Option<&Rc<Mints>> {
+        self.from.get(name)
+    }
+
+    /// Record that a declaration lowered to `names` minted `mints`.
+    pub fn declare(&mut self, mints: &Rc<Mints>, names: impl IntoIterator<Item = Global>) {
+        for name in names {
+            self.from.insert(name, Rc::clone(mints));
+        }
+    }
+
+    /// Record what `name` was lowered from under `renamed` instead.
+    pub fn rename(&mut self, name: &Global, renamed: Global) {
+        if let Some(mints) = self.from.remove(name) {
+            self.from.insert(renamed, mints);
+        }
+    }
+
+    /// Forget what `name` was lowered from.
+    pub fn forget(&mut self, name: &Global) {
+        self.from.remove(name);
+    }
+
+    /// Every name a lowering recorded, with what its declaration minted, in the names' order.
+    pub fn each(&self) -> impl Iterator<Item = (&Global, &Mints)> {
+        self.from.iter().map(|(name, mints)| (name, &**mints))
+    }
+}
+
+/// [`Minted`]'s table as it is stored: each declaration's entry once, in the order its first name has among the names, and each name with the entry of its declaration by that order.
+#[curios_archive::archived]
+pub struct StoredMints {
+    declarations: Vec<Mints>,
+    from: Vec<(Global, u32)>,
+}
+
+/// How [`Minted`]'s table is archived: as a [`StoredMints`], one entry for each declaration however many names share it, restored shared again.
+pub struct ByDeclarationProxy;
+
+/// The field adapter: `#[archived_with(ByDeclaration)]`.
+pub type ByDeclaration = curios_archive::Via<ByDeclarationProxy>;
+
+impl curios_archive::Proxy<Sorted<Global, Rc<Mints>>> for ByDeclarationProxy {
+    type Archivable = StoredMints;
+
+    fn to_archivable(from: &Sorted<Global, Rc<Mints>>) -> impl Borrow<StoredMints> {
+        let mut stored = StoredMints {
+            declarations: Vec::new(),
+            from: Vec::with_capacity(from.len()),
+        };
+        let mut ordinals = HashMap::new();
+        for (name, mints) in from.iter() {
+            let ordinal = *ordinals.entry(Rc::as_ptr(mints)).or_insert_with(|| {
+                stored.declarations.push((**mints).clone());
+                u32::try_from(stored.declarations.len() - 1)
+                    .expect("a unit's declarations are counted in a u32")
+            });
+            stored.from.push((*name, ordinal));
+        }
+
+        stored
+    }
+
+    fn from_archivable(stored: StoredMints) -> Result<Sorted<Global, Rc<Mints>>, String> {
+        let declarations = stored
+            .declarations
+            .into_iter()
+            .map(Rc::new)
+            .collect::<Vec<_>>();
+        let mut from = Sorted::new();
+        for (name, ordinal) in stored.from {
+            let mints = declarations
+                .get(ordinal as usize)
+                .ok_or("a name of a declaration no table holds")?;
+            from.insert(name, Rc::clone(mints));
+        }
+
+        Ok(from)
     }
 }
 
@@ -368,7 +454,7 @@ impl fmt::Display for Faithful<'_, Free> {
 
 /// One thing a `use` brought into a lexical scope, as it was written. Core holds only canonical names; the spelling is the text stage's, and it is what a goal report's candidate must be displayed under to be pasteable.
 ///
-/// **A module is recorded as the module, never as its members.** `use /std/{Eq}` puts every public binding of `/std/Eq` in scope, spelled through the label, and which bindings those are is the module's to say, once ([`Imports::members`]): an entry for each of them here would restate one module's interface in every scope that imports it, and a declaration added to the module would change what every one of those scopes stores.
+/// **A module is recorded as the module, never as its members.** `use /std/{Eq}` puts every public binding of `/std/Eq` in scope, spelled through the label, and which bindings those are is the module's to say, once (`Imports::members`): an entry for each of them here would restate one module's interface in every scope that imports it, and a declaration added to the module would change what every one of those scopes stores.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum Import {
@@ -398,44 +484,106 @@ impl Imported<'_> {
 }
 
 /// What a unit's `use` declarations brought into scope, and where. `use` is point-of-use: it binds from its own position to the end of the module body it is written in, and a nested module body starts with nothing. So each definition records the imports in scope where it was written, and the entrypoint tail records its own — what a goal inside either may be offered, spelled as it resolves there.
+///
+/// **By module body, persistent**: a body's imports are its own, so what a unit lowered over a baseline brought into scope is the baseline's with the bodies it lowered again placed again.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Imports {
-    /// Every import, in the order the lowering met them. Appended to only; the scopes below index into it.
-    pub entries: Vec<Import>,
-    /// Per definition, the indices into `entries` in scope where it was written.
-    pub by_item: BTreeMap<Global, Vec<usize>>,
-    /// The indices in scope where the entrypoint tail was written — the end of the root body.
-    pub tail: Vec<usize>,
+    /// Each module body's imports, in the order its `use` declarations bring them in, by the body. A body that imports nothing holds none.
+    #[archived_with(InSharedKeyOrder)]
+    bodies: Sorted<Qualifier, Rc<Vec<Import>>>,
+    /// Per definition, where it was written.
+    #[archived_with(InKeyOrder)]
+    by_item: Sorted<Global, InScope>,
+    /// Where the entrypoint tail was written: the end of the root body.
+    tail: InScope,
     /// The public bindings of each module an entry imports: each label with what it resolves to, by label.
-    pub members: BTreeMap<Qualifier, Vec<(String, Global)>>,
+    #[archived_with(InSharedKeyOrder)]
+    members: Sorted<Qualifier, Rc<Vec<(String, Global)>>>,
+}
+
+/// Where a definition was written, as far as what is in scope there goes: its module body, and how many of the body's imports stand before it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct InScope {
+    pub body: Qualifier,
+    pub count: u32,
 }
 
 impl Imports {
-    /// The bindings in scope at `owner`'s definition, or at the entrypoint tail for a goal no definition owns, each under every spelling a `use` gave it there and in the order the `use`s were written: a module's members where the module was imported, by label. One binding may be listed under several spellings, all of which resolve; a reader is shown the shortest, which the text stage picks (`curios-text`'s `spell`). A definition the lowering never snapshotted — one it synthesized, which no written goal can sit in — falls back to the tail's view as well.
-    pub fn in_scope_at(&self, owner: Option<&Global>) -> impl Iterator<Item = Imported<'_>> {
-        owner
+    /// The imports in scope at `owner`'s definition, or at the entrypoint tail for a goal no definition owns, in the order they were written. A definition the lowering never snapshotted — one it synthesized, which no written goal can sit in — falls back to the tail's view.
+    fn at(&self, owner: Option<&Global>) -> &[Import] {
+        let in_scope = owner
             .and_then(|owner| self.by_item.get(owner))
-            .unwrap_or(&self.tail)
+            .unwrap_or(&self.tail);
+        let body = self
+            .bodies
+            .get(&in_scope.body)
+            .map_or(&[][..], |body| body.as_slice());
+
+        &body[..body.len().min(in_scope.count as usize)]
+    }
+
+    /// The bindings in scope at `owner`'s definition, or at the entrypoint tail for a goal no definition owns, each under every spelling a `use` gave it there and in the order the `use`s were written: a module's members where the module was imported, by label. One binding may be listed under several spellings, all of which resolve; a reader is shown the shortest, which the text stage picks (`curios-text`'s `spell`).
+    pub fn in_scope_at(&self, owner: Option<&Global>) -> impl Iterator<Item = Imported<'_>> {
+        self.at(owner)
             .iter()
-            .flat_map(|index| self.brought(&self.entries[*index]))
+            .flat_map(|import| self.brought(import))
     }
 
     /// The modules in scope at `owner`'s definition, or at the entrypoint tail: each with the label a `use` brought it in under, which a path through it begins with.
     pub fn modules_at(&self, owner: Option<&Global>) -> impl Iterator<Item = (&Qualifier, &str)> {
-        owner
-            .and_then(|owner| self.by_item.get(owner))
-            .unwrap_or(&self.tail)
-            .iter()
-            .filter_map(|index| match &self.entries[*index] {
-                Import::Module { module, label } => Some((module, label.as_str())),
-                Import::Binding { .. } => None,
-            })
+        self.at(owner).iter().filter_map(|import| match import {
+            Import::Module { module, label } => Some((module, label.as_str())),
+            Import::Binding { .. } => None,
+        })
+    }
+
+    /// Every import some body of the unit holds, body by body.
+    pub fn entries(&self) -> impl Iterator<Item = &Import> {
+        self.bodies.iter().flat_map(|(_, body)| body.iter())
     }
 
     /// Every binding some scope of the unit has imported, under each spelling it was imported by.
     pub fn everywhere(&self) -> impl Iterator<Item = Imported<'_>> {
-        self.entries.iter().flat_map(|import| self.brought(import))
+        self.entries().flat_map(|import| self.brought(import))
+    }
+
+    /// Record that the module body `body` holds `imports`, in the order they were written, in place of what it held.
+    pub fn hold(&mut self, body: Qualifier, imports: Vec<Import>) {
+        match imports.is_empty() {
+            true => {
+                self.bodies.remove(&body);
+            }
+            false => self.bodies.insert(body, Rc::new(imports)),
+        }
+    }
+
+    /// Record that the definition `owner` was written at `in_scope`.
+    pub fn scope(&mut self, owner: Global, in_scope: InScope) {
+        self.by_item.insert(owner, in_scope);
+    }
+
+    /// Record that the entrypoint tail was written at `in_scope`.
+    pub fn scope_tail(&mut self, in_scope: InScope) {
+        self.tail = in_scope;
+    }
+
+    /// Record where `owner` was written under `renamed` instead.
+    pub fn rename(&mut self, owner: &Global, renamed: Global) {
+        if let Some(in_scope) = self.by_item.remove(owner) {
+            self.by_item.insert(renamed, in_scope);
+        }
+    }
+
+    /// Forget where `owner` was written.
+    pub fn forget(&mut self, owner: &Global) {
+        self.by_item.remove(owner);
+    }
+
+    /// Record that `module`, an imported module, offers `members`, by label, in place of what it offered.
+    pub fn offer(&mut self, module: Qualifier, members: Vec<(String, Global)>) {
+        self.members.insert(module, Rc::new(members));
     }
 
     /// The bindings `import` brings into scope: itself, or the members of the module it names.
@@ -451,7 +599,7 @@ impl Imports {
             ),
             Import::Module { module, label } => (
                 None,
-                self.members.get(module).map(|members| (label, members)),
+                self.members.get(module).map(|members| (label, &**members)),
             ),
         };
 

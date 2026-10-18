@@ -17,11 +17,11 @@ mod tests;
 
 use {
     crate::Global,
-    curios_utilities::{Qualifier, Source, Span, Table, intern},
+    curios_utilities::{InKeyOrder, Qualifier, Sorted, Source, Span, Table, intern},
     std::{
         cell::RefCell,
         cmp::Ordering,
-        collections::{BTreeMap, HashMap},
+        collections::HashMap,
         fmt,
         hash::{DefaultHasher, Hash, Hasher},
         ptr,
@@ -194,13 +194,17 @@ struct Sited {
 }
 
 /// Where each text of each anchor of one unit lies, and where each of the unit's definitions is named: what an [`Extent`] is resolved against, and where a report about a definition is placed when it holds no position of its own.
+///
+/// **Persistent**, so the anchors of a unit lowered over a baseline are the baseline's with the texts and names of what it lowered again placed again.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Anchors {
     /// By anchor and then by stamp, so an anchor's texts are neighbours, and ordered by what is anchored, so a stored table is the same bytes whichever process wrote it.
-    texts: BTreeMap<(Anchor, u32), Sited>,
+    #[archived_with(InKeyOrder)]
+    texts: Sorted<(Anchor, u32), Sited>,
     /// Where each definition's name was written, for the ones a name was written for: a constructor's tag and a method's label as much as a `let`'s, the head of a `satisfy` for the witness it declares.
-    labels: BTreeMap<Global, Extent>,
+    #[archived_with(InKeyOrder)]
+    labels: Sorted<Global, Extent>,
 }
 
 impl Anchors {
@@ -284,15 +288,18 @@ impl Anchors {
             ));
         }
 
-        let mut texts = self
+        // The anchor's texts, the least stamp first: its only one stands for a text that is gone.
+        let first = (extent.anchor, u32::MIN);
+        let (key, sited) = match self.texts.get(&first) {
+            Some(sited) => (&first, sited),
+            None => self.texts.after(&first)?,
+        };
+        let another = self
             .texts
-            .range((extent.anchor, u32::MIN)..=(extent.anchor, u32::MAX));
-        match (texts.next(), texts.next()) {
-            (Some((_, sited)), None) => {
-                Some(Span::new(sited.source.clone(), sited.start, sited.end))
-            }
-            _ => None,
-        }
+            .after(key)
+            .is_some_and(|((anchor, _), _)| *anchor == extent.anchor);
+        (key.0 == extent.anchor && !another)
+            .then(|| Span::new(sited.source.clone(), sited.start, sited.end))
     }
 }
 

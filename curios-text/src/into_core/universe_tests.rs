@@ -24,8 +24,8 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
 
     // The declaration's written type and the entry's are each the first level of a space of their own.
     let written = minted
-        .declarations
-        .iter()
+        .each()
+        .map(|(_, mints)| mints)
         .chain([&minted.entry])
         .flat_map(|mints| &mints.universes)
         .collect::<Vec<_>>();
@@ -37,7 +37,7 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
         ],
     );
     assert!(written.iter().all(|seed| seed.origin.is_some()));
-    assert_eq!(minted.declarations.len(), 1);
+    assert_eq!(minted.each().count(), 1);
 }
 
 /// A written `Sort` is one quality however many times its text is lowered, in the signature and under the lambda the definition is, and each written `Sort` is a quality of its own, counted from zero for its declaration.
@@ -53,16 +53,17 @@ fn each_written_sort_is_one_quality_of_its_declaration() {
     .unwrap();
 
     let written = minted
-        .declarations
-        .iter()
-        .map(|mints| mints.qualities.len())
+        .each()
+        .map(|(name, mints)| (name.faithful().to_string(), mints.qualities.len()))
         .collect::<Vec<_>>();
-    assert_eq!(written, vec![1, 2]);
+    assert_eq!(
+        written,
+        vec![("/both".to_string(), 2), ("/first".to_string(), 1)]
+    );
     assert!(
         minted
-            .declarations
-            .iter()
-            .flat_map(|mints| &mints.qualities)
+            .each()
+            .flat_map(|(_, mints)| &mints.qualities)
             .all(Option::is_some)
     );
     assert!(minted.entry.qualities.is_empty());

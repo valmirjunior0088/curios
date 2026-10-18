@@ -316,13 +316,12 @@ fn infer_on_an_unborn_hole_cannot_infer() {
 fn infer_on_an_unborn_goal_births_it_with_a_meta_type() {
     let mut context = context();
     // Mirror `elaborate_module_suffix`: written ids live below the lowering's count, so the stand-in type metavariable minted here cannot collide with the goal's.
-    context.seed(&Rc::new(Minted {
-        entry: Mints {
-            metavariables: 1,
-            ..Mints::default()
-        },
-        ..Minted::default()
-    }));
+    let mut seeded = Minted::default();
+    seeded.entry = Mints {
+        metavariables: 1,
+        ..Mints::default()
+    };
+    context.seed(&Rc::new(seeded));
     context.attempt(&[]);
 
     // A written goal in synthesis position does not die with `CannotInfer`: a fresh unmarked metavariable stands in as its type, and the goal is birthed under it so zonk can report it.

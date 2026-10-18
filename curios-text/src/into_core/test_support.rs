@@ -312,11 +312,13 @@ pub(super) fn run_err(src: &str) -> String {
     }
 }
 
-/// The names a lowering filed as resolving to nothing, as the refusal they are: each rendered as elaboration reports it, a line apart, declaration by declaration in the order the lowering met them, the entry's last. `Ok` where it filed none.
+/// The names a lowering filed as resolving to nothing, as the refusal they are: each rendered as elaboration reports it, a line apart, declaration by declaration in the order of their names, the entry's last. `Ok` where it filed none.
 fn unresolved(minted: &curios_core::Minted) -> Result<(), String> {
+    let mut seen = std::collections::HashSet::new();
     let filed = minted
-        .declarations
-        .iter()
+        .each()
+        .map(|(_, mints)| mints)
+        .filter(|mints| seen.insert(std::ptr::from_ref(*mints)))
         .chain([&minted.entry])
         .flat_map(|mints| mints.unbound.values())
         .map(ToString::to_string)

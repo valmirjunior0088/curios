@@ -153,14 +153,11 @@ pub(super) fn name_witnesses(
         .into_iter()
         .map(renamed)
         .collect();
-    named.minted.from = std::mem::take(&mut named.minted.from)
-        .into_iter()
-        .map(|(name, declaration)| (renamed(name), declaration))
-        .collect();
-    named.imports.by_item = std::mem::take(&mut named.imports.by_item)
-        .into_iter()
-        .map(|(name, in_scope)| (renamed(name), in_scope))
-        .collect();
+    // A witness is lowered under a name of its module's places and given one its key spells, so no name it takes was another's.
+    for (name, spelled) in &names {
+        named.minted.rename(name, *spelled);
+        named.imports.rename(name, *spelled);
+    }
     for binder in named
         .lints
         .iter_mut()

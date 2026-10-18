@@ -523,7 +523,15 @@ impl<'a> Baseline<'a> {
                 ordinal: unused.ordinal,
             }),
         }));
-        context.keep_declaration(self.unit.minted.declarations[index].clone(), names);
+        let held = self
+            .unit
+            .lowered_item(first)
+            .declared_names()
+            .first()
+            .and_then(|name| self.unit.minted.shared(name))
+            .cloned()
+            .unwrap_or_default();
+        context.keep_declaration(held, names);
         lowered.declarations.push(Rc::clone(declaration));
     }
 

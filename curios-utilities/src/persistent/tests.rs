@@ -200,11 +200,52 @@ fn an_ordered_map_names_the_positions_on_either_side_of_one() {
     assert_eq!(ordered.before(i64::MAX), Some((30, &30)));
 }
 
+#[test]
+fn a_sorted_map_names_the_keys_on_either_side_of_one() {
+    let mut sorted = Sorted::new();
+    for key in ["b", "d", "f"] {
+        sorted.insert(key, key.len());
+    }
+
+    assert_eq!(sorted.before(&"d"), Some((&"b", &1)));
+    assert_eq!(sorted.after(&"d"), Some((&"f", &1)));
+    assert_eq!(sorted.after(&"c"), Some((&"d", &1)));
+    assert_eq!(sorted.before(&"b"), None);
+    assert_eq!(sorted.after(&"f"), None);
+}
+
 /// A map read in key order, archived beside a field of its own.
 #[curios_archive::archived]
 struct Stored {
     #[archived_with(InKeyOrder)]
     map: Sorted<u32, String>,
+}
+
+/// A map whose values are shared, archived as their values.
+#[curios_archive::archived]
+struct StoredShared {
+    #[archived_with(InSharedKeyOrder)]
+    map: Sorted<u32, Rc<String>>,
+}
+
+/// A value two keys share is archived once for each and restored as a value of each.
+#[test]
+fn a_sorted_map_of_shared_values_is_restored_from_its_values() {
+    let shared = Rc::new("shared".to_string());
+    let mut map = Sorted::new();
+    map.insert(2, Rc::clone(&shared));
+    map.insert(1, shared);
+    let bytes = curios_archive::to_bytes(&StoredShared { map }).expect("a map archives");
+    let restored = curios_archive::from_bytes::<StoredShared>(&bytes).expect("a map restores");
+
+    assert_eq!(
+        restored
+            .map
+            .iter()
+            .map(|(key, value)| (*key, value.as_str()))
+            .collect::<Vec<_>>(),
+        [(1, "shared"), (2, "shared")],
+    );
 }
 
 /// A map read in key order is archived as its entries in that order and restored to the same entries, whatever order they were inserted in.

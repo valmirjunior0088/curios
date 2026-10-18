@@ -2098,13 +2098,14 @@ fn process_items(
             lowered.uses.insert(context.prefix(), read.clone());
         }
     }
+    context.close_body();
 
     Ok(())
 }
 
 /// The public bindings of each module some entry of `entries` imports: each label with what it resolves to, by label. A module's interface answers a public binding's target whoever asks (`visible_binding`), so the list is the module's and nothing of the scope that imported it.
-fn module_members(
-    entries: &[curios_core::Import],
+fn module_members<'e>(
+    entries: impl Iterator<Item = &'e curios_core::Import>,
     public: &Scoped<'_, PublicInterface>,
 ) -> BTreeMap<Qualifier, Vec<(String, curios_core::Global)>> {
     let mut members = BTreeMap::new();
@@ -2524,8 +2525,10 @@ fn into_core_unit_within(
     // Every scope is recorded: the members of the modules they import are the interfaces' to state, once for the unit.
     {
         let mut imports = shared.imports.borrow_mut();
-        let members = module_members(&imports.entries, &public);
-        imports.members = members;
+        let members = module_members(imports.entries(), &public);
+        for (module, offered) in members {
+            imports.offer(module, offered);
+        }
     }
     // The entry mints in a space of its own, as a declaration does, and is written in a text of its own.
     context.begin_declaration();
@@ -2627,10 +2630,6 @@ fn into_core_unit_within(
         .map(FlatItem::into_core)
         .collect::<Vec<_>>();
 
-    curios_profile::sample!(
-        "into_core_unit::imports",
-        shared.imports.borrow().entries.len()
-    );
     let mut unit = PreparedText {
         mounts: own.clone(),
         foreigns,
@@ -2648,9 +2647,10 @@ fn into_core_unit_within(
             witnesses,
             tests,
         },
-        minted: Rc::new(curios_core::Minted {
-            entry: entry_mints,
-            ..shared.minted.into_inner()
+        minted: Rc::new({
+            let mut minted = shared.minted.into_inner();
+            minted.entry = entry_mints;
+            minted
         }),
         imports: curios_archive::Deferred::held(shared.imports.into_inner()),
         visible: visible_mounts,
