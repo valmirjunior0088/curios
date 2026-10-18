@@ -1,4 +1,4 @@
-use /std/{Result, Nat, Byte, Bytes, Char, Str, Bool, Option, Parse};
+use /std/{Result, Nat, Byte, Bytes, Char, Str, Bool, Option, Parse, Fmt};
 use /std/Bool/{True, Holds};
 use /std/Parse/{Of, At, Pos, Input, Error};
 
@@ -49,7 +49,7 @@ let byte_spelling(b: Byte) -> Str =
     match Char/of_ascii(b)
     | some(c) =>
         match Nat/in_range(Byte/to_nat(b), '!', '~')
-        | true => Str/flatten(["'", Str/of_char(c), "'"])
+        | true => Fmt/render("'%'")(c)
         | false => numbered
         end
     | none() => numbered
@@ -87,7 +87,7 @@ let literal_past(@input: Bytes, lit: Bytes, at: Pos(Bytes, input)) -> Option(Pos
 
 --- The bytes of `lit`, exactly; declines on anything else.
 pub let literal(lit: Str) -> Parse(Bytes, {}) =
-    let message = Str/flatten(["expected \"", lit, "\""]);
+    let message = Fmt/render("expected \"%\"")(lit);
     Of {
         run(_, at) =
             match literal_past(Str/to_bytes(lit), at)

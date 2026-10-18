@@ -1,4 +1,4 @@
-use /std/{Str, List};
+use /std/{Str, List, Fmt};
 
 --- How a value spells as text.
 pub concept Spell(A: Type): pub Type {
@@ -10,7 +10,7 @@ pub use Spell/*;
 
 --- How a constructor application spells: the head, then its arguments in parentheses.
 pub let call(head: Str, args: List(Str)) -> Str =
-    Str/concat(head, Str/concat("(", Str/concat(Str/join(", ", args), ")")));
+    Fmt/render("%(%)")(head)(Str/join(", ", args));
 
 --- How a record spells: the head, then its fields in braces.
 ---
@@ -18,11 +18,8 @@ pub let call(head: Str, args: List(Str)) -> Str =
 pub let record(head: Str, fields: List({Str, Str})) -> Str =
     let entries =
         List/map(fields, ((label, value)) =>
-            match Str/len(label)
-            | 0 => value
-            | _ => Str/concat(label, Str/concat(" = ", value))
-            end);
+            match Str/len(label) | 0 => value | _ => Fmt/render("% = %")(label)(value) end);
     match entries
     | [] => Str/concat(head, " {}")
-    | _ => Str/concat(head, Str/concat(" { ", Str/concat(Str/join(", ", entries), " }")))
+    | _ => Fmt/render("% { % }")(head)(Str/join(", ", entries))
     end;

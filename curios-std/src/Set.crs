@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Str, List, Map, Show, Spell};
+use /std/{Nat, Bool, List, Map, Show, Spell, Fmt};
 use /std/ops/{Eql};
 use /std/Map/{Key};
 
@@ -55,5 +55,5 @@ satisfy (@K: Type, use Key(K), use Show(K)) => Show(Set(K)) {
 }
 
 satisfy (@K: Type, use Key(K), use Spell(K)) => Spell(Set(K)) {
-    spell(s) = Str/flatten(["Set/of_list(", Spell/spell(to_list(s)), ")"]),
+    spell(s) = Fmt/render("Set/of_list(#)")(to_list(s)),
 }

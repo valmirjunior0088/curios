@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Bytes, Str, List, Option, Eq, Hash, Show, Spell};
+use /std/{Nat, Bool, Bytes, Str, List, Option, Eq, Hash, Show, Spell, Fmt};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql};
 
@@ -250,23 +250,13 @@ satisfy (@K: Type, use Key(K), @V: Type, use Eql(V)) => Eql(Map(K, V)) {
 
 satisfy (@K: Type, use Key(K), @V: Type, use Show(K), use Show(V)) => Show(Map(K, V)) {
     show(m) =
-        Str/flatten([
-            "{",
-            Str/join(
-                ", ",
-                List/map(to_list(m), ((k, v)) => Str/flatten([Show/show(k), ": ", Show/show(v)]))),
-            "}"]),
+        Fmt/render("{%}")(
+            Str/join(", ", List/map(to_list(m), ((k, v)) => Fmt/render("%: %")(k)(v)))),
 }
 
 --- As `Map/of_list` over the entries.
 satisfy (@K: Type, use Key(K), @V: Type, use Spell(K), use Spell(V)) => Spell(Map(K, V)) {
     spell(m) =
-        Str/flatten([
-            "Map/of_list([",
-            Str/join(
-                ", ",
-                List/map(
-                    to_list(m),
-                    ((k, v)) => Str/flatten(["(", Spell/spell(k), ", ", Spell/spell(v), ")"]))),
-            "])"]),
+        Fmt/render("Map/of_list([%])")(
+            Str/join(", ", List/map(to_list(m), ((k, v)) => Fmt/render("(#, #)")(k)(v)))),
 }

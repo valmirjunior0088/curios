@@ -1,4 +1,4 @@
-use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Ord};
+use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Fmt, Ord};
 use /std/Bool/{True};
 use /std/ops/{Eql, Cmp};
 
@@ -198,7 +198,7 @@ satisfy Spell(Char) {
             | '\'' => "\\'"
             | _ => Str/of_char(c)
             end;
-        Str/concat("'", Str/concat(body, "'")),
+        Fmt/render("'%'")(body),
 }
 
 satisfy Ord(Char) {

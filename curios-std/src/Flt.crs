@@ -2,8 +2,8 @@ pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes,
     of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Result, Bytes, List, Ordering, Show, Spell, Ord,
-    Dyadic, Parse, Vec, Eq};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Result, Bytes, List, Ordering, Show, Spell, Fmt,
+    Ord, Dyadic, Parse, Vec, Eq};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -551,10 +551,8 @@ let layout(ds: List(Nat), k: Int) -> Str =
         | false =>
             match Nat/lt/try(kn, len)
             | some(inside) =>
-                Str/flatten([
-                    digits_to_str(List/take(ds, kn)),
-                    ".",
-                    digits_to_str(List/drop(@Nat, ds, kn))])
+                Fmt/render("%.%")(digits_to_str(List/take(ds, kn)))(
+                    digits_to_str(List/drop(@Nat, ds, kn)))
             | none() => Str/concat(digits_to_str(ds), Str/repeat("0", kn - len))
             end
         end
@@ -650,7 +648,7 @@ pub let to_str(f: Flt) -> Str =
         let suffix =
             match payload == unwritten
             | true => ""
-            | false => Str/flatten(["(0x", hex_str(payload), ")"])
+            | false => Fmt/render("(0x%)")(hex_str(payload))
             end;
         Str/flatten([sign, kind, suffix])
     | exp_field == 0 && mant_field == 0 => Str/concat(sign, "0")
@@ -1037,9 +1035,7 @@ satisfy Spell(Flt) {
                             | true => atom
                             | false => Str/concat(Str/concat(acc, ", "), atom)
                             end);
-                Str/concat(
-                    Str/concat("/std/Flt/of_le_bytes(x[", atoms),
-                    "], @/std/Bool/True/qed())")
+                Fmt/render("/std/Flt/of_le_bytes(x[%], @/std/Bool/True/qed())")(atoms)
             end
         | true =>
             let raw = to_str(f);

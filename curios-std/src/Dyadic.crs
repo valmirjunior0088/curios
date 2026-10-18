@@ -1,4 +1,4 @@
-use /std/{Flt, Nat, Int, Bool, Option, Ordering, Str, Show, Spell, Ord, Hash};
+use /std/{Flt, Nat, Int, Bool, Option, Ordering, Str, Show, Spell, Fmt, Ord, Hash};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul};
 
 --- A dyadic rational, `mantissa · 2^exponent`. Every finite float's exact value is one, and so is every sum, difference and product of them, so the arithmetic here never rounds; `Flt/rounded/of_dyadic` is the one way back to a float.
@@ -109,7 +109,7 @@ pub let ord(a: Dyadic, b: Dyadic) -> Ordering =
 
 --- `a` as it is held, `±mantissa*2^exponent`: `+3*2^-2` is three quarters.
 pub let to_str(a: Dyadic) -> Str =
-    Str/concat(Str/concat(Int/to_str(a.mantissa), "*2^"), Int/to_str(a.exponent));
+    Fmt/render("%*2^%")(a.mantissa)(a.exponent);
 
 satisfy Eql(Dyadic) {
     eql = eql,

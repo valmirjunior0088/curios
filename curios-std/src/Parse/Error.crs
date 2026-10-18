@@ -1,4 +1,4 @@
-use /std/{Str, Nat, Bool, Show, Spell};
+use /std/{Str, Nat, Bool, Show, Spell, Fmt};
 use /std/ops/{Eql};
 
 --- Why a parser refused: what it wanted, the byte offset it stopped at, and whether the refusal is committed — the input recognized as the shape the parser was reading, so an enclosing `or` reports it rather than trying an alternative.
@@ -30,7 +30,7 @@ pub let commit(e: Error) -> Error =
 
 --- The refusal as a line: the message, then where.
 pub let to_str(e: Error) -> Str =
-    Str/flatten([e.message, " at byte ", Nat/to_str(e.offset)]);
+    Fmt/render("% at byte %")(e.message)(e.offset);
 
 --- Shown as `to_str` spells it.
 satisfy Show(Error) {

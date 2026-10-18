@@ -1,4 +1,4 @@
-use /std/{Str, Char, Nat, Bool, Bytes, Result, Option, Parse};
+use /std/{Str, Char, Nat, Bool, Bytes, Result, Option, Parse, Fmt};
 use /std/Bool/{Holds};
 use /std/Parse/{Of, At, Pos, Input, Error};
 
@@ -46,7 +46,7 @@ pub let char_if(pred: (Char) -> Bool) -> Parse(Str, Char) =
 
 --- The character `expected`; declines on any other.
 pub let expect(expected: Char) -> Parse(Str, Char) =
-    let message = Str/flatten(["expected '", Str/of_char(expected), "'"]);
+    let message = Fmt/render("expected '%'")(expected);
     Of {
         run(_, at) =
             match Str/At/try_next(text(at), position(at))
@@ -60,7 +60,7 @@ pub let expect(expected: Char) -> Parse(Str, Char) =
 
 --- The characters of `lit`, exactly; declines on anything else.
 pub let literal(lit: Str) -> Parse(Str, {}) =
-    let message = Str/flatten(["expected \"", lit, "\""]);
+    let message = Fmt/render("expected \"%\"")(lit);
     Of {
         run(_, at) =
             match Str/follows(text(at), position(at), lit)

@@ -1,6 +1,6 @@
 pub use /sys/{Option};
 pub use /sys/Option/{some, none};
-use /std/{Bool, Eq, Show, Spell, Str, Monad, Result, Ordering, Ord};
+use /std/{Bool, Eq, Show, Spell, Fmt, Monad, Result, Ordering, Ord};
 use /std/Bool/{True, False};
 use /std/ops/{Eql, Cmp};
 
@@ -90,11 +90,7 @@ satisfy (@A: Type, use Eql(A)) => Eql(Option(A)) {
 }
 
 satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
-    show(m) =
-        match m
-        | some(x) => Str/concat("some(", Str/concat(Show/show(x), ")"))
-        | none() => "none()"
-        end,
+    show(m) = match m | some(x) => Fmt/render("some(%)")(x) | none() => "none()" end,
 }
 
 satisfy (@A: Type, use Spell(A)) => Spell(Option(A)) {

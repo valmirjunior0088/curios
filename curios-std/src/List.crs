@@ -1,6 +1,6 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map, fold};
-use /std/{Nat, Bool, Option, Str, Show, Spell, Monad, Ordering, Ord};
+use /std/{Nat, Bool, Option, Str, Show, Spell, Fmt, Monad, Ordering, Ord};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp};
 
@@ -215,11 +215,11 @@ satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
 }
 
 satisfy (@A: Type, use Show(A)) => Show(List(A)) {
-    show(l) = Str/concat("[", Str/concat(Str/join(", ", map(l, (x) => Show/show(x))), "]")),
+    show(l) = Fmt/render("[%]")(Str/join(", ", map(l, (x) => Show/show(x)))),
 }
 
 satisfy (@A: Type, use Spell(A)) => Spell(List(A)) {
-    spell(l) = Str/concat("[", Str/concat(Str/join(", ", map(l, (x) => Spell/spell(x))), "]")),
+    spell(l) = Fmt/render("[%]")(Str/join(", ", map(l, (x) => Spell/spell(x)))),
 }
 
 satisfy Monad(List) {

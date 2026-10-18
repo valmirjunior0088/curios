@@ -1,6 +1,6 @@
 pub use /sys/{Bits};
 pub use /sys/Bits/{get, len, eql, slice, replicate, and, or, xor, to_bytes};
-use /std/{List, Nat, Bool, Option, Eq, Str, Show, Spell, Ordering, Ord};
+use /std/{List, Nat, Bool, Option, Eq, Str, Show, Spell, Fmt, Ordering, Ord};
 use /std/ops/{Eql, Cmp};
 use /std/Bool/{Holds};
 
@@ -176,5 +176,5 @@ satisfy Show(Bits) {
 satisfy Spell(Bits) {
     spell(b) =
         let parts = fold(b, [], (bit, acc) => [..acc, match bit | true => "1" | false => "0" end]);
-        Str/concat("b[", Str/concat(Str/join(", ", parts), "]")),
+        Fmt/render("b[%]")(Str/join(", ", parts)),
 }

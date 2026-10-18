@@ -1,6 +1,6 @@
 pub use /sys/{Result};
 pub use /sys/Result/{success, failure};
-use /std/{Bool, Show, Spell, Str, Option, Ordering, Ord, Monad};
+use /std/{Bool, Show, Spell, Fmt, Option, Ordering, Ord, Monad};
 use /std/ops/{Eql, Cmp};
 
 --- `a` as a success.
@@ -69,8 +69,8 @@ satisfy (@A: Type, @E: Type, use Eql(A), use Eql(E)) => Eql(Result(E, A)) {
 satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(E, A)) {
     show(r) =
         match r
-        | success(x) => Str/concat("success(", Str/concat(Show/show(x), ")"))
-        | failure(e) => Str/concat("failure(", Str/concat(Show/show(e), ")"))
+        | success(x) => Fmt/render("success(%)")(x)
+        | failure(e) => Fmt/render("failure(%)")(e)
         end,
 }
 

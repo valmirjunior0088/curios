@@ -1,4 +1,4 @@
-use /std/{Nat, List, Eq, Str, Show, Spell};
+use /std/{Nat, List, Eq, Show, Spell, Fmt};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql};
 
@@ -110,5 +110,5 @@ satisfy (@T: Type, @n: Nat, use Show(T)) => Show(Vec(T, n)) {
 }
 
 satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T, n)) {
-    spell(v) = Str/flatten(["Vec/of_list(", Spell/spell(to_list(v)), ")"]),
+    spell(v) = Fmt/render("Vec/of_list(#)")(to_list(v)),
 }

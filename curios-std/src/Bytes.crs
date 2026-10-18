@@ -1,6 +1,6 @@
 pub use /sys/{Bytes};
 pub use /sys/Bytes/{get, len, eql, slice, replicate, and, or, xor, to_bits};
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Ordering, Ord};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Ordering, Ord};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp};
 
@@ -271,5 +271,5 @@ satisfy Show(Bytes) {
 satisfy Spell(Bytes) {
     spell(b) =
         let parts = fold(b, [], (byte, acc) => [..acc, Nat/to_str(Byte/to_nat(byte))]);
-        Str/concat("x[", Str/concat(Str/join(", ", parts), "]")),
+        Fmt/render("x[%]")(Str/join(", ", parts)),
 }

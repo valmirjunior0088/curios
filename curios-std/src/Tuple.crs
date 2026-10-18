@@ -1,8 +1,8 @@
-use /std/{Show, Spell, Ord, Ordering, Str, Bool, List};
+use /std/{Show, Spell, Fmt, Ord, Ordering, Str, Bool, List};
 use /std/ops/{Eql};
 
 let parens(parts: List(Str)) -> Str =
-    Str/concat("(", Str/concat(Str/join(", ", parts), ")"));
+    Fmt/render("(%)")(Str/join(", ", parts));
 
 let then(first: Ordering, rest: ({}) -> Ordering) -> Ordering =
     match first | eq() => rest(()) | _ => first end;
@@ -12,7 +12,7 @@ satisfy Show({}) {
 }
 
 satisfy (@A: Type, use Show(A)) => Show({A}) {
-    show(t) = Str/concat("(", Str/concat(Show/show(t.0), ",)")),
+    show(t) = Fmt/render("(%,)")(t.0),
 }
 
 satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
@@ -138,7 +138,7 @@ satisfy Spell({}) {
 }
 
 satisfy (@A: Type, use Spell(A)) => Spell({A}) {
-    spell(t) = Str/concat("(", Str/concat(Spell/spell(t.0), ",)")),
+    spell(t) = Fmt/render("(#,)")(t.0),
 }
 
 satisfy (@A: Type, @B: Type, use Spell(A), use Spell(B)) => Spell({A, B}) {
