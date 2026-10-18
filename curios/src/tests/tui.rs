@@ -250,7 +250,7 @@ fn resize_events_update_the_drawing_session_before_rendering() {
             view(model) = (w, h) => View/blank(w, h),
         };
         let program() -> Io({}) =
-            let result = Try/run(Tui/run(app))!;
+            let result = Try/run(Tui/main(app))!;
             print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
         program()
     "#,
@@ -273,7 +273,7 @@ const IDLE_PROGRAM: &str = r#"
             view(model) = (w, h) => View/blank(w, h),
         };
         let program() -> Io({}) =
-            let result = Try/run(Tui/run(app))!;
+            let result = Try/run(Tui/main(app))!;
             print(match result | success(_) => "quit" | failure(e) => Show/show(e) end);
         program()
     "#;
@@ -342,7 +342,7 @@ fn a_program_outlives_the_end_of_its_input() {
             view(model) = (w, h) => View/blank(w, h),
         };
         let program() -> Io({}) =
-            let result = Try/run(Tui/run(app))!;
+            let result = Try/run(Tui/main(app))!;
             print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
         program()
     "#,
@@ -373,7 +373,7 @@ pub(super) const LISTING_PROGRAM: &str = r#"
                 view(model) = Pane/border(Style/plain, "pick", Listing/view(model, (s: Str) => s, Style/plain, Style { ..Style/plain, reverse = true })),
             };
         let program() -> Io({}) =
-            let outcome = Try/run(Tui/run(app))!;
+            let outcome = Try/run(Tui/main(app))!;
             match outcome
             | success(model) => /std/print(Option/unwrap_or(Listing/selected(model), "none"))
             | failure(e) => /std/print(Show/show(e))
@@ -404,7 +404,7 @@ fn a_quit_waits_for_the_work_its_update_asked_for() {
             view(model) = (w, h) => View/blank(w, h),
         };
         let program() -> Io({}) =
-            let result = Try/run(Tui/run(app))!;
+            let result = Try/run(Tui/main(app))!;
             print(match result | success(_) => "/quit" | failure(_) => "/failed" end);
         program()
     "#,
@@ -466,7 +466,7 @@ fn a_release_gives_the_terminal_back_around_its_action() {
             view(model) = (w, h) => View/blank(w, h),
         };
         let program() -> Io({}) =
-            let result = Try/run(Tui/run(app))!;
+            let result = Try/run(Tui/main(app))!;
             print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
         program()
     "#,
@@ -509,7 +509,7 @@ fn a_size_the_terminal_reports_reaches_update_as_an_input() {
             view(model) = (w, h) => View/blank(w, h),
         };
         let program() -> Io({}) =
-            let result = Try/run(Tui/run(app))!;
+            let result = Try/run(Tui/main(app))!;
             print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
         program()
     "#,
@@ -581,7 +581,7 @@ const PICKER_PROGRAM: &str = r#"
             };
 
         let program() -> Io({}) =
-            let result = Try/run(Tui/run(app))!;
+            let result = Try/run(Tui/main(app))!;
             print(match result | success(m) => Str/concat(" with ", m.field.text) | failure(_) => " failed" end);
         program()
     "#;

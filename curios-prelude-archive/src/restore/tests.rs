@@ -68,7 +68,7 @@ fn string_literal_machinery_is_monomorphic() {
         "/std/Str/Str",
         "/std/Str/Valid/Valid",
         "/std/Str/Valid/from",
-        "/std/Str/scan_from",
+        "/std/Str/utf8/scan_from",
         "/std/Char/Char",
         "/std/Char/Valid/Valid",
     ];

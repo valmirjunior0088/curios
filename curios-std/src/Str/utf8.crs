@@ -1,0 +1,217 @@
+use /std/{Byte, Bytes, Bool, Char, Eq, Nat};
+use /std/Bool/{True, False, Holds};
+use /std/Str/{Class, Scan};
+
+--- What `c` begins.
+pub let classify(c: Byte) -> Class =
+    let n = Byte/to_nat(c);
+    choose
+    | Nat/in_range(n, 0x0, 0x7F) => Class/ascii()
+    | Nat/in_range(n, 0xC2, 0xDF) => Class/lead(1, 0x80, 0xBF, n - 0xC0)
+    | Nat/in_range(n, 0xE0, 0xEF) =>
+        let lo = match n == 0xE0 | true => 0xA0 | false => 0x80 end;
+        let hi = match n == 0xED | true => 0x9F | false => 0xBF end;
+        Class/lead(2, lo, hi, n - 0xE0)
+    | Nat/in_range(n, 0xF0, 0xF4) =>
+        let lo = match n == 0xF0 | true => 0x90 | false => 0x80 end;
+        let hi = match n == 0xF4 | true => 0x8F | false => 0xBF end;
+        Class/lead(3, lo, hi, n - 0xF0)
+    | _ => Class/bad()
+    end;
+
+--- Whether `c` continues a character: a byte in `0x80..=0xBF`, which no character begins with.
+pub let continues(c: Byte) -> Bool =
+    Nat/in_range(Byte/to_nat(c), 0x80, 0xBF);
+
+--- The state reading `c` leaves the scan in.
+pub let step(c: Byte, s: Scan) -> Scan =
+    let n = Byte/to_nat(c);
+    match s
+    | bad() => Scan/bad()
+    | cont(rem, lo, hi) =>
+        choose
+        | Bool/not(Nat/in_range(n, lo, hi)) => Scan/bad()
+        | rem == 1 => Scan/lead()
+        | _ => Scan/cont(rem - 1, 0x80, 0xBF)
+        end
+    | lead() =>
+        match classify(c)
+        | ascii() => Scan/lead()
+        | lead(cont, lo, hi, _) => Scan/cont(cont, lo, hi)
+        | bad() => Scan/bad()
+        end
+    end;
+
+--- The state reading all of `b` leaves the scan in.
+pub let scan_from(s: Scan, b: Bytes) -> Scan =
+    match b | x[] => s | x[h, ..t] => scan_from(step(h, s), t) end;
+
+--- How many characters `b` holds from scan state `s`.
+pub let count_scalars(s: Scan, b: Bytes) -> Nat =
+    match b
+    | x[] => 0
+    | x[h, ..t] =>
+        match s
+        | lead() => count_scalars(step(h, Scan/lead()), t) + 1
+        | cont(_, _, _) => count_scalars(step(h, s), t)
+        | bad() => count_scalars(step(h, Scan/bad()), t)
+        end
+    end;
+
+--- Whether every code from `min` to `max` is a scalar value: the range lies below the surrogates, or past them and at most `U+10FFFF`. One contiguous range, so these two cases are the whole of it.
+let scalars(min: Nat, max: Nat) -> Bool =
+    max < 0xD800 || min >= 0xE000 && max <= 0x10FFFF;
+
+--- Whether a character in flight can only end at a scalar value: `rem` continuation bytes still owed, the next between `lo` and `hi` and any after it between `0x80` and `0xBF`, over the bits `partial` has gathered so far.
+---
+--- The range is stated once over the bytes owed past the next: each shifts what came before by six bits, a power of `0x40`, and leaves its own six bits free. No count past three begins a character, so those are refused along with zero.
+pub let pending(rem: Nat, lo: Nat, hi: Nat, partial: Nat) -> Bool =
+    match rem
+    | 0 => false
+    | r + 1 =>
+        r <= 2
+            && scalars(
+                (partial * 0x40 + (lo - 0x80)) * Nat/pow(0x40, r),
+                (partial * 0x40 + (hi - 0x80)) * Nat/pow(0x40, r) + (Nat/pow(0x40, r) - 1))
+    end;
+
+--- A range of scalar values narrowed stays one.
+let scalars_within(
+    min: Nat,
+    max: Nat,
+    min2: Nat,
+    max2: Nat,
+    s: Holds(scalars(min, max)),
+    low: Holds(min <= min2),
+    high: Holds(max2 <= max),
+) -> Holds(scalars(min2, max2)) =
+    match max < 0xD800
+    | true =>
+        match max2 < 0xD800
+        | true => True/qed()
+        | false => match False/refuted() end
+        end
+    | false =>
+        match min >= 0xE000
+        | false => match s end
+        | true =>
+            match max <= 0x10FFFF
+            | false => match s end
+            | true =>
+                match max2 < 0xD800
+                | true => True/qed()
+                | false =>
+                    match min2 >= 0xE000
+                    | false => match False/refuted() end
+                    | true =>
+                        match max2 <= 0x10FFFF
+                        | true => True/qed()
+                        | false => match False/refuted() end
+                        end
+                    end
+                end
+            end
+        end
+    end;
+
+--- The last byte of a character, read in range, ends it at a scalar value.
+pub let concluded(
+    lo: Nat,
+    hi: Nat,
+    partial: Nat,
+    c: Nat,
+    p: Holds(pending(1, lo, hi, partial)),
+    inside: Holds(Nat/in_range(c, lo, hi)),
+) -> Char/Valid(partial * 0x40 + (c - 0x80)) =
+    scalars_within(
+        partial * 0x40 + (lo - 0x80),
+        partial * 0x40 + (hi - 0x80),
+        partial * 0x40 + (c - 0x80),
+        partial * 0x40 + (c - 0x80),
+        p,
+        True/proved(),
+        True/proved());
+
+--- A byte read in range, with more still owed, leaves a character that can still only end at a scalar value: its range narrows to the one below that byte.
+pub let advanced(
+    rem: Nat,
+    lo: Nat,
+    hi: Nat,
+    partial: Nat,
+    c: Nat,
+    p: Holds(pending(rem, lo, hi, partial)),
+    inside: Holds(Nat/in_range(c, lo, hi)),
+    more: Holds(Bool/not(rem == 1)),
+) -> Holds(pending(rem - 1, 0x80, 0xBF, partial * 0x40 + (c - 0x80))) =
+    match rem
+    | 0 => match p end
+    | r1 + 1 =>
+        match r1
+        | 0 => match more end
+        | r2 + 1 =>
+            match r2
+            | 0 =>
+                scalars_within(
+                    (partial * 0x40 + (lo - 0x80)) * 0x40,
+                    (partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F,
+                    (partial * 0x40 + (c - 0x80)) * 0x40,
+                    (partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F,
+                    p,
+                    True/proved(),
+                    True/proved())
+            | r3 + 1 =>
+                match r3
+                | 0 =>
+                    scalars_within(
+                        (partial * 0x40 + (lo - 0x80)) * 0x40 * 0x40,
+                        ((partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
+                        (partial * 0x40 + (c - 0x80)) * 0x40 * 0x40,
+                        ((partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
+                        p,
+                        True/proved(),
+                        True/proved())
+                | _ + 1 => match p end
+                end
+            end
+        end
+    end;
+
+--- Whether the character `c` begins can only end at a scalar value: what `classify`'s ranges promise of a lead byte, and nothing to promise of any other.
+pub let begins_scalars(c: Byte) -> Bool =
+    match classify(c) | lead(rem, lo, hi, partial) => pending(rem, lo, hi, partial) | _ => true end;
+
+--- Whether every byte below `k` begins only scalar values.
+let each_below(k: Nat) -> Bool =
+    match k | 0 => true | kp + 1 => begins_scalars(Nat/to_byte(kp % 256)) && each_below(kp) end;
+
+--- `classify`'s promise, decided once over every byte rather than proved family by family: the check is a structural recursion the build runs, so a change to `classify`'s ranges that broke it would stop the build rather than wait for a proof to be revisited.
+let every_byte: Holds(each_below(256)) =
+    True/qed();
+
+--- A byte below `m`, read out of the check over every byte below `m`.
+let begins_below(
+    m: Nat,
+    n: Nat,
+    all: Holds(each_below(m)),
+    inside: Holds(n < m),
+) -> Holds(begins_scalars(Nat/to_byte(n % 256))) =
+    match m
+    | 0 => match inside end
+    | mp + 1 =>
+        match begins_scalars(Nat/to_byte(mp % 256))
+        | false => match all end
+        | true =>
+            match n < mp
+            | true => begins_below(mp, n, all, True/qed())
+            | false =>
+                Eq/subst(
+                    (k: Nat) => Holds(begins_scalars(Nat/to_byte(k % 256))),
+                    Nat/le/antisym(mp, n, True/proved(), inside),
+                    True/qed())
+            end
+        end
+    end;
+
+--- Every byte begins only scalar values.
+pub let begins_scalars_of(c: Byte) -> Holds(begins_scalars(c)) =
+    begins_below(256, Byte/to_nat(c), every_byte, True/qed());

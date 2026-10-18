@@ -252,7 +252,7 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
     assert!(
         split
             .iter()
-            .all(|function| !function.name.contains("/std/Str/step")),
+            .all(|function| !function.name.contains("/std/Str/utf8/step")),
         "nothing on this program's path calls `step`, so the module holds no copy of it",
     );
     let next = split
@@ -279,7 +279,7 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
     );
     // Matched on the name rather than through `in_fold`, because the emitted call spells the callee's index before its hint and that index is not stable across passes.
     assert_eq!(
-        fold.body.matches("$/std/Str/step").count(),
+        fold.body.matches("$/std/Str/utf8/step").count(),
         0,
         "the walk steps its scan by the arm it is in rather than calling `step`",
     );

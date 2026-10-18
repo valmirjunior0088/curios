@@ -18,7 +18,7 @@ end
 pub use Json/*;
 
 mod encode;
-pub use encode/{encode};
+pub use encode/{let encode};
 
 mod decode;
-pub use decode/{decode};
+pub use decode/{let decode};

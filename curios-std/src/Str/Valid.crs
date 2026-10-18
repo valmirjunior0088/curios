@@ -1,5 +1,6 @@
-use /std/Str/{Class, classify, Scan, step, scan_from, pending, concluded, advanced,
-    begins_scalars_of, continues};
+use /std/Str/{Class, Scan};
+use /std/Str/utf8/{classify, step, scan_from, pending, concluded, advanced, begins_scalars_of,
+    continues};
 use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option, Str};
 use /std/Bool/{True, False, Holds};
 

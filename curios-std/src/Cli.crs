@@ -1,6 +1,6 @@
-use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Spell, Fmt,
-    Process, print, print_err};
-use /std/Bool/{True, False};
+use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Fmt, Process,
+    print, print_err};
+use /std/Bool/{True};
 use /std/ops/{Eql};
 
 -- The problems that keep a declaration from describing one unambiguous command line.
@@ -8,10 +8,17 @@ mod check;
 
 -- A line's tokens read as GNU reads them, and the known name nearest to one that names nothing.
 mod scan;
-use scan/{Seen, Raw};
 
 -- The screens a command line answers with.
 mod render;
+
+-- A line read against a command: what it parsed into, a request for help or the version, or the refusal.
+mod parse;
+
+--- What a line parses into: the slots a command's options and positionals fill, the values they hold, and the reads of them by name.
+pub mod Parsed;
+pub use Parsed/{let Parsed, Slot, Carrier, option_slots, slots, Slots, Values, Chosen, Lookup, Has,
+    get, HasIn, NamedIn, HasCommand, Named, command};
 
 --- How an argument's text is read: the type it is read into, the placeholder help shows for it, the reader, the printer help shows a default with, and the values it takes where they are a closed set, which help lists.
 pub struct Value: pub Type {
@@ -260,11 +267,11 @@ end
 
 let described(p: Problem) -> Str =
     match p
-    | invalid_name(n) => Str/concat("invalid name ", Spell/spell(n))
+    | invalid_name(n) => Fmt/render("invalid name #")(n)
     | invalid_short(c) => Fmt/render("invalid short name '%'")(c)
-    | duplicate_name(n) => Str/concat("duplicate name ", text_of(n))
-    | duplicate_slot(n) => Str/concat("two arguments read by ", Spell/spell(n))
-    | duplicate_command(n) => Str/concat("duplicate command ", Spell/spell(n))
+    | duplicate_name(n) => Fmt/render("duplicate name %")(text_of(n))
+    | duplicate_slot(n) => Fmt/render("two arguments read by #")(n)
+    | duplicate_command(n) => Fmt/render("duplicate command #")(n)
     | within(c, inner) => Fmt/render("in command #: %")(c)(described(inner))
     end;
 
@@ -302,210 +309,6 @@ pub let checked(command: Command, version: Option(Str)) -> Result(List(Problem),
     | [p, ..more] => (_) => Result/failure([p, ..more])
     end((ok) => Cli { command = command, version = version, @ok = ok });
 
---- What a parse fills and `get` reads by name: an option's long name or a positional's, and the type it is read into.
-pub struct Slot: pub Type {
-    name: Str,
-    T: Type,
-}
-
-let presented(A: Type, presence: Presence(A)) -> Type =
-    match presence | required() => A | optional() => Option(A) | default(_) => A end;
-
---- The type an option is read into: `Bool` for a flag and a toggle, `Nat` for a count, the reader's type for an option that is required or has a default, an `Option` for one that may be absent, and a list for `many`.
-pub let Carrier(k: Kind) -> Type =
-    match k
-    | flag() => Bool
-    | count() => Nat
-    | toggle(_) => Bool
-    | option(v, presence) => presented(v.A, presence)
-    | many(v) => List(v.A)
-    | choice(A, _, presence) => presented(A, presence)
-    end;
-
---- What a group's parse holds: its options, in order.
-pub let option_slots(fields: List(Field)) -> List(Slot) =
-    match fields
-    | [] => []
-    | [f, ..more] => [Slot { name = f.long, T = Carrier(f.kind) }, ..option_slots(more)]
-    end;
-
-let required_slots(ps: List(Positional)) -> List(Slot) =
-    match ps
-    | [] => []
-    | [p, ..more] => [Slot { name = p.name, T = p.v.A }, ..required_slots(more)]
-    end;
-
-let optional_slots(ps: List(Positional)) -> List(Slot) =
-    match ps
-    | [] => []
-    | [p, ..more] => [Slot { name = p.name, T = Option(p.v.A) }, ..optional_slots(more)]
-    end;
-
-let rest_slots(p: Option(Positional)) -> List(Slot) =
-    match p | none() => [] | some(r) => [Slot { name = r.name, T = List(r.v.A) }] end;
-
-let joined(a: List(Slot), b: List(Slot)) -> List(Slot) =
-    match a | [] => b | [s, ..more] => [s, ..joined(more, b)] end;
-
---- What a leaf's parse holds, in order: every option, then every positional.
-pub let slots(options: List(Field), positionals: Positionals) -> List(Slot) =
-    joined(
-        option_slots(options),
-        joined(
-            required_slots(positionals.required),
-            joined(optional_slots(positionals.optional), rest_slots(positionals.rest))));
-
---- What a command's parse holds by name: a leaf's options and positionals, and a group's options.
-pub let Slots(c: Command) -> List(Slot) =
-    match c
-    | leaf(_, _, options, ps) => slots(options, ps)
-    | group(_, _, options, _) => option_slots(options)
-    end;
-
---- A value for each slot, in order.
-pub induct Values: (List(Slot)) -> pub Type
---- No slot is left.
-| nil(): ([])
---- One slot's value, then the rest.
-| cons(@s: Slot, @rest: List(Slot), head: s.T, tail: Values(rest)): ([s, ..rest])
-end
-
-let appended(@a: List(Slot), @b: List(Slot), x: Values(a), y: Values(b)) -> Values(joined(a, b)) =
-    match x | nil() => y | cons(head, tail) => Values/cons(head, appended(tail, y)) end;
-
---- What a line parsed into against a command: a leaf's values, or a group's values and the parse of the command the line chose.
-pub induct Parsed: (Command) -> pub Type
---- A leaf's values.
-| leaf(
-    @name: Str,
-    @about: Str,
-    @options: List(Field),
-    @positionals: Positionals,
-    values: Values(slots(options, positionals))): (Command/leaf(name, about, options, positionals))
---- A group's values, and the command the line chose among its commands.
-| group(
-    @name: Str,
-    @about: Str,
-    @options: List(Field),
-    @commands: List(Command),
-    values: Values(option_slots(options)),
-    chosen: Chosen(commands)): (Command/group(name, about, options, commands))
---- Which of a group's commands a line chose, and what it parsed into against it.
-pub and Chosen: (List(Command)) -> pub Type
---- The first of the commands, and its parse.
-| here(@c: Command, @rest: List(Command), parsed: Parsed(c)): ([c, ..rest])
---- One of the commands after the first.
-| there(@c: Command, @rest: List(Command), chosen: Chosen(rest)): ([c, ..rest])
-end
-
-let values(@c: Command, p: Parsed(c)) -> Values(Slots(c)) =
-    match p | leaf(v) => v | group(v, _) => v end;
-
---- The type `get` answers for `name` among `spec`.
-pub let Lookup(spec: List(Slot), name: Str) -> Type =
-    match spec
-    | [] => {}
-    | [s, ..rest] => match s.name == name | true => s.T | false => Lookup(rest, name) end
-    end;
-
---- That `name` is one of `spec`'s, decided by reduction: a name the declaration lacks is refused where it is written.
-pub let Has(spec: List(Slot), name: Str) -> Prop =
-    match spec
-    | [] => False
-    | [s, ..rest] => match s.name == name | true => True | false => Has(rest, name) end
-    end;
-
-let read(
-    @spec: List(Slot),
-    v: Values(spec),
-    name: Str,
-    @ok: Has(spec, name),
-) -> Lookup(spec, name) =
-    match v
-    | nil() => match ok end
-    | cons(@s, @rest, head, tail) =>
-        let pick =
-            match s.name == name: (b) =>
-                (here: match b | true => True | false => Has(rest, name) end) -> match b
-                | true => s.T
-                | false => Lookup(rest, name)
-                end
-            | true => (_) => head
-            | false => (later) => read(@rest, tail, name, @later)
-            end;
-        pick(ok)
-    end;
-
---- The option or positional named `name` of the command `p` was parsed against, at the type its declaration decides.
-pub let get(
-    @c: Command,
-    p: Parsed(c),
-    name: Str,
-    @ok: Has(Slots(c), name),
-) -> Lookup(Slots(c), name) =
-    read(values(p), name, @ok);
-
---- That `name` is one of `commands`', decided by reduction.
-pub let HasIn(commands: List(Command), name: Str) -> Prop =
-    match commands
-    | [] => False
-    | [c, ..rest] => match /std/Cli/name(c) == name | true => True | false => HasIn(rest, name) end
-    end;
-
---- The first of `commands` named `name`.
-pub let NamedIn(commands: List(Command), name: Str) -> Command =
-    match commands
-    | [] => Command/leaf(name, "", [], positionals([]))
-    | [c, ..rest] => match /std/Cli/name(c) == name | true => c | false => NamedIn(rest, name) end
-    end;
-
---- That `c` is a group with a command named `name`.
-pub let HasCommand(c: Command, name: Str) -> Prop =
-    match c | leaf(_, _, _, _) => False | group(_, _, _, commands) => HasIn(commands, name) end;
-
---- The command of `c` named `name`.
-pub let Named(c: Command, name: Str) -> Command =
-    match c | leaf(_, _, _, _) => c | group(_, _, _, commands) => NamedIn(commands, name) end;
-
-let pick(
-    @commands: List(Command),
-    chosen: Chosen(commands),
-    name: Str,
-    @ok: HasIn(commands, name),
-) -> Option(Parsed(NamedIn(commands, name))) =
-    match chosen
-    | here(@c, @rest, parsed) =>
-        let found =
-            match /std/Cli/name(c) == name: (b) =>
-                (held: match b | true => True | false => HasIn(rest, name) end) -> Option(
-                    Parsed(match b | true => c | false => NamedIn(rest, name) end))
-            | true => (_) => Option/some(parsed)
-            | false => (_) => Option/none()
-            end;
-        found(ok)
-    | there(@c, @rest, more) =>
-        let found =
-            match /std/Cli/name(c) == name: (b) =>
-                (held: match b | true => True | false => HasIn(rest, name) end) -> Option(
-                    Parsed(match b | true => c | false => NamedIn(rest, name) end))
-            | true => (_) => Option/none()
-            | false => (later) => pick(more, name, @later)
-            end;
-        found(ok)
-    end;
-
---- The parse of the command `name` of the group `p` was parsed against, where the line chose it, and `none` where it chose another. A name the group lacks is refused where it is written.
-pub let command(
-    @c: Command,
-    p: Parsed(c),
-    name: Str,
-    @ok: HasCommand(c, name),
-) -> Option(Parsed(Named(c, name))) =
-    match p
-    | leaf(_) => match ok end
-    | group(_, chosen) => pick(chosen, name, @ok)
-    end;
-
 --- Why a line was refused.
 pub induct Failure: pub Type
 --- A token no name of the command matches, and the known name nearest to it.
@@ -538,276 +341,13 @@ pub induct Reading(A: Type): pub Type
 | refused(path: List(Str), failure: Failure)
 end
 
-let lifted(@A: Type, @B: Type, r: Reading(A), f: (A) -> B) -> Reading(B) =
-    match r
-    | parsed(a) => Reading/parsed(f(a))
-    | help(path) => Reading/help(path)
-    | version(text) => Reading/version(text)
-    | refused(path, failure) => Reading/refused(path, failure)
-    end;
-
 -- `name` as help writes a positional's.
 let shouted(name: Str) -> Str =
     Str/flatten(List/map(Str/to_list(name), (c) => Str/of_char(Char/to_ascii_upper(c))));
 
-let reading(v: Value, name: Str, text: Str) -> Result(Failure, v.A) =
-    match v.read(text)
-    | success(a) => Result/success(a)
-    | failure(reason) => Result/failure(Failure/bad_value(name, reason))
-    end;
-
-let readings(v: Value, name: Str, texts: List(Str)) -> Result(Failure, List(v.A)) =
-    match texts
-    | [] => Result/success([])
-    | [t, ..more] =>
-        let a = reading(v, name, t)!;
-        let rest = readings(v, name, more)!;
-        Result/success([a, ..rest])
-    end;
-
--- What an environment variable says of a flag: anything but nothing, `0` and `false` sets it.
-let truthy(text: Str) -> Bool =
-    Bool/not(text == "" || text == "0" || text == "false");
-
-let given(seen: List(Seen)) -> Nat =
-    List/len(List/filter(seen, (s) => match s | given() => true | _ => false end));
-
-let texts(seen: List(Seen)) -> List(Str) =
-    List/concat_map(seen, (s) => match s | value(t) => [t] | _ => [] end);
-
-let switched(seen: List(Seen)) -> Option(Bool) =
-    List/fold(
-        seen,
-        Option/none(),
-        (s, held) =>
-            match s
-            | given() => Option/some(true)
-            | negated() => Option/some(false)
-            | _ => held
-            end);
-
-let picks(seen: List(Seen)) -> List(Nat) =
-    List/fold(
-        List/reverse(seen),
-        [],
-        (s, held) =>
-            match s
-            | picked(k) => match List/contains(held, k) | true => held | false => [k, ..held] end
-            | _ => held
-            end);
-
-let present(@A: Type, presence: Presence(A), a: A) -> presented(A, presence) =
-    match presence | required() => a | optional() => Option/some(a) | default(_) => a end;
-
-let absent(@A: Type, presence: Presence(A), name: Str) -> Result(Failure, presented(A, presence)) =
-    match presence
-    | required() => Result/failure(Failure/missing_required(name))
-    | optional() => Result/success(Option/none())
-    | default(a) => Result/success(a)
-    end;
-
-let read_field(f: Field, seen: List(Seen), env: Map(Str, Str)) -> Result(Failure, Carrier(f.kind)) =
-    let name = Str/concat("--", f.long);
-    let set = Option/bind(f.env, (variable) => Map/try_get(env, variable));
-    match f.kind
-    | flag() =>
-        Result/success(given(seen) > 0 || match set | some(t) => truthy(t) | none() => false end)
-    | count() =>
-        match given(seen) == 0
-        | true => match set | some(t) => reading(nat, name, t) | none() => Result/success(0) end
-        | false => Result/success(given(seen))
-        end
-    | toggle(fallback) =>
-        match switched(seen)
-        | some(b) => Result/success(b)
-        | none() => Result/success(match set | some(t) => truthy(t) | none() => fallback end)
-        end
-    | option(v, presence) =>
-        match Option/or(List/last(texts(seen)), set)
-        | some(t) => Result/map(reading(v, name, t), (a) => present(presence, a))
-        | none() => absent(presence, name)
-        end
-    | many(v) =>
-        match texts(seen)
-        | [] => match set | some(t) => readings(v, name, [t]) | none() => Result/success([]) end
-        | _ => readings(v, name, texts(seen))
-        end
-    | choice(_, alternatives, presence) =>
-        let spelled = List/map(alternatives, (a) => Str/concat("--", a.long));
-        match picks(seen)
-        | [] =>
-            match Option/bind(set, (t) => List/find(alternatives, (a) => a.long == t))
-            | some(a) => Result/success(present(presence, a.value))
-            | none() => absent(presence, Str/join(" | ", spelled))
-            end
-        | [k, ..more] =>
-            match more
-            | [] =>
-                match List/try_get(alternatives, k)
-                | some(a) => Result/success(present(presence, a.value))
-                | none() => absent(presence, Str/join(" | ", spelled))
-                end
-            | [_, .._] =>
-                Result/failure(
-                    Failure/conflict(
-                        List/concat_map(
-                            picks(seen),
-                            (i) =>
-                                match List/try_get(spelled, i)
-                                | some(s) => [s]
-                                | none() => []
-                                end)))
-            end
-        end
-    end;
-
-let read_options(
-    fields: List(Field),
-    at: Nat,
-    seen: Map(Nat, List(Seen)),
-    env: Map(Str, Str),
-) -> Result(Failure, Values(option_slots(fields))) =
-    match fields
-    | [] => Result/success(Values/nil())
-    | [f, ..more] =>
-        let head = read_field(f, List/reverse(Option/unwrap_or(Map/try_get(seen, at), [])), env)!;
-        let tail = read_options(more, at + 1, seen, env)!;
-        Result/success(Values/cons(head, tail))
-    end;
-
-let read_required(
-    ps: List(Positional),
-    tokens: List(Str),
-) -> Result(Failure, {Values(required_slots(ps)), List(Str)}) =
-    match ps
-    | [] => Result/success((Values/nil(), tokens))
-    | [p, ..more] =>
-        match tokens
-        | [] => Result/failure(Failure/missing_required(shouted(p.name)))
-        | [t, ..rest] =>
-            let a = reading(p.v, shouted(p.name), t)!;
-            let (tail, left) = read_required(more, rest)!;
-            Result/success((Values/cons(a, tail), left))
-        end
-    end;
-
-let read_optional(
-    ps: List(Positional),
-    tokens: List(Str),
-) -> Result(Failure, {Values(optional_slots(ps)), List(Str)}) =
-    match ps
-    | [] => Result/success((Values/nil(), tokens))
-    | [p, ..more] =>
-        match tokens
-        | [] =>
-            let (tail, left) = read_optional(more, [])!;
-            Result/success((Values/cons(Option/none(), tail), left))
-        | [t, ..rest] =>
-            let a = reading(p.v, shouted(p.name), t)!;
-            let (tail, left) = read_optional(more, rest)!;
-            Result/success((Values/cons(Option/some(a), tail), left))
-        end
-    end;
-
-let read_rest(p: Option(Positional), tokens: List(Str)) -> Result(Failure, Values(rest_slots(p))) =
-    match p
-    | none() =>
-        match tokens
-        | [] => Result/success(Values/nil())
-        | [t, .._] => Result/failure(Failure/unexpected(t))
-        end
-    | some(r) =>
-        let all = readings(r.v, shouted(r.name), tokens)!;
-        Result/success(Values/cons(all, Values/nil()))
-    end;
-
-let leaf_values(
-    options: List(Field),
-    ps: Positionals,
-    raw: Raw,
-    env: Map(Str, Str),
-) -> Result(Failure, Values(slots(options, ps))) =
-    let o = read_options(options, 0, raw.seen, env)!;
-    let (r, after_required) = read_required(ps.required, raw.positionals)!;
-    let (q, after_optional) = read_optional(ps.optional, after_required)!;
-    let t = read_rest(ps.rest, after_optional)!;
-    Result/success(appended(o, appended(r, appended(q, t))));
-
--- What `raw` asks before the line is read further: help, then the version, then the first refusal.
-let asked(@A: Type, raw: Raw, path: List(Str), version: Option(Str)) -> Option(Reading(A)) =
-    choose
-    | raw.help => Option/some(Reading/help(path))
-    | some(text) = Option/filter(version, (_) => raw.version) => Option/some(Reading/version(text))
-    | some(f) = raw.failure => Option/some(Reading/refused(path, f))
-    | _ => Option/none()
-    end;
-
-let parse_command(
-    c: Command,
-    tokens: List(Str),
-    path: List(Str),
-    version: Option(Str),
-    env: Map(Str, Str),
-) -> Reading(Parsed(c)) =
-    match c
-    | leaf(name, _, options, ps) =>
-        let here = [..path, name];
-        let raw = scan/scan(options, version, tokens, false);
-        match asked(raw, here, version)
-        | some(early) => early
-        | none() =>
-            match leaf_values(options, ps, raw, env)
-            | success(v) => Reading/parsed(Parsed/leaf(v))
-            | failure(f) => Reading/refused(here, f)
-            end
-        end
-    | group(name, _, options, commands) =>
-        let here = [..path, name];
-        let raw = scan/scan(options, version, tokens, true);
-        let known = List/map(commands, /std/Cli/name);
-        match asked(raw, here, version)
-        | some(early) => early
-        | none() =>
-            match raw.rest
-            | [] => Reading/refused(here, Failure/missing_command(known))
-            | [word, ..more] =>
-                match read_options(options, 0, raw.seen, env)
-                | failure(f) => Reading/refused(here, f)
-                | success(v) =>
-                    match chosen(commands, word, more, here, version, env)
-                    | some(r) => lifted(r, (ch) => Parsed/group(v, ch))
-                    | none() =>
-                        Reading/refused(
-                            here,
-                            Failure/unknown_command(word, scan/closest(word, known), known))
-                    end
-                end
-            end
-        end
-    end
-and chosen(
-    commands: List(Command),
-    word: Str,
-    tokens: List(Str),
-    path: List(Str),
-    version: Option(Str),
-    env: Map(Str, Str),
-) -> Option(Reading(Chosen(commands))) =
-    match commands
-    | [] => Option/none()
-    | [c, ..rest] =>
-        match /std/Cli/name(c) == word
-        | true => Option/some(lifted(parse_command(c, tokens, path, version, env), Chosen/here))
-        | false =>
-            Option/map(
-                chosen(rest, word, tokens, path, version, env),
-                (r) => lifted(r, Chosen/there))
-        end
-    end;
-
 --- `argv` read against `cli`, `env` the environment variables the declaration names: what it parsed into, a request for help or the version, or the refusal. Help is answered before anything else on the line is, and the version next.
 pub let parse(cli: Cli, argv: List(Str), env: Map(Str, Str)) -> Reading(Parsed(cli.command)) =
-    parse_command(cli.command, argv, [], cli.version, env);
+    parse/command(cli.command, argv, [], cli.version, env);
 
 --- The help of the command `path` names from the root, as `--help` writes it.
 pub let help(cli: Cli, path: List(Str)) -> Str =
@@ -886,7 +426,7 @@ pub let main(cli: Cli, run: (Parsed(cli.command)) -> Io({})) -> Io({}) =
     end;
 
 --- `command` checked as the program starts and run as `main` runs a declared one; a declaration with problems is reported on standard error before the line is read, and ends the program with 1.
-pub let main_checked(
+pub let try_main(
     command: Command,
     version: Option(Str),
     run: (Parsed(command)) -> Io({}),

@@ -1,5 +1,5 @@
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord};
-use /std/Bool/{True, False, Holds};
+use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp};
 
 --- What a byte begins, as UTF-8 reads it.
@@ -12,27 +12,6 @@ pub induct Class: pub Type
 | bad()
 end
 
---- What `c` begins.
-pub let classify(c: Byte) -> Class =
-    let n = Byte/to_nat(c);
-    choose
-    | Nat/in_range(n, 0x0, 0x7F) => Class/ascii()
-    | Nat/in_range(n, 0xC2, 0xDF) => Class/lead(1, 0x80, 0xBF, n - 0xC0)
-    | Nat/in_range(n, 0xE0, 0xEF) =>
-        let lo = match n == 0xE0 | true => 0xA0 | false => 0x80 end;
-        let hi = match n == 0xED | true => 0x9F | false => 0xBF end;
-        Class/lead(2, lo, hi, n - 0xE0)
-    | Nat/in_range(n, 0xF0, 0xF4) =>
-        let lo = match n == 0xF0 | true => 0x90 | false => 0x80 end;
-        let hi = match n == 0xF4 | true => 0x8F | false => 0xBF end;
-        Class/lead(3, lo, hi, n - 0xF0)
-    | _ => Class/bad()
-    end;
-
---- Whether `c` continues a character: a byte in `0x80..=0xBF`, which no character begins with.
-let continues(c: Byte) -> Bool =
-    Nat/in_range(Byte/to_nat(c), 0x80, 0xBF);
-
 --- How far through a character a walk over bytes has come.
 pub induct Scan: pub Type
 --- Between characters, where a new one may begin.
@@ -43,28 +22,10 @@ pub induct Scan: pub Type
 | bad()
 end
 
---- The state reading `c` leaves the scan in.
-pub let step(c: Byte, s: Scan) -> Scan =
-    let n = Byte/to_nat(c);
-    match s
-    | bad() => Scan/bad()
-    | cont(rem, lo, hi) =>
-        choose
-        | Bool/not(Nat/in_range(n, lo, hi)) => Scan/bad()
-        | rem == 1 => Scan/lead()
-        | _ => Scan/cont(rem - 1, 0x80, 0xBF)
-        end
-    | lead() =>
-        match classify(c)
-        | ascii() => Scan/lead()
-        | lead(cont, lo, hi, _) => Scan/cont(cont, lo, hi)
-        | bad() => Scan/bad()
-        end
-    end;
-
---- The state reading all of `b` leaves the scan in.
-pub let scan_from(s: Scan, b: Bytes) -> Scan =
-    match b | x[] => s | x[h, ..t] => scan_from(step(h, s), t) end;
+-- How UTF-8 reads bytes: what a byte begins, how far through a character a walk has come, and the ranges a character in flight can still end in.
+mod utf8;
+pub use utf8/{classify, step, scan_from, count_scalars};
+use utf8/{pending, concluded, advanced, begins_scalars_of};
 
 --- That bytes are well-formed UTF-8, which is what `Str` carries: what that rests on, from any scan state, and what the operations carry it through.
 pub mod Valid;
@@ -76,175 +37,9 @@ pub use Valid/{let Valid};
 pub mod At;
 pub use At/{let At};
 
---- How many characters `b` holds from scan state `s`.
-pub let count_scalars(s: Scan, b: Bytes) -> Nat =
-    match b
-    | x[] => 0
-    | x[h, ..t] =>
-        match s
-        | lead() => count_scalars(step(h, Scan/lead()), t) + 1
-        | cont(_, _, _) => count_scalars(step(h, s), t)
-        | bad() => count_scalars(step(h, Scan/bad()), t)
-        end
-    end;
-
---- Whether every code from `min` to `max` is a scalar value: the range lies below the surrogates, or past them and at most `U+10FFFF`. One contiguous range, so these two cases are the whole of it.
-let scalars(min: Nat, max: Nat) -> Bool =
-    max < 0xD800 || min >= 0xE000 && max <= 0x10FFFF;
-
---- Whether a character in flight can only end at a scalar value: `rem` continuation bytes still owed, the next between `lo` and `hi` and any after it between `0x80` and `0xBF`, over the bits `partial` has gathered so far.
----
---- The range is stated once over the bytes owed past the next: each shifts what came before by six bits, a power of `0x40`, and leaves its own six bits free. No count past three begins a character, so those are refused along with zero.
-let pending(rem: Nat, lo: Nat, hi: Nat, partial: Nat) -> Bool =
-    match rem
-    | 0 => false
-    | r + 1 =>
-        r <= 2
-            && scalars(
-                (partial * 0x40 + (lo - 0x80)) * Nat/pow(0x40, r),
-                (partial * 0x40 + (hi - 0x80)) * Nat/pow(0x40, r) + (Nat/pow(0x40, r) - 1))
-    end;
-
---- A range of scalar values narrowed stays one.
-let scalars_within(
-    min: Nat,
-    max: Nat,
-    min2: Nat,
-    max2: Nat,
-    s: Holds(scalars(min, max)),
-    low: Holds(min <= min2),
-    high: Holds(max2 <= max),
-) -> Holds(scalars(min2, max2)) =
-    match max < 0xD800
-    | true =>
-        match max2 < 0xD800
-        | true => True/qed()
-        | false => match False/refuted() end
-        end
-    | false =>
-        match min >= 0xE000
-        | false => match s end
-        | true =>
-            match max <= 0x10FFFF
-            | false => match s end
-            | true =>
-                match max2 < 0xD800
-                | true => True/qed()
-                | false =>
-                    match min2 >= 0xE000
-                    | false => match False/refuted() end
-                    | true =>
-                        match max2 <= 0x10FFFF
-                        | true => True/qed()
-                        | false => match False/refuted() end
-                        end
-                    end
-                end
-            end
-        end
-    end;
-
---- The last byte of a character, read in range, ends it at a scalar value.
-let concluded(
-    lo: Nat,
-    hi: Nat,
-    partial: Nat,
-    c: Nat,
-    p: Holds(pending(1, lo, hi, partial)),
-    inside: Holds(Nat/in_range(c, lo, hi)),
-) -> Char/Valid(partial * 0x40 + (c - 0x80)) =
-    scalars_within(
-        partial * 0x40 + (lo - 0x80),
-        partial * 0x40 + (hi - 0x80),
-        partial * 0x40 + (c - 0x80),
-        partial * 0x40 + (c - 0x80),
-        p,
-        True/proved(),
-        True/proved());
-
---- A byte read in range, with more still owed, leaves a character that can still only end at a scalar value: its range narrows to the one below that byte.
-let advanced(
-    rem: Nat,
-    lo: Nat,
-    hi: Nat,
-    partial: Nat,
-    c: Nat,
-    p: Holds(pending(rem, lo, hi, partial)),
-    inside: Holds(Nat/in_range(c, lo, hi)),
-    more: Holds(Bool/not(rem == 1)),
-) -> Holds(pending(rem - 1, 0x80, 0xBF, partial * 0x40 + (c - 0x80))) =
-    match rem
-    | 0 => match p end
-    | r1 + 1 =>
-        match r1
-        | 0 => match more end
-        | r2 + 1 =>
-            match r2
-            | 0 =>
-                scalars_within(
-                    (partial * 0x40 + (lo - 0x80)) * 0x40,
-                    (partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F,
-                    (partial * 0x40 + (c - 0x80)) * 0x40,
-                    (partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F,
-                    p,
-                    True/proved(),
-                    True/proved())
-            | r3 + 1 =>
-                match r3
-                | 0 =>
-                    scalars_within(
-                        (partial * 0x40 + (lo - 0x80)) * 0x40 * 0x40,
-                        ((partial * 0x40 + (hi - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
-                        (partial * 0x40 + (c - 0x80)) * 0x40 * 0x40,
-                        ((partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
-                        p,
-                        True/proved(),
-                        True/proved())
-                | _ + 1 => match p end
-                end
-            end
-        end
-    end;
-
---- Whether the character `c` begins can only end at a scalar value: what `classify`'s ranges promise of a lead byte, and nothing to promise of any other.
-let begins_scalars(c: Byte) -> Bool =
-    match classify(c) | lead(rem, lo, hi, partial) => pending(rem, lo, hi, partial) | _ => true end;
-
---- Whether every byte below `k` begins only scalar values.
-let each_below(k: Nat) -> Bool =
-    match k | 0 => true | kp + 1 => begins_scalars(Nat/to_byte(kp % 256)) && each_below(kp) end;
-
---- `classify`'s promise, decided once over every byte rather than proved family by family: the check is a structural recursion the build runs, so a change to `classify`'s ranges that broke it would stop the build rather than wait for a proof to be revisited.
-let every_byte: Holds(each_below(256)) =
-    True/qed();
-
---- A byte below `m`, read out of the check over every byte below `m`.
-let begins_below(
-    m: Nat,
-    n: Nat,
-    all: Holds(each_below(m)),
-    inside: Holds(n < m),
-) -> Holds(begins_scalars(Nat/to_byte(n % 256))) =
-    match m
-    | 0 => match inside end
-    | mp + 1 =>
-        match begins_scalars(Nat/to_byte(mp % 256))
-        | false => match all end
-        | true =>
-            match n < mp
-            | true => begins_below(mp, n, all, True/qed())
-            | false =>
-                Eq/subst(
-                    (k: Nat) => Holds(begins_scalars(Nat/to_byte(k % 256))),
-                    Nat/le/antisym(mp, n, True/proved(), inside),
-                    True/qed())
-            end
-        end
-    end;
-
---- Every byte begins only scalar values.
-let begins_scalars_of(c: Byte) -> Holds(begins_scalars(c)) =
-    begins_below(256, Byte/to_nat(c), every_byte, True/qed());
+-- The walks a search makes: a character a predicate accepts, a piece held at a position forward or back, and a needle's first occurrence.
+mod search;
+use search/{seek, meets, meets_back, occurrence, first_occurrence, back_over};
 
 --- Text: bytes certified as UTF-8.
 pub struct Str: pub Type {
@@ -459,21 +254,6 @@ let count_concat(
 pub let is_empty(s: Str) -> Bool =
     Bytes/len(to_bytes(s)) == 0;
 
---- The first character at or after `from` that `pred` accepts, and where it is, or `none`: one walk forward, which stops there.
-let seek(s: Str, from: At(s), pred: (Char) -> Bool) -> Option({at: At(s), char: Char}) =
-    At/forward(
-        (_) => Option({at: At(s), char: Char}),
-        (at, again) =>
-            match At/try_next(s, at)
-            | some(n) =>
-                match pred(n.char)
-                | true => Option/some((at = at, char = n.char))
-                | false => again(n.past, n.progress)
-                end
-            | none() => Option/none()
-            end,
-        from);
-
 --- Where the first character `pred` accepts is, or `none`.
 pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(At(s)) =
     Option/map(seek(s, At/start(s), pred), (found) => found.at);
@@ -497,34 +277,6 @@ pub let join(sep: Str, parts: List(Str)) -> Str =
         "",
         (i, ok) => List/get(@Str, parts, i, @ok),
         (l, r) => concat(concat(l, sep), r));
-
--- That the walk has not gone back goes down with the position, here, in `span` and in `occurrence`, so the recursion is a tail call and a character passed keeps no frame.
---- Where `s` holds `piece` from `from` on, stepping both a character at a time from `p`: the position past it, which is not before `from`, or `none`.
-let meets(
-    s: Str,
-    from: At(s),
-    piece: Str,
-    p: At(piece),
-) -> Option({past: At(s), reach: Holds(from.offset <= past.offset)}) =
-    At/forward(
-        (at) =>
-            (p: At(piece), reached: Holds(from.offset <= at.offset)) -> Option(
-                {past: At(s), reach: Holds(from.offset <= past.offset)}),
-        (at, again) =>
-            (p, reached) =>
-                match At/try_next(piece, p)
-                | none() => Option/some((past = at, reach = reached))
-                | some(want) =>
-                    match At/try_next(s, at)
-                    | some(have) =>
-                        match have.char == want.char
-                        | true => again(have.past, have.progress)(want.past, True/proved())
-                        | false => Option/none()
-                        end
-                    | none() => Option/none()
-                    end
-                end,
-        from)(p, Nat/le/refl(from.offset));
 
 --- Where `piece` follows `from` in `s`: the position past it, which is not before `from`, or `none` when `s` does not hold it there.
 pub let follows(
@@ -557,109 +309,9 @@ pub let span(
                 end,
         from)(Nat/le/refl(from.offset));
 
---- Where `s` holds `piece` up to `from`, stepping both back a character at a time from `p`: the position where it starts, or `none`.
-let meets_back(s: Str, from: At(s), piece: Str, p: At(piece)) -> Option(At(s)) =
-    At/backward(
-        (_) => (p: At(piece)) -> Option(At(s)),
-        (at, again) =>
-            (p) =>
-                match At/try_prev(piece, p)
-                | none() => Option/some(at)
-                | some(want) =>
-                    match At/try_prev(s, at)
-                    | some(have) =>
-                        match have.char == want.char
-                        | true => again(have.past, have.progress)(want.past)
-                        | false => Option/none()
-                        end
-                    | none() => Option/none()
-                    end
-                end,
-        from)(p);
-
---- An occurrence of a needle at or after `from`: where it starts, which is not before `from`, and the position past it, which is past the start — the needle holds a character.
-let Found(s: Str, from: At(s)) -> Type =
-    {
-        start: At(s),
-        past: At(s),
-        ordered: Holds(from.offset <= start.offset),
-        progress: Holds(start.offset < past.offset)};
-
---- The first occurrence at or after `from` of the needle whose first character `first` reads, or `none`.
----
---- A candidate is a position whose byte is the needle's first — cheap to test, and a position because the walk steps only from one character to the next — confirmed by stepping both from there. Every other character is skipped without being decoded.
-let occurrence(
-    s: Str,
-    from: At(s),
-    needle: Str,
-    first: {char: Char, past: At(needle), progress: Holds(0 < past.offset)},
-) -> Option(Found(s, from)) =
-    let lead_byte =
-        Bytes/get(
-            needle.bytes,
-            0,
-            @Nat/lt/of_lt_le(
-                0,
-                first.past.offset,
-                Bytes/len(needle.bytes),
-                first.progress,
-                first.past.within));
-    At/forward(
-        (at) => (reached: Holds(from.offset <= at.offset)) -> Option(Found(s, from)),
-        (at, again) =>
-            (reached) =>
-                match at.offset < Bytes/len(s.bytes)
-                | false => Option/none()
-                | true =>
-                    let onward = At/skip(s, at);
-                    let later() -> Option(Found(s, from)) =
-                        again(onward.past, onward.progress)(True/proved());
-                    match Bytes/get(s.bytes, at.offset) == lead_byte
-                    | false => later()
-                    | true =>
-                        let have = At/next(s, at);
-                        match have.char == first.char
-                        | false => later()
-                        | true =>
-                            match meets(s, have.past, needle, first.past)
-                            | some(met) =>
-                                Option/some((
-                                    start = at,
-                                    past = met.past,
-                                    ordered = reached,
-                                    progress = True/proved()))
-                            | none() => later()
-                            end
-                        end
-                    end
-                end,
-        from)(Nat/le/refl(from.offset));
-
---- The first occurrence of `needle` in `s`: where it starts and the position past it, or `none`. An empty needle occurs at the start.
-let first_occurrence(s: Str, needle: Str) -> Option({start: At(s), past: At(s)}) =
-    match At/try_next(needle, At/start(needle))
-    | none() => Option/some((start = At/start(s), past = At/start(s)))
-    | some(first) =>
-        match occurrence(s, At/start(s), needle, first)
-        | some(found) => Option/some((start = found.start, past = found.past))
-        | none() => Option/none()
-        end
-    end;
-
 --- Where `needle` first occurs in `s`, or `none`; an empty needle occurs at the start.
 pub let index_of_substr(s: Str, needle: Str) -> Option(At(s)) =
     Option/map(first_occurrence(s, needle), (found) => found.start);
-
---- The last position at or before `from` past which `s` holds only characters `pred` accepts: one walk back.
-let back_over(s: Str, from: At(s), pred: (Char) -> Bool) -> At(s) =
-    At/backward(
-        (_) => At(s),
-        (at, again) =>
-            match At/try_prev(s, at)
-            | some(p) => match pred(p.char) | true => again(p.past, p.progress) | false => at end
-            | none() => at
-            end,
-        from);
 
 --- Without leading and trailing whitespace.
 pub let trim(s: Str) -> Str =

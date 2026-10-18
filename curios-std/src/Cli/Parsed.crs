@@ -1,0 +1,214 @@
+use /std/{Str, Nat, Bool, List, Option};
+use /std/Bool/{True, False};
+use /std/Cli/{Field, Kind, Presence, Positional, Positionals, Command, positionals};
+
+--- What a parse fills and `get` reads by name: an option's long name or a positional's, and the type it is read into.
+pub struct Slot: pub Type {
+    name: Str,
+    T: Type,
+}
+
+pub let presented(A: Type, presence: Presence(A)) -> Type =
+    match presence | required() => A | optional() => Option(A) | default(_) => A end;
+
+--- The type an option is read into: `Bool` for a flag and a toggle, `Nat` for a count, the reader's type for an option that is required or has a default, an `Option` for one that may be absent, and a list for `many`.
+pub let Carrier(k: Kind) -> Type =
+    match k
+    | flag() => Bool
+    | count() => Nat
+    | toggle(_) => Bool
+    | option(v, presence) => presented(v.A, presence)
+    | many(v) => List(v.A)
+    | choice(A, _, presence) => presented(A, presence)
+    end;
+
+--- What a group's parse holds: its options, in order.
+pub let option_slots(fields: List(Field)) -> List(Slot) =
+    match fields
+    | [] => []
+    | [f, ..more] => [Slot { name = f.long, T = Carrier(f.kind) }, ..option_slots(more)]
+    end;
+
+pub let required_slots(ps: List(Positional)) -> List(Slot) =
+    match ps
+    | [] => []
+    | [p, ..more] => [Slot { name = p.name, T = p.v.A }, ..required_slots(more)]
+    end;
+
+pub let optional_slots(ps: List(Positional)) -> List(Slot) =
+    match ps
+    | [] => []
+    | [p, ..more] => [Slot { name = p.name, T = Option(p.v.A) }, ..optional_slots(more)]
+    end;
+
+pub let rest_slots(p: Option(Positional)) -> List(Slot) =
+    match p | none() => [] | some(r) => [Slot { name = r.name, T = List(r.v.A) }] end;
+
+pub let joined(a: List(Slot), b: List(Slot)) -> List(Slot) =
+    match a | [] => b | [s, ..more] => [s, ..joined(more, b)] end;
+
+--- What a leaf's parse holds, in order: every option, then every positional.
+pub let slots(options: List(Field), positionals: Positionals) -> List(Slot) =
+    joined(
+        option_slots(options),
+        joined(
+            required_slots(positionals.required),
+            joined(optional_slots(positionals.optional), rest_slots(positionals.rest))));
+
+--- What a command's parse holds by name: a leaf's options and positionals, and a group's options.
+pub let Slots(c: Command) -> List(Slot) =
+    match c
+    | leaf(_, _, options, ps) => slots(options, ps)
+    | group(_, _, options, _) => option_slots(options)
+    end;
+
+--- A value for each slot, in order.
+pub induct Values: (List(Slot)) -> pub Type
+--- No slot is left.
+| nil(): ([])
+--- One slot's value, then the rest.
+| cons(@s: Slot, @rest: List(Slot), head: s.T, tail: Values(rest)): ([s, ..rest])
+end
+
+pub let appended(
+    @a: List(Slot),
+    @b: List(Slot),
+    x: Values(a),
+    y: Values(b),
+) -> Values(joined(a, b)) =
+    match x | nil() => y | cons(head, tail) => Values/cons(head, appended(tail, y)) end;
+
+--- What a line parsed into against a command: a leaf's values, or a group's values and the parse of the command the line chose.
+pub induct Parsed: (Command) -> pub Type
+--- A leaf's values.
+| leaf(
+    @name: Str,
+    @about: Str,
+    @options: List(Field),
+    @positionals: Positionals,
+    values: Values(slots(options, positionals))): (Command/leaf(name, about, options, positionals))
+--- A group's values, and the command the line chose among its commands.
+| group(
+    @name: Str,
+    @about: Str,
+    @options: List(Field),
+    @commands: List(Command),
+    values: Values(option_slots(options)),
+    chosen: Chosen(commands)): (Command/group(name, about, options, commands))
+--- Which of a group's commands a line chose, and what it parsed into against it.
+pub and Chosen: (List(Command)) -> pub Type
+--- The first of the commands, and its parse.
+| here(@c: Command, @rest: List(Command), parsed: Parsed(c)): ([c, ..rest])
+--- One of the commands after the first.
+| there(@c: Command, @rest: List(Command), chosen: Chosen(rest)): ([c, ..rest])
+end
+
+pub use Parsed/*;
+
+let values(@c: Command, p: Parsed(c)) -> Values(Slots(c)) =
+    match p | leaf(v) => v | group(v, _) => v end;
+
+--- The type `get` answers for `name` among `spec`.
+pub let Lookup(spec: List(Slot), name: Str) -> Type =
+    match spec
+    | [] => {}
+    | [s, ..rest] => match s.name == name | true => s.T | false => Lookup(rest, name) end
+    end;
+
+--- That `name` is one of `spec`'s, decided by reduction: a name the declaration lacks is refused where it is written.
+pub let Has(spec: List(Slot), name: Str) -> Prop =
+    match spec
+    | [] => False
+    | [s, ..rest] => match s.name == name | true => True | false => Has(rest, name) end
+    end;
+
+let read(
+    @spec: List(Slot),
+    v: Values(spec),
+    name: Str,
+    @ok: Has(spec, name),
+) -> Lookup(spec, name) =
+    match v
+    | nil() => match ok end
+    | cons(@s, @rest, head, tail) =>
+        let pick =
+            match s.name == name: (b) =>
+                (here: match b | true => True | false => Has(rest, name) end) -> match b
+                | true => s.T
+                | false => Lookup(rest, name)
+                end
+            | true => (_) => head
+            | false => (later) => read(@rest, tail, name, @later)
+            end;
+        pick(ok)
+    end;
+
+--- The option or positional named `name` of the command `p` was parsed against, at the type its declaration decides.
+pub let get(
+    @c: Command,
+    p: Parsed(c),
+    name: Str,
+    @ok: Has(Slots(c), name),
+) -> Lookup(Slots(c), name) =
+    read(values(p), name, @ok);
+
+--- That `name` is one of `commands`', decided by reduction.
+pub let HasIn(commands: List(Command), name: Str) -> Prop =
+    match commands
+    | [] => False
+    | [c, ..rest] => match /std/Cli/name(c) == name | true => True | false => HasIn(rest, name) end
+    end;
+
+--- The first of `commands` named `name`.
+pub let NamedIn(commands: List(Command), name: Str) -> Command =
+    match commands
+    | [] => Command/leaf(name, "", [], positionals([]))
+    | [c, ..rest] => match /std/Cli/name(c) == name | true => c | false => NamedIn(rest, name) end
+    end;
+
+--- That `c` is a group with a command named `name`.
+pub let HasCommand(c: Command, name: Str) -> Prop =
+    match c | leaf(_, _, _, _) => False | group(_, _, _, commands) => HasIn(commands, name) end;
+
+--- The command of `c` named `name`.
+pub let Named(c: Command, name: Str) -> Command =
+    match c | leaf(_, _, _, _) => c | group(_, _, _, commands) => NamedIn(commands, name) end;
+
+let pick(
+    @commands: List(Command),
+    chosen: Chosen(commands),
+    name: Str,
+    @ok: HasIn(commands, name),
+) -> Option(Parsed(NamedIn(commands, name))) =
+    match chosen
+    | here(@c, @rest, parsed) =>
+        let found =
+            match /std/Cli/name(c) == name: (b) =>
+                (held: match b | true => True | false => HasIn(rest, name) end) -> Option(
+                    Parsed(match b | true => c | false => NamedIn(rest, name) end))
+            | true => (_) => Option/some(parsed)
+            | false => (_) => Option/none()
+            end;
+        found(ok)
+    | there(@c, @rest, more) =>
+        let found =
+            match /std/Cli/name(c) == name: (b) =>
+                (held: match b | true => True | false => HasIn(rest, name) end) -> Option(
+                    Parsed(match b | true => c | false => NamedIn(rest, name) end))
+            | true => (_) => Option/none()
+            | false => (later) => pick(more, name, @later)
+            end;
+        found(ok)
+    end;
+
+--- The parse of the command `name` of the group `p` was parsed against, where the line chose it, and `none` where it chose another. A name the group lacks is refused where it is written.
+pub let command(
+    @c: Command,
+    p: Parsed(c),
+    name: Str,
+    @ok: HasCommand(c, name),
+) -> Option(Parsed(Named(c, name))) =
+    match p
+    | leaf(_) => match ok end
+    | group(_, chosen) => pick(chosen, name, @ok)
+    end;

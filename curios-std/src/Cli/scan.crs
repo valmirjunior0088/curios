@@ -199,7 +199,7 @@ let step(lookup: Map(Str, Claim), raw: Raw, literal: Bool, tokens: List(Str), gr
     end;
 
 --- `tokens` read against `fields` and the built-ins. A group stops at its first positional, the word that names its command, and hands it and what follows to the command.
-pub let scan(fields: List(Field), version: Option(Str), tokens: List(Str), group: Bool) -> Raw =
+pub let line(fields: List(Field), version: Option(Str), tokens: List(Str), group: Bool) -> Raw =
     step(
         claims(fields, version),
         Raw {

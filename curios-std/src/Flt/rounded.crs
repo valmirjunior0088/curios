@@ -1,5 +1,7 @@
 use /std/{Flt, Nat, Int, Bool, Str, Option, Dyadic, List, Vec};
 use /std/Flt/{Rounding, exact, reduction};
+use /std/Flt/grammar/{of_str_in, of_hex_str_in, of_decimal_in};
+use /std/Flt/digits/{to_str_significant_in};
 use /std/Bool/{Holds};
 
 --- `a + b`, in the direction `r` names.
@@ -132,21 +134,21 @@ pub let to_nat(r: Rounding, f: Flt, @ok: Flt/NonNeg(f)) -> Nat =
 
 --- `Flt/of_str` in the direction `r` names: decimal or hex text read exactly and rounded once, the special names read as they are. `none` for text that spells no number.
 pub let of_str(r: Rounding, s: Str) -> Option(Flt) =
-    Flt/of_str_in(r, s);
+    of_str_in(r, s);
 
 --- `Flt/of_hex_str` in the direction `r` names.
 pub let of_hex_str(r: Rounding, s: Str) -> Option(Flt) =
-    Flt/of_hex_str_in(r, s);
+    of_hex_str_in(r, s);
 
 --- `Flt/of_decimal` in the direction `r` names: `d · 10^e`, of the sign `negative` gives, rounded once.
 pub let of_decimal(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
-    Flt/of_decimal_in(r, negative, d, e, digits);
+    of_decimal_in(r, negative, d, e, digits);
 
 --- `Flt/to_str_significant` in the direction `r` names: exactly `n` significant digits (§5.12.2).
 pub let to_str_significant(r: Rounding, f: Flt, n: Nat, @ok: Holds(0 < n)) -> Str =
     match n
     | 0 => match ok end
-    | k + 1 => Flt/to_str_significant_in(r, f, k + 1)
+    | k + 1 => to_str_significant_in(r, f, k + 1)
     end;
 
 --- IEEE's `sum` (§9.4): the terms of `p` added exactly and rounded once in the direction `r` names. A NaN term answers the greatest of the NaNs' quieted patterns, the infinities of both signs answer the default NaN, and an exact zero is negative only when every term is a negative zero or `r` rounds toward negative.

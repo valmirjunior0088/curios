@@ -63,7 +63,7 @@ mod date_time;
 mod values;
 
 mod decode;
-pub use decode/{decode};
+pub use decode/{let decode};
 
 mod encode;
-pub use encode/{encode};
+pub use encode/{let encode};

@@ -338,7 +338,7 @@ fn a_declaration_with_problems_ends_the_program_with_one_before_the_line_is_read
         r#"
         use /std/{Cli, Option, print};
 
-        Cli/main_checked(
+        Cli/try_main(
             Cli/leaf("serve", "Serve", [Cli/flag("help", "Mine")], Cli/positionals([])),
             Option/some("0.1.0"),
             (_) => print("unreachable"))

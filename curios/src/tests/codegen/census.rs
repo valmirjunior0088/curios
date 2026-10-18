@@ -1078,8 +1078,8 @@ fn step_specialization_extent() {
         let Some(name) = &function.debug_name else {
             continue;
         };
-        // The walk's own callees, and `/std/Str/step` is not one: it survives only in the proofs, which erase.
-        if ["/std/Str/classify", "/std/Str/fold"]
+        // The walk's own callees, and `/std/Str/utf8/step` is not one: it survives only in the proofs, which erase.
+        if ["/std/Str/utf8/classify", "/std/Str/fold"]
             .iter()
             .any(|hint| name.contains(hint))
         {

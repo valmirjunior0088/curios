@@ -171,7 +171,7 @@ induct Wake(E: Type): Type
 end
 
 --- Run the program until it quits, answering its last model. One task races a read of the terminal, the answers of the work the program's directives asked for and, where the terminal does not report its size, a deadline for asking it that passes every tenth of a second, whatever else wakes the loop meanwhile, and is served before what arrived as it passed; what wakes it is folded through `update`, with every answer already waiting, and the screen drawn once. Work runs beside the loop, and a quit waits for the work its own update asked for and cancels the rest where it waits. A read of the terminal that fails ends the run with its error, and so do a query of its size and a draw. The end of the terminal's input ends the reading alone, and the program runs on until it quits.
-pub let run(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Io, Io/Error, M) =
+pub let main(@M: Type, @E: Type, app: Tui(M, E)) -> Try(Io, Io/Error, M) =
     Try/scope((children) => Try/bind(Session/open(children), (s) => running(app, s, children)));
 
 -- The loop of `app` over the session `s`, with the work its directives ask for spawned into `children`.
