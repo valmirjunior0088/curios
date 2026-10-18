@@ -527,3 +527,28 @@ impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for Sorted<K, V> {
         formatter.debug_map().entries(self.tree.iter()).finish()
     }
 }
+
+/// How a [`Sorted`] map is archived: as its entries, the least key first, so a map is stored as the order it is read back in and restored by inserting each.
+pub struct KeyOrder;
+
+/// The field adapter: `#[archived_with(InKeyOrder)]`.
+pub type InKeyOrder = curios_archive::Via<KeyOrder>;
+
+impl<K: Ord + Hash + Clone, V: Clone> curios_archive::Proxy<Sorted<K, V>> for KeyOrder {
+    type Archivable = Vec<(K, V)>;
+
+    fn to_archivable(map: &Sorted<K, V>) -> impl std::borrow::Borrow<Vec<(K, V)>> {
+        map.iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect::<Vec<_>>()
+    }
+
+    fn from_archivable(entries: Vec<(K, V)>) -> Result<Sorted<K, V>, String> {
+        let mut map = Sorted::new();
+        for (key, value) in entries {
+            map.insert(key, value);
+        }
+
+        Ok(map)
+    }
+}

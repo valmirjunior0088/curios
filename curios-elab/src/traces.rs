@@ -12,10 +12,9 @@ mod tests;
 use {
     crate::{Answered, Question},
     curios_core::{Global, Trace, WitnessKey},
-    curios_utilities::{Persistent, Sorted},
+    curios_utilities::{InKeyOrder, Persistent, Sorted},
     std::{
         borrow::Borrow,
-        cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap},
         convert::Infallible,
         hash::Hash,
@@ -42,41 +41,28 @@ pub struct Traces {
 ///
 /// **What a read of another unit stands on.** A trace's question holds no answer for a part, the declaration being the one to hold it; of a declaration in the unit that is the baseline's own, and of one in another unit it is this digest. A unit compiled over a baseline asks nothing of a unit that is the one the baseline was compiled after, and of any other asks each part again by what it digests to now.
 ///
-/// **One table for a unit**, every declaration of one compile having read one scope: a part is digested once however many declarations asked it, in the order the declarations, by name, first asked.
+/// **One table for a unit**, every declaration of one compile having read one scope: a part is digested once however many declarations asked it, and the table is read back in the order of its questions, so one made by reading every trace and one kept by the changes of a recompile's are one table.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Foreign {
-    read: Vec<(Question, Option<String>)>,
-    /// Where `read` holds each subject's parts, made the first time one is asked for.
-    #[archived_with(curios_archive::Skip)]
-    places: OnceCell<HashMap<Global, Vec<u32>>>,
+    #[archived_with(InKeyOrder)]
+    read: Sorted<Question, Option<String>>,
 }
 
 impl Foreign {
     /// The digest recorded of the part `question` asks: `None` where nothing asked it, `Some(None)` where the name declared no such part.
     pub(crate) fn digest(&self, question: &Question) -> Option<&Option<String>> {
-        let places = self.places.get_or_init(|| {
-            let mut places = HashMap::<Global, Vec<u32>>::new();
-            for (place, (asked, _)) in self.read.iter().enumerate() {
-                if let Some(subject) = asked.subject() {
-                    places.entry(*subject).or_default().push(place as u32);
-                }
-            }
-
-            places
-        });
-
-        places
-            .get(question.subject()?)?
-            .iter()
-            .map(|place| &self.read[*place as usize])
-            .find(|(asked, _)| asked == question)
-            .map(|(_, digest)| digest)
+        self.read.get(question)
     }
 
-    /// Record `digest` as what the part `question` asks had. The table's places are made after its last record.
+    /// Record `digest` as what the part `question` asks had, in place of what was recorded of it.
     pub(crate) fn record(&mut self, question: Question, digest: Option<String>) {
-        self.read.push((question, digest));
+        self.read.insert(question, digest);
+    }
+
+    /// Take out what was recorded of the part `question` asks: no declaration reads it now.
+    pub(crate) fn forget(&mut self, question: &Question) {
+        self.read.remove(question);
     }
 
     /// The name each part recorded here was asked of.

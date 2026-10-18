@@ -21,7 +21,7 @@ use {
 };
 
 /// One question a judgment put to its environment about another declaration, naming a declaration by `N` and a witness key by `K`: the name and the key themselves where a judgment asks, and each one's place in a unit's table where a unit is stored ([`Traces`](crate::Traces)).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub enum Question<N = Global, K = WitnessKey> {
     /// The type a name is declared at, with its universe scheme.

@@ -195,3 +195,30 @@ fn an_ordered_map_names_the_positions_on_either_side_of_one() {
     assert_eq!(ordered.after(30), None);
     assert_eq!(ordered.before(i64::MAX), Some((30, &30)));
 }
+
+/// A map read in key order, archived beside a field of its own.
+#[curios_archive::archived]
+struct Stored {
+    #[archived_with(InKeyOrder)]
+    map: Sorted<u32, String>,
+}
+
+/// A map read in key order is archived as its entries in that order and restored to the same entries, whatever order they were inserted in.
+#[test]
+fn a_sorted_map_is_restored_from_its_archive_in_key_order() {
+    let mut map = Sorted::new();
+    for key in [5, 1, 9, 3] {
+        map.insert(key, key.to_string());
+    }
+    let bytes = curios_archive::to_bytes(&Stored { map }).expect("a map archives");
+    let restored = curios_archive::from_bytes::<Stored>(&bytes).expect("a map restores");
+
+    assert_eq!(
+        restored
+            .map
+            .iter()
+            .map(|(key, value)| (*key, value.clone()))
+            .collect::<Vec<_>>(),
+        [1, 3, 5, 9].map(|key| (key, key.to_string())),
+    );
+}

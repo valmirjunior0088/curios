@@ -110,6 +110,8 @@ pub(super) struct Demand<'a> {
     pub(super) readers: Option<Readers>,
     /// The names the baseline declared and the unit does not.
     pub(super) lost: Vec<Global>,
+    /// The names the unit declares and the baseline did not.
+    gained: Vec<Global>,
 }
 
 /// Whether the part `question` asks, of a declaration the unit does not hold, digests now to what the baseline recorded of it. A part the baseline recorded nothing of does not stand, and neither does one that will not digest.
@@ -202,61 +204,110 @@ impl<'a> Demand<'a> {
             asking: false,
             readers: over.map(|over| over.readers.clone()),
             lost: Vec::new(),
+            gained: Vec::new(),
         }
     }
 
     /// Record what the unit's declarations read of the declarations it does not hold, each part by the digest it has in `scope`: what a later compile over this unit asks a read of another unit again by ([`Foreign`]).
     ///
-    /// Taken where the walk ends, off the traces that stood. A part a kept declaration read of a unit that did not move is the baseline's, digest and all, so nothing of that unit is read to record it; and a walk that kept every declaration of its baseline and dropped none, in a scope that did not move, holds the baseline's table, which its traces began with.
+    /// Taken where the walk ends, off the traces that stood. A part that will not digest is recorded nowhere, and a read with no record does not stand.
+    ///
+    /// **Kept by its changes over a baseline.** The baseline's table records what the baseline's traces read, which the walk's traces began as and changed only at the declarations it made or dropped: a part one of those read and no declaration reads now is taken out, and so is every part of a name the unit now declares; a part a declaration made reads is recorded, digested again where the unit declaring it moved. A part a kept declaration read of a unit that moved digests to what it did, or the declaration would have been made, so its record stands; and a walk that made and dropped nothing, in a scope that did not move, holds the baseline's table. Compiled whole, every trace is read.
     pub(super) fn note_foreign(&mut self, scope: &Established<'_>) {
-        let earlier = self.over.map(|over| over.traces);
-        if earlier.is_some()
-            && scope.settled()
-            && self.kept.iter().all(|kept| *kept)
-            && self.lost.is_empty()
-        {
+        let Some(over) = self.over else {
+            let mut read = Foreign::default();
+            for trace in self.traces.each() {
+                for part in self.foreign_parts(trace, scope) {
+                    if read.digest(&part).is_none()
+                        && let Ok(digest) = scope.part_digest(&part)
+                    {
+                        read.record(part, digest);
+                    }
+                }
+            }
+            self.traces.read(Rc::new(read));
+            return;
+        };
+        let made = (0..self.declarations.len())
+            .filter(|declaration| !self.kept[*declaration])
+            .collect::<Vec<_>>();
+        if scope.settled() && made.is_empty() && self.lost.is_empty() {
             return;
         }
 
-        let mut read = Foreign::default();
-        let mut noted = HashMap::<Global, Vec<Question>>::new();
-        for trace in self.traces.each() {
-            for (question, answered) in trace.asked() {
-                // A witness found is read by its signature, which its own question does not ask.
+        let mut read = Foreign::clone(over.traces.foreign());
+        let mut dropped = Vec::new();
+        for declaration in made {
+            let names = self.names(declaration);
+            for name in &names {
+                if let Some(earlier) = over.traces.of(name) {
+                    dropped.extend(self.foreign_parts(earlier, scope));
+                }
+            }
+            let Some(trace) = self.traces.of(names[0]) else {
+                continue;
+            };
+            for part in self.foreign_parts(trace, scope) {
+                let name = part.subject().expect("a part is of a name");
+                if read.digest(&part).is_some() && scope.unmoved(name) {
+                    continue;
+                }
+                match scope.part_digest(&part) {
+                    Ok(digest) => read.record(part, digest),
+                    Err(_) => read.forget(&part),
+                }
+            }
+        }
+        for name in &self.lost {
+            if let Some(earlier) = over.traces.of(name) {
+                dropped.extend(self.foreign_parts(earlier, scope));
+            }
+        }
+        let readers = self
+            .readers
+            .as_ref()
+            .expect("a walk over a baseline keeps who asked what");
+        for part in dropped {
+            let name = part.subject().expect("a part is of a name");
+            let read_now = Parts::of(&part).is_some_and(|asked| {
+                readers
+                    .of_name(name)
+                    .iter()
+                    .any(|(_, read)| read.meets(asked))
+            });
+            if !read_now {
+                read.forget(&part);
+            }
+        }
+        for name in &self.gained {
+            for part in Parts::ALL.questions(*name) {
+                read.forget(&part);
+            }
+        }
+        self.traces.read(Rc::new(read));
+    }
+
+    /// The parts `trace` reads of declarations the unit does not hold, as the table of them records each: every part asked, and the signature of each witness found, which its own question does not ask; none of a declaration of a fixed unit.
+    fn foreign_parts<'t>(
+        &'t self,
+        trace: &'t Trace<Question, Answered>,
+        scope: &'t Established<'_>,
+    ) -> impl Iterator<Item = Question> + 't {
+        trace
+            .asked()
+            .iter()
+            .filter_map(move |(question, answered)| {
                 let part = match (question, answered) {
                     (Question::Witness(..), Answered::Witness(Some(witness))) => {
                         Question::Signature(*witness)
                     }
                     (part, Answered::Part) => *part,
-                    _ => continue,
+                    _ => return None,
                 };
-                let Some(name) = part.subject() else {
-                    continue;
-                };
-                if self.owner.contains_key(name) || !scope.recorded(name) {
-                    continue;
-                }
-                let asked = noted.entry(*name).or_default();
-                if asked.contains(&part) {
-                    continue;
-                }
-                asked.push(part);
+                let name = part.subject()?;
 
-                let kept = earlier
-                    .and_then(|earlier| earlier.foreign().digest(&part))
-                    .filter(|_| scope.unmoved(name));
-                let digest = match kept {
-                    Some(digest) => digest.clone(),
-                    None => match scope.part_digest(&part) {
-                        Ok(digest) => digest,
-                        // A part that will not digest is recorded nowhere, and a read with no record does not stand.
-                        Err(_) => continue,
-                    },
-                };
-                read.record(part, digest);
-            }
-        }
-        self.traces.read(Rc::new(read));
+                (!self.owner.contains_key(name) && scope.recorded(name)).then_some(part)
+            })
     }
 
     /// Whether the part `question` asks of `name`, a declaration the unit does not hold, is the part the baseline read: the unit that holds it is the one the baseline was compiled after, or the part digests now to what the baseline recorded of it.
@@ -437,6 +488,7 @@ impl<'a> Demand<'a> {
             self.traces.forget(name);
         }
         self.lost = lost;
+        self.gained = gained;
         // A key at which the unit declares other witnesses than the baseline did.
         let keys = |names: &BTreeSet<Global>| {
             names

@@ -1036,6 +1036,26 @@ fn a_dependency_that_gained_a_declaration_redoes_nothing_of_its_dependent() {
     assert_stored_alike(&whole, &incremental);
 }
 
+/// What a unit records of another unit's parts follows what its declarations read now: `bound` stops reading `/dep`'s `limit`, which nothing else read, and `unrelated` starts reading `double`'s body, which `two` read already, so the record of `limit` is taken out and the one of `double` stands, as a whole compile of the edited text records them.
+///
+/// Mutation-checked: with a part no declaration reads any more left recorded, the unit records `limit`, and is not the one a whole compile stores.
+#[test]
+fn what_a_unit_records_of_another_follows_what_its_declarations_read_now() {
+    let dependency = unit_after("dep", DEPENDENCY, &[]);
+    let baseline = unit_after("lib", DEPENDENT, &[&dependency]);
+    let edited = DEPENDENT
+        .replace("pub let bound: Nat = limit;", "pub let bound: Nat = 4;")
+        .replace(
+            "pub let unrelated: Nat = 7;",
+            "pub let unrelated: Eq()(double(2), 4) = Eq/refl();",
+        );
+
+    let incremental = recompile_after("lib", &edited, &baseline, &[&dependency], &[false]);
+
+    assert!(reuses_body(&baseline, &incremental, "twice"));
+    assert_stored_alike(&unit_after("lib", &edited, &[&dependency]), &incremental);
+}
+
 /// A value computed where its unit is erased ran the erased forms of what it reaches in other units too, each recorded by the digest it had. `/dep`'s `double` is given another body under its signature, so `/lib`'s `twice` is elaborated once and what it erased to is computed again over the `double` that is there now: the unit is the one a whole compile after the edited `/dep` stores.
 ///
 /// Mutation-checked: with every erased form of a unit that moved taken to be the one an evaluation ran, `twice` is stored as the `4` it computed over the `/dep` that is gone.
