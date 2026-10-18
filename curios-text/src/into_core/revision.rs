@@ -9,8 +9,9 @@ mod tests;
 
 use {
     super::{Key, LoweredDeclaration, PreparedText, Records},
+    curios_utilities::{Qualifier, Sorted},
     std::{
-        collections::{BTreeSet, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
     },
 };
@@ -38,6 +39,7 @@ pub(super) struct Revised {
     pub records: Records,
     pub places: curios_core::Places,
     pub declarations: curios_core::Declarations,
+    pub bodies: Bodies,
     pub revision: Revision,
     /// Each kept witness the walk named otherwise, by the name the baseline gives it and the one it takes now.
     pub renamed: Vec<(curios_core::Global, curios_core::Global)>,
@@ -49,6 +51,7 @@ pub(super) fn revise(
     steps: &[Step],
     records: &[Rc<LoweredDeclaration>],
     made: &[curios_core::Item],
+    gone: &[Gone<'_>],
 ) -> Revised {
     let ends = steps
         .iter()
@@ -93,8 +96,9 @@ pub(super) fn revise(
         records,
         made,
         named: &named,
+        gone,
     };
-    let (items, records, places, declarations, removed) = walk
+    let (items, records, places, declarations, bodies, removed) = walk
         .over(&tables)
         .or_else(|| walk.over(&tables.respaced()))
         .expect("a version placed apart again has room for one walk's items");
@@ -110,58 +114,137 @@ pub(super) fn revise(
         records,
         places,
         declarations,
+        bodies,
         revision: Revision { anew, dropped },
         renamed,
     }
 }
 
-/// One of a baseline's declarations a walk did not keep: its record, and the places and the names of its items in the baseline.
+/// One of a baseline's declarations a walk did not keep: its record, the place of its first item in the baseline, and the places and the names of its items there.
 pub(super) struct Gone<'b> {
     pub record: &'b Rc<LoweredDeclaration>,
+    pub first: i64,
     pub places: Vec<usize>,
     pub names: Vec<curios_core::Global>,
 }
 
-/// Each of `baseline`'s declarations the walk did not keep, `steps` being the ones it met ([`Gone`]).
-pub(super) fn gone<'b>(baseline: &'b PreparedText, steps: &[Step]) -> Vec<Gone<'b>> {
+/// Each of `baseline`'s declarations the walk did not keep ([`Gone`]): of each body of `walked`, the ones none of `steps` keeps, and every one of each body of `removed`, which the unit no longer holds. Every other body's are kept, the walk having passed it.
+pub(super) fn gone<'b>(
+    baseline: &'b PreparedText,
+    steps: &[Step],
+    walked: impl IntoIterator<Item = Qualifier>,
+    removed: &[Qualifier],
+) -> Vec<Gone<'b>> {
     let kept = steps
         .iter()
         .filter_map(|step| step.kept)
         .collect::<HashSet<_>>();
     let items = &baseline.core().items;
+    let bodies = walked
+        .into_iter()
+        .chain(removed.iter().copied())
+        .collect::<BTreeSet<_>>();
 
-    baseline
-        .lowerings()
+    let mut gone = bodies
         .iter()
-        .filter(|(first, _)| !kept.contains(first))
-        .map(|(first, record)| {
+        .filter_map(|body| baseline.bodies().get(body))
+        .flat_map(|body| body.firsts.iter().copied())
+        .filter(|first| !kept.contains(first))
+        .filter_map(|first| {
+            let record = baseline.lowerings().get(first)?;
             let places = run(items, place_of(first), record.facts().len());
             let names = places
                 .iter()
                 .flat_map(|place| names_at(items, *place))
                 .collect();
-            Gone {
+            Some(Gone {
                 record,
+                first,
                 places,
                 names,
-            }
+            })
         })
-        .collect()
+        .collect::<Vec<_>>();
+    gone.sort_by_key(|gone| gone.first);
+
+    gone
 }
 
-/// The texts of `baseline`'s declarations no record of `records` was lowered from or kept by: what the unit's anchors no longer hold.
-pub(super) fn texts_gone(baseline: &PreparedText, records: &[Rc<LoweredDeclaration>]) -> Vec<Key> {
+/// The texts of the declarations `gone` takes away that no record of `records` was lowered from or kept by: what the unit's anchors no longer hold.
+pub(super) fn texts_gone(gone: &[Gone<'_>], records: &[Rc<LoweredDeclaration>]) -> Vec<Key> {
     let sited = records
         .iter()
         .filter_map(|record| record.text())
         .collect::<HashSet<_>>();
 
-    baseline
-        .lowerings()
-        .iter()
-        .filter_map(|(_, record)| record.text())
+    gone.iter()
+        .filter_map(|gone| gone.record.text())
         .filter(|text| !sited.contains(text))
         .collect()
+}
+
+/// Each module body's declarations, by the place of each one's first item, with how many of them no later lowering may keep: what a lowering over the unit finds a body's declarations by, and whether it may pass the body unwalked.
+#[derive(Clone, Default)]
+pub(crate) struct Bodies {
+    by: Sorted<Qualifier, Rc<Body>>,
+}
+
+/// One module body's declarations ([`Bodies`]).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Body {
+    pub firsts: BTreeSet<i64>,
+    pub unkeyable: usize,
+}
+
+impl Bodies {
+    /// The bodies of the declarations `records` holds.
+    pub(super) fn of(records: &Records) -> Self {
+        let mut bodies = Self::default();
+        let mut gathered = BTreeMap::<Qualifier, Body>::new();
+        for (first, record) in records.iter() {
+            let body = gathered.entry(record.body()).or_default();
+            body.firsts.insert(first);
+            body.unkeyable += usize::from(!record.keyable());
+        }
+        for (module, body) in gathered {
+            bodies.by.insert(module, Rc::new(body));
+        }
+
+        bodies
+    }
+
+    /// The declarations of the body `module`, where it holds any.
+    pub(super) fn get(&self, module: &Qualifier) -> Option<&Body> {
+        self.by.get(module).map(Rc::as_ref)
+    }
+
+    /// `record`, whose first item stands at `first`, among its body's declarations.
+    fn add(&mut self, first: i64, record: &LoweredDeclaration) {
+        let mut body = self
+            .by
+            .get(&record.body())
+            .map(|body| (**body).clone())
+            .unwrap_or_default();
+        body.firsts.insert(first);
+        body.unkeyable += usize::from(!record.keyable());
+        self.by.insert(record.body(), Rc::new(body));
+    }
+
+    /// `record`, whose first item stood at `first`, taken out of its body's declarations.
+    fn remove(&mut self, first: i64, record: &LoweredDeclaration) {
+        let Some(held) = self.by.get(&record.body()) else {
+            return;
+        };
+        let mut body = (**held).clone();
+        body.firsts.remove(&first);
+        body.unkeyable -= usize::from(!record.keyable());
+        match body.firsts.is_empty() {
+            true => {
+                self.by.remove(&record.body());
+            }
+            false => self.by.insert(record.body(), Rc::new(body)),
+        }
+    }
 }
 
 /// A baseline's tables at the places a version of its items holds them at, with where it holds what the baseline holds at each of its own places.
@@ -170,6 +253,7 @@ struct Tables {
     records: Records,
     places: curios_core::Places,
     declarations: curios_core::Declarations,
+    bodies: Bodies,
     /// The place of the version's item for each place of the baseline's own: `None` where the two are one.
     from: Option<HashMap<usize, usize>>,
 }
@@ -184,6 +268,7 @@ impl Tables {
                 records: baseline.lowerings().clone(),
                 places: baseline.places().clone(),
                 declarations: baseline.declarations().clone(),
+                bodies: baseline.bodies().clone(),
                 from: None,
             };
         }
@@ -224,6 +309,7 @@ impl Tables {
             places: curios_core::Places::of(&module),
             declarations: curios_core::Declarations::of(&module),
             items: module.items,
+            bodies: Bodies::of(&records),
             records,
             from: Some(from),
         }
@@ -244,6 +330,7 @@ impl Tables {
             places: curios_core::Places::of(&module),
             declarations: curios_core::Declarations::of(&module),
             items: module.items,
+            bodies: Bodies::of(&placed),
             records: placed,
             from: Some(from),
         }
@@ -266,14 +353,17 @@ struct Walk<'w> {
     made: &'w [curios_core::Item],
     /// The walk's items, by their place among them, that are kept items named otherwise.
     named: &'w HashSet<usize>,
+    /// The baseline's declarations the walk did not keep.
+    gone: &'w [Gone<'w>],
 }
 
-/// A version's items, records, places and declarations, with every place an item was taken out of or replaced at and the names it held there.
+/// A version's items, records, places, declarations and bodies, with every place an item was taken out of or replaced at and the names it held there.
 type Made = (
     curios_core::Items,
     Records,
     curios_core::Places,
     curios_core::Declarations,
+    Bodies,
     Vec<(usize, Vec<curios_core::Global>)>,
 );
 
@@ -282,21 +372,15 @@ impl Walk<'_> {
     fn over(&self, tables: &Tables) -> Option<Made> {
         let mut items = tables.items.clone();
         let mut records = tables.records.clone();
+        let mut bodies = tables.bodies.clone();
         let (mut removed, mut placed) = (Vec::new(), Vec::new());
-        let kept = self
-            .steps
-            .iter()
-            .filter_map(|step| step.kept)
-            .map(|first| position(tables.place(place_of(first))))
-            .collect::<HashSet<_>>();
 
-        // What no step keeps is taken out first, so what is put in has the room between kept items.
-        for (first, record) in tables.records.iter() {
-            if kept.contains(&first) {
-                continue;
-            }
+        // What the walk did not keep is taken out first, so what is put in has the room between kept items.
+        for gone in self.gone {
+            let first = position(tables.place(place_of(gone.first)));
             records.remove(first);
-            for place in run(&tables.items, place_of(first), record.facts().len()) {
+            bodies.remove(first, gone.record);
+            for place in run(&tables.items, place_of(first), gone.record.facts().len()) {
                 removed.push((place, names_at(&items, place)));
                 items.remove(place);
             }
@@ -325,7 +409,9 @@ impl Walk<'_> {
                 for (step, end) in steps.iter().zip(&self.ends[run..index]) {
                     let held = at.by_ref().take(end - step.from).collect::<Vec<_>>();
                     if let Some(&head) = held.first() {
-                        records.insert(position(head), Rc::clone(&self.records[step.record]));
+                        let record = &self.records[step.record];
+                        records.insert(position(head), Rc::clone(record));
+                        bodies.add(position(head), record);
                     }
                     placed.extend(&held);
                     cursor = held.last().copied().or(cursor);
@@ -341,6 +427,7 @@ impl Walk<'_> {
             {
                 // Written ahead of what the walk has passed: moved after it.
                 records.remove(position(first));
+                bodies.remove(position(first), record);
                 let mut after = cursor;
                 for place in &mut held {
                     let names = names_at(&items, *place);
@@ -352,6 +439,7 @@ impl Walk<'_> {
                 }
                 if let Some(&head) = held.first() {
                     records.insert(position(head), Rc::clone(record));
+                    bodies.add(position(head), record);
                 }
             }
             for (offset, (place, item)) in held.iter().zip(made).enumerate() {
@@ -377,7 +465,7 @@ impl Walk<'_> {
         let mut declarations = tables.declarations.clone();
         declarations.revise(&items, &removed, &placed);
 
-        Some((items, records, places, declarations, removed))
+        Some((items, records, places, declarations, bodies, removed))
     }
 }
 

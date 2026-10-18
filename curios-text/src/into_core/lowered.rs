@@ -247,6 +247,8 @@ pub(crate) struct LoweredDeclaration {
     key: Option<Key>,
     /// The text it was lowered from, whether or not a later lowering may keep it: what the unit's anchors hold of it. `None` for one built rather than written.
     text: Option<Key>,
+    /// The module body it is written in.
+    body: Qualifier,
     /// What the unit-wide passes read of each item it lowered to, in the unit's order.
     items: Vec<LoweredItem>,
     /// The definitions it recorded an import scope for, each by its place among the declaration's.
@@ -304,6 +306,7 @@ impl LoweredDeclaration {
         Self {
             key,
             text,
+            body: context.prefix(),
             items: facts,
             scoped: scoped.unwrap_or_default(),
             lints: lints.unwrap_or_default(),
@@ -324,6 +327,16 @@ impl LoweredDeclaration {
     /// The text this was lowered from. See the field.
     pub(super) fn text(&self) -> Option<Key> {
         self.text
+    }
+
+    /// The module body this is written in.
+    pub(super) fn body(&self) -> Qualifier {
+        self.body
+    }
+
+    /// Whether a later lowering may keep this. See [`LoweredDeclaration::key`].
+    pub(super) fn keyable(&self) -> bool {
+        self.key.is_some()
     }
 }
 
@@ -484,34 +497,24 @@ impl<'a> Baseline<'a> {
         }
     }
 
-    /// Who read what of the unit lowered over this baseline, `declarations` being its records and `uses` what the `use` declarations of its bodies read: the baseline's, with the edges of every declaration lowered again or taken away replaced, and of every body of `bodies`, each one whose `use` declarations were resolved again or that the unit no longer holds.
-    pub(super) fn readers_of(
+    /// Who read what of the unit lowered over this baseline, `uses` being what the `use` declarations of its bodies read: the baseline's, with the edges of every declaration `gone` takes away and every one `made` lowers replaced, of every body of `bodies`, each one whose `use` declarations were resolved again or that the unit no longer holds, and of every witness of `witnesses`, whose key `keyed` records what it read of.
+    pub(super) fn readers_of<'r>(
         &self,
-        declarations: &[Rc<LoweredDeclaration>],
+        gone: impl IntoIterator<Item = &'r Rc<LoweredDeclaration>>,
+        made: impl IntoIterator<Item = &'r Rc<LoweredDeclaration>>,
         uses: &Table<Vec<Consulted>>,
         bodies: impl IntoIterator<Item = Qualifier>,
         keyed: &Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
         witnesses: impl IntoIterator<Item = curios_core::Global>,
     ) -> LookupReaders {
         let mut readers = self.unit.lookup_readers().clone();
-        let now = declarations.iter().map(Rc::as_ptr).collect::<HashSet<_>>();
-        let then = self
-            .unit
-            .lowerings()
-            .iter()
-            .map(|(_, declaration)| Rc::as_ptr(declaration))
-            .collect::<HashSet<_>>();
-        for (_, declaration) in self.unit.lowerings().iter() {
-            if !now.contains(&Rc::as_ptr(declaration))
-                && let Some(key) = declaration.key
-            {
+        for declaration in gone {
+            if let Some(key) = declaration.key {
                 readers.replace(key, &declaration.consulted, &[]);
             }
         }
-        for declaration in declarations {
-            if !then.contains(&Rc::as_ptr(declaration))
-                && let Some(key) = declaration.key
-            {
+        for declaration in made {
+            if let Some(key) = declaration.key {
                 readers.replace(key, &[], &declaration.consulted);
             }
         }

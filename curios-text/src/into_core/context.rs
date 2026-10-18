@@ -487,6 +487,11 @@ impl Shared {
         self.closed.borrow().contains(body)
     }
 
+    /// Every module body this lowering walked.
+    pub(super) fn closed(&self) -> Vec<Qualifier> {
+        self.closed.borrow().iter().copied().collect()
+    }
+
     /// What a unit lowered over `baseline` starts from: what the baseline minted, its import scopes and where its declarations lie, which the lowering changes where it lowers a declaration again, and [`Shared::settle`] where it takes one away.
     pub(super) fn over(baseline: &crate::PreparedText) -> Self {
         let shared = Self::new();

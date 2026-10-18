@@ -450,6 +450,9 @@ pub struct PreparedText {
     /// Who read each binding, of the unit's lowered declarations read backwards: made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`LookupReaders`]).
     #[archived_with(curios_archive::Skip)]
     lookups: OnceCell<LookupReaders>,
+    /// Each module body's declarations, by the place of each one's first item, made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`Bodies`]).
+    #[archived_with(curios_archive::Skip)]
+    bodies: OnceCell<Bodies>,
     /// What the `unused-declaration` lint's roots reach of the unit's items, made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`Reachability`]).
     #[archived_with(curios_archive::Skip)]
     reachability: OnceCell<Rc<Reachability>>,
@@ -713,6 +716,11 @@ impl PreparedText {
         self.imports
             .get()
             .unwrap_or_else(|error| panic!("a unit's import scopes failed to restore: {error}"))
+    }
+
+    /// Each module body's declarations. See the field.
+    fn bodies(&self) -> &Bodies {
+        self.bodies.get_or_init(|| Bodies::of(self.lowerings()))
     }
 
     /// What the lint's roots reach of the unit's items. See the field. `None` for an entry restored, whose entry's terms no unit holds.
@@ -2575,7 +2583,7 @@ fn into_core_unit_within(
         .collect::<HashSet<_>>();
     let gone = baseline
         .as_ref()
-        .map(|baseline| revision::gone(baseline.unit(), &steps))
+        .map(|baseline| revision::gone(baseline.unit(), &steps, shared.closed(), &removed))
         .unwrap_or_default();
     let gone_names = gone
         .iter()
@@ -2685,7 +2693,11 @@ fn into_core_unit_within(
     }
     let lookups = baseline.as_ref().map(|baseline| {
         baseline.readers_of(
-            &declarations,
+            gone.iter().map(|gone| gone.record),
+            steps
+                .iter()
+                .filter(|step| step.kept.is_none())
+                .map(|step| &declarations[step.record]),
             &uses,
             relisted.into_iter().chain(unwalked),
             &held_keys,
@@ -2874,13 +2886,13 @@ fn into_core_unit_within(
         .map(FlatItem::into_core)
         .collect::<Vec<_>>();
     // Over a baseline, the unit is a version of the baseline's: its items, records, names and declarations, and what it minted, imported and anchored, the baseline's with what the walk changed.
-    let (items, records, places, declared, revision, renamed) = match &baseline {
+    let (items, records, places, declared, bodies, revision, renamed) = match &baseline {
         Some(baseline) => {
-            let revised = revise(baseline.unit(), &steps, &declarations, &made);
+            let revised = revise(baseline.unit(), &steps, &declarations, &made, &gone);
             shared.settle(
                 &revised.renamed,
                 &revised.revision.dropped,
-                &texts_gone(baseline.unit(), &declarations),
+                &texts_gone(&gone, &declarations),
             );
 
             (
@@ -2888,6 +2900,7 @@ fn into_core_unit_within(
                 revised.records,
                 OnceCell::from(revised.places),
                 OnceCell::from(revised.declarations),
+                OnceCell::from(revised.bodies),
                 Some(revised.revision),
                 revised.renamed,
             )
@@ -2895,6 +2908,7 @@ fn into_core_unit_within(
         None => (
             made.into(),
             in_walk_order(declarations),
+            OnceCell::new(),
             OnceCell::new(),
             OnceCell::new(),
             None,
@@ -2955,6 +2969,7 @@ fn into_core_unit_within(
         paths: OnceCell::new(),
         places,
         declarations: declared,
+        bodies,
         revision,
         core: curios_core::Module {
             items,
