@@ -12,8 +12,8 @@ use {
         synth_neutral, terms_differ, zonk_solved_term_metas,
     },
     curios_analysis::{
-        Invert, RESOLVED_SPELLING_LAYERS, Unfolding, another_case, records_case_equation,
-        scrutinee_solution, solve_indices,
+        Invert, RESOLVED_SPELLING_LAYERS, another_case, records_case_equation, scrutinee_solution,
+        solve_indices,
     },
     curios_core::{
         Advance, Atom, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin, Many,
@@ -1362,7 +1362,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
                 .collect::<Vec<_>>();
 
             // The kernel reads a term by value where reduction is entered, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The kernel's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it.
-            let unfolded = Unfolding::everything(&*context).term(head);
+            let unfolded = context.by_value(head);
             if unfolded != *head {
                 for (key, original) in scrutinee_spellings(context, &unfolded)? {
                     if !spellings.iter().any(|(written, _, _)| *written == key) {
@@ -1444,7 +1444,7 @@ pub(crate) fn dead_guard(context: &mut Context, head: &Term, value: &Term) -> Op
 
 /// The case a guard always is, where that is a case other than `value`, the arm's: the arm is then never taken, and an error its body raises is reported as one in a dead arm — which is where a proof resting on the guard fails, since no equation is recorded under a spelling that mentions no local ([`records_case_equation`]). `None` where the guard is the arm's own case, or no literal or constructor at all — a guard its locals decide stays stuck.
 fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) -> Option<Term> {
-    let spelled = Unfolding::everything(&*context).term(head);
+    let spelled = context.by_value(head);
     let case = reduce_with(context, &spelled).ok()?;
     another_case(context, &case, value, &[])
         .ok()?

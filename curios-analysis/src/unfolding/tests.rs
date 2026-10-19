@@ -18,7 +18,7 @@ fn var(name: &Free) -> Term {
     Term::free_var(name)
 }
 
-/// Unfolding toward solved variables substitutes a definition only where it reaches one, so a term is respelled no further than the substitution needs; unfolding everything is the kernel's spelling, every definition substituted.
+/// Unfolding toward solved variables substitutes a definition only where it reaches one, so a term is respelled no further than the substitution needs: a definition over another variable stays named.
 #[test]
 fn an_unfolding_toward_solved_variables_leaves_other_definitions_named() {
     let s = Free::local(1, Some("s"));
@@ -38,10 +38,6 @@ fn an_unfolding_toward_solved_variables_leaves_other_definitions_named() {
         Unfolding::toward(&scope, &solutions).term(&term),
         sum(var(&s), var(&u))
     );
-    assert_eq!(
-        Unfolding::everything(&scope).term(&term),
-        sum(var(&s), var(&v))
-    );
 }
 
 /// A definition that mentions itself is read once: a term naming it is unfolded a single level, and the walk ends.
@@ -52,9 +48,10 @@ fn a_definition_that_mentions_itself_is_read_once() {
     let mut scope = Scope::default();
     scope.assume(&s);
     scope.define(&f, sum(var(&f), var(&s)));
+    let solutions = [(s, nat(7))];
 
     assert_eq!(
-        Unfolding::everything(&scope).term(&sum(var(&f), nat(1))),
+        Unfolding::toward(&scope, &solutions).term(&sum(var(&f), nat(1))),
         sum(sum(var(&f), var(&s)), nat(1))
     );
 }

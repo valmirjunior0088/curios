@@ -1,10 +1,12 @@
 //! What the kernel sees of a term that one of its checkers holds under local definitions.
 //!
-//! The kernel hands every rule here its terms by value, each `let`-bound name unfolded; the elaborator keeps a `let` as a local definition, so a term it holds may name a `let` where the kernel's copy of the same term has the value. Every rule that records or compares what the kernel sees — the locals a case's solution re-types, the variables an index equation may solve, the variable a scrutinee is, the spelling a guard's equation is recorded under — has to read through those definitions, and this module is that reading, stated once. It reads through [`Env::unfold`] and nothing else, so a driver that answers no local definition, as the kernel does not, sees every term unchanged.
+//! The kernel hands every rule here its terms by value, each `let`-bound name unfolded; the elaborator keeps a `let` as a local definition, so a term it holds may name a `let` where the kernel's copy of the same term has the value. Every rule that records or compares what the kernel sees — the locals a case's solution re-types, the variables an index equation may solve, the variable a scrutinee is — has to read through those definitions, and this module is that reading, stated once. It reads through [`Env::unfold`] and nothing else, so a driver that answers no local definition, as the kernel does not, sees every term unchanged.
+//!
+//! The spelling a guard's equation is recorded under reads a term whole, every definition substituted, and is not read here: the elaborator holds each definition by value from where it is made, as the kernel holds a `let` (`curios-elab`'s `Context::by_value`), where a reading from scratch would unfold a chain of definitions again at every spelling.
 //!
 //! # Why one reading
 //!
-//! The re-typing inlines the definitions that reach a solved variable, the index solver collects the locals behind definitions, the case's own solution follows a chain of variables, and the elaborator's guard keys read what a guard is over — four readers, each of which would otherwise carry its own guard against a definition that mentions itself. A reading written once is one to test, and a guard key that named its `let` outright would miss the same guard met through an unfolded definition.
+//! The re-typing inlines the definitions that reach a solved variable, the index solver collects the locals behind definitions, and the case's own solution follows a chain of variables — three readers, each of which would otherwise carry its own guard against a definition that mentions itself. A reading written once is one to test.
 
 #[cfg(test)]
 mod tests;
@@ -15,38 +17,21 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// A term with its local definitions substituted, as the kernel has them — every definition, or only the ones that reach given variables.
+/// A term with the local definitions that reach given variables substituted, as the kernel has them, so a term is respelled no further than a substitution for those variables needs.
 ///
 /// Memoized for one use, because a scope's terms share their `let`s. A name is recorded before its definition is read, so a definition that mentions itself — which the elaborator's scope holds — is read once rather than without end.
 pub struct Unfolding<'a, E> {
     env: &'a E,
-    reach: Reach<'a>,
+    solutions: &'a [(Free, Term)],
     expansions: BTreeMap<Free, Option<Term>>,
 }
 
-/// Which local definitions an [`Unfolding`] substitutes.
-enum Reach<'a> {
-    /// All of them: the term as the kernel spells it.
-    Everything,
-    /// Only those whose definition reaches one of these variables, so a term is respelled no further than a substitution for them needs.
-    Toward(&'a [(Free, Term)]),
-}
-
 impl<'a, E: Env> Unfolding<'a, E> {
-    /// Every local definition substituted: the term as the kernel spells it.
-    pub fn everything(env: &'a E) -> Self {
-        Self {
-            env,
-            reach: Reach::Everything,
-            expansions: BTreeMap::new(),
-        }
-    }
-
-    /// Only the local definitions that reach a variable `solutions` solves.
+    /// The local definitions that reach a variable `solutions` solves.
     pub fn toward(env: &'a E, solutions: &'a [(Free, Term)]) -> Self {
         Self {
             env,
-            reach: Reach::Toward(solutions),
+            solutions,
             expansions: BTreeMap::new(),
         }
     }
@@ -73,13 +58,11 @@ impl<'a, E: Env> Unfolding<'a, E> {
             false => return None,
         };
         let unfolded = self.term(&definition);
-        let expansion = match self.reach {
-            Reach::Everything => Some(unfolded),
-            Reach::Toward(solutions) => solutions
-                .iter()
-                .any(|(solved, _)| unfolded.mentions_free(solved))
-                .then_some(unfolded),
-        };
+        let expansion = self
+            .solutions
+            .iter()
+            .any(|(solved, _)| unfolded.mentions_free(solved))
+            .then_some(unfolded);
 
         self.expansions.insert(*name, expansion.clone());
         expansion

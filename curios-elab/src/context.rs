@@ -73,7 +73,7 @@ use {
         Published, Refusal, Sort, ZonkPass, hold_at_one_instance, key_spelling, metavar_spines,
         read_by_value, shallow_scrutinee, zonk, zonk_solved_term_metas,
     },
-    curios_analysis::{Classification, Unfolding, records_case_equation},
+    curios_analysis::{Classification, records_case_equation},
     curios_core::{
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Declarations, Definition,
         DefinitionKind, Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
@@ -1544,7 +1544,30 @@ impl<'s> Context<'s> {
             self.typing.frames.forget_spellings_naming(&name);
         }
 
-        self.typing.frames.define(name, entry);
+        let by_value = self.by_value(&zonk_solved_term_metas(self, entry.body()));
+        self.typing
+            .frames
+            .define(name, entry.read_by_value(by_value));
+    }
+
+    /// `term` by value: each local definition it names replaced by what that definition is by value, which it was read as where it was defined ([`DefEntry`]). One substitution over what `term` holds, as the kernel reads a term through the values its `let`s were bound to (`curios-cert`'s `Scope::by_value`), where unfolding each definition in turn would read a chain of them again at every spelling.
+    pub(crate) fn by_value(&self, term: &Term) -> Term {
+        if !term.has_local_free() {
+            return term.clone();
+        }
+        let values = term
+            .free_vars_shared()
+            .iter()
+            .filter(|name| name.is_local())
+            .filter_map(|name| {
+                let entry = self.typing.frames.definition(name)?;
+                entry.reduct().map(|_| (*name, entry.by_value().clone()))
+            })
+            .collect::<Vec<_>>();
+        match values.is_empty() {
+            true => term.clone(),
+            false => term.substitute(&values),
+        }
     }
 
     /// Define `name`. `kind` is the declaring module item's [`DefinitionKind`], or `None` for a local binding no item declared.
@@ -1661,13 +1684,12 @@ impl<'s> Context<'s> {
         spelled
     }
 
-    /// `term` as the kernel is handed it under the arms in force: its solved metavariables materialized, its local definitions substituted, and every variable an arm refined spelled as the value it was refined to. The kernel substitutes a case's solution through the arm it checks, where the elaborator records it and keeps the variable spelled, so this is the reading a rule shared with the kernel is judged on.
+    /// `term` as the kernel is handed it under the arms in force: its solved metavariables materialized, its local definitions substituted by value ([`Context::by_value`]), and every variable an arm refined spelled as the value it was refined to. The kernel substitutes a case's solution through the arm it checks, where the elaborator records it and keeps the variable spelled, so this is the reading a rule shared with the kernel is judged on.
     ///
-    /// A solved metavariable is materialized first because it stands over a spine of the locals in scope where it was born, and would read as naming them: a guard written through a concept holds its witness as one, and names no local of its own once the witness is the global it resolved to.
+    /// A solved metavariable is materialized first because it stands over a spine of the locals in scope where it was born, and would read as naming them: a guard written through a concept holds its witness as one, and names no local of its own once the witness is the global it resolved to. A definition's value was materialized where it was defined, and is again here for what has been solved since.
     pub(crate) fn kernel_spelling(&self, term: &Term) -> Term {
-        self.spelled_as_refined(
-            &Unfolding::everything(self).term(&zonk_solved_term_metas(self, term)),
-        )
+        let by_value = self.by_value(&zonk_solved_term_metas(self, term));
+        self.spelled_as_refined(&zonk_solved_term_metas(self, &by_value))
     }
 
     /// Withhold, for as long as the current frame stands, every equation in force whose scrutinee names no local as the kernel spells it now ([`Context::kernel_spelling`]).

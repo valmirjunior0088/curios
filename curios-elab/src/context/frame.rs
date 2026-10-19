@@ -29,6 +29,8 @@ pub(crate) struct DefEntry {
     proof: bool,
     /// The depth of the frame that defines the name: what a settlement reading the definition rests on ([`Frames::begin_reads`](super::Frames::begin_reads)). No part of what the definition is, so two definitions alike in all else are one.
     depth: usize,
+    /// The term by value, as it was read where the name was defined ([`Context::by_value`](crate::Context::by_value)): its solved metavariables materialized and each local definition it names replaced by what that one is by value. Read in place of the term wherever the kernel's spelling of a term is asked, so a chain of definitions is read once, where each link is made, and not again at every spelling. Derived from the term and the definitions it names, so no part of what the definition is either.
+    by_value: Term,
 }
 
 impl PartialEq for DefEntry {
@@ -40,6 +42,7 @@ impl PartialEq for DefEntry {
 impl DefEntry {
     pub(crate) fn new(term: Term, kind: Option<DefinitionKind>) -> Self {
         Self {
+            by_value: term.clone(),
             term,
             kind,
             proof: false,
@@ -50,6 +53,7 @@ impl DefEntry {
     /// The entry a published item's name is bound by: `term`, and a proof where `proof`.
     pub(crate) fn published(term: Term, kind: DefinitionKind, proof: bool) -> Self {
         Self {
+            by_value: term.clone(),
             term,
             kind: Some(kind),
             proof,
@@ -65,6 +69,16 @@ impl DefEntry {
     /// The depth of the frame that defines the name.
     pub(super) fn depth(&self) -> usize {
         self.depth
+    }
+
+    /// The entry with its term read by value as `by_value`, where it is defined.
+    pub(super) fn read_by_value(self, by_value: Term) -> Self {
+        Self { by_value, ..self }
+    }
+
+    /// The term by value, as it was read where the name was defined.
+    pub(super) fn by_value(&self) -> &Term {
+        &self.by_value
     }
 
     pub(crate) fn body(&self) -> &Term {
