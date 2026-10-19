@@ -48,11 +48,13 @@ impl Size {
 }
 
 /// One call's size relation: `entry(row, column)` grades the callee's `column`th argument against the caller's `row`th parameter.
+///
+/// Held by row, each row the entries that claim something in column order, as Agda's termination checker holds its matrices: a call grades most arguments against no parameter, so a member handing its parameters on permuted has one entry a row, and composing, comparing and hashing cost the entries a matrix claims rather than its area. `Unknown` is never stored, so two matrices that grade alike are stored alike, and the derived equality, order and hash are the relation's.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Matrix {
     pub(super) rows: usize,
     pub(super) columns: usize,
-    pub(super) entries: Vec<Size>,
+    pub(super) entries: Vec<Vec<(usize, Size)>>,
 }
 
 impl Matrix {
@@ -61,34 +63,64 @@ impl Matrix {
         Self {
             rows,
             columns,
-            entries: vec![Size::Unknown; rows * columns],
+            entries: vec![Vec::new(); rows],
         }
     }
 
     pub(super) fn entry(&self, row: usize, column: usize) -> Size {
-        self.entries[row * self.columns + column]
+        let claimed = &self.entries[row];
+        match claimed.binary_search_by_key(&column, |(at, _)| *at) {
+            Ok(index) => claimed[index].1,
+            Err(_) => Size::Unknown,
+        }
     }
 
     pub(super) fn set(&mut self, row: usize, column: usize, size: Size) {
-        self.entries[row * self.columns + column] = size;
+        let claimed = &mut self.entries[row];
+        match (claimed.binary_search_by_key(&column, |(at, _)| *at), size) {
+            (Ok(index), Size::Unknown) => {
+                claimed.remove(index);
+            }
+            (Ok(index), size) => claimed[index].1 = size,
+            (Err(_), Size::Unknown) => {}
+            (Err(index), size) => claimed.insert(index, (column, size)),
+        }
     }
 
-    /// `self` followed by `other`, in the (join, compose) semiring: the best relation reachable through any intermediate position.
+    /// `self` followed by `other`, in the (join, compose) semiring: the best relation reachable through any intermediate position. Only entries both claim meet, since `Unknown` annihilates.
     pub(super) fn compose(&self, other: &Matrix) -> Option<Matrix> {
         if self.columns != other.rows {
             return None;
         }
-        let mut composed = Matrix::unknown(self.rows, other.columns);
-        for row in 0..self.rows {
-            for column in 0..other.columns {
-                let mut best = Size::Unknown;
-                for middle in 0..self.columns {
-                    best = best.join(self.entry(row, middle).compose(other.entry(middle, column)));
-                }
-                composed.set(row, column, best);
-            }
-        }
-        Some(composed)
+        let entries = self
+            .entries
+            .iter()
+            .map(|claimed| {
+                let mut reached = claimed
+                    .iter()
+                    .flat_map(|(middle, first)| {
+                        other.entries[*middle]
+                            .iter()
+                            .map(|(column, second)| (*column, first.compose(*second)))
+                    })
+                    .collect::<Vec<_>>();
+                reached.sort_unstable_by_key(|(column, _)| *column);
+                reached.dedup_by(|later, kept| {
+                    let same = later.0 == kept.0;
+                    if same {
+                        kept.1 = kept.1.join(later.1);
+                    }
+                    same
+                });
+                reached
+            })
+            .collect();
+
+        Some(Matrix {
+            rows: self.rows,
+            columns: other.columns,
+            entries,
+        })
     }
 
     /// Whether this matrix describes a call path that composes with itself unchanged — the paths that can repeat forever.

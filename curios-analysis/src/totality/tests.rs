@@ -71,11 +71,14 @@ fn call(caller: usize, callee: usize, matrix: Matrix) -> Call {
 /// Build a matrix from a row-major grid of size grades.
 fn matrix(rows: &[&[Size]]) -> Matrix {
     let columns = rows.first().map_or(0, |row| row.len());
-    Matrix {
-        rows: rows.len(),
-        columns,
-        entries: rows.concat(),
+    let mut matrix = Matrix::unknown(rows.len(), columns);
+    for (row, grades) in rows.iter().enumerate() {
+        for (column, grade) in grades.iter().enumerate() {
+            matrix.set(row, column, *grade);
+        }
     }
+
+    matrix
 }
 
 const LESS: Size = Size::Less;
