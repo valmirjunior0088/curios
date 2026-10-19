@@ -12,7 +12,7 @@ use {
     super::{FormatInput, TopItem, between_items, parse_for_format, print_term, print_top_item},
     curios_parse::is_blank,
     curios_print::{Original, Owed, Printer, flat, hard_line, reached, run_printer_placing},
-    curios_utilities::{Source, Span},
+    curios_utilities::{LINE_WIDTH, Source, Span},
     std::{cell::RefCell, fmt, path::Path, sync::Arc},
 };
 
@@ -56,9 +56,6 @@ impl Formatted {
         Self::from_source(&source).map_err(located)
     }
 }
-
-/// The canonical width — the same target goal reports render within.
-const WIDTH: usize = 100;
 
 /// The canonical indent — the corpus's four spaces.
 const INDENT: usize = 4;
@@ -104,7 +101,7 @@ fn render(printer: Printer, original: &Original<'_>) -> String {
         fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             let printer = self.0.borrow_mut().take().expect("rendered once");
 
-            run_printer_placing(printer, formatter, INDENT, WIDTH, self.1)
+            run_printer_placing(printer, formatter, INDENT, LINE_WIDTH, self.1)
         }
     }
     Within(RefCell::new(Some(printer)), original).to_string()

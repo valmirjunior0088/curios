@@ -17,7 +17,7 @@ use {
         Anchors, CalleeId, Free, Global, Level, Quality, ReaderPosition, Spelling, Subterm, Term,
         UniverseMetaId, WitnessKey,
     },
-    curios_utilities::{Plicity, Qualifier},
+    curios_utilities::{LINE_WIDTH, Plicity, Qualifier},
     std::{collections::HashMap, fmt, rc::Rc},
 };
 
@@ -44,8 +44,7 @@ pub(super) fn unreachable_arm_note(dead: &DeadArm, spelling: &Rc<Spelling>) -> S
 
 /// One goal's report without its snippet: the turnstile idiom under its own rename map (see [`GoalReport::rename_map`]) — the batch-wide one the caller installed is replaced, not extended, since every name this report shows is in the narrower map by construction. The message half of a goal's [`Report`](curios_utilities::Report), and what the batch's `Display` writes before each snippet.
 pub(super) fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String {
-    // A report's terms render within a fixed width — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
-    const WIDTH: usize = 100;
+    // A report's terms render within the width a line is written within — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
 
     let spelling = Rc::new(
         spelling
@@ -55,7 +54,7 @@ pub(super) fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String 
     );
     let clause = |term: &Term| {
         term.spelled(&spelling)
-            .within(WIDTH)
+            .within(LINE_WIDTH)
             .to_string()
             .replace('\n', "\n    ")
     };

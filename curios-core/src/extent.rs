@@ -286,10 +286,10 @@ impl Anchors {
                     });
                     let at = alike.unwrap_or_else(|| {
                         sources.push(SourceTexts {
-                            source: Source {
-                                path: sited.source.path.clone(),
-                                text: sited.source.text.clone(),
-                            },
+                            source: Source::of(
+                                sited.source.path.clone(),
+                                sited.source.text.clone(),
+                            ),
                             texts: Vec::new(),
                         });
                         by_path.entry(path).or_default().push(sources.len() - 1);

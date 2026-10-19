@@ -6,11 +6,14 @@ use {
     std::{
         fs,
         hash::{Hash, Hasher},
-        io,
+        io, iter,
         path::PathBuf,
-        sync::Arc,
+        sync::{Arc, OnceLock},
     },
 };
+
+/// The width a line of Curios is written within, in scalar values: the formatter breaks no line past it, and a report quotes a longer one as a window this wide around its marks, so a line the formatter wrote is quoted whole.
+pub const LINE_WIDTH: usize = 100;
 
 /// The columns `cluster` takes on a terminal, which is what a caret under it is padded and drawn by: two where it holds a scalar East Asian Width calls wide or fullwidth, one that presents as an emoji, or the selector that asks for emoji presentation; none where it opens with a mark, a joiner or a control, which a terminal draws over its neighbour or not at all; one otherwise. A tab is the caller's, since it pads as a tab.
 fn columns(cluster: &str) -> usize {
@@ -37,22 +40,28 @@ pub struct Source {
     #[archived_with(curios_archive::Map<curios_archive::AsString>)]
     pub path: Option<PathBuf>,
     pub text: String,
+    /// The byte offset each line begins at, found the first time a place in the text is named or a report quotes it, so that naming a place is a search rather than a count of every line before it. Never stored, being read off `text`.
+    #[archived_with(curios_archive::Skip)]
+    lines: OnceLock<Box<[usize]>>,
 }
 
 impl Source {
-    fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Arc<Self> {
-        Arc::new(Self {
-            path: Some(path.into()),
+    /// The source `text` is, read from `path` where it was read from a file: what each constructor below hands out shared.
+    pub fn of(path: Option<PathBuf>, text: impl Into<String>) -> Self {
+        Self {
+            path,
             text: text.into(),
-        })
+            lines: OnceLock::new(),
+        }
+    }
+
+    fn new(path: impl Into<PathBuf>, text: impl Into<String>) -> Arc<Self> {
+        Arc::new(Self::of(Some(path.into()), text))
     }
 
     /// A source with no backing file — embedded or test input handed to a parser as a bare string. Its diagnostics render the snippet without a file-location header.
     pub fn inline(text: impl Into<String>) -> Arc<Self> {
-        Arc::new(Self {
-            path: None,
-            text: text.into(),
-        })
+        Arc::new(Self::of(None, text))
     }
 
     /// A source whose text arrived with a name but no file — the program handed to the compiler on standard input. Diagnostics render `label` in the `--> label:line:column` header exactly as they render a path, which is the whole point: text that never touched the disk still has line numbers worth naming, and [`inline`](Self::inline) drops them.
@@ -77,10 +86,7 @@ impl Source {
 
     /// The byte offset of the 1-based `line` and `column`, the coordinate [`Span::line_column`] names a place by, so a place a diagnostic prints is one that can be asked about: columns count Unicode scalar values, and the column past a line's last is its end. `None` for a place the text does not hold.
     pub fn offset_of(&self, line: usize, column: usize) -> Option<usize> {
-        let start = match line.checked_sub(1)? {
-            0 => 0,
-            before => 1 + self.text.match_indices('\n').nth(before - 1)?.0,
-        };
+        let start = *self.line_starts().get(line.checked_sub(1)?)?;
         let written = self.text[start..].split('\n').next().unwrap_or_default();
         let within = column.checked_sub(1)?;
 
@@ -88,6 +94,29 @@ impl Source {
             Some((offset, _)) => Some(start + offset),
             None => (within == written.chars().count()).then_some(start + written.len()),
         }
+    }
+
+    /// The line `offset` stands on, counted from zero, and the byte offset that line begins at.
+    pub fn line_of(&self, offset: usize) -> (usize, usize) {
+        let starts = self.line_starts();
+        let line = starts.partition_point(|start| *start <= offset) - 1;
+
+        (line, starts[line])
+    }
+
+    /// The byte offset line `line`, counted from zero, ends at: its line break's, or the text's end for the last.
+    pub fn line_end(&self, line: usize) -> usize {
+        self.line_starts()
+            .get(line + 1)
+            .map_or(self.text.len(), |next| next - 1)
+    }
+
+    fn line_starts(&self) -> &[usize] {
+        self.lines.get_or_init(|| {
+            iter::once(0)
+                .chain(self.text.match_indices('\n').map(|(at, _)| at + 1))
+                .collect()
+        })
     }
 }
 
@@ -108,61 +137,52 @@ impl Span {
 
     /// The 1-based line and column of the span's start — the coordinate a diagnostic names a location by. Columns count Unicode scalar values on the line, matching the caret position in [`Span::render_snippet`].
     pub fn line_column(&self) -> (usize, usize) {
-        let source = &self.source.text;
+        let (line, line_start) = self.source.line_of(self.start);
+        let column = 1 + self.source.text[line_start..self.start].chars().count();
 
-        let line_start = source[..self.start]
-            .rfind('\n')
-            .map(|index| 1 + index)
-            .unwrap_or(0);
-
-        let line = 1 + source[..line_start]
-            .bytes()
-            .filter(|&byte| byte == b'\n')
-            .count();
-        let column = 1 + source[line_start..self.start].chars().count();
-
-        (line, column)
+        (line + 1, column)
     }
 
     /// Renders the span as a compiler diagnostic: a `--> path:line:column` header when the source is a file (omitted for inline sources), the column counted in scalars as [`Span::line_column`] counts it, the 1-based-numbered source line containing the span's start, and a caret underline placed and sized by the columns each grapheme cluster takes on a terminal, so it stands under a wide character as it stands under a narrow one. The underline is clamped to that first line and is at least one `^` wide, so multi-line and empty spans still point somewhere visible.
+    ///
+    /// **A line past [`LINE_WIDTH`] is quoted as a window around the span's start**, [`LINE_WIDTH`] scalars of it with `…` where it is cut, so a report costs what it shows rather than its line, and a line the formatter wrote is quoted whole.
     pub fn render_snippet(&self) -> String {
         let source = &self.source.text;
         let start = self.start;
         let end = self.end;
 
-        let line_start = source[..start]
-            .rfind('\n')
-            .map(|index| 1 + index)
-            .unwrap_or(0);
-
-        let line_end = source[start..]
-            .find('\n')
-            .map(|index| start + index)
-            .unwrap_or(source.len());
-
+        let (line, line_start) = self.source.line_of(start);
+        let line_end = self.source.line_end(line);
         let (number, column) = self.line_column();
+        let (shown_start, shown_end) = window(source, line_start, line_end, start);
+        let (opening, closing) = (
+            if shown_start > line_start { "…" } else { "" },
+            if shown_end < line_end { "…" } else { "" },
+        );
 
-        let width: usize = graphemes(&source[start..end.min(line_end)])
+        let width: usize = graphemes(&source[start..end.clamp(start, shown_end)])
             .map(|cluster| match cluster {
                 "\t" => 1,
                 _ => columns(cluster),
             })
             .sum();
 
-        // A cluster pads as the columns it takes, and a tab pads as a tab: the line above is printed verbatim, so padding a tab with a space would put the caret one column along where the text moves eight, and every tab-indented line would report a caret short of its span by the width of its indentation. A tab *inside* the span takes one `^`, since no column count is the tab's own.
-        let indent: String = graphemes(&source[line_start..start])
-            .map(|cluster| match cluster {
-                "\t" => "\t".to_string(),
-                _ => " ".repeat(columns(cluster)),
-            })
+        // A cluster pads as the columns it takes, and a tab pads as a tab: the line above is printed verbatim, so padding a tab with a space would put the caret one column along where the text moves eight, and every tab-indented line would report a caret short of its span by the width of its indentation. A tab *inside* the span takes one `^`, since no column count is the tab's own. The `…` a cut opens with takes the column it is drawn in.
+        let indent: String = iter::once(" ".repeat(opening.chars().count()))
+            .chain(
+                graphemes(&source[shown_start..start]).map(|cluster| match cluster {
+                    "\t" => "\t".to_string(),
+                    _ => " ".repeat(columns(cluster)),
+                }),
+            )
             .collect();
 
         let caret = format!("{}{}", indent, "^".repeat(width.max(1)));
 
         let snippet = format!(
-            "{number:>5} | {line}\n{padding:>5} | {caret}",
+            "{number:>5} | {opening}{line}{closing}\n{padding:>5} | {caret}",
             number = number,
-            line = &source[line_start..line_end],
+            line = &source[shown_start..shown_end],
             padding = "",
         );
 
@@ -170,6 +190,26 @@ impl Span {
             Some(path) => format!("   --> {}:{number}:{column}\n{snippet}", path.display()),
             None => snippet,
         }
+    }
+}
+
+/// The part of the line from `line_start` to `line_end` a report quotes around `at`, as byte offsets: the whole line where it holds no more than [`LINE_WIDTH`] scalars, and otherwise [`LINE_WIDTH`] of them with a third before `at`, moved back from the line's end where fewer stand after it. Each bound is found by walking at most [`LINE_WIDTH`] scalars from `at`, so quoting a long line costs the window and not the line.
+fn window(text: &str, line_start: usize, line_end: usize, at: usize) -> (usize, usize) {
+    let line = &text[line_start..line_end];
+    if line.len() <= LINE_WIDTH || line.chars().count() <= LINE_WIDTH {
+        return (line_start, line_end);
+    }
+    let back = |from: usize, scalars: usize| {
+        text[line_start..from]
+            .char_indices()
+            .rev()
+            .nth(scalars - 1)
+            .map_or(line_start, |(offset, _)| line_start + offset)
+    };
+    let left = back(at, LINE_WIDTH / 3);
+    match text[left..line_end].char_indices().nth(LINE_WIDTH) {
+        Some((offset, _)) => (left, left + offset),
+        None => (back(line_end, LINE_WIDTH), line_end),
     }
 }
 

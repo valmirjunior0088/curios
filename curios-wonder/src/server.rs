@@ -853,16 +853,30 @@ fn range_of(span: &Span) -> Range {
             .map_or(span.start, |c| span.start + c.len_utf8()),
     };
 
+    // The source finds a line by its line starts, so a file's diagnostics cost what they name and not the lines before each.
+    let at = |offset: usize| {
+        let offset = offset.min(text.len());
+        let (line, line_start) = span.source.line_of(offset);
+        position_at(text, line, line_start, offset)
+    };
+
     Range {
-        start: position_of(text, span.start),
-        end: position_of(text, end),
+        start: at(span.start),
+        end: at(end),
     }
 }
 
+/// `offset` in a buffer an edit has moved, which no source holds: its line counted from the text's start.
 fn position_of(text: &str, offset: usize) -> Position {
     let offset = offset.min(text.len());
     let line_start = text[..offset].rfind('\n').map_or(0, |index| index + 1);
     let line = text[..line_start].matches('\n').count();
+
+    position_at(text, line, line_start, offset)
+}
+
+/// `offset` on line `line`, which begins at `line_start`, as a protocol position: its line, and the UTF-16 units from the line's start to it.
+fn position_at(text: &str, line: usize, line_start: usize, offset: usize) -> Position {
     let character = text[line_start..offset]
         .chars()
         .map(char::len_utf16)

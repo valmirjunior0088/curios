@@ -102,3 +102,78 @@ fn a_note_is_rendered_under_the_report_as_its_line_over_its_own_snippet() {
         "`a` is already declared\n\n    2 | let a = 2;\n      |     ^\n\n  first declared here\n\n    1 | let a = 1;\n      |     ^"
     );
 }
+
+#[test]
+fn a_line_within_the_width_is_quoted_whole() {
+    let line = "x".repeat(LINE_WIDTH);
+    let source = Source::inline(format!("{line}\n"));
+    let span = Span::new(Arc::clone(&source), 50, 51);
+
+    let snippet = span.render_snippet();
+    assert!(snippet.contains(&line), "{snippet}");
+    assert!(!snippet.contains('…'), "{snippet}");
+}
+
+#[test]
+fn a_line_past_the_width_is_quoted_as_a_window_around_its_mark() {
+    let line = format!("{}mark{}", "a".repeat(500), "b".repeat(500));
+    let source = Source::inline(format!("{line}\n"));
+    let offset = line.find("mark").unwrap();
+    let span = Span::new(Arc::clone(&source), offset, offset + 4);
+
+    // A third of the window stands before the mark, the rest after it, and each cut end is marked; the caret stands under the mark as the window draws it.
+    let before = LINE_WIDTH / 3;
+    let shown = format!(
+        "…{}mark{}…",
+        "a".repeat(before),
+        "b".repeat(LINE_WIDTH - before - 4)
+    );
+    assert_eq!(
+        span.render_snippet(),
+        format!("    1 | {shown}\n      | {}^^^^", " ".repeat(1 + before))
+    );
+    assert_eq!(span.line_column(), (1, 501));
+}
+
+#[test]
+fn a_mark_near_a_long_line_s_end_is_quoted_with_the_end() {
+    let line = format!("{}end", "a".repeat(500));
+    let source = Source::inline(line.clone());
+    let span = Span::new(Arc::clone(&source), 500, 503);
+
+    // Fewer scalars stand after the mark than the window holds, so the window ends where the line does, cut at its start alone.
+    let shown = format!("…{}end", "a".repeat(LINE_WIDTH - 3));
+    assert_eq!(
+        span.render_snippet(),
+        format!(
+            "    1 | {shown}\n      | {}^^^",
+            " ".repeat(1 + LINE_WIDTH - 3)
+        )
+    );
+}
+
+#[test]
+fn a_span_wider_than_the_window_is_underlined_to_its_edge() {
+    let line = "c".repeat(1_000);
+    let source = Source::inline(line);
+    let span = Span::new(Arc::clone(&source), 0, 1_000);
+
+    let snippet = span.render_snippet();
+    assert!(
+        snippet.ends_with(&format!("| {}", "^".repeat(LINE_WIDTH))),
+        "{snippet}"
+    );
+}
+
+#[test]
+fn a_place_is_named_on_every_line_of_a_text_without_a_final_break() {
+    let source = Source::inline("one\ntwo\nthree");
+    let last = source.text.find("three").unwrap();
+
+    assert_eq!(
+        Span::new(Arc::clone(&source), last, last).line_column(),
+        (3, 1)
+    );
+    assert_eq!(source.offset_of(3, 6), Some(source.text.len()));
+    assert_eq!(source.offset_of(4, 1), None);
+}

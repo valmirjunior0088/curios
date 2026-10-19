@@ -21,7 +21,7 @@ use {
         Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
     },
     curios_print::{Printer, each_named, render_annotated},
-    curios_utilities::{Mount, Qualifier, RootKind, Source, Span},
+    curios_utilities::{LINE_WIDTH, Mount, Qualifier, RootKind, Source, Span},
     std::{
         collections::{HashMap, HashSet},
         path::PathBuf,
@@ -32,9 +32,6 @@ use {
 
 /// Where a name is written: the path of the file it lies in, and its byte range there — what a name a signature prints is found by among the unit's mentions.
 pub(super) type Written = (Option<PathBuf>, usize, usize);
-
-/// The width a signature is rendered within — the formatter's, so a page and a file agree on where a long telescope breaks.
-const WIDTH: usize = 100;
 
 /// The indent a broken signature continues at — the formatter's.
 const INDENT: usize = 4;
@@ -622,7 +619,7 @@ impl Reader<'_> {
             }
             referents.push(referent.map(|referent| self.public_name(&referent)));
         });
-        let (text, annotations) = render_annotated(head, INDENT, WIDTH);
+        let (text, annotations) = render_annotated(head, INDENT, LINE_WIDTH);
         assert_eq!(
             annotations.len(),
             referents.len(),
@@ -891,7 +888,7 @@ pub fn heading(declaration: &str, label: usize) -> Option<Heading> {
             false => stated.members.into_iter().find(|member| named(member)),
         })
         .map(|stated| Heading {
-            head: render_annotated(stated.apart.unwrap_or(stated.head), INDENT, WIDTH).0,
+            head: render_annotated(stated.apart.unwrap_or(stated.head), INDENT, LINE_WIDTH).0,
             prose: stated.prose.unwrap_or_default(),
         })
 }
