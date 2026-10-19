@@ -1340,7 +1340,7 @@ const DECLINED: [&str; 14] = [
 const REFUSED: [&str; 2] = [
     // Its proof's terms hold `of(n, d)` opened to the match on `Int/view(n)` it is stuck on, which as printed elaborates at another type (`documentation/roadmap/tools/000-findings.md`).
     "/std/Int/DivMod/unique",
-    // Its guard's fact proves a proof field over a recursive call, and the call written with its implicit argument, as a report prints it, is no guard the field's statement meets (`documentation/roadmap/theory/000-findings.md`).
+    // Its guard's fact proves a proof field over a recursive call, and the call written with its implicit argument, as a report prints it, holds the type its field's statement holds as a node by its name, so the guard's key meets no statement (`documentation/roadmap/theory/100-a-type-former-is-one-term-however-it-is-reached.md`).
     "/std/Tui/Glyph/of_cluster",
 ];
 
