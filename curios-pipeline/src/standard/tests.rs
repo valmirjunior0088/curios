@@ -1322,7 +1322,7 @@ const DECLINED: [&str; 14] = [
     "/std/Cli/main",
     "/std/http/Url/part",
     "/std/http/syntax/status_line",
-    // Each names a declaration its module cannot: another module's own, reached by unfolding.
+    // Each names a declaration its module cannot: another module's own, reached by unfolding (`documentation/roadmap/tools/303-a-report-writes-an-intrinsic-by-the-call-that-reaches-it.md`).
     "/std/Nat/Coprime/cancel",
     "/std/Nat/Coprime/common",
     "/std/Nat/Coprime/quotients",

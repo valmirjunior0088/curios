@@ -1,0 +1,21 @@
+# A report writes an intrinsic by the call that reaches it
+
+**Not refined yet.** This specification reserves spelling an intrinsic node a report shows as the `/std` call a program writes to reach it, where its reader reaches the `/sys` declaration that writes it by no name. It is not an implementation plan: two designs are named under *Refinement* and neither is drawn.
+
+## What is missing
+
+**An intrinsic `/std` only wraps is shown as the compiler holds it.** A name its reader reaches by none declines the term it stands in (`global`, `curios-text/src/from_core.rs`), and [A diagnostic spells what its reader can write](../../design/tools/a-diagnostic-spells-what-its-reader-can-write.md) then shows the whole term through Core's printer with a line saying so. 45 of the declarations `/sys` writes an intrinsic by are reached by no program (`UNREACHED_INTRINSICS`, `curios-pipeline/src/tests/spelling_tests.rs`): the seven of `/sys/Channel`, the eight operations of each directed rounding of `/sys/Flt` (`ties_to_away`, `toward_zero`, `toward_positive`, `toward_negative`), `/sys/Io/advance` and `/sys/Io/suspend`, and `/sys/Handle` with its three standard handles. `/std` uses each only inside a declaration of its own that does more than name it: `Flt/rounded/add` dispatches on a `Rounding`, `Channel` and `Io` hold a protocol around theirs, and a handle is held in a structure of the library's (`Process/Output { Handle/stdout }`), its type kept in the private `/std/internal`. A goal keeps the call as written, but a mismatch shows its sides past the unfolding that reached the node: `pub let f(a: Flt, b: Flt) -> Eq()(Flt/rounded/add(Rounding/toward_zero(), a, b), a) = Eq/refl();` is refused with `Flt/toward_zero/add(a, b)` on both sides and the line. The library's own `let`s meet the same where a name reached by unfolding is another module's (`DECLINED`, `curios-pipeline/src/standard/tests.rs`, eleven of them).
+
+**An operator form drops the proof its node holds.** `intrinsic_form` (`curios-core/src/print.rs`) writes `NatDiv`, `NatRem`, `IntDiv` and `IntRem` as `/` and `%`, the proof of a nonzero divisor left out, and nothing proves it again where the reader stands; a method projected off a dictionary is written as its operator only where the procedure that proves a bound from the facts in scope proves each dropped proof again there (`proved_again`, `curios-elab/src/written.rs`). No program is known whose paste is refused for it: one whose proof is a lemma from `0 < b * b` still reads back, unification taking the proof from the term the pasted type is checked against.
+
+## What is known
+
+- **The fallback is decided.** A report that holds a name its reader reaches by none shows the term as the compiler holds it, since a different program is worse than an unpasteable one; this specification adds a writable spelling where one exists, and leaves the fallback for where none does.
+- **A second spelling of the call is ruled out.** Re-exporting the directed roundings would spell `Flt/rounded/add(Rounding/toward_zero(), a, b)` a second way, which [Syntax forms are closed](../../design/surface/syntax-forms-are-closed-semantics-extend-by-witness.md) and `.claude/rules/curios.md` rule out, and `Channel`, `Io` and `Handle` are the library's to hold.
+- **The decision rejects a reduction handed to the printer** and a translation that asks the elaborator for types; either design below has to stay on the side of that line.
+
+## Refinement
+
+- **The design, one of two.** The translation writes a node as the `/std` call that reduces to it where that declaration does nothing else, from a table each unit states of its own declarations, as its lexicon states its globals; or a mismatch keeps the side it compared before an unfolding that reached a name its reader cannot write, and shows that side, which also covers the eleven `let`s `DECLINED` lists for a name reached by unfolding.
+- **The operator form** follows the same rule as a method's: written as its operator where its proof is proved again where the reader stands, and as its `/std` call with the proof otherwise; a program whose paste is refused for it is found first, or this half closes as read.
+- **Check**: `UNREACHED_INTRINSICS` and `DECLINED` lose what the design covers, and the program above is refused with its sides as written and no line.
