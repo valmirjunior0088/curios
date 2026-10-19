@@ -1189,6 +1189,12 @@ impl<'s> Context<'s> {
         self.typing.frames.assume(name, type_);
     }
 
+    /// [`Context::assume`] of each of `bindings` in order, the scope restated once for all of them: an arm's retyped locals.
+    pub(crate) fn assume_all(&mut self, bindings: Vec<(Free, Term)>) {
+        self.typing.caches.note_write();
+        self.typing.frames.assume_all(bindings);
+    }
+
     /// Step `walk` past its next binder: mint one from the entry's hint, assume it at `domain`, and hand it back for the caller's own capture.
     pub(crate) fn advance_assumed(&mut self, walk: &mut impl Advance, domain: &Term) -> Free {
         let binder = walk.advance_fresh(|hint| self.fresh(hint));

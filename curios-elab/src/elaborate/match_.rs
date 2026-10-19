@@ -1483,11 +1483,14 @@ fn retype_locals(
         solutions.push(solution);
     }
 
-    // The binders past the base frame alone: a declaration's type is closed, so no solution of an arm's locals retypes one, and reading them all would cost every arm the program's size.
+    // The binders past the base frame alone: a declaration's type is closed, so no solution of an arm's locals retypes one, and reading them all would cost every arm the program's size. Each type is read with its committed solutions substituted: a local `let`'s type stays as written, a solved metavariable whose spine names every local before it, which is no mention of the variable the case solves.
     let locals = context.local_binders().cloned().collect::<Vec<_>>();
-    for (name, type_) in retyped(&*context, &locals, &solutions) {
-        context.assume(&name, &type_);
-    }
+    let locals = locals
+        .into_iter()
+        .map(|(name, type_)| (name, zonk_solved_term_metas(&*context, &type_)))
+        .collect::<Vec<_>>();
+    let retyped = retyped(&*context, &locals, &solutions);
+    context.assume_all(retyped);
 }
 
 /// Whether a motive scope is the lowering's elided form — a bare metavariable body (`match s | ..` or the explicit hole `match s : _ | ..`), as opposed to a user-written constant or scrutinee-binding motive. Only the elided form takes the ambient result; everything else is taken verbatim.

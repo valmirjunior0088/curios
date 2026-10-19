@@ -452,6 +452,37 @@ impl Frame {
 
     /// Bind `name` at `type_`, a local after every other.
     pub(super) fn bind(&mut self, name: Free, type_: Term) {
+        let again = self.place(name, &type_);
+        match (self.depth > 0, again) {
+            (false, _) => {}
+            (true, false) => {
+                self.spine.bound(&name);
+                self.telescope.bound(name, type_);
+            }
+            (true, true) => self.restate_scope(),
+        }
+    }
+
+    /// Bind each of `bindings` in order, as [`Frame::bind`] binds one, with the scope restated once where any is a name bound already rather than once for each: what an arm retyping its locals binds.
+    pub(super) fn bind_all(&mut self, bindings: Vec<(Free, Term)>) {
+        let mut again = false;
+        for (name, type_) in &bindings {
+            again |= self.place(*name, type_);
+        }
+        match (self.depth > 0, again) {
+            (false, _) => {}
+            (true, false) => {
+                for (name, type_) in bindings {
+                    self.spine.bound(&name);
+                    self.telescope.bound(name, type_);
+                }
+            }
+            (true, true) => self.restate_scope(),
+        }
+    }
+
+    /// Record `name`'s binding at `type_`, at the place among the locals after every other: whether the name was bound already.
+    fn place(&mut self, name: Free, type_: &Term) -> bool {
         let place = self.next_local;
         self.next_local += 1;
         let again = self.assumptions.contains_key(&name);
@@ -466,14 +497,8 @@ impl Frame {
                 depth: self.depth,
             },
         );
-        match (self.depth > 0, again) {
-            (false, _) => {}
-            (true, false) => {
-                self.spine.bound(&name);
-                self.telescope.bound(name, type_);
-            }
-            (true, true) => self.restate_scope(),
-        }
+
+        again
     }
 
     /// The telescope and the spine stated again from the locals, each name at its innermost binding: where a name is bound again or its type replaced, which only an arm retyping its locals does, and which reads the scope as the retyping did.

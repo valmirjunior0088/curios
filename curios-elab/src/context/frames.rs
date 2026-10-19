@@ -190,6 +190,18 @@ impl<'s> Frames<'s> {
         self.innermost().bind(*name, type_.clone());
     }
 
+    /// [`Frames::assume`] of each of `bindings` in order, the innermost frame restating its scope once for all of them ([`Frame::bind_all`]).
+    pub(crate) fn assume_all(&mut self, bindings: Vec<(Free, Term)>) {
+        match &mut self.top {
+            Some(top) => Rc::make_mut(top).bind_all(bindings),
+            None => {
+                for (name, type_) in &bindings {
+                    self.assume(name, type_);
+                }
+            }
+        }
+    }
+
     /// Join `name` to the witness scope (it must already be assumed).
     pub(crate) fn push_witness_binder(&mut self, name: &Free, type_: &Term) {
         self.innermost().witness(*name, type_.clone());
