@@ -895,7 +895,24 @@ impl<'m> Compiler<'m> {
         let dispatches =
             writes(|pattern| matches!(pattern, Pattern::Literal(_) | Pattern::Character(_)));
         if peels && dispatches {
-            return Err(Error::MatrixMixedNatDispatch);
+            let first = |alike: fn(&Pattern) -> bool| {
+                lines
+                    .iter()
+                    .find(|line| line.cells[0].is_some_and(|(pattern, _)| alike(pattern)))
+                    .map(|line| line.row)
+                    .expect("a row writes the kind the column was found to hold")
+            };
+            let successor = first(|pattern| matches!(pattern, Pattern::Succ(_)));
+            let literal =
+                first(|pattern| matches!(pattern, Pattern::Literal(_) | Pattern::Character(_)));
+            let place = |row: usize| self.matrix.rows[row].body.extent();
+
+            return Err(Error::MatrixMixedNatDispatch {
+                successor: self.written(successor),
+                literal: self.written(literal),
+                successor_at: place(successor),
+                literal_at: place(literal),
+            });
         }
 
         let term = self.term;

@@ -1082,10 +1082,12 @@ impl fmt::Display for Displayed<'_> {
                     "a `{head}` pattern matches a value of that structure, and this one is of type {scrutinee}"
                 )
             }
-            Error::MatrixMixedNatDispatch => {
+            Error::MatrixMixedNatDispatch {
+                successor, literal, ..
+            } => {
                 write!(
                     f,
-                    "a `Nat` match arm mixes successor-peeling (`n + 1; ih`) with literal dispatch (`5`) in one column; use one or the other"
+                    "`{successor}` peels a successor and `{literal}` matches a value, and a `Nat` is taken apart one of the two ways: `0` beside successor arms, or literals beside `_`; a value past `0` is matched on the predecessor inside the successor arm"
                 )
             }
             // A name a program wrote is reported by the reason the lowering filed for it, in that value's own words, so a misspelled name reads the same whichever stage refuses for it.

@@ -158,9 +158,29 @@ fn nat_literal_mixed_with_succ_is_rejected() {
 
     let error = error(source);
     assert!(
-        error.contains("mixes successor-peeling"),
+        error.contains("`some(n + 1; ih)` peels a successor and `some(5)` matches a value"),
         "unexpected error: {error}"
     );
+}
+
+// The refusal names the two arms as they are written, whatever they are, and notes each where it stands: no arm here reads a hypothesis, and the literal is no `5`.
+#[test]
+fn a_mixed_nat_column_is_refused_by_the_arms_it_holds() {
+    let source = r#"
+        use /std/{Nat};
+        let f(n : Nat) -> Nat =
+            match n | 0 => 10 | 1 => 11 | p + 1 => p end;
+        /std/print(Nat/to_str(f(1)))
+        "#;
+
+    let error = error(source);
+    for said in [
+        "`p + 1` peels a successor and `1` matches a value",
+        "`p + 1` peels a successor here",
+        "`1` matches a value here",
+    ] {
+        assert!(error.contains(said), "{said:?} unsaid in {error}");
+    }
 }
 
 // A refusal of a match's shape stands under the match, wherever in a body the match is written: a whole body, an operand, a lambda's body.
@@ -182,7 +202,7 @@ fn a_match_shape_refusal_is_located_at_the_match() {
     ] {
         let error = error(source);
         assert!(
-            error.contains("mixes successor-peeling") && error.contains(line),
+            error.contains("peels a successor and") && error.contains(line),
             "{source:?} reported {error}"
         );
     }

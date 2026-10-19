@@ -643,8 +643,13 @@ pub enum Error {
         head: String,
         scrutinee: Box<Term>,
     },
-    /// A `Nat` column mixing a successor arm with a literal one. A literal peels no successor, so the two are the fold and the dispatch, and one column is one of them.
-    MatrixMixedNatDispatch,
+    /// A `Nat` column mixing a successor arm with a literal one. A literal peels no successor, so the two are the fold and the dispatch, and one column is one of them. `successor` and `literal` are an arm of each as written, and each stands where its body is written, which the report notes.
+    MatrixMixedNatDispatch {
+        successor: String,
+        literal: String,
+        successor_at: Option<Extent>,
+        literal_at: Option<Extent>,
+    },
     /// A match over constructors — or, where `no_arms`, one with none, which eliminates only an empty type — whose scrutinee's type is no inductive.
     NotAInductType {
         head_type: Box<Term>,
@@ -2123,6 +2128,25 @@ impl Error {
                     })
                     .collect()
             }
+            // The report stands at the match, and each of the two arms it names is noted where it is written.
+            Self::MatrixMixedNatDispatch {
+                successor,
+                literal,
+                successor_at,
+                literal_at,
+            } => [
+                note(
+                    written(successor_at),
+                    format!("`{successor}` peels a successor here"),
+                ),
+                note(
+                    written(literal_at),
+                    format!("`{literal}` matches a value here"),
+                ),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
             _ => Vec::new(),
         }
     }

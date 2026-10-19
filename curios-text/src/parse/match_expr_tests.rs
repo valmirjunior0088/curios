@@ -397,6 +397,25 @@ fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
     }
 }
 
+// A spaced successor pattern takes a step of one: a larger step is refused at the step, and not as a spacing it has, nor as a step of one before a stray digit.
+#[test]
+fn a_successor_pattern_past_one_is_refused_at_its_step() {
+    for source in [
+        "match n | 0 => 10 | 1 => 11 | k + 2 => k end",
+        "match n | 0 => 0 | p + 10 => p end",
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            report.contains("a successor pattern takes a step of one"),
+            "{source:?} reported {report}"
+        );
+        assert!(
+            !report.contains("whitespace"),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
 /// A constructor pattern names its constructor bare, and the refusal says so rather than blaming the token the fall-through reached.
 ///
 /// The tag is resolved against the scrutinee's type, so the namespace is never spelled. Written anyway, it is refused for that, rather than the head parsing as a `Binder` and the arm reporting `Expected '=>'` against the `/` — with a `=>` plainly written further along the same line.
