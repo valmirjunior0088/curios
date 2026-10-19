@@ -10,8 +10,8 @@ use {
         },
     },
     curios_core::{
-        Anchors, Certification, Definition, DefinitionKind, Global, Imports, Item, Module, Nominal,
-        Places, ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
+        Anchors, Certification, Definition, DefinitionKind, Global, Item, Module, Nominal, Places,
+        ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
     },
     curios_elab::{
         Context, ErasedUnit, Error, Established, Reading, Recompile, Recompiled,
@@ -432,7 +432,19 @@ fn std_image_division() {
             .expect("the certifier's reads serialize")
             .len();
         let records = lowering_stored(std.text()).len();
-        let [lowered, forms, _, _, _, _, anchors, imports, _, _, _] = apart_parts(&apart)
+        let imports = {
+            let held = std.text().imports();
+            curios_archive::to_bytes(held)
+                .expect("the import scopes serialize")
+                .len()
+                + held
+                    .objects(&|_| true)
+                    .expect("the import scopes serialize")
+                    .iter()
+                    .map(|object| object.bytes.as_slice().len())
+                    .sum::<usize>()
+        };
+        let [lowered, forms, _, _, _, _, _, anchors, _, _, _, _] = apart_parts(&apart)
             .expect("what a unit stores apart")
             .map(|part| part.as_slice().len());
         // Each lowered item, then each erased form, is an object stored alone, and the elaborated items are the members of one run.
@@ -500,7 +512,7 @@ fn std_image_division() {
             imports + records + asked + erasures + reads,
             None,
         );
-        part!("  its import scopes", Imports, std.text().imports());
+        row("  its import scopes", imports, None);
         row("  what its verdicts stand on", reads, None);
         row("  the lowering's records and scans", records, None);
         row("  what its declarations asked", asked, None);

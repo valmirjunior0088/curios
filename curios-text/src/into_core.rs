@@ -647,9 +647,9 @@ pub struct PreparedText {
     minted: Rc<curios_core::Minted>,
     /// Every binding a `use` brought into scope, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and half of what a report spells a name by ([`PreparedText::spellings`]).
     ///
-    /// **Stored apart from the unit** ([`PreparedText::imports_bytes`]): they are read by the unit's own reports and its documentation, and by nothing compiled after it.
+    /// **Stored apart from the unit**, each body's imports and each module's offer an object ([`PreparedText::imports_recorded`]): they are read by the unit's own reports and its documentation, and by nothing compiled after it.
     #[archived_with(curios_archive::Skip)]
-    imports: curios_archive::Deferred<curios_core::Imports>,
+    imports: Recorded<curios_core::Imports>,
     /// The mounts this unit may name: the ones it declared a dependency on, or every open one in scope where it declared none, and its own. What its references were guarded by, and what drops a path it may not write from the table a report spells by.
     visible: Vec<Mount>,
     /// Every lint the lowering found, in reading order, less each `unused-binder` lint elaboration credited — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its predecessors' interfaces.
@@ -892,9 +892,9 @@ impl PreparedText {
         self
     }
 
-    /// The bytes of this unit's import scopes, stored apart from what the unit is for its successors: the ones they were restored from, or their archive, made now.
-    pub fn imports_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
-        self.imports.bytes()
+    /// This unit's import scopes as it holds them, stored apart from what the unit is for its successors.
+    pub fn imports_recorded(&self) -> &Recorded<curios_core::Imports> {
+        &self.imports
     }
 
     /// The bytes of where this unit's declarations lie, stored apart as its import scopes are.
@@ -902,9 +902,14 @@ impl PreparedText {
         self.anchors.bytes()
     }
 
-    /// This unit with `imports` as its import scopes and `anchors` as where its declarations lie ([`PreparedText::imports_bytes`], [`PreparedText::anchors_bytes`]), each read when something first asks: what a restored unit is given, since restoring it leaves it with neither.
-    pub fn with_reported(mut self, imports: impl Into<Bytes>, anchors: impl Into<Bytes>) -> Self {
-        self.imports = curios_archive::Deferred::stored(imports);
+    /// This unit with `imports` and `entries` as its import scopes and `anchors` as where its declarations lie ([`PreparedText::imports_recorded`], [`PreparedText::anchors_bytes`]), each read when something first asks: what a restored unit is given, since restoring it leaves it with neither.
+    pub fn with_reported(
+        mut self,
+        imports: impl Into<Bytes>,
+        entries: Vec<Object>,
+        anchors: impl Into<Bytes>,
+    ) -> Self {
+        self.imports = Recorded::stored(imports, entries);
         self.anchors = curios_archive::Deferred::stored(anchors);
         self
     }
@@ -3624,7 +3629,7 @@ fn into_core_unit_within(
             minted.entry = entry_mints;
             minted
         }),
-        imports: curios_archive::Deferred::held(shared.imports.into_inner()),
+        imports: Recorded::held(shared.imports.into_inner()),
         visible: visible_mounts,
         broken,
         lints: ordered(

@@ -3,7 +3,7 @@
 use {
     crate::rerun,
     curios_archive::{Bytes, parted},
-    curios_core::{Global, HeldReads, ItemRun, Module, Read, ReadTable},
+    curios_core::{Global, HeldReads, Imports, ItemRun, Module, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
     curios_text::PreparedText,
     curios_utilities::{Digest, Member, Object, Recorded},
@@ -64,6 +64,11 @@ pub(crate) enum Kind {
         text: Rc<PreparedText>,
         digests: Vec<Digest>,
     },
+    /// The import scopes of a lowering, each body's imports and each module's offer stored alone, by their digests.
+    Imports {
+        text: Rc<PreparedText>,
+        digests: Vec<Digest>,
+    },
 }
 
 impl Kind {
@@ -74,7 +79,9 @@ impl Kind {
             Kind::Items { named, .. } => Box::new(named.iter().map(|(_, digest)| digest)),
             Kind::Traces(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
             Kind::Reads(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
-            Kind::Lowering { digests, .. } => Box::new(digests.iter()),
+            Kind::Lowering { digests, .. } | Kind::Imports { digests, .. } => {
+                Box::new(digests.iter())
+            }
         }
     }
 
@@ -129,6 +136,14 @@ impl Kind {
                     .collect::<BTreeSet<_>>();
 
                 text.baseline_objects(&|digest| wanted.contains(digest))
+            }
+            Kind::Imports { text, digests } => {
+                let wanted = digests
+                    .iter()
+                    .filter(|digest| fresh(digest))
+                    .collect::<BTreeSet<_>>();
+
+                imports(text)?.objects(&|digest| wanted.contains(digest))
             }
             Kind::Reads(entries) => {
                 let entries = entries
@@ -251,6 +266,30 @@ pub(crate) fn lowering_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>
         Kind::Lowering {
             text: Rc::clone(text),
             digests: text.baseline_digests()?,
+        },
+    ))
+}
+
+/// The import scopes `text` holds.
+fn imports(text: &PreparedText) -> Result<&Imports, String> {
+    text.imports_recorded().get()
+}
+
+/// What a unit stores of the import scopes `text` holds: their own part and the kind of their entries, what they were restored from where they were and their own otherwise.
+pub(crate) fn imports_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>, Kind), String> {
+    if let Some((table, entries)) = text.imports_recorded().as_stored() {
+        return Ok((
+            Cow::Borrowed(table.as_slice()),
+            Kind::Stored(entries.to_vec()),
+        ));
+    }
+    let held = imports(text)?;
+
+    Ok((
+        Cow::Owned(curios_archive::to_bytes(held)?.to_vec()),
+        Kind::Imports {
+            text: Rc::clone(text),
+            digests: held.digests()?,
         },
     ))
 }
