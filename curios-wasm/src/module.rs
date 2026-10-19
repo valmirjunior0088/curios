@@ -188,6 +188,11 @@ impl Module {
         &self.types
     }
 
+    /// The recursion groups, in declaration order, to be rewritten in place or added among: a type may name only types declared before its group or in it.
+    pub fn types_mut(&mut self) -> &mut Vec<RecType> {
+        &mut self.types
+    }
+
     /// Looks up a declared type by name across all recursion groups — type names form one flat module-wide namespace. `curios-js`'s bridge tests read the accessors' declared shapes back out through it.
     pub fn get_type(&self, target_name: &TypeName) -> Option<&SubType> {
         self.types
@@ -229,9 +234,11 @@ impl Module {
         self.funcs.push((func_name, func));
     }
 
-    /// The module-defined functions, each to be rewritten in place under the name it was added by.
-    pub fn funcs_mut(&mut self) -> impl Iterator<Item = &mut Func> {
-        self.funcs.iter_mut().map(|(_, func)| func)
+    /// The module-defined functions, each with the name it was added by, to be rewritten in place.
+    pub fn funcs_mut(&mut self) -> impl Iterator<Item = (&FuncName, &mut Func)> {
+        self.funcs
+            .iter_mut()
+            .map(|(func_name, func)| (&*func_name, func))
     }
 
     pub(crate) fn tables(&self) -> &[(TableName, Table)] {
@@ -254,6 +261,11 @@ impl Module {
 
     pub(crate) fn globals(&self) -> &[(GlobalName, Global)] {
         &self.globals
+    }
+
+    /// The module-defined globals, each to have its initializer rewritten in place.
+    pub fn globals_mut(&mut self) -> impl Iterator<Item = &mut Global> {
+        self.globals.iter_mut().map(|(_, global)| global)
     }
 
     /// Adds a module-defined global. Its index-space position is its insertion order among defined globals, after all imported ones — the encoder works this out from names, so interleaving with `add_import` calls is harmless.

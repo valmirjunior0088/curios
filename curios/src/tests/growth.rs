@@ -5,7 +5,7 @@
 //! A growth that compiles past the size a stage once refused or never answered at is a fixture here; `growth_slopes`, among the instrumented tests, counts what each stage does at three sizes and holds the growths that are linear today to it.
 
 use {
-    super::compile,
+    super::{compile, run},
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
@@ -430,6 +430,108 @@ fn ten_thousand_operators_in_one_function_fit_the_engine_s_locals() {
     for growth in [Growth::LeftPlus, Growth::LetPlus] {
         assert_eq!(emits(&grown(growth, 10_100)), Ok(()), "{growth:?}");
     }
+}
+
+/// A structure of 10 001 fields and a family whose constructor carries 10 001 run, and a tuple of 10 001 elements handed to a function is emitted as a module the engine validates: a struct type past the engine's 10 000 fields keeps 9 999 and nests the rest in a trailing struct.
+#[test]
+fn a_struct_past_the_engine_s_fields_spills_into_a_trailing_struct() {
+    let width = 10_001;
+    let values = joined((0..width).map(|index| format!("a + {index}")), ", ");
+
+    let fields = joined((0..width).map(|index| format!("x{index}: Nat")), ", ");
+    let named = joined(
+        (0..width).map(|index| format!("x{index} = a + {index}")),
+        ", ",
+    );
+    let last = width - 1;
+    let structure = program(
+        &fill!(
+            "struct Wide: Type { ${fields} }\n\nlet f(a: Nat) -> Nat =\n    let w = Wide { ${named} };\n    w.x${last};\n",
+            fields,
+            named,
+            last,
+        ),
+        "f(a)",
+    );
+    assert_eq!(run(&structure), b"10000\n");
+
+    let payload = repeated("Nat", width, ", ");
+    let binders = joined((0..width).map(|index| format!("x{index}")), ", ");
+    let constructor = program(
+        &fill!(
+            "induct Wide: Type\n| make(${payload})\nend\n\nlet f(a: Nat) -> Nat = match Wide/make(${values}) | make(${binders}) => x${last} end;\n",
+            payload,
+            values,
+            binders,
+            last,
+        ),
+        "f(a)",
+    );
+    assert_eq!(run(&constructor), b"10000\n");
+
+    let wide = repeated("Nat", width, ", ");
+    let tuple = program(
+        &fill!(
+            "let pick(n: Nat, t: {${wide}}) -> Nat = match n | 0 => t.${last} | _ => pick(n - 1, t) end;\n\nlet f(a: Nat) -> Nat =\n    let t = (${values});\n    pick(a, t) + pick(a + 1, t);\n",
+            wide,
+            last,
+            values,
+        ),
+        "f(a)",
+    );
+    assert_eq!(emits(&tuple), Ok(()));
+}
+
+/// A closure capturing 10 001 values, called where it is not known, is emitted as a module the engine validates: its environment is a struct past the engine's fields, spilled as any other.
+#[test]
+fn a_closure_capturing_past_the_engine_s_fields_spills_its_environment() {
+    let width = 10_001;
+    let lets = (0..width)
+        .map(|index| format!("    let x{index} = a + {index};\n"))
+        .collect::<String>();
+    let captured = joined((0..width).map(|index| format!("x{index}")), " + ");
+    let source = program(
+        &fill!(
+            "use /std/{List};\n\nlet apply(gs: List((Nat) -> Nat), n: Nat) -> Nat = match gs | [g, .._] => g(n) | [] => n end;\n\nlet f(a: Nat) -> Nat =\n${lets}    apply([(n: Nat) => n + ${captured}, (n: Nat) => n], a);\n",
+            lets,
+            captured,
+        ),
+        "f(a)",
+    );
+    assert_eq!(emits(&source), Ok(()));
+}
+
+/// A closure of 1 001 parameters, called where it is not known, runs, and a function returning a tuple of 1 001 elements its callers read is emitted as a module the engine validates: a signature past the engine's 1 000 parameters or results keeps 999 and passes the rest as one struct.
+#[test]
+fn a_signature_past_the_engine_s_parameters_or_results_spills_into_a_struct() {
+    let width = 1_001;
+    let last = width - 1;
+    let arrow = repeated("Nat", width, ", ");
+    let typed = joined((0..width).map(|index| format!("x{index}: Nat")), ", ");
+    let arguments = joined((0..width).map(|index| format!("n + {index}")), ", ");
+    let parameters = program(
+        &fill!(
+            "use /std/{List};\n\nlet apply(gs: List((${arrow}) -> Nat), n: Nat) -> Nat = match gs | [g, .._] => g(${arguments}) | [] => n end;\n\nlet f(a: Nat) -> Nat = apply([(${typed}) => x0 + x${last}, (${typed}) => x1], a);\n",
+            arrow,
+            arguments,
+            typed,
+            last,
+        ),
+        "f(a)",
+    );
+    assert_eq!(run(&parameters), b"1000\n");
+
+    let elements = joined((0..width).map(|index| format!("a + {index}")), ", ");
+    let results = program(
+        &fill!(
+            "let g(n: Nat, a: Nat) -> {${arrow}} = match n | 0 => (${elements}) | _ => g(n - 1, a + 1) end;\n\nlet f(a: Nat) -> Nat = g(a, a).${last} + g(a + 1, a).0;\n",
+            arrow,
+            elements,
+            last,
+        ),
+        "f(a)",
+    );
+    assert_eq!(emits(&results), Ok(()));
 }
 
 /// Two thousand lambdas applied in turn at two calls compile: the nest is collapsed into one function of all its parameters, which both calls pass, where absorbing a level a round would run the optimizer past its backstop.
