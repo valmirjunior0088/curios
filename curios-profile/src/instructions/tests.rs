@@ -46,3 +46,23 @@ fn a_count_includes_a_thread_started_after_it_opened() {
         after - before
     );
 }
+
+/// A count opened alone leaves out a thread started after it opened, as the work a pool's threads do while the opening thread runs alone.
+#[test]
+fn a_count_opened_alone_leaves_out_a_thread_it_starts() {
+    let Some(count) = Instructions::open_alone() else {
+        return;
+    };
+
+    let before = count.read();
+    std::thread::spawn(|| black_box(work(10_000_000)))
+        .join()
+        .expect("the uncounted thread finishes");
+    let after = count.read();
+
+    assert!(
+        after - before < 10_000_000,
+        "{} instructions over ten million additions on a started thread",
+        after - before
+    );
+}

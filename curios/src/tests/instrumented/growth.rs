@@ -20,30 +20,49 @@ struct Count {
     bytes: u64,
 }
 
+/// The two instruction counts a compile is read on, each opened before any pool starts: the measuring thread's alone, which a stage that starts no thread is read on, so a pool's thread waiting for work retires nothing inside it, and the thread's with every thread it starts, which Binaryen and Cranelift are read on, since their passes run on pools ([`THREADED`]).
+#[derive(Default)]
+struct Counters {
+    alone: Option<Instructions>,
+    pooled: Option<Instructions>,
+}
+
+impl Counters {
+    fn open() -> Self {
+        Self {
+            alone: Instructions::open_alone(),
+            pooled: Instructions::open(),
+        }
+    }
+}
+
 /// The counters as they stand, read at a stage's boundary: each column a difference of two of these.
 struct Mark {
-    instructions: Option<u64>,
+    alone: Option<u64>,
+    pooled: Option<u64>,
     allocations: u64,
     bytes: u64,
 }
 
 impl Mark {
-    fn now(counter: Option<&Instructions>) -> Self {
+    fn now(counters: &Counters) -> Self {
         Self {
-            instructions: counter.map(Instructions::read),
+            alone: counters.alone.as_ref().map(Instructions::read),
+            pooled: counters.pooled.as_ref().map(Instructions::read),
             allocations: allocation_count() as u64,
             bytes: allocated_bytes() as u64,
         }
     }
 
-    /// What was done since `self`, and the mark it ends at. Looks are taken, so each read hands back what the stage before it left.
-    fn since(self, counter: Option<&Instructions>) -> (Count, Mark) {
-        let now = Mark::now(counter);
+    /// What the stage at `stage` of [`STAGES`] did since `self`, and the mark it ends at. Looks are taken, so each read hands back what the stage before it left.
+    fn since(self, counters: &Counters, stage: usize) -> (Count, Mark) {
+        let now = Mark::now(counters);
+        let (before, after) = match THREADED.contains(&STAGES[stage]) {
+            true => (self.pooled, now.pooled),
+            false => (self.alone, now.alone),
+        };
         let count = Count {
-            instructions: self
-                .instructions
-                .zip(now.instructions)
-                .map(|(before, after)| after - before),
+            instructions: before.zip(after).map(|(before, after)| after - before),
             looks: take_looks(),
             allocations: now.allocations - self.allocations,
             bytes: now.bytes - self.bytes,
@@ -67,14 +86,17 @@ const STAGES: [&str; 11] = [
     "cranelift",
 ];
 
+/// The stages whose work runs on pools as well as on the thread that asks for it: Binaryen's passes, and Wasmtime's parallel compilation under Cranelift.
+const THREADED: [&str; 2] = ["binaryen", "cranelift"];
+
 /// What each stage of one compile of `source` did, in [`STAGES`]' order.
-fn counted(source: &str, counter: Option<&Instructions>) -> [Count; 11] {
+fn counted(source: &str, counters: &Counters) -> [Count; 11] {
     let mut counts = [Count::default(); 11];
     take_looks();
-    let mark = Mark::now(counter);
+    let mark = Mark::now(counters);
 
     let entrypoint = source.parse::<Entrypoint>().expect("a growth parses");
-    let (count, mark) = mark.since(counter);
+    let (count, mark) = mark.since(counters, 0);
     counts[0] = count;
 
     let mut mark = Some(mark);
@@ -97,7 +119,7 @@ fn counted(source: &str, counter: Option<&Instructions>) -> [Count; 11] {
             let (count, next) = mark
                 .take()
                 .expect("a stage boundary follows the last")
-                .since(counter);
+                .since(counters, index);
             counts[index] = count;
             mark = Some(next);
         },
@@ -106,11 +128,11 @@ fn counted(source: &str, counter: Option<&Instructions>) -> [Count; 11] {
     let mark = mark.expect("the last stage left a mark");
 
     let bytes = optimize(&module, false, |_| {});
-    let (count, mark) = mark.since(counter);
+    let (count, mark) = mark.since(counters, 9);
     counts[9] = count;
 
     curios_cranelift::compile(&bytes).expect("an optimized growth compiles to machine code");
-    let (count, _) = mark.since(counter);
+    let (count, _) = mark.since(counters, 10);
     counts[10] = count;
 
     counts
@@ -208,7 +230,7 @@ const HELD_SLOPE: f64 = 3.0;
 /// cargo test --all-features --package curios --lib -- --ignored --nocapture growth_slopes
 /// ```
 ///
-/// Alone in its invocation: the instruction count opens before Binaryen's and Wasmtime's pools start, so their threads are counted with this one's, and a measurement run beside it would share the allocator's counters. Counted, so the slopes hold on any machine; the instruction column reads `-` where the kernel opens no count.
+/// Alone in its invocation: the instruction counts open before Binaryen's and Wasmtime's pools start, so a stage before Binaryen is read on this thread alone and Binaryen and Cranelift with the pools' threads, and a measurement run beside it would share the allocator's counters. Counted, so the slopes hold on any machine; the instruction column reads `-` where the kernel opens no count.
 ///
 /// # What it last printed
 ///
@@ -247,7 +269,7 @@ const HELD_SLOPE: f64 = 3.0;
 #[test]
 #[ignore = "measurement, counted: run by hand, alone in its invocation"]
 fn growth_slopes() {
-    let counter = Instructions::open();
+    let counters = Counters::open();
     let mut regressed = Vec::new();
     let front = STAGES
         .iter()
@@ -259,9 +281,9 @@ fn growth_slopes() {
     for growth in Growth::ALL {
         let base = base(growth);
         // Compiled once uncounted first: the prelude's modules are restored where a compile first reads them, once a process, so the smallest size would otherwise carry its growth's first restores and steepen its slope.
-        counted(&grown(growth, base), None);
+        counted(&grown(growth, base), &Counters::default());
         let counts =
-            [base, base * 2, base * 4].map(|size| counted(&grown(growth, size), counter.as_ref()));
+            [base, base * 2, base * 4].map(|size| counted(&grown(growth, size), &counters));
         let shown = |steepest: Option<(f64, &str)>| match steepest {
             Some((slope, stage)) => format!("{slope:.2} {stage}"),
             None => "-".to_string(),
