@@ -165,7 +165,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
     let two_decl = InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::done(())),
-        constructors: vec![nullary("a", Vec::new()), nullary("b", Vec::new())],
+        constructors: vec![nullary("a", Vec::new()), nullary("b", Vec::new())].into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -182,7 +182,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
             )],
             (),
         )),
-        constructors: vec![nullary("mk", vec![at("a")])],
+        constructors: vec![nullary("mk", vec![at("a")])].into(),
         result_sort: Term::prop(),
         module: Qualifier::default(),
         rep_public: true,

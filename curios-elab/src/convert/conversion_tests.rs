@@ -92,7 +92,8 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
                 ),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_at(three),
         module: Qualifier::from(["E"]),
         rep_public: true,

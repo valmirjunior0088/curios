@@ -266,7 +266,8 @@ fn a_guard_settled_under_one_case_of_a_split() -> (Module, Term) {
                 Telescope::build([(held, bool_type())], vec![Term::free_var(&held)]),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::prop(),
         module: Qualifier::default(),
         rep_public: true,

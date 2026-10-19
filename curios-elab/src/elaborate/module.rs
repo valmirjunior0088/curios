@@ -327,7 +327,7 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
         InductDecl {
             universe_context: induct_decl.universe_context,
             arity: induct_decl.arity,
-            constructors,
+            constructors: constructors.into(),
             result_sort: induct_decl.result_sort,
             module: induct_decl.module,
             rep_public: induct_decl.rep_public,

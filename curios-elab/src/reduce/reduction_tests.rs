@@ -251,7 +251,8 @@ fn a_proofs_match_stands_while_the_instance_it_states_is_open() {
                 constructors: vec![(
                     Atom::from("zero"),
                     InductParam::new(Telescope::done(vec![nat(0)]), Vec::new()),
-                )],
+                )]
+                .into(),
                 result_sort: Term::prop(),
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -933,7 +934,7 @@ fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
                         constraints: Vec::new(),
                     },
                     arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
-                    constructors: Vec::new(),
+                    constructors: Vec::new().into(),
                     result_sort: sort.clone(),
                     module: Qualifier::empty(),
                     rep_public: true,

@@ -362,7 +362,7 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
                 InductDecl {
                     universe_context: UniverseContext::empty(),
                     arity: Telescope::done(Telescope::done(())),
-                    constructors: Vec::new(),
+                    constructors: Vec::new().into(),
                     result_sort: sort,
                     module: Qualifier::empty(),
                     rep_public: true,
@@ -624,7 +624,7 @@ fn register(
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 arity: Telescope::done(indices),
-                constructors,
+                constructors: constructors.into(),
                 result_sort: sort,
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -996,7 +996,7 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
                     [(param, Term::prop())],
                     Telescope::build([(index, Term::free_var(&param))], ()),
                 ),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -1190,7 +1190,7 @@ fn declare_proposition(context: &mut Context, path: &str) -> Term {
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::prop(),
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -1261,7 +1261,7 @@ fn a_struct_field_at_a_proposition_is_not_read() {
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::prop(),
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -1327,7 +1327,7 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::prop(),
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -1355,7 +1355,8 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                         ),
                         vec![Plicity::Explicit, Plicity::Explicit],
                     ),
-                )]),
+                )])
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -1418,7 +1419,8 @@ fn a_constructor_payload_at_the_unit_type_is_compared() {
                         ),
                         vec![Plicity::Explicit, Plicity::Explicit],
                     ),
-                )]),
+                )])
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 rep_public: true,

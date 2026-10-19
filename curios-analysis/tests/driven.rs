@@ -269,7 +269,8 @@ fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
                 Telescope::build([(binder, payload_type)], Vec::new()),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort,
         module: Qualifier::from(["T"]),
         rep_public: true,
@@ -292,7 +293,7 @@ fn a_negative_self_occurrence_is_refused() {
     inducts.insert(
         false_name,
         InductDecl {
-            constructors: Vec::new(),
+            constructors: Vec::new().into(),
             ..single_payload(Term::type_ground(), Term::prop())
         },
     );
@@ -341,7 +342,7 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
     inducts.insert(
         false_name,
         InductDecl {
-            constructors: Vec::new(),
+            constructors: Vec::new().into(),
             ..single_payload(Term::type_ground(), Term::prop())
         },
     );
@@ -1011,7 +1012,7 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
     inducts.insert(
         false_name,
         InductDecl {
-            constructors: Vec::new(),
+            constructors: Vec::new().into(),
             ..single_payload(Term::type_ground(), Term::prop())
         },
     );
@@ -1062,7 +1063,7 @@ fn a_vector_an_entry_is_handed_in_with_is_not_the_kernels() {
                     [(Free::local(2, Some("A")), Term::type_ground())],
                     Telescope::done(()),
                 ),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 polarities: vec![Polarity::Strict],
                 variances: Vec::new(),
                 ..single_payload(Term::type_ground(), Term::type_ground())

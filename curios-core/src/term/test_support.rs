@@ -124,7 +124,7 @@ pub(super) fn shaped(params: usize, indices: usize, variances: &[Variance]) -> I
                 (),
             ),
         ),
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,

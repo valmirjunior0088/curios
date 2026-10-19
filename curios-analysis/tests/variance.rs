@@ -77,7 +77,8 @@ fn family(
                 Telescope::build(typed.into_iter().chain(held), targets),
                 plicities,
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -190,7 +191,7 @@ fn a_level_a_payloads_type_mentions_is_invariant() {
 #[test]
 fn a_level_an_index_type_mentions_is_invariant() {
     let over = InductDecl {
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         ..family(
             1,
             Vec::new(),

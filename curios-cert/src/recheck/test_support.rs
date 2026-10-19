@@ -66,7 +66,7 @@ pub(super) fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl 
     InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::done(())),
-        constructors,
+        constructors: constructors.into(),
         result_sort: Term::prop(),
         module: Qualifier::default(),
         rep_public: true,
@@ -380,7 +380,8 @@ pub(super) fn indexed_module(target: Term) -> Module {
         constructors: vec![(
             Atom::from("mk"),
             InductParam::new(Telescope::done(vec![target]), Vec::new()),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -440,7 +441,7 @@ pub(super) fn sorted_registry(sort: Term) -> Module {
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         result_sort: sort,
         module: Qualifier::default(),
         rep_public: true,
@@ -485,7 +486,8 @@ pub(super) fn indexed_by_proof(diverging: bool) -> Module {
         constructors: vec![(
             Atom::from("mk"),
             InductParam::new(Telescope::done(vec![target]), Vec::new()),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -529,7 +531,7 @@ pub(super) fn clashing_index_decls(
     let two_decl = InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::done(())),
-        constructors: vec![nullary("a"), nullary("b")],
+        constructors: vec![nullary("a"), nullary("b")].into(),
         result_sort: carrier_sort,
         module: Qualifier::default(),
         rep_public: true,
@@ -551,7 +553,8 @@ pub(super) fn clashing_index_decls(
                 )]),
                 Vec::new(),
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -707,7 +710,7 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
     let two_decl = InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::done(())),
-        constructors: vec![nullary("a", Vec::new()), nullary("b", Vec::new())],
+        constructors: vec![nullary("a", Vec::new()), nullary("b", Vec::new())].into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -721,7 +724,8 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
         constructors: vec![
             nullary(tags[0], vec![at("a")]),
             nullary(tags[1], vec![at("a")]),
-        ],
+        ]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -804,7 +808,7 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         result_sort: Term::type_at(level.clone()),
         module: Qualifier::default(),
         rep_public: true,
@@ -837,7 +841,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         result_sort: Term::type_at(Level::param(UniverseParam(1))),
         module: Qualifier::default(),
         rep_public: true,
@@ -932,7 +936,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         result_sort: Term::type_at(Level::param(UniverseParam(0))),
         module: Qualifier::default(),
         rep_public: true,
@@ -1194,7 +1198,8 @@ pub(super) fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module
                 ),
                 vec![Plicity::Implicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -1304,7 +1309,8 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
                 ),
                 vec![Plicity::Implicit, Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -1415,7 +1421,8 @@ pub(super) fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
                 Telescope::build([(Free::local(995, Some("x")), nat.clone())], Vec::new()),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -1585,7 +1592,8 @@ pub(super) fn vouched_declaration() -> (Global, InductDecl) {
                 ),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::prop(),
         module: Qualifier::default(),
         rep_public: true,
@@ -1697,7 +1705,8 @@ pub(super) fn proof_carrying_unit(carried: Carried) -> Module {
                 ),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::prop(),
         module: Qualifier::default(),
         rep_public: true,
@@ -1779,7 +1788,8 @@ pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
                     false => vec![Plicity::Implicit],
                 },
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -1825,7 +1835,8 @@ pub(super) fn indexed_family(
         constructors: vec![(
             Atom::from("yes"),
             InductParam::new(Telescope::done(vec![zero]), Vec::new()),
-        )],
+        )]
+        .into(),
         result_sort,
         module: Qualifier::default(),
         rep_public: true,
@@ -2351,7 +2362,8 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
                 ),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_at(three),
         module: Qualifier::default(),
         rep_public: true,
@@ -2365,7 +2377,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
             [(Free::local(611, Some("e")), e_type.clone())],
             (),
         )),
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -2545,7 +2557,7 @@ pub(super) fn judged_environment() -> Module {
             InductDecl {
                 universe_context: UniverseContext::default(),
                 arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::default(),
                 rep_public: true,
@@ -2810,7 +2822,8 @@ pub(super) fn wrapper_of_its_parameter(negatively: bool) -> Module {
                         ),
                         vec![Plicity::Implicit, Plicity::Explicit],
                     ),
-                )],
+                )]
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::default(),
                 rep_public: true,
@@ -2849,7 +2862,8 @@ pub(super) fn stored_in_the_wrapper() -> Module {
                         ),
                         vec![Plicity::Explicit],
                     ),
-                )],
+                )]
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::default(),
                 rep_public: true,
@@ -2875,7 +2889,8 @@ pub(super) fn shadowing_registry(payload: Term) -> Module {
                         Telescope::build([(Free::local(910, Some("a")), payload)], Vec::new()),
                         vec![Plicity::Explicit],
                     ),
-                )],
+                )]
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::default(),
                 rep_public: true,
@@ -2918,7 +2933,7 @@ pub(super) fn two_registry_entries(varied: Varied) -> Module {
     let family = InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         result_sort: Term::type_ground(),
         module: owner(),
         rep_public: !stamped,
@@ -2986,7 +3001,8 @@ pub(super) fn wrap_declaration(variances: Vec<Variance>) -> InductDecl {
                 ),
                 vec![Plicity::Implicit, Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_at(level),
         module: Qualifier::default(),
         rep_public: true,
@@ -3013,7 +3029,8 @@ pub(super) fn box_declaration(variances: Vec<Variance>) -> InductDecl {
                 Telescope::build([(held, Term::type_at(level.clone()))], Vec::new()),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_at(level.succ().expect("a parameter has a successor")),
         module: Qualifier::default(),
         rep_public: true,
@@ -3104,7 +3121,8 @@ pub(super) fn held_module(
                 Telescope::build([(Free::local(50, Some("x")), payload)], Vec::new()),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort,
         module: Qualifier::default(),
         rep_public: true,
@@ -3146,7 +3164,8 @@ pub(super) fn index_target_module(variances: Vec<Variance>) -> (Global, Module) 
         constructors: vec![(
             Atom::from("mk"),
             InductParam::new(Telescope::done(vec![box_at(payload_level)]), Vec::new()),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -3293,7 +3312,8 @@ pub(super) fn alias_module(variances: Vec<Variance>) -> (Global, Module) {
                 ),
                 vec![Plicity::Implicit, Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: sort,
         module: Qualifier::default(),
         rep_public: true,
@@ -3365,7 +3385,8 @@ pub(super) fn excused_arm_module(with_arm: bool) -> (Global, Module) {
                 ),
                 vec![Plicity::Implicit, Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: sort,
         module: Qualifier::default(),
         rep_public: true,

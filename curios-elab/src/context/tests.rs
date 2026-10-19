@@ -162,7 +162,7 @@ fn unit_of_entries(context: &mut Context) -> [Global; 4] {
             InductDecl {
                 universe_context: UniverseContext::default(),
                 arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::default(),
                 rep_public: true,

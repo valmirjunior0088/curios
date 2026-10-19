@@ -24,7 +24,7 @@ fn family(
             (0..parameters).map(|index| (binder(90 + index, "A"), Term::type_ground())),
             Telescope::done(()),
         ),
-        constructors,
+        constructors: constructors.into(),
         result_sort,
         module: Qualifier::default(),
         rep_public: true,

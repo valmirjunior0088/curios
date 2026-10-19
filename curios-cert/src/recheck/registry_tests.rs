@@ -140,7 +140,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
             constraints: Vec::new(),
         },
         arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         // The sort is the *second* parameter, so an occurrence's second level decides it.
         result_sort: Term::type_at(Level::param(UniverseParam(1))),
         module: Qualifier::default(),

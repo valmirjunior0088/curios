@@ -31,7 +31,7 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
             &InductDecl {
                 universe_context: UniverseContext::default(),
                 arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::prop(),
                 module: Qualifier::from(["P"]),
                 rep_public: true,

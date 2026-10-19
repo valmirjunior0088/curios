@@ -71,7 +71,8 @@ fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductD
                 Telescope::build([(payload, payload_type)], Vec::new()),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort,
         module: Qualifier::from(["Fam"]),
         rep_public: true,
@@ -178,7 +179,8 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
                 ),
                 vec![Plicity::Implicit, Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::from(["Vec"]),
         rep_public: true,
@@ -224,7 +226,8 @@ fn a_constructor_telescope_shorter_than_the_parameter_prefix_is_refused() {
         constructors: vec![(
             Atom::from("mk"),
             InductParam::new(Telescope::done(Vec::new()), Vec::new()),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::from(["Fam"]),
         rep_public: true,
@@ -267,7 +270,8 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
                 ),
                 vec![Plicity::Implicit, Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::from(["Fam"]),
         rep_public: true,
@@ -334,7 +338,7 @@ fn proposition(kernel: &mut Kernel, path: &str) -> Term {
             &InductDecl {
                 universe_context: UniverseContext::default(),
                 arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::prop(),
                 module: Qualifier::from([path]),
                 rep_public: true,

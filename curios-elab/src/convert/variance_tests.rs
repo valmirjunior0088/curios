@@ -27,7 +27,7 @@ fn declare_wrap(context: &mut Context, variance: Variance) {
                     constraints: Vec::new(),
                 },
                 arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: sort,
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -71,7 +71,8 @@ fn declare_held(context: &mut Context) {
                         Telescope::build([(held, payload)], Vec::new()),
                         vec![Plicity::Explicit],
                     ),
-                )],
+                )]
+                .into(),
                 result_sort: Term::type_at(level()),
                 module: Qualifier::empty(),
                 rep_public: true,

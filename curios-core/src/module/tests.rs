@@ -278,7 +278,7 @@ fn a_surviving_universe_metavariable_refuses_the_zonked_projection() {
         family.kind = DefinitionKind::Nominal(Rc::new(Nominal::Inductive(InductDecl {
             universe_context: UniverseContext::default(),
             arity: Telescope::done(Telescope::done(())),
-            constructors: Vec::new(),
+            constructors: Vec::new().into(),
             result_sort: Term::type_at(level),
             module: Qualifier::default(),
             rep_public: true,

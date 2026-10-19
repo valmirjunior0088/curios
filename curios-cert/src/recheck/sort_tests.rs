@@ -158,7 +158,8 @@ fn holding_through(only: &Global) -> (Global, InductDecl) {
                     Telescope::build([(carrier, left(0)), (held, payload)], Vec::new()),
                     vec![Plicity::Implicit, Plicity::Explicit],
                 ),
-            )],
+            )]
+            .into(),
             result_sort: Term::type_ground(),
             module: Qualifier::default(),
             rep_public: true,
@@ -186,7 +187,8 @@ fn box_over_a_sort(result_sort: Term) -> (Global, InductDecl) {
                     ),
                     vec![Plicity::Implicit, Plicity::Explicit],
                 ),
-            )],
+            )]
+            .into(),
             result_sort,
             module: Qualifier::default(),
             rep_public: true,
@@ -206,7 +208,8 @@ fn tagged() -> (Global, InductDecl) {
             constructors: vec![(
                 Atom::from("tag"),
                 InductParam::new(Telescope::done(Vec::new()), Vec::new()),
-            )],
+            )]
+            .into(),
             result_sort: Term::type_ground(),
             module: Qualifier::default(),
             rep_public: true,

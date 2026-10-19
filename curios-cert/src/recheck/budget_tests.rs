@@ -47,7 +47,8 @@ fn spent_item_beside_an_aliased_payload() -> Module {
                 ),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         rep_public: true,
@@ -171,7 +172,8 @@ fn held_at_a_counted_index(unfolding: usize) -> Module {
                 )]),
                 Vec::new(),
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::type_at(level()),
         module: Qualifier::default(),
         rep_public: true,

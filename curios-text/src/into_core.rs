@@ -1825,7 +1825,7 @@ fn process_items(
                                     param_tys.clone(),
                                     curios_core::Telescope::build(index_tys.iter().cloned(), ()),
                                 ),
-                                constructors,
+                                constructors: constructors.into(),
                                 result_sort: result_sort.clone(),
                                 module: context.island(),
                                 rep_public: u.rep_pub,

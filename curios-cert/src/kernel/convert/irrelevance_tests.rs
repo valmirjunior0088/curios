@@ -357,7 +357,7 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
             &InductDecl {
                 universe_context: UniverseContext::default(),
                 arity: Telescope::done(Telescope::build([(binder(92, "n"), nat_type())], ())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -496,7 +496,7 @@ fn a_constructors_value_is_typed_by_its_declaration() {
                 &InductDecl {
                     universe_context: UniverseContext::default(),
                     arity,
-                    constructors,
+                    constructors: constructors.into(),
                     result_sort,
                     module: Qualifier::empty(),
                     rep_public: true,
@@ -607,7 +607,8 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
                             ),
                             vec![Plicity::Explicit, Plicity::Explicit],
                         ),
-                    )]),
+                    )])
+                    .into(),
                     result_sort: Term::type_ground(),
                     module: Qualifier::empty(),
                     rep_public: true,
@@ -789,7 +790,8 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                         ),
                         vec![Plicity::Explicit, Plicity::Explicit],
                     ),
-                )]),
+                )])
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -1013,7 +1015,7 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
             &InductDecl {
                 universe_context: UniverseContext::default(),
                 arity: Telescope::done(Telescope::build([(binder(90, "R"), Term::prop())], ())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 rep_public: true,

@@ -32,7 +32,8 @@ fn a_constructor_has_the_type_its_signature_ends_in() {
                         Telescope::build([(payload, nat_type())], Vec::new()),
                         vec![Plicity::Explicit],
                     ),
-                )],
+                )]
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::from(["Wrapped"]),
                 rep_public: true,
@@ -65,7 +66,8 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
                         Telescope::build([(payload, nat_type())], Vec::new()),
                         vec![Plicity::Explicit],
                     ),
-                )],
+                )]
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::from(["Wrapped"]),
                 rep_public: true,
@@ -214,7 +216,7 @@ fn a_recursive_proof_that_does_not_descend_is_refused() {
             &InductDecl {
                 universe_context: UniverseContext::default(),
                 arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::prop(),
                 module: Qualifier::from(["False"]),
                 rep_public: true,

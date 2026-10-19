@@ -87,7 +87,7 @@ fn both_checkers_decide_non_informativeness_alike() {
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         result_sort: Term::prop(),
         module: Qualifier::from(["Held"]),
         rep_public: true,

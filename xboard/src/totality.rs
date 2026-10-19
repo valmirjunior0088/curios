@@ -110,7 +110,8 @@ fn a_payload_applied_at_its_own_family() -> (Module, Term) {
                 Telescope::build([(Free::local(922, Some("f")), payload_type)], Vec::new()),
                 vec![Plicity::Explicit],
             ),
-        )],
+        )]
+        .into(),
         result_sort: Term::prop(),
         module: Qualifier::default(),
         rep_public: true,

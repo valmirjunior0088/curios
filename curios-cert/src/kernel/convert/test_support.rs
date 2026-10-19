@@ -38,7 +38,7 @@ pub(super) fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Ter
             &InductDecl {
                 universe_context: UniverseContext::default(),
                 arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort,
                 module: Qualifier::from([path]),
                 rep_public: true,
@@ -182,7 +182,8 @@ pub(super) fn declare_wrap(
                         ),
                         vec![Plicity::Implicit, Plicity::Explicit],
                     ),
-                )],
+                )]
+                .into(),
                 result_sort: sort.clone(),
                 module: Qualifier::default(),
                 rep_public: true,
@@ -233,7 +234,8 @@ pub(super) fn declare_leaf(
                 constructors: vec![(
                     Atom::from("leaf"),
                     InductParam::new(Telescope::done(Vec::new()), Vec::new()),
-                )],
+                )]
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::default(),
                 rep_public: true,
@@ -281,7 +283,8 @@ pub(super) fn declare_box(kernel: &mut Kernel, variances: Vec<Variance>) -> Glob
                         Telescope::build([(held, Term::type_at(level.clone()))], Vec::new()),
                         vec![Plicity::Explicit],
                     ),
-                )],
+                )]
+                .into(),
                 result_sort: Term::type_at(level.succ().expect("a parameter has a successor")),
                 module: Qualifier::default(),
                 rep_public: true,
@@ -312,7 +315,7 @@ pub(super) fn declare_indexed(kernel: &mut Kernel, path: &str, param_sort: Term)
                     [(param, param_sort)],
                     Telescope::build([(binder(91, "p"), Term::free_var(&param))], ()),
                 ),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::from([path]),
                 rep_public: true,

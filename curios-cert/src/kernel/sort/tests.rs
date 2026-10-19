@@ -26,7 +26,7 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Term {
             &InductDecl {
                 universe_context: UniverseContext::default(),
                 arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new(),
+                constructors: Vec::new().into(),
                 result_sort,
                 module: Qualifier::from([path]),
                 rep_public: true,

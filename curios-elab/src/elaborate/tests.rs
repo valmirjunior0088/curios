@@ -72,7 +72,8 @@ fn register_opt(context: &mut Context) {
                             vec![Plicity::Explicit],
                         ),
                     ),
-                ]),
+                ])
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -386,7 +387,8 @@ fn register_tagged(context: &mut Context) {
                         Telescope::build([(hidden, nat()), (plain, nat())], Vec::new()),
                         vec![Plicity::Implicit, Plicity::Explicit],
                     ),
-                )]),
+                )])
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 rep_public: true,
@@ -760,7 +762,8 @@ fn register_flag(context: &mut Context) {
                         Atom::from("on"),
                         InductParam::new(Telescope::done(vec![nat_lit(1)]), vec![]),
                     ),
-                ]),
+                ])
+                .into(),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),
                 rep_public: true,

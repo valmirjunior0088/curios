@@ -165,7 +165,7 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
     let entry = InductDecl {
         universe_context: UniverseContext::empty(),
         arity: Telescope::Done(Box::new(Telescope::Done(Box::new(())))),
-        constructors: Vec::new(),
+        constructors: Vec::new().into(),
         result_sort: Term::type_ground(),
         module: Qualifier::empty(),
         rep_public: true,

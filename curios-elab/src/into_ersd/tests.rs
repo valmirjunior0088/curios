@@ -979,7 +979,8 @@ fn opt_induct() -> InductDecl {
                     vec![Plicity::Explicit],
                 ),
             ),
-        ]),
+        ])
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::empty(),
         rep_public: true,
@@ -1622,7 +1623,8 @@ fn unary_induct(payload: Term) -> InductDecl {
                 Telescope::build([(x, payload)], Vec::new()),
                 vec![Plicity::Explicit],
             ),
-        )]),
+        )])
+        .into(),
         result_sort: Term::type_ground(),
         module: Qualifier::empty(),
         rep_public: true,

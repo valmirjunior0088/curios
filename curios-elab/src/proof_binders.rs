@@ -123,7 +123,7 @@ pub(crate) fn state_proof_binders(
     }
 
     for (_, declaration) in &mut published.induct_decls {
-        for (_, constructor) in &mut declaration.constructors {
+        for constructor in declaration.constructors.signatures_mut() {
             constructor.telescope = stated_telescope(context, &constructor.telescope)?;
         }
     }

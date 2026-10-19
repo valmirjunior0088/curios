@@ -5,6 +5,7 @@ use {
     },
     crate::Sharing,
     curios_utilities::{Plicity, Qualifier},
+    std::{collections::HashMap, fmt, ops::Deref, sync::OnceLock},
 };
 
 /// One constructor's registry signature: its full telescope.
@@ -33,6 +34,99 @@ impl InductParam {
     }
 }
 
+/// A family's cases in declaration order, each tag beside its signature, with the position of each tag found in constant time.
+///
+/// A sequence, because the order is load-bearing: a case's position *is* its runtime tag ([`InductDecl::constructor_index`]). A `BTreeMap<Atom, _>` would make that position the collation order over constructor spellings, so renaming a case would silently renumber the emitted tags of every case it sorted past. Declaration order is predictable from the source, stable under a rename, and changes only under an edit that visibly reorders the declaration.
+///
+/// The positions are found the first time a tag is looked up, and never stored, being read off the cases: a scan for a tag would make every construction and every reader of one case pay the family's width. Nothing reorders or renames a case once the sequence is made, so the positions found stand; equality, and the debug form, are the cases'.
+#[derive(Clone, Default)]
+#[curios_archive::archived]
+pub struct Constructors {
+    cases: Vec<(Atom, InductParam)>,
+    #[archived_with(curios_archive::Skip)]
+    positions: OnceLock<HashMap<Atom, usize>>,
+}
+
+impl Constructors {
+    /// The position of the first case `tag` names, which is its runtime tag.
+    pub fn position(&self, tag: &Atom) -> Option<usize> {
+        let positions = self.positions.get_or_init(|| {
+            let mut positions = HashMap::with_capacity(self.cases.len());
+            for (position, (tag, _)) in self.cases.iter().enumerate() {
+                positions.entry(tag.clone()).or_insert(position);
+            }
+            positions
+        });
+
+        positions.get(tag).copied()
+    }
+
+    /// The cases, in declaration order.
+    pub fn as_slice(&self) -> &[(Atom, InductParam)] {
+        &self.cases
+    }
+
+    /// Every case's signature mutably, in declaration order: what changes no tag and no position.
+    pub fn signatures_mut(&mut self) -> impl Iterator<Item = &mut InductParam> {
+        self.cases.iter_mut().map(|(_, param)| param)
+    }
+}
+
+impl Deref for Constructors {
+    type Target = [(Atom, InductParam)];
+
+    fn deref(&self) -> &Self::Target {
+        &self.cases
+    }
+}
+
+impl<'c> IntoIterator for &'c Constructors {
+    type Item = &'c (Atom, InductParam);
+    type IntoIter = std::slice::Iter<'c, (Atom, InductParam)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.cases.iter()
+    }
+}
+
+impl IntoIterator for Constructors {
+    type Item = (Atom, InductParam);
+    type IntoIter = std::vec::IntoIter<(Atom, InductParam)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.cases.into_iter()
+    }
+}
+
+impl From<Vec<(Atom, InductParam)>> for Constructors {
+    fn from(cases: Vec<(Atom, InductParam)>) -> Self {
+        Self {
+            cases,
+            positions: OnceLock::new(),
+        }
+    }
+}
+
+impl FromIterator<(Atom, InductParam)> for Constructors {
+    fn from_iter<I: IntoIterator<Item = (Atom, InductParam)>>(cases: I) -> Self {
+        Self::from(cases.into_iter().collect::<Vec<_>>())
+    }
+}
+
+impl PartialEq for Constructors {
+    fn eq(&self, other: &Self) -> bool {
+        self.cases == other.cases
+    }
+}
+
+impl Eq for Constructors {}
+
+impl fmt::Debug for Constructors {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.cases.fmt(formatter)
+    }
+}
+
 /// One inductive declaration's registry entry: the metadata an `induct` declaration produces alongside its type-constructor and value-constructor function bindings.
 ///
 /// The elaborator consults this when checking an inductive match: each arm's binders are typed directly from the matching constructor's telescope (instantiated at the scrutinee type's parameters), and the arm's binder count is arity-checked against that telescope statically. `erase` consults it again to type constructor payloads and order runtime tags.
@@ -44,10 +138,8 @@ pub struct InductDecl {
     ///
     /// Nested rather than two parallel telescopes. The indices are scoped under the parameters *by construction*, so there is no agreement between two encodings to state, nothing to keep in sync, and no malformed pairing for a judgment to refuse — a declaration claiming one parameter and an index telescope that does not lead with it is unspellable rather than rejected.
     pub arity: Telescope<Telescope<()>>,
-    /// Per-constructor signatures **in declaration order** — each the constructor's signature telescope (see [`InductParam`]).
-    ///
-    /// A sequence rather than a map, because the order is load-bearing: a constructor's position here *is* its runtime tag (`Self::constructor_index`). A `BTreeMap<Atom, _>` would make that position the collation order over constructor spellings, so renaming a case would silently renumber the emitted tags of every case it sorted past. Declaration order is predictable from the source, stable under a rename, and changes only under an edit that visibly reorders the declaration.
-    pub constructors: Vec<(Atom, InductParam)>,
+    /// Per-constructor signatures **in declaration order** — each the constructor's signature telescope (see [`InductParam`]), its position its runtime tag ([`Constructors`]).
+    pub constructors: Constructors,
     /// The declared result sort — `Type` or `Prop` — the codomain of the type-constructor's kind. A fully-applied `InductType { name, .. }` has this sort, which `Sort::of` reads to decide propositional irrelevance.
     pub result_sort: Term,
     /// The exact source module that owns construction and elimination rights. This is finer-grained than the mount that owns the declaration: nested modules under one mount do not share representation access.
@@ -129,12 +221,11 @@ impl InductDecl {
         Some(self.constructor(tag)?.telescope.clone().open_params(params))
     }
 
-    /// `tag`'s signature entry, or `None` if it is not a case of this inductive. Constructor counts are small, so the scan is cheaper than a tree.
+    /// `tag`'s signature entry, or `None` if it is not a case of this inductive.
     pub fn constructor(&self, tag: &Atom) -> Option<&InductParam> {
-        self.constructors
-            .iter()
-            .find(|(candidate, _)| candidate == tag)
-            .map(|(_, param)| param)
+        let position = self.constructors.position(tag)?;
+
+        Some(&self.constructors[position].1)
     }
 
     /// Every constructor signature, in declaration order.
@@ -144,7 +235,7 @@ impl InductDecl {
 
     /// Every constructor signature mutably, in declaration order.
     pub fn signatures_mut(&mut self) -> impl Iterator<Item = &mut InductParam> {
-        self.constructors.iter_mut().map(|(_, param)| param)
+        self.constructors.signatures_mut()
     }
 
     /// The canonical plicities of `tag`'s *payload* binders — the constructor signature plicities past the leading `params.len()` declaration parameters, paralleling the telescope [`Self::instantiate`] peels. `None` if `tag` is not a constructor of this inductive.
@@ -166,8 +257,7 @@ impl InductDecl {
 
     /// `tag`'s position in [`Self::constructor_order`] — the runtime tag `erase_variant` gives a value constructed with it.
     pub fn constructor_index(&self, tag: &Atom) -> Option<usize> {
-        self.constructor_order()
-            .position(|candidate| candidate == tag)
+        self.constructors.position(tag)
     }
 }
 
