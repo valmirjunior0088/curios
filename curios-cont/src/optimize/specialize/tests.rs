@@ -6,7 +6,7 @@ use {
         Atom, BRANCH_COPY_NODE_LIMIT, BRANCH_SPECIALIZATION_GROWTH_LIMIT, Callee, Continuation,
         CopyBudget, CopyPlan, Edge, Function, Intrinsic, JUMP_COPY_NODE_LIMIT, Literal, Module,
         Node, Row, RowId, SCC_CLONE_NODE_LIMIT, SCC_COPY_NODE_LIMIT, Slot, ValueExpr,
-        forward_aggregate_projections, function_nodes, known_values, simplify_nodes,
+        function_nodes, known_values, shrink,
         test_support::{
             PolymorphicLoop, has_switch, known_callee, nest_helpers, polymorphic_loop,
             tagged_consumer, tagged_family, tagged_join,
@@ -269,10 +269,12 @@ fn specializes_a_constructor_argument_and_collapses_the_switch() {
         "the general function keeps its switch"
     );
 
-    // The rebuilt constructor lets the existing folds collapse the switch.
-    while forward_aggregate_projections(&mut module) | simplify_nodes(&mut module) {}
+    // The rebuilt constructor lets the shrinker collapse the switch, and move the clone into its one call.
+    assert!(shrink(&mut module));
     assert!(
-        !has_switch(&module, clone),
+        module
+            .live_nodes()
+            .all(|(_, node)| !matches!(node, Node::Switch { .. })),
         "projection and known-switch folding collapse the clone's dispatch"
     );
     module.verify().unwrap();

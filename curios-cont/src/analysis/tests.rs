@@ -4,7 +4,7 @@ use {
     super::{analyze_calls, analyze_sccs, known_values},
     crate::{
         Atom, Callee, Continuation, Edge, Function, FunctionId, Literal, Module, Node, ValueId,
-        atoms, inline_single_use_continuations, optimize, test_support::call_graph,
+        atoms, optimize, shrink, test_support::call_graph,
     },
     curios_num::Natural,
     std::collections::BTreeMap,
@@ -345,7 +345,7 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
     module.verify().unwrap();
 }
 
-/// A continuation parameter that every transfer hands the same literal is known, exactly as a function parameter is. The single-transfer case is still beta-reduced outright — `inline_single_use_continuations` needs no literal to do that — and the analysis recording it first costs nothing; what the analysis is *for* is the multi-transfer join below, which nothing else folds.
+/// A continuation parameter that every transfer hands the same literal is known, exactly as a function parameter is. The single-transfer case is still put in place outright — the shrinker needs no literal to do that — and the analysis recording it first costs nothing; what the analysis is *for* is the multi-transfer join below, which nothing else folds.
 #[test]
 fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_same_literal() {
     let mut module = Module::new();
@@ -390,7 +390,7 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
         known_values(&module).get(&parameter),
         Some(&Atom::Literal(Literal::Nat(Natural::from(7u32))))
     );
-    assert!(inline_single_use_continuations(&mut module));
+    assert!(shrink(&mut module));
     assert!(matches!(
         module.node(call),
         Some(Node::ApplyCont(Edge { args, .. }))

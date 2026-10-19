@@ -379,6 +379,12 @@ fn a_concept_of_many_methods_compiles_in_its_size() {
     assert_eq!(compiles(&grown(Growth::Methods, 2_000)), Ok(()));
 }
 
+/// Two thousand lambdas applied in turn compile: each is moved into its one call as the one around it is, within one pass of the continuation optimizer's shrinker, where a round apiece would run the optimizer past its backstop.
+#[test]
+fn a_nest_of_lambdas_applied_in_turn_compiles_in_its_size() {
+    assert_eq!(compiles(&grown(Growth::Lambdas, 2_000)), Ok(()));
+}
+
 /// Nesting ten thousand deep compiles on a test thread's stack: parentheses, each a nonterminal the parser re-enters, and an arrow, each parameter a term the lowering lowers inside the one before. The depth is bought with stack where it is spent, so no stage's acceptance follows the thread it runs on.
 #[test]
 fn nesting_ten_thousand_deep_compiles_on_a_test_thread() {

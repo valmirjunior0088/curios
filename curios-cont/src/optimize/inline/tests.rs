@@ -1,7 +1,7 @@
-//! Inlining a known call and a single-use continuation, and what each must clone rather than share.
+//! Inlining a known call, and what it must clone rather than share.
 
 use {
-    super::{inline_known_calls, inline_single_use_continuations},
+    super::inline_known_calls,
     crate::{
         Atom, Callee, Continuation, CopyPlan, Edge, Function, FunctionId, Literal,
         MULTI_SITE_INLINE_LIMIT, Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueExpr,
@@ -10,75 +10,6 @@ use {
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };
-
-#[test]
-fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
-    let mut module = Module::new();
-    let entry = module.reserve_function();
-    let return_cont = module.reserve_continuation();
-    let continuation = module.reserve_continuation();
-    let captured = module.add_value(Some("captured".into()));
-
-    let nested = module.reserve_function();
-    let nested_return = module.reserve_continuation();
-    let nested_body = module.add_node(Node::ApplyCont(Edge {
-        target: nested_return,
-        args: vec![Atom::Value(captured)],
-    }));
-    module.define_function(
-        nested,
-        Function {
-            debug_name: Some("nested".into()),
-            params: vec![],
-            return_cont: nested_return,
-            body: nested_body,
-            droppable: false,
-        },
-    );
-    let return_nested = module.add_node(Node::ApplyCont(Edge {
-        target: return_cont,
-        args: vec![Atom::Fun(nested)],
-    }));
-    let continuation_body = module.add_node(Node::LetFun {
-        functions: vec![nested],
-        body: return_nested,
-    });
-    module.define_continuation(
-        continuation,
-        Continuation {
-            debug_name: Some("capture scope".into()),
-            params: vec![captured],
-            body: continuation_body,
-        },
-    );
-    let call = module.add_node(Node::ApplyCont(Edge {
-        target: continuation,
-        args: vec![Atom::Literal(Literal::Nat(Natural::from(7u32)))],
-    }));
-    let body = module.add_node(Node::LetCont {
-        continuations: vec![continuation],
-        body: call,
-    });
-    module.define_function(
-        entry,
-        Function {
-            debug_name: Some("main".into()),
-            params: vec![],
-            return_cont,
-            body,
-            droppable: false,
-        },
-    );
-    module.set_entry(entry);
-
-    assert!(inline_single_use_continuations(&mut module));
-    assert!(matches!(
-        module.node(nested_body),
-        Some(Node::ApplyCont(Edge { args, .. }))
-            if args == &[Atom::Literal(Literal::Nat(Natural::from(7u32)))]
-    ));
-    module.verify().unwrap();
-}
 
 #[test]
 fn known_call_inlining_clones_recursive_local_continuations() {

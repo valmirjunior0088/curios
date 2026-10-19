@@ -32,6 +32,9 @@ pub(crate) use protocol::*;
 mod reachable;
 pub(crate) use reachable::*;
 
+mod shrink;
+pub(crate) use shrink::*;
+
 mod simplify;
 pub(crate) use simplify::*;
 
@@ -107,32 +110,16 @@ pub fn optimize(module: &mut Module) {
         let changed = pass!("cont::rewrite_atoms", rewrite_atoms(module, &substitutions))
             | pass!("cont::forward_continuations", forward_continuations(module))
             | pass!("cont::forward_calls", forward_calls(module))
-            | pass!(
-                "cont::forward_aggregate_projections",
-                forward_aggregate_projections(module)
-            )
+            | pass!("cont::shrink", shrink(module))
             | pass!("cont::answer_row_tests", answer_row_tests(module))
             | pass!("cont::dedupe_intrinsics", dedupe_intrinsics(module))
-            | pass!("cont::simplify_nodes", simplify_nodes(module))
-            | pass!(
-                "cont::fold_intrinsic_identities",
-                fold_intrinsic_identities(module)
-            )
             | pass!("cont::fuse_append_chains", fuse_append_chains(module))
             | pass!("cont::flatten_indexed_lists", flatten_indexed_lists(module))
-            | pass!(
-                "cont::eliminate_dead_bindings",
-                eliminate_dead_bindings(module)
-            )
             | pass!(
                 "cont::eliminate_dead_parameters",
                 eliminate_dead_parameters(module)
             )
             | pass!("cont::eliminate_dead_calls", eliminate_dead_calls(module))
-            | pass!(
-                "cont::inline_single_use_continuations",
-                inline_single_use_continuations(module)
-            )
             | pass!("cont::inline_known_calls", inline_known_calls(module))
             | pass!("cont::contify_calls", contify_calls(module))
             | pass!(

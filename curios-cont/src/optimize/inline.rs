@@ -2,7 +2,7 @@ use {
     crate::{
         Atom, Callee, Continuation, ContinuationId, CopyPlan, Function, FunctionId,
         MULTI_SITE_INLINE_LIMIT, Mapping, Module, Node, NodeId, SCC_CLONE_NODE_LIMIT, ValueId,
-        analyze_calls, atoms, clone_node, prune_unreachable, visit_atoms_mut,
+        analyze_calls, clone_node, prune_unreachable,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -61,106 +61,7 @@ pub(crate) fn inline_known_calls(module: &mut Module) -> bool {
     }
     changed
 }
-/// The nodes each value is named at — an atom, or a closure call's callee — kept current through a sweep of inlines.
-///
-/// **A parameter is replaced where it is named.** A continuation's parameters are bound over its body and the functions nested in it, and a substitution walking that region whole walks every continuation nested inside it, so inlining a nesting of n of them costs its square. Named sites are what a substitution rewrites, and an entry left behind by a rewrite names a node that no longer names the value, which a substitution passes over.
-#[derive(Default)]
-struct Uses(BTreeMap<ValueId, BTreeSet<NodeId>>);
-
-impl Uses {
-    fn of(module: &Module) -> Self {
-        let mut uses = Self::default();
-        for (id, node) in module.live_nodes() {
-            uses.note(id, node);
-        }
-        uses
-    }
-
-    /// Record `id` as a site of every value `node` names.
-    fn note(&mut self, id: NodeId, node: &Node) {
-        self.name(id, named(node));
-    }
-
-    /// Record `id` as a site of each of `values`.
-    fn name(&mut self, id: NodeId, values: impl IntoIterator<Item = ValueId>) {
-        for value in values {
-            self.0.entry(value).or_default().insert(id);
-        }
-    }
-
-    /// The nodes that name any of `values`.
-    fn sites(&self, values: &[ValueId]) -> BTreeSet<NodeId> {
-        values
-            .iter()
-            .filter_map(|value| self.0.get(value))
-            .flatten()
-            .copied()
-            .collect()
-    }
-}
-
-/// The value `atom` is, where it is one.
-fn value_of(atom: &Atom) -> Option<ValueId> {
-    match atom {
-        Atom::Value(value) => Some(*value),
-        Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => None,
-    }
-}
-
-/// Every value `node` names: its atoms, and a closure call's callee.
-fn named(node: &Node) -> impl Iterator<Item = ValueId> + '_ {
-    let callee = match node {
-        Node::ApplyFun {
-            callee: Callee::Closure(value),
-            ..
-        } => Some(*value),
-        _ => None,
-    };
-    atoms(node).into_iter().filter_map(value_of).chain(callee)
-}
-
-pub(crate) fn inline_single_use_continuations(module: &mut Module) -> bool {
-    let mut changed = false;
-    // Inline in sweeps: build the transfer index once per sweep rather than once per inline. Inlining a single-use continuation moves its one transfer without duplicating it, so it never changes another continuation's transfer count — the snapshot stays valid for the rest of the sweep. Each candidate is re-read against the live module, and the module is pruned once at the end of each sweep rather than after every inline.
-    for _ in 0..10_000 {
-        let transfers_by_target = continuation_transfers(module);
-        let mut uses = Uses::of(module);
-        let mut inlined_any = false;
-        for index in 0..module.continuations().len() {
-            let target = ContinuationId(index as u32);
-            // Re-read: an earlier inline (and its prune) in this sweep may have removed or rewritten this continuation.
-            let Some(continuation) = module.continuation(target) else {
-                continue;
-            };
-            let Some(transfers) = transfers_by_target.get(&target) else {
-                continue;
-            };
-            if transfers.len() != 1 || transfers[0] == continuation.body {
-                continue;
-            }
-            let call = transfers[0];
-            let params_len = continuation.params.len();
-            let Some(Node::ApplyCont(edge)) = module.node(call) else {
-                continue;
-            };
-            if edge.target != target || edge.args.len() != params_len {
-                continue;
-            }
-            let args = edge.args.clone();
-            if inline_continuation(module, &mut uses, target, call, &args) {
-                changed = true;
-                inlined_any = true;
-            }
-        }
-        if !inlined_any {
-            break;
-        }
-        // Prune once per sweep rather than once per inline: `nodes_from` tolerates the transient dangling `LetCont` references left within the sweep, so the repair only has to happen before the next sweep rebuilds its transfer index.
-        prune_unreachable(module);
-    }
-    changed
-}
-/// Index every continuation to the nodes that transfer control to it, one entry per referencing node in ascending node order. Building this once per rewrite pass keeps single-use detection linear instead of rescanning every node for each continuation.
+/// Index every continuation to the nodes that transfer control to it, one entry per referencing node in ascending node order. Building this once per rewrite pass keeps a reader linear instead of rescanning every node for each continuation.
 pub(crate) fn continuation_transfers(module: &Module) -> BTreeMap<ContinuationId, Vec<NodeId>> {
     let mut transfers: BTreeMap<ContinuationId, Vec<NodeId>> = BTreeMap::new();
     let mut targets = BTreeSet::new();
@@ -196,99 +97,6 @@ pub(crate) fn collect_control_targets(node: &Node, targets: &mut BTreeSet<Contin
         | Node::Panic(_)
         | Node::Unreachable => {}
     }
-}
-/// Put `continuation`'s body in place of `call`, its one transfer, each parameter replaced by its argument at the nodes that name it ([`Uses`]), which it keeps current.
-fn inline_continuation(
-    module: &mut Module,
-    uses: &mut Uses,
-    continuation: ContinuationId,
-    call: NodeId,
-    args: &[Atom],
-) -> bool {
-    let definition = module.continuation(continuation).unwrap().clone();
-    let substitutions = definition
-        .params
-        .iter()
-        .copied()
-        .zip(args.iter().cloned())
-        .collect::<BTreeMap<_, _>>();
-    let substitution_nodes = uses
-        .sites(&definition.params)
-        .into_iter()
-        .filter(|node| module.node(*node).is_some())
-        .collect::<BTreeSet<_>>();
-    if substitution_nodes.iter().any(|node| {
-        matches!(
-            module.node(*node),
-            Some(Node::ApplyFun {
-                callee: Callee::Closure(value),
-                ..
-            }) if matches!(
-                substitutions.get(value),
-                Some(Atom::Literal(_) | Atom::Filler)
-            )
-        )
-    }) {
-        return false;
-    }
-
-    // The closure calls a substituted function cannot be a call of — see [`Module::applies`].
-    let unreachable = substitution_nodes
-        .iter()
-        .copied()
-        .filter(|node| {
-            matches!(
-                module.node(*node),
-                Some(Node::ApplyFun {
-                    callee: Callee::Closure(value),
-                    args,
-                    ..
-                }) if matches!(
-                    substitutions.get(value),
-                    Some(Atom::Fun(function)) if !module.applies(*function, args.len())
-                )
-            )
-        })
-        .collect::<BTreeSet<_>>();
-
-    for &id in &substitution_nodes {
-        let node = module.node_mut(id).unwrap();
-        if unreachable.contains(&id) {
-            *node = Node::Unreachable;
-            continue;
-        }
-        // The values a replacement brings in are what the node names anew; the rest it named already.
-        let mut brought = Vec::new();
-        visit_atoms_mut(node, &mut |atom| {
-            if let Atom::Value(value) = atom
-                && let Some(replacement) = substitutions.get(value)
-            {
-                *atom = replacement.clone();
-                brought.extend(value_of(replacement));
-            }
-        });
-        if let Node::ApplyFun { callee, .. } = node
-            && let Callee::Closure(value) = *callee
-            && let Some(replacement) = substitutions.get(&value)
-        {
-            *callee = match replacement {
-                Atom::Value(value) => Callee::Closure(*value),
-                Atom::Fun(function) => Callee::Known(*function),
-                Atom::Literal(_) | Atom::Filler => unreachable!(),
-            };
-            brought.extend(value_of(replacement));
-        }
-        uses.name(id, brought);
-    }
-
-    let body = module.remove_node(definition.body).unwrap();
-    uses.note(call, &body);
-    module.set_node(call, body);
-    module.remove_continuation(continuation);
-    for param in definition.params {
-        module.remove_value(param);
-    }
-    true
 }
 pub(crate) fn inline_call(
     module: &mut Module,
