@@ -194,71 +194,92 @@ impl Readable<'_> {
 
 /// Complete what judging each definition of `module` read, held where `places` says and concluded as `certification` records, where no filing has ([`curios_core::ReadRecord::complete`]): with the identity of the item judged, the certifier's own digest of each part read — of a declaration of the unit, over the unit as it stands, and of another unit's, the digest the walk recorded of it, none of a fixed unit's — and the verdict. What a store's filing asks of the certifier before the unit is filed, so a later walk at its address finds the verdict by the item it judged, and nothing outside the certifier computes any part of what that walk compares.
 pub fn complete(module: &Module, places: &Places, certification: &Certification) {
+    curios_profile::profile!("judgments::complete");
     let mut globals = Globals::default();
     globals.mount(module, places, certification);
+    let mut completing = Completing {
+        module,
+        places,
+        certification,
+        globals,
+        digests: HashMap::new(),
+        identities: HashMap::new(),
+    };
     for (name, record) in certification.records() {
         if record.completed() {
             continue;
         }
-        record.complete(concluded(
-            module,
-            places,
-            certification,
-            &globals,
-            name,
-            record,
-        ));
+        record.complete(completing.concluded(name, record));
     }
 }
 
-/// What judging `name`, which read `reads`, concluded and read, as a filing completes its record: `None` where no record of it can be completed.
-fn concluded(
-    module: &Module,
-    places: &Places,
-    certification: &Certification,
-    globals: &Globals<'_>,
-    name: &Global,
-    reads: &Reads,
-) -> Option<Concluded> {
-    let place = places.place(name)?.item();
-    let input = match module.items.part(place) {
-        Some(stored) => stored.digest,
-        None => ItemRun::identity(&module.items[place]).ok()?,
-    };
-    let read = |read: &Global, body: bool| -> Option<Option<Option<[u8; 32]>>> {
-        if places.place(read).is_some() {
-            return read_digest(globals, read, body)
-                .ok()
-                .map(|digest| Some(digest.as_deref().and_then(bytes_of)));
+/// What a filing completes a walk's records with: the unit, held where `places` says and mounted, and what the walk recorded, each part read digested and each item named once however many records ask.
+struct Completing<'a> {
+    module: &'a Module,
+    places: &'a Places,
+    certification: &'a Certification,
+    globals: Globals<'a>,
+    /// What each part of the unit read digests to, by its name and whether it is the body: `None` where it will not digest.
+    digests: HashMap<(Global, bool), Option<Option<[u8; 32]>>>,
+    /// The identity of each item judged, by its place: `None` where it will not archive.
+    identities: HashMap<usize, Option<Digest>>,
+}
+
+impl Completing<'_> {
+    /// What judging `name`, which read `reads`, concluded and read: `None` where no record of it can be completed.
+    fn concluded(&mut self, name: &Global, reads: &Reads) -> Option<Concluded> {
+        let place = self.places.place(name)?.item();
+        let input =
+            *self
+                .identities
+                .entry(place)
+                .or_insert_with(|| match self.module.items.part(place) {
+                    Some(stored) => Some(stored.digest),
+                    None => ItemRun::identity(&self.module.items[place]).ok(),
+                });
+        let signatures = reads
+            .signatures
+            .iter()
+            .map(|signature| self.read(signature, false))
+            .collect::<Option<Vec<_>>>()?;
+        let bodies = reads
+            .bodies
+            .iter()
+            .map(|body| self.read(body, true))
+            .collect::<Option<Vec<_>>>()?;
+
+        Some(Concluded {
+            input: input?,
+            signatures,
+            bodies,
+            totality: self.certification.totality(name)?,
+            vectors: self
+                .certification
+                .polarities(name)
+                .zip(self.certification.variances(name))
+                .map(|(polarities, variances)| (polarities.to_vec(), variances.to_vec())),
+        })
+    }
+
+    /// What a record holds of a read of `read`, its body where `body` and its signature otherwise: of a declaration of the unit, the certifier's digest of it now; of another unit's, the digest the walk recorded; of a fixed unit's, nothing. `None` where it will not digest.
+    fn read(&mut self, read: &Global, body: bool) -> Option<Option<Option<[u8; 32]>>> {
+        if self.places.place(read).is_some() {
+            let globals = &self.globals;
+            let digest = *self.digests.entry((*read, body)).or_insert_with(|| {
+                read_digest(globals, read, body)
+                    .ok()
+                    .map(|digest| digest.as_deref().and_then(bytes_of))
+            });
+
+            return digest.map(Some);
         }
-        let recorded = certification.abroad(read).and_then(|read| match body {
+        let recorded = self.certification.abroad(read).and_then(|read| match body {
             true => read.body.as_deref(),
             false => read.signature.as_deref(),
         });
 
         Some(recorded.map(bytes_of))
-    };
-    let signatures = reads
-        .signatures
-        .iter()
-        .map(|signature| read(signature, false))
-        .collect::<Option<Vec<_>>>()?;
-    let bodies = reads
-        .bodies
-        .iter()
-        .map(|body| read(body, true))
-        .collect::<Option<Vec<_>>>()?;
-
-    Some(Concluded {
-        input,
-        signatures,
-        bodies,
-        totality: certification.totality(name)?,
-        vectors: certification
-            .polarities(name)
-            .zip(certification.variances(name))
-            .map(|(polarities, variances)| (polarities.to_vec(), variances.to_vec())),
-    })
+    }
 }
 
 /// The thirty-two bytes a digest spells.

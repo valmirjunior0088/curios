@@ -78,12 +78,10 @@ impl<'a> Candidating<'a> {
         &self,
         credited: impl Fn(&[Global]) -> Vec<(Global, u32)>,
     ) -> Result<(), String> {
+        curios_profile::profile!("elaborations::complete");
         for declaration in self.declarations.each() {
-            let Some(first) = self.lowered.items[declaration]
-                .declared_names()
-                .first()
-                .copied()
-            else {
+            // Asked of what each place declares, which a stored module knows without its item: a filing over a store completes what its edit made and restores nothing else.
+            let Some(first) = self.lowered.items.names(declaration).first().copied() else {
                 continue;
             };
             let Some(held) = self.traces.held(first) else {
@@ -108,7 +106,7 @@ impl<'a> Candidating<'a> {
         let positions = self.declarations.items(declaration);
         let names = positions
             .iter()
-            .flat_map(|position| self.lowered.items[*position].declared_names())
+            .flat_map(|position| self.lowered.items.names(*position))
             .copied()
             .collect::<Vec<_>>();
         if names
@@ -119,8 +117,10 @@ impl<'a> Candidating<'a> {
         }
         let mut outputs = Vec::with_capacity(positions.len());
         for position in positions.iter() {
-            let made = self.lowered.items[*position]
-                .declared_names()
+            let made = self
+                .lowered
+                .items
+                .names(*position)
                 .first()
                 .and_then(|name| self.places.place(name));
             let Some(made) = made.and_then(|made| self.items.get(&made.item())) else {

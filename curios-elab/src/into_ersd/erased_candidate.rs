@@ -40,6 +40,9 @@ impl ErasedUnit {
         items: &HashMap<usize, Digest>,
         forms: &HashMap<usize, Digest>,
     ) {
+        curios_profile::profile!("erasures::complete");
+        // What each part or binding asked digests to, made once however many items read it.
+        let mut digests = HashMap::<Question, Option<Read>>::new();
         for place in module.items.places() {
             let names = module.items.names(place);
             let Some(held) = names.first().and_then(|first| self.asked(first)) else {
@@ -55,8 +58,14 @@ impl ErasedUnit {
 
             let mut reads = Some(Vec::with_capacity(held.len()));
             for (question, answered) in held.asked() {
-                let read = match answered {
-                    Answered::Part => self.read_then(module, places, &names, question),
+                let own = question
+                    .subject()
+                    .is_some_and(|subject| names.contains(&subject));
+                let read = match (answered, own) {
+                    (Answered::Part, true) => Some(None),
+                    (Answered::Part, false) => *digests
+                        .entry(*question)
+                        .or_insert_with(|| self.read_then(module, places, &names, question)),
                     _ => None,
                 };
                 match (read, &mut reads) {
