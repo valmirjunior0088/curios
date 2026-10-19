@@ -341,7 +341,7 @@ impl Packs {
     }
 }
 
-/// The candidates of an address are the objects its packs hold under their names ([`curios_utilities::candidate`]).
+/// The candidates of an address are the objects its packs hold under their names ([`curios_utilities::candidate_name`]).
 impl Candidates for Packs {
     fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Object> {
         self.prefixed(&candidate_prefix(facet, input))

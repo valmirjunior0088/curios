@@ -1,6 +1,6 @@
 //! Explicit control-flow structuring over a region's sibling blocks.
 //!
-//! An [`EmissionBody`] region is a straight-line prologue ending in a single [`EmissionTail`] transfer, plus a flat set of labeled join blocks its branches enter. The emitter must recover structured Wasm control flow — `block`/`loop`/`br`/`br_table` nesting — from that flat set. This module computes the analysis that recovery rests on: the region's control-flow graph over a virtual entry node and its blocks, its strongly connected components (the loop forest), and the reducibility of each component. From those it derives a [`region_layout`] — the loop, forward-block, and localized-dispatcher nesting the emitter walks.
+//! An [`EmissionBody`] region is a straight-line prologue ending in a single [`EmissionTail`](super::EmissionTail) transfer, plus a flat set of labeled join blocks its branches enter. The emitter must recover structured Wasm control flow — `block`/`loop`/`br`/`br_table` nesting — from that flat set. This module computes the analysis that recovery rests on: the region's control-flow graph over a virtual entry node and its blocks, its strongly connected components (the loop forest), and the reducibility of each component. From those it derives a [`region_layout`] — the loop, forward-block, and localized-dispatcher nesting the emitter walks.
 //!
 //! Every routine is iterative and orders its output by node index, so the layout is deterministic and stack-safe regardless of block count.
 
