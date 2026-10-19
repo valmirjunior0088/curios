@@ -607,7 +607,7 @@ impl UniverseContext {
         }
     }
 
-    /// This context with no constraint saying where in a text it was raised; its kind, its declaration and its binder stand. What a consed declaration carries: the position is read by a report about that declaration's own elaboration, which is over by the time it is stored.
+    /// This context with no constraint saying where in a text it was raised; its kind, its declaration and its binder stand. What a consed declaration carries, and every group a consed term holds ([`Sharing`](crate::Sharing)): the position is read by a report about that declaration's own elaboration, which is over by the time it is stored.
     pub fn unplaced(&self) -> Self {
         Self {
             parameter_count: self.parameter_count,

@@ -182,6 +182,44 @@ fn a_universe_context_is_consed_without_its_positions() {
     assert_eq!(constraint.origin.binder, raised.binder);
 }
 
+/// A group a consed term holds says nowhere where its constraints were raised, as a consed declaration's context does: a member projected out of a group built in hand is consed as the one a store restored, whose constraints carry no position.
+#[test]
+fn a_group_a_term_holds_is_consed_without_its_positions() {
+    let f = Free::local(0, Some("f"));
+    let rec = Term::rec(
+        [(
+            f,
+            Term::intrinsic(Intrinsic::NatType),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+        )],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = rec.as_ref() else {
+        panic!("a block is a group: {rec}");
+    };
+    let projected = |extent: Option<Extent>| {
+        let context = UniverseContext {
+            parameter_count: 1,
+            quality_count: 0,
+            constraints: vec![UniverseConstraint {
+                lower: Level::zero(),
+                upper: Level::param(UniverseParam(0)),
+                origin: UniverseConstraintOrigin {
+                    extent,
+                    ..UniverseConstraintOrigin::new(UniverseConstraintKind::WrittenType)
+                },
+            }],
+        };
+        let member = Term::rec_proj(group.clone().with_universe_context(context), 0);
+
+        curios_archive::to_bytes(&Sharing::new().share(&member))
+            .expect("a term archives")
+            .to_vec()
+    };
+
+    assert_eq!(projected(Some(written_at(0))), projected(None));
+}
+
 /// A spine taller than a native stack is consed, and two built apart come out the same node.
 #[test]
 fn a_deep_spine_is_consed_without_native_recursion() {

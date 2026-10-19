@@ -2234,8 +2234,28 @@ fn held_twice(term: &Term) -> bool {
     Rc::strong_count(&term.inner) > 2
 }
 
-/// Whether `node`'s children are `consed`'s, pair by pair the same allocation, and each held under no extent: a node consing would rebuild into a copy of itself.
+/// Whether `node`'s children are `consed`'s, pair by pair the same allocation, and each held under no extent, and a group it carries states its constraints under none: a node consing would rebuild into a copy of itself.
 fn holds_as_consed(node: &Subterm, consed: &Subterm) -> bool {
+    // A group's constraints are the node's own data and no child of it.
+    let group = match node {
+        Subterm::Rec(rec) => Some(&rec.group),
+        Subterm::Instance(Instance {
+            head: InstanceHead::RecProj(group, _),
+            ..
+        }) => Some(group),
+        _ => None,
+    };
+    let placed = group.is_some_and(|group| {
+        group
+            .universe_context()
+            .constraints
+            .iter()
+            .any(|constraint| constraint.origin.extent.is_some())
+    });
+    if placed {
+        return false;
+    }
+
     let mut children = Vec::new();
     let positioned = node.any_child_term(&mut |child| {
         children.push(Rc::as_ptr(&child.inner));

@@ -820,6 +820,9 @@ impl RecGroup {
             if visit.states_qualities() {
                 context.quality_count = 0;
             }
+            if visit.conses() {
+                context = context.unplaced();
+            }
             context
         };
         visit.leave_universe_scope(universe_arity);
