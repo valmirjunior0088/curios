@@ -80,9 +80,20 @@ impl Order {
     /// The items that reach each name. See the field.
     fn readers(&self) -> &Persistent<Global, Rc<BTreeSet<Global>>> {
         self.readers.get_or_init(|| {
-            let mut readers = Persistent::new();
+            // Gathered whole before any is put in the persistent table, so no reader's set is copied as it grows.
+            let mut gathered = HashMap::<Global, BTreeSet<Global>>::new();
             for (first, reach) in self.items.iter() {
-                read(&mut readers, first, &reach.names);
+                for name in &reach.names {
+                    gathered.entry(*name).or_default().insert(*first);
+                }
+            }
+            let mut readers = Persistent::new();
+            #[expect(
+                clippy::iter_over_hash_type,
+                reason = "a persistent table built of the entries reads the same whatever order they come in"
+            )]
+            for (name, reading) in gathered {
+                readers.insert(name, Rc::new(reading));
             }
             readers
         })
