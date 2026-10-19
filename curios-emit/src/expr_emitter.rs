@@ -6,7 +6,10 @@ use {
     },
     curios_num::Natural,
     curios_utilities::recurse,
-    std::collections::{BTreeMap, HashMap, HashSet},
+    std::{
+        collections::{BTreeMap, HashMap, HashSet},
+        mem,
+    },
 };
 
 #[derive(Debug)]
@@ -294,19 +297,21 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    /// Emit one region: its bindings, then its blocks laid out as a structured nesting of `loop`, forward `block`, and localized-dispatcher scopes derived from the region's control-flow analysis ([`region_layout`]). Enters a frame the caller is responsible for leaving.
+    /// Emit one region after `code`: its bindings, then its blocks laid out as a structured nesting of `loop`, forward `block`, and localized-dispatcher scopes derived from the region's control-flow analysis ([`region_layout`]). Enters a frame, holding `code` and then the region's own, that the caller is responsible for leaving.
     ///
     /// Guarded at the entry, as every data-shaped walk is: regions nest once per layout block, and a debug frame of this walk runs to tens of kilobytes, which would put a mutually recursive dictionary group's knot past a test thread's stack at eight levels.
     fn emit_region(
         &mut self,
+        code: Vec<curios_wasm::Instr>,
         params: HashMap<&'a EmissionValueName, LocalData>,
         region: &'a EmissionBody,
     ) {
-        recurse(|| self.emit_region_within(params, region))
+        recurse(|| self.emit_region_within(code, params, region))
     }
 
     fn emit_region_within(
         &mut self,
+        code: Vec<curios_wasm::Instr>,
         params: HashMap<&'a EmissionValueName, LocalData>,
         region: &'a EmissionBody,
     ) {
@@ -326,8 +331,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
         // A region with no join blocks is straight-line code ending in its tail; there is nothing to structure.
         if region.blocks.is_empty() {
-            self.context
-                .enter_frame(Frame::new(params, aggregates, vec![]));
+            self.context.enter_frame(Frame {
+                instrs: code,
+                ..Frame::new(params, aggregates, vec![])
+            });
             self.emit_let_values(&region.values);
             let tail = self.context.tail_instrs(&region.tail);
             self.emit_instrs(tail);
@@ -341,14 +348,29 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
         // The region frame registers the forward-entry block of every top-level item, so the tail and earlier items resolve their forward branches.
         let registrations = scope_registrations(&layout, region, &block_params, &dispatch);
-        self.context
-            .enter_frame(Frame::new(params, aggregates, registrations));
+        self.context.enter_frame(Frame {
+            instrs: code,
+            ..Frame::new(params, aggregates, registrations)
+        });
         self.emit_let_values(&region.values);
 
         // The tail is the innermost code: every block wraps it, so the tail can branch forward to any of them.
         let entry = self.context.tail_instrs(&region.tail);
-        let body = self.fold_items(entry, &layout, region, &block_params, &dispatch);
-        self.emit_instrs(body);
+        let code = mem::take(&mut self.region_frame().instrs);
+        let code = self.fold_items(code, entry, &layout, region, &block_params, &dispatch);
+        let frame = self.region_frame();
+        debug_assert!(
+            frame.instrs.is_empty(),
+            "the fold emits into its own frames"
+        );
+        frame.instrs = code;
+    }
+
+    /// The frame of the region being emitted.
+    fn region_frame(&mut self) -> &mut Frame<'a> {
+        self.context
+            .this_frame()
+            .expect("a region is emitted in a frame of its own")
     }
 
     /// Reserve one wasm local per block parameter, keyed by block index. A branch binds these before jumping and the block body reads them, so a block referenced from more than one scope shares the same locals.
@@ -412,34 +434,35 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    /// Fold each item's body around `entry`, wrapping every item in a forward `block` labeled by its entry point. Because the items are in a topological order, item `i` is nested inside every later item, so a forward branch to a later item exits outward as a plain `br`.
+    /// Fold each item's body around `entry`, wrapping every item in a forward `block` labeled by its entry point, after `code`. Because the items are in a topological order, item `i` is nested inside every later item, so a forward branch to a later item exits outward as a plain `br`.
+    ///
+    /// **The last item's body is emitted onto `code`.** It follows its block at the level the fold stands at, and so does the body of a region's own last item, so collected into a vector of its own and copied up, a nesting of regions would copy what its levels hold at each of them.
     fn fold_items(
         &mut self,
+        mut code: Vec<curios_wasm::Instr>,
         entry: Vec<curios_wasm::Instr>,
         items: &[LayoutItem],
         region: &'a EmissionBody,
         block_params: &[Vec<(&'a EmissionValueName, LocalData)>],
         dispatch: &BTreeMap<usize, DispatchPlan>,
     ) -> Vec<curios_wasm::Instr> {
+        let Some((last, earlier)) = items.split_last() else {
+            code.extend(entry);
+            return code;
+        };
         let mut result = entry;
-        for item in items {
-            let body = self.emit_item(item, region, block_params, dispatch);
-            let label = item_enter_label(item, region, dispatch);
-            result = [curios_wasm::Instr::Block {
-                label_name: label,
-                block_type: curios_wasm::BlockType::Empty,
-                instructions: result,
-            }]
-            .into_iter()
-            .chain(body)
-            .collect();
+        for item in earlier {
+            let entered = entered_by(item, region, dispatch, result);
+            result = self.emit_item(vec![entered], item, region, block_params, dispatch);
         }
-        result
+        code.push(entered_by(last, region, dispatch, result));
+        self.emit_item(code, last, region, block_params, dispatch)
     }
 
-    /// Emit one layout item's body: a plain block's code, a `loop` around a reducible component's interior, or a localized dispatcher.
+    /// Emit one layout item's body after `code`: a plain block's code, a `loop` around a reducible component's interior, or a localized dispatcher.
     fn emit_item(
         &mut self,
+        mut code: Vec<curios_wasm::Instr>,
         item: &LayoutItem,
         region: &'a EmissionBody,
         block_params: &[Vec<(&'a EmissionValueName, LocalData)>],
@@ -448,7 +471,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         match item {
             LayoutItem::Block(block) => {
                 let params = block_params[*block].iter().cloned().collect();
-                self.emit_region(params, &region.blocks[*block].1.region);
+                self.emit_region(code, params, &region.blocks[*block].1.region);
                 self.context.leave_frame()
             }
             LayoutItem::Loop { header, body } => {
@@ -471,22 +494,31 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 self.context.enter_frame(Frame::structural(registrations));
 
                 let header_params = block_params[*header].iter().cloned().collect();
-                self.emit_region(header_params, &region.blocks[*header].1.region);
+                self.emit_region(Vec::new(), header_params, &region.blocks[*header].1.region);
                 let header_body = self.context.leave_frame();
-                let interior = self.fold_items(header_body, rest, region, block_params, dispatch);
+                let interior = self.fold_items(
+                    Vec::new(),
+                    header_body,
+                    rest,
+                    region,
+                    block_params,
+                    dispatch,
+                );
                 self.context.leave_frame();
 
-                vec![
+                code.extend([
                     curios_wasm::Instr::Loop {
                         label_name: loop_label,
                         block_type: curios_wasm::BlockType::Empty,
                         instructions: interior,
                     },
                     curios_wasm::Instr::Unreachable,
-                ]
+                ]);
+                code
             }
             LayoutItem::Dispatch { members } => {
-                self.emit_dispatch(members, region, block_params, dispatch)
+                code.extend(self.emit_dispatch(members, region, block_params, dispatch));
+                code
             }
         }
     }
@@ -524,7 +556,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .iter()
             .map(|member| {
                 let params = block_params[*member].iter().cloned().collect();
-                self.emit_region(params, &region.blocks[*member].1.region);
+                self.emit_region(Vec::new(), params, &region.blocks[*member].1.region);
                 let label = curios_wasm::LabelName::from(format!("${}", region.blocks[*member].0));
                 (label, self.context.leave_frame())
             })
@@ -570,7 +602,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     }
 
     pub(crate) fn emit_root_region(&mut self, region: &'a EmissionBody) {
-        self.emit_region(self.context.params(), region);
+        self.emit_region(Vec::new(), self.context.params(), region);
         self.leave_last_frame();
     }
 }
@@ -632,5 +664,19 @@ fn item_enter_label(
             curios_wasm::LabelName::from(format!("${}", region.blocks[*block].0))
         }
         LayoutItem::Dispatch { members } => dispatch[&members[0]].enter_label.clone(),
+    }
+}
+
+/// `instructions` in the forward `block` `item` is entered by.
+fn entered_by(
+    item: &LayoutItem,
+    region: &EmissionBody,
+    dispatch: &BTreeMap<usize, DispatchPlan>,
+    instructions: Vec<curios_wasm::Instr>,
+) -> curios_wasm::Instr {
+    curios_wasm::Instr::Block {
+        label_name: item_enter_label(item, region, dispatch),
+        block_type: curios_wasm::BlockType::Empty,
+        instructions,
     }
 }
