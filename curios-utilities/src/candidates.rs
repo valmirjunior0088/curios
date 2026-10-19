@@ -12,6 +12,7 @@ use {
 pub enum Facet {
     Elaboration,
     Erasure,
+    Judgment,
 }
 
 impl Facet {
@@ -20,6 +21,7 @@ impl Facet {
         match self {
             Facet::Elaboration => 1,
             Facet::Erasure => 2,
+            Facet::Judgment => 3,
         }
     }
 }
@@ -29,6 +31,7 @@ impl fmt::Debug for Facet {
         formatter.write_str(match self {
             Facet::Elaboration => "elaboration",
             Facet::Erasure => "erasure",
+            Facet::Judgment => "judgment",
         })
     }
 }

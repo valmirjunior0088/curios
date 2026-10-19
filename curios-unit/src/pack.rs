@@ -261,7 +261,7 @@ pub fn rerun(kind: u8, members: &[Object]) -> Result<Vec<Object>, String> {
             ReadTable::run(
                 entries
                     .iter()
-                    .map(|entry: &&ReadEntry| (&entry.0, &entry.1)),
+                    .map(|entry: &&ReadEntry| (&entry.0, &entry.1, entry.2.as_ref())),
             )
         }),
         other => Err(format!("no run is of kind {other}")),

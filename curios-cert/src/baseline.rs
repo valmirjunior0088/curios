@@ -11,12 +11,12 @@
 //! **What a declaration's own terms decide is decided of its terms.** Its universe contexts, the levels and binders it mentions and what it spells of elaboration's own syntax are held to their rules by the walk that first met those terms, so a declaration whose terms are the baseline's is passed over by every such check whether or not its verdict is adopted.
 
 use {
-    super::{Globals, held, induct_alike, struct_alike},
+    super::{Globals, Held, held, induct_alike, struct_alike},
     curios_core::{
-        Certification, Global, InductDecl, Item, Module, Nominal, Places, Polarity, Reads, Sharing,
-        StructDecl, Term, Totality, UniverseContext, Variance,
+        Certification, Concluded, Global, InductDecl, Item, ItemRun, Module, Nominal, Places,
+        Polarity, Reads, Sharing, StructDecl, Totality, UniverseContext, Variance,
     },
-    curios_utilities::{Qualifier, digest},
+    curios_utilities::{Digest, Qualifier, digest},
     std::collections::{BTreeMap, HashMap},
 };
 
@@ -98,49 +98,172 @@ pub(crate) fn read_digest(
     let Some(held) = globals.held(name) else {
         return Ok(None);
     };
-    let sharing = Sharing::new();
-    if body {
-        let unfolds = held.value.map(|value| sharing.share(value));
+    let read = Readable {
+        held,
+        family: globals.induct_decl(name),
+        record: globals.struct_decl(name),
+        partial: globals.partial(name),
+        polarities: globals.polarities(name),
+        variances: globals.variances(name),
+    };
 
-        return curios_archive::to_bytes(&unfolds).map(|bytes| Some(digest(&bytes)));
+    read.digest(body).map(Some)
+}
+
+/// [`read_digest`] of `name` as `module` holds it where `places` says, under the verdict `partial` and the vectors `polarities` and `variances`: what a walk reads of a declaration of its own unit, as it settled it or as the baseline holds it. `Ok(None)` where the module holds no such name.
+pub(crate) fn held_digest(
+    module: &Module,
+    places: &Places,
+    name: &Global,
+    (partial, polarities, variances): (bool, Option<&[Polarity]>, Option<&[Variance]>),
+    body: bool,
+) -> Result<Option<String>, String> {
+    let Some(held) = held(module, places, name) else {
+        return Ok(None);
+    };
+    let read = Readable {
+        held,
+        family: module.induct_decl(places, name),
+        record: module.struct_decl(places, name),
+        partial,
+        polarities,
+        variances,
+    };
+
+    read.digest(body).map(Some)
+}
+
+/// What a read reads of a declaration: its terms, the registry entries its former carries, and the certifier's verdict on it.
+struct Readable<'a> {
+    held: Held<'a>,
+    family: Option<&'a InductDecl>,
+    record: Option<&'a StructDecl>,
+    partial: bool,
+    polarities: Option<&'a [Polarity]>,
+    variances: Option<&'a [Variance]>,
+}
+
+impl Readable<'_> {
+    /// The digest of what a read reads of the declaration: what it unfolds to, where `body`, and otherwise its signature. See [`read_digest`].
+    fn digest(&self, body: bool) -> Result<String, String> {
+        let sharing = Sharing::new();
+        if body {
+            let unfolds = self.held.value.map(|value| sharing.share(value));
+
+            return curios_archive::to_bytes(&unfolds).map(|bytes| digest(&bytes));
+        }
+
+        // An entry as the certifier reads one: what elaboration alone records is left out, and its scheme is held by what it is compared by.
+        let family = self.family.map(|declaration| {
+            let read = InductDecl {
+                universe_context: UniverseContext::empty(),
+                module: Qualifier::default(),
+                rep_public: false,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+                ..declaration.shared(&sharing)
+            };
+
+            (read, declaration.universe_context.inequalities())
+        });
+        let record = self.record.map(|declaration| {
+            let read = StructDecl {
+                universe_context: UniverseContext::empty(),
+                module: Qualifier::default(),
+                rep_public: false,
+                polarities: Vec::new(),
+                variances: Vec::new(),
+                ..declaration.shared(&sharing)
+            };
+
+            (read, declaration.universe_context.inequalities())
+        });
+        let part = (
+            sharing.share(self.held.type_),
+            self.held.universes.inequalities(),
+            family,
+            record,
+            self.partial,
+            self.polarities.map(<[Polarity]>::to_vec),
+            self.variances.map(<[Variance]>::to_vec),
+        );
+
+        curios_archive::to_bytes(&part).map(|bytes| digest(&bytes))
     }
+}
 
-    // An entry as the certifier reads one: what elaboration alone records is left out, and its scheme is held by what it is compared by.
-    let family = globals.induct_decl(name).map(|declaration| {
-        let read = InductDecl {
-            universe_context: UniverseContext::empty(),
-            module: Qualifier::default(),
-            rep_public: false,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-            ..declaration.shared(&sharing)
-        };
+/// Complete what judging each definition of `module` read, held where `places` says and concluded as `certification` records, where no filing has ([`curios_core::ReadRecord::complete`]): with the identity of the item judged, the certifier's own digest of each part read — of a declaration of the unit, over the unit as it stands, and of another unit's, the digest the walk recorded of it, none of a fixed unit's — and the verdict. What a store's filing asks of the certifier before the unit is filed, so a later walk at its address finds the verdict by the item it judged, and nothing outside the certifier computes any part of what that walk compares.
+pub fn complete(module: &Module, places: &Places, certification: &Certification) {
+    let mut globals = Globals::default();
+    globals.mount(module, places, certification);
+    for (name, record) in certification.records() {
+        if record.completed() {
+            continue;
+        }
+        record.complete(concluded(
+            module,
+            places,
+            certification,
+            &globals,
+            name,
+            record,
+        ));
+    }
+}
 
-        (read, declaration.universe_context.inequalities())
-    });
-    let record = globals.struct_decl(name).map(|declaration| {
-        let read = StructDecl {
-            universe_context: UniverseContext::empty(),
-            module: Qualifier::default(),
-            rep_public: false,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-            ..declaration.shared(&sharing)
-        };
+/// What judging `name`, which read `reads`, concluded and read, as a filing completes its record: `None` where no record of it can be completed.
+fn concluded(
+    module: &Module,
+    places: &Places,
+    certification: &Certification,
+    globals: &Globals<'_>,
+    name: &Global,
+    reads: &Reads,
+) -> Option<Concluded> {
+    let place = places.place(name)?.item();
+    let input = match module.items.part(place) {
+        Some(stored) => stored.digest,
+        None => ItemRun::identity(&module.items[place]).ok()?,
+    };
+    let read = |read: &Global, body: bool| -> Option<Option<Option<[u8; 32]>>> {
+        if places.place(read).is_some() {
+            return read_digest(globals, read, body)
+                .ok()
+                .map(|digest| Some(digest.as_deref().and_then(bytes_of)));
+        }
+        let recorded = certification.abroad(read).and_then(|read| match body {
+            true => read.body.as_deref(),
+            false => read.signature.as_deref(),
+        });
 
-        (read, declaration.universe_context.inequalities())
-    });
-    let part = (
-        sharing.share(held.type_),
-        held.universes.inequalities(),
-        family,
-        record,
-        globals.partial(name),
-        globals.polarities(name).map(<[Polarity]>::to_vec),
-        globals.variances(name).map(<[Variance]>::to_vec),
-    );
+        Some(recorded.map(bytes_of))
+    };
+    let signatures = reads
+        .signatures
+        .iter()
+        .map(|signature| read(signature, false))
+        .collect::<Option<Vec<_>>>()?;
+    let bodies = reads
+        .bodies
+        .iter()
+        .map(|body| read(body, true))
+        .collect::<Option<Vec<_>>>()?;
 
-    curios_archive::to_bytes(&part).map(|bytes| Some(digest(&bytes)))
+    Some(Concluded {
+        input,
+        signatures,
+        bodies,
+        totality: certification.totality(name)?,
+        vectors: certification
+            .polarities(name)
+            .zip(certification.variances(name))
+            .map(|(polarities, variances)| (polarities.to_vec(), variances.to_vec())),
+    })
+}
+
+/// The thirty-two bytes a digest spells.
+pub(crate) fn bytes_of(digest: &str) -> Option<[u8; 32]> {
+    Digest::from_hex(digest).map(|digest| *digest.as_bytes())
 }
 
 /// How a declaration a walk has settled came out against the baseline's under its name: whether everything a signature read reads of it is the baseline's — its type, its universe context, its registry entries and the certifier's verdict on it — and whether what it unfolds to is. A proof unfolds to nothing whatever its body, so an edit to one moves no read of it.
@@ -233,54 +356,44 @@ impl<'a> Adopting<'a> {
         }
     }
 
-    /// Record how `item`, judged by this walk, came out against the baseline's declaration under each of its names: `partial` is the walk's classification of a name once the item is classified, and `polarities` the vectors it has filed.
+    /// Record how `item`, judged by this walk where `module` holds it at the places `places` gives, came out against the baseline's declaration under each of its names: `partial` is the walk's classification of a name once the item is classified, and `polarities` and `variances` the vectors it has filed.
+    ///
+    /// **Told by the digest a read records** ([`held_digest`]), of the declaration as the walk settled it and as the baseline holds it: a part that digests alike is one to every judgment, and one that differs in a binder's name alone is told apart, so a record carried from the baseline digests what a walk that judged every declaration would.
     pub(crate) fn judged(
         &mut self,
+        (module, places): (&Module, &Places),
         item: &Item,
         partial: impl Fn(&Global) -> bool,
         polarities: &BTreeMap<Global, Vec<Polarity>>,
         variances: &BTreeMap<Global, Vec<Variance>>,
     ) {
-        for (index, name) in item.declared_names().into_iter().enumerate() {
-            let stood = match held(self.baseline.module, self.baseline.places, name) {
-                None => Stood {
-                    signature: false,
-                    body: false,
-                },
-                Some(held) => {
-                    let certification = self.baseline.certification;
-                    let verdict = partial(name)
-                        == (certification.totality(name) != Some(Totality::Total))
-                        && polarities.get(name).map(Vec::as_slice)
-                            == certification.polarities(name)
-                        && variances.get(name).map(Vec::as_slice) == certification.variances(name);
-                    let (same_type, same_body, same_universes) = match item {
-                        Item::Let(definition) => (
-                            definition.type_ == *held.type_,
-                            (!definition.proof).then_some(&definition.body) == held.value,
-                            definition.universe_context == *held.universes,
-                        ),
-                        Item::Rec(rec) => (
-                            rec.group.member_type(index) == *held.type_,
-                            (!rec.definitions[index].proof)
-                                .then_some(&Term::rec_proj(rec.group.clone(), index))
-                                == held.value,
-                            rec.group.universe_context() == held.universes,
-                        ),
-                    };
-
-                    Stood {
-                        signature: same_type
-                            && same_universes
-                            && verdict
-                            && self.baseline.places.place(name).is_some_and(|place| {
-                                let earlier = &self.baseline.module.items[place.item()];
-
-                                Baseline::entries_alike(name, item, earlier)
-                            }),
-                        body: same_body,
-                    }
-                }
+        let baseline = self.baseline;
+        let certification = baseline.certification;
+        for name in item.declared_names() {
+            let now = |body| {
+                let verdict = (
+                    partial(name),
+                    polarities.get(name).map(Vec::as_slice),
+                    variances.get(name).map(Vec::as_slice),
+                );
+                held_digest(module, places, name, verdict, body)
+                    .ok()
+                    .flatten()
+            };
+            let then = |body| {
+                let verdict = (
+                    certification.totality(name) != Some(Totality::Total),
+                    certification.polarities(name),
+                    certification.variances(name),
+                );
+                held_digest(baseline.module, baseline.places, name, verdict, body)
+                    .ok()
+                    .flatten()
+            };
+            let alike = |body| now(body).is_some_and(|now| Some(now) == then(body));
+            let stood = Stood {
+                signature: alike(false),
+                body: alike(true),
             };
             self.stood.insert(*name, stood);
         }

@@ -170,7 +170,11 @@ impl Kind {
                 if entries.is_empty() {
                     return Ok(Vec::new());
                 }
-                let run = ReadTable::run(entries.iter().map(|(_, name, held)| (name, &***held)))?;
+                let run = ReadTable::run(
+                    entries
+                        .iter()
+                        .map(|(_, name, held)| (name, &***held, held.made())),
+                )?;
 
                 members(
                     ReadTable::KIND,
@@ -205,7 +209,7 @@ fn members(
         .collect()
 }
 
-/// What a certified unit stores of what judging its definitions read, `recorded`: its own part and the kind of its entries, what it was restored from where it was and its own otherwise, each definition's reads by the digest they are stored under ([`ReadTable::identity`]).
+/// What a certified unit stores of what judging its definitions read, `recorded`: its own part and the kind of its entries, what it was restored from where it was and its own otherwise, each definition's reads by the digest they are stored under ([`curios_core::ReadRecord::digest`]).
 pub(crate) fn reads_indexed(recorded: &Recorded<Read>) -> Result<(Cow<'_, [u8]>, Kind), String> {
     if let Some((table, entries)) = recorded.as_stored() {
         return Ok((
@@ -218,7 +222,7 @@ pub(crate) fn reads_indexed(recorded: &Recorded<Read>) -> Result<(Cow<'_, [u8]>,
     let entries = read
         .definitions()
         .map(|(name, held)| {
-            let digest = held.digest(|reads| ReadTable::identity(name, reads))?;
+            let digest = held.digest(name)?;
 
             Ok((digest, *name, Rc::clone(held)))
         })

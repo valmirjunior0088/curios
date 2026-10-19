@@ -14,12 +14,14 @@ use {
         UniverseContext, UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
     },
     curios_utilities::{
-        Filed, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded, Records, Sorted,
+        Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
+        Records, Sorted, candidate_name,
     },
     std::{
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         fmt,
+        ops::Deref,
         rc::Rc,
     },
 };
@@ -168,8 +170,105 @@ impl ReadBy {
     }
 }
 
+/// What the certifier completes a definition's reads with where its unit is filed: the identity of the item judged, the certifier's own digest of each part read, and what it concluded of the definition. What a later walk takes the verdict from where it judges an item of that identity and finds every part read digesting as it did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Concluded {
+    /// The identity of the item judged ([`ItemRun::identity`](crate::ItemRun::identity)).
+    pub input: Digest,
+    /// The digest of what each signature read read, in the order of the reads: `None` where nothing is recorded of it, it being a fixed unit's, and otherwise the digest, `None` within where no unit holds the name.
+    pub signatures: Vec<Option<Option<[u8; 32]>>>,
+    /// The same, of each body read.
+    pub bodies: Vec<Option<Option<[u8; 32]>>>,
+    /// The definition's totality, closed over what it mentions.
+    pub totality: Totality,
+    /// The vectors of the registry entry its former carries, where it carries one.
+    pub vectors: Option<(Vec<Polarity>, Vec<Variance>)>,
+}
+
+/// What judging a definition read as a record holds it, and once a filing completed it, what judged it and what it concluded ([`Concluded`]): shared with every version that keeps it, beside the digest it is stored under.
+#[derive(Debug)]
+pub struct ReadRecord {
+    reads: Reads,
+    /// What a filing completed it with: unset until one did, `None` where nothing completes it.
+    made: OnceCell<Option<Concluded>>,
+    /// The digest it is stored under, kept once it is complete.
+    digest: OnceCell<Digest>,
+}
+
+impl ReadRecord {
+    /// The record of a judgment that read `reads`, which no filing has completed.
+    pub fn new(reads: Reads) -> Self {
+        Self {
+            reads,
+            made: OnceCell::new(),
+            digest: OnceCell::new(),
+        }
+    }
+
+    /// The record a store held under `digest`: complete where it was filed with `made`, and otherwise left for a filing to complete.
+    pub fn restored(reads: Reads, made: Option<Concluded>, digest: Digest) -> Self {
+        let record = Self::new(reads);
+        if let Some(made) = made {
+            let _ = record.made.set(Some(made));
+            let _ = record.digest.set(digest);
+        }
+
+        record
+    }
+
+    /// What judged the definition and what it concluded, where a filing completed the record with it.
+    pub fn made(&self) -> Option<&Concluded> {
+        self.made.get()?.as_ref()
+    }
+
+    /// Whether a filing has completed the record, with what judged the definition or with nothing.
+    pub fn completed(&self) -> bool {
+        self.made.get().is_some()
+    }
+
+    /// Complete the record with `made`, where nothing has: the record of every version that holds it.
+    pub fn complete(&self, made: Option<Concluded>) {
+        let _ = self.made.set(made);
+    }
+
+    /// The digest a store names this record of the definition `name` by: where it is complete, the candidate's name, which a store finds it among the records filed for the item it judged by ([`candidate_name`]), and otherwise the digest of its run alone.
+    pub fn digest(&self, name: &Global) -> Result<Digest, String> {
+        if let Some(digest) = self.digest.get() {
+            return Ok(*digest);
+        }
+        let run = ReadTable::run([(name, &self.reads, self.made())])?;
+        let digest = match self.made() {
+            Some(made) => candidate_name(Facet::Judgment, &made.input, &run),
+            None => Digest::of(&run),
+        };
+        if self.completed() {
+            let _ = self.digest.set(digest);
+        }
+
+        Ok(digest)
+    }
+}
+
+/// A record reads as what the judgment read.
+impl Deref for ReadRecord {
+    type Target = Reads;
+
+    fn deref(&self) -> &Reads {
+        &self.reads
+    }
+}
+
+/// Two records are one where they say the same was read: what completed them is a function of that and of the unit.
+impl PartialEq for ReadRecord {
+    fn eq(&self, other: &Self) -> bool {
+        self.reads == other.reads
+    }
+}
+
+impl Eq for ReadRecord {}
+
 /// What judging a definition read, as a record holds it: shared with every version that keeps it, beside the digest it is stored under.
-pub type HeldReads = Rc<Filed<Reads>>;
+pub type HeldReads = Rc<ReadRecord>;
 
 /// What a walk's judgments read, held apart from what they concluded: of the items of its own unit, by name, and of the declarations of other units, each by the digest of the part read.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -206,13 +305,15 @@ impl Records for Read {
                     unread.insert(ReadTable::read(bytes)?.into_iter().map(Some).collect())
                 }
             };
-            let (name, reads) = usize::try_from(member.index)
+            let (name, reads, made) = usize::try_from(member.index)
                 .ok()
                 .and_then(|index| run.get_mut(index))
                 .and_then(Option::take)
                 .ok_or_else(|| format!("a run of reads holds no member {}", member.index))?;
-            read.by
-                .insert(name, Rc::new(Filed::stored(reads, object.digest)));
+            read.by.insert(
+                name,
+                Rc::new(ReadRecord::restored(reads, made, object.digest)),
+            );
         }
 
         Ok(read)
@@ -375,6 +476,11 @@ impl Certification {
         self.read().abroad.get(name)
     }
 
+    /// What judging each definition read, as the record holds it, in the order of the definitions' names: what a filing completes.
+    pub fn records(&self) -> impl Iterator<Item = (&Global, &HeldReads)> {
+        self.read().definitions()
+    }
+
     /// The declarations of other units the walk recorded a read of.
     pub fn read_abroad(&self) -> impl Iterator<Item = &Global> {
         self.read().abroad.iter().map(|(name, _)| name)
@@ -412,7 +518,16 @@ impl Revision {
     /// Record what the walk concluded of `name`, which it judged.
     pub fn judged(&mut self, name: Global, certified: Certified) {
         self.totalities.insert(name, certified.totality);
-        self.by.insert(name, Rc::new(Filed::new(certified.reads)));
+        self.by
+            .insert(name, Rc::new(ReadRecord::new(certified.reads)));
+    }
+
+    /// Record `record`, a record a store held, as what judging `name` read, and its verdict as the walk's: a definition whose verdict the walk took from it.
+    pub fn adopted(&mut self, name: Global, record: HeldReads) {
+        if let Some(made) = record.made() {
+            self.totalities.insert(name, made.totality);
+        }
+        self.by.insert(name, record);
     }
 
     /// Take out everything recorded of `name`, which the unit no longer declares.

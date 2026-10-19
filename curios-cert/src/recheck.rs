@@ -51,23 +51,25 @@ mod universes_tests;
 
 use {
     super::{
-        Adopting, Baseline, Error, Globals, Kernel, PositionVerdicts, Totals, Unvisited,
+        Adopting, Baseline, Error, Globals, Kernel, PositionVerdicts, Totals, Unvisited, bytes_of,
         check_definition, check_entrypoint, check_induct_decl, check_positions, check_rec_group,
-        check_struct_decl, define_as_stated, free_locals_of, open_quality, positivity_vectors,
-        read_digest, rewrite_universe_levels_scoped_shared, satisfiable, universe_metas,
-        variance_vectors,
+        check_struct_decl, define_as_stated, free_locals_of, held_digest, open_quality,
+        positivity_vectors, read_digest, rewrite_universe_levels_scoped_shared, satisfiable,
+        universe_metas, variance_vectors,
     },
     curios_analysis::{Declarations, Erased, PositivityRefusal},
     curios_core::{
-        Abroad, Bound, Certification, Certified, Changes, Entrypoint, Free, Global, InductDecl,
-        Item, Level, Lexicon, MetavarId, Module, Places, Polarity, Program, Reads, StructDecl,
-        Term, Totality, UniverseContext, Variance, Zonked,
+        Abroad, Bound, Certification, Certified, Changes, Concluded, Entrypoint, Free, Global,
+        HeldReads, InductDecl, Item, ItemRun, Level, Lexicon, MetavarId, Module, Places, Polarity,
+        Program, ReadRecord, ReadTable, Reads, StructDecl, Term, Totality, UniverseContext,
+        Variance, Zonked,
     },
-    curios_utilities::{SyntaxRegistry, grown},
+    curios_utilities::{Candidates, Facet, SyntaxRegistry, grown},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         mem,
+        rc::Rc,
     },
 };
 
@@ -179,12 +181,14 @@ pub fn certify_module(
 }
 
 /// [`certify_module`] for a unit compiled over a baseline: the walk is handed the earlier walk's module and record whole and adopts each of its verdicts that still stands, judging every other declaration — see [`Baseline`]. Which declarations those are is this walk's to decide, from the reads the earlier one filed, and no caller's. `places` is where `module` holds each name.
+///
+/// **`candidates` is what a store at the unit's address holds of verdicts filed before**, by the item each judged: a declaration the walk would judge takes a verdict from a record there where every part it read digests as it did, by the certifier's own digest ([`complete`](crate::complete)).
 pub fn certify_module_over(
     module: &Zonked<Module>,
     budget: u64,
     globals: &Globals,
     baseline: Baseline<'_>,
-    places: &Places,
+    (places, candidates): (&Places, Option<&dyn Candidates>),
     syntax: SyntaxRegistry,
 ) -> Rechecked {
     let mut kernel = Kernel::new(budget, syntax);
@@ -194,7 +198,11 @@ pub fn certify_module_over(
         module.as_module(),
         None,
         globals,
-        Some(Over { baseline, places }),
+        Some(Over {
+            baseline,
+            places,
+            candidates,
+        }),
     )
 }
 
@@ -447,11 +455,12 @@ fn verdicts_into<'s>(
     grown(|| verdicts_within(kernel, module, entry, globals, over))
 }
 
-/// A walk over a baseline: the earlier walk, handed over whole, and where the module being judged holds each name.
+/// A walk over a baseline: the earlier walk, handed over whole, where the module being judged holds each name, and what a store holds of verdicts filed before.
 #[derive(Clone, Copy)]
 pub(crate) struct Over<'s> {
     pub(crate) baseline: Baseline<'s>,
     pub(crate) places: &'s Places,
+    pub(crate) candidates: Option<&'s dyn Candidates>,
 }
 
 /// The walk: `module`'s items, then — for a program — the term `entry` closes it with. Over a baseline, the walk visits the items whose terms or registry entries are not the baseline's and the declarations whose filed reads could reach them ([`Changed`]): it judges the first, and of the others adopts each verdict that stands in its turn and judges the rest ([`Baseline`]); every other declaration is the baseline's, read where the baseline holds it once the walk has passed it, as a walk that adopted it there would read it.
@@ -649,6 +658,10 @@ fn verdicts_within<'s>(
     let mut variances: BTreeMap<Global, Vec<Variance>> = BTreeMap::new();
     // The names of the declarations the walk judged, whose reads are its own.
     let mut judged = Vec::new();
+    // The records the walk took a verdict from, of a store, by the name each was filed under.
+    let mut taken = BTreeMap::<Global, HeldReads>::new();
+    // The names of the declarations the walk has settled, judged or adopted: what a record a store holds may be held to.
+    let mut settled = BTreeSet::<Global>::new();
 
     // The items as the module stores them, which is every item after the items it reaches where the module was made by the elaborator (`Module::ordered`). The walk sorts nothing: an item that names one stored after it finds the name unbound, and a family it stores in one accepted after it finds no vector filed, each of which refuses.
     for place in &walk {
@@ -677,6 +690,53 @@ fn verdicts_within<'s>(
                 variances.insert(name, vector);
             }
             adopting.adopted(item);
+            settled.extend(item.declared_names().into_iter().copied());
+            continue;
+        }
+
+        // A declaration the walk would judge takes the verdict of a record a store holds of the item, where every part the record read digests as it did.
+        if let Some(over) = over
+            && let Some(candidates) = over.candidates
+            && let Some(records) = {
+                let now = Settled {
+                    module,
+                    places: over.places,
+                    baseline: over.baseline,
+                    settled: &settled,
+                    totals: &totals,
+                    polarities: &polarities,
+                    variances: &variances,
+                };
+                stored(candidates, globals, kernel, &now, *place, item)
+            }
+        {
+            let refusals = take(kernel, item, &records);
+            verdicts.extend(refusals);
+            for (name, record) in records {
+                reads.insert(name, (**record).clone());
+                let made = record.made().expect("a record taken is complete");
+                if made.totality != Totality::Total {
+                    totals.adopt(name);
+                }
+                if let Some((vector, variance)) = made.vectors.clone() {
+                    kernel.file_polarities(&name, vector.clone());
+                    kernel.file_variances(&name, variance.clone());
+                    polarities.insert(name, vector);
+                    variances.insert(name, variance);
+                }
+                judged.push(name);
+                taken.insert(name, record);
+            }
+            if let Some(adopting) = &mut adopting {
+                adopting.judged(
+                    (module, over.places),
+                    item,
+                    |name| totals.partial(kernel, name),
+                    &polarities,
+                    &variances,
+                );
+            }
+            settled.extend(item.declared_names().into_iter().copied());
             continue;
         }
 
@@ -796,14 +856,16 @@ fn verdicts_within<'s>(
         );
 
         // How the item came out against the baseline's, for the declarations that read it.
-        if let Some(adopting) = &mut adopting {
+        if let (Some(adopting), Some(over)) = (&mut adopting, over) {
             adopting.judged(
+                (module, over.places),
                 item,
                 |name| totals.partial(kernel, name),
                 &polarities,
                 &variances,
             );
         }
+        settled.extend(item.declared_names().into_iter().copied());
     }
     // Past every item: the entry reads them all.
     kernel.at(usize::MAX);
@@ -840,6 +902,7 @@ fn verdicts_within<'s>(
             &changed,
             Judged {
                 names: &judged,
+                taken: &taken,
                 reads: &reads,
                 totality: &totality,
                 polarities: &polarities,
@@ -899,6 +962,8 @@ fn verdicts_within<'s>(
 /// What a walk over a baseline concluded of the declarations it judged: their names, what each read, how each is classified, and the vectors of the entries it accepted.
 struct Judged<'w> {
     names: &'w [Global],
+    /// The records of a store the walk took the verdicts of some of `names` from, which are filed as they were taken.
+    taken: &'w BTreeMap<Global, HeldReads>,
     reads: &'w BTreeMap<Global, Reads>,
     totality: &'w dyn Fn(&Global) -> Totality,
     polarities: &'w BTreeMap<Global, Vec<Polarity>>,
@@ -916,13 +981,16 @@ fn revised(
 ) -> Certification {
     let mut revision = baseline.certification.revised();
     for name in judged.names {
-        revision.judged(
-            *name,
-            Certified {
-                totality: (judged.totality)(name),
-                reads: judged.reads.get(name).cloned().unwrap_or_default(),
-            },
-        );
+        match judged.taken.get(name) {
+            Some(record) => revision.adopted(*name, Rc::clone(record)),
+            None => revision.judged(
+                *name,
+                Certified {
+                    totality: (judged.totality)(name),
+                    reads: judged.reads.get(name).cloned().unwrap_or_default(),
+                },
+            ),
+        }
         let vectors = judged
             .polarities
             .get(name)
@@ -1190,6 +1258,207 @@ fn read_stands(
     asked.borrow_mut().insert((*name, body), stands);
 
     stands
+}
+
+/// What a walk has settled where it asks whether a record a store holds stands: its module, where the module holds each name, the baseline beneath it, the names settled so far, and the verdicts and vectors it holds of them.
+struct Settled<'w> {
+    module: &'w Module,
+    places: &'w Places,
+    baseline: Baseline<'w>,
+    settled: &'w BTreeSet<Global>,
+    totals: &'w Totals<'w>,
+    polarities: &'w BTreeMap<Global, Vec<Polarity>>,
+    variances: &'w BTreeMap<Global, Vec<Variance>>,
+}
+
+/// The records a store holds of a judgment of `item`, at `place`, by the item's identity, one for each name it declares, where every part each read digests now as it did ([`ReadRecord`]): `None` where some name has none that stands.
+///
+/// **Read by the certifier's own digest, of what is settled.** A part of a declaration of the walk's unit is digested as the walk settled it, or as the baseline holds it where the walk passed it unvisited; one not settled by now is one the order does not account for, and no record that read it stands. A part of another unit is digested where it stands, and a fixed unit's is recorded nowhere. A part of the item's own is read under the verdict the record holds of it, which is what taking it makes the walk's.
+fn stored(
+    candidates: &dyn Candidates,
+    globals: &Globals,
+    kernel: &Kernel,
+    now: &Settled<'_>,
+    place: usize,
+    item: &Item,
+) -> Option<Vec<(Global, HeldReads)>> {
+    let names = item.declared_names();
+    let identity = match now.module.items.part(place) {
+        Some(stored) => stored.digest,
+        None => ItemRun::identity(item).ok()?,
+    };
+    curios_profile::profile!("certify::candidates");
+    let found = candidates
+        .candidates(Facet::Judgment, &identity)
+        .into_iter()
+        .filter_map(|object| {
+            let member = object
+                .member
+                .filter(|member| member.kind == ReadTable::KIND)?;
+            let (name, reads, made) =
+                ReadTable::member(object.bytes.as_slice(), member.index).ok()?;
+            let made = made.filter(|made| {
+                made.input == identity
+                    && made.signatures.len() == reads.signatures.len()
+                    && made.bodies.len() == reads.bodies.len()
+            })?;
+
+            Some((
+                name,
+                Rc::new(ReadRecord::restored(reads, Some(made), object.digest)),
+            ))
+        })
+        .collect::<Vec<_>>();
+    // What a record says of a name of the item's own is read under the verdict the first record of that name holds: where records disagree, a part read digests otherwise, and none stands.
+    let mut own = HashMap::<Global, &Concluded>::new();
+    for (name, record) in &found {
+        if let Some(made) = record.made() {
+            own.entry(*name).or_insert(made);
+        }
+    }
+
+    names
+        .iter()
+        .map(|name| {
+            found
+                .iter()
+                .find(|(found, record)| {
+                    found == *name && stands(globals, kernel, now, &names, &own, record)
+                })
+                .map(|(name, record)| (*name, Rc::clone(record)))
+        })
+        .collect()
+}
+
+/// Whether every part `record` read digests now as it did. See [`stored`].
+fn stands(
+    globals: &Globals,
+    kernel: &Kernel,
+    now: &Settled<'_>,
+    names: &[&Global],
+    own: &HashMap<Global, &Concluded>,
+    record: &ReadRecord,
+) -> bool {
+    let Some(made) = record.made() else {
+        return false;
+    };
+    let digest = |read: &Global, body: bool| -> Option<Option<Option<[u8; 32]>>> {
+        let unit = now.places.place(read).is_some();
+        if unit && names.contains(&read) {
+            let concluded = own.get(read)?;
+            let verdict = (
+                concluded.totality != Totality::Total,
+                concluded
+                    .vectors
+                    .as_ref()
+                    .map(|(polarities, _)| polarities.as_slice()),
+                concluded
+                    .vectors
+                    .as_ref()
+                    .map(|(_, variances)| variances.as_slice()),
+            );
+            return held_digest(now.module, now.places, read, verdict, body)
+                .ok()
+                .map(|digest| Some(digest.as_deref().and_then(bytes_of)));
+        }
+        if unit {
+            let verdict = match (now.settled.contains(read), kernel.passed(read)) {
+                (true, _) => (
+                    now.totals.partial(kernel, read),
+                    now.polarities.get(read).map(Vec::as_slice),
+                    now.variances.get(read).map(Vec::as_slice),
+                ),
+                (false, true) => (
+                    now.baseline.certification.totality(read) != Some(Totality::Total),
+                    now.baseline.certification.polarities(read),
+                    now.baseline.certification.variances(read),
+                ),
+                (false, false) => return None,
+            };
+            return held_digest(now.module, now.places, read, verdict, body)
+                .ok()
+                .map(|digest| Some(digest.as_deref().and_then(bytes_of)));
+        }
+        if globals.in_scope(read) && !globals.recorded(read) {
+            return Some(None);
+        }
+
+        read_digest(globals, read, body)
+            .ok()
+            .map(|digest| digest.as_deref().map(bytes_of))
+    };
+
+    record
+        .signatures
+        .iter()
+        .zip(&made.signatures)
+        .all(|(read, recorded)| digest(read, false).is_some_and(|now| now == *recorded))
+        && record
+            .bodies
+            .iter()
+            .zip(&made.bodies)
+            .all(|(read, recorded)| digest(read, true).is_some_and(|now| now == *recorded))
+}
+
+/// Take the verdict `records` hold of `item`, a record for each name it declares: each name stands at its type with its real body, as the walk leaves an item it does not judge, and what the walk refuses of it is handed back — a stamp that says `Total` where the verdict taken does not, as for an item judged.
+fn take(kernel: &mut Kernel, item: &Item, records: &[(Global, HeldReads)]) -> Vec<Verdict> {
+    let mut refusals = Vec::new();
+    let mut defined =
+        |name: &Global, type_: &Term, body: &Term, proof: bool, universes: &UniverseContext| {
+            if let Err(error) =
+                define_as_stated(kernel, &Free::from(name), type_, body, proof, universes)
+            {
+                refusals.push(Verdict {
+                    name: Some(*name),
+                    error,
+                });
+            }
+        };
+    let stamps = match item {
+        Item::Let(definition) => {
+            defined(
+                &definition.name,
+                &definition.type_,
+                &definition.body,
+                definition.proof,
+                &definition.universe_context,
+            );
+            vec![(definition.name, definition.totality)]
+        }
+        Item::Rec(rec) => {
+            let universes = rec.group.universe_context().clone();
+            for (member, definition) in rec.definitions.iter().enumerate() {
+                defined(
+                    &definition.name,
+                    &rec.group.member_type(member),
+                    &Term::rec_proj(rec.group.clone(), member),
+                    definition.proof,
+                    &universes,
+                );
+            }
+            rec.definitions
+                .iter()
+                .map(|definition| (definition.name, definition.totality))
+                .collect()
+        }
+    };
+    for (name, stamp) in stamps {
+        let taken = records
+            .iter()
+            .find(|(held, _)| *held == name)
+            .and_then(|(_, record)| record.made());
+        if stamp.is_total() && taken.is_some_and(|made| made.totality != Totality::Total) {
+            refusals.push(Verdict {
+                name: Some(name),
+                error: Error::NotTotal {
+                    erased: Erased::Proof,
+                    reached: None,
+                },
+            });
+        }
+    }
+
+    refusals
 }
 
 /// What adopting one item's verdict files: the refusals met on the way, each name's reads as the baseline's record holds them, the names that record calls partial, and the polarity vector of each registry entry the item declares.

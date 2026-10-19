@@ -2,13 +2,13 @@
 
 use {
     super::test_support::*,
-    crate::{Baseline, Error, Globals, Kernel, Rechecked, induct_alike, struct_alike},
+    crate::{Baseline, Error, Globals, Kernel, Rechecked, complete, induct_alike, struct_alike},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Certification, Certified, Free, Global, Intrinsic, Item, Module, Nat, Places, Reads, Term,
-        Totality,
+        Certification, Certified, Free, Global, Intrinsic, Item, ItemRun, Module, Nat, Places,
+        ReadTable, Reads, Term, Totality,
     },
-    curios_utilities::Qualifier,
+    curios_utilities::{Candidates, Digest, Facet, Member, Object, Qualifier, candidate_prefix},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -74,6 +74,16 @@ fn walked(module: &Module) -> Rechecked {
 
 /// `module` walked over `baseline` as `certification` records it.
 fn walked_over(module: &Module, baseline: &Module, certification: &Certification) -> Rechecked {
+    walked_among(module, baseline, certification, None)
+}
+
+/// [`walked_over`], taking what it can from what `store` holds.
+fn walked_among(
+    module: &Module,
+    baseline: &Module,
+    certification: &Certification,
+    store: Option<&dyn Candidates>,
+) -> Rechecked {
     let (places, now) = (Places::of(baseline), Places::of(module));
     let globals = Globals::default();
 
@@ -89,6 +99,7 @@ fn walked_over(module: &Module, baseline: &Module, certification: &Certification
                 certification,
             },
             places: &now,
+            candidates: store,
         }),
     )
 }
@@ -323,6 +334,16 @@ fn a_verdict_that_moves_reaches_what_read_it_through_a_declaration_whose_terms_s
     );
 }
 
+/// `alias` respelled: an application that reduces to `Nat`.
+fn applied_nat() -> Term {
+    let t = Free::local(11, Some("t"));
+
+    Term::apply(
+        Term::func([(t, Term::type_ground())], Term::free_var(&t)),
+        [nat()],
+    )
+}
+
 /// A body read falls with the body: `three` unfolded `alias`, so an `alias` respelled as an application that reduces to `Nat` has `three` judged again. The baseline's record calls `three` partial, which an adopted `three` stamped total would be refused over; judged, it is total and the record says so.
 #[test]
 fn a_body_read_falls_with_an_edit_to_the_body() {
@@ -333,12 +354,7 @@ fn a_body_read_falls_with_an_edit_to_the_body() {
             ..certified
         }
     });
-    let t = Free::local(11, Some("t"));
-    let respelled = Term::apply(
-        Term::func([(t, Term::type_ground())], Term::free_var(&t)),
-        [nat()],
-    );
-    let edited = reading_module(respelled, Term::free_var);
+    let edited = reading_module(applied_nat(), Term::free_var);
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -514,4 +530,115 @@ fn a_read_of_a_body_falls_where_its_definition_starts_or_stops_being_a_proof() {
             "marked in the baseline: {marked}",
         );
     }
+}
+
+/// What a store holds of the walks filed into it, in memory: each record a member of its walk's run, under the name its filing completed it with.
+struct Shelf(Vec<Object>);
+
+impl Shelf {
+    /// A store holding `certification`, a walk of `module`, its records completed as a filing completes them.
+    fn filed(module: &Module, certification: &Certification) -> Self {
+        complete(module, &Places::of(module), certification);
+        let records = certification.records().collect::<Vec<_>>();
+        let run = ReadTable::run(
+            records
+                .iter()
+                .map(|&(name, record)| (name, &***record, record.made())),
+        )
+        .expect("a run archives");
+
+        Shelf(
+            records
+                .iter()
+                .zip(0..)
+                .map(|(&(name, record), index)| Object {
+                    digest: record.digest(name).expect("a record archives"),
+                    member: Some(Member {
+                        kind: ReadTable::KIND,
+                        index,
+                    }),
+                    ..Object::of(run.clone())
+                })
+                .collect(),
+        )
+    }
+}
+
+impl Candidates for Shelf {
+    fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Object> {
+        let prefix = candidate_prefix(facet, input);
+        self.0
+            .iter()
+            .filter(|object| object.digest.as_bytes().starts_with(&prefix))
+            .cloned()
+            .collect()
+    }
+
+    fn object(&self, digest: &Digest) -> Option<Object> {
+        self.0
+            .iter()
+            .find(|object| object.digest == *digest)
+            .cloned()
+    }
+}
+
+/// `written` with `five : Nat = identity(6)`: the edit both walks below are over.
+fn edited_five() -> Module {
+    let five = authored(
+        &global("five"),
+        nat(),
+        Term::apply(
+            Term::free_var(&Free::from(&global("identity"))),
+            [literal(6)],
+        ),
+    );
+
+    replaced(&versioned(written()), "five", five)
+}
+
+/// A declaration the walk would judge takes a verdict a store holds of its item where every part that verdict read digests as it did: `five` was written, edited and written back, so the baseline's `five` is another item, and the store's record of the first is taken, the mark with it.
+#[test]
+fn a_declaration_to_judge_takes_a_stores_verdict_where_every_part_it_read_stands() {
+    let first = marked();
+    let store = Shelf::filed(&written(), &first);
+    let baseline = edited_five();
+    let certification = walked(&baseline).certification;
+
+    let rechecked = walked_among(&written(), &baseline, &certification, Some(&store));
+
+    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(rechecked.certification, first);
+}
+
+/// A store's verdict whose reads moved is passed over: the record of `five` says it unfolded `alias`, which is respelled as an application that reduces to `Nat`, so `five`, written back, is judged and files its own reads, as a walk over every declaration does.
+#[test]
+fn a_stores_verdict_that_read_a_part_since_moved_is_passed_over() {
+    let unfolding = doctored(&walked(&written()).certification, "five", |certified| {
+        Certified {
+            reads: Reads {
+                signatures: BTreeSet::from([global("identity")]),
+                bodies: BTreeSet::from([global("alias")]),
+            },
+            ..certified
+        }
+    });
+    let store = Shelf::filed(&written(), &unfolding);
+    let baseline = edited_five();
+    let certification = walked(&baseline).certification;
+    let respelled = reading_module(applied_nat(), Term::free_var);
+
+    let rechecked = walked_among(&respelled, &baseline, &certification, Some(&store));
+
+    let place = Places::of(&respelled)
+        .place(&global("five"))
+        .expect("the module declares the name")
+        .item();
+    let identity = ItemRun::identity(&respelled.items[place]).expect("an item archives");
+    assert_eq!(
+        store.candidates(Facet::Judgment, &identity).len(),
+        1,
+        "the store holds a verdict of the item",
+    );
+    assert_eq!(rechecked.verdicts, Vec::new());
+    assert_eq!(rechecked.certification, walked(&respelled).certification);
 }

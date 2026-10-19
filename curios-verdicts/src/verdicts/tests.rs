@@ -631,7 +631,7 @@ fn packed_counts(root: &Path) -> Vec<usize> {
     counts
 }
 
-/// A unit compiled over its slot files the objects it made and none it kept: an edit to one declaration's text, of three, writes a pack of that declaration's lowered item, elaborated item, erased form and lowering record, of its file's scan and texts, and of the records of its elaboration and its erasure, each named by what it was made from, beside the pack the first filing wrote; what judging it read stands, since a string respelled reads nothing new.
+/// A unit compiled over its slot files the objects it made and none it kept: an edit to one declaration's text, of three, writes a pack of that declaration's lowered item, elaborated item, erased form and lowering record, of its file's scan and texts, and of the records of its elaboration, its erasure and its judgment, each named by what it was made from, beside the pack the first filing wrote.
 #[test]
 fn a_refiling_writes_only_the_objects_it_made() {
     let root = project("refiled-objects");
@@ -644,7 +644,7 @@ fn a_refiling_writes_only_the_objects_it_made() {
     write(&root, "shape/lib.crs", &library_of_three("second"));
     assert!(!reused(&root), "an edited unit is compiled again");
 
-    assert_eq!(packed_counts(&root), [8, first]);
+    assert_eq!(packed_counts(&root), [9, first]);
     assert!(reused(&root), "and what it filed is restored");
 }
 

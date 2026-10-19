@@ -3,7 +3,8 @@
 use {
     super::{granted, withheld},
     crate::{
-        Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, compile_unit, compile_unit_over, recheck_over,
+        Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, Over, compile_unit, compile_unit_over,
+        complete_records, recheck_over,
         tests::test_support::{
             Store, assert_stored_alike, compile_with_units, elaborated_above, elaborated_wholesale,
             lowering_stored, restored, traces_stored,
@@ -367,7 +368,7 @@ fn std_recompile_reproduction() {
     });
 }
 
-/// Whether the standard library, an edit to it undone, takes each declaration the edit made again from what a store filed of it before: for a leaf edit and for a hub, the library compiled whole and filed, the edit compiled over it and filed, and the library's own tree compiled over the edit with the store's candidates, compared as stored with the first. A measurement, since each edit compiles the library whole; counted, and it asserts, since a unit other than the first is the fault it is here to name.
+/// Whether the standard library, an edit to it undone, takes each declaration the edit made again from what a store filed of it before: for a leaf edit and for a hub, the library compiled whole and filed, the edit compiled over it and filed, and the library's own tree compiled over the edit with the store's candidates, compared as stored with the first, and every verdict it holds one a filing completed, none judged again. A measurement, since each edit compiles the library whole; counted, and it asserts, since a unit other than the first, or a verdict judged again, is the fault it is here to name.
 #[test]
 #[ignore = "measurement, counted: for a leaf edit and a hub, files the standard library and the edit, undoes the edit over the store's candidates, and compares the result with the first unit byte for byte"]
 fn std_undo_reproduction() {
@@ -415,16 +416,24 @@ fn std_undo_reproduction() {
             )
             .expect("the library recompiles over the edit");
 
+            let judged = undone
+                .certification()
+                .records()
+                .filter(|(_, record)| !record.completed())
+                .map(|(name, _)| *name)
+                .collect::<Vec<_>>();
             println!("{label}");
             println!("  objects read {:>9}", store.read.borrow().len());
+            println!("  judged       {:>9}", judged.len());
+            assert_eq!(judged, Vec::new(), "{label}: judged again");
             assert_stored_alike(&original, &undone);
         }
     });
 }
 
-/// Whether every part of the standard library digests alike held in hand and restored from a store: what a unit compiled over the library records of a read, of its own or of another unit, is asked again by its digest, and a unit restored is read alike only where the two agree ([`part_digests`]). A measurement, since it compiles the library whole; counted, and it asserts.
+/// Whether every part of the standard library digests alike held in hand and restored from a store: what a unit compiled over the library records of a read, of its own or of another unit, is asked again by its digest, and a unit restored is read alike only where the two agree ([`part_digests`]); and so does what the certifier completes each judgment's record with, its own digest of each part read ([`complete_records`]). A measurement, since it compiles the library whole; counted, and it asserts.
 #[test]
-#[ignore = "measurement, counted: compiles the standard library whole, stores and restores it, and compares the digest of every part, binding and form the two hold"]
+#[ignore = "measurement, counted: compiles the standard library whole, stores and restores it, and compares the digest of every part, binding and form the two hold, and how each completes its certifier's records"]
 fn std_part_digest_census() {
     with_prelude(|prelude| {
         let [sys, _] = prelude else {
@@ -450,13 +459,42 @@ fn std_part_digest_census() {
             .filter(|(now, then)| now != then)
             .map(|((question, _), _)| format!("{question:?}"))
             .collect::<Vec<_>>();
+        // The certifier's own digests: each record completed over the unit held in hand and over the one restored, which was stored before either was completed.
+        complete_records(&held);
+        complete_records(&stored);
+        let judgments = |unit: &Unit| {
+            unit.certification()
+                .records()
+                .map(|(name, record)| (*name, record.made().cloned()))
+                .collect::<Vec<_>>()
+        };
+        let (judged_now, judged_then) = (judgments(&held), judgments(&stored));
+        let completed = judged_now.iter().filter(|(_, made)| made.is_some()).count();
+        let moved = judged_now
+            .iter()
+            .zip(&judged_then)
+            .filter(|(now, then)| now != then)
+            .map(|((name, _), _)| *name)
+            .collect::<Vec<_>>();
         println!("\n=== /std's parts held in hand and restored ===");
-        println!("  digested    {:>10}", now.len());
-        println!("  differing   {:>10}", differing.len());
+        println!("  parts digested        {:>10}", now.len());
+        println!("  parts differing       {:>10}", differing.len());
+        println!("  judgments             {:>10}", judged_now.len());
+        println!("  judgments completed   {:>10}", completed);
+        println!("  judgments differing   {:>10}", moved.len());
         assert_eq!(now.len(), then.len(), "the two hold the same parts");
         assert!(
             differing.is_empty(),
             "a part digests otherwise restored: {differing:?}"
+        );
+        assert_eq!(
+            judged_now.len(),
+            judged_then.len(),
+            "the two record the same judgments"
+        );
+        assert!(
+            moved.is_empty(),
+            "a judgment's reads digest otherwise restored: {moved:?}"
         );
     });
 }
@@ -1610,8 +1648,11 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             &places,
             DEFAULT_STEP_BUDGET,
             predecessors,
-            std,
-            &[false],
+            Over {
+                baseline: std,
+                moved: &[false],
+                candidates: None,
+            },
             &SYNTAX,
         );
 

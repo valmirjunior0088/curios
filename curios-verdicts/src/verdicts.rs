@@ -16,7 +16,7 @@ mod tests;
 use {
     crate::{Packs, opened, replace},
     curios_package::{Store, compiler, entry_slot, unit_slot},
-    curios_pipeline::{After, Cache, Earlier},
+    curios_pipeline::{After, Cache, Earlier, complete_records},
     curios_text::{Overlay, UnitSource},
     curios_unit::{Indexed, Record, Unit, digested, read_within},
     curios_utilities::{Candidates, Qualifier, digest},
@@ -650,6 +650,10 @@ impl Cache for Verdicts {
     /// Filed, and taken into the fold with what its slot holds: [`Verdicts::payload_put`] files a payload under what every unit of the fold was filed as.
     fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
         curios_profile::profile!("verdicts::put");
+        // What the certifier records of each judgment is completed where the unit is filed, by the certifier, so a later walk at this address finds each verdict by the item it judged.
+        if self.slot(source).is_some() {
+            complete_records(unit);
+        }
         let Some(placement) = self.placement(source, unit) else {
             // A unit with no place is still one the fold took: every unit after it is checked against it.
             if self

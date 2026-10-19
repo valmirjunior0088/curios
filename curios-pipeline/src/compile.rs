@@ -1346,11 +1346,11 @@ pub trait Cache {
     fn put(&self, source: &UnitSource<'_>, unit: &Unit);
 }
 
-/// A unit to compile another text of its sources over, with what it was compiled after and what the cache holds of declarations elaborated before: what a cache offers the fold on a miss.
+/// A unit to compile another text of its sources over, with what it was compiled after and what the cache holds of what was made before: what a cache offers the fold on a miss.
 pub struct Earlier {
     pub unit: Unit,
     pub after: After,
-    /// What a declaration to be made may be taken from ([`compile_unit_over`](crate::compile_unit_over)): `None` for a cache that keeps nothing of the kind.
+    /// What a declaration's elaboration, an item's erasure and its verdict may be taken from ([`compile_unit_over`](crate::compile_unit_over)): `None` for a cache that keeps nothing of the kind.
     pub candidates: Option<Rc<dyn Candidates>>,
 }
 

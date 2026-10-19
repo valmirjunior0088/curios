@@ -23,8 +23,9 @@ pub(crate) struct Store {
 }
 
 impl Store {
-    /// File `unit`: every object it names, each once.
+    /// File `unit`: every object it names, each once, its records completed as a store's filing completes them.
     pub(crate) fn file(&mut self, unit: &Unit) {
+        complete_records(unit);
         let stored = unit.stored().expect("a unit serializes");
         for object in stored.objects(|_| true).expect("a unit's objects are made") {
             self.objects.entry(object.digest).or_insert(object);
@@ -495,10 +496,12 @@ pub(crate) fn restored(unit: &Unit) -> Unit {
     Unit::restored(&stored.index, |digest| pack.get(digest)).expect("a stored unit restores")
 }
 
-/// That `incremental` is stored as `whole` is: the same index, which names each object by its digest, and where they are not, which parts.
+/// That `incremental` is filed as `whole` is: each with its records completed as a filing completes them ([`complete_records`]), the same index, which names each object by its digest, and where they are not, which parts.
 ///
 /// A unit is stored with its elaborated module consed up to spelling under no position ([`Unit::stored`]), so what is left to differ is what the two compilations concluded.
 pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
+    complete_records(whole);
+    complete_records(incremental);
     let stored = |unit: &Unit| unit.stored().expect("a unit serializes").index;
     if stored(whole) == stored(incremental) {
         return;
@@ -506,6 +509,12 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
 
     let consed = |unit: &Unit| {
         curios_archive::to_bytes(&unit.core().shared(&Sharing::new())).expect("a module serializes")
+    };
+    let judgments = |unit: &Unit| {
+        unit.certification()
+            .records()
+            .map(|(name, record)| record.digest(name).ok())
+            .collect::<Vec<_>>()
     };
     let baseline = |unit: &Unit| lowering_stored(unit.text());
     let traces = traces_stored;
@@ -547,6 +556,10 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
         (
             "the certifier's record",
             whole.certification() == incremental.certification(),
+        ),
+        (
+            "the names of the certifier's records",
+            judgments(whole) == judgments(incremental),
         ),
     ];
     let differing = parts

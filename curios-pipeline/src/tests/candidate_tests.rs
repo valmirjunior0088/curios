@@ -84,7 +84,7 @@ const FIRST: &str = "use /std/{Nat};\n\npub let base: Nat = 1;\n\npub let next: 
 
 const EDITED: &str = "use /std/{Nat};\n\npub let base: Nat = 2;\n\npub let next: Nat = base;\n";
 
-/// An edit undone elaborates and erases nothing: the declaration it made again is lowered as it was first and every part and binding read stands, so its item is read out of the store, then its erased form and the one of the declaration that read its value, the unit coming out as a whole compile of the first text.
+/// An edit undone elaborates, erases and judges nothing: the declaration it made again is lowered as it was first and every part and binding read stands, so its item is read out of the store, then its erased form and the one of the declaration that read its value, and its verdict is a record the store holds, complete before the unit is filed; the unit comes out as a whole compile of the first text.
 #[test]
 fn an_edit_undone_takes_what_it_made_from_the_store() {
     let first = unit_of(FIRST);
@@ -95,6 +95,13 @@ fn an_edit_undone_takes_what_it_made_from_the_store() {
 
     let undone = recompile_from(FIRST, &edited, &store);
 
+    assert!(
+        undone
+            .certification()
+            .records()
+            .all(|(_, record)| record.completed()),
+        "every verdict is one a filing completed",
+    );
     assert_stored_alike(&first, &undone);
     assert_eq!(
         *store.read.borrow(),
