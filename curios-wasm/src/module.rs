@@ -229,6 +229,11 @@ impl Module {
         self.funcs.push((func_name, func));
     }
 
+    /// The module-defined functions, each to be rewritten in place under the name it was added by.
+    pub fn funcs_mut(&mut self) -> impl Iterator<Item = &mut Func> {
+        self.funcs.iter_mut().map(|(_, func)| func)
+    }
+
     pub(crate) fn tables(&self) -> &[(TableName, Table)] {
         &self.tables
     }

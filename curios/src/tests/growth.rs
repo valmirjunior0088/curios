@@ -6,7 +6,7 @@
 
 use {
     super::compile,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
     std::{fmt::Write, iter},
@@ -361,6 +361,20 @@ fn elaborates(source: &str) -> Result<(), String> {
     }
 }
 
+/// Whether `source` is emitted as a module the engine validates, with what it is refused for where it is not: what a fixture holding the emitter to the engine's limits asks, the optimizer and the code generator after it being `documentation/roadmap/compilation/211-binaryen-and-cranelift-compile-a-function-in-its-size.md`'s.
+fn emits(source: &str) -> Result<(), String> {
+    let entrypoint = source
+        .parse::<Entrypoint>()
+        .map_err(|error| error.format())?;
+    let (module, _) = compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )?;
+    curios_runtime::validate(&curios_wasm::to_bytes(&module)).map_err(|error| error.to_string())
+}
+
 /// Elaboration takes a deep expression in its size: a left-leaning and a right-nested chain of ten thousand operators, whose recorded terms are each other's subterms and are zonked in one pass, and a thousand nested list literals, whose levels are a chain of solutions zonked once along it.
 #[test]
 fn deep_expressions_elaborate_in_their_size() {
@@ -408,6 +422,14 @@ fn a_nest_of_lambdas_applied_in_turn_compiles_in_its_size() {
 #[test]
 fn a_chain_of_matches_each_on_the_let_before_it_compiles_in_its_size() {
     assert_eq!(compiles(&grown(Growth::ChainedMatches, 1_000)), Ok(()));
+}
+
+/// Ten thousand one hundred `+` in one function are emitted as a module the engine validates, written in one expression and as a `let` chain: each operator's value dies where the next is written, so the emitter folds their locals by liveness onto a few, where a local apiece would pass the engine's fifty thousand.
+#[test]
+fn ten_thousand_operators_in_one_function_fit_the_engine_s_locals() {
+    for growth in [Growth::LeftPlus, Growth::LetPlus] {
+        assert_eq!(emits(&grown(growth, 10_100)), Ok(()), "{growth:?}");
+    }
 }
 
 /// Two thousand lambdas applied in turn at two calls compile: the nest is collapsed into one function of all its parameters, which both calls pass, where absorbing a level a round would run the optimizer past its backstop.

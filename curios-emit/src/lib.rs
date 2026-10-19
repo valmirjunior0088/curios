@@ -38,6 +38,9 @@ use expr_emitter::*;
 mod hoist;
 use hoist::*;
 
+mod locals;
+use locals::*;
+
 mod immediate;
 use immediate::*;
 
@@ -103,6 +106,7 @@ fn into_wasm_within(module: &curios_cont::Module) -> (curios_wasm::Module, Forei
     let mut wasm_module = curios_wasm::Module::new("module");
     let table = Table::new(&structured, &raw);
     ModuleEmitter::new(&table, &mut wasm_module).emit_module(&structured);
+    allocate_locals(&mut wasm_module);
 
     let mut imported = ForeignStore::new();
     for function in table.host_funcs() {
