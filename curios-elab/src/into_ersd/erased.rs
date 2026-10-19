@@ -12,7 +12,7 @@ use {
     super::{Binding, Environment, Projection},
     crate::{Foreign, HeldTrace, Question, Readers, Traces, part_digest},
     curios_archive::{Bytes, Deferred},
-    curios_core::{Extent, Free, Global, Item, Module, Places},
+    curios_core::{Free, Global, Item, Module, Places},
     curios_utilities::{Digest, Object, Ordered, Persistent, Recorded, digest},
     std::{
         borrow::Borrow,
@@ -36,8 +36,10 @@ pub struct ErasedItem {
     functions: Vec<Global>,
     /// What applying each function a declared name is bound to does ([`curios_ersd::Module::interface`]), read once here, where the fragment is final, since every item that imports the name asks.
     interfaces: BTreeMap<curios_ersd::FunctionId, curios_ersd::Interface>,
-    /// The values whose initializers read themselves while nothing else of the fragment reads them ([`curios_ersd::Module::unforced`]), each with where its initializer is written. Nothing here forces one; an item that reads one would, and is refused.
-    unforced: BTreeMap<curios_ersd::ValueId, Option<Extent>>,
+    /// The values whose initializers read themselves while nothing else of the fragment reads them ([`curios_ersd::Module::unforced`]). Nothing here forces one; an item that reads one would, and is refused where it reads it.
+    ///
+    /// **No position.** Where such a value is written is its declaration's, which a report finds by the name; a form holding it would be one thing erased from an item in hand and another from the same item restored from a store, which holds no position.
+    unforced: BTreeSet<curios_ersd::ValueId>,
     /// The names bound to what an evaluation of the item computed, where that is another atom than the one the item bound them to. A function one of them is bound to is a closure the item computed and no definition's own, so what a record says of the definition is not said of it.
     computed: BTreeSet<Global>,
 }
@@ -51,8 +53,8 @@ pub(super) enum Export<'a> {
     Constant(&'a curios_ersd::Constant),
     /// To a value its item computes.
     Value,
-    /// To a value whose own initializer reads it and nothing else of its item does: reading it is the cycle forcing meets first, its initializer written at `extent`.
-    Unforced { extent: Option<&'a Extent> },
+    /// To a value whose own initializer reads it and nothing else of its item does: reading it is the cycle forcing meets first.
+    Unforced,
     /// To a function of `arity` parameters.
     Function {
         arity: usize,
@@ -61,13 +63,11 @@ pub(super) enum Export<'a> {
 }
 
 impl ErasedItem {
-    /// `extents` holds where each computed member's initializer is written, by the identity it was minted as.
     pub(super) fn new(
         module: curios_ersd::Module,
         environment: Environment,
         values: Vec<Global>,
         functions: Vec<Global>,
-        extents: &BTreeMap<curios_ersd::ValueId, Extent>,
     ) -> Self {
         let interfaces = environment
             .bindings()
@@ -81,7 +81,7 @@ impl ErasedItem {
         let unforced = module
             .unforced()
             .into_iter()
-            .map(|step| (step.value, extents.get(&step.value).cloned()))
+            .map(|step| step.value)
             .collect();
 
         Self {
@@ -126,13 +126,6 @@ impl ErasedItem {
         &self.functions
     }
 
-    /// Where the initializer of each value that reads itself is written, where it is written anywhere, by the value's identity in the fragment.
-    pub(super) fn extents(&self) -> impl Iterator<Item = (curios_ersd::ValueId, &Extent)> {
-        self.unforced
-            .iter()
-            .filter_map(|(value, extent)| Some((*value, extent.as_ref()?)))
-    }
-
     /// Whether an item that names `name` reads this erased form and `other` alike: the name bound the same way, and the row it declares, where it declares one, of the same shape under the same mask. What an importing item holds of a row is no more ([`ErasedItem::struct_row_read`], [`ErasedItem::induct_row_read`]).
     pub(super) fn read_alike(&self, other: &ErasedItem, name: &Global) -> bool {
         self.export(name) == other.export(name)
@@ -143,13 +136,11 @@ impl ErasedItem {
     /// The digest of what an item that names `name` reads of this erased form: what [`ErasedItem::read_alike`] compares, archived. What a unit records of a binding it read in another unit's erased form, and what the binding is asked again by.
     pub(crate) fn read_digest(&self, name: &Global) -> Result<String, String> {
         let export = self.export(name).map(|export| match export {
-            Export::Dropped => (0u8, None, None, None),
-            Export::Constant(constant) => (1, Some(constant.clone()), None, None),
-            Export::Value => (2, None, None, None),
-            Export::Unforced { extent } => (3, None, Some(extent.cloned()), None),
-            Export::Function { arity, interface } => {
-                (4, None, None, Some((arity as u64, interface)))
-            }
+            Export::Dropped => (0u8, None, None),
+            Export::Constant(constant) => (1, Some(constant.clone()), None),
+            Export::Value => (2, None, None),
+            Export::Unforced => (3, None, None),
+            Export::Function { arity, interface } => (4, None, Some((arity as u64, interface))),
         });
         let record = self.struct_row_read(name).map(|(schema, mask)| {
             (
@@ -220,12 +211,12 @@ impl ErasedItem {
                     .constant(constant)
                     .expect("an exported constant is the fragment's"),
             ),
-            Binding::Atom(curios_ersd::Atom::Value(value)) => match self.unforced.get(&value) {
-                Some(extent) => Export::Unforced {
-                    extent: extent.as_ref(),
-                },
-                None => Export::Value,
-            },
+            Binding::Atom(curios_ersd::Atom::Value(value)) => {
+                match self.unforced.contains(&value) {
+                    true => Export::Unforced,
+                    false => Export::Value,
+                }
+            }
             Binding::Atom(curios_ersd::Atom::Function(function)) => Export::Function {
                 arity: self
                     .module

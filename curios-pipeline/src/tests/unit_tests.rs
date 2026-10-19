@@ -121,7 +121,7 @@ fn the_orphan_rule_fires_across_units_and_not_across_modules() {
         .expect("one unit may satisfy its own concept at its own type");
 }
 
-/// A value whose own initializer reads it is forced by the first declaration that reads it, whichever unit that declaration is in: the unit declaring it compiles, since nothing in it reads the value, and a unit that reads it is refused where it is compiled, at the value's own line, before any program links the two.
+/// A value whose own initializer reads it is forced by the first declaration that reads it, whichever unit that declaration is in: the unit declaring it compiles, since nothing in it reads the value, and a unit that reads it is refused where it is compiled, at the read, with a note at the value's own line, before any program links the two.
 ///
 /// The control is the same pair with the read left out: a refusal that fired for it would be the declaring unit's, or the fixture's.
 #[test]
@@ -138,8 +138,12 @@ fn a_unit_that_reads_another_units_self_reading_value_is_refused_where_it_is_com
         "expected the recursion rule's refusal, got: {refusal}"
     );
     assert!(
+        refusal.contains("pub let read() -> /std/Nat = /knot/xs;"),
+        "expected the refusal framed at the read, got: {refusal}"
+    );
+    assert!(
         refusal.contains("pub let xs : /std/Nat = /std/Nat/add(xs, 1);"),
-        "expected the refusal framed at the value's own line, got: {refusal}"
+        "expected a note at the value's own line, got: {refusal}"
     );
 
     compile_each(&[&knot, &idle]).expect("a unit that reads no such value compiles");

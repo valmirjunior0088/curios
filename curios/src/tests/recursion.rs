@@ -288,8 +288,12 @@ fn a_value_that_reads_itself_is_refused_at_the_erase_boundary() {
         "expected the verifier's refusal:\n{report}"
     );
     assert!(
+        report.contains("/std/print(Nat/to_str(xs))"),
+        "expected the refusal framed at the read:\n{report}"
+    );
+    assert!(
         report.contains("let xs : Nat = xs + 1;"),
-        "expected the refusal framed at the value's own line:\n{report}"
+        "expected a note at the value's own line:\n{report}"
     );
 }
 

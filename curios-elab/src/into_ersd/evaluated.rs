@@ -166,19 +166,6 @@ fn taken(
         .iter()
         .map(|function| linking.functions.get(function).copied())
         .collect::<Option<Vec<_>>>()?;
-    let extents = erased
-        .extents()
-        .filter_map(|(value, extent)| {
-            match taken
-                .landed
-                .atom(landed.atom(curios_ersd::Atom::Value(value)))
-            {
-                curios_ersd::Atom::Value(value) => Some((value, *extent)),
-                _ => None,
-            }
-        })
-        .collect();
-
     let computed = erased
         .environment()
         .bindings()
@@ -188,7 +175,5 @@ fn taken(
         })
         .collect();
 
-    Some(
-        ErasedItem::new(taken.module, environment, values, functions, &extents).computing(computed),
-    )
+    Some(ErasedItem::new(taken.module, environment, values, functions).computing(computed))
 }

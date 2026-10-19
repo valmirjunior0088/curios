@@ -2066,6 +2066,16 @@ impl Error {
                     )
                 })
                 .collect(),
+            // A value read where it evaluates itself: the report stands at the read, and the value is written in its declaration.
+            Self::EvaluationCycle { steps } => match steps.as_slice() {
+                [(named @ ErasedName::Named(Free::Global(member)), None)] => note(
+                    Anchors::label(anchors, member),
+                    format!("`{}` is declared here", named.spelled(spelling)),
+                )
+                .into_iter()
+                .collect(),
+                _ => Vec::new(),
+            },
             Self::DuplicateWitness { standing, .. } => note(
                 Anchors::label(anchors, standing),
                 "the other witness is declared here".to_string(),

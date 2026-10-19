@@ -154,7 +154,6 @@ impl<'s> Lowering<'s> {
             environment.exporting(declared),
             values,
             functions,
-            &extents,
         ))
     }
 
@@ -165,7 +164,7 @@ impl<'s> Lowering<'s> {
 
     /// Bind `name`, which another item declares, as this fragment reads it: an erased binding as none, a constant as the constant, and a value or a function as an import, minted the first time the name is used.
     ///
-    /// A value whose own initializer reads it is refused here: its item could not tell that anything would read it, and this read is what forces it into itself. So the recursion rules are settled for every fragment where it is erased, and a unit that reads such a value of another is refused where it is compiled.
+    /// A value whose own initializer reads it is refused here, where it is read: its item could not tell that anything would read it, and this read is what forces it into itself. So the recursion rules are settled for every fragment where it is erased, and a unit that reads such a value of another is refused where it is compiled, the report noting where the value is declared.
     fn external(&mut self, name: &Free) -> Result<Option<Binding>, Error> {
         let Some(global) = name.as_global() else {
             return Ok(None);
@@ -174,9 +173,7 @@ impl<'s> Lowering<'s> {
             return Ok(None);
         };
         let binding = match export {
-            Export::Unforced { extent } => {
-                return Err(Error::evaluates_itself(*name).at_opt(extent.cloned()));
-            }
+            Export::Unforced => return Err(Error::evaluates_itself(*name)),
             Export::Dropped => Binding::Dropped,
             Export::Constant(constant) => Binding::Atom(curios_ersd::Atom::Constant(
                 self.builder.constant(constant.clone()),

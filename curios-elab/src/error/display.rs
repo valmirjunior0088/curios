@@ -220,7 +220,7 @@ fn spelled_free(name: &Free, spelling: &Spelling) -> String {
 
 impl ErasedName {
     /// This name as its reader writes it: a declaration as resolution reaches it, a local binder by its label.
-    fn spelled(&self, spelling: &Spelling) -> String {
+    pub(super) fn spelled(&self, spelling: &Spelling) -> String {
         match self {
             ErasedName::Named(name) => spelled_free(name, spelling),
             ErasedName::Erased(name) => name.clone(),
