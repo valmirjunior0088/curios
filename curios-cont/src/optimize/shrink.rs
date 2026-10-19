@@ -4,6 +4,8 @@
 //!
 //! **The census is the pass's own.** What names each value, jumps to each continuation, calls or names each function, binds each entity, and refers to each node is read once off the module where the pass begins, kept exact by every rewrite the pass makes, and dropped where it ends; no use information outlives the pass ([`Module`]'s rule). A rewrite that changes what a node refers to queues every entity whose count moved, and the node itself.
 //!
+//! **A rewrite pays for what it changes.** A substitution rewrites each site where it stands and moves only the substituted value's entry, so a construction of n operands that n continuations each hand one is not filed again at every one; and a group keeps naming a member the pass took out of it until the pass ends, when each such group is rewritten once, so a match of n arms dropped an arm at a time is not rewritten at every arm.
+//!
 //! A worked-through reference is Appel and Jim's imperative algorithm (*Shrinking lambda expressions in linear time*, JFP 1997), which reduces from a set of redexes instead of rounds of census and reduction; Benton, Kennedy, Lindley and Russo implement it in SML.NET (*Shrinking reductions in SML.NET*, 2004).
 
 #[cfg(test)]
@@ -34,6 +36,7 @@ pub(crate) fn shrink(module: &mut Module) -> bool {
             Redex::Function(function) => pass.reduce_function(function),
         }
     }
+    pass.finish();
     pass.changed
 }
 
@@ -239,6 +242,22 @@ fn withdraw<K: Ord>(sites: &mut BTreeMap<K, BTreeSet<NodeId>>, key: K, id: NodeI
     }
 }
 
+/// One node's rewrite, read before anything changes.
+enum Rewrite {
+    /// Hand a literal binding's literal to every reader, then drop the binding nothing reads.
+    Propagate(ValueId, Atom),
+    /// Drop a binding nothing reads.
+    Unbind(ValueId),
+    /// Pin an intrinsic to the literal it computes.
+    Fold(ValueId, Literal, NodeId),
+    /// Name an operand wherever an intrinsic's result is named, and drop the intrinsic.
+    Forward(ValueId, Atom),
+    /// Take an empty group out of its chain.
+    Splice,
+    /// Take a switch's edge.
+    Take(Edge),
+}
+
 /// Where a jump to a continuation stands relative to that continuation's own body.
 enum Standing {
     Outside,
@@ -253,9 +272,19 @@ struct Shrink<'m> {
     pending: Pending,
     /// The functions on a cycle of the call graph closed under definition where the pass begins ([`analyze_calls`]). A reduction makes no cycle that was not there — a substitution turns into a call only a reference the closed graph already counts as one, and a moved body brings its edges into the function that called it — so a function outside this set never comes to call itself, and moving its body into its one call never moves it into itself.
     recursive: BTreeSet<FunctionId>,
-    /// The continuations a jump from within their own body may enter: every one jumped to from inside its body where the pass begins, and every member of a group one of whose members was put in place, since a member put in place within a sibling's body brings its jumps to that sibling inside it. Put in place at a jump within its own body, a continuation would hold itself, so one of these is put in place only once its one jump is found outside it.
+    /// The continuations a jump from within their own body may enter, where the pass begins. Put in place at a jump within its own body, a continuation would hold itself, so one of these is put in place only once its one jump is found outside it.
     looping: BTreeSet<ContinuationId>,
+    /// The groups, by their first member, one of whose members was put in place: a member put in place within a sibling's body brings its jumps to that sibling inside it, so every member of such a group is read as [`Shrink::looping`] is. A group's list holds still for the pass, since a member taken out of it leaves it at [`Shrink::finish`].
+    looping_groups: BTreeSet<ContinuationId>,
+    /// The continuations and functions the pass dropped or put in place, whose groups [`Shrink::finish`] takes them out of. Taken out one at a time, a group of n members would be rewritten n times.
+    unbound: Vec<Unbound>,
     changed: bool,
+}
+
+/// A member a group no longer binds.
+enum Unbound {
+    Continuation(ContinuationId),
+    Function(FunctionId),
 }
 
 impl<'m> Shrink<'m> {
@@ -285,7 +314,55 @@ impl<'m> Shrink<'m> {
             pending,
             recursive,
             looping,
+            looping_groups: BTreeSet::new(),
+            unbound: Vec::new(),
             changed: false,
+        }
+    }
+
+    /// Take every member the pass unbound out of its group, once a group, and the groups left empty out of their chains.
+    fn finish(&mut self) {
+        let binders = self
+            .unbound
+            .iter()
+            .filter_map(|member| match member {
+                Unbound::Continuation(continuation) => self.census.held.get(continuation),
+                Unbound::Function(function) => self.census.bound.get(function),
+            })
+            .copied()
+            .collect::<BTreeSet<_>>();
+        for binder in binders {
+            let empty = match self.module.node(binder) {
+                Some(Node::LetCont { continuations, .. }) => {
+                    let live = continuations
+                        .iter()
+                        .copied()
+                        .filter(|member| self.module.continuation(*member).is_some())
+                        .collect::<Vec<_>>();
+                    let empty = live.is_empty();
+                    if let Some(Node::LetCont { continuations, .. }) = self.module.node_mut(binder)
+                    {
+                        *continuations = live;
+                    }
+                    empty
+                }
+                Some(Node::LetFun { functions, .. }) => {
+                    let live = functions
+                        .iter()
+                        .copied()
+                        .filter(|member| self.module.function(*member).is_some())
+                        .collect::<Vec<_>>();
+                    let empty = live.is_empty();
+                    if let Some(Node::LetFun { functions, .. }) = self.module.node_mut(binder) {
+                        *functions = live;
+                    }
+                    empty
+                }
+                _ => false,
+            };
+            if empty {
+                self.splice(binder);
+            }
         }
     }
 
@@ -366,32 +443,38 @@ impl<'m> Shrink<'m> {
         })
     }
 
-    /// Name `replacement` wherever `value` is named. A closure call whose callee becomes a function is a call of it, or stands where no run arrives when the function takes another number of arguments ([`Module::applies`]).
+    /// Name `replacement` wherever `value` is named, where each site stands: the census moves the site from `value` to what replaces it, and nothing else about the site changes. A closure call whose callee becomes a function is a call of it, or stands where no run arrives when the function takes another number of arguments ([`Module::applies`]).
     fn substitute(&mut self, value: ValueId, replacement: &Atom) {
-        let sites = self.census.uses.get(&value).cloned().unwrap_or_default();
+        let Some(sites) = self.census.uses.remove(&value) else {
+            return;
+        };
+        self.pending.push(Redex::Value(value));
         for site in sites {
-            let mut node = self.module.node(site).expect("a use is live").clone();
-            if let Node::ApplyFun {
-                callee: Callee::Closure(callee),
-                args,
-                ..
-            } = &node
-                && *callee == value
-                && let Atom::Fun(function) = replacement
-                && !self.module.applies(*function, args.len())
-            {
+            let unreachable = matches!(
+                (self.module.node(site), replacement),
+                (
+                    Some(Node::ApplyFun { callee: Callee::Closure(callee), args, .. }),
+                    Atom::Fun(function),
+                ) if *callee == value && !self.module.applies(*function, args.len())
+            );
+            if unreachable {
                 self.set(site, Node::Unreachable);
                 continue;
             }
-            visit_atoms_mut(&mut node, &mut |atom| {
+            let node = self.module.node_mut(site).expect("a use is live");
+            let mut named = false;
+            visit_atoms_mut(node, &mut |atom| {
                 if *atom == Atom::Value(value) {
                     *atom = replacement.clone();
+                    named = true;
                 }
             });
-            if let Node::ApplyFun { callee, .. } = &mut node
+            let mut called = false;
+            if let Node::ApplyFun { callee, .. } = node
                 && let Callee::Closure(callee_value) = *callee
                 && callee_value == value
             {
+                called = true;
                 *callee = match replacement {
                     Atom::Value(replacement) => Callee::Closure(*replacement),
                     Atom::Fun(function) => Callee::Known(*function),
@@ -400,7 +483,27 @@ impl<'m> Shrink<'m> {
                     }
                 };
             }
-            self.set(site, node);
+            match replacement {
+                Atom::Value(replacement) => {
+                    self.census
+                        .uses
+                        .entry(*replacement)
+                        .or_default()
+                        .insert(site);
+                    self.pending.push(Redex::Value(*replacement));
+                }
+                Atom::Fun(function) => {
+                    if named {
+                        self.census.names.entry(*function).or_default().insert(site);
+                    }
+                    if called {
+                        self.census.calls.entry(*function).or_default().insert(site);
+                    }
+                    self.pending.push(Redex::Function(*function));
+                }
+                Atom::Literal(_) | Atom::Filler => {}
+            }
+            self.pending.push(Redex::Node(site));
         }
     }
 
@@ -475,64 +578,83 @@ impl<'m> Shrink<'m> {
         }
     }
 
-    /// Take `continuation` out of the group binding it, and hand back the group's other members.
-    fn unhold(&mut self, continuation: ContinuationId) -> Vec<ContinuationId> {
-        let Some(&binder) = self.census.held.get(&continuation) else {
-            return Vec::new();
-        };
-        let Some(Node::LetCont {
-            continuations,
-            body,
-        }) = self.module.node(binder).cloned()
-        else {
-            return Vec::new();
-        };
-        let rest = continuations
-            .into_iter()
-            .filter(|member| *member != continuation)
-            .collect::<Vec<_>>();
-        self.set(
-            binder,
-            Node::LetCont {
-                continuations: rest.clone(),
-                body,
-            },
-        );
-        rest
+    /// The first member of the group binding `continuation`, which names the group for the pass.
+    fn group(&self, continuation: ContinuationId) -> Option<ContinuationId> {
+        let binder = self.census.held.get(&continuation)?;
+        match self.module.node(*binder)? {
+            Node::LetCont { continuations, .. } => continuations.first().copied(),
+            _ => None,
+        }
     }
 
-    /// Take `function` out of the group binding it.
-    fn unbind_function(&mut self, function: FunctionId) {
-        let Some(&binder) = self.census.bound.get(&function) else {
-            return;
-        };
-        let Some(Node::LetFun { functions, body }) = self.module.node(binder).cloned() else {
-            return;
-        };
-        let rest = functions
-            .into_iter()
-            .filter(|member| *member != function)
-            .collect();
-        self.set(
-            binder,
-            Node::LetFun {
-                functions: rest,
-                body,
-            },
-        );
+    /// Whether a jump from within `continuation`'s own body may enter it.
+    fn may_loop(&self, continuation: ContinuationId) -> bool {
+        self.looping.contains(&continuation)
+            || self
+                .group(continuation)
+                .is_some_and(|group| self.looping_groups.contains(&group))
     }
 
-    fn reduce_node(&mut self, id: NodeId) {
-        let Some(node) = self.module.node(id).cloned() else {
-            return;
-        };
+    /// What rewriting the node at `id` would do, read without changing anything: a node is read in place, so a switch or a group a rewrite leaves alone costs nothing to look at.
+    fn rewrite(&self, id: NodeId) -> Option<Rewrite> {
+        let node = self.module.node(id)?;
+        let unread = |result: &ValueId| Census::count(&self.census.uses, result) == 0;
         match node {
             Node::LetValue {
                 result,
                 value: ValueExpr::Literal(literal),
                 ..
+            } => Some(Rewrite::Propagate(*result, Atom::Literal(literal.clone()))),
+            Node::LetValue { result, .. } if unread(result) => Some(Rewrite::Unbind(*result)),
+            Node::LetIntrinsic {
+                result,
+                op,
+                args,
+                next,
             } => {
-                let literal = Atom::Literal(literal);
+                if let Some(literal) = evaluate(*op, args) {
+                    return Some(Rewrite::Fold(*result, literal, *next));
+                }
+                match self
+                    .forwarded(*op, args)
+                    .or_else(|| identity_fold(*op, args))
+                {
+                    Some(Fold::Operand(replacement))
+                        if self.substitutable(*result, &replacement) =>
+                    {
+                        return Some(Rewrite::Forward(*result, replacement));
+                    }
+                    Some(Fold::Literal(literal)) => {
+                        return Some(Rewrite::Fold(*result, literal, *next));
+                    }
+                    Some(Fold::Operand(_)) | None => {}
+                }
+                (op.is_total() && unread(result)).then_some(Rewrite::Unbind(*result))
+            }
+            Node::LetFun { functions, .. } if functions.is_empty() => Some(Rewrite::Splice),
+            Node::LetCont { continuations, .. } if continuations.is_empty() => {
+                Some(Rewrite::Splice)
+            }
+            Node::Switch {
+                scrutinee: Atom::Literal(Literal::Nat(tag)),
+                cases,
+                default,
+            } => u32::try_from(tag)
+                .ok()
+                .and_then(|tag| cases.get(&tag))
+                .or(default.as_ref())
+                .cloned()
+                .map(Rewrite::Take),
+            _ => None,
+        }
+    }
+
+    fn reduce_node(&mut self, id: NodeId) {
+        let Some(rewrite) = self.rewrite(id) else {
+            return;
+        };
+        match rewrite {
+            Rewrite::Propagate(result, literal) => {
                 if self.substitutable(result, &literal) {
                     self.substitute(result, &literal);
                 }
@@ -540,64 +662,20 @@ impl<'m> Shrink<'m> {
                     self.unbind(id, result);
                 }
             }
-            Node::LetValue { result, .. } if Census::count(&self.census.uses, &result) == 0 => {
+            Rewrite::Unbind(result) => self.unbind(id, result),
+            Rewrite::Fold(result, literal, next) => self.fold(id, result, literal, next),
+            Rewrite::Forward(result, replacement) => {
+                self.substitute(result, &replacement);
                 self.unbind(id, result);
             }
-            Node::LetIntrinsic {
-                result,
-                op,
-                args,
-                next,
-            } => {
-                if let Some(literal) = evaluate(op, &args) {
-                    self.fold(id, result, literal, next);
-                    return;
-                }
-                match self
-                    .forwarded(op, &args)
-                    .or_else(|| identity_fold(op, &args))
-                {
-                    Some(Fold::Operand(replacement))
-                        if self.substitutable(result, &replacement) =>
-                    {
-                        self.substitute(result, &replacement);
-                        self.unbind(id, result);
-                        return;
-                    }
-                    Some(Fold::Literal(literal)) => {
-                        self.fold(id, result, literal, next);
-                        return;
-                    }
-                    Some(Fold::Operand(_)) | None => {}
-                }
-                if op.is_total() && Census::count(&self.census.uses, &result) == 0 {
-                    self.unbind(id, result);
-                }
-            }
-            Node::LetFun { functions, .. } if functions.is_empty() => {
+            Rewrite::Splice => {
                 self.splice(id);
                 self.changed = true;
             }
-            Node::LetCont { continuations, .. } if continuations.is_empty() => {
-                self.splice(id);
+            Rewrite::Take(edge) => {
+                self.set(id, Node::ApplyCont(edge));
                 self.changed = true;
             }
-            Node::Switch {
-                scrutinee: Atom::Literal(Literal::Nat(tag)),
-                cases,
-                default,
-            } => {
-                if let Some(edge) = u32::try_from(&tag)
-                    .ok()
-                    .and_then(|tag| cases.get(&tag))
-                    .or(default.as_ref())
-                    .cloned()
-                {
-                    self.set(id, Node::ApplyCont(edge));
-                    self.changed = true;
-                }
-            }
-            _ => {}
         }
     }
 
@@ -645,41 +723,36 @@ impl<'m> Shrink<'m> {
     }
 
     fn reduce_continuation(&mut self, continuation: ContinuationId) {
-        let Some(definition) = self.module.continuation(continuation).cloned() else {
+        let Some(definition) = self.module.continuation(continuation) else {
             return;
         };
-        let jumps = self
-            .census
-            .transfers
-            .get(&continuation)
-            .cloned()
-            .unwrap_or_default();
-        match jumps.len() {
-            0 => self.drop_continuation(continuation),
-            1 => {
-                let jump = *jumps.first().expect("one jump");
-                let Some(Node::ApplyCont(Edge { target, args })) = self.module.node(jump).cloned()
-                else {
-                    return;
-                };
-                if target != continuation || args.len() != definition.params.len() {
-                    return;
-                }
-                if self.looping.contains(&continuation) {
-                    match self.standing(jump, continuation) {
-                        Standing::Outside => {}
-                        // Entered from nowhere but itself, it is entered from nowhere.
-                        Standing::Within => {
-                            self.drop_continuation(continuation);
-                            return;
-                        }
-                        Standing::Unknown => return,
-                    }
-                }
-                self.put_continuation(continuation, jump, &args);
-            }
-            _ => {}
+        let params = definition.params.len();
+        let Some(jumps) = self.census.transfers.get(&continuation) else {
+            self.drop_continuation(continuation);
+            return;
+        };
+        let (1, Some(&jump)) = (jumps.len(), jumps.first()) else {
+            return;
+        };
+        let Some(Node::ApplyCont(Edge { target, args })) = self.module.node(jump) else {
+            return;
+        };
+        if *target != continuation || args.len() != params {
+            return;
         }
+        let args = args.clone();
+        if self.may_loop(continuation) {
+            match self.standing(jump, continuation) {
+                Standing::Outside => {}
+                // Entered from nowhere but itself, it is entered from nowhere.
+                Standing::Within => {
+                    self.drop_continuation(continuation);
+                    return;
+                }
+                Standing::Unknown => return,
+            }
+        }
+        self.put_continuation(continuation, jump, &args);
     }
 
     /// Where `jump` stands relative to `continuation`'s body, read up the referrers from the jump to the group binding the continuation.
@@ -718,11 +791,13 @@ impl<'m> Shrink<'m> {
         if !self.bind_params(&definition.params, args) {
             return;
         }
+        if let Some(group) = self.group(continuation) {
+            self.looping_groups.insert(group);
+        }
         let body = self.remove(definition.body);
         self.set(jump, body);
-        let siblings = self.unhold(continuation);
+        self.unbound.push(Unbound::Continuation(continuation));
         self.drop_definition_of_continuation(continuation, &definition.params);
-        self.looping.extend(siblings);
         self.changed = true;
     }
 
@@ -732,7 +807,7 @@ impl<'m> Shrink<'m> {
             .continuation(continuation)
             .cloned()
             .expect("a continuation dropped is live");
-        self.unhold(continuation);
+        self.unbound.push(Unbound::Continuation(continuation));
         self.clean(definition.body);
         self.drop_definition_of_continuation(continuation, &definition.params);
         self.changed = true;
@@ -795,7 +870,7 @@ impl<'m> Shrink<'m> {
         }
         let body = self.remove(definition.body);
         self.set(call, body);
-        self.unbind_function(function);
+        self.unbound.push(Unbound::Function(function));
         self.drop_definition_of_function(function, &definition.params);
         self.changed = true;
     }
@@ -806,7 +881,7 @@ impl<'m> Shrink<'m> {
             .function(function)
             .cloned()
             .expect("a function dropped is live");
-        self.unbind_function(function);
+        self.unbound.push(Unbound::Function(function));
         self.clean(definition.body);
         self.drop_definition_of_function(function, &definition.params);
         self.changed = true;
