@@ -884,27 +884,34 @@ impl MachineModule {
                 "{owner} entry block cannot belong to a nested scope"
             )));
         }
+        // Each block is followed to the entry once: a chain is walked until it meets a block already known to reach it, and every block on the way is then known to as well. Followed from every block afresh, blocks nested n deep would walk the square of the nesting.
+        let mut rooted = BTreeSet::from([function.entry]);
         for block in function.blocks.keys().copied() {
             if block != function.entry && !parents.contains_key(&block) {
                 return Err(MachineVerifyError(format!(
                     "{owner} non-entry block {block} has no lexical owner"
                 )));
             }
+            let mut path = Vec::new();
+            let mut on_path = BTreeSet::new();
             let mut current = block;
-            let mut seen = BTreeSet::new();
-            while let Some(parent) = parents.get(&current) {
-                if !seen.insert(current) {
+            while !rooted.contains(&current) {
+                if !on_path.insert(current) {
                     return Err(MachineVerifyError(format!(
                         "{owner} block scopes contain a cycle at {current}"
                     )));
                 }
-                current = *parent;
+                path.push(current);
+                current = match parents.get(&current) {
+                    Some(parent) => *parent,
+                    None => {
+                        return Err(MachineVerifyError(format!(
+                            "{owner} block {block} is not nested under the entry block"
+                        )));
+                    }
+                };
             }
-            if current != function.entry {
-                return Err(MachineVerifyError(format!(
-                    "{owner} block {block} is not nested under the entry block"
-                )));
-            }
+            rooted.extend(path);
         }
         Ok(())
     }
