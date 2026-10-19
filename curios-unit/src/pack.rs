@@ -254,7 +254,7 @@ pub fn rerun(kind: u8, members: &[Object]) -> Result<Vec<Object>, String> {
             TraceTable::run(
                 entries
                     .iter()
-                    .map(|entry: &&TracedEntry| (&entry.0, &entry.1)),
+                    .map(|entry: &&TracedEntry| (&entry.0, &entry.1, entry.2.as_ref())),
             )
         }),
         ReadTable::KIND => rerun_with(kind, members, ReadTable::read, |entries| {

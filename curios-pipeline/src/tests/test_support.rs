@@ -472,8 +472,12 @@ pub(crate) fn traces_stored(traces: &Traces) -> Vec<u8> {
         .expect("a unit's traces serialize")
         .to_vec();
     bytes.extend(
-        TraceTable::run(traces.declarations().map(|(name, held)| (name, &***held)))
-            .expect("a unit's traces serialize"),
+        TraceTable::run(
+            traces
+                .declarations()
+                .map(|(name, held)| (name, &***held, held.made())),
+        )
+        .expect("a unit's traces serialize"),
     );
 
     bytes

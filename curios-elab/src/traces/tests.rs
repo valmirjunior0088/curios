@@ -6,6 +6,11 @@ fn named(segments: &[&str]) -> Global {
     Global::Authored(Qualifier::from(segments.iter().copied()))
 }
 
+/// File `trace` in `traces` as what the declaration written as `name` asked, as a walk files a declaration it made.
+fn file(traces: &mut Traces, name: Global, trace: Trace<Question, Answered>) {
+    traces.share(name, Rc::new(TraceRecord::new(trace)));
+}
+
 fn asking(questions: &[(Question, Answered)]) -> Trace<Question, Answered> {
     let mut trace = Trace::default();
     for (question, answered) in questions {
@@ -19,14 +24,19 @@ fn asking(questions: &[(Question, Answered)]) -> Trace<Question, Answered> {
 fn a_name_is_read_by_every_declaration_that_asked_it_with_the_parts_each_asked() {
     let (a, b, x) = (named(&["m", "a"]), named(&["m", "b"]), named(&["m", "x"]));
     let mut traces = Traces::default();
-    traces.file(
+    file(
+        &mut traces,
         a,
         asking(&[
             (Question::Signature(x), Answered::Part),
             (Question::Body(x), Answered::Part),
         ]),
     );
-    traces.file(b, asking(&[(Question::Signature(x), Answered::Part)]));
+    file(
+        &mut traces,
+        b,
+        asking(&[(Question::Signature(x), Answered::Part)]),
+    );
 
     let readers = Readers::of(&traces);
 
@@ -45,7 +55,7 @@ fn a_declaration_made_again_replaces_the_edges_its_earlier_trace_added() {
     let (a, x, y) = (named(&["m", "a"]), named(&["m", "x"]), named(&["m", "y"]));
     let earlier = asking(&[(Question::Body(x), Answered::Part)]);
     let mut traces = Traces::default();
-    traces.file(a, earlier.clone());
+    file(&mut traces, a, earlier.clone());
     let mut readers = Readers::of(&traces);
 
     readers.replace(
@@ -66,7 +76,7 @@ fn a_dropped_declaration_reads_nothing_and_was_answered_nothing_about_lemmas() {
         (Question::Signature(x), Answered::Part),
     ]);
     let mut traces = Traces::default();
-    traces.file(a, earlier.clone());
+    file(&mut traces, a, earlier.clone());
     let mut readers = Readers::of(&traces);
     assert_eq!(readers.lemmas(&a), Some(true));
 

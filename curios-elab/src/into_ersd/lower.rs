@@ -9,14 +9,14 @@ use {
         emitted, evaluate, intrinsic, link, register_shape,
     },
     crate::{
-        Answered, Foreign, Parts, Question, Readers, Traces, validate_entry_universes,
+        Answered, Foreign, Parts, Question, Readers, TraceRecord, Traces, validate_entry_universes,
         validate_universes, validate_universes_in,
     },
     curios_core::{
         Certification, Entrypoint, Extent, Free, Global, Item, Module, Operand, Program, Trace,
         Zonked, foreign_operands, project_erased_universes,
     },
-    curios_utilities::{Filed, SyntaxRegistry, grown, recurse},
+    curios_utilities::{SyntaxRegistry, grown, recurse},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -667,7 +667,7 @@ pub(super) fn erase_items<'s>(
                 .as_ref()
                 .and_then(|over| over.taken(place, item, &unit)),
         };
-        let (trace, candidate) = match (kept, taken) {
+        let record = match (kept, taken) {
             (Some((held, trace)), _) => {
                 unit.keep(place, item, held);
                 if let Some(name) = names.first() {
@@ -675,11 +675,11 @@ pub(super) fn erase_items<'s>(
                 }
                 continue;
             }
-            (None, Some((held, trace, candidate))) => {
-                curios_profile::sample!("erase::taken", trace.len());
+            (None, Some((held, record))) => {
+                curios_profile::sample!("erase::taken", record.len());
                 unit.keep(place, item, held);
 
-                (trace, Some(candidate))
+                record
             }
             (None, None) => {
                 let read = RefCell::new(Vec::new());
@@ -716,7 +716,7 @@ pub(super) fn erase_items<'s>(
                 curios_profile::sample!("erase::asked", trace.len());
                 unit.push(place, item, erased);
 
-                (trace, None)
+                Rc::new(TraceRecord::new(trace))
             }
         };
         made.extend(names.first().map(|name| **name));
@@ -726,7 +726,7 @@ pub(super) fn erase_items<'s>(
             others.push(**name);
         }
         if let Some(name) = names.first() {
-            asked.file_held(**name, Rc::new(Filed::new(trace)), candidate);
+            asked.share(**name, record);
         }
     }
     // Who asked what of the unit's traces: the baseline's, with the edges of every item erased again, or no longer held, replaced.

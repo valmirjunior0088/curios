@@ -6,18 +6,18 @@
 //!
 //! **Asked in the order the items are stored in, which is the order they are read in.** A module's items stand each after the items it reaches, and erasing one reads the erased form of another only where the other is already erased, so what a question is about is decided by the time it is asked: no item waits for another, and none is asked for.
 //!
-//! **An item to be erased is first looked for in a store.** Where the baseline is handed what a store holds of items erased before ([`ErasedBaseline::candidates`]), an item the walk does not keep is taken from a candidate filed for the item it is, where every part and binding the candidate read digests as it does now ([`ErasedCandidate`]); it is erased otherwise.
+//! **An item to be erased is first looked for in a store.** Where the baseline is handed what a store holds of items erased before ([`ErasedBaseline::candidates`]), an item the walk does not keep is taken from a record filed of an erasure of the item it is, where every part and binding the record read digests as it does now ([`ErasedUnit::complete`]); it is erased otherwise.
 //!
 //! **A part is the elaborated declaration's, a binding the erased item's.** A question about a name's type, body or registry entry is answered as it was where the elaborator kept the declaration, and for one elaborated again where that part came out equal as it is stored ([`Same`]). A question about how a name is bound is answered as it was where the item declaring it kept its erased form, and for one erased again where an item naming it reads the two alike (`ErasedItem::read_alike`). A question about an erased form whole, which an item evaluated where it is erased asks of each item it ran (`evaluate`), is answered as it was where the item kept its erased form, and for one erased again where the two forms are stored as the same bytes. A name neither the unit nor its baseline declares is another unit's or no one's, and what was read of it stands where the unit that holds it is the one the baseline was erased after, or where it digests now to what the baseline recorded (`Foreign`).
 
 use {
-    super::{ErasedCandidate, ErasedUnit, Erasures, Held, Projection},
+    super::{ErasedUnit, Erasures, Held, Projection},
     crate::{
-        Answered, HeldTrace, Question, Read, Same, bytes_of, concepts_alike, entries_alike,
+        Answered, HeldTrace, Question, Read, Same, bytes_of, concepts_alike, entries_alike, found,
         inducts_alike, part_digest, structs_alike,
     },
-    curios_core::{Changes, Global, Item, ItemRun, Module, Nominal, Place, Places, Trace},
-    curios_utilities::{Candidates, Digest, Facet},
+    curios_core::{Changes, Global, Item, ItemRun, Module, Nominal, Place, Places},
+    curios_utilities::{Candidates, Facet},
     std::{
         collections::{BTreeSet, HashMap},
         rc::Rc,
@@ -36,7 +36,7 @@ pub struct ErasedBaseline<'a> {
     pub dropped: &'a BTreeSet<Global>,
     /// Where the module being erased holds each name.
     pub now: &'a Places,
-    /// What a store holds of items erased before, where an item to be erased may be taken from it ([`ErasedCandidate`]).
+    /// What a store holds of items erased before, where an item to be erased may be taken from one of its records ([`ErasedUnit::complete`]).
     pub candidates: Option<&'a dyn Candidates>,
 }
 
@@ -245,13 +245,13 @@ impl<'a> ErasedOver<'a> {
         Some((erased, Rc::clone(trace)))
     }
 
-    /// The erased form of `item`, at `place`, taken from a candidate a store holds for the item, where one stands ([`ErasedCandidate`]), with what its erasure asked and the candidate's name: `unit` holds the erased forms of the items before it. Asked of an item the walk does not keep.
+    /// The erased form of `item`, at `place`, taken from a record a store holds of an erasure of the item, where one stands ([`ErasedUnit::complete`]), with the record: `unit` holds the erased forms of the items before it. Asked of an item the walk does not keep.
     pub(super) fn taken(
         &self,
         place: usize,
         item: &Item,
         unit: &ErasedUnit,
-    ) -> Option<(Held, Trace<Question, Answered>, Digest)> {
+    ) -> Option<(Held, HeldTrace)> {
         let candidates = self.baseline.candidates?;
         let names = item.declared_names();
         let first = names.first()?;
@@ -261,23 +261,22 @@ impl<'a> ErasedOver<'a> {
             None => ItemRun::identity(item).ok()?,
         };
 
-        candidates
-            .candidates(Facet::Erasure, &identity)
+        found(candidates, Facet::Erasure, &identity, first)
             .into_iter()
-            .find_map(|object| {
-                let candidate = ErasedCandidate::read(object.bytes.as_slice(), &identity, first)?;
-                if !candidate.stands(self, &names, unit) {
+            .find_map(|record| {
+                let made = record.made()?;
+                if !self.stands(&names, made, &record, unit) {
                     return None;
                 }
                 let form = candidates
-                    .object(&candidate.form)
+                    .object(made.outputs.first()?)
                     .filter(|form| form.member.is_none())?;
 
-                Some((Held::stored(form).ok()?, candidate.trace, object.digest))
+                Some((Held::stored(form).ok()?, Rc::clone(&record)))
             })
     }
 
-    /// What the part or binding `question` asks reads now, as a candidate of the erasure of the item declaring `names` records it ([`Read`]): `unit` holding the erased forms of the items before the one asking. `None` where it cannot be told: a binding of an item the walk has not come to, or a part or a binding that will not digest.
+    /// What the part or binding `question` asks reads now, as a completed record of the erasure of the item declaring `names` holds it ([`Read`]): `unit` holding the erased forms of the items before the one asking. `None` where it cannot be told: a binding of an item the walk has not come to, or a part or a binding that will not digest.
     ///
     /// A binding of an item of the unit is read off the form `unit` holds, and a part off the module being erased, which is final; one of another unit is the record the baseline holds of it where that unit did not move, and digested again otherwise; and a fixed unit's is recorded nowhere.
     pub(super) fn read_now(

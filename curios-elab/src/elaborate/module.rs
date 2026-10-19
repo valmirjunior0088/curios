@@ -2123,7 +2123,7 @@ pub struct Recompile<'a> {
     pub relowered: &'a BTreeSet<Global>,
     /// The names the baseline declares and the new text's lowering does not.
     pub dropped: &'a BTreeSet<Global>,
-    /// What a store holds of declarations elaborated before, where a declaration to be made may be taken from it (`Candidate`).
+    /// What a store holds of declarations elaborated before, where a declaration to be made may be taken from one of its records (`curios_elab::Candidating`).
     pub candidates: Option<&'a dyn Candidates>,
 }
 

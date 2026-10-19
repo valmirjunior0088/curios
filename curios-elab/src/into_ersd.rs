@@ -34,7 +34,6 @@ mod over;
 pub use over::*;
 
 mod erased_candidate;
-use erased_candidate::*;
 
 mod link;
 use link::*;

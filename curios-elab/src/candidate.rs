@@ -1,39 +1,23 @@
-//! What elaborating a declaration made, filed for a later compile that lowers it alike: a candidate, holding the items it made, what it asked with the digest of every part it read, and the binders its proofs read ([`Candidating`]).
+//! A declaration's elaboration as a store keeps it to be found by what the declaration was lowered to: its trace, completed where it is filed with what the declaration was made from, the digest of every part it read and what it made ([`Candidating`], [`Made`]).
 //!
-//! **Found by what it was made from.** A candidate is named by the digest of the declaration's lowered items ([`declaration_input`]) and then by what it holds ([`curios_utilities::candidate`]), so a store holds every candidate filed for one lowering together, whichever unit filed each.
+//! **Found by what it was made from.** A completed record is named by the digest of the declaration's lowered items ([`declaration_input`]) and then by what it holds ([`curios_utilities::candidate_name`]), so a store holds every record filed for one lowering together, whichever unit filed each ([`found`]).
 //!
-//! **Taken where every part it read digests as it did.** A declaration is [a function of what it reads](../../documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md), so one lowered to the items a candidate was made from, every answer it was given standing and every part it read digesting as it did, elaborates to the candidate's items, and a walk over a baseline takes them in place of elaborating. A part of the unit's own is answered in a trace by the unit the trace is kept with, so a candidate holds a digest of each, which no later unit moves; a part of a fixed unit is the compiler's, which a store's address names, and is recorded nowhere.
+//! **Taken where every part it read digests as it did.** A declaration is [a function of what it reads](../../documentation/design/compilation/a-declaration-is-a-function-of-what-it-reads.md), so one lowered to the items a record was made from, every answer it was given standing and every part it read digesting as it did, elaborates to the record's items, and a walk over a baseline takes them in place of elaborating. A part of the unit's own is answered in a trace by the unit the trace is kept with, so a completed record holds a digest of each, which no later unit moves; a part of a fixed unit is the compiler's, which a store's address names, and is recorded nowhere.
 //!
-//! **What a filing makes again is what it made.** A part's digest is of the part as a unit stores it, under no position ([`part_digest`]), so a declaration kept over a baseline, which read each part as it was, files the candidate its baseline filed: a recompile carries it ([`Traces::candidate`]), and a unit compiled whole makes it again, alike.
+//! **What a filing completes again is what it completed.** A part's digest is of the part as it is compared, under no position ([`part_digest`]), so a declaration kept over a baseline, which read each part as it was, holds the record its baseline filed, and a unit compiled whole completes it again alike.
 //!
 //! **A witness is elaborated, never taken.** It registers at its key as its signature elaborates, which nothing here replays.
 
 use {
-    crate::{Answered, Question, TraceTable, Traces, part_digest},
-    curios_core::{Declarations, Global, Item, Module, Places, Trace},
-    curios_utilities::{Digest, Facet, Object, candidate},
-    std::{cell::RefCell, collections::HashMap},
+    crate::{
+        Answered, HeldTrace, Made, Question, Read, TraceRecord, TraceTable, Traces, part_digest,
+    },
+    curios_core::{Declarations, Global, Item, ItemRun, Module, Places},
+    curios_utilities::{Candidates, Digest, Facet, Object},
+    std::{cell::RefCell, collections::HashMap, rc::Rc},
 };
 
-/// What a question read, as a candidate records it: `None` where it read no part a candidate records, and otherwise the digest of the part, `None` within where the name declared no such part.
-pub(crate) type Read = Option<Option<[u8; 32]>>;
-
-/// A declaration's elaboration as a store keeps it. See the module documentation.
-#[curios_archive::archived]
-struct ElaborationCandidate {
-    /// What it was made from ([`declaration_input`]), whole, of which its name holds a prefix.
-    input: [u8; 32],
-    /// The items it made, each by its identity ([`curios_core::ItemRun::identity`]), one for each of its lowered items, in their order.
-    items: Vec<[u8; 32]>,
-    /// What it asked, as a run of one trace ([`TraceTable::run`]).
-    trace: Vec<u8>,
-    /// What each question read, in the trace's order: `None` where it read no part — the unit's lemmas, whether a witness is declared, a key no witness answers, a part of the declaration's own or of a fixed unit — and otherwise the digest of the part, `None` within where the name declared no such part. A witness found is read by its signature.
-    reads: Vec<Read>,
-    /// The written binders its proofs read, each by the name of its definition and its place among that definition's written binders, that a lowering lints unless a proof reads it.
-    credited: Vec<(Global, u32)>,
-}
-
-/// What the declaration whose lowered items digest to `items`, in their order, was made from: the digest a candidate of its elaboration is found by.
+/// What the declaration whose lowered items digest to `items`, in their order, was made from: the digest its elaboration's record is found by.
 pub fn declaration_input(items: impl IntoIterator<Item = Digest>) -> Digest {
     let mut bytes = Vec::new();
     for item in items {
@@ -51,7 +35,7 @@ pub fn lowered_digest(lowered: &Module, position: usize) -> Result<Digest, Strin
     }
 }
 
-/// What a filing makes a unit's candidates of: its lowered module and the declarations its items make, the digest of each lowered item and of each elaborated one by its place, its elaborated module with where it holds each name, and its traces.
+/// What a filing completes a unit's elaboration records with: its lowered module and the declarations its items make, the digest of each lowered item and of each elaborated one by its place, its elaborated module with where it holds each name, and its traces.
 pub struct Candidating<'a> {
     lowered: &'a Module,
     declarations: &'a Declarations,
@@ -67,7 +51,7 @@ pub struct Candidating<'a> {
 }
 
 impl<'a> Candidating<'a> {
-    /// What a filing makes the candidates of the unit lowered to `lowered`, whose items make `declarations` and digest to `inputs`, and elaborated to `module`, held where `places` says, whose items are named `items`, and whose declarations asked `traces`: `inputs` and `items` each by the place of its item.
+    /// What a filing completes the records of the unit lowered to `lowered`, whose items make `declarations` and digest to `inputs`, and elaborated to `module`, held where `places` says, whose items are named `items`, and whose declarations asked `traces`: `inputs` and `items` each by the place of its item.
     pub fn new(
         lowered: &'a Module,
         declarations: &'a Declarations,
@@ -89,12 +73,38 @@ impl<'a> Candidating<'a> {
         }
     }
 
-    /// The candidate of `declaration`, whose proofs read `credited`, as a store keeps it: `None` where none is made of it — a witness, one the unit holds no trace of, or one that read a part that will not digest, or of another unit that the unit records nothing of.
-    pub fn candidate(
+    /// Complete the record of each declaration that no filing has, `credited` saying which written binders the proofs of the declaration declaring its names read: what the declaration made and read, or nothing for one no record can be completed of — a witness, or one that read a part that will not digest, or of another unit that the unit records nothing of.
+    pub fn complete(
+        &self,
+        credited: impl Fn(&[Global]) -> Vec<(Global, u32)>,
+    ) -> Result<(), String> {
+        for declaration in self.declarations.each() {
+            let Some(first) = self.lowered.items[declaration]
+                .declared_names()
+                .first()
+                .copied()
+            else {
+                continue;
+            };
+            let Some(held) = self.traces.held(first) else {
+                continue;
+            };
+            if held.completed() {
+                continue;
+            }
+            held.complete(self.made(declaration, held, &credited)?);
+        }
+
+        Ok(())
+    }
+
+    /// What `declaration`, whose trace is `held`, made and read: `None` where no record of it can be completed.
+    fn made(
         &self,
         declaration: usize,
-        credited: Vec<(Global, u32)>,
-    ) -> Result<Option<Object>, String> {
+        held: &TraceRecord,
+        credited: &impl Fn(&[Global]) -> Vec<(Global, u32)>,
+    ) -> Result<Option<Made>, String> {
         let positions = self.declarations.items(declaration);
         let names = positions
             .iter()
@@ -107,10 +117,7 @@ impl<'a> Candidating<'a> {
         {
             return Ok(None);
         }
-        let Some(trace) = self.traces.of(&names[0]) else {
-            return Ok(None);
-        };
-        let mut items = Vec::with_capacity(positions.len());
+        let mut outputs = Vec::with_capacity(positions.len());
         for position in positions.iter() {
             let made = self.lowered.items[*position]
                 .declared_names()
@@ -119,11 +126,11 @@ impl<'a> Candidating<'a> {
             let Some(made) = made.and_then(|made| self.items.get(&made.item())) else {
                 return Ok(None);
             };
-            items.push(*made.as_bytes());
+            outputs.push(*made);
         }
 
-        let mut reads = Vec::with_capacity(trace.len());
-        for (question, answered) in trace.asked() {
+        let mut reads = Vec::with_capacity(held.len());
+        for (question, answered) in held.asked() {
             let read = match (question, answered) {
                 (Question::Witness(..), Answered::Witness(Some(found))) => {
                     self.read(&names, &Question::Signature(*found))
@@ -145,20 +152,16 @@ impl<'a> Candidating<'a> {
         else {
             return Ok(None);
         };
-        let input = declaration_input(inputs);
-        let made = ElaborationCandidate {
-            input: *input.as_bytes(),
-            items,
-            trace: TraceTable::run([(&names[0], trace)])?,
-            reads,
-            credited,
-        };
 
-        let bytes = curios_archive::to_bytes(&made)?.to_vec();
-        Ok(Some(candidate(Facet::Elaboration, &input, bytes)))
+        Ok(Some(Made {
+            input: declaration_input(inputs),
+            reads,
+            outputs,
+            credited: credited(&names),
+        }))
     }
 
-    /// What the declaration declaring `names` read of the part `question` asks, as a candidate records it ([`Read`]): nothing of a part of its own, or of a fixed unit's, which the unit records nothing of; and `None` where the part will not digest.
+    /// What the declaration declaring `names` read of the part `question` asks, as a completed record holds it ([`Read`]): nothing of a part of its own, or of a fixed unit's, which the unit records nothing of; and `None` where the part will not digest.
     fn read(&self, names: &[Global], question: &Question) -> Option<Read> {
         let Some(subject) = question
             .subject()
@@ -191,64 +194,56 @@ pub(crate) fn bytes_of(digest: &str) -> Option<[u8; 32]> {
     Digest::from_hex(digest).map(|digest| *digest.as_bytes())
 }
 
-/// A candidate read back: what it was made from, its items' identities, its trace, what each question read and the binders its proofs read.
-pub(crate) struct Candidate {
-    pub(crate) items: Vec<Digest>,
-    pub(crate) trace: Trace<Question, Answered>,
-    pub(crate) reads: Vec<Read>,
-    pub(crate) credited: Vec<(Global, u32)>,
+/// The completed records of the declaration written as `name` that `facet` made from `input`, as `candidates` holds them, each with the digest it is stored under: what a walk looks among before it makes the declaration.
+pub(crate) fn found(
+    candidates: &dyn Candidates,
+    facet: Facet,
+    input: &Digest,
+    name: &Global,
+) -> Vec<HeldTrace> {
+    candidates
+        .candidates(facet, input)
+        .into_iter()
+        .filter_map(|object| {
+            let member = object
+                .member
+                .filter(|member| member.kind == TraceTable::KIND)?;
+            let (traced, trace, made) =
+                TraceTable::member(object.bytes.as_slice(), member.index).ok()?;
+            let made =
+                made.filter(|made| made.input == *input && made.reads.len() == trace.len())?;
+
+            (traced == *name)
+                .then(|| Rc::new(TraceRecord::restored(trace, Some(made), object.digest)))
+        })
+        .collect()
 }
 
-impl Candidate {
-    /// The candidate `bytes` hold, made from `input` by the declaration written as `name` and holding an item for each of its `items` lowered items: `None` for bytes that hold no such candidate.
-    pub(crate) fn read(bytes: &[u8], input: &Digest, name: &Global, items: usize) -> Option<Self> {
-        let candidate = curios_archive::from_bytes::<ElaborationCandidate>(bytes).ok()?;
-        if candidate.input != *input.as_bytes() || candidate.items.len() != items {
-            return None;
+/// The items `made` names, read out of the objects `object` finds by their identities, each run checked once: `None` where one is not found.
+pub(crate) fn items_of(
+    made: &Made,
+    object: impl Fn(&Digest) -> Option<Object>,
+) -> Option<Vec<Item>> {
+    let mut runs = Vec::<(Object, Vec<(usize, u32)>)>::new();
+    for (at, identity) in made.outputs.iter().enumerate() {
+        let found = object(identity)?;
+        let member = found.member.filter(|member| member.kind == ItemRun::KIND)?;
+        match runs
+            .iter_mut()
+            .find(|(run, _)| run.bytes.as_slice().as_ptr() == found.bytes.as_slice().as_ptr())
+        {
+            Some((_, members)) => members.push((at, member.index)),
+            None => runs.push((found, vec![(at, member.index)])),
         }
-        let [(traced, trace)] =
-            <[_; 1]>::try_from(TraceTable::read(&candidate.trace).ok()?).ok()?;
-        if traced != *name || trace.len() != candidate.reads.len() {
-            return None;
+    }
+    let mut items = vec![None; made.outputs.len()];
+    for (run, members) in runs {
+        let indices = members.iter().map(|(_, index)| *index).collect::<Vec<_>>();
+        let read = ItemRun::members(run.bytes.as_slice(), &indices).ok()?;
+        for ((at, _), item) in members.into_iter().zip(read) {
+            items[at] = Some(item);
         }
-
-        Some(Self {
-            items: candidate
-                .items
-                .into_iter()
-                .map(Digest::from_bytes)
-                .collect(),
-            trace,
-            reads: candidate.reads,
-            credited: candidate.credited,
-        })
     }
 
-    /// The items this candidate made, read out of the objects `object` finds by their identities, each run checked once: `None` where one is not found.
-    pub(crate) fn made(&self, object: impl Fn(&Digest) -> Option<Object>) -> Option<Vec<Item>> {
-        let mut runs = Vec::<(Object, Vec<(usize, u32)>)>::new();
-        for (at, identity) in self.items.iter().enumerate() {
-            let found = object(identity)?;
-            let member = found
-                .member
-                .filter(|member| member.kind == curios_core::ItemRun::KIND)?;
-            match runs
-                .iter_mut()
-                .find(|(run, _)| run.bytes.as_slice().as_ptr() == found.bytes.as_slice().as_ptr())
-            {
-                Some((_, members)) => members.push((at, member.index)),
-                None => runs.push((found, vec![(at, member.index)])),
-            }
-        }
-        let mut items = vec![None; self.items.len()];
-        for (run, members) in runs {
-            let indices = members.iter().map(|(_, index)| *index).collect::<Vec<_>>();
-            let read = curios_core::ItemRun::members(run.bytes.as_slice(), &indices).ok()?;
-            for ((at, _), item) in members.into_iter().zip(read) {
-                items[at] = Some(item);
-            }
-        }
-
-        items.into_iter().collect()
-    }
+    items.into_iter().collect()
 }
