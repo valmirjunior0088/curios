@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         AbsHeapType, AddressType, ArrayType, BlockType, CompType, DataMode, DataName, DataSegment,
@@ -8,6 +11,7 @@ use {
         TableType, TypeName, ValType,
     },
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat},
+    curios_utilities::recurse,
 };
 
 fn print_dollar_ident(name: &str) -> Printer {
@@ -636,9 +640,12 @@ fn print_instr(instr: &Instr) -> Printer {
     }
 }
 
-// Hard breaks, not literal newlines: a group holding a multi-instruction sequence (a global's initializer) must refuse to flatten rather than ride its first instruction.
+// Hard breaks, not literal newlines: a group holding a multi-instruction sequence (a global's initializer) must refuse to flatten rather than ride its first instruction. Each instruction is built inside `recurse`, since a block's printer is built inside its parent's and code nests as deep as the program it was emitted from.
 fn print_instrs(instrs: &[Instr]) -> Printer {
-    sep_flat(instrs.iter().map(print_instr), hard_line)
+    sep_flat(
+        instrs.iter().map(|instr| recurse(|| print_instr(instr))),
+        hard_line,
+    )
 }
 
 fn print_expr(expr: &Expr) -> Printer {
