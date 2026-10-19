@@ -139,6 +139,40 @@ fn constraint_identity_ignores_diagnostic_provenance() {
     assert_eq!(hash(&left), hash(&right));
 }
 
+/// A context's inequalities are what its equality reads: two contexts whose constraints were raised for other reasons, one of them at a position, compare equal and hold one set of inequalities, and a context with another inequality holds another.
+#[test]
+fn a_contexts_inequalities_are_what_it_is_compared_by() {
+    let context = |origin: UniverseConstraintOrigin, upper: usize| UniverseContext {
+        parameter_count: 3,
+        quality_count: 0,
+        constraints: vec![UniverseConstraint {
+            lower: param(0),
+            upper: param(upper),
+            origin,
+        }],
+    };
+    let raised = context(origin("first"), 1);
+    let placed = context(
+        UniverseConstraintOrigin {
+            extent: Some(Extent {
+                anchor: Anchor::of(Anchored::Entry),
+                start: 0,
+                end: 4,
+                stamp: 0,
+            }),
+            declaration: Some("/lib/held".into()),
+            ..origin("second")
+        },
+        1,
+    );
+    let other = context(origin("first"), 2);
+
+    assert_eq!(raised, placed);
+    assert_eq!(raised.inequalities(), placed.inequalities());
+    assert_ne!(raised, other);
+    assert_ne!(raised.inequalities(), other.inequalities());
+}
+
 #[test]
 fn level_parameter_names_stay_alphabetic_past_the_sixth() {
     let name = |index: usize| Level::param(UniverseParam(index)).to_string();

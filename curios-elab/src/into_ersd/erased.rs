@@ -141,7 +141,7 @@ impl ErasedItem {
     }
 
     /// The digest of what an item that names `name` reads of this erased form: what [`ErasedItem::read_alike`] compares, archived. What a unit records of a binding it read in another unit's erased form, and what the binding is asked again by.
-    pub(super) fn read_digest(&self, name: &Global) -> Result<String, String> {
+    pub(crate) fn read_digest(&self, name: &Global) -> Result<String, String> {
         let export = self.export(name).map(|export| match export {
             Export::Dropped => (0u8, None, None, None),
             Export::Constant(constant) => (1, Some(constant.clone()), None, None),
@@ -404,7 +404,7 @@ impl ErasedUnit {
     }
 
     /// The erased form of the item at `place`, read out of its bytes now where the unit was restored and nothing has read it before.
-    pub(super) fn item(&self, place: usize) -> &ErasedItem {
+    pub(crate) fn item(&self, place: usize) -> &ErasedItem {
         self.form(place)
             .erased
             .get()
@@ -429,7 +429,7 @@ impl ErasedUnit {
     }
 
     /// Where the item declaring `name` sits.
-    pub(super) fn place(&self, name: &Global) -> Option<usize> {
+    pub(crate) fn place(&self, name: &Global) -> Option<usize> {
         self.index.declared.get(name).map(|at| place_of(*at))
     }
 
@@ -468,7 +468,7 @@ impl ErasedUnit {
     }
 
     /// The digest of the erased form of the item at `place`, whole, as it is stored.
-    pub(super) fn form_digest(&self, place: usize) -> Result<String, String> {
+    pub(crate) fn form_digest(&self, place: usize) -> Result<String, String> {
         self.form(place).object().map(|object| object.digest.hex())
     }
 

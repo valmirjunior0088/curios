@@ -14,7 +14,7 @@ use {
     super::{Globals, held, induct_alike, struct_alike},
     curios_core::{
         Certification, Global, InductDecl, Item, Module, Nominal, Places, Polarity, Reads, Sharing,
-        StructDecl, Term, Totality, Variance,
+        StructDecl, Term, Totality, UniverseContext, Variance,
     },
     curios_utilities::{Qualifier, digest},
     std::collections::{BTreeMap, HashMap},
@@ -87,7 +87,7 @@ impl<'a> Baseline<'a> {
     }
 }
 
-/// The digest of what a read reads of `name`, a declaration a unit in `globals` holds: of its body, what it unfolds to, where `body`, and otherwise of its signature, which is its type, its universe context, the registry entry it carries as [`induct_alike`] and [`struct_alike`] read one, and the certifier's verdict on it, its totality and its entry's polarity vector. `Ok(None)` where no unit holds the name.
+/// The digest of what a read reads of `name`, a declaration a unit in `globals` holds: of its body, what it unfolds to, where `body`, and otherwise of its signature, which is its type, its universe context by what it is compared by ([`UniverseContext::inequalities`]), the registry entry it carries as [`induct_alike`] and [`struct_alike`] read one, and the certifier's verdict on it, its totality and its entry's polarity vector. `Ok(None)` where no unit holds the name.
 ///
 /// **The certifier's own, of what [`Stood`] says of a declaration of the walk's unit.** A walk records it of each part it read of another unit, and a walk over that walk's unit as a baseline digests the part again where the unit it reads is not the one that was read: the terms are the ones in its scope and the function is this one, so a verdict adopted across units rests on nothing another component computed. Each term is consed alone (`Sharing`), so it is digested under no position and under its binders' names: two parts that digest alike are one to every judgment, and two that differ in a name alone are judged again, which costs a judgment and admits nothing.
 pub(crate) fn read_digest(
@@ -105,24 +105,34 @@ pub(crate) fn read_digest(
         return curios_archive::to_bytes(&unfolds).map(|bytes| Some(digest(&bytes)));
     }
 
-    // An entry as the certifier reads one: what elaboration alone records is left out.
-    let family = globals.induct_decl(name).map(|declaration| InductDecl {
-        module: Qualifier::default(),
-        rep_public: false,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-        ..declaration.shared(&sharing)
+    // An entry as the certifier reads one: what elaboration alone records is left out, and its scheme is held by what it is compared by.
+    let family = globals.induct_decl(name).map(|declaration| {
+        let read = InductDecl {
+            universe_context: UniverseContext::empty(),
+            module: Qualifier::default(),
+            rep_public: false,
+            polarities: Vec::new(),
+            variances: Vec::new(),
+            ..declaration.shared(&sharing)
+        };
+
+        (read, declaration.universe_context.inequalities())
     });
-    let record = globals.struct_decl(name).map(|declaration| StructDecl {
-        module: Qualifier::default(),
-        rep_public: false,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-        ..declaration.shared(&sharing)
+    let record = globals.struct_decl(name).map(|declaration| {
+        let read = StructDecl {
+            universe_context: UniverseContext::empty(),
+            module: Qualifier::default(),
+            rep_public: false,
+            polarities: Vec::new(),
+            variances: Vec::new(),
+            ..declaration.shared(&sharing)
+        };
+
+        (read, declaration.universe_context.inequalities())
     });
     let part = (
         sharing.share(held.type_),
-        held.universes.clone(),
+        held.universes.inequalities(),
         family,
         record,
         globals.partial(name),

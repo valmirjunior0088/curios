@@ -530,6 +530,15 @@ impl Hash for UniverseConstraint {
     }
 }
 
+/// What two contexts are compared by ([`UniverseContext`]'s equality): how many levels and sorts each binds, and each constraint's inequality in order, with nothing of where a constraint came from. What a digest of a declaration holds of its scheme, so two digest alike exactly where they compare equal ([`UniverseContext::inequalities`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Inequalities {
+    parameter_count: u64,
+    quality_count: u64,
+    constraints: Vec<(Level, Level)>,
+}
+
 /// A closed, declaration-local residual universe context.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 #[curios_archive::archived]
@@ -546,6 +555,19 @@ impl UniverseContext {
 
     pub fn empty() -> Self {
         Self::default()
+    }
+
+    /// What this context is compared by: see [`Inequalities`].
+    pub fn inequalities(&self) -> Inequalities {
+        Inequalities {
+            parameter_count: self.parameter_count as u64,
+            quality_count: self.quality_count as u64,
+            constraints: self
+                .constraints
+                .iter()
+                .map(|constraint| (constraint.lower.clone(), constraint.upper.clone()))
+                .collect(),
+        }
     }
 
     /// How many universe parameters of either kind the declaration binds, which is how much an instance of it states: nothing, for a declaration a bare occurrence denotes.

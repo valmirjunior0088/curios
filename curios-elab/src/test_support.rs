@@ -3,8 +3,8 @@
 //! Behind the `test-support` feature, so no build that ships holds it. What it hands out is owned and names a family by its spelling, since a family's identity is its fragment's own and means nothing beside another fragment's.
 
 use {
-    crate::{Context, ErasedUnit, Established},
-    curios_core::Term,
+    crate::{Context, ErasedUnit, Established, Parts, Question, part_digest},
+    curios_core::{Module, Places, Term},
     curios_utilities::SyntaxRegistry,
 };
 
@@ -18,6 +18,33 @@ pub fn written_for_reader(
     context.read_through(established);
 
     crate::written(&mut context, term)
+}
+
+/// The digest of every part of every declaration `module` holds where `places` keeps it, of how an item naming each name reads `erased`'s form of it, and of that form whole, each beside the question it answers: what a unit records of a read. A unit held in hand and the same unit restored from a store are read alike by a unit compiled over either only where these agree.
+pub fn part_digests(
+    module: &Module,
+    places: &Places,
+    erased: &ErasedUnit,
+) -> Vec<(Question, Result<Option<String>, String>)> {
+    module
+        .items
+        .places()
+        .flat_map(|place| module.items.names(place).into_iter().copied())
+        .flat_map(|name| Parts::ALL.questions(name))
+        .map(|question| {
+            let digest = match (
+                question,
+                question.subject().and_then(|name| erased.place(name)),
+            ) {
+                (Question::Erased(name), Some(at)) => erased.item(at).read_digest(&name).map(Some),
+                (Question::Ran(_), Some(at)) => erased.form_digest(at).map(Some),
+                (Question::Erased(_) | Question::Ran(_), None) => Ok(None),
+                (part, _) => part_digest(module, places, &part),
+            };
+
+            (question, digest)
+        })
+        .collect()
 }
 
 /// A field of a constructor's row as its declaring item erased it: its shape, and for a field at a family, that family's name.

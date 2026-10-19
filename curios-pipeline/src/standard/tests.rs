@@ -6,7 +6,7 @@ use {
         Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, compile_unit, compile_unit_over, recheck_over,
         tests::test_support::{
             Store, assert_stored_alike, compile_with_units, elaborated_above, elaborated_wholesale,
-            lowering_stored, traces_stored,
+            lowering_stored, restored, traces_stored,
         },
     },
     curios_core::{
@@ -15,7 +15,8 @@ use {
     },
     curios_elab::{
         Context, ErasedUnit, Error, Established, Reading, Recompile, Recompiled,
-        elaborate_and_zonk_unit_over, test_support::written_for_reader,
+        elaborate_and_zonk_unit_over,
+        test_support::{part_digests, written_for_reader},
     },
     curios_ersd::FieldShape,
     curios_prelude::with_prelude,
@@ -418,6 +419,45 @@ fn std_undo_reproduction() {
             println!("  objects read {:>9}", store.read.borrow().len());
             assert_stored_alike(&original, &undone);
         }
+    });
+}
+
+/// Whether every part of the standard library digests alike held in hand and restored from a store: what a unit compiled over the library records of a read, of its own or of another unit, is asked again by its digest, and a unit restored is read alike only where the two agree ([`part_digests`]). A measurement, since it compiles the library whole; counted, and it asserts.
+#[test]
+#[ignore = "measurement, counted: compiles the standard library whole, stores and restores it, and compares the digest of every part, binding and form the two hold"]
+fn std_part_digest_census() {
+    with_prelude(|prelude| {
+        let [sys, _] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
+        let source = std_from_its_tree();
+        let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+        let held = compile_unit(
+            DEFAULT_STEP_BUDGET,
+            Predecessors::over(&roots),
+            &SYNTAX,
+            &unit,
+        )
+        .expect("the library compiles");
+        let stored = restored(&held);
+        let digests = |unit: &Unit| part_digests(unit.core(), unit.places(), unit.erased());
+        let (now, then) = (digests(&held), digests(&stored));
+
+        let differing = now
+            .iter()
+            .zip(&then)
+            .filter(|(now, then)| now != then)
+            .map(|((question, _), _)| format!("{question:?}"))
+            .collect::<Vec<_>>();
+        println!("\n=== /std's parts held in hand and restored ===");
+        println!("  digested    {:>10}", now.len());
+        println!("  differing   {:>10}", differing.len());
+        assert_eq!(now.len(), then.len(), "the two hold the same parts");
+        assert!(
+            differing.is_empty(),
+            "a part digests otherwise restored: {differing:?}"
+        );
     });
 }
 

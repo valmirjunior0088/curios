@@ -66,36 +66,60 @@ fn a_definition_whose_mark_moved_unfolds_to_something_else() {
     );
 }
 
-/// A definition's signature digests as the unit stores it: where its scheme's constraint was raised is a position of its text, which no stored form holds, so the definition elaborated now and the one restored from a store digest alike.
-#[test]
-fn a_signature_digests_alike_wherever_its_constraints_were_raised() {
-    let raised = Item::Let(Definition {
+/// `stated(1, false)` under a scheme of one constraint, `0 ≤ upper`, raised as `origin` says.
+fn constrained(upper: usize, origin: UniverseConstraintOrigin) -> Item {
+    Item::Let(Definition {
         universe_context: UniverseContext {
-            parameter_count: 2,
+            parameter_count: 3,
             quality_count: 0,
             constraints: vec![UniverseConstraint {
                 lower: Level::param(UniverseParam(0)),
-                upper: Level::param(UniverseParam(1)),
-                origin: UniverseConstraintOrigin {
-                    extent: Some(Extent {
-                        anchor: Anchor::of(Anchored::Entry),
-                        start: 0,
-                        end: 4,
-                        stamp: 0,
-                    }),
-                    ..UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity)
-                },
+                upper: Level::param(UniverseParam(upper)),
+                origin,
             }],
         },
         ..match stated(1, false) {
             Item::Let(definition) => definition,
             Item::Rec(_) => unreachable!("a definition of its own"),
         }
-    });
+    })
+}
+
+/// A signature digests as it is compared: where its scheme's constraint was raised, and why, is no part of either, so the definition elaborated now, the one restored from a store and one whose constraint another reason raised digest alike and compare alike, and one with another inequality does neither.
+#[test]
+fn a_signature_digests_as_it_is_compared() {
+    let placed = constrained(
+        1,
+        UniverseConstraintOrigin {
+            extent: Some(Extent {
+                anchor: Anchor::of(Anchored::Entry),
+                start: 0,
+                end: 4,
+                stamp: 0,
+            }),
+            ..UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity)
+        },
+    );
+    let otherwise = constrained(
+        1,
+        UniverseConstraintOrigin {
+            declaration: Some("/lib/elsewhere".into()),
+            ..UniverseConstraintOrigin::new(UniverseConstraintKind::WrittenType)
+        },
+    );
+    let further = constrained(
+        2,
+        UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+    );
     let digest = |item: &Item| {
         item_part_digest(item, Place::Let(0), &Question::Signature(name()))
             .expect("a signature digests")
     };
+    let alike = |made: &Item, held: &Item| unfolds_alike(made, held).1;
 
-    assert_eq!(digest(&raised), digest(&raised.shared(&Sharing::new())));
+    assert_eq!(digest(&placed), digest(&placed.shared(&Sharing::new())));
+    assert_eq!(digest(&placed), digest(&otherwise));
+    assert!(alike(&placed, &otherwise));
+    assert_ne!(digest(&placed), digest(&further));
+    assert!(!alike(&placed, &further));
 }
