@@ -92,10 +92,13 @@ fn is_prop_in(
         })
 }
 
-/// The quality of the sort `type_` inhabits, as far as it is solved. Wraps `Sort::of`, mapping an exhausted budget like the helpers above.
+/// The quality of the sort `type_` inhabits, as far as it is solved: the one its head's declaration settles where it settles one ([`Sort::declared_quality`]), read before anything is run, and otherwise `Sort::of`'s, mapping an exhausted budget like the helpers above.
 pub(crate) fn quality_of(context: &mut Context, type_: &Term) -> Result<Quality, Error> {
-    Sort::of(context, type_)
-        .map(|sort| sort.quality)
+    Sort::declared_quality(context, &Binders::default(), &Opened::default(), type_)
+        .and_then(|declared| match declared {
+            Some(quality) => Ok(quality),
+            None => Sort::of(context, type_).map(|sort| sort.quality),
+        })
         .map_err(|error| {
             Error::from_reduce(error, |refusal| {
                 Error::reduce_exhausted(type_.clone(), refusal)

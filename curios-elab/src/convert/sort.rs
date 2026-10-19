@@ -373,13 +373,36 @@ impl Sort {
         })
     }
 
-    /// Whether `type_`, as written, is an application of a declaration that lands in `Prop` — the kernel's rule, `curios-cert`'s `declared_into_prop`, which states why a proposition is known by its head and why only a declaration's word is taken. Here a declaration is a global name with an assumption, a member of the group being elaborated included: its signature was checked before any body was, and reduction reads it where the member is still a slot.
+    /// Whether `type_`, as written, is an application of a declaration that lands in `Prop` — the kernel's rule, `curios-cert`'s `declared_into_prop`, which states why a proposition is known by its head and why only a declaration's word is taken.
     pub(crate) fn declared_into_prop(
         context: &mut Context,
         binders: &Binders,
         opened: &Opened,
         type_: &Term,
     ) -> Result<Option<Level>, ReduceError> {
+        Ok(Sort::declared(context, binders, opened, type_)?
+            .and_then(|(quality, level)| quality.is_prop().then_some(level)))
+    }
+
+    /// The quality `type_`, as written, lands in by its head's declaration, where the declaration settles it, `Prop` or `Type`: exact, since no proposition stands where a type is wanted and no type where a proposition is, so nothing reduced is read. `None` where the head is no declaration, or the quality is one its use decides.
+    pub(crate) fn declared_quality(
+        context: &mut Context,
+        binders: &Binders,
+        opened: &Opened,
+        type_: &Term,
+    ) -> Result<Option<Quality>, ReduceError> {
+        Ok(Sort::declared(context, binders, opened, type_)?
+            .map(|(quality, _)| quality)
+            .filter(|quality| matches!(quality, Quality::Prop | Quality::Type)))
+    }
+
+    /// The sort `type_`, as written, lands in by its head's declaration, its quality read through what is solved: where `type_` is an application of a declaration, a global name with an assumption, a member of the group being elaborated included, since its signature was checked before any body was and reduction reads it where the member is still a slot. `None` where the head is no declaration or what the application has is no sort.
+    fn declared(
+        context: &mut Context,
+        binders: &Binders,
+        opened: &Opened,
+        type_: &Term,
+    ) -> Result<Option<(Quality, Level)>, ReduceError> {
         let mut head = type_;
         while let Subterm::Apply(apply) = &**head {
             head = &apply.head;
@@ -401,10 +424,8 @@ impl Sort {
 
         Ok(match synth_neutral(context, binders, opened, type_)? {
             Some(declared) => match &*reduce(context, declared)? {
-                Subterm::Sort(quality, level)
-                    if context.universes().quality(*quality).is_prop() =>
-                {
-                    Some(level.clone())
+                Subterm::Sort(quality, level) => {
+                    Some((context.universes().quality(*quality), level.clone()))
                 }
                 _ => None,
             },
