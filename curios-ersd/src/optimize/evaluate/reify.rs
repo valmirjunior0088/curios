@@ -2,8 +2,11 @@
 //!
 //! A leaf value interns as a [`Constant`] and needs no statement; a list, product, or constructor materializes its already-reified fields into a `Let` binding the corresponding construction right-hand side, appended to `out` in dependency order for the caller to splice ahead of the candidate. A closure result materializes as a deep copy of its function with its reified captures wired in, bound by a `Functions` statement — what makes the runtime-args `Fmt` collapse reachable.
 
+#[cfg(test)]
+mod tests;
+
 use {
-    super::{Bail, Closure, ReifyBudget, Value, copy_weight, deep_copy_function},
+    super::{Bail, Closure, ReifyBudget, Value, deep_copy_function},
     crate::{
         Atom, BlockId, Constant, FunctionId, Module, Rhs, SequenceOp, Statement, StatementId,
         ValueId, control_blocks,
@@ -223,7 +226,7 @@ pub(super) fn reify_all(
     Ok(atoms)
 }
 
-/// What a region names and does not bind: its free functions, then its free values ([`free_references`]).
+/// What a region names and does not bind: its free functions, then its free values ([`RegionFacts`]).
 type Free = (BTreeSet<FunctionId>, BTreeSet<ValueId>);
 
 /// One closure copy's identity: the source function and the captures already reduced to atoms. Equal keys deep-copy to functions that differ only in their fresh identities.
@@ -238,10 +241,7 @@ pub(super) struct ReifyScope {
     item_bound: Option<BTreeSet<FunctionId>>,
     /// The values top-level items bind, computed on first use like [`ReifyScope::item_bound`]. See [`ReifyScope::free_values_settled`].
     item_values: Option<BTreeSet<ValueId>>,
-    /// Each region's free functions and values, computed once per pass. See [`ReifyScope::free_values_settled`] and [`ReifyScope::reaches_candidate`].
-    free: BTreeMap<FunctionId, Option<Free>>,
-    weights: BTreeMap<FunctionId, Option<usize>>,
-    outward: BTreeMap<FunctionId, bool>,
+    regions: Regions,
     local: HashMap<Specialization, Atom>,
     shared: HashMap<Specialization, (Atom, usize)>,
     position: Option<usize>,
@@ -263,9 +263,7 @@ impl ReifyScope {
         Self {
             item_bound: None,
             item_values: None,
-            free: BTreeMap::new(),
-            weights: BTreeMap::new(),
-            outward: BTreeMap::new(),
+            regions: Regions::default(),
             local: HashMap::new(),
             shared: HashMap::new(),
             position: None,
@@ -326,14 +324,9 @@ impl ReifyScope {
         reached
     }
 
-    /// The functions and values `function`'s region names and does not bind, computed once per pass.
-    ///
-    /// Cached because it walks the whole region and is asked on the probe and again on the real run for every closure; reification only appends, so a region's free references do not move within a pass. Uncached, it triples a hello-world compile's wall clock.
-    fn free(&mut self, module: &Module, function: FunctionId) -> Option<&Free> {
-        self.free
-            .entry(function)
-            .or_insert_with(|| free_references(module, function))
-            .as_ref()
+    /// The functions and values `function`'s region names and does not bind, `None` where it reaches a tombstoned entity.
+    pub(super) fn free(&mut self, module: &Module, function: FunctionId) -> Option<&Free> {
+        self.regions.of(module, function).map(|facts| &facts.free)
     }
 
     /// Whether copying `function` for the current candidate would carry it out of the knot initializer it is bound in.
@@ -412,29 +405,170 @@ impl ReifyScope {
             .all(|value| covered.contains(value) || item_values.contains(value))
     }
 
-    /// Whether every function reachable from `function`'s region is in scope at an arbitrary splice site.
-    ///
-    /// Walks the whole region, and is asked on the probe *and* again on the real run for every closure, so it is cached. Stable for a pass on the same argument as the others: reification only appends, and statements are rewritten in the tail.
+    /// Whether every function `function`'s region names outside itself is bound by a top-level item, and so in scope at an arbitrary splice site.
     pub(super) fn outward_ok(&mut self, module: &Module, function: FunctionId) -> bool {
-        if let Some(&known) = self.outward.get(&function) {
-            return known;
-        }
         let item_bound = self
             .item_bound
             .get_or_insert_with(|| item_bound_functions(module));
-        let ok = outward_functions_item_bound(module, function, item_bound);
-        self.outward.insert(function, ok);
-        ok
+        self.regions
+            .of(module, function)
+            .is_some_and(|facts| facts.free.0.iter().all(|named| item_bound.contains(named)))
     }
 
-    /// What deep-copying `function` would materialize, computed once per pass.
+    /// What deep-copying `function` would materialize.
     pub(super) fn weigh(&mut self, module: &Module, function: FunctionId) -> Option<usize> {
-        if let Some(&weight) = self.weights.get(&function) {
-            return weight;
+        self.regions.of(module, function).map(|facts| facts.weight)
+    }
+}
+
+/// What a function's region — the function and every function bound in its blocks, transitively — names and does not bind, and what copying it materializes.
+struct RegionFacts {
+    free: Free,
+    /// What [`deep_copy_function`] adds for the region, in arena entries: its functions, blocks, statements, values and recursive groups.
+    ///
+    /// A closure reifies by copying its whole function region, so charging one node for it would let a single replacement add a parser body's worth of statements for the price of one. The caps only bound what they can see, and this is what makes a closure cost what it actually builds.
+    weight: usize,
+}
+
+/// Each region's facts, computed once per pass from the facts of the regions bound in it.
+///
+/// **A region is a tree.** A function is bound once and a value defined once ([`Module::verify`]), and a region's code names only what is in its lexical scope, so what a region names from outside is what its function's own blocks name and what the regions bound there name, less the function, the functions its blocks bind and the values they define. Walked whole for each function instead, the regions of a nesting — an `Io` block's continuations, each bound inside the one before — cost the square of its depth.
+///
+/// Stable for a pass: reification only appends, and statements are rewritten after it. A region reaching a tombstoned entity, or a function bound inside its own region, has no facts, which every reader takes as unsafe.
+#[derive(Default)]
+struct Regions(BTreeMap<FunctionId, Option<RegionFacts>>);
+
+impl Regions {
+    fn of(&mut self, module: &Module, function: FunctionId) -> Option<&RegionFacts> {
+        // Post-order without native recursion: a nesting is as deep as the program wrote it.
+        let mut work = vec![(function, None)];
+        let mut entered = BTreeSet::new();
+        while let Some((next, share)) = work.pop() {
+            match share {
+                None => {
+                    if self.0.contains_key(&next) || !entered.insert(next) {
+                        continue;
+                    }
+                    let Some(share) = Share::of(module, next) else {
+                        self.0.insert(next, None);
+                        continue;
+                    };
+                    let pending = share
+                        .bound
+                        .iter()
+                        .filter(|child| !self.0.contains_key(child) && !entered.contains(child))
+                        .map(|&child| (child, None))
+                        .collect::<Vec<_>>();
+                    work.push((next, Some(share)));
+                    work.extend(pending);
+                }
+                Some(share) => {
+                    let facts = share.facts(next, &self.0);
+                    self.0.insert(next, facts);
+                }
+            }
         }
-        let weight = copy_weight(module, function);
-        self.weights.insert(function, weight);
-        weight
+        self.0.get(&function)?.as_ref()
+    }
+}
+
+/// What one function's own blocks contribute to its region, before the regions bound in them.
+struct Share {
+    /// The functions those blocks bind, whose regions the function's region holds.
+    bound: Vec<FunctionId>,
+    named: Free,
+    /// The function's parameters and the values its blocks define.
+    defined: BTreeSet<ValueId>,
+    weight: usize,
+}
+
+impl Share {
+    /// `None` when `function` is a tombstone.
+    fn of(module: &Module, function: FunctionId) -> Option<Share> {
+        let definition = module.function(function)?;
+        let mut share = Share {
+            bound: Vec::new(),
+            named: Free::default(),
+            defined: definition.params.iter().copied().collect(),
+            weight: 1 + definition.params.len(),
+        };
+        let mut groups = BTreeSet::new();
+        for block in control_blocks(module, definition.body) {
+            share.weight += 1;
+            let Some(block) = module.block(block) else {
+                continue;
+            };
+            share.weight += block.statements.len();
+            for &statement in &block.statements {
+                match module.statement(statement) {
+                    Some(Statement::Let { result, rhs }) => {
+                        let binders = rhs.binders();
+                        share.weight += 1 + binders.len();
+                        share.defined.insert(*result);
+                        share.defined.extend(binders);
+                        share.name(rhs.operands());
+                    }
+                    Some(Statement::Functions { functions }) => share.bound.extend(functions),
+                    Some(Statement::Rec { group }) => {
+                        groups.insert(*group);
+                        if let Some(group) = module.rec_group(*group) {
+                            share.weight += group.values.len();
+                            share.bound.extend(&group.functions);
+                            share
+                                .defined
+                                .extend(group.values.iter().map(|member| member.value));
+                        }
+                    }
+                    None => {}
+                }
+            }
+            share.name(block.terminator.atoms());
+        }
+        share.weight += groups.len();
+        Some(share)
+    }
+
+    fn name(&mut self, atoms: Vec<Atom>) {
+        for atom in atoms {
+            match atom {
+                Atom::Function(named) => {
+                    self.named.0.insert(named);
+                }
+                Atom::Value(named) => {
+                    self.named.1.insert(named);
+                }
+                Atom::Constant(_) => {}
+            }
+        }
+    }
+
+    /// `function`'s region facts, from this share and the facts of every region bound in it: `None` where one of those has none, or has not been computed because it encloses `function`.
+    fn facts(
+        self,
+        function: FunctionId,
+        regions: &BTreeMap<FunctionId, Option<RegionFacts>>,
+    ) -> Option<RegionFacts> {
+        let Share {
+            bound,
+            named: (mut functions, mut values),
+            defined,
+            mut weight,
+        } = self;
+        for child in &bound {
+            let facts = regions.get(child)?.as_ref()?;
+            functions.extend(&facts.free.0);
+            values.extend(&facts.free.1);
+            weight += facts.weight;
+        }
+        functions.remove(&function);
+        for child in &bound {
+            functions.remove(child);
+        }
+        values.retain(|value| !defined.contains(value));
+        Some(RegionFacts {
+            free: (functions, values),
+            weight,
+        })
     }
 }
 
@@ -512,126 +646,6 @@ pub(super) fn item_bound_functions(module: &Module) -> BTreeSet<FunctionId> {
         }
     }
     item_bound
-}
-
-/// The functions and values a region references from outside itself.
-///
-/// [`outward_functions_item_bound`] answers the same question about functions alone and is what gates a reification at all; this answers it about both, and is what decides whether an emitted group can be *bound at item level*. The two are separate because a free value is ordinarily covered by the closure's captures and substituted away, so the reification gate has no business refusing one — while a copy that came out still naming a value bound in some block cannot be lifted out of it.
-///
-/// `None` when the region reaches a tombstoned entity, which the caller treats as unsafe.
-pub(super) fn free_references(module: &Module, root: FunctionId) -> Option<Free> {
-    let mut region = BTreeSet::new();
-    let mut bound = BTreeSet::new();
-    let mut functions = BTreeSet::new();
-    let mut values = BTreeSet::new();
-    let mut work = vec![root];
-
-    while let Some(function) = work.pop() {
-        if !region.insert(function) {
-            continue;
-        }
-        let definition = module.function(function)?;
-        bound.extend(&definition.params);
-        for block in control_blocks(module, definition.body) {
-            let Some(block) = module.block(block) else {
-                continue;
-            };
-            for &statement in &block.statements {
-                match module.statement(statement) {
-                    Some(Statement::Let { result, rhs }) => {
-                        bound.insert(*result);
-                        bound.extend(rhs.binders());
-                        for atom in rhs.operands() {
-                            match atom {
-                                Atom::Function(referenced) => {
-                                    functions.insert(referenced);
-                                }
-                                Atom::Value(referenced) => {
-                                    values.insert(referenced);
-                                }
-                                Atom::Constant(_) => {}
-                            }
-                        }
-                    }
-                    Some(Statement::Functions {
-                        functions: bound_here,
-                    }) => work.extend(bound_here),
-                    Some(Statement::Rec { group }) => {
-                        if let Some(group) = module.rec_group(*group) {
-                            work.extend(&group.functions);
-                            bound.extend(group.values.iter().map(|member| member.value));
-                        }
-                    }
-                    None => {}
-                }
-            }
-            for atom in block.terminator.atoms() {
-                match atom {
-                    Atom::Function(referenced) => {
-                        functions.insert(referenced);
-                    }
-                    Atom::Value(referenced) => {
-                        values.insert(referenced);
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    functions.retain(|function| !region.contains(function));
-    values.retain(|value| !bound.contains(value));
-    Some((functions, values))
-}
-
-/// Whether every function the region rooted at `root` references outside itself is bound by a top-level item.
-fn outward_functions_item_bound(
-    module: &Module,
-    root: FunctionId,
-    item_bound: &BTreeSet<FunctionId>,
-) -> bool {
-    let mut region = BTreeSet::new();
-    let mut outward = BTreeSet::new();
-    let mut work = vec![root];
-    while let Some(function) = work.pop() {
-        if !region.insert(function) {
-            continue;
-        }
-        let Some(definition) = module.function(function) else {
-            return false;
-        };
-        for block in control_blocks(module, definition.body) {
-            let Some(block) = module.block(block) else {
-                continue;
-            };
-            for &statement in &block.statements {
-                match module.statement(statement) {
-                    Some(Statement::Let { rhs, .. }) => {
-                        for atom in rhs.operands() {
-                            if let Atom::Function(referenced) = atom {
-                                outward.insert(referenced);
-                            }
-                        }
-                    }
-                    Some(Statement::Functions { functions }) => work.extend(functions),
-                    Some(Statement::Rec { group }) => {
-                        if let Some(group) = module.rec_group(*group) {
-                            work.extend(&group.functions);
-                        }
-                    }
-                    None => {}
-                }
-            }
-            for atom in block.terminator.atoms() {
-                if let Atom::Function(referenced) = atom {
-                    outward.insert(referenced);
-                }
-            }
-        }
-    }
-    outward
-        .into_iter()
-        .all(|function| region.contains(&function) || item_bound.contains(&function))
 }
 
 fn emit(module: &mut Module, out: &mut Vec<StatementId>, rhs: Rhs) -> Atom {

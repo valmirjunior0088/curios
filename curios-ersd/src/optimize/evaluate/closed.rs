@@ -8,8 +8,7 @@ mod tests;
 use {
     super::{
         Bail, DESCRIPTION_COPY_NODE_LIMIT, Evaluator, Outcome, PASS_REIFY_BUDGET, ReifyBudget,
-        ReifyScope, Residual, Value, free_references, reify, reify_all, reify_check,
-        reify_check_all,
+        ReifyScope, Residual, Value, reify, reify_all, reify_check, reify_check_all,
     },
     crate::{
         Atom, BlockId, ForeignId, FunctionId, Module, Rhs, Statement, StatementId, ValueId,
@@ -314,7 +313,14 @@ fn apply(module: &mut Module, plans: Vec<Result<Planned, Bail>>) -> (usize, usiz
         if !spliced.is_empty() {
             // Hoisting is a bet placed before reification, because the position has to be in hand before the first copy is recorded under it. Here is where it settles: a group that came out closed is bound ahead of the item, and one that did not goes back into the candidate's own block — with the claim it made on the module-wide memo withdrawn, since nothing later can name a copy bound in a block that need not dominate it.
             let safe = position.is_some_and(|before| {
-                group_is_item_level_safe(module, &spliced, &item_functions, &item_values, before)
+                group_is_item_level_safe(
+                    module,
+                    &mut scope,
+                    &spliced,
+                    &item_functions,
+                    &item_values,
+                    before,
+                )
             });
             let (splice_before, splice_owner) = match hoisting && !safe {
                 true => {
@@ -414,6 +420,7 @@ fn item_binding_positions(
 /// So the group decides. Everything it names must be a constant, a function bound by an item or by this group, or a value bound by an item or by this group — checked through the copies as well as over the emitted statements, because a copy carries its whole region with it.
 fn group_is_item_level_safe(
     module: &Module,
+    scope: &mut ReifyScope,
     group: &[StatementId],
     item_functions: &BTreeMap<FunctionId, usize>,
     item_values: &BTreeMap<ValueId, usize>,
@@ -443,8 +450,7 @@ fn group_is_item_level_safe(
             }
             Some(Statement::Functions { functions: bound }) => {
                 for &function in bound {
-                    let Some((outward_functions, outward_values)) =
-                        free_references(module, function)
+                    let Some((outward_functions, outward_values)) = scope.free(module, function)
                     else {
                         return false;
                     };

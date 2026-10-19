@@ -5,7 +5,7 @@
 //! This pass mints one specialized function per `(target, position, spine)`: a verbatim deep copy with the baked parameter dropped and instead bound locally to the reified spine — *binding, not substitution* — then folded: a match on the now-known spine takes its arm, a known projection reads its field, and a self-recursive call whose spine argument folds to a strictly smaller literal is rewritten to the next specialization. The chain is finite because every mint keys on a strict subterm of its requester's spine; the budgets are belt and braces. A recursive call whose spine does not fold falls back to the generic target — always correct, never required to fire.
 
 use {
-    super::{ReifyBudget, ReifyScope, Value, copy_weight, deep_copy_function, reify, reify_check},
+    super::{ReifyBudget, ReifyScope, Value, deep_copy_function, reify, reify_check},
     crate::{
         Analysis, Atom, BlockId, ConstructorId, Function, FunctionId, Module, Rhs, Statement,
         StatementId, Terminator, ValueId, control_blocks,
@@ -319,7 +319,7 @@ impl Minter {
         let spine_atom = reify(module, spine, &mut reify_budget, &mut prelude, &mut scope).ok()?;
 
         // Charge what the copy will materialize before making it: a mint is bounded by size as well as by count.
-        let weight = copy_weight(module, target)?;
+        let weight = scope.weigh(module, target)?;
         if weight > self.nodes {
             return None;
         }
