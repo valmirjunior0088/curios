@@ -59,7 +59,14 @@ pub struct Object {
     pub digest: Digest,
     pub bytes: Bytes,
     /// Which of the values `bytes` holds together this one is: `None` where they hold it alone.
-    pub member: Option<u32>,
+    pub member: Option<Member>,
+}
+
+/// Which of the values a run holds together an object is, and what kind of run it is: what says how the run is read, by whoever merges it with another of its kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Member {
+    pub kind: u8,
+    pub index: u32,
 }
 
 impl Object {

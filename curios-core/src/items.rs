@@ -167,7 +167,7 @@ impl Stored {
                 .expect("a stored module's items are handed over before one is read");
             match part.member {
                 None => curios_archive::from_bytes::<Item>(part.bytes.as_slice()),
-                Some(member) => self.member(&part.bytes, member),
+                Some(member) => self.member(&part.bytes, member.index),
             }
             .unwrap_or_else(|error| panic!("a stored item failed to restore: {error}"))
         })

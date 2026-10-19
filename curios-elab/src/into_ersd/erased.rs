@@ -10,12 +10,12 @@
 
 use {
     super::{Binding, Environment, Projection},
-    crate::{Answered, Foreign, Question, Readers, Traces, part_digest},
+    crate::{Foreign, HeldTrace, Question, Readers, Traces, part_digest},
     curios_archive::{Bytes, Deferred},
-    curios_core::{Extent, Free, Global, Item, Module, Places, Trace},
-    curios_utilities::{Digest, Object, Ordered, Persistent, digest},
+    curios_core::{Extent, Free, Global, Item, Module, Places},
+    curios_utilities::{Digest, Object, Ordered, Persistent, Recorded, digest},
     std::{
-        borrow::{Borrow, Cow},
+        borrow::Borrow,
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
@@ -338,9 +338,9 @@ pub struct ErasedUnit {
     index: ErasedIndex,
     /// What erasing each item asked of the declarations around it, by the first name the item declares — see the module documentation.
     ///
-    /// **The unit's baseline half**, as a lowered unit keeps its own: stored beside what the unit is for its successors ([`ErasedUnit::baseline_bytes`]), handed back as bytes where the unit is restored ([`ErasedUnit::with_baseline`]), and read out of them when an erasure over the unit first asks.
+    /// **The unit's baseline half**, as a lowered unit keeps its own: stored beside what the unit is for its successors, each item's trace an object ([`ErasedUnit::recorded`]), handed back where the unit is restored ([`ErasedUnit::with_baseline`]), and read when an erasure over the unit first asks.
     #[archived_with(curios_archive::Skip)]
-    asked: Deferred<Traces>,
+    asked: Recorded<Traces>,
     /// Who asked what, of what erasing each item asked, read backwards the first time an erasure over the unit asks (`Readers`).
     #[archived_with(curios_archive::Skip)]
     readers: OnceCell<Readers>,
@@ -479,7 +479,7 @@ impl ErasedUnit {
 
     /// This unit with `asked` as what erasing each of its items asked.
     pub(super) fn asking(mut self, asked: Traces) -> Self {
-        self.asked = Deferred::held(asked);
+        self.asked = Recorded::held(asked);
         self
     }
 
@@ -507,7 +507,7 @@ impl ErasedUnit {
     }
 
     /// What erasing the item declaring `name` first asked, as the unit holds it.
-    pub(super) fn asked(&self, name: &Global) -> Option<&Rc<Trace<Question, Answered>>> {
+    pub(super) fn asked(&self, name: &Global) -> Option<&HeldTrace> {
         self.traces().held(name)
     }
 
@@ -516,14 +516,14 @@ impl ErasedUnit {
         self.traces().foreign()
     }
 
-    /// The bytes of this unit's baseline half: what erasing each of its items asked, stored apart from what the unit is for its successors.
-    pub fn baseline_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
-        self.asked.bytes()
+    /// This unit's baseline half: what erasing each of its items asked, as the unit holds it, which nothing compiled after the unit reads, and which it stores apart from what it is for its successors, each item's trace an object.
+    pub fn recorded(&self) -> &Recorded<Traces> {
+        &self.asked
     }
 
-    /// This unit with `bytes` as its baseline half, read when an erasure over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
-    pub fn with_baseline(mut self, bytes: impl Into<Bytes>) -> Self {
-        self.asked = Deferred::stored(bytes);
+    /// This unit with `table` and `entries` as its baseline half ([`ErasedUnit::recorded`]), read when an erasure over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
+    pub fn with_baseline(mut self, table: impl Into<Bytes>, entries: Vec<Object>) -> Self {
+        self.asked = Recorded::stored(table, entries);
         self
     }
 

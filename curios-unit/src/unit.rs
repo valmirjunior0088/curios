@@ -1,69 +1,15 @@
 //! What one unit provides to its successors, and what it is before a certifier has walked it.
 
 use {
-    crate::{apart_parts, digests, found, halved, halves},
+    crate::{Indexed, Kind, apart_parts, digests, found, halved, halves, traces_indexed},
     curios_abi::ForeignStore,
-    curios_archive::{Bytes, Deferred, joined, parted},
+    curios_archive::{Bytes, joined, parted},
     curios_core::{Certification, ItemRun, Lexicon, Module, Places},
     curios_elab::{ErasedUnit, Projection, Readers, Traces},
     curios_text::PreparedText,
-    curios_utilities::{Digest, Mount, Object},
-    std::{cell::OnceCell, collections::BTreeSet, rc::Rc},
+    curios_utilities::{Digest, Mount, Object, Recorded},
+    std::{cell::OnceCell, rc::Rc},
 };
-
-/// A unit as it is stored: its index, which every compilation after the unit restores and which names each object the unit stores on its own by its digest alone, and those objects ([`Indexed::objects`]).
-///
-/// **The index is a function of what was compiled**, since it names an object by what the object holds and never by where it is kept: a recompile files the index a whole compile files, and a record digests the index alone and so vouches for every object it names.
-pub struct Indexed {
-    pub index: Vec<u8>,
-    /// The objects stored alone: the lowered items and the erased forms.
-    alone: Vec<Object>,
-    /// The elaborated module, and the digest of the item at each place of it.
-    core: Rc<Module>,
-    elaborated: Vec<(usize, Digest)>,
-}
-
-impl Indexed {
-    /// The digest of every object the index names.
-    pub fn digests(&self) -> impl Iterator<Item = &Digest> {
-        self.alone
-            .iter()
-            .map(|object| &object.digest)
-            .chain(self.elaborated.iter().map(|(_, digest)| digest))
-    }
-
-    /// The objects the index names that `wanted` asks for: each stored alone as it is, and the elaborated items, each once, as the members of one run consed in one table ([`ItemRun::of`]), so a node two of them spell is stored once.
-    pub fn objects(&self, wanted: impl Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
-        let mut objects = self
-            .alone
-            .iter()
-            .filter(|object| wanted(&object.digest))
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut seen = BTreeSet::new();
-        let members = self
-            .elaborated
-            .iter()
-            .filter(|(_, digest)| wanted(digest) && seen.insert(*digest))
-            .collect::<Vec<_>>();
-        if members.is_empty() {
-            return Ok(objects);
-        }
-
-        let run = Bytes::from(ItemRun::of(
-            members.iter().map(|(place, _)| &self.core.items[*place]),
-        )?);
-        for (member, (_, digest)) in members.into_iter().enumerate() {
-            objects.push(Object {
-                digest: *digest,
-                bytes: run.clone(),
-                member: Some(u32::try_from(member).map_err(|error| error.to_string())?),
-            });
-        }
-
-        Ok(objects)
-    }
-}
 
 /// A unit as its compilation produced it, before the kernel has judged it: everything a [`Unit`] holds except the certifier's record.
 ///
@@ -94,9 +40,9 @@ pub struct Uncertified {
     erased: Rc<ErasedUnit>,
     /// What each of the unit's declarations asked of the declarations around it as it elaborated: what a later compile of the same sources keeps a declaration's elaboration by.
     ///
-    /// **Of the unit's baseline half, with the text's** ([`PreparedText::baseline_bytes`]): nothing compiled after the unit reads it, so it is stored beside what the unit is for its successors and read out of its bytes when a compile over the unit first asks.
+    /// **Of the unit's baseline half, with the text's** ([`PreparedText::baseline_bytes`]): nothing compiled after the unit reads it, so it is stored beside what the unit is for its successors, each declaration's trace an object, and read when a compile over the unit first asks.
     #[archived_with(curios_archive::Skip)]
-    traces: Rc<Deferred<Traces>>,
+    traces: Rc<Recorded<Traces>>,
     /// Who asked what, of the unit's traces read backwards: what a recompile over the unit finds what an edit could reach by. Made the first time a recompile over the unit asks, or handed over by the recompile that made the unit, and kept beside its places; never stored, being read off the traces.
     #[archived_with(curios_archive::Skip)]
     readers: Rc<OnceCell<Readers>>,
@@ -117,7 +63,7 @@ impl Uncertified {
             projection: Rc::default(),
             lexicon: Rc::default(),
             erased: Rc::new(erased),
-            traces: Rc::new(Deferred::held(traces)),
+            traces: Rc::new(Recorded::held(traces)),
             readers: Rc::default(),
             fixed: false,
         }
@@ -208,27 +154,39 @@ impl Uncertified {
         self.readers.get_or_init(|| Readers::of(self.traces()))
     }
 
-    /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read: its index, the unit and then what it stores apart from itself ([`halved`]), and the objects the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms and its elaborated items ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
+    /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read: its index, the unit and then what it stores apart from itself ([`halved`]), and the objects the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms, its elaborated items, what each declaration asked as it elaborated and what erasing each item asked ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
     fn indexed(&self, unit: &[u8], reads: Option<&[u8]>) -> Result<Indexed, String> {
         let items = self.text.items_objects()?;
         let forms = self.erased.items_objects()?;
-        let elaborated = self.elaborated()?;
+        let elaborated = Kind::Items {
+            core: Rc::clone(&self.core),
+            named: self.elaborated()?,
+        };
+        let (traces_table, traces) = traces_indexed(&self.traces)?;
+        let (asked_table, asked) = traces_indexed(self.erased.recorded())?;
         let anchors = self.text.anchors_bytes()?;
         let imports = self.text.imports_bytes()?;
         let text = self.text.baseline_bytes()?;
-        let traces = self.traces.bytes()?;
-        let erased = self.erased.baseline_bytes()?;
+        let kinds = [elaborated, traces, asked];
 
-        let apart = joined(&[
-            &digests(items.iter().map(|object| &object.digest))[..],
-            &digests(forms.iter().map(|object| &object.digest))[..],
-            &digests(elaborated.iter().map(|(_, digest)| digest))[..],
-            &anchors[..],
-            &imports[..],
-            &text[..],
-            &traces[..],
-            &erased[..],
-        ]);
+        let mut parts = vec![
+            digests(items.iter().map(|object| &object.digest)),
+            digests(forms.iter().map(|object| &object.digest)),
+        ];
+        parts.extend(kinds.iter().map(|kind| digests(kind.digests())));
+        let apart = joined(
+            &parts
+                .iter()
+                .map(Vec::as_slice)
+                .chain([
+                    &anchors[..],
+                    &imports[..],
+                    &text[..],
+                    &traces_table[..],
+                    &asked_table[..],
+                ])
+                .collect::<Vec<_>>(),
+        );
         let apart = match reads {
             Some(reads) => joined(&[&apart[..], reads]),
             None => apart,
@@ -237,8 +195,7 @@ impl Uncertified {
         Ok(Indexed {
             index: halved(unit, &apart),
             alone: items.into_iter().chain(forms).collect(),
-            core: Rc::clone(&self.core),
-            elaborated,
+            kinds: kinds.into(),
         })
     }
 
@@ -275,11 +232,13 @@ impl Uncertified {
             items,
             forms,
             elaborated,
+            traces,
+            asked,
             anchors,
             imports,
             text,
-            traces,
-            erased,
+            traces_table,
+            asked_table,
         ] = apart_parts(&bytes).ok_or("not what a unit stores apart from itself")?;
 
         Ok(Self {
@@ -292,10 +251,10 @@ impl Uncertified {
             ),
             erased: Rc::new(
                 Rc::unwrap_or_clone(self.erased)
-                    .with_baseline(erased)
+                    .with_baseline(asked_table, found(&asked, find)?)
                     .with_items(found(&forms, find)?)?,
             ),
-            traces: Rc::new(Deferred::stored(traces)),
+            traces: Rc::new(Recorded::stored(traces_table, found(&traces, find)?)),
             readers: Rc::default(),
             core: Rc::new(Rc::unwrap_or_clone(self.core).with_items(found(&elaborated, find)?)?),
             places: Rc::default(),

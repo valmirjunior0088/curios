@@ -16,8 +16,8 @@ use {
         withhold,
     },
     crate::{
-        Answered, Context, Error, Established, Foreign, GoalSite, Parts, Question, Readers, Same,
-        Traces, concepts_alike, entries_alike, inducts_alike, structs_alike,
+        Answered, Context, Error, Established, Foreign, GoalSite, HeldTrace, Parts, Question,
+        Readers, Same, Traces, concepts_alike, entries_alike, inducts_alike, structs_alike,
     },
     curios_core::{Declarations, Global, Item, Module, Nominal, Places, Trace},
     curios_utilities::recurse,
@@ -856,11 +856,7 @@ impl<'a> Demand<'a> {
     /// What `declaration` asked where the baseline elaborated it, where the walk may keep it by that: the lowering kept every item of it, the baseline holds each under its name, nothing it reaches is refused, and a witness it declares is alone at its key.
     ///
     /// **A witness is kept where it would register.** A witness registers under its key as its signature elaborates, and the second to register at one key is refused; a kept one registers nothing, so it is asked here what registering would have: that it is the first the unit declares at its key, and that none stands there yet. One that is not is attempted, and refused where a whole compile refuses it.
-    fn recorded(
-        &self,
-        context: &Context,
-        declaration: usize,
-    ) -> Option<Rc<Trace<Question, Answered>>> {
+    fn recorded(&self, context: &Context, declaration: usize) -> Option<HeldTrace> {
         let over = self.over?;
         let module = self.module;
         let names = self.names(declaration);

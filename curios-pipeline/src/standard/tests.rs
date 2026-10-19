@@ -6,6 +6,7 @@ use {
         Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, compile_unit, compile_unit_over, recheck_over,
         tests::test_support::{
             assert_stored_alike, compile_with_units, elaborated_above, elaborated_wholesale,
+            traces_stored,
         },
     },
     curios_core::{
@@ -13,7 +14,7 @@ use {
         Places, ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
     },
     curios_elab::{
-        Context, ErasedUnit, Error, Established, Reading, Recompile, Recompiled, Traces,
+        Context, ErasedUnit, Error, Established, Reading, Recompile, Recompiled,
         elaborate_and_zonk_unit_over, test_support::written_for_reader,
     },
     curios_ersd::FieldShape,
@@ -226,14 +227,16 @@ fn std_unit_reproduction() {
         if stored!(first.certification()) != stored!(second.certification()) {
             differing.push("the certifier's record".to_string());
         }
-        if stored!(first.traces()) != stored!(second.traces()) {
+        if traces_stored(first.traces()) != traces_stored(second.traces()) {
             differing.push("what its declarations asked".to_string());
         }
         let erasures = |unit: &Unit| {
-            unit.erased()
-                .baseline_bytes()
-                .expect("an erased unit's traces serialize")
-                .into_owned()
+            traces_stored(
+                unit.erased()
+                    .recorded()
+                    .get()
+                    .expect("an erased unit's traces restore"),
+            )
         };
         if erasures(&first) != erasures(&second) {
             differing.push("what its erasures asked".to_string());
@@ -426,16 +429,7 @@ fn std_image_division() {
                 .and_then(|parts| parts.try_into().ok())
                 .expect("what a certified unit stores apart");
         let reads = reads.as_slice().len();
-        let [
-            lowered,
-            forms,
-            _,
-            anchors,
-            imports,
-            records,
-            asked,
-            erasures,
-        ] = apart_parts(&apart)
+        let [lowered, forms, _, _, _, anchors, imports, records, _, _] = apart_parts(&apart)
             .expect("what a unit stores apart")
             .map(|part| part.as_slice().len());
         // Each lowered item, then each erased form, is an object stored alone, and the elaborated items are the members of one run.
@@ -453,6 +447,14 @@ fn std_image_division() {
             .first()
             .map_or(0, |member| member.bytes.as_slice().len());
         let (lowered, forms) = (alone(0..lowered), alone(lowered..lowered + forms));
+        let asked = traces_stored(std.traces()).len();
+        let erasures = traces_stored(
+            std.erased()
+                .recorded()
+                .get()
+                .expect("erasure's half restores"),
+        )
+        .len();
 
         println!("\n=== how /std's stored unit divides ===");
         row(
@@ -505,15 +507,8 @@ fn std_image_division() {
                 .len(),
             None,
         );
-        part!("  what its declarations asked", Traces, std.traces());
-        row(
-            "  what its erasures asked",
-            std.erased()
-                .baseline_bytes()
-                .expect("erasure's half serializes")
-                .len(),
-            None,
-        );
+        row("  what its declarations asked", asked, None);
+        row("  what its erasures asked", erasures, None);
 
         let together = Sharing::new();
         std.core().shared(&together);

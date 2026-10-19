@@ -20,6 +20,9 @@ pub struct ItemRun {
 }
 
 impl ItemRun {
+    /// The kind a pack's entry names for a member of a run of items ([`curios_utilities::Member`]).
+    pub const KIND: u8 = 1;
+
     /// The bytes of a run of `items`, in their order, consed in one table: one node for each structure as it is spelled, under no position ([`Item::shared`]).
     pub fn of<'i>(items: impl IntoIterator<Item = &'i Item>) -> Result<Vec<u8>, String> {
         let sharing = Sharing::new();

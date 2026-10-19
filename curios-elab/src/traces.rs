@@ -4,7 +4,7 @@
 //!
 //! **A version of the baseline's.** A unit compiled over a baseline holds its baseline's traces with the trace of each declaration it made filed in place of the one it replaces and each declaration it dropped taken out: the table is persistent and read back in the order of its names ([`Sorted`]), so a trace kept is shared, never copied, and nothing is visited to keep it.
 //!
-//! **Stored with each name written once.** A trace names the same few declarations its neighbours do: the library's traces hold some forty names each, drawn from the few thousand the library and its scope declare. A name is archived as its segments, and read back through the process's table at an allocation a segment, so the stored form holds a table of the names and of the witness keys, each once, and a question holds its place there.
+//! **Each declaration's trace an object, stored with each name written once.** A trace is stored as an object of its own, named by the digest of its run alone, and the traces a filing writes are the members of one run ([`TraceTable`]). A trace names the same few declarations its neighbours do: the library's traces hold some forty names each, drawn from the few thousand the library and its scope declare. A name is archived as its segments, and read back through the process's table at an allocation a segment, so a run holds a table of the names and of the witness keys, each once, and a question holds its place there. What the unit reads of other units, the declarations settled before the offer and the stored order are the unit's own, stored with it.
 
 #[cfg(test)]
 mod tests;
@@ -12,9 +12,8 @@ mod tests;
 use {
     crate::{Answered, Question},
     curios_core::{Global, Order, Trace, WitnessKey},
-    curios_utilities::{InKeyOrder, Persistent, Sorted},
+    curios_utilities::{Digest, Filed, InKeyOrder, Object, Persistent, Records, Sorted},
     std::{
-        borrow::Borrow,
         collections::{BTreeMap, BTreeSet, HashMap},
         convert::Infallible,
         hash::Hash,
@@ -22,12 +21,19 @@ use {
     },
 };
 
+/// A declaration's trace as a unit holds it: shared with every version that keeps it, beside the digest it is stored under.
+pub type HeldTrace = Rc<Filed<Trace<Question, Answered>>>;
+
+/// A declaration's trace as a run holds it: the name the declaration is written as, and its trace.
+pub type TracedEntry = (Global, Trace<Question, Answered>);
+
 /// Each declaration's trace, by the name it is written as. See the module documentation.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Traces {
-    #[archived_with(TraceTabled)]
-    declarations: Sorted<Global, Rc<Trace<Question, Answered>>>,
+    /// **Stored apart, an object for each**, and handed back where the traces are restored ([`Records`]): what is archived with the unit is the rest.
+    #[archived_with(curios_archive::Skip)]
+    declarations: Sorted<Global, HeldTrace>,
     /// What the declarations read of declarations the unit does not hold. See [`Foreign`].
     foreign: Rc<Foreign>,
     /// The declarations settled before the unit's lemmas were offered to a proof the elaborator writes: the prover's vocabulary and everything it reads, by the names they are written as.
@@ -108,11 +114,11 @@ impl Foreign {
 impl Traces {
     /// File `trace` as what the declaration written as `name` asked, in place of any trace held under the name.
     pub(crate) fn file(&mut self, name: Global, trace: Trace<Question, Answered>) {
-        self.declarations.insert(name, Rc::new(trace));
+        self.declarations.insert(name, Rc::new(Filed::new(trace)));
     }
 
     /// File `trace` as what the declaration written as `name` asked: another unit's trace of it, held where that unit holds it.
-    pub(crate) fn share(&mut self, name: Global, trace: Rc<Trace<Question, Answered>>) {
+    pub(crate) fn share(&mut self, name: Global, trace: HeldTrace) {
         self.declarations.insert(name, trace);
     }
 
@@ -123,12 +129,17 @@ impl Traces {
 
     /// What the declaration written as `name` asked, where the unit holds one.
     pub fn of(&self, name: &Global) -> Option<&Trace<Question, Answered>> {
-        self.held(name).map(Rc::as_ref)
+        self.held(name).map(|held| &***held)
     }
 
     /// The trace of the declaration written as `name`, as the unit holds it.
-    pub(crate) fn held(&self, name: &Global) -> Option<&Rc<Trace<Question, Answered>>> {
+    pub(crate) fn held(&self, name: &Global) -> Option<&HeldTrace> {
         self.declarations.get(name)
+    }
+
+    /// Each declaration's trace as the unit holds it, in the order of the names the declarations are written as: what the unit stores an object for.
+    pub fn declarations(&self) -> impl Iterator<Item = (&Global, &HeldTrace)> {
+        self.declarations.iter()
     }
 
     /// What the declarations read of declarations the unit does not hold.
@@ -163,7 +174,7 @@ impl Traces {
 
     /// Every declaration's trace, in the order of the names the declarations are written as.
     pub(crate) fn each(&self) -> impl Iterator<Item = &Trace<Question, Answered>> {
-        self.declarations.iter().map(|(_, trace)| trace.as_ref())
+        self.declarations.iter().map(|(_, trace)| &***trace)
     }
 
     /// The declarations holding a trace, by the name each is written as, with how many questions each asked.
@@ -484,7 +495,7 @@ impl Readers {
     }
 }
 
-/// A unit's traces as they are stored: every name and every witness key a question holds, once, and each declaration's questions holding their places.
+/// Declarations' traces as a run of the store holds them: every name and every witness key a question holds, once, and each declaration's questions holding their places, a member of the run.
 #[curios_archive::archived]
 pub struct TraceTable {
     names: Vec<Global>,
@@ -533,22 +544,57 @@ fn placed<T: Copy>(table: &[T], place: u32, of: &str) -> Result<T, String> {
         .ok_or_else(|| format!("a stored trace holds a {of} its table does not"))
 }
 
-/// How a unit's traces are archived: as a [`TraceTable`].
-pub struct TraceTabling;
+impl TraceTable {
+    /// The kind a pack's entry names for a member of a run of traces ([`curios_utilities::Member`]).
+    pub const KIND: u8 = 2;
 
-/// The field adapter: `#[archived_with(TraceTabled)]`.
-pub type TraceTabled = curios_archive::Via<TraceTabling>;
+    /// The bytes of a run of `entries`, each a declaration's name and its trace, in their order.
+    pub fn run<'t>(
+        entries: impl IntoIterator<Item = (&'t Global, &'t Trace<Question, Answered>)>,
+    ) -> Result<Vec<u8>, String> {
+        curios_archive::to_bytes(&Self::of(entries)).map(|bytes| bytes.to_vec())
+    }
 
-impl curios_archive::Proxy<Sorted<Global, Rc<Trace<Question, Answered>>>> for TraceTabling {
-    type Archivable = TraceTable;
+    /// What the trace `trace` of the declaration written as `name` is named by among the objects of a store: the digest of a run of it alone.
+    pub fn identity(name: &Global, trace: &Trace<Question, Answered>) -> Result<Digest, String> {
+        Self::run([(name, trace)]).map(|bytes| Digest::of(&bytes))
+    }
 
-    fn to_archivable(
-        declarations: &Sorted<Global, Rc<Trace<Question, Answered>>>,
-    ) -> impl Borrow<TraceTable> {
+    /// The entries of the run `bytes` holds ([`TraceTable::run`]), in their order. `Err` is bytes that hold no run of traces.
+    pub fn read(bytes: &[u8]) -> Result<Vec<TracedEntry>, String> {
+        let TraceTable {
+            names,
+            keys,
+            declarations,
+        } = curios_archive::from_bytes::<TraceTable>(bytes)?;
+
+        declarations
+            .into_iter()
+            .map(|TabledTrace { name, asked }| {
+                let mut trace = Trace::default();
+                for (question, answered) in asked.asked() {
+                    trace.record(
+                        question.spelled(
+                            |place| placed(&names, place, "name"),
+                            |place| placed(&keys, place, "witness key"),
+                        )?,
+                        answered.spelled(|place| placed(&names, place, "name"))?,
+                    );
+                }
+
+                Ok((placed(&names, name, "name")?, trace))
+            })
+            .collect()
+    }
+
+    /// The table holding `entries`, every name and witness key once, at the place it was first asked for.
+    fn of<'t>(
+        entries: impl IntoIterator<Item = (&'t Global, &'t Trace<Question, Answered>)>,
+    ) -> TraceTable {
         let mut names = Placing::new();
         let mut keys = Placing::new();
-        let declarations = declarations
-            .iter()
+        let declarations = entries
+            .into_iter()
             .map(|(name, trace)| {
                 let mut asked = Trace::default();
                 for (question, answered) in trace.asked() {
@@ -574,29 +620,32 @@ impl curios_archive::Proxy<Sorted<Global, Rc<Trace<Question, Answered>>>> for Tr
             declarations,
         }
     }
+}
 
-    fn from_archivable(
-        table: TraceTable,
-    ) -> Result<Sorted<Global, Rc<Trace<Question, Answered>>>, String> {
-        let TraceTable {
-            names,
-            keys,
-            declarations,
-        } = table;
-
-        let mut traces = Sorted::new();
-        for TabledTrace { name, asked } in declarations {
-            let mut trace = Trace::default();
-            for (question, answered) in asked.asked() {
-                trace.record(
-                    question.spelled(
-                        |place| placed(&names, place, "name"),
-                        |place| placed(&keys, place, "witness key"),
-                    )?,
-                    answered.spelled(|place| placed(&names, place, "name"))?,
-                );
-            }
-            traces.insert(placed(&names, name, "name")?, Rc::new(trace));
+/// A unit's traces restored out of what it stores of them: the rest, archived with the unit, and each declaration's trace a member of a run ([`TraceTable`]), restored beside the digest it was found by. A run several traces lie in is read once.
+impl Records for Traces {
+    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+        let mut traces = curios_archive::from_bytes::<Traces>(table)?;
+        let mut runs = HashMap::<(usize, usize), Vec<Option<TracedEntry>>>::new();
+        for object in entries {
+            let member = object
+                .member
+                .ok_or("a trace is stored as a member of a run")?;
+            let bytes = object.bytes.as_slice();
+            let run = match runs.entry((bytes.as_ptr() as usize, bytes.len())) {
+                std::collections::hash_map::Entry::Occupied(read) => read.into_mut(),
+                std::collections::hash_map::Entry::Vacant(unread) => {
+                    unread.insert(TraceTable::read(bytes)?.into_iter().map(Some).collect())
+                }
+            };
+            let (name, trace) = usize::try_from(member.index)
+                .ok()
+                .and_then(|index| run.get_mut(index))
+                .and_then(Option::take)
+                .ok_or_else(|| format!("a run of traces holds no member {}", member.index))?;
+            traces
+                .declarations
+                .insert(name, Rc::new(Filed::stored(trace, object.digest)));
         }
 
         Ok(traces)

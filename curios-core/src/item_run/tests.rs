@@ -4,7 +4,7 @@ use {
         Definition, DefinitionKind, Free, Global, Items, Outlines, Term, Totality, UniverseContext,
     },
     curios_archive::Bytes,
-    curios_utilities::{Object, Qualifier},
+    curios_utilities::{Member, Object, Qualifier},
 };
 
 /// A definition `name` of the ground type, whose body is `body`.
@@ -45,7 +45,10 @@ fn stored(items: &[Item], bytes: Bytes) -> Items {
         .map(|(member, item)| Object {
             digest: ItemRun::identity(item).expect("an item archives"),
             bytes: bytes.clone(),
-            member: Some(u32::try_from(member).expect("a few members")),
+            member: Some(Member {
+                kind: ItemRun::KIND,
+                index: u32::try_from(member).expect("a few members"),
+            }),
         })
         .collect();
 

@@ -11,9 +11,10 @@
 use {
     super::{ErasedUnit, Erasures, Held, Projection},
     crate::{
-        Answered, Question, Same, concepts_alike, entries_alike, inducts_alike, structs_alike,
+        Answered, HeldTrace, Question, Same, concepts_alike, entries_alike, inducts_alike,
+        structs_alike,
     },
-    curios_core::{Changes, Global, Item, Module, Nominal, Place, Places, Trace},
+    curios_core::{Changes, Global, Item, Module, Nominal, Place, Places},
     std::{
         collections::{BTreeSet, HashMap},
         rc::Rc,
@@ -35,7 +36,7 @@ pub struct ErasedBaseline<'a> {
 }
 
 /// An erased form the unit keeps of its baseline, with what erasing it asked.
-pub(super) type Kept = (Held, Rc<Trace<Question, Answered>>);
+pub(super) type Kept = (Held, HeldTrace);
 
 /// What an erasure over a baseline has decided, as it walks the unit's items in the order they are stored in.
 pub(super) struct ErasedOver<'a> {

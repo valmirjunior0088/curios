@@ -25,3 +25,6 @@ pub use stored::*;
 
 mod pack;
 pub use pack::*;
+
+mod indexed;
+pub use indexed::*;

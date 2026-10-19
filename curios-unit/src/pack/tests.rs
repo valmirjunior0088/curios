@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_core::{Definition, DefinitionKind, Global, Term, Totality, UniverseContext},
+    curios_core::{Definition, DefinitionKind, Global, Item, Term, Totality, UniverseContext},
     curios_utilities::Qualifier,
     std::io::Cursor,
 };
@@ -58,17 +58,20 @@ fn the_same_objects_pack_to_the_same_name() {
 #[test]
 fn members_of_one_run_share_its_bytes() {
     let run = Bytes::from(b"a run of two members".to_vec());
-    let member = |form: &[u8], member| Object {
+    let member = |form: &[u8], index| Object {
         digest: Digest::of(form),
         bytes: run.clone(),
-        member: Some(member),
+        member: Some(Member {
+            kind: ItemRun::KIND,
+            index,
+        }),
     };
     let bytes = packed(&[member(b"first", 0), member(b"second", 1), whole(b"alone")]);
     let pack = Pack::read(Bytes::from(bytes.clone())).expect("a pack reads back");
 
     let second = pack.get(&Digest::of(b"second")).expect("a member packed");
     assert_eq!(second.bytes.as_slice(), run.as_slice());
-    assert_eq!(second.member, Some(1));
+    assert_eq!(second.member.map(|member| member.index), Some(1));
     assert_eq!(
         bytes
             .windows(run.as_slice().len())
@@ -113,7 +116,10 @@ fn pack_of(items: &[Item], alone: &[Object]) -> Pack {
         objects.push(Object {
             digest: ItemRun::identity(item).expect("an item archives"),
             bytes: run.clone(),
-            member: Some(u32::try_from(member).expect("a few members")),
+            member: Some(Member {
+                kind: ItemRun::KIND,
+                index: u32::try_from(member).expect("a few members"),
+            }),
         });
     }
 
@@ -145,7 +151,7 @@ fn a_merge_conses_its_runs_into_one() {
         assert_eq!(member.bytes.as_slice(), run, "one run holds every member");
         let read = curios_archive::from_bytes::<ItemRun>(member.bytes.as_slice())
             .expect("a run reads back");
-        let at = usize::try_from(member.member.expect("a member")).expect("a small member");
+        let at = usize::try_from(member.member.expect("a member").index).expect("a small member");
         assert_eq!(&read.items[at], *item);
     }
 }

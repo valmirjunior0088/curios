@@ -16,7 +16,7 @@ use {
         Certification, Entrypoint, Extent, Free, Global, Item, Module, Operand, Program, Trace,
         Zonked, foreign_operands, project_erased_universes,
     },
-    curios_utilities::{SyntaxRegistry, grown, recurse},
+    curios_utilities::{Filed, SyntaxRegistry, grown, recurse},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -712,7 +712,7 @@ pub(super) fn erase_items<'s>(
                     others.push(**name);
                 }
 
-                Rc::new(trace)
+                Rc::new(Filed::new(trace))
             }
         };
         if let Some(name) = names.first() {
@@ -726,8 +726,8 @@ pub(super) fn erase_items<'s>(
         for name in made.iter().chain(&others).chain(over.lost()) {
             readers.replace(
                 *name,
-                earlier.asked(name).map(Rc::as_ref),
-                asked.held(name).map(Rc::as_ref),
+                earlier.asked(name).map(|held| &***held),
+                asked.held(name).map(|held| &***held),
             );
         }
 

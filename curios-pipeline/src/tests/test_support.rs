@@ -5,7 +5,7 @@
 use {
     crate::*,
     curios_core::{Item, Module, Sharing, Variance},
-    curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_program},
+    curios_elab::{DEFAULT_STEP_BUDGET, Erasures, TraceTable, Traces, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, RootSource, SYNTAX, UnitSource},
     curios_unit::{Pack, Predecessors, Unit, packed},
@@ -416,6 +416,19 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
     assert_eq!(whole.tests, incremental.tests);
 }
 
+/// What a unit stores of `traces`: the rest of them, then each declaration's trace, all in one run.
+pub(crate) fn traces_stored(traces: &Traces) -> Vec<u8> {
+    let mut bytes = curios_archive::to_bytes(traces)
+        .expect("a unit's traces serialize")
+        .to_vec();
+    bytes.extend(
+        TraceTable::run(traces.declarations().map(|(name, held)| (name, &***held)))
+            .expect("a unit's traces serialize"),
+    );
+
+    bytes
+}
+
 /// `unit` stored and restored, the objects its index names found in one pack of their own, as a store keeps them beside a slot.
 pub(crate) fn restored(unit: &Unit) -> Unit {
     let stored = unit.stored().expect("a unit serializes");
@@ -446,10 +459,14 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
             .expect("a baseline half serializes")
             .into_owned()
     };
-    let traces = |unit: &Unit| {
-        curios_archive::to_bytes(unit.traces())
-            .expect("a unit's traces serialize")
-            .to_vec()
+    let traces = traces_stored;
+    let erasures = |unit: &Unit| {
+        traces(
+            unit.erased()
+                .recorded()
+                .get()
+                .expect("an erased unit's traces restore"),
+        )
     };
     let parts = [
         (
@@ -458,12 +475,11 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
         ),
         (
             "what its declarations asked",
-            traces(whole) == traces(incremental),
+            traces(whole.traces()) == traces(incremental.traces()),
         ),
         (
             "what its erasures asked",
-            whole.erased().baseline_bytes().unwrap()
-                == incremental.erased().baseline_bytes().unwrap(),
+            erasures(whole) == erasures(incremental),
         ),
         (
             "the text stage's part",

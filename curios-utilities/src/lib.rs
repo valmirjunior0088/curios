@@ -48,6 +48,9 @@ pub use recurse::*;
 mod digest;
 pub use digest::*;
 
+mod recorded;
+pub use recorded::*;
+
 mod nearest;
 pub use nearest::*;
 
