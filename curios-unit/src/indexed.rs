@@ -2,8 +2,8 @@
 
 use {
     crate::rerun,
-    curios_archive::Bytes,
-    curios_core::{Global, ItemRun, Module},
+    curios_archive::{Bytes, parted},
+    curios_core::{Global, HeldReads, ItemRun, Module, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
     curios_utilities::{Digest, Member, Object, Recorded},
     std::{borrow::Cow, collections::BTreeSet, rc::Rc},
@@ -56,6 +56,8 @@ pub(crate) enum Kind {
     },
     /// Declarations' traces, each with its digest and the name it is filed under.
     Traces(Vec<(Digest, Global, HeldTrace)>),
+    /// What judging definitions read, each with its digest and the definition's name.
+    Reads(Vec<(Digest, Global, HeldReads)>),
 }
 
 impl Kind {
@@ -65,6 +67,7 @@ impl Kind {
             Kind::Stored(objects) => Box::new(objects.iter().map(|object| &object.digest)),
             Kind::Items { named, .. } => Box::new(named.iter().map(|(_, digest)| digest)),
             Kind::Traces(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
+            Kind::Reads(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
         }
     }
 
@@ -112,6 +115,22 @@ impl Kind {
                     run,
                 )
             }
+            Kind::Reads(entries) => {
+                let entries = entries
+                    .iter()
+                    .filter(|(digest, ..)| fresh(digest))
+                    .collect::<Vec<_>>();
+                if entries.is_empty() {
+                    return Ok(Vec::new());
+                }
+                let run = ReadTable::run(entries.iter().map(|(_, name, held)| (name, &***held)))?;
+
+                members(
+                    ReadTable::KIND,
+                    entries.iter().map(|(digest, ..)| *digest),
+                    run,
+                )
+            }
         }
     }
 }
@@ -137,6 +156,70 @@ fn members(
             })
         })
         .collect()
+}
+
+/// What a certified unit stores of what judging its definitions read, `recorded`: its own part and the kind of its entries, what it was restored from where it was and its own otherwise, each definition's reads by the digest they are stored under ([`ReadTable::identity`]).
+pub(crate) fn reads_indexed(recorded: &Recorded<Read>) -> Result<(Cow<'_, [u8]>, Kind), String> {
+    if let Some((table, entries)) = recorded.as_stored() {
+        return Ok((
+            Cow::Borrowed(table.as_slice()),
+            Kind::Stored(entries.to_vec()),
+        ));
+    }
+    let read = recorded.get()?;
+    let table = curios_archive::to_bytes(read)?.to_vec();
+    let entries = read
+        .definitions()
+        .map(|(name, held)| {
+            let digest = held.digest(|reads| ReadTable::identity(name, reads))?;
+
+            Ok((digest, *name, Rc::clone(held)))
+        })
+        .collect::<Result<_, String>>()?;
+
+    Ok((Cow::Owned(table), Kind::Reads(entries)))
+}
+
+/// The bytes a record of what was read is filed as where it is a constant of the executable, as the prelude's certification files it: its own part, the digest of each definition's reads and the one run holding them all, behind their lengths, so it is restored as a store's is and nothing of it is read until a walk asks.
+pub fn reads_filed(recorded: &Recorded<Read>) -> Result<Vec<u8>, String> {
+    let (table, kind) = reads_indexed(recorded)?;
+    let digests = crate::digests(kind.digests());
+    let run = kind
+        .objects(&|_| true)?
+        .first()
+        .map(|member| member.bytes.as_slice().to_vec())
+        .unwrap_or_default();
+
+    Ok(curios_archive::joined(&[
+        &table[..],
+        &digests[..],
+        &run[..],
+    ]))
+}
+
+/// The record of what was read that `bytes` file ([`reads_filed`]): its own part, and each definition's reads a member of the one run, named by its digest. `None` for bytes that are no such thing.
+pub fn reads_restored(bytes: &Bytes) -> Option<(Bytes, Vec<Object>)> {
+    let [table, digests, run]: [Bytes; 3] = parted(bytes)?.try_into().ok()?;
+    let digests = digests.as_slice();
+    if !digests.len().is_multiple_of(32) {
+        return None;
+    }
+    let entries = digests
+        .chunks_exact(32)
+        .enumerate()
+        .map(|(index, digest)| {
+            Some(Object {
+                digest: Digest::from_bytes(digest.try_into().ok()?),
+                bytes: run.clone(),
+                member: Some(Member {
+                    kind: ReadTable::KIND,
+                    index: u32::try_from(index).ok()?,
+                }),
+            })
+        })
+        .collect::<Option<_>>()?;
+
+    Some((table, entries))
 }
 
 /// What a unit stores of the traces `recorded`: their own part and the kind of their entries, what they were restored from where they were and their own otherwise, each trace by the digest it is stored under ([`TraceTable::identity`]).

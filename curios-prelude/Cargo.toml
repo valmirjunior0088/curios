@@ -51,3 +51,5 @@ curios-core = { workspace = true }
 curios-elab = { workspace = true }
 curios-prelude-archive = { workspace = true }
 curios-text = { workspace = true }
+# For the form what judging each definition read is filed in, which a unit's is restored from as a store's is.
+curios-unit = { workspace = true }

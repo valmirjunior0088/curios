@@ -1,7 +1,9 @@
 //! What one unit provides to its successors, and what it is before a certifier has walked it.
 
 use {
-    crate::{Indexed, Kind, apart_parts, digests, found, halved, halves, traces_indexed},
+    crate::{
+        Indexed, Kind, apart_parts, digests, found, halved, halves, reads_indexed, traces_indexed,
+    },
     curios_abi::ForeignStore,
     curios_archive::{Bytes, joined, parted},
     curios_core::{Certification, ItemRun, Lexicon, Module, Places},
@@ -154,8 +156,8 @@ impl Uncertified {
         self.readers.get_or_init(|| Readers::of(self.traces()))
     }
 
-    /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read: its index, the unit and then what it stores apart from itself ([`halved`]), and the objects the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms, its elaborated items, what each declaration asked as it elaborated and what erasing each item asked ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
-    fn indexed(&self, unit: &[u8], reads: Option<&[u8]>) -> Result<Indexed, String> {
+    /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read, its own part and its entries: its index, the unit and then what it stores apart from itself ([`halved`]), and the objects the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms, its elaborated items, what each declaration asked as it elaborated and what erasing each item asked ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
+    fn indexed(&self, unit: &[u8], reads: Option<(&[u8], Kind)>) -> Result<Indexed, String> {
         let items = self.text.items_objects()?;
         let forms = self.erased.items_objects()?;
         let elaborated = Kind::Items {
@@ -167,7 +169,7 @@ impl Uncertified {
         let anchors = self.text.anchors_bytes()?;
         let imports = self.text.imports_bytes()?;
         let text = self.text.baseline_bytes()?;
-        let kinds = [elaborated, traces, asked];
+        let mut kinds = vec![elaborated, traces, asked];
 
         let mut parts = vec![
             digests(items.iter().map(|object| &object.digest)),
@@ -188,14 +190,19 @@ impl Uncertified {
                 .collect::<Vec<_>>(),
         );
         let apart = match reads {
-            Some(reads) => joined(&[&apart[..], reads]),
+            Some((table, reads)) => {
+                let named = digests(reads.digests());
+                kinds.push(reads);
+
+                joined(&[&apart[..], &named[..], table])
+            }
             None => apart,
         };
 
         Ok(Indexed {
             index: halved(unit, &apart),
             alone: items.into_iter().chain(forms).collect(),
-            kinds: kinds.into(),
+            kinds,
         })
     }
 
@@ -343,16 +350,16 @@ impl Unit {
         Rc::ptr_eq(&self.unit.core, &other.unit.core)
     }
 
-    /// This unit as it is stored: its index, itself, its elaborated module without its items, then what it stores apart from itself and what the certifier's record does, what judging each definition read ([`Certification::reads_bytes`]), each behind its length; and the objects the index names ([`Indexed::objects`]).
+    /// This unit as it is stored: its index, itself, its elaborated module without its items, then what it stores apart from itself and what the certifier's record does, what judging each definition read ([`Certification::recorded`]), each behind its length; and the objects the index names ([`Indexed::objects`]).
     ///
     /// **A stored unit says what its items mean, not where they were written or how they were come by.** An elaborated item is named by its form consed in a table of its own, one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are named alike, and one moved by an edit above it is stored as it was; the items a filing writes are consed in one table, so a node two of them spell is stored once.
     ///
     /// Consed here and not where a unit is assembled, and only the items the unit did not restore: a unit that is neither filed nor followed — a keystroke's — is never serialized.
     pub fn stored(&self) -> Result<Indexed, String> {
         let unit = curios_archive::to_bytes(self)?;
-        let reads = self.certification.reads_bytes()?;
+        let (table, reads) = reads_indexed(self.certification.recorded())?;
 
-        self.unit.indexed(&unit, Some(&reads))
+        self.unit.indexed(&unit, Some((&table, reads)))
     }
 
     /// The unit whose index is `index` ([`Unit::stored`]), each object it names found by `find`: decoded, what it stores apart from itself kept as the bytes it is, for whoever asks. `Err` is bytes that hold no unit, or an object `find` holds none for.
@@ -362,13 +369,16 @@ impl Unit {
     ) -> Result<Self, String> {
         let (unit, apart) = halves(index).ok_or("not a unit's index")?;
         let restored = curios_archive::from_bytes::<Unit>(unit)?;
-        let [apart, reads]: [Bytes; 2] = parted(&Bytes::from(apart.to_vec()))
+        let [apart, reads, table]: [Bytes; 3] = parted(&Bytes::from(apart.to_vec()))
             .and_then(|parts| parts.try_into().ok())
             .ok_or("not what a certified unit stores apart from itself")?;
+        let reads = found(&reads, &find)?;
 
         Ok(Self {
             unit: restored.unit.with_apart(apart, &find)?,
-            certification: Rc::new(Rc::unwrap_or_clone(restored.certification).with_reads(reads)),
+            certification: Rc::new(
+                Rc::unwrap_or_clone(restored.certification).with_reads(table, reads),
+            ),
         })
     }
 }

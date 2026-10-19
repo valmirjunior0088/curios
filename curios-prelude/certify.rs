@@ -7,6 +7,7 @@ use {
     curios_core::{Certification, Zonked},
     curios_elab::DEFAULT_STEP_BUDGET,
     curios_text::SYNTAX,
+    curios_unit::reads_filed,
     std::{fs, path::Path},
 };
 
@@ -79,7 +80,7 @@ fn file_certifications(out: &Path, certifications: &Vec<Certification>) {
     // What judging each definition read, each root's behind its length: a record is filed without them, and only a walk over a root as a baseline reads them.
     let reads = certifications
         .iter()
-        .map(Certification::reads_bytes)
+        .map(|certification| reads_filed(certification.recorded()))
         .collect::<Result<Vec<_>, _>>()
         .unwrap_or_else(|error| panic!("the prelude's reads failed to serialize: {error}"));
     let path = out.join("reads.rkyv");

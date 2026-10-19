@@ -11,7 +11,7 @@ mod tests;
 
 use {
     curios_archive::Bytes,
-    curios_core::ItemRun,
+    curios_core::{ItemRun, ReadEntry, ReadTable},
     curios_elab::{TraceTable, TracedEntry},
     curios_utilities::{Digest, Member, Object},
     std::{
@@ -237,6 +237,13 @@ pub fn rerun(kind: u8, members: &[Object]) -> Result<Vec<Object>, String> {
                 entries
                     .iter()
                     .map(|entry: &&TracedEntry| (&entry.0, &entry.1)),
+            )
+        }),
+        ReadTable::KIND => rerun_with(kind, members, ReadTable::read, |entries| {
+            ReadTable::run(
+                entries
+                    .iter()
+                    .map(|entry: &&ReadEntry| (&entry.0, &entry.1)),
             )
         }),
         other => Err(format!("no run is of kind {other}")),

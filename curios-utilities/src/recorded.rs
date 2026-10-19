@@ -46,6 +46,15 @@ impl<T> Filed<T> {
     }
 }
 
+/// Two are one where their values are: the digest is where a value is stored, not what it is.
+impl<T: PartialEq> PartialEq for Filed<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<T: Eq> Eq for Filed<T> {}
+
 impl<T> Deref for Filed<T> {
     type Target = T;
 

@@ -11,7 +11,7 @@ use {
     curios_core::Certification,
     curios_document::Documentation,
     curios_prelude_archive::{restore_archives, restore_documentation},
-    curios_unit::Unit,
+    curios_unit::{Unit, reads_restored},
     std::cell::LazyCell,
 };
 
@@ -30,14 +30,16 @@ thread_local! {
             certifications.try_into().unwrap_or_else(|filed: Vec<_>| {
                 panic!("the prelude's certification holds {} records for two roots", filed.len())
             });
-        let [sys_reads, std_reads]: [Bytes; 2] = parted(&Bytes::from(READS_BYTES))
-            .and_then(|filed| filed.try_into().ok())
+        let [sys_reads, std_reads] = parted(&Bytes::from(READS_BYTES))
+            .and_then(|filed| <[Bytes; 2]>::try_from(filed).ok())
+            .and_then(|[sys, std]| Some([reads_restored(&sys)?, reads_restored(&std)?]))
             .unwrap_or_else(|| panic!("the prelude's reads are not two roots'"));
         let [sys, std] = restore_archives();
+        let certified = |record: Certification, (table, entries)| record.with_reads(table, entries);
 
         [
-            sys.unit.certified(sys_record.with_reads(sys_reads)),
-            std.unit.certified(std_record.with_reads(std_reads)),
+            sys.unit.certified(certified(sys_record, sys_reads)),
+            std.unit.certified(certified(std_record, std_reads)),
         ]
     });
 }

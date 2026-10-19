@@ -9,11 +9,13 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
-        Marks, Members, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
-        Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
-        UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
+        Marks, Members, Place, Places, Polarity, ReadEntry, ReadTable, RecGroup, RecMemberScopes,
+        Scope, Sharing, Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
+        UniverseContext, UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
     },
-    curios_utilities::{InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Sorted},
+    curios_utilities::{
+        Filed, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded, Records, Sorted,
+    },
     std::{
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -60,9 +62,9 @@ pub struct Certification {
     variances: Sorted<Global, Vec<Variance>>,
     /// What judging each definition read of other items: what a later walk over the unit decides by which of these verdicts stand, and what nothing compiled after the unit reads.
     ///
-    /// **Of the unit's baseline half**, as its traces are: skipped where the record is stored, stored beside it ([`Certification::reads_bytes`]), handed back as bytes where it is restored ([`Certification::with_reads`]), and read out of them when a walk over the unit first asks.
+    /// **Of the unit's baseline half**, as its traces are: skipped where the record is stored, stored beside it, each definition's reads an object ([`Certification::recorded`]), handed back where it is restored ([`Certification::with_reads`]), and read when a walk over the unit first asks.
     #[archived_with(curios_archive::Skip)]
-    reads: curios_archive::Deferred<Read>,
+    reads: Recorded<Read>,
     /// What judging each definition read, read backwards. See [`ReadBy`].
     #[archived_with(curios_archive::Skip)]
     read_by: OnceCell<ReadBy>,
@@ -81,7 +83,7 @@ pub struct ReadBy {
 
 impl ReadBy {
     /// Who read what, of what judging each definition of `by` read.
-    fn of(by: &Sorted<Global, Reads>) -> Self {
+    fn of(by: &Sorted<Global, HeldReads>) -> Self {
         // Gathered whole first, so each name's list is built once and not copied at every reader a persistent insert would add.
         let (mut signatures, mut bodies) = (
             BTreeMap::<Global, Vec<Global>>::new(),
@@ -166,16 +168,55 @@ impl ReadBy {
     }
 }
 
+/// What judging a definition read, as a record holds it: shared with every version that keeps it, beside the digest it is stored under.
+pub type HeldReads = Rc<Filed<Reads>>;
+
 /// What a walk's judgments read, held apart from what they concluded: of the items of its own unit, by name, and of the declarations of other units, each by the digest of the part read.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Read {
-    /// What judging each definition read of other items.
-    #[archived_with(InKeyOrder)]
-    by: Sorted<Global, Reads>,
+    /// What judging each definition read of other items: stored apart, an object for each ([`ReadTable`]), and handed back where the record is restored ([`Records`]), what is archived with it being the rest.
+    #[archived_with(curios_archive::Skip)]
+    by: Sorted<Global, HeldReads>,
     /// What the walk read of each declaration its unit does not hold, another unit's. See [`Abroad`].
     #[archived_with(InKeyOrder)]
     abroad: Sorted<Global, Abroad>,
+}
+
+impl Read {
+    /// What judging each definition read, as the record holds it, in the order of the definitions' names: what the record stores an object for.
+    pub fn definitions(&self) -> impl Iterator<Item = (&Global, &HeldReads)> {
+        self.by.iter()
+    }
+}
+
+/// What a walk's judgments read restored out of what a unit stores of them: the rest, archived with the record, and what judging each definition read a member of a run ([`ReadTable`]), restored beside the digest it was found by. A run several lie in is read once.
+impl Records for Read {
+    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+        let mut read = curios_archive::from_bytes::<Read>(table)?;
+        let mut runs = HashMap::<(usize, usize), Vec<Option<ReadEntry>>>::new();
+        for object in entries {
+            let member = object
+                .member
+                .ok_or("what a judgment read is stored as a member of a run")?;
+            let bytes = object.bytes.as_slice();
+            let run = match runs.entry((bytes.as_ptr() as usize, bytes.len())) {
+                std::collections::hash_map::Entry::Occupied(held) => held.into_mut(),
+                std::collections::hash_map::Entry::Vacant(unread) => {
+                    unread.insert(ReadTable::read(bytes)?.into_iter().map(Some).collect())
+                }
+            };
+            let (name, reads) = usize::try_from(member.index)
+                .ok()
+                .and_then(|index| run.get_mut(index))
+                .and_then(Option::take)
+                .ok_or_else(|| format!("a run of reads holds no member {}", member.index))?;
+            read.by
+                .insert(name, Rc::new(Filed::stored(reads, object.digest)));
+        }
+
+        Ok(read)
+    }
 }
 
 /// What a walk read of one declaration of another unit: the digest of what a signature read reads of it, and of what a body read does, each where some judgment read it. The certifier makes both, from the terms in its scope and its own verdict on them, and compares them where a walk over a baseline meets a unit that is not the one the baseline's walk read.
@@ -294,14 +335,18 @@ impl Certification {
             .unwrap_or_else(|error| panic!("a certifier's reads failed to restore: {error}"))
     }
 
-    /// The bytes of what judging each definition read: stored apart from the record, since only a walk over its unit as a baseline reads them.
-    pub fn reads_bytes(&self) -> Result<std::borrow::Cow<'_, [u8]>, String> {
-        self.reads.bytes()
+    /// What judging each definition read, as the record holds it: stored apart from the record, each definition's reads an object, since only a walk over its unit as a baseline reads them.
+    pub fn recorded(&self) -> &Recorded<Read> {
+        &self.reads
     }
 
-    /// This record with `bytes` as what judging each definition read ([`Certification::reads_bytes`]), read when a walk over its unit first asks: what a restored record is given, since restoring it leaves it with none.
-    pub fn with_reads(mut self, bytes: impl Into<curios_archive::Bytes>) -> Self {
-        self.reads = curios_archive::Deferred::stored(bytes);
+    /// This record with `table` and `entries` as what judging each definition read ([`Certification::recorded`]), read when a walk over its unit first asks: what a restored record is given, since restoring it leaves it with none.
+    pub fn with_reads(
+        mut self,
+        table: impl Into<curios_archive::Bytes>,
+        entries: Vec<Object>,
+    ) -> Self {
+        self.reads = Recorded::stored(table, entries);
         self
     }
 
@@ -322,7 +367,7 @@ impl Certification {
 
     /// What judging `name` read of other items, when this record covers it.
     pub fn reads(&self, name: &Global) -> Option<&Reads> {
-        self.read().by.get(name)
+        self.read().by.get(name).map(|held| &***held)
     }
 
     /// What the walk read of `name`, a declaration of another unit, where it read it and recorded so.
@@ -359,7 +404,7 @@ pub struct Revision {
     totalities: Sorted<Global, Totality>,
     polarities: Sorted<Global, Vec<Polarity>>,
     variances: Sorted<Global, Vec<Variance>>,
-    by: Sorted<Global, Reads>,
+    by: Sorted<Global, HeldReads>,
     abroad: Sorted<Global, Abroad>,
 }
 
@@ -367,7 +412,7 @@ impl Revision {
     /// Record what the walk concluded of `name`, which it judged.
     pub fn judged(&mut self, name: Global, certified: Certified) {
         self.totalities.insert(name, certified.totality);
-        self.by.insert(name, certified.reads);
+        self.by.insert(name, Rc::new(Filed::new(certified.reads)));
     }
 
     /// Take out everything recorded of `name`, which the unit no longer declares.
@@ -413,7 +458,7 @@ impl Revision {
             totalities: self.totalities,
             polarities: self.polarities,
             variances: self.variances,
-            reads: curios_archive::Deferred::held(Read {
+            reads: Recorded::held(Read {
                 by: self.by,
                 abroad: self.abroad,
             }),

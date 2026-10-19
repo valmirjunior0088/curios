@@ -20,6 +20,9 @@ pub use items::*;
 mod item_run;
 pub use item_run::*;
 
+mod read_table;
+pub use read_table::*;
+
 mod declarations;
 pub use declarations::*;
 
