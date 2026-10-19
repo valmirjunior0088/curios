@@ -425,11 +425,12 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         for item in items {
             let body = self.emit_item(item, region, block_params, dispatch);
             let label = item_enter_label(item, region, dispatch);
-            result = std::iter::once(curios_wasm::Instr::Block {
+            result = [curios_wasm::Instr::Block {
                 label_name: label,
                 block_type: curios_wasm::BlockType::Empty,
                 instructions: result,
-            })
+            }]
+            .into_iter()
             .chain(body)
             .collect();
         }
