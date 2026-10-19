@@ -47,6 +47,7 @@ impl Cache for Overlaid<'_> {
             offered.cloned().map(|unit| Earlier {
                 unit,
                 after: After::Scope,
+                candidates: None,
             })
         })
     }

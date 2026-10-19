@@ -37,6 +37,15 @@ impl Credits {
         self.credited.extend(read);
     }
 
+    /// Credit `credited`, each by its declaration and its place: what the proofs of a declaration taken from a candidate read, which no proof written now reads again.
+    pub(crate) fn adopt(&mut self, credited: impl IntoIterator<Item = (Global, u32)>) {
+        self.credited.extend(
+            credited
+                .into_iter()
+                .map(|(declaration, place)| (Some(declaration), place)),
+        );
+    }
+
     /// The written binders proofs have read, each by its declaration and its place among that declaration's written binders — each used, though no written reference reaches it.
     pub(crate) fn credited(&self) -> BTreeSet<(Option<Global>, u32)> {
         self.credited.iter().copied().collect()

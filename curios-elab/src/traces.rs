@@ -43,6 +43,11 @@ pub struct Traces {
     before: Rc<BTreeSet<Global>>,
     /// The order the unit's items are stored in, with what each reaches of the unit and its depth: what a unit compiled over this one gives the order again from the items it made by ([`Order::revised`]).
     order: Order,
+    /// The candidate each declaration's elaboration was filed as ([`Candidating`](crate::Candidating)), by the name it is written as, where a filing made one.
+    ///
+    /// **Carried with the trace it was made beside.** A declaration kept over a baseline asked what it asked there and read each part as it was, so its candidate is the one its baseline filed, and a unit compiled over this one names it again without making it; one made again or dropped is taken out with its trace.
+    #[archived_with(InKeyOrder)]
+    candidates: Sorted<Global, [u8; 32]>,
 }
 
 /// What a unit's declarations read of declarations the unit does not hold, another unit's or no one's: each part asked of one, with the digest it had (`part_digest`), none where the name declared no such part.
@@ -112,9 +117,21 @@ impl Foreign {
 }
 
 impl Traces {
-    /// File `trace` as what the declaration written as `name` asked, in place of any trace held under the name.
+    /// File `trace` as what the declaration written as `name` asked, in place of any trace held under the name and the candidate filed beside it.
     pub(crate) fn file(&mut self, name: Global, trace: Trace<Question, Answered>) {
         self.declarations.insert(name, Rc::new(Filed::new(trace)));
+        self.candidates.remove(&name);
+    }
+
+    /// File `trace` as what the declaration written as `name` asked, as the candidate named `candidate` holds it: what a walk that adopts the candidate files, the candidate being what a filing would make of it again.
+    pub(crate) fn adopt(
+        &mut self,
+        name: Global,
+        trace: Trace<Question, Answered>,
+        candidate: Digest,
+    ) {
+        self.declarations.insert(name, Rc::new(Filed::new(trace)));
+        self.candidates.insert(name, *candidate.as_bytes());
     }
 
     /// File `trace` as what the declaration written as `name` asked: another unit's trace of it, held where that unit holds it.
@@ -122,9 +139,32 @@ impl Traces {
         self.declarations.insert(name, trace);
     }
 
-    /// Take out the trace held under `name`, where one is: a declaration no longer written as it.
+    /// Take out the trace held under `name`, where one is, with the candidate filed beside it: a declaration no longer written as it.
     pub(crate) fn forget(&mut self, name: &Global) {
         self.declarations.remove(name);
+        self.candidates.remove(name);
+    }
+
+    /// The digest of the candidate the declaration written as `name` was filed as, where the unit holds one.
+    pub fn candidate(&self, name: &Global) -> Option<Digest> {
+        self.candidates.get(name).copied().map(Digest::from_bytes)
+    }
+
+    /// The digest of the candidate each declaration was filed as, by the name it is written as.
+    pub fn candidates(&self) -> impl Iterator<Item = (&Global, Digest)> {
+        self.candidates
+            .iter()
+            .map(|(name, candidate)| (name, Digest::from_bytes(*candidate)))
+    }
+
+    /// These traces with `made` filed as the candidates of the declarations each names, beside the ones held: what a filing that made them stores.
+    pub fn with_candidates(&self, made: impl IntoIterator<Item = (Global, Digest)>) -> Traces {
+        let mut traces = self.clone();
+        for (name, candidate) in made {
+            traces.candidates.insert(name, *candidate.as_bytes());
+        }
+
+        traces
     }
 
     /// What the declaration written as `name` asked, where the unit holds one.

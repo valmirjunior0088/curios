@@ -9,6 +9,7 @@ mod tests;
 
 use {
     crate::{Item, Sharing},
+    curios_archive::Pooled,
     curios_utilities::Digest,
 };
 
@@ -39,5 +40,22 @@ impl ItemRun {
     /// What `item` is named by among the objects of a store: the digest of its form consed in a table of its own and archived alone.
     pub fn identity(item: &Item) -> Result<Digest, String> {
         curios_archive::to_bytes(&item.shared(&Sharing::new())).map(|bytes| Digest::of(&bytes))
+    }
+
+    /// The members `members` names of the run `bytes` holds, in their order, the run checked once and nothing of it restored but them: what a compile reads of a run that may hold every item of a unit.
+    pub fn members(bytes: &[u8], members: &[u32]) -> Result<Vec<Item>, String> {
+        let run = curios_archive::access::<ArchivedItemRun>(bytes)?;
+        let pooled = Pooled::new();
+        members
+            .iter()
+            .map(|member| {
+                let item = usize::try_from(*member)
+                    .ok()
+                    .and_then(|member| run.items.get(member))
+                    .ok_or_else(|| format!("a run holds no member {member}"))?;
+
+                pooled.restore::<Item>(item)
+            })
+            .collect()
     }
 }

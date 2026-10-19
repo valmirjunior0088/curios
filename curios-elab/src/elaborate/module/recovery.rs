@@ -9,7 +9,7 @@
 use {
     crate::{Attempted, Context, Error, GoalSite},
     curios_core::{Entrypoint, Free, Global, Item, Module},
-    std::collections::BTreeSet,
+    std::collections::{BTreeSet, HashMap},
 };
 
 /// A top-level item's position in its module's order, with the entry after the last item: what an item is kept and a refusal filed under, so both come back in item order whatever order the items elaborated in.
@@ -172,6 +172,8 @@ pub(super) struct Survived {
 #[derive(Default)]
 pub(super) struct Survivors {
     kept: Vec<(ItemStamp, Item)>,
+    /// Where `kept` holds the item declaring each name.
+    declaring: HashMap<Global, usize>,
     refusals: Vec<(ItemStamp, Error)>,
     obligations: Vec<(ItemStamp, Error)>,
     held: Vec<Holding>,
@@ -180,6 +182,9 @@ pub(super) struct Survivors {
 impl Survivors {
     /// Keep an item that elaborated, with the erasure obligations it breaks: reported, and no refusal, since the item stands for the certifier to judge.
     pub(super) fn keep(&mut self, stamp: ItemStamp, item: Item, obligations: Vec<Error>) {
+        for name in item.declared_names() {
+            self.declaring.insert(*name, self.kept.len());
+        }
         self.kept.push((stamp, item));
         self.obligations
             .extend(obligations.into_iter().map(|error| (stamp, error)));
@@ -195,6 +200,11 @@ impl Survivors {
         if !matches!(error.unwrapped(), Error::Poisoned) {
             self.refusals.push((stamp, error));
         }
+    }
+
+    /// The kept item declaring `name`, where one does.
+    pub(super) fn item(&self, name: &Global) -> Option<&Item> {
+        self.declaring.get(name).map(|kept| &self.kept[*kept].1)
     }
 
     /// Every name the kept items declare.

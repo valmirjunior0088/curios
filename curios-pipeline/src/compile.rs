@@ -1,7 +1,7 @@
 //! The stage sequence itself: [`compile_entrypoint`] and the two halves it is assembled from — the type-checking prologue and the lowering back half — each observing every [`Stage`] it produces before moving past it.
 
 use {
-    super::{Stage, compile_lowered_over, compile_unit_over_told},
+    super::{Over, Stage, compile_lowered_over, compile_unit_over_told},
     curios_abi::ForeignStore,
     curios_cert::{
         Globals, Kernel, Rechecked, Verdict, certify_module, certify_program,
@@ -23,7 +23,7 @@ use {
         UnitSource, into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
     curios_unit::{Predecessors, Uncertified, Unit},
-    curios_utilities::{Qualifier, Report, SyntaxRegistry, recurse},
+    curios_utilities::{Candidates, Qualifier, Report, SyntaxRegistry, recurse},
     std::{cell::LazyCell, collections::BTreeSet, fmt, rc::Rc},
 };
 
@@ -971,17 +971,21 @@ where
                 Some(Earlier {
                     unit: baseline,
                     after,
+                    candidates,
                 }) => compile_lowered_over(
                     budget,
                     predecessors,
                     syntax,
                     lowered,
-                    baseline,
-                    &predecessors
-                        .units()
-                        .iter()
-                        .map(|unit| after.moved(unit))
-                        .collect::<Vec<_>>(),
+                    Over {
+                        baseline,
+                        moved: &predecessors
+                            .units()
+                            .iter()
+                            .map(|unit| after.moved(unit))
+                            .collect::<Vec<_>>(),
+                        candidates: candidates.as_deref(),
+                    },
                     closing,
                 ),
                 None => compile_lowered(budget, predecessors, syntax, lowered, closing),
@@ -1342,10 +1346,12 @@ pub trait Cache {
     fn put(&self, source: &UnitSource<'_>, unit: &Unit);
 }
 
-/// A unit to compile another text of its sources over, with what it was compiled after: what a cache offers the fold on a miss.
+/// A unit to compile another text of its sources over, with what it was compiled after and what the cache holds of declarations elaborated before: what a cache offers the fold on a miss.
 pub struct Earlier {
     pub unit: Unit,
     pub after: After,
+    /// What a declaration to be made may be taken from ([`compile_unit_over`](crate::compile_unit_over)): `None` for a cache that keeps nothing of the kind.
+    pub candidates: Option<Rc<dyn Candidates>>,
 }
 
 /// Which units in scope a baseline was compiled after, as whoever offers it can say.
@@ -1447,16 +1453,20 @@ where
             Some(Earlier {
                 unit: baseline,
                 after,
+                candidates,
             }) => compile_unit_over_told(
                 budget,
                 Predecessors::over(&predecessors),
                 syntax,
                 source,
-                baseline,
-                &predecessors
-                    .iter()
-                    .map(|unit| after.moved(unit))
-                    .collect::<Vec<_>>(),
+                Over {
+                    baseline,
+                    moved: &predecessors
+                        .iter()
+                        .map(|unit| after.moved(unit))
+                        .collect::<Vec<_>>(),
+                    candidates: candidates.as_deref(),
+                },
                 &told,
             )?,
             None => compile_unit_told(

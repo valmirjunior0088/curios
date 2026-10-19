@@ -1,7 +1,7 @@
 //! A unit as it is stored: its index, and the objects the index names, each entry of a kind a member of one run of it where a filing writes it.
 
 use {
-    crate::rerun,
+    crate::{Uncertified, rerun},
     curios_archive::{Bytes, parted},
     curios_core::{Anchors, Global, HeldReads, Imports, ItemRun, Module, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
@@ -59,6 +59,12 @@ pub(crate) enum Kind {
     Traces(Vec<(Digest, Global, HeldTrace)>),
     /// What judging definitions read, each with its digest and the definition's name.
     Reads(Vec<(Digest, Global, HeldReads)>),
+    /// The candidates of a unit's declarations' elaborations, stored alone: the ones a filing made now, and the digests of the ones it carried, which `unit` makes again for a store that lacks one ([`Uncertified::candidates_again`]).
+    Candidates {
+        made: Vec<Object>,
+        carried: Vec<Digest>,
+        unit: Uncertified,
+    },
     /// The records and scans of a lowering's baseline half, each stored alone, by their digests.
     Lowering {
         text: Rc<PreparedText>,
@@ -84,6 +90,11 @@ impl Kind {
             Kind::Items { named, .. } => Box::new(named.iter().map(|(_, digest)| digest)),
             Kind::Traces(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
             Kind::Reads(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
+            Kind::Candidates { made, carried, .. } => Box::new(
+                made.iter()
+                    .map(|object| &object.digest)
+                    .chain(carried.iter()),
+            ),
             Kind::Lowering { digests, .. }
             | Kind::Imports { digests, .. }
             | Kind::Anchors { digests, .. } => Box::new(digests.iter()),
@@ -133,6 +144,27 @@ impl Kind {
                     entries.iter().map(|(digest, ..)| *digest),
                     run,
                 )
+            }
+            Kind::Candidates {
+                made,
+                carried,
+                unit,
+            } => {
+                let mut objects = made
+                    .iter()
+                    .filter(|object| fresh(&object.digest))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                let lacking = carried
+                    .iter()
+                    .filter(|digest| fresh(digest))
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+                if !lacking.is_empty() {
+                    objects.extend(unit.candidates_again(&lacking)?);
+                }
+
+                Ok(objects)
             }
             Kind::Lowering { text, digests } => {
                 let wanted = digests
@@ -332,7 +364,12 @@ pub(crate) fn anchors_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>,
 }
 
 /// What a unit stores of the traces `recorded`: their own part and the kind of their entries, what they were restored from where they were and their own otherwise, each trace by the digest it is stored under ([`TraceTable::identity`]).
-pub(crate) fn traces_indexed(recorded: &Recorded<Traces>) -> Result<(Cow<'_, [u8]>, Kind), String> {
+///
+/// The traces held are stored with `made` filed as the candidates of the declarations each names ([`Traces::with_candidates`]).
+pub(crate) fn traces_indexed<'r>(
+    recorded: &'r Recorded<Traces>,
+    made: &[(Global, Object)],
+) -> Result<(Cow<'r, [u8]>, Kind), String> {
     if let Some((table, entries)) = recorded.as_stored() {
         return Ok((
             Cow::Borrowed(table.as_slice()),
@@ -340,7 +377,10 @@ pub(crate) fn traces_indexed(recorded: &Recorded<Traces>) -> Result<(Cow<'_, [u8
         ));
     }
     let traces = recorded.get()?;
-    let table = curios_archive::to_bytes(traces)?.to_vec();
+    let table = curios_archive::to_bytes(
+        &traces.with_candidates(made.iter().map(|(name, object)| (*name, object.digest))),
+    )?
+    .to_vec();
     let entries = traces
         .declarations()
         .map(|(name, held)| {

@@ -19,7 +19,7 @@ use {
     curios_pipeline::{After, Cache, Earlier},
     curios_text::{Overlay, UnitSource},
     curios_unit::{Indexed, Record, Unit, digested, read_within},
-    curios_utilities::{Qualifier, digest},
+    curios_utilities::{Candidates, Qualifier, digest},
     std::{
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet},
@@ -233,6 +233,7 @@ impl Verdicts {
         Some(Earlier {
             unit: kept.unit.clone(),
             after: After::Units(after),
+            candidates: self.candidates(&slot),
         })
     }
 
@@ -399,6 +400,12 @@ impl Verdicts {
         Some(packs)
     }
 
+    /// What the packs of `slot`'s address hold of declarations elaborated before, for a compile at the slot to take one from (`curios_elab::Candidating`): a slot names one unit, so whatever filed them compiled the unit at hand.
+    fn candidates(&self, slot: &str) -> Option<Rc<dyn Candidates>> {
+        self.packs(slot)
+            .map(|packs| -> Rc<dyn Candidates> { packs })
+    }
+
     /// The unit whose index `slot` holds as `index`, each object it names found among the packs of the slot's address: `None` where one of them is not found there, or the index holds no unit.
     fn restored(&self, slot: &str, index: &[u8]) -> Option<Unit> {
         curios_profile::profile!("verdicts::restored");
@@ -563,6 +570,7 @@ impl Verdicts {
         Some(Earlier {
             unit,
             after: After::Units(after),
+            candidates: self.candidates(&slot),
         })
     }
 
@@ -634,6 +642,7 @@ impl Cache for Verdicts {
                 offered.cloned().map(|unit| Earlier {
                     unit,
                     after: After::Scope,
+                    candidates: self.slot(source).and_then(|slot| self.candidates(&slot)),
                 })
             })
     }

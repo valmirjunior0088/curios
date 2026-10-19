@@ -31,7 +31,7 @@ use {
         UniverseContext, UniverseMetaId, Universes, Visit, stamp_declaration_instance,
         universe_metas,
     },
-    curios_utilities::{Plicity, Qualifier, grown},
+    curios_utilities::{Candidates, Plicity, Qualifier, grown},
     std::{cell::RefCell, collections::BTreeSet, rc::Rc},
 };
 
@@ -2123,6 +2123,8 @@ pub struct Recompile<'a> {
     pub relowered: &'a BTreeSet<Global>,
     /// The names the baseline declares and the new text's lowering does not.
     pub dropped: &'a BTreeSet<Global>,
+    /// What a store holds of declarations elaborated before, where a declaration to be made may be taken from it (`Candidate`).
+    pub candidates: Option<&'a dyn Candidates>,
 }
 
 /// A unit elaborated over a baseline: its module, what each of its declarations asked and who asked what of that, and every name of a declaration elaborated again.
@@ -2181,6 +2183,7 @@ fn elaborate_and_zonk_over<'s>(
             dropped: recompile.dropped,
             readers: recompile.readers,
             established,
+            candidates: recompile.candidates,
         };
         let elaborated = elaborate_module_suffix(
             context,

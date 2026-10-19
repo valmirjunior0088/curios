@@ -528,6 +528,61 @@ impl<'s> Context<'s> {
         }
     }
 
+    /// Publish `item`, an item a candidate made, as its elaboration published it ([`Context::publish`]), the registry entries its formers carry being the ones its elaboration rebuilt, with the totality stamped on each of its definitions: what the declarations that read it read of it.
+    pub(crate) fn publish_adopted(&mut self, item: &Item) {
+        let mut published = Published {
+            item: item.clone(),
+            induct_decls: Vec::new(),
+            struct_decls: Vec::new(),
+            concepts: Vec::new(),
+        };
+        for (name, nominal) in item.nominals() {
+            published.induct_decls.extend(
+                nominal
+                    .inductive()
+                    .cloned()
+                    .map(|declaration| (*name, declaration)),
+            );
+            published
+                .struct_decls
+                .extend(nominal.record().cloned().map(|record| (*name, record)));
+            published
+                .concepts
+                .extend(nominal.concept().cloned().map(|concept| (*name, concept)));
+        }
+        // An elaboration assumes each name before it publishes it, which publishing replaces.
+        let types = match item {
+            Item::Let(definition) => vec![(definition.name, definition.type_.clone())],
+            Item::Rec(rec) => rec
+                .definitions
+                .iter()
+                .enumerate()
+                .map(|(index, definition)| (definition.name, rec.group.member_type(index)))
+                .collect(),
+        };
+        for (name, type_) in types {
+            let name = Free::from(&name);
+            self.forget(&name);
+            self.assume(&name, &type_);
+        }
+        self.publish(&published);
+        match item {
+            Item::Let(definition) => {
+                self.record_definition_totality(&definition.name, definition.totality);
+            }
+            Item::Rec(rec) => {
+                for definition in &rec.definitions {
+                    self.record_definition_totality(&definition.name, definition.totality);
+                }
+            }
+        }
+    }
+
+    /// Credit the written binders `credited` names, each by its definition's name and its place among that definition's written binders: what the proofs of a declaration taken from a candidate read.
+    pub(crate) fn credit_adopted(&mut self, credited: impl IntoIterator<Item = (Global, u32)>) {
+        self.underway.credits.adopt(credited);
+    }
+
     /// Zonk every term recorded since `mark`, the finished item's, so the erasure obligations read them once the state they were recorded in is gone.
     ///
     /// One pass across them all, the solutions standing still while it runs: the terms are each other's subterms, a deep expression's recorded once at each of its levels, and zonked apart they would cost the sum of their sizes.

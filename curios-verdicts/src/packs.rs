@@ -20,7 +20,7 @@ mod tests;
 use {
     curios_archive::Bytes,
     curios_unit::{Pack, pack_name, pack_names, packed, repacked},
-    curios_utilities::{Digest, Object},
+    curios_utilities::{Candidates, Digest, Facet, Object, candidate_prefix},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -255,6 +255,26 @@ impl Packs {
         names
     }
 
+    /// Every object whose name opens with `prefix` that a pack of this address holds, each once: read out of each pack whose table names one.
+    fn prefixed(&self, prefix: &[u8]) -> Vec<Object> {
+        let mut found = BTreeMap::new();
+        for name in self.list() {
+            let named = self.names(&name).is_some_and(|names| {
+                let at = names.partition_point(|held| held.as_bytes()[..prefix.len()] < *prefix);
+                names
+                    .get(at)
+                    .is_some_and(|held| held.as_bytes().starts_with(prefix))
+            });
+            if let Some(pack) = named.then(|| self.pack(&name)).flatten() {
+                for object in pack.prefixed(prefix) {
+                    found.entry(object.digest).or_insert(object);
+                }
+            }
+        }
+
+        found.into_values().collect()
+    }
+
     /// The object named `digest`, among the packs last listed: read out of the pack whose table names it.
     fn probe(&self, digest: &Digest) -> Option<Object> {
         let names = self.listed.borrow().clone().unwrap_or_default();
@@ -318,6 +338,17 @@ impl Packs {
     /// Where the pack named `name` is kept.
     fn path(&self, name: &str) -> PathBuf {
         self.directory.join(name).with_extension(EXTENSION)
+    }
+}
+
+/// The candidates of an address are the objects its packs hold under their names ([`curios_utilities::candidate`]).
+impl Candidates for Packs {
+    fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Object> {
+        self.prefixed(&candidate_prefix(facet, input))
+    }
+
+    fn object(&self, digest: &Digest) -> Option<Object> {
+        self.find(digest)
     }
 }
 

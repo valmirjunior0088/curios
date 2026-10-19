@@ -51,6 +51,9 @@ pub use digest::*;
 mod recorded;
 pub use recorded::*;
 
+mod candidates;
+pub use candidates::*;
+
 mod nearest;
 pub use nearest::*;
 

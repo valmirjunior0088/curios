@@ -8,19 +8,22 @@
 //!
 //! **Over a baseline, the walk visits what the edit reached and nothing else.** A unit compiled over an earlier text of itself marks the declarations its edit could reach, through who asked what of the baseline's traces ([`Readers`]), and holds those alone: the baseline answers for every other declaration from the start ([`Established::answer_but`]), and its trace is the baseline's. A marked declaration is decided once every marked declaration it read is, kept where none of what it read moved and made otherwise; one asked for ahead of that asks again the questions its elaboration put, in the order it asked them ([`Traces`]), each after the declaration it is about has been asked for, and is kept where every one is answered as it was. A question about a declaration that was kept is answered as it was; one about a declaration elaborated again is answered as it was where the part asked came out equal, so an edit redoes what read the part it changed and nothing behind that.
 //!
+//! **A declaration to be made is first looked for in a store.** Where the walk is handed what a store holds of declarations elaborated before ([`Over::candidates`]), a declaration it would elaborate is taken from a candidate filed for what its items were lowered to, where every answer the candidate was given is the walk's now and every part it read digests as it did ([`Candidate`]); it is elaborated otherwise.
+//!
 //! **A cycle is refused by its members.** A declaration asked for while it is being asked for closes a cycle, through a name it wrote or a witness a goal of its resolves to alike. Every member is refused, the report is raised once, at the first member in source order, naming them all, and what reaches a member is withheld as a dependent of any refusal is.
 
 use {
     super::{
-        Elaborated, Holding, ItemMark, ItemStamp, Poison, Survivors, elaborate_module_item,
-        withhold,
+        Elaborated, Holding, ItemMark, ItemStamp, Poison, Survivors, carrying,
+        elaborate_module_item, withhold,
     },
     crate::{
-        Answered, Context, Error, Established, Foreign, GoalSite, HeldTrace, Parts, Question,
-        Readers, Same, Traces, concepts_alike, entries_alike, inducts_alike, structs_alike,
+        Answered, Candidate, Context, Error, Established, Foreign, GoalSite, HeldTrace, Parts,
+        Question, Read, Readers, Same, Traces, bytes_of, concepts_alike, declaration_input,
+        entries_alike, inducts_alike, item_part_digest, lowered_digest, part_digest, structs_alike,
     },
-    curios_core::{Declarations, Global, Item, Module, Nominal, Places, Trace},
-    curios_utilities::recurse,
+    curios_core::{Declarations, Global, Item, Module, Nominal, Place, Places, Trace},
+    curios_utilities::{Candidates, Digest, Facet, recurse},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -65,6 +68,8 @@ pub(super) struct Over<'a> {
     pub(super) readers: &'a Readers,
     /// The scope, whose baseline layer answers for every declaration the walk does not hold, and for each it holds from where the walk keeps it.
     pub(super) established: &'a Established<'a>,
+    /// What a store holds of declarations elaborated before, where the walk may take a declaration from it ([`Candidate`]).
+    pub(super) candidates: Option<&'a dyn Candidates>,
 }
 
 /// One declaration the walk holds: where it stands, whether it was kept, and over a baseline what the walk knows of what the edit reached of it.
@@ -130,6 +135,8 @@ pub(super) struct Demand<'a> {
     pub(super) readers: Option<Readers>,
     /// The names the unit declares and the baseline did not.
     gained: Vec<Global>,
+    /// What each part a candidate read of a finished declaration, or of another unit, digests to now: asked once, however many candidates read it. `None` where it will not digest.
+    now: RefCell<HashMap<Question, Option<Read>>>,
 }
 
 /// Whether the part `question` asks, of a declaration the unit does not hold, digests now to what the baseline recorded of it. A part the baseline recorded nothing of does not stand, and neither does one that will not digest.
@@ -176,6 +183,7 @@ impl<'a> Demand<'a> {
             asking: false,
             readers: over.map(|over| over.readers.clone()),
             gained: Vec::new(),
+            now: RefCell::new(HashMap::new()),
         }
     }
 
@@ -972,8 +980,13 @@ impl<'a> Demand<'a> {
         self.held_mut(declaration).kept = true;
     }
 
-    /// File `trace` as what the declaration declaring `names` asked, under the first: in place of the baseline's trace of it, and of any trace the baseline held under another of its names, which was a declaration this one now holds the name of.
-    fn file(&mut self, names: &[&Global], trace: Trace<Question, Answered>) {
+    /// File `trace` as what the declaration declaring `names` asked, under the first: in place of the baseline's trace of it, and of any trace the baseline held under another of its names, which was a declaration this one now holds the name of. With `candidate`, the trace is the one the candidate of that name holds, which the declaration was taken from.
+    fn file(
+        &mut self,
+        names: &[&Global],
+        trace: Trace<Question, Answered>,
+        candidate: Option<Digest>,
+    ) {
         let (first, others) = names.split_first().expect("a declaration declares a name");
         if let Some(over) = self.over {
             for name in others {
@@ -986,7 +999,10 @@ impl<'a> Demand<'a> {
                 readers.replace(**first, over.traces.of(first), Some(&trace));
             }
         }
-        self.traces.file(**first, trace);
+        match candidate {
+            Some(candidate) => self.traces.adopt(**first, trace, candidate),
+            None => self.traces.file(**first, trace),
+        }
     }
 
     /// Note which parts of `made`, an item elaborated again over a baseline, came out as the baseline holds them.
@@ -1022,6 +1038,146 @@ impl<'a> Demand<'a> {
         }
     }
 
+    /// Take `declaration`'s items from a candidate a store holds for what its items were lowered to, where one stands ([`Candidate`]): every answer it was given is the one the walk gives now, and every part it read digests as it did. Whether one was taken.
+    ///
+    /// **Nothing is asked for to decide it.** A candidate's questions are answered of declarations finished and of other units alone, so a candidate that read a declaration not yet decided is passed over, and the declaration elaborated as it would have been: taking one closes no cycle and decides nothing ahead of the order its readers are counted in.
+    ///
+    /// **Taken as elaborated.** Each item is published as its elaboration published it ([`Context::publish_adopted`]) and compared with the baseline's, the binders its proofs read are credited, and its trace is filed beside the candidate, so the declarations that read it, the unit's record and a later filing find what they would have of an elaboration.
+    fn adopted(&mut self, context: &mut Context, declaration: usize) -> bool {
+        let Some(candidates) = self.over.and_then(|over| over.candidates) else {
+            return false;
+        };
+        let module = self.module;
+        let positions = Rc::clone(self.declarations.items(declaration));
+        let names = self.names(declaration);
+        if names.iter().any(|name| module.witnesses.contains(*name))
+            || positions
+                .iter()
+                .any(|position| self.poison.reaches(module, &module.items[*position]))
+        {
+            return false;
+        }
+        curios_profile::profile!("demand::candidates");
+        let Ok(inputs) = positions
+            .iter()
+            .map(|position| lowered_digest(module, *position))
+            .collect::<Result<Vec<_>, _>>()
+        else {
+            return false;
+        };
+        let input = declaration_input(inputs);
+
+        for object in candidates.candidates(Facet::Elaboration, &input) {
+            let Some(candidate) =
+                Candidate::read(object.bytes.as_slice(), &input, names[0], positions.len())
+            else {
+                continue;
+            };
+            if !self.reads_stand(context, &names, &candidate) {
+                continue;
+            }
+            let Some(items) = candidate.made(|identity| candidates.object(identity)) else {
+                continue;
+            };
+            let alike = positions.iter().zip(&items).all(|(position, item)| {
+                module.items[*position].declared_names() == item.declared_names()
+            });
+            if !alike {
+                continue;
+            }
+
+            curios_profile::sample!("demand::adopted", candidate.trace.len());
+            for (position, item) in positions.iter().zip(items) {
+                context.publish_adopted(&item);
+                self.compare(context, &item);
+                self.survivors.keep(ItemStamp(*position), item, Vec::new());
+            }
+            context.credit_adopted(candidate.credited);
+            self.file(&names, candidate.trace, Some(object.digest));
+            return true;
+        }
+
+        false
+    }
+
+    /// Whether every question of `candidate`, the declaration declaring `names` elaborated, is answered now as it was, and every part it read digests as it did, each of a declaration finished or of another unit.
+    fn reads_stand(&self, context: &Context, names: &[&Global], candidate: &Candidate) -> bool {
+        candidate
+            .trace
+            .asked()
+            .iter()
+            .zip(&candidate.reads)
+            .all(|((question, answered), read)| match question {
+                Question::Lemmas => {
+                    read.is_none() && *answered == Answered::Whether(context.offers_lemmas())
+                }
+                Question::WitnessDeclared(concept, key) => {
+                    read.is_none()
+                        && *answered == Answered::Whether(context.witness_stands(concept, key))
+                }
+                // A witness the unit declares at the key and has not finished may yet stand there.
+                Question::Witness(concept, key) => {
+                    let found = context.witness_standing(concept, key);
+
+                    context.witness_pending(concept, key).is_none()
+                        && *answered == Answered::Witness(found)
+                        && match found {
+                            Some(witness) => {
+                                self.read_now(context, names, &Question::Signature(witness))
+                                    == Some(*read)
+                            }
+                            None => read.is_none(),
+                        }
+                }
+                part => self.read_now(context, names, part) == Some(*read),
+            })
+    }
+
+    /// What the part `question` asks reads now, as a candidate of the declaration declaring `names` records it ([`Read`]): `None` where it cannot be told — of a declaration not finished, refused or withheld, or a part that will not digest.
+    ///
+    /// A part of a declaration kept is the baseline's, one made or taken now is the item the walk keeps for it, and one of another unit is the record the baseline holds of it where that unit did not move, and digested again otherwise.
+    fn read_now(&self, context: &Context, names: &[&Global], question: &Question) -> Option<Read> {
+        let over = self.over?;
+        let subject = question.subject()?;
+        if names.contains(&subject) {
+            return Some(None);
+        }
+        if let Some(read) = self.now.borrow().get(question) {
+            return *read;
+        }
+
+        let digest = match self.owner(subject) {
+            Some(owner) => {
+                if self.standing(owner) != Standing::Finished || self.poison.holds(subject) {
+                    return None;
+                }
+                match self.held.get(&owner).is_none_or(|held| held.kept) {
+                    true => part_digest(over.baseline, over.places, question),
+                    false => {
+                        let item = carrying(context, self.survivors.item(subject)?.clone());
+                        let place = place_in(&item, subject)?;
+                        item_part_digest(&item, place, question)
+                    }
+                }
+            }
+            // A fixed unit's part is the compiler's, which no candidate records.
+            None if !over.established.recorded(subject) => {
+                self.now.borrow_mut().insert(*question, Some(None));
+                return Some(None);
+            }
+            None => match over.traces.foreign().digest(question) {
+                Some(then) if over.established.unmoved(subject) => Ok(then.clone()),
+                _ => over.established.part_digest(question),
+            },
+        };
+        let read = digest
+            .ok()
+            .map(|digest| Some(digest.as_deref().and_then(bytes_of)));
+        self.now.borrow_mut().insert(*question, read);
+
+        read
+    }
+
     /// Elaborate `declaration` after what it reads: kept as its baseline holds it where everything it asked there is answered as it was, and otherwise attempt by attempt, until one reads nothing unfinished.
     ///
     /// **Over a baseline, decided unasked where the walk knows how** ([`Demand::unasked`]): kept where no seed reaches it, or what it waited on is decided and none of it moved, and made where it is to be made. Only a declaration asked for ahead of what it waits on, or while the vocabulary is asked for, asks its trace again.
@@ -1050,6 +1206,9 @@ impl<'a> Demand<'a> {
         }
         if traced {
             self.reached(context, declaration)?;
+        }
+        if self.adopted(context, declaration) {
+            return Ok(());
         }
 
         loop {
@@ -1106,7 +1265,7 @@ impl<'a> Demand<'a> {
                 // What the attempt that stands asked of the declarations around it is its declaration's.
                 let trace = context.take_trace();
                 curios_profile::sample!("demand::asked", trace.len());
-                self.file(&names, trace);
+                self.file(&names, trace, None);
                 self.poison = poison;
                 let mut holding = Vec::new();
                 for (position, outcome) in items.iter().zip(outcomes) {
@@ -1145,5 +1304,18 @@ impl<'a> Demand<'a> {
                 self.declaration(context, dependency)?;
             }
         }
+    }
+}
+
+/// Where `item` holds `name` among its definitions, as a module holding it alone would place it.
+fn place_in(item: &Item, name: &Global) -> Option<Place> {
+    match item {
+        Item::Let(definition) => (definition.name == *name).then_some(Place::Let(0)),
+        Item::Rec(rec) => rec
+            .definitions
+            .iter()
+            .position(|definition| definition.name == *name)
+            .and_then(|member| u32::try_from(member).ok())
+            .map(|member| Place::Member { item: 0, member }),
     }
 }

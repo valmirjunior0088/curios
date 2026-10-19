@@ -6,6 +6,7 @@ pub(crate) mod test_support;
 
 mod baseline_tests;
 mod budget_tests;
+mod candidate_tests;
 mod certification_tests;
 mod diagnostic_tests;
 mod erasure_tests;

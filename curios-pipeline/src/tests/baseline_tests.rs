@@ -37,6 +37,7 @@ impl Cache for Stub {
             .map(|unit| Earlier {
                 unit,
                 after: After::Scope,
+                candidates: None,
             })
     }
 
@@ -173,6 +174,7 @@ impl Cache for Keeping {
         self.kept.borrow().clone().map(|unit| Earlier {
             unit,
             after: After::Scope,
+            candidates: None,
         })
     }
 

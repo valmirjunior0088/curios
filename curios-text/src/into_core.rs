@@ -726,6 +726,22 @@ impl PreparedText {
         });
     }
 
+    /// The binders elaboration credited among those written in the definitions named `names`, each by its definition's name and its place: what a declaration declaring them has a later compile credit where it takes the declaration's elaboration whole.
+    pub fn credited_in(&self, names: &[curios_core::Global]) -> Vec<(curios_core::Global, u32)> {
+        names
+            .iter()
+            .flat_map(|name| {
+                let at = |ordinal| LintedBinder {
+                    declaration: Some(*name),
+                    ordinal,
+                };
+                self.credited
+                    .range(at(0)..=at(u32::MAX))
+                    .map(|binder| (*name, binder.ordinal))
+            })
+            .collect()
+    }
+
     /// Drop the `unused-binder` lint of every binder `read` holds of, and record which each was.
     fn credit_where(&mut self, read: impl Fn(&LintedBinder) -> bool) {
         let (credited, kept) = std::mem::take(&mut self.lints)

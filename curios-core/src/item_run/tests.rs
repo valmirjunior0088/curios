@@ -98,3 +98,16 @@ fn an_item_is_named_alike_whatever_it_was_stored_beside() {
     }
     assert_ne!(ItemRun::identity(&items[0]), ItemRun::identity(&items[1]));
 }
+
+/// Members read alone out of a run are the items it was made of, in the order they were asked for, and a member the run does not hold is refused.
+#[test]
+fn members_read_alone_are_the_items_the_run_holds() {
+    let items = items();
+    let run = ItemRun::of(&items).expect("a run archives");
+
+    assert_eq!(
+        ItemRun::members(&run, &[2, 0]).expect("the run holds both"),
+        vec![items[2].clone(), items[0].clone()]
+    );
+    assert!(ItemRun::members(&run, &[3]).is_err());
+}

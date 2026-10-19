@@ -5,7 +5,7 @@ use {
     crate::{
         Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, compile_unit, compile_unit_over, recheck_over,
         tests::test_support::{
-            assert_stored_alike, compile_with_units, elaborated_above, elaborated_wholesale,
+            Store, assert_stored_alike, compile_with_units, elaborated_above, elaborated_wholesale,
             lowering_stored, traces_stored,
         },
     },
@@ -118,6 +118,7 @@ fn elaborated_over(
             declarations: lowered.declarations(),
             relowered,
             dropped: &dropped,
+            candidates: None,
         },
         lowered.core(),
         lowered.minted(),
@@ -165,6 +166,7 @@ fn std_recompile_census() {
                 &unit,
                 std,
                 &[false],
+                None,
             )
             .expect("the edited library recompiles");
             let recompiled_in = start.elapsed();
@@ -350,6 +352,7 @@ fn std_recompile_reproduction() {
                 &unit,
                 std,
                 &[false],
+                None,
             )
             .expect("the edited library recompiles");
 
@@ -359,6 +362,61 @@ fn std_recompile_reproduction() {
                 "  indexed     {:>10} bytes either way",
                 whole.stored().expect("a unit serializes").index.len()
             );
+        }
+    });
+}
+
+/// Whether the standard library, an edit to it undone, takes each declaration the edit made again from what a store filed of it before: for a leaf edit and for a hub, the library compiled whole and filed, the edit compiled over it and filed, and the library's own tree compiled over the edit with the store's candidates, compared as stored with the first. A measurement, since each edit compiles the library whole; counted, and it asserts, since a unit other than the first is the fault it is here to name.
+#[test]
+#[ignore = "measurement, counted: for a leaf edit and a hub, files the standard library and the edit, undoes the edit over the store's candidates, and compares the result with the first unit byte for byte"]
+fn std_undo_reproduction() {
+    let directory = std_directory();
+
+    with_prelude(|prelude| {
+        let [sys, _] = prelude else {
+            panic!("the prelude has two roots")
+        };
+        let roots = [*sys];
+        let predecessors = Predecessors::over(&roots);
+        let source = std_from_its_tree();
+        let first = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
+        let original = compile_unit(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &first)
+            .expect("the library compiles");
+
+        println!("\n=== /std with an edit undone over the store ===");
+        for Edit { label, file, edit } in edits() {
+            let mut store = Store::default();
+            store.file(&original);
+            let path = directory.join(file);
+            let text = edit(&fs::read_to_string(&path).expect("an authored source"));
+            let edited = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
+            let unit = UnitSource::mounted(&edited).seeing(vec![Qualifier::from(["sys"])]);
+            let edited = compile_unit_over(
+                DEFAULT_STEP_BUDGET,
+                predecessors,
+                &SYNTAX,
+                &unit,
+                &original,
+                &[false],
+                None,
+            )
+            .expect("the edited library recompiles");
+            store.file(&edited);
+
+            let undone = compile_unit_over(
+                DEFAULT_STEP_BUDGET,
+                predecessors,
+                &SYNTAX,
+                &first,
+                &edited,
+                &[false],
+                Some(&store),
+            )
+            .expect("the library recompiles over the edit");
+
+            println!("{label}");
+            println!("  items read  {:>10}", store.read.borrow().len());
+            assert_stored_alike(&original, &undone);
         }
     });
 }
@@ -637,6 +695,7 @@ fn std_vocabulary_reach_reproduction() {
             &unit,
             std,
             &[false],
+            None,
         );
 
         println!("\n=== /std with a lemma of the vocabulary reading /std/Str/At/skip ===");

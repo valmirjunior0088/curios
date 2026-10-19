@@ -17,7 +17,7 @@ use {
     },
     curios_text::{PreparedText, UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Uncertified, Unit},
-    curios_utilities::SyntaxRegistry,
+    curios_utilities::{Candidates, SyntaxRegistry},
     std::collections::BTreeSet,
 };
 
@@ -26,6 +26,8 @@ use {
 /// The result is a unit like [`compile_unit`](crate::compile_unit)'s — the same lowering, a core module holding every item in the order a module is stored in, an erased form for each — differing in which items were elaborated, judged and erased now and which were taken from the baseline. An item's erased form is its own, in identities of its own, so one taken from the baseline is the one a whole compile makes.
 ///
 /// **`moved` says which predecessors the baseline was not compiled after**, one for each in their order: a unit whose contents changed since, or one the baseline's compile was never handed. What the baseline read of a unit that did not move stands unasked, at every stage; what it read of one that moved is asked again by the digest each stage recorded of the part read (`curios_elab::Foreign`, `curios_core::Abroad`). Whoever offers the baseline says which is which, and where it cannot say, every one moved.
+///
+/// **`candidates` is what a store holds of declarations elaborated before**, by what each was lowered to: a declaration to be made is taken from one there where every part it read stands (`curios_elab::Candidating`).
 pub fn compile_unit_over(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -33,14 +35,18 @@ pub fn compile_unit_over(
     source: &UnitSource<'_>,
     baseline: &Unit,
     moved: &[bool],
+    candidates: Option<&dyn Candidates>,
 ) -> Result<Unit, CompileError> {
     compile_unit_over_told(
         budget,
         predecessors,
         syntax,
         source,
-        baseline,
-        moved,
+        Over {
+            baseline,
+            moved,
+            candidates,
+        },
         &|_| {},
     )
 }
@@ -51,8 +57,7 @@ pub(crate) fn compile_unit_over_told(
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
-    baseline: &Unit,
-    moved: &[bool],
+    over: Over<'_>,
     told: &dyn Fn(&PreparedText),
 ) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit_over");
@@ -60,14 +65,21 @@ pub(crate) fn compile_unit_over_told(
         source,
         &predecessors.text(),
         syntax,
-        baseline.text(),
-        moved.iter().all(|moved| !moved),
+        over.baseline.text(),
+        over.moved.iter().all(|moved| !moved),
     )
     .map_err(|error| CompileError::Failure(vec![error.report()]))?;
     told(&lowered);
 
-    compile_lowered_over(budget, predecessors, syntax, lowered, baseline, moved, None)
-        .map(|(unit, _)| unit)
+    compile_lowered_over(budget, predecessors, syntax, lowered, over, None).map(|(unit, _)| unit)
+}
+
+/// What a unit is compiled over: its baseline, which predecessors the baseline was not compiled after, and what a store holds of declarations elaborated before ([`compile_unit_over`]).
+#[derive(Clone, Copy)]
+pub(crate) struct Over<'a> {
+    pub(crate) baseline: &'a Unit,
+    pub(crate) moved: &'a [bool],
+    pub(crate) candidates: Option<&'a dyn Candidates>,
 }
 
 /// [`compile_unit_over`] from the unit's lowering on, which was made over `baseline`'s: elaborate, judge and erase what does not stand. With `closing`, the unit is a program's declarations and the term that closes the program is elaborated in their walk and handed back beside the unit ([`Closing`]).
@@ -76,8 +88,11 @@ pub(crate) fn compile_lowered_over(
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     mut lowered: PreparedText,
-    baseline: &Unit,
-    moved: &[bool],
+    Over {
+        baseline,
+        moved,
+        candidates,
+    }: Over<'_>,
     closing: Option<Closing<'_>>,
 ) -> Result<(Unit, Option<Entrypoint>), CompileError> {
     let cores = predecessors.cores();
@@ -120,6 +135,7 @@ pub(crate) fn compile_lowered_over(
         declarations: lowered.declarations(),
         relowered: &relowered,
         dropped: &dropped,
+        candidates,
     };
     let walked = match tail {
         Some(tail) => elaborate_and_zonk_entry_over(

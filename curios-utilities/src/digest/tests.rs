@@ -50,3 +50,14 @@ fn a_digest_kept_as_bytes_is_the_one_spelled_in_hex() {
     assert_eq!(kept.hex(), digest(b"one"));
     assert_eq!(Digest::from_bytes(*kept.as_bytes()), kept);
 }
+
+/// A digest's hex spelling reads back as the digest, and text of another length or alphabet reads as none.
+#[test]
+fn a_digest_reads_back_from_its_hex() {
+    let digest = Digest::of(b"one");
+
+    assert_eq!(Digest::from_hex(&digest.hex()), Some(digest));
+    assert_eq!(Digest::from_hex(&super::digest(b"one")), Some(digest));
+    assert_eq!(Digest::from_hex(&digest.hex()[1..]), None);
+    assert_eq!(Digest::from_hex(&"g".repeat(64)), None);
+}

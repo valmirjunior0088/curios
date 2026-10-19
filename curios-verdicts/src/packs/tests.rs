@@ -57,6 +57,48 @@ fn filings_one_at_a_time_keep_the_packs_geometric() {
     }
 }
 
+/// The candidates made from one input are found together, whichever pack each was written in, and none made from another input or of another kind of object is.
+#[test]
+fn candidates_of_an_input_are_found_across_packs() {
+    let directory = Temporary::new("packs", "candidates");
+    let packs = Packs::at(directory.to_path_buf(), now());
+    let (input, other) = (Digest::of(b"input"), Digest::of(b"other"));
+    let made = |input: &Digest, text: &str| {
+        curios_utilities::candidate(Facet::Elaboration, input, text.as_bytes().to_vec())
+    };
+    let first = made(&input, "first");
+    packs
+        .write(&[first.clone(), made(&other, "elsewhere"), object("plain")])
+        .expect("a pack is written");
+    let second = made(&input, "second");
+    packs
+        .write(std::slice::from_ref(&second))
+        .expect("a pack is written");
+
+    let mut found = Packs::at(directory.to_path_buf(), now())
+        .candidates(Facet::Elaboration, &input)
+        .into_iter()
+        .map(|object| object.bytes.as_slice().to_vec())
+        .collect::<Vec<_>>();
+    found.sort();
+    assert_eq!(found, vec![b"first".to_vec(), b"second".to_vec()]);
+    assert_eq!(
+        packs
+            .object(&second.digest)
+            .map(|object| object.bytes.as_slice().to_vec()),
+        Some(b"second".to_vec())
+    );
+    assert!(
+        first
+            .digest
+            .as_bytes()
+            .starts_with(&curios_utilities::candidate_prefix(
+                Facet::Elaboration,
+                &input
+            ))
+    );
+}
+
 /// A pack whose bytes are not the ones its name says is not believed: what only it held is not found, the pack is taken away, and what it held is missing again for the next filing to write.
 #[test]
 fn a_pack_other_than_its_name_is_taken_away() {

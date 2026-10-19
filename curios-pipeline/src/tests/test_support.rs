@@ -9,9 +9,44 @@ use {
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
     curios_unit::{Pack, Predecessors, Unit, packed},
-    curios_utilities::{RootKind, test_support::Temporary},
-    std::{fs, rc::Rc},
+    curios_utilities::{
+        Candidates, Digest, Facet, Object, RootKind, candidate_prefix, test_support::Temporary,
+    },
+    std::{cell::RefCell, collections::BTreeMap, fs, rc::Rc},
 };
+
+/// What a store holds of the units filed into it, by name, and the name of every object a compile read out of it: a store's candidates, held in memory.
+#[derive(Default)]
+pub(crate) struct Store {
+    objects: BTreeMap<Digest, Object>,
+    pub(crate) read: RefCell<Vec<Digest>>,
+}
+
+impl Store {
+    /// File `unit`: every object it names, each once.
+    pub(crate) fn file(&mut self, unit: &Unit) {
+        let stored = unit.stored().expect("a unit serializes");
+        for object in stored.objects(|_| true).expect("a unit's objects are made") {
+            self.objects.entry(object.digest).or_insert(object);
+        }
+    }
+}
+
+impl Candidates for Store {
+    fn candidates(&self, facet: Facet, input: &Digest) -> Vec<Object> {
+        let prefix = candidate_prefix(facet, input);
+        self.objects
+            .values()
+            .filter(|object| object.digest.as_bytes().starts_with(&prefix))
+            .cloned()
+            .collect()
+    }
+
+    fn object(&self, digest: &Digest) -> Option<Object> {
+        self.read.borrow_mut().push(*digest);
+        self.objects.get(digest).cloned()
+    }
+}
 
 /// A fixture's entrypoint. Every fixture is a program, so its final term describes doing something and yielding nothing: one whose subject is a term binds it in a `let` at the type under test and closes with `Io/pure(())`.
 pub(super) fn entrypoint_of(source: &str) -> Entrypoint {
@@ -333,6 +368,7 @@ pub(super) fn recompile_after(
             &UnitSource::mounted(&modules),
             baseline,
             &moved,
+            None,
         )
     })
     .map_err(String::from)
@@ -388,6 +424,7 @@ pub(super) fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result
             &UnitSource::mounted(modules),
             baseline,
             &vec![false; prelude.len()],
+            None,
         )
     })
     .map_err(String::from)

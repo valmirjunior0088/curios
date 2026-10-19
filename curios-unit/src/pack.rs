@@ -166,6 +166,24 @@ impl Pack {
         None
     }
 
+    /// Every object this pack holds whose name opens with `prefix`, in the order of their names: the table is sorted, so they lie together.
+    pub fn prefixed<'p>(&'p self, prefix: &'p [u8]) -> impl Iterator<Item = Object> + 'p {
+        let (mut low, mut high) = (0, self.count);
+        while low < high {
+            let middle = low + (high - low) / 2;
+            let (held, ..) = self.entry(middle);
+            match held.as_bytes()[..prefix.len()] < *prefix {
+                true => low = middle + 1,
+                false => high = middle,
+            }
+        }
+
+        (low..self.count)
+            .map(|index| self.entry(index))
+            .take_while(|(held, ..)| held.as_bytes().starts_with(prefix))
+            .filter_map(|(held, run, member)| self.object(held, run, member))
+    }
+
     /// Every object this pack holds, in the order of their names.
     pub fn objects(&self) -> impl Iterator<Item = Object> + '_ {
         (0..self.count).filter_map(|index| {

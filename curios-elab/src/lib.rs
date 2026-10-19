@@ -74,6 +74,9 @@ pub use traces::*;
 mod same;
 pub(crate) use same::*;
 
+mod candidate;
+pub use candidate::*;
+
 mod elaborate;
 pub use elaborate::*;
 
