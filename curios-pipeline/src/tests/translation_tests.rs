@@ -29,6 +29,7 @@ fn shown(source: &str, name: &str) -> (String, String) {
         let spellings = Rc::new(unit.text().spellings(&predecessors.text()));
         let reading = Reading {
             module: unit.core(),
+            kept: None,
             scope: &lexicons,
             syntax: &SYNTAX,
             spellings: Some(&spellings),

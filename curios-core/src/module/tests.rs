@@ -431,3 +431,66 @@ fn an_item_follows_what_its_registry_entry_reaches() {
 
     assert_eq!(names(&module.ordered()), ["/Payload", "/Box"]);
 }
+
+/// A lexicon revised at the names a module changed answers as the module's own does: a name added shortens against the others and a name taken away no longer counts, a former made again as a plain definition writes no fields, and a former new to the module writes its own.
+#[test]
+fn a_lexicon_revised_at_what_changed_answers_as_the_whole_one() {
+    let nested = |path: &[&str]| {
+        let mut definition = definition("placeholder", UniverseContext::empty());
+        definition.name = Global::Authored(Qualifier::from(path.to_vec()));
+        Item::Let(definition)
+    };
+    let then = over(vec![
+        Item::Let(boxed(definition("Box", UniverseContext::empty()))),
+        reading("Payload", &[]),
+        nested(&["a", "shared"]),
+        nested(&["gone", "shared"]),
+    ]);
+    let now = over(vec![
+        Item::Let(definition("Box", UniverseContext::empty())),
+        Item::Let(boxed(definition("Crate", UniverseContext::empty()))),
+        reading("Payload", &[]),
+        nested(&["a", "shared"]),
+        nested(&["b", "other"]),
+    ]);
+    let changed = [
+        authored("Box"),
+        authored("Crate"),
+        Global::Authored(Qualifier::from(["gone", "shared"])),
+        Global::Authored(Qualifier::from(["b", "other"])),
+    ]
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+
+    let revised = now.lexicon_over(&then.lexicon(), &Places::of(&now), &changed);
+    let read = |lexicon: &Lexicon| {
+        let spelling = Spelling::default().with_lexicons(lexicon, &[]);
+        then.module_symbols()
+            .into_iter()
+            .chain(now.module_symbols())
+            .map(|name| {
+                (
+                    spelling.symbol(&name),
+                    spelling.structure_fields(&name).map(<[_]>::to_vec),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(read(&revised), read(&now.lexicon()));
+    let shared = Global::Authored(Qualifier::from(["a", "shared"]));
+    let spelled = |lexicon: &Lexicon| {
+        Spelling::default()
+            .with_lexicons(lexicon, &[])
+            .symbol(&shared)
+    };
+    assert_eq!(
+        spelled(&then.lexicon()),
+        "a/shared",
+        "two names end in `shared`"
+    );
+    assert_eq!(
+        spelled(&revised),
+        "shared",
+        "the one ending in `shared` with it is gone"
+    );
+}

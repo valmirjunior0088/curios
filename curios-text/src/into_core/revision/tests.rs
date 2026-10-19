@@ -162,6 +162,22 @@ fn same_unit(over: &PreparedText, whole: &PreparedText) {
         whole.paths(),
         "the paths each name is written at, and who may write each, differ"
     );
+    let read = |unit: &PreparedText| {
+        let lexicon = unit.lexicon();
+        let spelling = curios_core::Spelling::default().with_lexicons(&lexicon, &[]);
+        whole
+            .core()
+            .module_symbols()
+            .into_iter()
+            .map(|name| {
+                (
+                    spelling.symbol(&name),
+                    spelling.structure_fields(&name).map(<[_]>::to_vec),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(read(over), read(whole), "the unit's lexicon differs");
 }
 
 /// A binding added to a module another re-exports by a glob is exported by both, the module that re-exports it resolved again for what its `pub use` read.

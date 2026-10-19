@@ -226,10 +226,14 @@ fn a_numeral_operand_prints_bare() {
 /// A spelling that shortens `names` to their last segment and marks each as `marks` says, as a diagnostic's would.
 fn spelling_of(names: &[(Global, Vec<Plicity>)]) -> Rc<Spelling> {
     let globals = names.iter().map(|(name, _)| *name).collect::<Vec<_>>();
+    let mut plicities = Marks::new();
+    for (name, marks) in names {
+        plicities.insert(*name, Rc::new(marks.clone()));
+    }
     Rc::new(
         Spelling::default()
             .with_short_names(Rc::new(build_shorten(&globals)))
-            .with_nominal_plicities(Rc::new(names.iter().cloned().collect())),
+            .with_nominal_plicities(Rc::new(plicities)),
     )
 }
 

@@ -9,9 +9,9 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
-        Members, Outlines, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
-        Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
-        UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
+        Marks, Members, Outlines, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope,
+        Sharing, Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
+        UniverseContext, UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
     },
     curios_utilities::{InKeyOrder, Mount, Persistent, Plicity, Qualifier, Sorted},
     std::{
@@ -1210,24 +1210,14 @@ impl Module {
     /// Read off the type constructor's own definition, whose declared type is the one or two `FuncType`s lowering nests — the parameters', then an indexed family's indices' — ending in the sort: the parameters keep their declared marks and the indices are always explicit. That type is the marks' one home a checker establishes: `InductType` carries none (for a fixed name they are a function of the name, so storing them per-occurrence would be derived data that conversion must then either compare pointlessly or exclude from `Hash`, and excluding them lets hash-consing collapse differently-marked equal nodes), and the marks a registry entry's arity states for the elaborator ([`InductDecl::arity`], [`StructDecl::arity`]) are checked by no one, so a report does not read them.
     ///
     /// The formers are the definitions declared as one, which each place of the module says of its names with no item read ([`Items::declared`]), each then read where the module holds it and no other item with it: a member of a `rec` item for an inductive, which refers to itself, and a plain `let` for a structure or a concept. A nullary declaration has no `FuncType` wrapper at all and contributes nothing.
-    fn nominal_plicities(&self, located: &Located) -> BTreeMap<Global, Vec<Plicity>> {
-        let mut marks = BTreeMap::new();
-
+    fn nominal_plicities(&self, located: &Located) -> Marks {
+        let mut marks = Marks::new();
         // Which definitions are type formers is what each place says it declares, so the formers are read and no other item is.
-        let formers = self.declared_as(Declared::is_former);
-        for name in &formers {
-            let Some(def) = self.definition_at(located, name) else {
-                continue;
-            };
-            // A type former's result is a sort, so the walk ends at the first node that is not a function type.
-            let mut collected = Vec::new();
-            let mut type_ = &def.type_;
-            while let Subterm::FuncType(FuncType { telescope }) = &**type_ {
-                collected.extend(telescope.marks());
-                type_ = telescope.terminal();
-            }
-            if !collected.is_empty() {
-                marks.insert(def.name, collected);
+        for name in &self.declared_as(Declared::is_former) {
+            if let Some(former) = self.definition_at(located, name)
+                && let Some(collected) = former_marks(&former)
+            {
+                marks.insert(former.name, Rc::new(collected));
             }
         }
 
@@ -1282,33 +1272,79 @@ impl Module {
         }
     }
 
+    /// This module's lexicon made of `earlier`, the lexicon of a module that declares otherwise than this one only the names of `changed`, where `places` holds this module's names: each of those read again of this module, and every other entry `earlier`'s. The items that declare them are read and no other.
+    pub fn lexicon_over(
+        &self,
+        earlier: &Lexicon,
+        places: &Places,
+        changed: &BTreeSet<Global>,
+    ) -> Lexicon {
+        let held = |name: &&Global| places.place(name).is_some();
+        let symbols = earlier.symbols.revised(
+            changed.iter().filter(|name| !held(name)).copied(),
+            changed.iter().filter(held).copied(),
+        );
+        let mut plicities = (*earlier.plicities).clone();
+        let mut members = (*earlier.members).clone();
+        for name in changed {
+            plicities.remove(name);
+            members.fields.remove(name);
+            members.payloads.remove(name);
+            let Some((former, declared)) = places
+                .place(name)
+                .and_then(|place| self.definition_placed(place, name))
+            else {
+                continue;
+            };
+            if !declared.is_former() {
+                continue;
+            }
+            if let Some(marks) = former_marks(&former) {
+                plicities.insert(*name, Rc::new(marks));
+            }
+            put_members(&mut members, name, &former);
+        }
+
+        Lexicon {
+            symbols: Rc::new(symbols),
+            plicities: Rc::new(plicities),
+            members: Rc::new(members),
+        }
+    }
+
+    /// The definition `name` names where `place` holds it, a group's member as [`RecItem::definitions`] materializes it, and what it is declared as: the one item is read.
+    fn definition_placed(&self, place: Place, name: &Global) -> Option<(Definition, Declared)> {
+        let at = self
+            .items
+            .names(place.item())
+            .into_iter()
+            .position(|held| held == name)?;
+        let declared = *self.items.declared(place.item()).get(at)?;
+        let definition = match &self.items[place.item()] {
+            Item::Let(definition) => definition.clone(),
+            Item::Rec(rec) => rec.definitions().into_iter().nth(at)?,
+        };
+
+        Some((definition, declared))
+    }
+
+    /// The module the definition `name` names sits in ([`Definition::island`]), where `places` holds it: the one item is read.
+    pub fn island_of(&self, places: &Places, name: &Global) -> Option<Qualifier> {
+        let place = places.place(name)?;
+
+        self.items[place.item()]
+            .definitions()
+            .into_iter()
+            .find(|definition| definition.name == *name)
+            .map(|definition| definition.island)
+    }
+
     /// What this unit's structures and constructors are written by ([`Members`]): each structure's fields under their marks and labels, a concept's record among them, and the marks each constructor is called by.
     fn members(&self, located: &Located) -> Members {
         let mut members = Members::default();
         for name in &self.declared_as(Declared::is_former) {
-            let Some(nominal) = self
-                .definition_at(located, name)
-                .and_then(|former| former.kind.nominal().cloned())
-            else {
-                continue;
-            };
-            if let Some(record) = nominal.record() {
-                let fields = record.fields();
-                let written = fields
-                    .marks()
-                    .into_iter()
-                    .zip(fields.labels())
-                    .map(|(mark, label)| (mark, (!label.is_empty()).then(|| label.to_string())))
-                    .collect();
-                members.fields.insert(*name, written);
-            }
-            if let Some(family) = nominal.inductive() {
-                let constructors = family
-                    .constructors
-                    .iter()
-                    .map(|(tag, case)| (tag.clone(), case.telescope.marks()))
-                    .collect();
-                members.payloads.insert(*name, constructors);
+            if let Some(former) = self.definition_at(located, name) {
+                put_members(&mut members, name, &former);
             }
         }
 
@@ -1977,6 +2013,43 @@ fn entry_refusal(name: &Global) -> String {
         "elaboration-only syntax survives in the registry entry for {}",
         name.faithful()
     )
+}
+
+/// The plicities a type former's declared type states, parameters then indices: `None` for a nullary declaration, which has no `FuncType` wrapper and contributes nothing. A former's result is a sort, so the walk ends at the first node that is not a function type.
+fn former_marks(former: &Definition) -> Option<Vec<Plicity>> {
+    let mut collected = Vec::new();
+    let mut type_ = &former.type_;
+    while let Subterm::FuncType(FuncType { telescope }) = &**type_ {
+        collected.extend(telescope.marks());
+        type_ = telescope.terminal();
+    }
+
+    (!collected.is_empty()).then_some(collected)
+}
+
+/// What the former `former`, named `name`, declares of structures and constructors, put in `members`: a structure's fields under their marks and labels, a concept's record among them, and the marks each constructor is called by.
+fn put_members(members: &mut Members, name: &Global, former: &Definition) {
+    let Some(nominal) = former.kind.nominal() else {
+        return;
+    };
+    if let Some(record) = nominal.record() {
+        let fields = record.fields();
+        let written = fields
+            .marks()
+            .into_iter()
+            .zip(fields.labels())
+            .map(|(mark, label)| (mark, (!label.is_empty()).then(|| label.to_string())))
+            .collect();
+        members.fields.insert(*name, Rc::new(written));
+    }
+    if let Some(family) = nominal.inductive() {
+        let constructors = family
+            .constructors
+            .iter()
+            .map(|(tag, case)| (tag.clone(), case.telescope.marks()))
+            .collect();
+        members.payloads.insert(*name, Rc::new(constructors));
+    }
 }
 
 #[cfg(test)]

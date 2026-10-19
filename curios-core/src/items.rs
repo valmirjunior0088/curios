@@ -398,6 +398,11 @@ impl Items {
         Some(changes)
     }
 
+    /// Whether a copy of these items shares what they hold: a version's and a stored module's do, and a vector of their own does not.
+    pub fn is_shared(&self) -> bool {
+        !matches!(self.0, Held::Made(_))
+    }
+
     /// Whether these items are a version's, held at places a version made of them keeps.
     pub fn is_version(&self) -> bool {
         matches!(self.0, Held::Placed(_))

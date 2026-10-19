@@ -9,9 +9,9 @@ use {
     curios_analysis::DeclaredPart,
     curios_core::{
         Anchors, Atom, CalleeId, Definition, DefinitionKind, DisplayNames, Exhaustion, Extent,
-        Free, Global, Item, Level, Lexicon, Module, Polarity, ReaderNames, ReaderPosition,
-        ReaderPrinter, ReduceError, Rename, Spelling, Spellings, Term, UniverseConstraintOrigin,
-        UniverseError, Unresolved, WitnessKey, build_rename,
+        Free, Global, Islands, Item, Level, Lexicon, Module, Places, Polarity, ReaderNames,
+        ReaderPosition, ReaderPrinter, ReduceError, Rename, Spelling, Spellings, Term,
+        UniverseConstraintOrigin, UniverseError, Unresolved, WitnessKey, build_rename,
     },
     curios_num::{Integer, Natural},
     curios_utilities::{InfixOp, Note, Plicity, Qualifier, Report, Span, SyntaxRegistry},
@@ -2300,8 +2300,13 @@ fn as_held(message: String, spelling: &Spelling) -> String {
 /// **Each unit in scope is read by the lexicon it keeps** ([`Lexicon`]), made once for the unit, and only `module`'s own is made here. So a report costs what its own unit holds and what it prints, however much is in scope, and it reads no declaration of a unit in scope it does not print.
 ///
 /// The reader's own unit stays a tier apart for the shortening: a declaration this reader wrote settles its own spelling before the environment competes for it, so a root `Holds` beside `/std/Bool/Holds` reports as the `Holds` that was written rather than as `/Holds`. The plicities have no such contest — a name resolves to one declaration and reads its marks off that one.
-fn report_spelling(module: &Module, scope: &[&Lexicon], syntax: &SyntaxRegistry) -> Spelling {
-    let own = module.lexicon();
+fn report_spelling(
+    module: &Module,
+    lexicon: Option<&Lexicon>,
+    scope: &[&Lexicon],
+    syntax: &SyntaxRegistry,
+) -> Spelling {
+    let own = lexicon.cloned().unwrap_or_else(|| module.lexicon());
 
     Spelling::default()
         .with_lexicons(&own, scope)
@@ -2316,6 +2321,8 @@ fn report_spelling(module: &Module, scope: &[&Lexicon], syntax: &SyntaxRegistry)
 pub struct Reading<'a> {
     /// The unit the error arose in: its symbols are what a global is shortened against first.
     pub module: &'a Module,
+    /// The lexicon `module` keeps and where it holds each name, where its unit keeps them: what a report spells the unit's own names by and places its reader in, each read where it stands. `None` where no unit keeps them, and what a report reads of them is then made of `module`.
+    pub kept: Option<(&'a Lexicon, &'a Places)>,
     /// The lexicon each unit in scope keeps.
     pub scope: &'a [&'a Lexicon],
     pub syntax: &'a SyntaxRegistry,
@@ -2330,7 +2337,12 @@ pub struct Reading<'a> {
 impl Reading<'_> {
     /// How a term of the unit is spelled for a reader, before one is placed ([`Spelling::for_reader`]): every axis a report sets, and a global named as resolution finds it where the unit's tables are at hand. A report takes it and places its own reader; so does anything else that prints a term of the unit for one.
     pub fn spelling(&self) -> Spelling {
-        let spelling = report_spelling(self.module, self.scope, self.syntax);
+        let spelling = report_spelling(
+            self.module,
+            self.kept.map(|(lexicon, _)| lexicon),
+            self.scope,
+            self.syntax,
+        );
         let spelling = match &self.printer {
             Some(printer) => spelling.with_reader_printer(Rc::clone(printer)),
             None => spelling,
@@ -2339,14 +2351,27 @@ impl Reading<'_> {
             return spelling;
         };
 
-        // A report's reader stands in one of this unit's definitions, and resolution reads that definition's module.
-        let islands = self
-            .module
-            .items
-            .iter()
-            .flat_map(Item::definitions)
-            .map(|definition| (definition.name, definition.island))
-            .collect();
+        // A report's reader stands in one of this unit's definitions, and resolution reads that definition's module: read of the one item where the unit keeps where each name is, and of every item otherwise.
+        let islands: Islands = match self.kept {
+            Some((_, places)) => {
+                let module = Module {
+                    items: self.module.items.clone(),
+                    ..Module::default()
+                };
+                let places = places.clone();
+                Box::new(move |name| module.island_of(&places, name))
+            }
+            None => {
+                let islands = self
+                    .module
+                    .items
+                    .iter()
+                    .flat_map(Item::definitions)
+                    .map(|definition| (definition.name, definition.island))
+                    .collect::<BTreeMap<_, _>>();
+                Box::new(move |name| islands.get(name).copied())
+            }
+        };
 
         spelling.with_reader_names(Rc::new(ReaderNames::new(Rc::clone(spellings), islands)))
     }

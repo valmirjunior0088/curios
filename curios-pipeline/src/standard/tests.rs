@@ -1251,6 +1251,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         let spellings = Rc::new(std.text().spellings(&predecessors.text()));
         let reading = Reading {
             module: std.core(),
+            kept: None,
             scope: &lexicons,
             syntax: &SYNTAX,
             spellings: Some(&spellings),

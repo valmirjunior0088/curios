@@ -6,7 +6,8 @@
 
 use {
     crate::{
-        Closing, CompileError, elaborator_refusal, globals_after, kernel_refusal, with_broken,
+        Closing, CompileError, elaborator_refusal, globals_after, kernel_refusal, lowering_refusal,
+        with_broken,
     },
     curios_cert::{Baseline, Rechecked, certify_module_over},
     curios_core::{Entrypoint, Module, Places, Zonked},
@@ -141,9 +142,8 @@ pub(crate) fn compile_lowered_over(
     let walked = with_broken(
         lowered.broken(),
         walked.map_err(|error| {
-            elaborator_refusal(
+            lowering_refusal(
                 &error,
-                lowered.core(),
                 &predecessors.lexicons(),
                 &lowered,
                 predecessors,

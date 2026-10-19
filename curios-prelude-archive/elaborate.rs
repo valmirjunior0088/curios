@@ -108,6 +108,7 @@ fn reported(
 
     error.format(&Reading {
         module,
+        kept: None,
         scope: &lexicons.iter().collect::<Vec<_>>(),
         syntax: &SYNTAX,
         spellings: None,

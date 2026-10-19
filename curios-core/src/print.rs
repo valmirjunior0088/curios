@@ -9,10 +9,10 @@ use {
     curios_abi::stdio,
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat, soft_line},
-    curios_utilities::{InfixOp, Plicity, Qualifier, Symbol, recurse},
+    curios_utilities::{InfixOp, Persistent, Plicity, Qualifier, Symbol, recurse},
     std::{
         cell::{Cell, RefCell},
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeSet, HashMap},
         rc::Rc,
     },
 };
@@ -85,7 +85,7 @@ pub struct Spelling {
     /// axis (c) — whether to suppress universe instances and metavariable-headed levels.
     erase_universes: bool,
     /// axis (d) — each unit's nominal declarations' parameter plicities, the reader's own unit first, so an applied family is marked the way a use site would write it. A name resolves to one declaration, so the first unit to list it answers.
-    nominal_plicities: Vec<Rc<BTreeMap<Global, Vec<Plicity>>>>,
+    nominal_plicities: Vec<Rc<Marks>>,
     /// axis (e) — whether every metavariable spells as a bare `?`.
     anonymous_metavars: bool,
     /// axis (f) — the certified-string declaration, so a `Str` literal spells as its own text.
@@ -119,14 +119,23 @@ pub trait ReaderPrinter {
     ) -> Option<String>;
 }
 
-/// What a unit's structures and constructors are written by: each field's mark and label, each payload member's mark. Made once for a unit and kept with its [`Lexicon`].
-#[derive(Debug, Default)]
+/// Each nominal family's argument plicities, by the family's name: what a report marks an applied family by (axis (d)). Persistent, so a unit compiled over another holds the other's with the families it changed read again.
+pub type Marks = Persistent<Global, Rc<Vec<Plicity>>>;
+
+/// What a unit's structures and constructors are written by: each field's mark and label, each payload member's mark. Made once for a unit and kept with its [`Lexicon`]; persistent, as [`Marks`] are.
+#[derive(Debug, Default, Clone)]
 pub struct Members {
-    /// Each structure's fields in slot order, a concept's among them: the mark a field is declared under, and its label where it has one.
-    pub(crate) fields: BTreeMap<Global, Vec<(Plicity, Option<String>)>>,
-    /// Each family's constructors in declaration order, with the marks each one is called by: the family's parameters, every one hidden, then its payload.
-    pub(crate) payloads: BTreeMap<Global, Vec<(Atom, Vec<Plicity>)>>,
+    /// Each structure's fields, a concept's among them, by the structure's name.
+    pub(crate) fields: Persistent<Global, Rc<Fields>>,
+    /// Each family's constructors, by the family's name.
+    pub(crate) payloads: Persistent<Global, Rc<Payloads>>,
 }
+
+/// One structure's fields in slot order: the mark a field is declared under, and its label where it has one.
+pub type Fields = Vec<(Plicity, Option<String>)>;
+
+/// One family's constructors in declaration order, with the marks each one is called by: the family's parameters, every one hidden, then its payload.
+pub type Payloads = Vec<(Atom, Vec<Plicity>)>;
 
 /// Where a reader stands when they read a rendered term: the definition they wrote it in (the entrypoint's final term when `None`), whose module and imports decide what reaches a name, and the witness binders in scope there, outermost first, which no program refers to by name.
 #[derive(Clone, Debug, Default)]
@@ -135,18 +144,21 @@ pub struct ReaderPosition {
     pub witnesses: Rc<[Free]>,
 }
 
-/// What axis (b) spells a global by for a reader: the unit's [`Spellings`] and the module each of its definitions sits in, with the spellings already asked for.
+/// What axis (b) spells a global by for a reader: the unit's [`Spellings`] and the module each of its definitions sits in, asked of the definition a reader stands in, with the spellings already asked for.
 pub struct ReaderNames {
     spellings: Rc<Spellings>,
-    islands: BTreeMap<Global, Qualifier>,
+    islands: Islands,
     memo: RefCell<Asked>,
 }
+
+/// The module the definition a global names sits in, asked for by the global ([`Definition::island`](crate::Definition::island)): what a reader standing in it reaches a name from.
+pub type Islands = Box<dyn Fn(&Global) -> Option<Qualifier>>;
 
 /// The spellings a render already asked for, keyed by the definition the reader stands in and the global spelled — `None` where the reader can reach it by none.
 type Asked = HashMap<(Option<Global>, Global), Option<String>>;
 
 impl ReaderNames {
-    pub fn new(spellings: Rc<Spellings>, islands: BTreeMap<Global, Qualifier>) -> Self {
+    pub fn new(spellings: Rc<Spellings>, islands: Islands) -> Self {
         Self {
             spellings,
             islands,
@@ -167,8 +179,7 @@ impl ReaderNames {
         let island = reader
             .owner
             .as_ref()
-            .and_then(|owner| self.islands.get(owner))
-            .cloned()
+            .and_then(|owner| (self.islands)(owner))
             .unwrap_or_else(Qualifier::empty);
         let spelled = printer.spell(&self.spellings, &island, reader.owner.as_ref(), global);
         self.memo.borrow_mut().insert(key, spelled.clone());
@@ -182,7 +193,7 @@ impl ReaderNames {
 #[derive(Clone, Default)]
 pub struct Lexicon {
     pub(crate) symbols: Rc<Symbols>,
-    pub(crate) plicities: Rc<BTreeMap<Global, Vec<Plicity>>>,
+    pub(crate) plicities: Rc<Marks>,
     pub(crate) members: Rc<Members>,
 }
 
@@ -271,7 +282,7 @@ impl Spelling {
     }
 
     /// Mark a nominal family's implicit parameters (axis (d)), from one unit's table of them ([`Lexicon`]): a table for each call, the reader's own unit's first.
-    pub fn with_nominal_plicities(mut self, plicities: Rc<BTreeMap<Global, Vec<Plicity>>>) -> Self {
+    pub fn with_nominal_plicities(mut self, plicities: Rc<Marks>) -> Self {
         self.nominal_plicities.push(plicities);
         self
     }
@@ -339,7 +350,7 @@ impl Spelling {
         self.members
             .iter()
             .find_map(|unit| unit.fields.get(structure))
-            .map(Vec::as_slice)
+            .map(|fields| fields.as_slice())
     }
 
     /// The marks `family`'s constructor `tag` is called by, in order: the family's parameters, every one hidden, then its payload, which is the tail a constructor's value holds.
@@ -550,25 +561,71 @@ fn assign(
     Rename { spellings }
 }
 
-/// The globals one unit declares, with how many of them carry each segment-suffix: what a global is shortened against (axis (b) without a reader). Made once for a unit and read where it stands ([`Lexicon`]).
-#[derive(Debug, Default)]
+/// The globals one unit declares, with how many of them carry each segment-suffix: what a global is shortened against (axis (b) without a reader). Made once for a unit and read where it stands ([`Lexicon`]); persistent, so a unit compiled over another holds the other's with the names it changed counted again ([`Symbols::revised`]).
+#[derive(Debug, Default, Clone)]
 pub struct Symbols {
-    names: BTreeSet<Global>,
-    suffixes: HashMap<String, usize>,
+    names: Persistent<Global, ()>,
+    suffixes: Persistent<String, usize>,
 }
 
 impl Symbols {
     /// `names`, each counted once: one global can be listed twice, an inductive being both an `induct_decls` registry key and an `items` type-constructor definition, and such a name would otherwise look ambiguous with itself and never shorten.
     pub fn of(names: impl IntoIterator<Item = Global>) -> Self {
-        let names = names.into_iter().collect::<BTreeSet<_>>();
-        let mut suffixes = HashMap::new();
-        for name in &names {
-            for suffix in suffixes_of(name) {
-                *suffixes.entry(suffix).or_insert(0) += 1;
-            }
+        let mut symbols = Self::default();
+        for name in names {
+            symbols.add(name);
         }
 
-        Self { names, suffixes }
+        symbols
+    }
+
+    /// These symbols with each name of `gone` taken out and each of `added` put in, every suffix counted as [`Symbols::of`] counts it.
+    pub fn revised(
+        &self,
+        gone: impl IntoIterator<Item = Global>,
+        added: impl IntoIterator<Item = Global>,
+    ) -> Self {
+        let mut symbols = self.clone();
+        for name in gone {
+            if symbols.names.remove(&name).is_some() {
+                for suffix in suffixes_of(&name) {
+                    let count = symbols.suffixes.get(&suffix).copied().unwrap_or(0);
+                    match count {
+                        0 | 1 => {
+                            symbols.suffixes.remove(&suffix);
+                        }
+                        _ => symbols.suffixes.insert(suffix, count - 1),
+                    }
+                }
+            }
+        }
+        for name in added {
+            symbols.add(name);
+        }
+
+        symbols
+    }
+
+    /// `name` among these symbols, counted where it was not.
+    fn add(&mut self, name: Global) {
+        if self.names.contains_key(&name) {
+            return;
+        }
+        for suffix in suffixes_of(&name) {
+            let count = self.suffixes.get(&suffix).copied().unwrap_or(0);
+            self.suffixes.insert(suffix, count + 1);
+        }
+        self.names.insert(name, ());
+    }
+
+    /// Whether `name` is one of these.
+    fn contains(&self, name: &Global) -> bool {
+        self.names.contains_key(name)
+    }
+
+    /// How many of these carry `suffix`.
+    fn carrying(&self, suffix: &str) -> usize {
+        self.suffixes.get(&suffix.to_string()).copied().unwrap_or(0)
     }
 }
 
@@ -607,8 +664,8 @@ impl Shorten {
 
     /// The spelling `name` shortens to, where it shortens.
     pub fn get(&self, name: &Global) -> Option<String> {
-        let own = self.own.names.contains(name);
-        if !own && !self.scope.iter().any(|unit| unit.names.contains(name)) {
+        let own = self.own.contains(name);
+        if !own && !self.scope.iter().any(|unit| unit.contains(name)) {
             return None;
         }
         // Two single-segment names cannot collide — one label, one declaration — so this needs no ambiguity test of its own.
@@ -618,7 +675,7 @@ impl Shorten {
 
         // How many distinct globals carry a segment-suffix.
         let carried = |suffix: &str| {
-            let counted = |unit: &Rc<Symbols>| unit.suffixes.get(suffix).copied().unwrap_or(0);
+            let counted = |unit: &Rc<Symbols>| unit.carrying(suffix);
 
             counted(&self.own) + self.scope.iter().map(counted).sum::<usize>()
         };
@@ -627,7 +684,6 @@ impl Shorten {
             !suffix.contains('/')
                 && self
                     .own
-                    .names
                     .contains(&Global::Authored(Qualifier::from([suffix])))
         };
         let rendered = name.faithful().to_string();
@@ -651,7 +707,7 @@ pub fn build_shorten_layered(own: &[Global], predecessors: &[Global]) -> Shorten
         predecessors
             .iter()
             .copied()
-            .filter(|name| !own.names.contains(name)),
+            .filter(|name| !own.contains(name)),
     );
 
     Shorten::over(Rc::new(own), [Rc::new(around)])

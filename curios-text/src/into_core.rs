@@ -322,6 +322,91 @@ impl PathsCell {
     }
 }
 
+/// What a report spells a unit's own names by ([`curios_core::Lexicon`]), made where a report first asks and kept: whole, off the unit's lowered module, or as the lexicon of the unit it was lowered over revised at the names its lowering made or dropped ([`curios_core::Module::lexicon_over`]).
+///
+/// **Shared with the units lowered over it**, as a unit's paths are ([`PathsCell`]), so a session that reports at every keystroke over one baseline reads that baseline's declarations once. A cell holds the unit's items as the version they are, which shares them; a unit whose items are a vector of their own is read where its cell is made, since copying them would read them all.
+struct LexiconCell {
+    module: curios_core::Module,
+    places: curios_core::Places,
+    /// What this lexicon revises: `None` for one made whole, and once it is made.
+    earlier: RefCell<Option<LexiconRevising>>,
+    made: OnceCell<Rc<curios_core::Lexicon>>,
+}
+
+/// What a unit's lexicon revises: the cell of the unit it was lowered over, and the names whose entries are read again.
+struct LexiconRevising {
+    cell: Rc<LexiconCell>,
+    names: Rc<BTreeSet<curios_core::Global>>,
+}
+
+impl LexiconCell {
+    /// The lexicon of `unit`, made whole: now where its items are a vector of their own, and where a report asks otherwise.
+    fn whole(unit: &PreparedText) -> Self {
+        let items = &unit.core().items;
+        if !items.is_shared() {
+            return Self {
+                module: curios_core::Module::default(),
+                places: curios_core::Places::default(),
+                earlier: RefCell::new(None),
+                made: OnceCell::from(Rc::new(unit.core().lexicon())),
+            };
+        }
+
+        Self {
+            module: curios_core::Module {
+                items: items.clone(),
+                ..curios_core::Module::default()
+            },
+            places: unit.places().clone(),
+            earlier: RefCell::new(None),
+            made: OnceCell::new(),
+        }
+    }
+
+    /// The lexicon of a unit of `module`, whose names `places` holds, lowered over the unit whose cell `earlier` is: its lexicon revised at `names`.
+    fn over(
+        earlier: &Rc<LexiconCell>,
+        names: BTreeSet<curios_core::Global>,
+        module: curios_core::Module,
+        places: curios_core::Places,
+    ) -> Self {
+        // An earlier cell that made nothing and revises another is passed over, its names taken with these.
+        let link = match (earlier.made.get(), &*earlier.earlier.borrow()) {
+            (None, Some(before)) => LexiconRevising {
+                cell: Rc::clone(&before.cell),
+                names: Rc::new(before.names.union(&names).copied().collect()),
+            },
+            _ => LexiconRevising {
+                cell: Rc::clone(earlier),
+                names: Rc::new(names),
+            },
+        };
+
+        Self {
+            module,
+            places,
+            earlier: RefCell::new(Some(link)),
+            made: OnceCell::new(),
+        }
+    }
+
+    /// The lexicon, made now where nothing asked before.
+    fn lexicon(&self) -> Rc<curios_core::Lexicon> {
+        let made = self.made.get_or_init(|| {
+            let earlier = self.earlier.borrow_mut().take();
+            Rc::new(match earlier {
+                Some(LexiconRevising { cell, names }) => {
+                    self.module
+                        .lexicon_over(&cell.lexicon(), &self.places, &names)
+                }
+                None => self.module.lexicon(),
+            })
+        });
+
+        Rc::clone(made)
+    }
+}
+
 /// `written`, the paths of `global`, put in the order a reader takes them: its own path, then each path it is exported at, by path. A module's bindings are walked in a hash's order, which differs from one compilation to the next, and a reader takes the first of two spellings equally short.
 fn in_reading_order(global: &curios_core::Global, written: &mut [curios_core::WritablePath]) {
     written.sort_by(|left, right| {
@@ -532,6 +617,9 @@ pub struct PreparedText {
     /// Every absolute path this unit gives a global, made the first time a report spells a name over it or a unit lowered over it and kept — see [`PathsCell`]. Never stored, being read off `table`, `public` and `audiences`.
     #[archived_with(curios_archive::Skip)]
     paths: OnceCell<Rc<PathsCell>>,
+    /// What a report spells this unit's own names by, made the first time a report over it or a unit lowered over it asks and kept — see [`LexiconCell`]. Never stored, being read off the lowered module.
+    #[archived_with(curios_archive::Skip)]
+    lexicon: OnceCell<Rc<LexiconCell>>,
     /// The lowered module: what its elaboration reads, each item in hand where the unit was lowered in this process and read out of the bytes it was stored as where it was restored.
     ///
     /// **Stored without its items.** What every unit lowered after this one reads of it is what each item declares and the registry entries its lowering wrote, so that is what a unit is restored with; an item is read by a later lowering of the same sources, and by a unit whose witness names its declaration ([`PreparedText::written`]), so each is stored on its own, beside the unit, and read by whoever asks for it ([`PreparedText::lowered_item`]).
@@ -669,7 +757,7 @@ impl PreparedText {
     }
 
     /// Where the unit's lowered items hold each name it declares. See the field.
-    fn places(&self) -> &curios_core::Places {
+    pub fn places(&self) -> &curios_core::Places {
         self.places
             .get_or_init(|| curios_core::Places::of(&self.core))
     }
@@ -926,6 +1014,17 @@ impl PreparedText {
     /// Every absolute path this unit gives a global, with who may write it — see [`writable_paths`]. Made once for the unit: every report of every compilation it is in scope of reads the one table.
     fn paths(&self) -> Rc<curios_core::Paths> {
         self.paths_cell().paths()
+    }
+
+    /// What a report spells this unit's own names by: its lowered module's lexicon ([`curios_core::Module::lexicon`]), made once for the unit, or revised of the unit it was lowered over.
+    pub fn lexicon(&self) -> Rc<curios_core::Lexicon> {
+        self.lexicon_cell().lexicon()
+    }
+
+    /// Where this unit's lexicon is made and kept. See the field.
+    fn lexicon_cell(&self) -> &Rc<LexiconCell> {
+        self.lexicon
+            .get_or_init(|| Rc::new(LexiconCell::whole(self)))
     }
 
     /// Where this unit's paths are made and kept. See the field.
@@ -3456,6 +3555,24 @@ fn into_core_unit_within(
         ))),
         _ => OnceCell::new(),
     };
+    // Over a baseline, its lexicon with the entries of every name lowered anew or dropped read again; otherwise made whole. Either where a report first asks.
+    let lexicon = match (&baseline, &revision) {
+        (Some(baseline), Some(revision)) if items.is_shared() => {
+            OnceCell::from(Rc::new(LexiconCell::over(
+                baseline.unit().lexicon_cell(),
+                revision.anew.union(&revision.dropped).copied().collect(),
+                curios_core::Module {
+                    items: items.clone(),
+                    ..curios_core::Module::default()
+                },
+                places
+                    .get()
+                    .cloned()
+                    .expect("a unit lowered over a baseline holds where its items hold each name"),
+            )))
+        }
+        _ => OnceCell::new(),
+    };
 
     let unit = PreparedText {
         mounts: own.clone(),
@@ -3465,6 +3582,7 @@ fn into_core_unit_within(
         audiences: OnceCell::from(audiences),
         aliases: OnceCell::from(aliases),
         paths,
+        lexicon,
         places,
         declarations: declared,
         bodies,

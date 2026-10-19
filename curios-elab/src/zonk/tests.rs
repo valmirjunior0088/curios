@@ -310,6 +310,7 @@ fn a_budget_spent_under_a_binder_is_reported_over_a_term_that_prints() {
         refused
             .format(&Reading {
                 module: &lowered_module(nat()),
+                kept: None,
                 scope: &[],
                 syntax: &SYNTAX,
                 spellings: None,

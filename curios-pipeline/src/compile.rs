@@ -226,9 +226,43 @@ pub(crate) fn elaborator_refusal(
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
 ) -> CompileError {
+    refusal_read(error, module, None, lexicons, text, predecessors, syntax)
+}
+
+/// [`elaborator_refusal`] of the module the lowering `text` made, read where its unit keeps what a report spells the unit's own names by and places its reader in ([`PreparedText::lexicon`], [`PreparedText::places`]): over a baseline, those of the baseline revised, so a refusal reads the declarations the edit reached.
+pub(crate) fn lowering_refusal(
+    error: &curios_elab::Error,
+    lexicons: &[&curios_core::Lexicon],
+    text: &PreparedText,
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+) -> CompileError {
+    let lexicon = text.lexicon();
+    refusal_read(
+        error,
+        text.core(),
+        Some((&lexicon, text.places())),
+        lexicons,
+        text,
+        predecessors,
+        syntax,
+    )
+}
+
+/// What elaboration or erasure refused `module` with, read against `kept`, the lexicon and places its unit keeps for it, where there are any.
+fn refusal_read(
+    error: &curios_elab::Error,
+    module: &curios_core::Module,
+    kept: Option<(&curios_core::Lexicon, &curios_core::Places)>,
+    lexicons: &[&curios_core::Lexicon],
+    text: &PreparedText,
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+) -> CompileError {
     let spellings = Rc::new(text.spellings(&predecessors.text()));
     let reading = Reading {
         module,
+        kept,
         scope: lexicons,
         syntax,
         spellings: Some(&spellings),
@@ -675,6 +709,7 @@ where
     // What a report of this program is read against, each table made by the first report that reads one.
     let reading = || Reading {
         module: &lowered.module,
+        kept: None,
         scope: &lexicons,
         syntax,
         spellings: Some(&*spellings),
@@ -1228,9 +1263,8 @@ pub(crate) fn compile_lowered(
     let walked = with_broken(
         lowered.broken(),
         walked.map_err(|error| {
-            elaborator_refusal(
+            lowering_refusal(
                 &error,
-                lowered.core(),
                 &predecessors.lexicons(),
                 &lowered,
                 predecessors,
