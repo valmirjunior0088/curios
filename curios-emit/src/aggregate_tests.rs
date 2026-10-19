@@ -12,6 +12,45 @@ fn tuple_construction_and_projection() {
     assert_contains(&wat, "struct.get $tuple");
 }
 
+/// The tuple types are the arities the module builds a tuple at, with the unit a host call resumes with, and none between: a module that builds a five-element tuple declares no type for one to four, and its read of the first field casts once.
+#[test]
+fn a_tuple_type_is_declared_for_each_arity_the_module_builds() {
+    let mut module = curios_cont::Module::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let tuple = module.add_value(Some("tuple".into()));
+    let field = module.add_value(Some("field".into()));
+    let exit = module.add_node(halt(vec![curios_cont::Atom::Value(field)]));
+    let project = module.add_node(curios_cont::Node::LetIntrinsic {
+        result: field,
+        op: curios_cont::Intrinsic::TupleGet(0),
+        args: vec![curios_cont::Atom::Value(tuple)],
+        next: exit,
+    });
+    let build = module.add_node(curios_cont::Node::LetValue {
+        result: tuple,
+        value: curios_cont::ValueExpr::Tuple((1..=5).map(nat).collect()),
+        next: project,
+    });
+    module.define_function(
+        main,
+        curios_cont::Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body: build,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    let wat = wat(&module);
+
+    assert_eq!(count(&wat, "(type $tuple/"), 2);
+    assert_contains(&wat, "(type $tuple/0 ");
+    assert_contains(&wat, "(type $tuple/5 ");
+    assert_absent(&wat, "ref.test (ref $tuple");
+}
+
 #[test]
 fn list_literal_builds_a_rope_leaf() {
     let wat = wat(&list_len());

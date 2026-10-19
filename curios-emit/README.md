@@ -30,7 +30,7 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-ersd` b
 
 ### A structural tuple is read at its own final type
 
-**Decision.** The `$tuple/N` heap types of the structural rows are final and unrelated to one another, and a field read finds an object's exact type by testing every roster arity that could hold the field, widest first, casting on the last. A family read is a single exact cast, since a family is one final struct keyed by identity.
+**Decision.** The `$tuple/N` heap types of the structural rows are final and unrelated to one another, one for each arity the module builds a tuple at, and a field read finds an object's exact type by testing every one of them that could hold the field, widest first, casting on the last. A family read is a single exact cast, since a family is one final struct keyed by identity.
 
 **Rationale.** Wasmtime's `ref.cast` and `ref.test` to a concrete type compare the object's type index against the target and, on inequality, call the `is_subtype` libcall through a per-store cache (its `func_environ/gc.rs` and `runtime/store/gc.rs`, issue #13484); only a final target short-circuits. A prefix chain `$tuple/4 <: … <: $tuple/1` read every real object through a narrower prefix and so made every read a host call. Testing every arity assumes nothing about which width arrived, and the module-global roster is 2 to 5 arities across the corpus. `a_tuple_is_read_at_its_own_final_type` in `curios`'s codegen tests pins the shape.
 

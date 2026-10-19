@@ -1,14 +1,14 @@
 use {
     super::{
         BigHelper, EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName,
-        EmissionCode, EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule,
-        EmissionValue, EmissionValueName, FltHelper, LoadAs, call, concrete_val, get, i64_const,
-        refuse_func_name, tee, when,
+        EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
+        EmissionValueName, FltHelper, LoadAs, call, concrete_val, get, i64_const, refuse_func_name,
+        tee, when,
     },
     curios_abi::{Carrier, ForeignFunction, Namespace, WireLeaf, WireType},
     std::{
         cell::{OnceCell, RefCell},
-        collections::{BTreeMap, HashMap, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         sync::Arc,
     },
 };
@@ -320,37 +320,24 @@ impl<'a> FuncData<'a> {
     }
 }
 
-fn max_tuple_arity(data: &EmissionData) -> usize {
+/// The arity of the tuple `data` builds, where it builds one.
+fn built_tuple_arity(data: &EmissionData) -> Option<usize> {
     match data {
-        EmissionData::Tuple(fields) => fields.len(),
-        _ => 0,
+        EmissionData::Tuple(fields) => Some(fields.len()),
+        _ => None,
     }
 }
 
-fn max_value_tuple_arity(value: &EmissionValue) -> usize {
-    match value {
-        EmissionValue::Pure(data) => max_tuple_arity(data),
-        // Projecting field `index` reads through a tuple type of arity at least `index + 1`, even when no tuple of that arity is ever *built* in the module (e.g. the projected tuple only ever arrives from outside, or the producing array is empty). Sizing the tuple types from constructions alone misses it.
-        EmissionValue::Eval(EmissionCode::Intrinsic(
-            curios_cont::Intrinsic::TupleGet(index),
-            _,
-        )) => index + 1,
-        _ => 0,
+/// Note into `arities` the arity of every tuple `region` and the blocks nested in it build.
+fn note_built_tuple_arities(region: &EmissionBody, arities: &mut BTreeSet<usize>) {
+    for (_, value) in &region.values {
+        if let EmissionValue::Pure(data) = value {
+            arities.extend(built_tuple_arity(data));
+        }
     }
-}
-
-fn max_region_tuple_arity(region: &EmissionBody) -> usize {
-    let values = region
-        .values
-        .iter()
-        .map(|(_, value)| max_value_tuple_arity(value));
-
-    let blocks = region
-        .blocks
-        .iter()
-        .map(|(_, block)| max_region_tuple_arity(&block.region));
-
-    values.chain(blocks).max().unwrap_or(0)
+    for (_, block) in &region.blocks {
+        note_built_tuple_arities(&block.region, arities);
+    }
 }
 
 #[derive(Debug)]
@@ -412,6 +399,7 @@ pub(crate) struct Table<'a> {
     list_map: OnceCell<curios_wasm::FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Lazy used-tracking: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
+    /// One final struct type for each arity the module builds a tuple at, and the unit a host call resumes with: every tuple a read can meet was built at one of them, since nothing outside the module builds one, and a read tries those wide enough to hold its field.
     tuple_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// One final struct type per nominal row, keyed by the row's identity rather than by an arity — which is what makes a row read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the Cont module's own row table, so a row whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
     row_types: BTreeMap<curios_cont::RowId, (curios_wasm::TypeName, Vec<curios_cont::Slot>)>,
@@ -513,26 +501,22 @@ impl<'a> Table<'a> {
                 })
                 .collect(),
             tuple_types: {
-                let max = module
-                    .consts()
-                    .iter()
-                    .map(|(_, data)| max_tuple_arity(data))
-                    .chain(
-                        module
-                            .clsrs()
-                            .iter()
-                            .map(|(_, clsr)| max_region_tuple_arity(&clsr.region)),
-                    )
-                    .chain(
-                        module
-                            .funcs()
-                            .iter()
-                            .map(|(_, func)| max_region_tuple_arity(&func.region)),
-                    )
-                    .max()
-                    .unwrap_or(0);
+                let mut arities = BTreeSet::from([0]);
+                arities.extend(
+                    module
+                        .consts()
+                        .iter()
+                        .filter_map(|(_, data)| built_tuple_arity(data)),
+                );
+                for (_, clsr) in module.clsrs() {
+                    note_built_tuple_arities(&clsr.region, &mut arities);
+                }
+                for (_, func) in module.funcs() {
+                    note_built_tuple_arities(&func.region, &mut arities);
+                }
 
-                (0..=max)
+                arities
+                    .into_iter()
                     .map(|arity| {
                         (
                             arity,

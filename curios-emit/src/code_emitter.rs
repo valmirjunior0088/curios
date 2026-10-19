@@ -1747,7 +1747,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// Read field `index` through the object's *exact* tuple type, trying `arities` in order and casting on the last.
     ///
-    /// The tuple types are final and unrelated, so there is no prefix supertype to read a field through — the object's own type has to be found. Exhausting every roster arity that could hold the field is what makes this correct without an assumption: it never supposes an object's arity is its construction's, which `curios-cont`'s field split makes false whenever a narrow tuple materialises at its region's width. The order is a preference only.
+    /// The tuple types are final and unrelated, so there is no prefix supertype to read a field through — the object's own type has to be found. Exhausting every roster arity that could hold the field is what makes this correct without an assumption: it never supposes an object's arity is its construction's, which `curios-cont`'s field split makes false whenever a narrow tuple materialises at its region's width, and the roster holds every arity the module builds a tuple at. The order is a preference only.
     fn tuple_get_cascade(
         &self,
         operand: &'a EmissionValueName,
@@ -1755,7 +1755,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         arities: &[usize],
     ) -> Vec<curios_wasm::Instr> {
         match arities {
-            // No arity at all: a read the roster was not sized for, which the table's sizing from every projection makes impossible; reaching it is a compiler bug.
+            // No arity at all: the module builds no tuple wide enough to hold the field, so no value reaches this read, and reaching it is a compiler bug.
             [] => self
                 .context
                 .table()
