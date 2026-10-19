@@ -4,19 +4,65 @@ use {
     crate::{apart_parts, digests, found, halved, halves},
     curios_abi::ForeignStore,
     curios_archive::{Bytes, Deferred, joined, parted},
-    curios_core::{Certification, Lexicon, Module, Places, Sharing},
+    curios_core::{Certification, ItemRun, Lexicon, Module, Places},
     curios_elab::{ErasedUnit, Projection, Readers, Traces},
     curios_text::PreparedText,
     curios_utilities::{Digest, Mount, Object},
-    std::{cell::OnceCell, rc::Rc},
+    std::{cell::OnceCell, collections::BTreeSet, rc::Rc},
 };
 
-/// A unit as it is stored: its index, which every compilation after the unit restores and which names each object the unit stores on its own by its digest alone, and those objects.
+/// A unit as it is stored: its index, which every compilation after the unit restores and which names each object the unit stores on its own by its digest alone, and those objects ([`Indexed::objects`]).
 ///
 /// **The index is a function of what was compiled**, since it names an object by what the object holds and never by where it is kept: a recompile files the index a whole compile files, and a record digests the index alone and so vouches for every object it names.
 pub struct Indexed {
     pub index: Vec<u8>,
-    pub objects: Vec<Object>,
+    /// The objects stored alone: the lowered items and the erased forms.
+    alone: Vec<Object>,
+    /// The elaborated module, and the digest of the item at each place of it.
+    core: Rc<Module>,
+    elaborated: Vec<(usize, Digest)>,
+}
+
+impl Indexed {
+    /// The digest of every object the index names.
+    pub fn digests(&self) -> impl Iterator<Item = &Digest> {
+        self.alone
+            .iter()
+            .map(|object| &object.digest)
+            .chain(self.elaborated.iter().map(|(_, digest)| digest))
+    }
+
+    /// The objects the index names that `wanted` asks for: each stored alone as it is, and the elaborated items, each once, as the members of one run consed in one table ([`ItemRun::of`]), so a node two of them spell is stored once.
+    pub fn objects(&self, wanted: impl Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
+        let mut objects = self
+            .alone
+            .iter()
+            .filter(|object| wanted(&object.digest))
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut seen = BTreeSet::new();
+        let members = self
+            .elaborated
+            .iter()
+            .filter(|(_, digest)| wanted(digest) && seen.insert(*digest))
+            .collect::<Vec<_>>();
+        if members.is_empty() {
+            return Ok(objects);
+        }
+
+        let run = Bytes::from(ItemRun::of(
+            members.iter().map(|(place, _)| &self.core.items[*place]),
+        )?);
+        for (member, (_, digest)) in members.into_iter().enumerate() {
+            objects.push(Object {
+                digest: *digest,
+                bytes: run.clone(),
+                member: Some(u32::try_from(member).map_err(|error| error.to_string())?),
+            });
+        }
+
+        Ok(objects)
+    }
 }
 
 /// A unit as its compilation produced it, before the kernel has judged it: everything a [`Unit`] holds except the certifier's record.
@@ -32,8 +78,8 @@ pub struct Uncertified {
     text: Rc<PreparedText>,
     /// Elaborated and zonked. This is what the kernel judges and what a successor's elaboration reads where it stands.
     ///
-    /// **Stored apart, and read by item.** A compilation after the unit reads the declarations it names, so the module's archive is kept beside the unit, and a unit restored holds a module whose outline is restored — each item's names and what each is declared as — and whose items are each read when something first asks ([`Module::stored`]).
-    #[archived_with(curios_archive::Skip)]
+    /// **Stored without its items, which are read by item.** A compilation after the unit reads the declarations it names, so the unit stores the module's outline — each item's names and what each is declared as — and each item as an object of the store, a member of a run consed with the items filed beside it, and a unit restored holds a module whose items are each read when something first asks ([`curios_core::WithoutItems`], [`Module::with_items`]).
+    #[archived_with(curios_core::WithoutItems)]
     core: Rc<Module>,
     /// Where `core` holds each name it defines, made the first time the unit is read by name and kept for as long as it is held: no compilation keys the unit again. Never stored, being read off `core`.
     #[archived_with(curios_archive::Skip)]
@@ -162,11 +208,11 @@ impl Uncertified {
         self.readers.get_or_init(|| Readers::of(self.traces()))
     }
 
-    /// What this unit stores apart from itself, each part behind its length ([`joined`]) and read by whoever asks for it, with the objects it names: its lowered items and its erased forms, each an object of its own named by its digest ([`PreparedText::items_objects`], [`ErasedUnit::items_objects`]), its elaborated module's archive, read by item ([`Module::stored`]), then its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
-    pub fn apart(&self) -> Result<(Vec<u8>, Vec<Object>), String> {
+    /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read: its index, the unit and then what it stores apart from itself ([`halved`]), and the objects the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms and its elaborated items ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
+    fn indexed(&self, unit: &[u8], reads: Option<&[u8]>) -> Result<Indexed, String> {
         let items = self.text.items_objects()?;
         let forms = self.erased.items_objects()?;
-        let module = curios_archive::to_bytes(&*self.core)?;
+        let elaborated = self.elaborated()?;
         let anchors = self.text.anchors_bytes()?;
         let imports = self.text.imports_bytes()?;
         let text = self.text.baseline_bytes()?;
@@ -174,40 +220,67 @@ impl Uncertified {
         let erased = self.erased.baseline_bytes()?;
 
         let apart = joined(&[
-            &digests(&items)[..],
-            &digests(&forms)[..],
-            &module[..],
+            &digests(items.iter().map(|object| &object.digest))[..],
+            &digests(forms.iter().map(|object| &object.digest))[..],
+            &digests(elaborated.iter().map(|(_, digest)| digest))[..],
             &anchors[..],
             &imports[..],
             &text[..],
             &traces[..],
             &erased[..],
         ]);
-
-        Ok((apart, items.into_iter().chain(forms).collect()))
-    }
-
-    /// This unit as it is imaged: its index, itself and then what it stores apart from itself ([`halved`]), and the objects the index names.
-    pub fn stored(&self) -> Result<Indexed, String> {
-        let unit = curios_archive::to_bytes(self)?;
-        let (apart, objects) = self.apart()?;
+        let apart = match reads {
+            Some(reads) => joined(&[&apart[..], reads]),
+            None => apart,
+        };
 
         Ok(Indexed {
-            index: halved(&unit, &apart),
-            objects,
+            index: halved(unit, &apart),
+            alone: items.into_iter().chain(forms).collect(),
+            core: Rc::clone(&self.core),
+            elaborated,
         })
     }
 
-    /// This unit with `bytes` as what it stores apart from itself ([`Uncertified::apart`]), each part a run of the buffer they are in and read when something first asks for it, and each object they name found by `find` now — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing, or name an object `find` holds none for.
+    /// The digest of the elaborated item at each place: the one it was stored under where the module holds it as it was read, and what it is named by alone otherwise ([`ItemRun::identity`]), which a whole compile and a recompile name it by alike.
+    fn elaborated(&self) -> Result<Vec<(usize, Digest)>, String> {
+        let items = &self.core.items;
+        items
+            .places()
+            .map(|place| {
+                let digest = match items.part(place) {
+                    Some(part) => part.digest,
+                    None => ItemRun::identity(&items[place])?,
+                };
+
+                Ok((place, digest))
+            })
+            .collect()
+    }
+
+    /// This unit as it is imaged: its index, itself and then what it stores apart from itself, and the objects the index names.
+    pub fn stored(&self) -> Result<Indexed, String> {
+        self.indexed(&curios_archive::to_bytes(self)?, None)
+    }
+
+    /// This unit with `bytes` as what it stores apart from itself ([`Uncertified::stored`]), each part a run of the buffer they are in and read when something first asks for it, and each object they name found by `find` now — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing, or name an object `find` holds none for.
     pub fn with_apart(
         self,
         bytes: impl Into<Bytes>,
-        find: &dyn Fn(&Digest) -> Option<Bytes>,
+        find: &dyn Fn(&Digest) -> Option<Object>,
     ) -> Result<Self, String> {
         let bytes = bytes.into();
         let fixed = matches!(bytes, Bytes::Constant(_));
-        let [items, forms, module, anchors, imports, text, traces, erased] =
-            apart_parts(&bytes).ok_or("not what a unit stores apart from itself")?;
+        let [
+            items,
+            forms,
+            elaborated,
+            anchors,
+            imports,
+            text,
+            traces,
+            erased,
+        ] = apart_parts(&bytes).ok_or("not what a unit stores apart from itself")?;
 
         Ok(Self {
             fixed,
@@ -224,26 +297,11 @@ impl Uncertified {
             ),
             traces: Rc::new(Deferred::stored(traces)),
             readers: Rc::default(),
-            core: Rc::new(Module::stored(module)?),
+            core: Rc::new(Rc::unwrap_or_clone(self.core).with_items(found(&elaborated, find)?)?),
             places: Rc::default(),
             projection: Rc::default(),
             lexicon: Rc::default(),
         })
-    }
-
-    /// This unit with its elaborated module hash-consed in a table of its own — what [`Unit::stored`] serializes. The lowered module is left as it was built, since a lint and a report are located in it.
-    fn consed(&self) -> Self {
-        Self {
-            text: Rc::clone(&self.text),
-            core: Rc::new(self.core.shared(&Sharing::new())),
-            places: Rc::default(),
-            projection: Rc::default(),
-            lexicon: Rc::default(),
-            erased: Rc::clone(&self.erased),
-            traces: Rc::clone(&self.traces),
-            readers: Rc::clone(&self.readers),
-            fixed: self.fixed,
-        }
     }
 }
 
@@ -326,29 +384,23 @@ impl Unit {
         Rc::ptr_eq(&self.unit.core, &other.unit.core)
     }
 
-    /// This unit as it is stored: its index, itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]), then what it stores apart from itself ([`Uncertified::apart`]) and what the certifier's record does, what judging each definition read ([`Certification::reads_bytes`]), each behind its length; and the objects the index names.
+    /// This unit as it is stored: its index, itself, its elaborated module without its items, then what it stores apart from itself and what the certifier's record does, what judging each definition read ([`Certification::reads_bytes`]), each behind its length; and the objects the index names ([`Indexed::objects`]).
     ///
-    /// **A stored unit says what its items mean, not where they were written or how they were come by.** A consed module is one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are the same nodes, and one moved by an edit above it is stored as it was. The fixed prelude's images are consed by the same pass, where they are built.
+    /// **A stored unit says what its items mean, not where they were written or how they were come by.** An elaborated item is named by its form consed in a table of its own, one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are named alike, and one moved by an edit above it is stored as it was; the items a filing writes are consed in one table, so a node two of them spell is stored once.
     ///
-    /// Run here and not where a unit is assembled: the pass builds a node for every node of the module, and a unit that is neither filed nor followed — a keystroke's — is never serialized.
+    /// Consed here and not where a unit is assembled, and only the items the unit did not restore: a unit that is neither filed nor followed — a keystroke's — is never serialized.
     pub fn stored(&self) -> Result<Indexed, String> {
-        let consed = self.unit.consed();
-        let (apart, objects) = consed.apart()?;
-        let unit = curios_archive::to_bytes(&Unit {
-            unit: consed,
-            certification: Rc::clone(&self.certification),
-        })?;
-
+        let unit = curios_archive::to_bytes(self)?;
         let reads = self.certification.reads_bytes()?;
 
-        Ok(Indexed {
-            index: halved(&unit, &joined(&[&apart[..], &reads[..]])),
-            objects,
-        })
+        self.unit.indexed(&unit, Some(&reads))
     }
 
     /// The unit whose index is `index` ([`Unit::stored`]), each object it names found by `find`: decoded, what it stores apart from itself kept as the bytes it is, for whoever asks. `Err` is bytes that hold no unit, or an object `find` holds none for.
-    pub fn restored(index: &[u8], find: impl Fn(&Digest) -> Option<Bytes>) -> Result<Self, String> {
+    pub fn restored(
+        index: &[u8],
+        find: impl Fn(&Digest) -> Option<Object>,
+    ) -> Result<Self, String> {
         let (unit, apart) = halves(index).ok_or("not a unit's index")?;
         let restored = curios_archive::from_bytes::<Unit>(unit)?;
         let [apart, reads]: [Bytes; 2] = parted(&Bytes::from(apart.to_vec()))

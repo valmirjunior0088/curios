@@ -14,7 +14,7 @@ use {
         PreparedText, RootSource, SYNTAX, Translation, UnitSource, document_unit, prepare_prelude,
         sys_source,
     },
-    curios_unit::{Packed, Record, Uncertified, framed, packed},
+    curios_unit::{Indexed, Record, Uncertified, framed, packed},
     curios_utilities::{Qualifier, Report, Source, digest},
     std::{
         collections::BTreeSet,
@@ -215,12 +215,12 @@ fn write_image(
     reads: Vec<(PathBuf, Arc<Source>)>,
     after: Vec<(String, String)>,
 ) -> String {
-    let pack = |stored: &curios_unit::Indexed| {
-        packed(stored.objects.iter().map(|object| Packed {
-            digest: object.digest,
-            bytes: object.bytes.as_slice(),
-            member: None,
-        }))
+    let pack = |stored: &Indexed| {
+        let objects = stored
+            .objects(|_| true)
+            .unwrap_or_else(|error| panic!("/{root} objects serialization failed: {error}"));
+
+        packed(&objects)
     };
     let first = image
         .stored()

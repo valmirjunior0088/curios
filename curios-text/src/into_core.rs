@@ -62,7 +62,7 @@ use {
     crate::{
         Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
         LintedBinder, Module, Name, RootSource, StructLit, StructLitEntry, Subterm, Term, TopItem,
-        TupleField, UseGroup, WithoutItems, func_sugar_type_params, ordered, tree_of,
+        TupleField, UseGroup, func_sugar_type_params, ordered, tree_of,
     },
     curios_abi::{ForeignFunction, ForeignStore},
     curios_archive::Bytes,
@@ -623,7 +623,7 @@ pub struct PreparedText {
     /// The lowered module: what its elaboration reads, each item in hand where the unit was lowered in this process and read out of the bytes it was stored as where it was restored.
     ///
     /// **Stored without its items.** What every unit lowered after this one reads of it is what each item declares and the registry entries its lowering wrote, so that is what a unit is restored with; an item is read by a later lowering of the same sources, and by a unit whose witness names its declaration ([`PreparedText::written`]), so each is stored on its own, beside the unit, and read by whoever asks for it ([`PreparedText::lowered_item`]).
-    #[archived_with(WithoutItems)]
+    #[archived_with(curios_core::WithoutItems)]
     core: curios_core::Module,
     /// Where the unit's lowered items hold each name it declares, made the first time something asks: what finds a declaration's lowered form by its name, and says what it is with nothing read.
     #[archived_with(curios_archive::Skip)]
@@ -907,7 +907,7 @@ impl PreparedText {
 
     /// This unit with `objects` as its lowered items ([`PreparedText::items_objects`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves its module without one. `Err` is not one for each item the unit outlines.
     pub fn with_items(mut self, objects: Vec<Object>) -> Result<Self, String> {
-        self.core.items = self.core.items.with_parts(objects)?;
+        self.core = self.core.with_items(objects)?;
 
         Ok(self)
     }

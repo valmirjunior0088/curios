@@ -9,11 +9,11 @@
 use {
     super::{
         Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
-        Marks, Members, Outlines, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope,
-        Sharing, Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
-        UniverseContext, UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
+        Marks, Members, Place, Places, Polarity, RecGroup, RecMemberScopes, Scope, Sharing,
+        Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term, UniverseContext,
+        UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
     },
-    curios_utilities::{InKeyOrder, Mount, Persistent, Plicity, Qualifier, Sorted},
+    curios_utilities::{InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Sorted},
     std::{
         cell::OnceCell,
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -839,6 +839,49 @@ pub enum Item {
 }
 
 impl Item {
+    /// This item with every term hash-consed against `sharing` — see [`Module::shared`].
+    pub fn shared(&self, sharing: &Sharing) -> Item {
+        let kind = |kind: &DefinitionKind| match kind {
+            DefinitionKind::Nominal(nominal) => {
+                DefinitionKind::Nominal(Rc::new(nominal.shared(sharing)))
+            }
+            other => other.clone(),
+        };
+
+        match self {
+            Item::Let(definition) => Item::Let(Definition {
+                name: definition.name,
+                kind: kind(&definition.kind),
+                universe_context: definition.universe_context.unplaced(),
+                island: definition.island,
+                totality: definition.totality,
+                proof: definition.proof,
+                variances: definition.variances.clone(),
+                field_variances: definition.field_variances.clone(),
+                type_: sharing.share(&definition.type_),
+                body: sharing.share(&definition.body),
+            }),
+            Item::Rec(rec) => Item::Rec(RecItem {
+                definitions: rec
+                    .definitions
+                    .iter()
+                    .map(|member| RecDefinition {
+                        name: member.name,
+                        kind: kind(&member.kind),
+                        island: member.island,
+                        totality: member.totality,
+                        proof: member.proof,
+                    })
+                    .collect(),
+                // Mapped in place rather than opened and re-closed: the round trip rebuilds every node twice and drops every memoized derivation with it, and the rebuilt nodes would escape this very pass.
+                group: rec
+                    .group
+                    .map_members(|term| sharing.share(term))
+                    .with_universe_context(rec.group.universe_context().unplaced()),
+            }),
+        }
+    }
+
     /// How a diagnostic names this item.
     ///
     /// An authored declaration is named by its path. A witness has no authored path — that is the point of `satisfy` — so it is named by the module it was declared in, which is the coordinate a reader can actually act on.
@@ -977,86 +1020,6 @@ pub struct Module {
 }
 
 impl Module {
-    /// The module archived as `bytes`, read by item where the bytes outlive every reader: its outline restored now — each item's names, what each is declared as and whether it is a group, which every compilation reads and which is small — and each item the first time it is read ([`Items`]), the entry a former carries with it, all through one pool, so a node an item shares with another is one allocation as it is in a module restored whole. `Err` is bytes that hold no module.
-    ///
-    /// **By item where the bytes are a constant of the executable, and whole otherwise.** An item is restored out of a view of the archive that was checked whole, and a view borrows its bytes: of a constant it lives as long as the process, and of bytes read for one unit it would have to be held beside what it borrows. So a module read out of a store's slot is restored whole, as every module was.
-    pub fn stored(bytes: impl Into<curios_archive::Bytes>) -> Result<Self, String> {
-        let archived = match bytes.into() {
-            curios_archive::Bytes::Constant(bytes) => {
-                curios_archive::access::<ArchivedModule>(bytes)?
-            }
-            read => return curios_archive::from_bytes::<Module>(read.as_slice()),
-        };
-        let pooled = std::rc::Rc::new(curios_archive::Pooled::new());
-        // What a name is declared as is read off the archive where it lies: an entry a former carries is restored with its item, the first time one is read.
-        let declared = |kind: &ArchivedDefinitionKind| match kind {
-            ArchivedDefinitionKind::Authored => Declared::Authored,
-            ArchivedDefinitionKind::Nominal(nominal) => match &**nominal {
-                ArchivedNominal::Inductive(_) => Declared::Inductive,
-                ArchivedNominal::Struct(_) => Declared::Struct,
-                ArchivedNominal::Concept { .. } => Declared::Concept,
-            },
-            ArchivedDefinitionKind::InductiveConstructor { .. } => Declared::Constructor,
-            ArchivedDefinitionKind::ConceptMethod { .. } => Declared::Method,
-            ArchivedDefinitionKind::Witness => Declared::Witness,
-            ArchivedDefinitionKind::Test => Declared::Test,
-        };
-        // The declaration a generated item was generated from is read off the archive as what it is declared as is.
-        let generated = |kind: &ArchivedDefinitionKind| match kind {
-            ArchivedDefinitionKind::InductiveConstructor { owner, .. }
-            | ArchivedDefinitionKind::ConceptMethod { owner } => pooled
-                .restore::<curios_utilities::Qualifier>(owner)
-                .map(|owner| Some(Global::Authored(owner))),
-            _ => Ok(None),
-        };
-        let mut outlines = Outlines::default();
-        for item in archived.items.iter() {
-            match item {
-                ArchivedItem::Let(definition) => outlines.push(
-                    [pooled.restore::<Global>(&definition.name)?],
-                    [declared(&definition.kind)],
-                    false,
-                    generated(&definition.kind)?,
-                ),
-                ArchivedItem::Rec(rec) => outlines.push(
-                    rec.definitions
-                        .iter()
-                        .map(|definition| pooled.restore::<Global>(&definition.name))
-                        .collect::<Result<Vec<_>, _>>()?,
-                    rec.definitions
-                        .iter()
-                        .map(|definition| declared(&definition.kind)),
-                    true,
-                    match rec.definitions.first() {
-                        Some(definition) => generated(&definition.kind)?,
-                        None => None,
-                    },
-                ),
-            }
-        }
-        let items = {
-            let pooled = std::rc::Rc::clone(&pooled);
-
-            Items::stored(outlines, move |place| {
-                curios_profile::sample!("module::restored", place);
-                pooled
-                    .restore::<Item>(&archived.items[place])
-                    .unwrap_or_else(|error| {
-                        panic!("a stored module's item failed to restore: {error}")
-                    })
-            })
-        };
-
-        Ok(Self {
-            items,
-            mounts: pooled.restore(&archived.mounts)?,
-            witnesses: pooled.restore(&archived.witnesses)?,
-            tests: pooled.restore(&archived.tests)?,
-        })
-    }
-}
-
-impl Module {
     /// The entry the definition `name` carries, read at the place `places` keeps for it: one item read, and of a stored module one item restored.
     pub fn nominal(&self, places: &Places, name: &Global) -> Option<&Nominal> {
         let place = places.place(name)?;
@@ -1154,55 +1117,19 @@ impl Module {
     ///
     /// Not for a lowered module, which a lint and a report are located in: a consed term says nothing of where it was written.
     pub fn shared(&self, sharing: &Sharing) -> Module {
-        let kind = |kind: &DefinitionKind| match kind {
-            DefinitionKind::Nominal(nominal) => {
-                DefinitionKind::Nominal(Rc::new(nominal.shared(sharing)))
-            }
-            other => other.clone(),
-        };
-        let definition = |definition: &Definition| Definition {
-            name: definition.name,
-            kind: kind(&definition.kind),
-            universe_context: definition.universe_context.unplaced(),
-            island: definition.island,
-            totality: definition.totality,
-            proof: definition.proof,
-            variances: definition.variances.clone(),
-            field_variances: definition.field_variances.clone(),
-            type_: sharing.share(&definition.type_),
-            body: sharing.share(&definition.body),
-        };
-
         Module {
-            items: self
-                .items
-                .iter()
-                .map(|item| match item {
-                    Item::Let(let_) => Item::Let(definition(let_)),
-                    Item::Rec(rec) => Item::Rec(RecItem {
-                        definitions: rec
-                            .definitions
-                            .iter()
-                            .map(|member| RecDefinition {
-                                name: member.name,
-                                kind: kind(&member.kind),
-                                island: member.island,
-                                totality: member.totality,
-                                proof: member.proof,
-                            })
-                            .collect(),
-                        // Mapped in place rather than opened and re-closed: the round trip rebuilds every node twice and drops every memoized derivation with it, and the rebuilt nodes would escape this very pass.
-                        group: rec
-                            .group
-                            .map_members(|term| sharing.share(term))
-                            .with_universe_context(rec.group.universe_context().unplaced()),
-                    }),
-                })
-                .collect(),
+            items: self.items.iter().map(|item| item.shared(sharing)).collect(),
             mounts: self.mounts.clone(),
             witnesses: self.witnesses.clone(),
             tests: self.tests.clone(),
         }
+    }
+
+    /// This module, archived without its items ([`WithoutItems`](crate::WithoutItems)), with `objects` handed over as what each item was archived as, one for each, in their order: what a restored unit is given, since restoring it leaves its module without one. `Err` is not one for each item the module outlines.
+    pub fn with_items(mut self, objects: Vec<Object>) -> Result<Self, String> {
+        self.items = self.items.with_parts(objects)?;
+
+        Ok(self)
     }
 
     /// Each nominal declaration's argument plicities, keyed by the family's name — parameters then indices, in the order a use site supplies them.
@@ -1684,14 +1611,11 @@ fn item_positions(
     }
 }
 
-/// Every position in `module` that can hold a bound value, item by item — see [`item_positions`]. `None` is the entrypoint, which belongs to the module rather than to any name it declares.
-fn module_positions(
-    module: &Module,
-    in_scope: impl Fn(&Global) -> bool,
-    mut visit: impl FnMut(Option<&Global>, &dyn Carried),
-) {
-    for item in module.items.iter() {
-        item_positions(item, &in_scope, &mut visit);
+/// Every position that can hold a bound value in the items of `module` it holds as other than an object a store holds, item by item — see [`item_positions`]: an item read out of the object it was stored as was walked where it was filed, by the compiler that files this one, since a store's address names its compiler.
+fn made_positions(module: &Module, mut visit: impl FnMut(Option<&Global>, &dyn Carried)) {
+    let items = &module.items;
+    for place in items.places().filter(|place| items.part(*place).is_none()) {
+        item_positions(&items[place], &|_| false, &mut visit);
     }
 }
 
@@ -1744,37 +1668,35 @@ impl fmt::Display for Positional {
 ///
 /// The two witness classes are asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns and named by what it witnesses, which are questions about `Module::witnesses` rather than about any position — so they are asked over the declarations and not through the walk.
 ///
+/// The terms are those of the items the module holds as other than an object a store holds, made by the compilation filing it: an item read out of the object it was stored as was refused or admitted by the filing that wrote it, the prelude's by its build, so a filing walks what its edit made and not the unit (`made_positions`).
+///
 /// It refuses the free locals [`free_locals_of`] reports, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
 pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
     let mut found: Option<Positional> = None;
 
-    module_positions(
-        module,
-        |_| false,
-        |owner, carried| {
-            if found.is_some() {
-                return;
-            }
+    made_positions(module, |owner, carried| {
+        if found.is_some() {
+            return;
+        }
 
-            if carried.has_metavar() {
-                found = Some(Positional::Metavar {
-                    owner: owner.cloned(),
-                });
-                return;
-            }
+        if carried.has_metavar() {
+            found = Some(Positional::Metavar {
+                owner: owner.cloned(),
+            });
+            return;
+        }
 
-            if let Some(index) = carried
-                .free_vars()
-                .into_iter()
-                .find_map(|free| free.local_index())
-            {
-                found = Some(Positional::FreeLocal {
-                    owner: owner.cloned(),
-                    index,
-                });
-            }
-        },
-    );
+        if let Some(index) = carried
+            .free_vars()
+            .into_iter()
+            .find_map(|free| free.local_index())
+        {
+            found = Some(Positional::FreeLocal {
+                owner: owner.cloned(),
+                index,
+            });
+        }
+    });
 
     if let Some(witness) = module.witnesses.iter().find(|witness| match witness {
         // Containment rather than equality: the identity names the *module* that declares it, which lies within one of this unit's mounts rather than being one.

@@ -18,7 +18,7 @@ use {
     curios_package::{Store, compiler, entry_slot, unit_slot},
     curios_pipeline::{After, Cache, Earlier},
     curios_text::{Overlay, UnitSource},
-    curios_unit::{Indexed, Packed, Record, Unit, digested, read_within},
+    curios_unit::{Indexed, Record, Unit, digested, read_within},
     curios_utilities::{Qualifier, digest},
     std::{
         cell::{OnceCell, RefCell},
@@ -403,7 +403,7 @@ impl Verdicts {
         curios_profile::profile!("verdicts::restored");
         let packs = self.packs(slot)?;
 
-        Unit::restored(index, |digest| packs.find(digest).map(|found| found.bytes)).ok()
+        Unit::restored(index, |digest| packs.find(digest)).ok()
     }
 
     /// File the objects of `stored` the packs of `slot`'s address do not hold, in one pack: what a slot naming them is renamed into place after.
@@ -413,22 +413,14 @@ impl Verdicts {
             .packs(slot)
             .ok_or_else(|| io::Error::other("a store files objects"))?;
         let missing = packs
-            .missing(stored.objects.iter().map(|object| &object.digest))
+            .missing(stored.digests())
             .into_iter()
             .collect::<BTreeSet<_>>();
+        let objects = stored
+            .objects(|digest| missing.contains(digest))
+            .map_err(io::Error::other)?;
 
-        packs.write(
-            stored
-                .objects
-                .iter()
-                .filter(|object| missing.contains(&object.digest))
-                .map(|object| Packed {
-                    digest: object.digest,
-                    bytes: object.bytes.as_slice(),
-                    member: None,
-                })
-                .collect(),
-        )
+        packs.write(&objects)
     }
 
     /// What each unit of `sources` is filed as, in order, verified against the store without deserializing any of it — the probe [`Verdicts::payload_get`] decides a hit with.

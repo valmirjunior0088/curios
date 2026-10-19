@@ -536,8 +536,11 @@ impl ErasedUnit {
             .collect()
     }
 
-    /// This unit with `objects` as its erased forms ([`ErasedUnit::items_objects`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves it with none. `Err` is not one for each item the unit's index names.
+    /// This unit with `objects` as its erased forms ([`ErasedUnit::items_objects`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves it with none. `Err` is not one for each item the unit's index names, or one stored with others, since a form is stored alone.
     pub fn with_items(mut self, items: Vec<Object>) -> Result<Self, String> {
+        if items.iter().any(|object| object.member.is_some()) {
+            return Err("an erased form is stored alone".to_string());
+        }
         let named = |at: i64| usize::try_from(at).is_ok_and(|place| place < items.len());
         if !self.index.declared.iter().all(|(_, at)| named(*at))
             || !self.index.computing.iter().all(|(at, _)| named(at))
@@ -626,6 +629,7 @@ impl Form {
             (Some(digest), Some(bytes)) => Ok(Object {
                 digest,
                 bytes: bytes.clone(),
+                member: None,
             }),
             _ => self
                 .erased

@@ -53,21 +53,24 @@ impl fmt::Debug for Digest {
     }
 }
 
-/// The bytes a value was stored as, beside their digest: what a store keeps the value as and finds it by. A value restored from a store keeps the object it was read from, so storing it again digests nothing.
+/// A value as a store keeps it, beside the digest it is found by: the bytes it was stored as, or the bytes of several values stored together with which of them it is. A value restored from a store keeps the object it was read from, so storing it again digests nothing.
 #[derive(Debug, Clone)]
 pub struct Object {
     pub digest: Digest,
     pub bytes: Bytes,
+    /// Which of the values `bytes` holds together this one is: `None` where they hold it alone.
+    pub member: Option<u32>,
 }
 
 impl Object {
-    /// `bytes` as an object, digested now.
+    /// `bytes` as an object holding one value alone, digested now.
     pub fn of(bytes: impl Into<Bytes>) -> Self {
         let bytes = bytes.into();
 
         Self {
             digest: Digest::of(bytes.as_slice()),
             bytes,
+            member: None,
         }
     }
 }

@@ -105,7 +105,7 @@ pub fn restore_archives() -> [Stored; 2] {
                     .unwrap_or_else(|error| {
                         panic!("validated archived /{root} failed to restore: {error}")
                     })
-                    .with_apart(apart, &|digest| pack.get(digest).map(|found| found.bytes))
+                    .with_apart(apart, &|digest| pack.get(digest))
                     .unwrap_or_else(|error| {
                         panic!("archived /{root} holds nothing stored apart: {error}")
                     }),

@@ -23,7 +23,7 @@ use {
         Label, LetSignature, Overlay, PreparedText, RootSource, SYNTAX, TopItem, TopLet, TopMod,
         Translation, UnitSource, into_core_unit, into_core_unit_over,
     },
-    curios_unit::{Pack, Packed, Predecessors, Unit, apart_parts, halves, packed},
+    curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed},
     curios_utilities::{Qualifier, RootKind, digest, test_support::Temporary},
     std::{
         cell::RefCell,
@@ -429,7 +429,7 @@ fn std_image_division() {
         let [
             lowered,
             forms,
-            module,
+            _,
             anchors,
             imports,
             records,
@@ -438,20 +438,26 @@ fn std_image_division() {
         ] = apart_parts(&apart)
             .expect("what a unit stores apart")
             .map(|part| part.as_slice().len());
-        // Each lowered item, then each erased form, is an object the index names by its digest.
-        let objects = |range: std::ops::Range<usize>| {
-            stored.objects[range]
+        // Each lowered item, then each erased form, is an object stored alone, and the elaborated items are the members of one run.
+        let objects = stored
+            .objects(|_| true)
+            .expect("the library's objects serialize");
+        let alone = |range: std::ops::Range<usize>| {
+            objects[range]
                 .iter()
                 .map(|object| object.bytes.as_slice().len())
                 .sum::<usize>()
         };
         let (lowered, forms) = (lowered / 32, forms / 32);
-        let (lowered, forms) = (objects(0..lowered), objects(lowered..lowered + forms));
+        let module = objects[lowered + forms..]
+            .first()
+            .map_or(0, |member| member.bytes.as_slice().len());
+        let (lowered, forms) = (alone(0..lowered), alone(lowered..lowered + forms));
 
         println!("\n=== how /std's stored unit divides ===");
         row(
             "the index and its objects",
-            stored.index.len() + lowered + forms,
+            stored.index.len() + lowered + forms + module,
             None,
         );
         row(
@@ -477,7 +483,7 @@ fn std_image_division() {
         );
         row("  its lowered items, each stored alone", lowered, None);
         row("  its erased forms, each stored alone", forms, None);
-        row("  its elaborated module, read by item", module, None);
+        row("  its elaborated items, one run read by item", module, None);
         row("what a report restores", anchors, None);
         part!(
             "  where its declarations lie",
@@ -559,24 +565,21 @@ fn std_image_division() {
             curios_archive::to_bytes(&consed).expect("a module serializes")
         );
         timed!(
-            "    serializing the unit, consed",
+            "    indexing the unit, its items named alone",
             std.stored().expect("a unit serializes")
         );
+        timed!(
+            "    serializing its objects, one run consed",
+            stored
+                .objects(|_| true)
+                .expect("a unit's objects serialize")
+        );
         timed!("    digesting the index", digest(&stored.index));
-        let pack = Pack::read(curios_archive::Bytes::from(packed(
-            stored.objects.iter().map(|object| Packed {
-                digest: object.digest,
-                bytes: object.bytes.as_slice(),
-                member: None,
-            }),
-        )))
-        .expect("a unit's objects pack");
+        let pack = Pack::read(curios_archive::Bytes::from(packed(&objects)))
+            .expect("a unit's objects pack");
         timed!(
             "    restoring the unit",
-            Unit::restored(&stored.index, |digest| pack
-                .get(digest)
-                .map(|found| found.bytes))
-            .expect("a unit restores")
+            Unit::restored(&stored.index, |digest| pack.get(digest)).expect("a unit restores")
         );
     });
 }

@@ -1,19 +1,20 @@
-//! A pack: objects of the store, each named by the digest of its bytes ([`Digest`]), kept together in one file named by the digest of its own ([`Pack`]).
+//! A pack: objects of the store, each named by a digest ([`Object`]), kept together in one file named by the digest of its own ([`Pack`]).
 //!
 //! **Read from its end.** A pack closes on a table of the objects it holds, sorted by name, each with where its bytes lie, then how many there are and a magic: an object is found by a binary search of the table, and which objects a pack holds is read off its end alone ([`pack_names`]).
 //!
 //! **A function of what it holds.** Objects are laid out in the order of their names, each once, so two filers packing the same objects write the same bytes, under the same name.
 //!
-//! **An object is its bytes, or a member of them.** An entry names the run of the pack an object lies in, and where that run holds several objects archived together, which of them it is: the declarations of one pack share one table of nodes, so a node two of them spell is restored once, and each is still named by the digest of its form archived alone, which no pack's choice of neighbours moves.
+//! **An object is its bytes, or a member of them.** An entry names the run of the pack an object lies in, and where that run holds several objects archived together, which of them it is: the elaborated declarations of one pack share one table of nodes ([`curios_core::ItemRun`]), so a node two of them spell is restored once, and each is still named by the digest of its form archived alone, which no pack's choice of neighbours moves. A merge of packs conses their runs again into one ([`repacked`]), so a pack keeps one table however it was made.
 
 #[cfg(test)]
 mod tests;
 
 use {
     curios_archive::Bytes,
-    curios_utilities::Digest,
+    curios_core::{Item, ItemRun},
+    curios_utilities::{Digest, Object},
     std::{
-        collections::HashMap,
+        collections::{BTreeMap, BTreeSet, HashMap},
         io::{Read, Seek, SeekFrom},
         ops::Range,
     },
@@ -31,34 +32,27 @@ const ENTRY: usize = 32 + 8 + 8 + 4;
 /// The member an entry names where its object is the whole of its run.
 const WHOLE: u32 = u32::MAX;
 
-/// One object put in a pack: its name, the bytes of the run it lies in, and which member of the run it is, where the run archives several together.
-pub struct Packed<'o> {
-    pub digest: Digest,
-    pub bytes: &'o [u8],
-    pub member: Option<u32>,
-}
-
 /// The bytes of a pack holding `objects`, each once, in the order of their names: a run shared by several members is written once, where the first of them is.
-pub fn packed<'o>(objects: impl IntoIterator<Item = Packed<'o>>) -> Vec<u8> {
+pub fn packed<'o>(objects: impl IntoIterator<Item = &'o Object>) -> Vec<u8> {
     let mut objects = objects.into_iter().collect::<Vec<_>>();
     objects.sort_by_key(|object| object.digest);
     objects.dedup_by_key(|object| object.digest);
 
     let mut bytes = Vec::new();
-    // Where each run handed in was written, by where it lies in memory: members of one run are handed in as the one slice.
+    // Where each run handed in was written, by where it lies in memory: members of one run are handed in as the one run of one buffer.
     let mut written = HashMap::<(*const u8, usize), u64>::new();
     let mut table = Vec::with_capacity(objects.len());
     for object in &objects {
-        let run = (object.bytes.as_ptr(), object.bytes.len());
-        let start = *written.entry(run).or_insert_with(|| {
+        let run = object.bytes.as_slice();
+        let start = *written.entry((run.as_ptr(), run.len())).or_insert_with(|| {
             let start = bytes.len() as u64;
-            bytes.extend_from_slice(object.bytes);
+            bytes.extend_from_slice(run);
             start
         });
         table.push((
             object.digest,
             start,
-            object.bytes.len() as u64,
+            run.len() as u64,
             object.member.unwrap_or(WHOLE),
         ));
     }
@@ -118,12 +112,6 @@ fn entry_name(entry: &[u8]) -> Digest {
     Digest::from_bytes(entry[..32].try_into().expect("thirty-two bytes"))
 }
 
-/// An object a pack holds: the run of the pack it lies in, and which member of the run it is, where the run archives several together.
-pub struct Found {
-    pub bytes: Bytes,
-    pub member: Option<u32>,
-}
-
 /// A pack read: its bytes, and where the table they close on lies.
 pub struct Pack {
     bytes: Bytes,
@@ -160,14 +148,14 @@ impl Pack {
         self.count == 0
     }
 
-    /// The object named `digest`, where this pack holds it.
-    pub fn get(&self, digest: &Digest) -> Option<Found> {
+    /// The object named `digest`, where this pack holds it: the run of the pack it lies in, and which member of the run it is, where the run holds several.
+    pub fn get(&self, digest: &Digest) -> Option<Object> {
         let (mut low, mut high) = (0, self.count);
         while low < high {
             let middle = low + (high - low) / 2;
             let (held, run, member) = self.entry(middle);
             match held.cmp(digest) {
-                std::cmp::Ordering::Equal => return self.found(run, member),
+                std::cmp::Ordering::Equal => return self.object(held, run, member),
                 std::cmp::Ordering::Less => low = middle + 1,
                 std::cmp::Ordering::Greater => high = middle,
             }
@@ -175,11 +163,11 @@ impl Pack {
         None
     }
 
-    /// Every object this pack holds, by name, in the order of their names.
-    pub fn objects(&self) -> impl Iterator<Item = (Digest, Found)> + '_ {
+    /// Every object this pack holds, in the order of their names.
+    pub fn objects(&self) -> impl Iterator<Item = Object> + '_ {
         (0..self.count).filter_map(|index| {
             let (digest, run, member) = self.entry(index);
-            Some((digest, self.found(run, member)?))
+            self.object(digest, run, member)
         })
     }
 
@@ -201,11 +189,60 @@ impl Pack {
         )
     }
 
-    /// The object lying in `run`, as member `member`.
-    fn found(&self, run: Range<usize>, member: u32) -> Option<Found> {
-        Some(Found {
+    /// The object named `digest` lying in `run`, as member `member`.
+    fn object(&self, digest: Digest, run: Range<usize>, member: u32) -> Option<Object> {
+        Some(Object {
+            digest,
             bytes: self.bytes.run(run)?,
             member: (member != WHOLE).then_some(member),
         })
     }
+}
+
+/// The bytes of one pack holding every object of `packs`, each once: an object stored alone as it is, and every member of a run read out of it and consed again with the others in one run ([`ItemRun::of`]), so a merged pack keeps one table of nodes for the declarations it holds. `Err` is a run that holds no items, or no member an entry names.
+pub fn repacked<'p>(packs: impl IntoIterator<Item = &'p Pack>) -> Result<Vec<u8>, String> {
+    let mut alone = Vec::new();
+    let mut members = BTreeMap::<Digest, Item>::new();
+    // Each run read, by where it lies in memory: its members are read out of it once.
+    let mut runs = HashMap::<(*const u8, usize), ItemRun>::new();
+    for object in packs.into_iter().flat_map(Pack::objects) {
+        let Some(member) = object.member else {
+            alone.push(object);
+            continue;
+        };
+        if members.contains_key(&object.digest) {
+            continue;
+        }
+        let bytes = object.bytes.as_slice();
+        let run = match runs.entry((bytes.as_ptr(), bytes.len())) {
+            std::collections::hash_map::Entry::Occupied(read) => read.into_mut(),
+            std::collections::hash_map::Entry::Vacant(unread) => {
+                unread.insert(curios_archive::from_bytes::<ItemRun>(bytes)?)
+            }
+        };
+        let item = usize::try_from(member)
+            .ok()
+            .and_then(|member| run.items.get(member))
+            .ok_or_else(|| format!("a run holds no member {member}"))?;
+        members.insert(object.digest, item.clone());
+    }
+
+    let mut objects = alone;
+    let seen = objects
+        .iter()
+        .map(|object| object.digest)
+        .collect::<BTreeSet<_>>();
+    members.retain(|digest, _| !seen.contains(digest));
+    if !members.is_empty() {
+        let run = Bytes::from(ItemRun::of(members.values())?);
+        for (member, digest) in members.keys().enumerate() {
+            objects.push(Object {
+                digest: *digest,
+                bytes: run.clone(),
+                member: Some(u32::try_from(member).map_err(|error| error.to_string())?),
+            });
+        }
+    }
+
+    Ok(packed(&objects))
 }

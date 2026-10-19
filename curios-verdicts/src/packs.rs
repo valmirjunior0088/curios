@@ -6,7 +6,7 @@
 //!
 //! **What a filing writes is decided by the packs' ends.** Which objects a pack holds is read off its table ([`pack_names`]), so a filing reads no pack whole to know what it lacks.
 //!
-//! **Kept geometric where it is filed.** The filing that writes a pack merges the smallest packs of the address into one, wherever each no longer holds at least twice the objects of the one before it, as `git repack --geometric` rolls a repository's packs up: the address holds a logarithmic number of packs, and an object is written again a logarithmic number of times over its life.
+//! **Kept geometric where it is filed.** The filing that writes a pack merges the smallest packs of the address into one, wherever each no longer holds at least twice the objects of the one before it, as `git repack --geometric` rolls a repository's packs up: the address holds a logarithmic number of packs, and an object is written again a logarithmic number of times over its life. The elaborated declarations of the merged packs are consed again in one table ([`repacked`]), so a pack keeps one however it was made.
 //!
 //! **A pack another filer merged away is looked for again.** The packs are listed once for a handle, and again where an object is not found among them, so a merge that renamed what a reader was about to read is a second listing, never a miss.
 
@@ -15,8 +15,8 @@ mod tests;
 
 use {
     curios_archive::Bytes,
-    curios_unit::{Found, Pack, Packed, pack_name, pack_names, packed},
-    curios_utilities::Digest,
+    curios_unit::{Pack, pack_name, pack_names, packed, repacked},
+    curios_utilities::{Digest, Object},
     std::{
         cell::RefCell,
         collections::BTreeMap,
@@ -56,7 +56,7 @@ impl Packs {
     }
 
     /// The object named `digest`, where a pack of this address holds it.
-    pub(crate) fn find(&self, digest: &Digest) -> Option<Found> {
+    pub(crate) fn find(&self, digest: &Digest) -> Option<Object> {
         if self.listed.borrow().is_none() {
             self.list();
         }
@@ -84,7 +84,7 @@ impl Packs {
     }
 
     /// File `objects` as one pack beside what the address holds, then merge the smallest packs where they are no longer geometric. Nothing is written for no objects.
-    pub(crate) fn write(&self, objects: Vec<Packed<'_>>) -> io::Result<()> {
+    pub(crate) fn write(&self, objects: &[Object]) -> io::Result<()> {
         if objects.is_empty() {
             return Ok(());
         }
@@ -115,7 +115,7 @@ impl Packs {
         Ok(name)
     }
 
-    /// The smallest packs merged into one, wherever each no longer holds at least [`FACTOR`] times the objects of the one before it, the merged ones taken away once the merge bears its name.
+    /// The smallest packs merged into one, wherever each no longer holds at least [`FACTOR`] times the objects of the one before it, the merged ones taken away once the merge bears its name. Their elaborated declarations are consed again in one table ([`repacked`]).
     fn roll_up(&self) -> io::Result<()> {
         let mut sized = self
             .list()
@@ -136,15 +136,8 @@ impl Packs {
         if merged.len() < 2 {
             return Ok(());
         }
-        let objects = merged
-            .iter()
-            .flat_map(|(_, pack)| pack.objects())
-            .collect::<Vec<_>>();
-        let into = self.put(packed(objects.iter().map(|(digest, found)| Packed {
-            digest: *digest,
-            bytes: found.bytes.as_slice(),
-            member: found.member,
-        })))?;
+        let merging = repacked(merged.iter().map(|(_, pack)| &**pack)).map_err(io::Error::other)?;
+        let into = self.put(merging)?;
         for (name, _) in &merged {
             if *name != into {
                 let _ = fs::remove_file(self.path(name));
@@ -173,7 +166,7 @@ impl Packs {
     }
 
     /// The object named `digest`, among the packs last listed: read out of the pack whose table names it.
-    fn probe(&self, digest: &Digest) -> Option<Found> {
+    fn probe(&self, digest: &Digest) -> Option<Object> {
         let names = self.listed.borrow().clone().unwrap_or_default();
         names.iter().find_map(|name| {
             let named = self
@@ -190,7 +183,7 @@ impl Packs {
             return names.clone();
         }
         let names = match self.read.borrow().get(name) {
-            Some(Some(pack)) => Some(pack.objects().map(|(digest, _)| digest).collect()),
+            Some(Some(pack)) => Some(pack.objects().map(|object| object.digest).collect()),
             _ => File::open(self.path(name))
                 .ok()
                 .and_then(|mut file| pack_names(&mut file))

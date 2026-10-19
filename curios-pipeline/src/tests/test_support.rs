@@ -8,7 +8,7 @@ use {
     curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, RootSource, SYNTAX, UnitSource},
-    curios_unit::{Pack, Packed, Predecessors, Unit, packed},
+    curios_unit::{Pack, Predecessors, Unit, packed},
     curios_utilities::{RootKind, test_support::Temporary},
     std::{fs, rc::Rc},
 };
@@ -419,19 +419,13 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
 /// `unit` stored and restored, the objects its index names found in one pack of their own, as a store keeps them beside a slot.
 pub(crate) fn restored(unit: &Unit) -> Unit {
     let stored = unit.stored().expect("a unit serializes");
-    let pack = Pack::read(curios_archive::Bytes::from(packed(
-        stored.objects.iter().map(|object| Packed {
-            digest: object.digest,
-            bytes: object.bytes.as_slice(),
-            member: None,
-        }),
-    )))
-    .expect("a unit's objects pack");
+    let objects = stored
+        .objects(|_| true)
+        .expect("a unit's objects serialize");
+    let pack =
+        Pack::read(curios_archive::Bytes::from(packed(&objects))).expect("a unit's objects pack");
 
-    Unit::restored(&stored.index, |digest| {
-        pack.get(digest).map(|found| found.bytes)
-    })
-    .expect("a stored unit restores")
+    Unit::restored(&stored.index, |digest| pack.get(digest)).expect("a stored unit restores")
 }
 
 /// That `incremental` is stored as `whole` is: the same index, which names each object by its digest, and where they are not, which parts.

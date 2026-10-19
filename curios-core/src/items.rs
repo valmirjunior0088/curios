@@ -1,6 +1,8 @@
 //! A module's items, each in hand or restored the first time it is read.
 //!
-//! **A stored module is read by item.** A compilation reads of a unit in scope the declarations it names, and a library holds thousands a program names a few of; restored whole, every process pays for all of them before its first declaration. So a module that was stored holds a cell for each of its items and a restorer its unit hands it, and reading the item at a place fills that cell and no other.
+//! **A stored module is read by item.** A compilation reads of a unit in scope the declarations it names, and a library holds thousands a program names a few of; restored whole, every process pays for all of them before its first declaration. So a module that was stored holds a cell for each of its items and the object each was stored as, and reading the item at a place fills that cell and no other.
+//!
+//! **A member of a run is read with the run.** Elaborated items are stored several to a run, consed in one table ([`ItemRun`]): a run is read once for every member of it, through one pool where its bytes are a constant of the executable, so a node two members share is one allocation, and whole where they were read for one unit, since a view borrows the bytes it was checked over.
 //!
 //! **What a place declares is known without its item.** Where a module holds each name, which of its items are groups and whether two units declare one name are asked of every unit in scope by every compilation, and none of them reads a term: a stored module keeps the names each place declares beside its cells ([`Outlines`]).
 //!
@@ -11,10 +13,13 @@
 //! **A version holds items by place.** A unit compiled over a baseline holds the baseline's items and replaces the ones it made: a version shares every item it did not change with the module it was made from, each at the place it had, and holds an item new to it at a place between two others ([`Items::version`]). A module made whole or restored places its items at their indices; a version made of one spaces them apart first, once, and every version made of a version keeps its places. So a reader goes by the places a module gives ([`Items::places`]), never by counting.
 
 use {
-    crate::{Declared, Global, Item},
-    curios_utilities::{Object, Ordered},
+    crate::{ArchivedItemRun, Declared, Global, Item, ItemRun, Module},
+    curios_archive::{Bytes, Pooled, Proxy, Via},
+    curios_utilities::{Mount, Object, Ordered},
     std::{
-        cell::OnceCell,
+        borrow::Borrow,
+        cell::{OnceCell, RefCell},
+        collections::{BTreeMap, BTreeSet},
         fmt,
         ops::{Index, IndexMut, Range},
         rc::Rc,
@@ -136,42 +141,72 @@ fn declared_by(item: &Item) -> Vec<Declared> {
     }
 }
 
-/// A stored module's items: a cell for each, what each declares, and where each is restored from.
+/// A stored module's items: a cell for each, what each declares, and the object each was stored as.
 struct Stored {
     cells: Vec<OnceCell<Item>>,
     outlines: Outlines,
-    source: Source,
+    /// The object each item was stored as: none where they were not handed over, and no item can be read.
+    parts: Vec<Object>,
+    /// Each run a part is a member of, read the first time one of its members is, by where its bytes lie: a run is read once for every member of it.
+    runs: RefCell<BTreeMap<(usize, usize), Rc<ReadRun>>>,
 }
 
-/// Where a stored module's items are restored from.
-enum Source {
-    /// What the module's unit hands it, asked for one item at a time.
-    Restorer(Box<dyn Fn(usize) -> Item>),
-    /// The object each item was archived as on its own: none where they were not handed over, and no item can be read.
-    Parts(Vec<Object>),
+/// A run read: a view of one that is a constant of the executable, checked once, with the pool its members are restored through; or one read for a unit, restored whole, since a view borrows the bytes it was checked over.
+enum ReadRun {
+    Viewed(&'static ArchivedItemRun, Pooled),
+    Restored(ItemRun),
 }
 
 impl Stored {
     /// The item at `index`, restored the first time it is asked for.
     fn item(&self, index: usize) -> &Item {
-        self.cells[index].get_or_init(|| match &self.source {
-            Source::Restorer(restore) => restore(index),
-            Source::Parts(parts) => {
-                let part = parts
-                    .get(index)
-                    .expect("a stored module's items are handed over before one is read");
-                curios_archive::from_bytes::<Item>(part.bytes.as_slice())
-                    .unwrap_or_else(|error| panic!("a stored item failed to restore: {error}"))
+        self.cells[index].get_or_init(|| {
+            let part = self
+                .parts
+                .get(index)
+                .expect("a stored module's items are handed over before one is read");
+            match part.member {
+                None => curios_archive::from_bytes::<Item>(part.bytes.as_slice()),
+                Some(member) => self.member(&part.bytes, member),
             }
+            .unwrap_or_else(|error| panic!("a stored item failed to restore: {error}"))
         })
     }
 
-    /// The object the item at `index` was archived as on its own, where it was.
-    fn part(&self, index: usize) -> Option<&Object> {
-        match &self.source {
-            Source::Parts(parts) => parts.get(index),
-            Source::Restorer(_) => None,
+    /// The item that is member `member` of the run `run` holds, the run read the first time one of its members is.
+    fn member(&self, run: &Bytes, member: u32) -> Result<Item, String> {
+        let key = (run.as_slice().as_ptr() as usize, run.as_slice().len());
+        let read = self.runs.borrow().get(&key).cloned();
+        let read = match read {
+            Some(read) => read,
+            None => {
+                let read = Rc::new(match run {
+                    Bytes::Constant(bytes) => ReadRun::Viewed(
+                        curios_archive::access::<ArchivedItemRun>(bytes)?,
+                        Pooled::new(),
+                    ),
+                    Bytes::Run { .. } => {
+                        ReadRun::Restored(curios_archive::from_bytes::<ItemRun>(run.as_slice())?)
+                    }
+                });
+                self.runs.borrow_mut().insert(key, Rc::clone(&read));
+                read
+            }
+        };
+        let member = usize::try_from(member).map_err(|error| error.to_string())?;
+        let missing = || format!("a run holds no member {member}");
+
+        match &*read {
+            ReadRun::Viewed(archived, pooled) => {
+                pooled.restore::<Item>(archived.items.get(member).ok_or_else(missing)?)
+            }
+            ReadRun::Restored(run) => run.items.get(member).cloned().ok_or_else(missing),
         }
+    }
+
+    /// The object the item at `index` was stored as, where it was handed over.
+    fn part(&self, index: usize) -> Option<&Object> {
+        self.parts.get(index)
     }
 }
 
@@ -312,16 +347,7 @@ pub struct Changes {
 pub struct Items(Held);
 
 impl Items {
-    /// The items of a stored module: one for each of `outlines`, the item at a place being what `restore` answers for it, asked once.
-    pub fn stored(outlines: Outlines, restore: impl Fn(usize) -> Item + 'static) -> Self {
-        Self(Held::Stored(Rc::new(Stored {
-            cells: (0..outlines.len()).map(|_| OnceCell::new()).collect(),
-            outlines,
-            source: Source::Restorer(Box::new(restore)),
-        })))
-    }
-
-    /// The items of a stored module whose items were each archived on its own: one for each of `outlines`, the item at a place read out of its part the first time it is asked for. No part is handed over yet where `parts` is empty, and reading an item is then a fault; `Err` is parts that are neither none nor one for each item.
+    /// The items of a stored module whose items were each stored as an object: one for each of `outlines`, the item at a place read out of its part the first time it is asked for. No part is handed over yet where `parts` is empty, and reading an item is then a fault; `Err` is parts that are neither none nor one for each item.
     pub fn parted(outlines: Outlines, parts: Vec<Object>) -> Result<Self, String> {
         if !parts.is_empty() && parts.len() != outlines.len() {
             return Err(format!(
@@ -334,17 +360,16 @@ impl Items {
         Ok(Self(Held::Stored(Rc::new(Stored {
             cells: (0..outlines.len()).map(|_| OnceCell::new()).collect(),
             outlines,
-            source: Source::Parts(parts),
+            parts,
+            runs: RefCell::default(),
         }))))
     }
 
-    /// These items, a stored module's archived on their own ([`Items::parted`]), with `parts` handed over as the objects they were archived as.
+    /// These items, a stored module's ([`Items::parted`]), with `parts` handed over as the objects they were stored as.
     pub fn with_parts(&self, parts: Vec<Object>) -> Result<Self, String> {
         match &self.0 {
-            Held::Stored(stored) if matches!(stored.source, Source::Parts(_)) => {
-                Self::parted(stored.outlines.clone(), parts)
-            }
-            _ => Err("items not archived on their own are handed no parts".to_string()),
+            Held::Stored(stored) => Self::parted(stored.outlines.clone(), parts),
+            _ => Err("items not stored are handed no parts".to_string()),
         }
     }
 
@@ -797,15 +822,74 @@ impl fmt::Debug for Items {
     }
 }
 
+/// A module archived without its items: what each item declares, its mounts, its witnesses and its tests, which is what every unit after it reads of it. A registry entry rides in the former that declares it, so it is read with that item. An item is stored as an object of its own, beside the unit, and read by whoever names it: a module restored holds its items as parts not yet handed over ([`Items::parted`], [`Module::with_items`]).
+pub struct Itemless;
+
+/// A module as [`Itemless`] archives it.
+#[curios_archive::archived]
+pub struct ItemlessModule {
+    outlines: Outlines,
+    mounts: Vec<Mount>,
+    witnesses: BTreeSet<Global>,
+    tests: Vec<Global>,
+}
+
+impl ItemlessModule {
+    fn of(module: &Module) -> Self {
+        Self {
+            outlines: Outlines::of(&module.items),
+            mounts: module.mounts.clone(),
+            witnesses: module.witnesses.clone(),
+            tests: module.tests.clone(),
+        }
+    }
+
+    fn module(self) -> Result<Module, String> {
+        Ok(Module {
+            items: Items::parted(self.outlines, Vec::new())?,
+            mounts: self.mounts,
+            witnesses: self.witnesses,
+            tests: self.tests,
+        })
+    }
+}
+
+impl Proxy<Module> for Itemless {
+    type Archivable = ItemlessModule;
+
+    fn to_archivable(module: &Module) -> impl Borrow<ItemlessModule> {
+        ItemlessModule::of(module)
+    }
+
+    fn from_archivable(module: ItemlessModule) -> Result<Module, String> {
+        module.module()
+    }
+}
+
+impl Proxy<Rc<Module>> for Itemless {
+    type Archivable = ItemlessModule;
+
+    fn to_archivable(module: &Rc<Module>) -> impl Borrow<ItemlessModule> {
+        ItemlessModule::of(module)
+    }
+
+    fn from_archivable(module: ItemlessModule) -> Result<Rc<Module>, String> {
+        module.module().map(Rc::new)
+    }
+}
+
+/// The field adapter: `#[archived_with(WithoutItems)]`.
+pub type WithoutItems = Via<Itemless>;
+
 /// A module's items archived as the vector they are: the ones in hand by reference, and a stored module's each restored first.
 pub struct ItemVector;
 
-pub type AsVector = curios_archive::Via<ItemVector>;
+pub type AsVector = Via<ItemVector>;
 
-impl curios_archive::Proxy<Items> for ItemVector {
+impl Proxy<Items> for ItemVector {
     type Archivable = Vec<Item>;
 
-    fn to_archivable(items: &Items) -> impl std::borrow::Borrow<Vec<Item>> {
+    fn to_archivable(items: &Items) -> impl Borrow<Vec<Item>> {
         match &items.0 {
             Held::Made(items) => std::borrow::Cow::Borrowed(items),
             Held::Stored(_) | Held::Placed(_) => {
