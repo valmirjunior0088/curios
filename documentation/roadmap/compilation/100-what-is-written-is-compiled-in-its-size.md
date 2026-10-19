@@ -64,16 +64,6 @@ What the emitter does at those limits:
 - **A struct per structure, field for field.** A structure of 10 001 fields panics `` `into_wasm` emitted a module that does not validate: struct fields size is out of bounds ``.
 - **Not reached today.** 500 string literals emit 17 data segments, a 500-element list literal emits `array.new_fixed` of at most 10 operands, and the emitted subtype depth is 1. A function of 1 001 parameters called once compiles. An escaping function of more than 1 000 parameters, and a body past 7 654 321 bytes, are untried.
 
-### Binaryen pays superlinearly for a long function
-
-A Binaryen `version_130` replay of the module `curios` hands `BinaryenModuleReadWithFeatures`, at `curios-binaryen`'s settings:
-
-- **`precompute-propagate`.** After `simplify-locals` has sunk a dependent chain of n `+` into one expression, it takes 10.0 s at 150 and 62.9 s at 300, while either pass alone takes milliseconds. The whole default pipeline with that one pass skipped (`BinaryenAddPassToSkip`) takes 2.25 s and 4.74 s, on a module whose baseline is 0.34 s.
-- **`simplify-locals-nostructure`.** On a 2 000-element list built from a run-time value, it takes 6.8 s of a 10 s pipeline the skip above does not shorten.
-- **A match's arms are not Binaryen's.** A match of 2 000 literal arms spends 1.3 s of a 6.7 s compile in Binaryen; the counted slopes below place the rest in the Cont lowering and its optimizer.
-
-[Precompute-propagate's introduction](https://github.com/WebAssembly/binaryen/pull/1179) already kept it to higher levels for its compile time. The [LLVM WebAssembly backend](https://android.googlesource.com/platform/external/opencl/llvm-project/+/cd46354dbd10) counts excess locals among what makes it "easy to hit engine limitations of 50K locals" and code "slower to compile to native code".
-
 ### A reduction another exposes waits a round
 
 The continuation optimizer runs its passes over the whole module a round at a time until a round changes nothing, and a pass sees only what the module held when it began. Where one rewrite makes the next possible, a chain of them takes a round a link, each round a walk of the module, and a chain longer than the 1 024-round backstop leaves the fixpoint unfinished: a release compile emits the module as the last round left it, and a debug one panics. The shrinking rewrites reduce what they expose in one pass, and a nest of lambdas applied in turn is collapsed in one plan, where returned-closure uncurrying absorbs a level a round (stage 7).
@@ -84,16 +74,13 @@ The continuation optimizer runs its passes over the whole module a round at a ti
 
 ### The counted slopes reach every stage
 
-`growth_slopes`' reading over the compiler of `21cb5f586`, printed in its documentation, holds twelve growths linear in every stage: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow and a string literal. Besides the Binaryen costs above, these reach a stage that grows as its square or steeper:
+`growth_slopes`' reading over the compiler of `be93acf08`, printed in its documentation, holds fourteen growths linear in every stage and eleven more in every stage before Binaryen; what Binaryen and Cranelift pay for those eleven is [Binaryen and Cranelift compile a function in its size](101-binaryen-and-cranelift-compile-a-function-in-its-size.md)'s. The one growth left reaches a stage that grows past its square:
 
-- **Erasure's optimizer**: an `Io` block's allocations (3.2 in `ersd-optm`).
-- **The Cont optimizer**: nested lambdas (3.3 to 3.4 in `cont-optm`).
-- **Emission**: nested matches and an `Io` block (3.6 to 3.9 in `emit`).
-- **Cranelift**: a long function, a chain of operators nested to the right, a match's arms, a telescope's parameters summed and nested list literals (3.1 to 3.9 in `cranelift`).
+- **Elaboration**: matches each on the `let` before it (5.5 to 5.9 in `elaborate`).
 
 ## Goal
 
-Doubling a program along any axis an author can grow it at most doubles what every stage counts, and changes no verdict: length, width, nesting depth, the scope a term stands in, the size of a literal and the size of a function. Depth is bounded by memory alone, and the emitted module is inside the engine's envelope at every size. What holds it is counted, as the rule it restores is.
+Doubling a program along any axis an author can grow it at most doubles what every stage counts, up to the module Binaryen and Cranelift are handed, whose cost is [Binaryen and Cranelift compile a function in its size](101-binaryen-and-cranelift-compile-a-function-in-its-size.md)'s, and changes no verdict: length, width, nesting depth, the scope a term stands in, the size of a literal and the size of a function. Depth is bounded by memory alone, and the emitted module is inside the engine's envelope at every size. What holds it is counted, as the rule it restores is.
 
 ## Settled
 
@@ -121,7 +108,6 @@ Doubling a program along any axis an author can grow it at most doubles what eve
   - A signature past 1 000 parameters or results passes the overflow as a trailing struct.
   - Acceptance stays independent of size.
 - **A shrinking reduction reduces what it exposes.** The continuation optimizer's shrinking rewrites are one pass reducing from a worklist until none is left, over a census of its own ([`curios-cont`'s decision](../../../curios-cont/README.md#a-shrinking-reduction-reduces-what-it-exposes)). This is Appel and Jim's imperative algorithm, which [SML.NET](https://www.microsoft.com/en-us/research/wp-content/uploads/2005/04/Shrinking-Reductions-in-SML-NET.pdf) implements; the rounds were their naïve algorithm, quadratic in the worst case.
-- **`curios-binaryen` holds Binaryen to the rule.** It is Binaryen's authority ([One crate is the authority for one external concern](../../design/one-crate-is-the-authority-for-one-external-concern.md)): a pass the growth suite refuses is skipped by name with its reason stated, and reported upstream with its reduced module. Constant propagation is the continuation optimizer's in any case ([`curios-binaryen`'s README](../../../curios-binaryen/README.md)).
 
 ## Stages
 
@@ -129,7 +115,7 @@ Each stage begins by attributing the growths its slopes name, by a debugger's sa
 
 1. **The instrument.** The instruction count in `curios-profile`; `tests::growth`'s programs; `growth_slopes` over the grid, holding the seven growths linear today. Check: `growth_slopes` by hand; `curios-profile`'s tests.
 2. **Depth.** The parser's, lowering's and erasure's brackets, the surface tree's drop if a fixture needs it, and each further overflow the depth fixtures meet. Check: parentheses and an arrow at 10 000 levels on a test thread; nested calls join them with stage 7, whose lexical scopes make them quadratic in their depth (59 s at 10 000, every sample in `curios-cont`'s `lexical_scopes`).
-3. **One rebuild per pass.** The settle's `Zonk`, the totality obligations' memo, the spine read where it is used, solved metavariables substituted before a close, and the universe zonk's memo. Check: a left-leaning and a right-nested `+` of 10 000 operators and 1 000 nested lists elaborate in `tests::growth`; their elaboration rows held, the stages after it being stage 7's and stage 10's.
+3. **One rebuild per pass.** The settle's `Zonk`, the totality obligations' memo, the spine read where it is used, solved metavariables substituted before a close, and the universe zonk's memo. Check: a left-leaning and a right-nested `+` of 10 000 operators and 1 000 nested lists elaborate in `tests::growth`; their elaboration rows held, the stages after it being stage 7's and those after the module [Binaryen and Cranelift compile a function in its size](101-binaryen-and-cranelift-compile-a-function-in-its-size.md)'s.
 4. **A fact read alone.** `InductDecl::at`'s facets through every reader of one, in both checkers: the kernel's handle instantiates its arity and its sort, and a constructor where one is read. Besides, the facts a reader reads beside a declaration: an arm retypes the locals past the base frame alone, entailment reads its hole's binders there too, and erasure copies the one constructor's row it reads, builds a family's row in one pass and finds a match's arms by their tags once. Check: 4 000 constructors compile in near-linear time; the row's memory is stage 6's.
 5. **The scope by reference.** The persistent frames first, then the spine, prototyped on a scratch copy and measured before it lands. Besides, each walk that paid a scope or a body it could not change: a reduct kept by the names it read absent, a solution judged in the scope it was born in, a node's facts read off its spine, a capture passing over what holds only older locals, a materialization over what holds no metavariable, the proof-binder marking entering a block's binders once, and a block closing its bindings over one lookup of its binders. Check: a 6 000-binding `let` chain, a 2 000-statement `Io` block, 1 000 parameters summed and 2 000 nested lambdas in `tests::growth`; their elaboration rows held, the nested lambdas' erasure being stage 6's.
 6. **Lowering and erasure.** A telescope, a structure's fields and nested matches, `let`s and lambdas lowered in their size, and nested list literals erased in theirs. Landed: lowering resolves a name through an index of its scope and binds a telescope's prefixes a binder at a time, a `let` in tail position continues its block, a telescope and a block close over one lookup of their binders, a curried type's erasability is answered once for every tail of it, a term's levels are zonked through the solver's memo, an item imports what it reads of a row, a nominal value is shaped by its declaration's row, a structure is read a facet at a time — its sort, its parameters, one field — in both checkers, erasure and lowering, a telescope's entry is read without opening the entries before it, a term's levels are zonked with no copy of the solver, an operation's operands are rebuilt with no walk of those not yet elaborated, every table of both checkers, the closed machine's and both totality obligations' files a term that names no local and no metavariable as its canonical node, a binder a walk opened beside a type is found by its name, so a record's fields are classified each against the names it holds, and a level's representatives are found by following each solution once. Remaining:
@@ -137,11 +123,10 @@ Each stage begins by attributing the growths its slopes name, by a debugger's sa
    - Two reads still hold a row whole: the shared row of an anonymous tuple, which each fragment that reads one registers with a blank field for each of its width, and the program an item is evaluated in, which links the whole row of each family it reaches. Each costs what the fragment that reads the row pays already, and no growth in the grid names either; they wait for one that does.
 
    Check: their rows held.
-7. **The Cont lowering and its optimizer.** A match's arms, a list built at run time, a tuple, a structure's fields, a telescope, a chain and a concept's wrappers lowered and optimized in their size. Landed: a region's lexical scope is the one it is nested in with what it binds, held persistent; the dataflow solver runs a rule again only where a fact it read moved; a continuation's parameters are replaced where they are named, each site noted for what the replacement brings in; the verifier spells an operand only where it refuses one; the recursion verdict reads the call graph closed under definition without closing it; emission reads a region's sibling edges off what each region recorded as it was built and emits a region's last item onto the code before it; the machine verifier follows each block to the entry once; the machine's free values are settled a function at a time, where what a reached function needs has grown; the closed evaluator sums a region's facts from the regions bound in it; the shrinking rewrites reduce what they expose in one pass; and a nest of lambdas applied in turn is one function of its levels' parameters. Remaining: nested matches emitted in their size, retaken; what a list built at run time and a telescope's parameters summed still pay is Binaryen's and Cranelift's, stage 10's. Check: their rows held; nested calls at 10 000 levels join the depth fixture, and 2 000 nested lambdas compile in `tests::growth`, applied in turn at one call and at two.
+7. **The Cont lowering and its optimizer.** A match's arms, a list built at run time, a tuple, a structure's fields, a telescope, a chain and a concept's wrappers lowered and optimized in their size. Landed: a region's lexical scope is the one it is nested in with what it binds, held persistent; the dataflow solver runs a rule again only where a fact it read moved; a continuation's parameters are replaced where they are named, each site noted for what the replacement brings in; the verifier spells an operand only where it refuses one; the recursion verdict reads the call graph closed under definition without closing it; emission reads a region's sibling edges off what each region recorded as it was built and emits a region's last item onto the code before it; the machine verifier follows each block to the entry once; the machine's free values are settled a function at a time, where what a reached function needs has grown; the closed evaluator sums a region's facts from the regions bound in it; the shrinking rewrites reduce what they expose in one pass; and a nest of lambdas applied in turn is one function of its levels' parameters. What nested matches, a list built at run time and a telescope's parameters summed still pay is Binaryen's and Cranelift's, [Binaryen and Cranelift compile a function in its size](101-binaryen-and-cranelift-compile-a-function-in-its-size.md)'s. Check: their rows held before Binaryen; nested calls at 10 000 levels join the depth fixture, and 2 000 nested lambdas compile in `tests::growth`, applied in turn at one call and at two.
 8. **Locals by liveness.** The coloring pass over each emitted function. Check: 10 100 `+` in one function compiles and runs; `curios-std`'s corpus.
 9. **Wide shapes.** The envelope fixtures, then the spill. Check: each crossing runs.
-10. **Binaryen and Cranelift.** The long-function shapes retaken after stage 8; each Binaryen pass still refused skipped, stated in `curios-binaryen`'s README, and its report prepared; what Cranelift pays for a long function attributed, and taken where `curios-cranelift` configures it or the emitted function shapes it. Check: every row held; `wasm-optm` sizes over `programs/` before and after.
-11. **A match on the `let` before it.** Its elaboration and erasure attributed by samples and taken in their size. Check: `ChainedMatches` held; 2 000 chained matches compile in `tests::growth`.
+10. **A match on the `let` before it.** Its elaboration and erasure attributed by samples and taken in their size. Check: `ChainedMatches` held; 2 000 chained matches compile in `tests::growth`.
 
 ## Protocol
 
@@ -153,15 +138,12 @@ One program a shape and size, on standard input. Each body reads the argument co
 - **Scope**: n parameters summed.
 - **Size**: one string literal of n characters.
 
-A Binaryen reading replays the bytes `curios` hands `BinaryenModuleReadWithFeatures`, dumped by a debugger at that call, through `BinaryenModuleOptimize` or `BinaryenModuleRunPasses`, linked against the cached `libbinaryen.a`, with `BinaryenAddPassToSkip` for a skip.
-
 ## Rejected
 
 - **A spine over the bound variables alone**, `let`-defined locals left out as [elaboration-zoo](https://github.com/AndrasKovacs/elaboration-zoo)'s pruning mask leaves them: an `Io` block's binders are lambdas', so its scope grows all the same.
 - **A spine linear in the scope, as [smalltt](https://github.com/AndrasKovacs/smalltt) keeps it**, "usually linear in the size of the local scope": that is the cliff.
 - **A nesting limit, as [clang's `-fbracket-depth`](https://lists.llvm.org/pipermail/llvm-bugs/2021-April/091875.html)**: acceptance would follow the host's stack, which the depth decision rejects.
 - **Validating after Binaryen, for its merged locals**: Binaryen aborts on a module it cannot read, and the browser path runs none.
-- **A pass list of Curios's own in place of Binaryen's default**: the list would have to follow every version's, where a skip names only what the suite refuses.
 - **Timing the suite**: the readings above are a machine's load as much as the compiler's.
 
 ## Retirement
@@ -169,5 +151,5 @@ A Binaryen reading replays the bytes `curios` hands `BinaryenModuleReadWithFeatu
 - [Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) gains that a judgment does not pay its scope, and its counted fixtures gain the growth suite.
 - [Depth is bought with stack, not with hand-rolled frames](../../design/compilation/depth-is-bought-with-stack-not-with-hand-rolled-frames.md) names the parser and erasure.
 - `curios-profile`'s README states four instruments.
-- `curios-emit`'s README states local allocation and the spill, and `curios-binaryen`'s states its skips.
+- `curios-emit`'s README states local allocation and the spill.
 - What cites this specification is updated, and it is deleted.

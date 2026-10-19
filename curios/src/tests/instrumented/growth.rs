@@ -124,12 +124,13 @@ fn slope(small: u64, middle: u64, large: u64) -> Option<f64> {
     (first > 0 && first * 50 >= small.max(1)).then(|| second as f64 / first as f64)
 }
 
-/// The steepest slope over the stages of one column, with the stage it is at.
+/// The steepest slope over the first `stages` of [`STAGES`] in one column, with the stage it is at.
 fn steepest(
     counts: &[[Count; 11]; 3],
+    stages: usize,
     column: impl Fn(&Count) -> Option<u64>,
 ) -> Option<(f64, &'static str)> {
-    (0..STAGES.len())
+    (0..stages)
         .filter_map(|stage| {
             let [small, middle, large] = counts.each_ref().map(|count| column(&count[stage]));
             slope(small?, middle?, large?).map(|slope| (slope, STAGES[stage]))
@@ -172,6 +173,23 @@ const HELD: &[Growth] = &[
     Growth::Lets,
     Growth::Arrow,
     Growth::StringLiteral,
+    Growth::Statements,
+    Growth::Lambdas,
+];
+
+/// The growths every stage of which before Binaryen is linear today, where Binaryen or Cranelift is not: what Binaryen and Cranelift pay is `documentation/roadmap/compilation/101-binaryen-and-cranelift-compile-a-function-in-its-size.md`'s, and each moves to [`HELD`] once it is taken there.
+const HELD_FRONT: &[Growth] = &[
+    Growth::LetPlus,
+    Growth::LetCall,
+    Growth::Functions,
+    Growth::ListOpen,
+    Growth::Arms,
+    Growth::ParametersSummed,
+    Growth::Fields,
+    Growth::RightPlus,
+    Growth::LeftPlus,
+    Growth::Matches,
+    Growth::Lists,
 ];
 
 /// The steepest slope a held growth's stage may show: two is linear and four quadratic, so three tells them apart with room on both sides — for a logarithm's factor, and for the instructions a run's drawn hash keys move in a stage that grows little.
@@ -189,42 +207,47 @@ const HELD_SLOPE: f64 = 3.0;
 ///
 /// # What it last printed
 ///
-/// Over the compiler of `21cb5f586`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
+/// Over the compiler of `be93acf08`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
 ///
 /// | growth | n | instructions | looks | allocations | bytes |
 /// | --- | --- | --- | --- | --- | --- |
-/// | LetPlus | 25 | 3.60 binaryen | 2.00 erase | 2.09 ersd-optm | 2.17 cont-optm |
-/// | LetCall | 25 | 3.61 binaryen | 2.00 erase | 2.09 ersd-optm | 2.73 parse |
-/// | Statements | 100 | 3.63 emit | 2.00 erase | 3.22 ersd-optm | 2.82 ersd-optm |
-/// | Definitions | 250 | 2.05 parse | 2.00 erase | 2.00 erase | 2.58 parse |
-/// | Functions | 250 | 3.96 binaryen | 2.00 erase | 2.12 cranelift | 3.56 cranelift |
-/// | Strings | 250 | 2.03 erase | 2.00 lower | 2.00 parse | 2.00 binaryen |
-/// | List | 1000 | 1.96 erase | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
-/// | ListOpen | 400 | 3.68 binaryen | 2.00 erase | 2.12 cont | 2.85 cranelift |
-/// | Arms | 250 | 3.15 cranelift | 2.00 erase | 2.01 ersd-optm | 2.50 binaryen |
-/// | Parameters | 400 | 2.19 ersd-optm | 2.00 erase | 2.11 cont | 2.23 ersd-optm |
-/// | ParametersSummed | 100 | 3.85 cranelift | 2.00 erase | 2.16 cranelift | 3.32 cranelift |
-/// | Tuple | 250 | 2.01 parse | 2.00 erase | 2.00 parse | 2.02 elaborate |
-/// | Fields | 250 | 2.01 erase | 2.00 erase | 2.00 parse | 2.92 binaryen |
+/// | LetPlus | 25 | 2.18 binaryen | 2.00 erase | 2.09 ersd-optm | 2.08 erase |
+/// | LetCall | 25 | 2.20 binaryen | 2.00 erase | 2.10 cranelift | 2.73 parse |
+/// | Statements | 100 | 2.15 elaborate | 2.00 erase | 2.04 cont-optm | 2.20 binaryen |
+/// | Definitions | 250 | 2.03 parse | 2.00 erase | 2.00 erase | 2.58 parse |
+/// | Functions | 250 | 3.03 binaryen | 2.00 erase | 2.11 cranelift | 2.75 cranelift |
+/// | Strings | 250 | 2.02 parse | 2.00 lower | 2.00 parse | 2.00 binaryen |
+/// | List | 1000 | 1.98 erase | 2.00 erase | 2.12 erase | 2.06 erase |
+/// | ListOpen | 400 | 3.82 binaryen | 2.00 erase | 2.12 cranelift | 2.85 cranelift |
+/// | Arms | 250 | 11.95 binaryen | 2.00 erase | 2.17 cranelift | 3.21 cranelift |
+/// | Parameters | 400 | 2.26 ersd-optm | 2.00 erase | 2.11 cont | 2.24 ersd-optm |
+/// | ParametersSummed | 100 | 2.49 binaryen | 2.00 erase | 2.08 cranelift | 2.53 cranelift |
+/// | Tuple | 250 | 2.01 lower | 2.00 erase | 2.00 parse | 2.02 elaborate |
+/// | Fields | 250 | 2.01 parse | 2.00 erase | 2.00 parse | 2.91 binaryen |
 /// | Constructors | 250 | 2.37 erase | 2.00 erase | 2.02 ersd-optm | 2.45 ersd-optm |
-/// | Methods | 250 | 2.44 cont-optm | 2.00 erase | 2.00 elaborate | 2.18 cont |
-/// | Calls | 250 | 2.48 cont-optm | 2.00 erase | 2.04 cont-optm | 2.74 cont |
-/// | Parentheses | 1000 | 1.99 parse | - | 2.00 parse | 2.00 parse |
-/// | RightPlus | 250 | 3.45 cranelift | 2.00 erase | 2.08 cranelift | 3.68 cranelift |
-/// | LeftPlus | 250 | 3.04 binaryen | 2.00 erase | 2.11 cranelift | 3.11 cranelift |
-/// | Matches | 200 | 3.89 emit | 2.00 erase | 3.21 emit | 3.86 emit |
-/// | Lambdas | 100 | 3.30 cont-optm | 2.37 elaborate | 3.40 cont-optm | 3.29 cont-optm |
-/// | Lists | 400 | 3.21 cranelift | 2.00 erase | 2.09 cranelift | 2.68 ersd-optm |
-/// | Lets | 100 | 2.05 elaborate | 2.00 erase | 2.01 erase | 2.46 erase |
-/// | Arrow | 1000 | 2.03 elaborate | 2.00 erase | 2.05 elaborate | 2.03 elaborate |
-/// | StringLiteral | 2000 | 2.00 elaborate | 2.00 erase | 2.00 erase | 2.00 erase |
+/// | Methods | 250 | 2.07 cont | 2.00 erase | 2.01 elaborate | 2.18 cont |
+/// | Calls | 250 | 2.09 cont | 2.00 erase | 2.04 cont | 2.74 cont |
+/// | Parentheses | 1000 | 1.98 parse | - | 2.00 parse | 2.00 parse |
+/// | RightPlus | 250 | 3.56 cranelift | 2.00 erase | 2.07 cranelift | 3.60 cranelift |
+/// | LeftPlus | 250 | 3.05 binaryen | 2.00 erase | 2.08 cranelift | 2.72 cont |
+/// | Matches | 200 | 3.45 binaryen | 2.00 erase | 2.13 cranelift | 2.94 cranelift |
+/// | ChainedMatches | 25 | 5.52 elaborate | 5.47 elaborate | 5.85 elaborate | 5.81 elaborate |
+/// | Lambdas | 100 | 2.33 cont | 2.37 elaborate | 2.05 cont | 2.51 cont |
+/// | Lists | 400 | 3.72 binaryen | 2.00 erase | 2.01 emit | 2.68 ersd-optm |
+/// | Lets | 100 | 2.08 elaborate | 2.00 erase | 2.00 erase | 2.46 erase |
+/// | Arrow | 1000 | 2.06 elaborate | 2.00 erase | 2.06 elaborate | 2.03 elaborate |
+/// | StringLiteral | 2000 | 2.00 erase | 2.00 erase | 2.00 erase | 2.00 erase |
 ///
-/// **Twelve growths are held linear in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow and a string literal, the ones [`HELD`] lists. A growth is held where the stage that steepened it has been taken up: one reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cont` do. Every other growth reaches a stage that grows as its square or steeper, and the stage each names is where `documentation/roadmap/compilation/100-what-is-written-is-compiled-in-its-size.md` takes it up.
+/// **Fourteen growths are held linear in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements and nested lambdas, the ones [`HELD`] lists. **Eleven more are held in every stage before Binaryen**, the ones [`HELD_FRONT`] lists; what Binaryen and Cranelift pay for them is `documentation/roadmap/compilation/101-binaryen-and-cranelift-compile-a-function-in-its-size.md`'s. A growth is held where the stage that steepened it has been taken up: one reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cont` do. Matches each on the `let` before it grow past their square in elaboration, which `documentation/roadmap/compilation/100-what-is-written-is-compiled-in-its-size.md` takes up.
 #[test]
 #[ignore = "measurement, counted: run by hand, alone in its invocation"]
 fn growth_slopes() {
     let counter = Instructions::open();
     let mut regressed = Vec::new();
+    let front = STAGES
+        .iter()
+        .position(|stage| *stage == "binaryen")
+        .expect("Binaryen is a stage");
 
     println!("| growth | n | instructions | looks | allocations | bytes |");
     println!("| --- | --- | --- | --- | --- | --- |");
@@ -238,10 +261,28 @@ fn growth_slopes() {
             Some((slope, stage)) => format!("{slope:.2} {stage}"),
             None => "-".to_string(),
         };
-        let instructions = steepest(&counts, |count| count.instructions);
-        let looks = steepest(&counts, |count| Some(count.looks));
-        let allocations = steepest(&counts, |count| Some(count.allocations));
-        let bytes = steepest(&counts, |count| Some(count.bytes));
+        let columns = |stages: usize| {
+            [
+                (
+                    "instructions",
+                    steepest(&counts, stages, |count| count.instructions),
+                ),
+                (
+                    "looks",
+                    steepest(&counts, stages, |count| Some(count.looks)),
+                ),
+                (
+                    "allocations",
+                    steepest(&counts, stages, |count| Some(count.allocations)),
+                ),
+                (
+                    "bytes",
+                    steepest(&counts, stages, |count| Some(count.bytes)),
+                ),
+            ]
+        };
+        let every = columns(STAGES.len());
+        let [instructions, looks, allocations, bytes] = every.map(|(_, steepest)| steepest);
         println!(
             "| {growth:?} | {base} | {} | {} | {} | {} |",
             shown(instructions),
@@ -250,18 +291,16 @@ fn growth_slopes() {
             shown(bytes),
         );
 
-        if HELD.contains(&growth) {
-            for (column, steepest) in [
-                ("instructions", instructions),
-                ("looks", looks),
-                ("allocations", allocations),
-                ("bytes", bytes),
-            ] {
-                if let Some((slope, stage)) = steepest
-                    && slope > HELD_SLOPE
-                {
-                    regressed.push(format!("{growth:?}: {column} at {stage} grows {slope:.2}"));
-                }
+        let held = match (HELD.contains(&growth), HELD_FRONT.contains(&growth)) {
+            (true, _) => every,
+            (false, true) => columns(front),
+            (false, false) => continue,
+        };
+        for (column, steepest) in held {
+            if let Some((slope, stage)) = steepest
+                && slope > HELD_SLOPE
+            {
+                regressed.push(format!("{growth:?}: {column} at {stage} grows {slope:.2}"));
             }
         }
     }
