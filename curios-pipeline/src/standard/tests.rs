@@ -484,11 +484,18 @@ fn std_image_division() {
         .len();
 
         println!("\n=== how /std's stored unit divides ===");
-        row(
-            "the index and its objects",
-            stored.index.len() + lowered + forms + module,
-            None,
-        );
+        // Every object once, a run its members share counted once.
+        let objects_held = objects
+            .iter()
+            .map(|object| {
+                let bytes = object.bytes.as_slice();
+                ((bytes.as_ptr(), bytes.len()), bytes.len())
+            })
+            .collect::<BTreeMap<_, _>>()
+            .values()
+            .sum::<usize>();
+        row("the index", stored.index.len(), None);
+        row("its objects", objects_held, None);
         row(
             "what a successor restores",
             unit.len(),

@@ -6,11 +6,13 @@
 //!
 //! **What a filing writes is decided by the packs' ends.** Which objects a pack holds is read off its table ([`pack_names`]), so a filing reads no pack whole to know what it lacks.
 //!
-//! **Kept geometric where it is filed.** The filing that writes a pack merges the smallest packs of the address into one, wherever each no longer holds at least twice the objects of the one before it, as `git repack --geometric` rolls a repository's packs up: the address holds a logarithmic number of packs, and an object is written again a logarithmic number of times over its life. The elaborated declarations of the merged packs are consed again in one table ([`repacked`]), so a pack keeps one however it was made.
+//! **Kept geometric where it is filed.** The filing that writes a pack merges the smallest packs of the address into one, wherever each no longer holds at least twice the objects of the one before it: the address holds a logarithmic number of packs, and an object is written again a logarithmic number of times over its life. The runs of each kind the merged packs hold are run again into one ([`repacked`]), so a pack keeps one table a kind however it was made.
 //!
 //! **A pack another filer merged away is looked for again.** The packs are listed once for a handle, and again where an object is not found among them, so a merge that renamed what a reader was about to read is a second listing, never a miss.
 //!
-//! **What no slot names is collected where a filing finds a day has passed since the last collection** ([`Packs::collect`]): an object the address's slot has not named for five days is dropped from its pack. Each address keeps a table of the objects a collection found its slot not naming, with when one first did, and forgets one named again, as git keeps a time for each unreachable object of a cruft pack ([`gitformat-pack`](https://git-scm.com/docs/gitformat-pack#_cruft_packs)) rather than one for the pack: a pack holding a live unit is read by every restore of it, so a time renewed by reads, as Go's build cache keeps one for each file ([`cache.go`](https://go.dev/src/cmd/go/internal/cache/cache.go)), would keep every dead object beside the live ones for as long as the unit is used. A read writes nothing. A filer that found an object present as a collection beside it drops it names an object no pack holds, which is a miss and never a belief. Every time is asked of the clock the handle was opened at.
+//! **What no slot names is collected where a filing finds a day has passed since the last collection** ([`Packs::collect`]): an object the address's slot has not named for five days is dropped from its pack, each address keeping a table of the objects a collection found its slot not naming, with when one first did. A read writes nothing. Every time is asked of the clock the handle was opened at.
+//!
+//! Why a slot's objects are kept in packs at its address, merged so and collected so, is the crate `README.md`'s.
 
 #[cfg(test)]
 mod tests;
