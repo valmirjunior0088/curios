@@ -76,11 +76,12 @@ A Binaryen `version_130` replay of the module `curios` hands `BinaryenModuleRead
 
 ### The counted slopes reach every stage
 
-`growth_slopes`' reading over the compiler of `ad8841072`, printed in its documentation, holds eight growths linear in every stage: definitions, strings, a list literal, a family's constructors, parentheses, `let`s, an arrow and a string literal. Besides the Binaryen costs above, these reach a stage that grows as its square or steeper:
+`growth_slopes`' reading over the compiler of `21cb5f586`, printed in its documentation, holds twelve growths linear in every stage: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow and a string literal. Besides the Binaryen costs above, these reach a stage that grows as its square or steeper:
 
-- **The Cont lowering**: a list built at run time, a telescope's parameters and nested matches (slopes 3.7 to 4.9 in `cont`). Nested list literals read 3.1 in its bytes, which its node arena's reallocations make at the grid's sizes: `cargo xtask profile` over 400 to 3 200 levels counts the stage linear in allocations and in bytes.
-- **Emission**: nested matches (3.6 in `emit`).
-- **Cranelift**: a long function's bytes and a chain of operators nested to the right (3.5 to 3.8 in `cranelift`).
+- **Erasure's optimizer**: an `Io` block's allocations (3.2 in `ersd-optm`).
+- **The Cont optimizer**: nested lambdas (3.3 to 3.4 in `cont-optm`).
+- **Emission**: nested matches and an `Io` block (3.6 to 3.9 in `emit`).
+- **Cranelift**: a long function, a chain of operators nested to the right, a match's arms, a telescope's parameters summed and nested list literals (3.1 to 3.9 in `cranelift`).
 
 ## Goal
 
@@ -127,7 +128,7 @@ Each stage begins by attributing the growths its slopes name, by a debugger's sa
    - Two reads still hold a row whole: the shared row of an anonymous tuple, which each fragment that reads one registers with a blank field for each of its width, and the program an item is evaluated in, which links the whole row of each family it reaches. Each costs what the fragment that reads the row pays already, and no growth in the grid names either; they wait for one that does.
 
    Check: their rows held.
-7. **The Cont lowering and its optimizer.** A match's arms, a list built at run time, a tuple, a structure's fields, a telescope, a chain and a concept's wrappers lowered and optimized in their size. Landed: a region's lexical scope is the one it is nested in with what it binds, held persistent; the dataflow solver runs a rule again only where a fact it read moved; a continuation's parameters are replaced where they are named, each site noted for what the replacement brings in; the verifier spells an operand only where it refuses one; the recursion verdict reads the call graph closed under definition without closing it; and emission reads a region's sibling edges off what each region recorded as it was built. What a list built at run time and a telescope's parameters still pay is Binaryen's, stage 10's. Check: their rows held; nested calls at 10 000 levels join the depth fixture.
+7. **The Cont lowering and its optimizer.** A match's arms, a list built at run time, a tuple, a structure's fields, a telescope, a chain and a concept's wrappers lowered and optimized in their size. Landed: a region's lexical scope is the one it is nested in with what it binds, held persistent; the dataflow solver runs a rule again only where a fact it read moved; a continuation's parameters are replaced where they are named, each site noted for what the replacement brings in; the verifier spells an operand only where it refuses one; the recursion verdict reads the call graph closed under definition without closing it; and emission reads a region's sibling edges off what each region recorded as it was built. Remaining: nested lambdas optimized, and nested matches and an `Io` block emitted and their erasure optimized, in their size; what a list built at run time and a telescope's parameters summed still pay is Binaryen's and Cranelift's, stage 10's. Check: their rows held; nested calls at 10 000 levels join the depth fixture.
 8. **Locals by liveness.** The coloring pass over each emitted function. Check: 10 100 `+` in one function compiles and runs; `curios-std`'s corpus.
 9. **Wide shapes.** The envelope fixtures, then the spill. Check: each crossing runs.
 10. **Binaryen and Cranelift.** The long-function shapes retaken after stage 8; each Binaryen pass still refused skipped, stated in `curios-binaryen`'s README, and its report prepared; what Cranelift pays for a long function attributed, and taken where `curios-cranelift` configures it or the emitted function shapes it. Check: every row held; `wasm-optm` sizes over `programs/` before and after.
