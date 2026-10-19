@@ -81,7 +81,7 @@ use {
         Minted, Mints, NumLit, Quality, RecGroup, ReduceError, StructDecl, StructInstance, Subterm,
         Term, Totality, Trace, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseError, UniverseMetaId, UniverseRole, Universes, Variance, WitnessKey,
-        WitnessOrigin, instantiate_universes_scoped,
+        WitnessOrigin, instantiate_universes_scoped, project_erased_universes,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -1544,14 +1544,32 @@ impl<'s> Context<'s> {
             self.typing.frames.forget_spellings_naming(&name);
         }
 
-        let by_value = self.by_value(&zonk_solved_term_metas(self, entry.body()));
-        self.typing
-            .frames
-            .define(name, entry.read_by_value(by_value));
+        let entry = match name.is_local() {
+            true => {
+                let zonked = zonk_solved_term_metas(self, entry.body());
+                let by_value = ByValue {
+                    term: self.by_value(&zonked),
+                    erased: self.erased_by_value(&zonked),
+                };
+                entry.read_by_value(by_value)
+            }
+            false => entry,
+        };
+        self.typing.frames.define(name, entry);
     }
 
-    /// `term` by value: each local definition it names replaced by what that definition is by value, which it was read as where it was defined ([`DefEntry`]). One substitution over what `term` holds, as the kernel reads a term through the values its `let`s were bound to (`curios-cert`'s `Scope::by_value`), where unfolding each definition in turn would read a chain of them again at every spelling.
+    /// `term` by value: each local definition it names replaced by what that definition is by value, which it was read as where it was defined ([`ByValue`]). One substitution over what `term` holds, as the kernel reads a term through the values its `let`s were bound to (`curios-cert`'s `Scope::by_value`), where unfolding each definition in turn would read a chain of them again at every spelling.
     pub(crate) fn by_value(&self, term: &Term) -> Term {
+        self.substituted_by_value(term, |by_value| &by_value.term)
+    }
+
+    /// [`Context::by_value`] with universe instances erased ([`project_erased_universes`]), over the erased values each definition keeps: what an equation's key over local definitions is spelled from, in what `term` holds.
+    pub(crate) fn erased_by_value(&self, term: &Term) -> Term {
+        self.substituted_by_value(&project_erased_universes(term), |by_value| &by_value.erased)
+    }
+
+    /// `term` with each local definition it names replaced by `value` of what the definition is by value.
+    fn substituted_by_value(&self, term: &Term, value: fn(&ByValue) -> &Term) -> Term {
         if !term.has_local_free() {
             return term.clone();
         }
@@ -1561,7 +1579,8 @@ impl<'s> Context<'s> {
             .filter(|name| name.is_local())
             .filter_map(|name| {
                 let entry = self.typing.frames.definition(name)?;
-                entry.reduct().map(|_| (*name, entry.by_value().clone()))
+                entry.reduct()?;
+                Some((*name, value(entry.by_value()?).clone()))
             })
             .collect::<Vec<_>>();
         match values.is_empty() {

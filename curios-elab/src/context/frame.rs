@@ -29,8 +29,17 @@ pub(crate) struct DefEntry {
     proof: bool,
     /// The depth of the frame that defines the name: what a settlement reading the definition rests on ([`Frames::begin_reads`](super::Frames::begin_reads)). No part of what the definition is, so two definitions alike in all else are one.
     depth: usize,
-    /// The term by value, as it was read where the name was defined ([`Context::by_value`](crate::Context::by_value)): its solved metavariables materialized and each local definition it names replaced by what that one is by value. Read in place of the term wherever the kernel's spelling of a term is asked, so a chain of definitions is read once, where each link is made, and not again at every spelling. Derived from the term and the definitions it names, so no part of what the definition is either.
-    by_value: Term,
+    /// What a local definition's term is by value, read where the name was defined; `None` for a published item's name, which is never read by value here. Derived from the term and the definitions it names, so no part of what the definition is either.
+    by_value: Option<ByValue>,
+}
+
+/// A local definition's term by value, as it was read where the name was defined ([`Context::by_value`](crate::Context::by_value)): read in place of the term wherever the kernel's spelling of a term is asked, so a chain of definitions is read once, where each link is made, and not again at every spelling.
+#[derive(Debug, Clone)]
+pub(crate) struct ByValue {
+    /// The term with its solved metavariables materialized and each local definition it names replaced by what that one is by value.
+    pub(crate) term: Term,
+    /// The same with its universe instances erased ([`project_erased_universes`](curios_core::project_erased_universes)): what an equation's key over the definition is spelled from (`shallow_scrutinee`). Built as `term` is, over the erased values beneath, since erasing commutes with substituting what is erased.
+    pub(crate) erased: Term,
 }
 
 impl PartialEq for DefEntry {
@@ -42,7 +51,7 @@ impl PartialEq for DefEntry {
 impl DefEntry {
     pub(crate) fn new(term: Term, kind: Option<DefinitionKind>) -> Self {
         Self {
-            by_value: term.clone(),
+            by_value: None,
             term,
             kind,
             proof: false,
@@ -53,7 +62,7 @@ impl DefEntry {
     /// The entry a published item's name is bound by: `term`, and a proof where `proof`.
     pub(crate) fn published(term: Term, kind: DefinitionKind, proof: bool) -> Self {
         Self {
-            by_value: term.clone(),
+            by_value: None,
             term,
             kind: Some(kind),
             proof,
@@ -71,14 +80,17 @@ impl DefEntry {
         self.depth
     }
 
-    /// The entry with its term read by value as `by_value`, where it is defined.
-    pub(super) fn read_by_value(self, by_value: Term) -> Self {
-        Self { by_value, ..self }
+    /// The entry of a local definition with its term read by value as `by_value`, where it is defined.
+    pub(super) fn read_by_value(self, by_value: ByValue) -> Self {
+        Self {
+            by_value: Some(by_value),
+            ..self
+        }
     }
 
-    /// The term by value, as it was read where the name was defined.
-    pub(super) fn by_value(&self) -> &Term {
-        &self.by_value
+    /// The term by value, as it was read where the name was defined, where the name is a local definition's.
+    pub(super) fn by_value(&self) -> Option<&ByValue> {
+        self.by_value.as_ref()
     }
 
     pub(crate) fn body(&self) -> &Term {

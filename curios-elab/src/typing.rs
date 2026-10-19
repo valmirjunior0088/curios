@@ -1356,7 +1356,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
             context.refine_projection(head.clone(), *index, value.clone());
         }
         _ => {
-            let mut spellings = scrutinee_spellings(context, head)?
+            let mut spellings = scrutinee_spellings(context, head, head)?
                 .into_iter()
                 .map(|(key, original)| (key, original, false))
                 .collect::<Vec<_>>();
@@ -1364,7 +1364,8 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
             // The kernel reads a term by value where reduction is entered, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The kernel's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it.
             let unfolded = context.by_value(head);
             if unfolded != *head {
-                for (key, original) in scrutinee_spellings(context, &unfolded)? {
+                let erased = context.erased_by_value(head);
+                for (key, original) in scrutinee_spellings(context, &unfolded, &erased)? {
                     if !spellings.iter().any(|(written, _, _)| *written == key) {
                         spellings.push((key, original, true));
                     }
@@ -1480,10 +1481,14 @@ fn contradicted_guard(context: &mut Context, head: &Term, value: &Term) -> Optio
     None
 }
 
-/// The spellings a scrutinee that is neither a variable nor a projection is met by, each with the term it was registered from: as written, and resolved through a concept dispatch where it has one.
-fn scrutinee_spellings(context: &mut Context, head: &Term) -> Result<Vec<(Term, Term)>, Error> {
+/// The spellings a scrutinee that is neither a variable nor a projection is met by, each with the term it was registered from: as written, and resolved through a concept dispatch where it has one. The written key is read from `keyed`, which is `head` or a spelling of it the key reads alike, as its universes erased ([`Context::erased_by_value`]).
+fn scrutinee_spellings(
+    context: &mut Context,
+    head: &Term,
+    keyed: &Term,
+) -> Result<Vec<(Term, Term)>, Error> {
     // Registered on the *cheap* key: the scrutinee as written, with metas and universes normalized. Reducing it here would make a guard cost its operand's evaluation before any use of the fact — see `shallow_scrutinee`. An occurrence this spelling does not meet is met at the stuck form reduction leaves it as, against the entry's reduced spelling (`reduce`'s `refined_reduct`), which is settled when a probe first needs it rather than at every site that records one.
-    let canonical = shallow_scrutinee(context, head);
+    let canonical = shallow_scrutinee(context, keyed);
 
     // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLe(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/le(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
     let resolved = match canonical.head_key().is_none() {
