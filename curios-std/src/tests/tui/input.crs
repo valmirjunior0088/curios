@@ -117,7 +117,7 @@ test a_change_of_focus_and_a_reported_size_are_inputs =
     Test/equal(
         inputs(x[0x1B, '[', 'I', 0x1B, '[', 'O', 0x1B, '[', '4', '8', ';', '2', '4', ';', '8', '0',
             ';', '4', '8', '0', ';', '6', '4', '0', 't']),
-        [Input/focus(true), Input/focus(false), Input/resize(Tty/Size { cols = 80, rows = 24 })]);
+        [Input/focus(true), Input/focus(false), Input/resize(Tty/Size { w = 80, h = 24 })]);
 
 -- What a terminal answers of itself is no input: a mode's report, supported where the terminal holds it set or reset and not where it knows it not, the keyboard protocol's flags, and the device attributes.
 test the_terminal_s_replies_are_read_apart_from_its_inputs =

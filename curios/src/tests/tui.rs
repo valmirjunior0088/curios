@@ -213,11 +213,11 @@ fn a_session_remembers_what_it_drew_and_the_size_it_was_told() {
                 let now = Session/measure(s)!;
                 let _ = Session/draw(s, View/blank(6, 3))!;
                 let known = Session/size(s)!;
-                let _ = print(Nat/to_str(original.cols))!;
+                let _ = print(Nat/to_str(original.w))!;
                 let _ = print("/")!;
-                let _ = print(Nat/to_str(now.cols))!;
+                let _ = print(Nat/to_str(now.w))!;
                 let _ = print("/")!;
-                let _ = print(Nat/to_str(known.cols))!;
+                let _ = print(Nat/to_str(known.w))!;
                 Try/pure(()))))!;
             Io/pure(());
         program()
@@ -244,7 +244,7 @@ fn resize_events_update_the_drawing_session_before_rendering() {
         let app: Tui(Nat, Nat) = Tui {
             init = (0, Directive/none()),
             update(model, event) = match event
-                | input(resize(size)) => match size.cols == 8
+                | input(resize(size)) => match size.w == 8
                     | true => (model + 1, Directive/quit())
                     | false => (model + 1, Directive/none())
                     end
@@ -506,7 +506,7 @@ fn a_size_the_terminal_reports_reaches_update_as_an_input() {
         let app: Tui(Nat, Nat) = Tui {
             init = (0, Directive/none()),
             update(model, event) = match event
-                | input(resize(size)) => (size.cols, Directive/quit())
+                | input(resize(size)) => (size.w, Directive/quit())
                 | _ => (model, Directive/none())
                 end,
             view(model) = (w, h) => View/blank(w, h),

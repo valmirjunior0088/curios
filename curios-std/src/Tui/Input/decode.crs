@@ -281,7 +281,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
                     match parameter(p, 2)
                     | none() => Step/skip(p.next)
                     | some(cols) =>
-                        Step/input(Input/resize(Tty/Size { cols = cols, rows = rows }), p.next)
+                        Step/input(Input/resize(Tty/Size { w = cols, h = rows }), p.next)
                     end
                 end
             end

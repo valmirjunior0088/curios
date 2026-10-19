@@ -52,7 +52,7 @@ test a_custom_event_reaches_update =
 
 -- A resize moves the fold to the size it reports, and the view is drawn there.
 test the_view_follows_a_resize_the_fold_meets =
-    let d = Tui/drive(counter, 3, 1, [Event/input(Input/resize(Tty/Size { cols = 4, rows = 2 }))]);
+    let d = Tui/drive(counter, 3, 1, [Event/input(Input/resize(Tty/Size { w = 4, h = 2 }))]);
     Test/all([
-        Test/equal(d.size, Tty/Size { cols = 4, rows = 2 }),
+        Test/equal(d.size, Tty/Size { w = 4, h = 2 }),
         Test/equal(Frame/to_lines(Frame/of_view(d.view)), ["0   ", "    "])]);

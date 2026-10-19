@@ -62,4 +62,4 @@ foreign tty_size(Handle) -> {status: Nat, cols: Nat, rows: Nat};
 pub let size(t: Tty) -> Try(Io, Io/Error, Size) =
     let reply = tty_size(t.0)!;
     let _ = Status/succeeded(reply.status)!;
-    Try/pure(Size { cols = reply.cols, rows = reply.rows });
+    Try/pure(Size { w = reply.cols, h = reply.rows });

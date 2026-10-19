@@ -1,10 +1,10 @@
 use /std/{Nat, Show, Spell, Fmt};
 use /std/ops/{Eql};
 
---- The terminal's size in cells.
+--- The terminal's size in cells: `w` columns by `h` rows, as a view's size is.
 pub struct Size: pub Type {
-    cols: Nat,
-    rows: Nat,
+    w: Nat,
+    h: Nat,
 }
 
 satisfy Eql(Size) {
@@ -16,5 +16,5 @@ satisfy Spell(Size) {
 }
 
 satisfy Show(Size) {
-    show(s) = Fmt/render("%x%")(s.cols)(s.rows),
+    show(s) = Fmt/render("%x%")(s.w)(s.h),
 }

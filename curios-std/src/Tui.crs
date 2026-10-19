@@ -128,12 +128,7 @@ pub let drive(
     w: Nat,
     h: Nat,
     events: List(Event(E)),
-) -> {
-    model: M,
-    quit: Bool,
-    size: Tty/Size,
-    view: View(size.cols, size.rows),
-    pending: List(Io(E))} =
+) -> {model: M, quit: Bool, size: Tty/Size, view: View(size.w, size.h), pending: List(Io(E))} =
     let start = asked(app.init.1);
     let state =
         List/fold(
@@ -141,7 +136,7 @@ pub let drive(
             (
                 model = app.init.0,
                 quit = start.quit,
-                size = Tty/Size { cols = w, rows = h },
+                size = Tty/Size { w = w, h = h },
                 pending = [..start.work, ..start.released]),
             (e, acc) =>
                 match acc.quit
@@ -160,7 +155,7 @@ pub let drive(
         model = state.model,
         quit = state.quit,
         size = state.size,
-        view = app.view(state.model)(state.size.cols, state.size.rows),
+        view = app.view(state.model)(state.size.w, state.size.h),
         pending = state.pending);
 
 -- What wakes the loop: a read of the terminal, an answer of the work a directive asked for, or the deadline for asking the terminal's size.
@@ -231,7 +226,7 @@ let running(
         match more | item(e) => waiting([..acc, Event/custom(e)]) | _ => Io/pure(acc) end;
     let draw(m: M) -> Try(Io, Io/Error, {}) =
         let size = Session/size(s)!;
-        Session/draw(s, app.view(m)(size.cols, size.rows));
+        Session/draw(s, app.view(m)(size.w, size.h));
     -- `m`, once each of `tasks` has answered.
     let quitting(m: M, tasks: List(Io/Scope/Task(E))) -> Try(Io, Io/Error, M) =
         match tasks
