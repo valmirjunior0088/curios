@@ -78,7 +78,12 @@ impl Uses {
 
     /// Record `id` as a site of every value `node` names.
     fn note(&mut self, id: NodeId, node: &Node) {
-        for value in named(node) {
+        self.name(id, named(node));
+    }
+
+    /// Record `id` as a site of each of `values`.
+    fn name(&mut self, id: NodeId, values: impl IntoIterator<Item = ValueId>) {
+        for value in values {
             self.0.entry(value).or_default().insert(id);
         }
     }
@@ -94,6 +99,14 @@ impl Uses {
     }
 }
 
+/// The value `atom` is, where it is one.
+fn value_of(atom: &Atom) -> Option<ValueId> {
+    match atom {
+        Atom::Value(value) => Some(*value),
+        Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => None,
+    }
+}
+
 /// Every value `node` names: its atoms, and a closure call's callee.
 fn named(node: &Node) -> impl Iterator<Item = ValueId> + '_ {
     let callee = match node {
@@ -103,13 +116,7 @@ fn named(node: &Node) -> impl Iterator<Item = ValueId> + '_ {
         } => Some(*value),
         _ => None,
     };
-    atoms(node)
-        .into_iter()
-        .filter_map(|atom| match atom {
-            Atom::Value(value) => Some(*value),
-            Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => None,
-        })
-        .chain(callee)
+    atoms(node).into_iter().filter_map(value_of).chain(callee)
 }
 
 pub(crate) fn inline_single_use_continuations(module: &mut Module) -> bool {
@@ -250,11 +257,14 @@ fn inline_continuation(
             *node = Node::Unreachable;
             continue;
         }
+        // The values a replacement brings in are what the node names anew; the rest it named already.
+        let mut brought = Vec::new();
         visit_atoms_mut(node, &mut |atom| {
             if let Atom::Value(value) = atom
                 && let Some(replacement) = substitutions.get(value)
             {
                 *atom = replacement.clone();
+                brought.extend(value_of(replacement));
             }
         });
         if let Node::ApplyFun { callee, .. } = node
@@ -266,8 +276,9 @@ fn inline_continuation(
                 Atom::Fun(function) => Callee::Known(*function),
                 Atom::Literal(_) | Atom::Filler => unreachable!(),
             };
+            brought.extend(value_of(replacement));
         }
-        uses.note(id, node);
+        uses.name(id, brought);
     }
 
     let body = module.remove_node(definition.body).unwrap();
