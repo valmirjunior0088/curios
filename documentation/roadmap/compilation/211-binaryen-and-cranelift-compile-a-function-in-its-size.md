@@ -1,6 +1,6 @@
 # Binaryen and Cranelift compile a function in its size
 
-[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) states that "a compilation ends — accepted, or refused for its budget — in time proportional to what was written plus what the budget counted". Binaryen's optimizer and Cranelift's code generation are stages of a compile, and each pays more than that for a long function. Everything before them is [What is written is compiled in its size](100-what-is-written-is-compiled-in-its-size.md)'s, and this waits on its locals by liveness, which changes every long function the two are handed.
+[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) states that "a compilation ends — accepted, or refused for its budget — in time proportional to what was written plus what the budget counted". Binaryen's optimizer and Cranelift's code generation are stages of a compile, and each pays more than that for a long function. Every stage before them is held to the rule by `growth_slopes` (`curios/src/tests/instrumented/growth.rs`), and the emitter hands them each function with its locals allocated by liveness ([`curios-emit`'s decision](../../../curios-emit/README.md#locals-are-allocated-by-liveness)).
 
 ## What is wrong
 
@@ -28,12 +28,12 @@ Doubling a program along any axis an author can grow it at most doubles what Bin
 
 ## Stages
 
-1. **Binaryen.** The long-function shapes retaken once the emitter allocates locals by liveness; each pass the growth suite still refuses skipped, stated in `curios-binaryen`'s README, and its reduced module and report prepared. Check: their rows held in `growth_slopes`; `wasm-optm` sizes over `programs/` before and after.
+1. **Binaryen.** The long-function shapes retaken over the emitter's locals by liveness; each pass the growth suite still refuses skipped, stated in `curios-binaryen`'s README, and its reduced module and report prepared. Check: their rows held in `growth_slopes`; `wasm-optm` sizes over `programs/` before and after.
 2. **Cranelift.** What it pays for a long function attributed, and taken where `curios-cranelift` configures it or the emitted function shapes it. Check: their rows held.
 
 ## Protocol
 
-The counted slopes are `growth_slopes`', the instrument [What is written is compiled in its size](100-what-is-written-is-compiled-in-its-size.md) built, whose `binaryen` and `cranelift` columns are these stages. A Binaryen reading replays the bytes `curios` hands `BinaryenModuleReadWithFeatures`, dumped by a debugger at that call, through `BinaryenModuleOptimize` or `BinaryenModuleRunPasses`, linked against the cached `libbinaryen.a`, with `BinaryenAddPassToSkip` for a skip.
+The counted slopes are `growth_slopes`' (`curios/src/tests/instrumented/growth.rs`), whose `binaryen` and `cranelift` columns are these stages. A Binaryen reading replays the bytes `curios` hands `BinaryenModuleReadWithFeatures`, dumped by a debugger at that call, through `BinaryenModuleOptimize` or `BinaryenModuleRunPasses`, linked against the cached `libbinaryen.a`, with `BinaryenAddPassToSkip` for a skip.
 
 ## Rejected
 

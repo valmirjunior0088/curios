@@ -16,6 +16,14 @@ The Curios erased IR: the flat, explicit, first-order stage between `curios-elab
 
 **Rationale.** Every encoding decision — carriers, tag layouts, dispatch, loop synthesis — belongs to the lowering into Cont. Collapsing shapes early discards information the backend cannot recover, and an operation reused across shapes acquires a per-context meaning no node-local classification can read.
 
+### An item imports what it reads of another's row
+
+**Decision.** A row another declaration declares is one of a fragment's imports, as a value or a function it uses is: a structure's schema at its width, and a family at the count of constructors it declares, with each constructor the item names at its position, which is its discriminant. Erasure reads a mask where the declaring item holds it, and only the declaring item lists a row whole, as does every program, which has no import; linking maps an imported constructor by its position and asserts its row resolved.
+
+**Rationale.** A unit of erasure is a declaration, not a module, so a row copied into each fragment that names it is a copy per declaration: a family's constructors, each an item reading its family, cost the square of the family. [Lean's](https://raw.githubusercontent.com/leanprover/lean4/master/src/Lean/Declaration.lean) constructor carries its index (`cidx`) and [OCaml's](https://raw.githubusercontent.com/ocaml/ocaml/trunk/typing/data_types.mli) its tag and its type's constructor counts (`cstr_tag`, `cstr_consts`, `cstr_nonconsts`): an importer reads the declaration and keeps the tag.
+
+**Rejected.** A position on every constructor's record, which every reader of a record would carry for an importer's sake; a row held by reference, where a fragment would no longer verify alone.
+
 ### Numeric carriers are exact
 
 **Decision.** The erased carriers are Core's, unbounded — `Nat` and `Int` as `curios-num`'s `Natural` and `Integer`, `Flt` as binary64 — with the carrier methods every stage's constant folder shares. The runtime's split between an i31 and a boxed magnitude appears nowhere in the IR; it is `curios-cont`'s and `curios-emit`'s ([Nat and Int are an i31 until they outgrow it](../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)).
