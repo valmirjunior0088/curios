@@ -141,8 +141,12 @@ fn steepest(
 /// The size each growth is counted at, doubled twice: large enough that its own work outgrows the prelude's and a quadratic term shows past the linear one, small enough that a growth whose stage is quadratic or worse today is counted in seconds.
 fn base(growth: Growth) -> usize {
     match growth {
-        Growth::LetPlus | Growth::LetCall | Growth::ChainedMatches => 25,
-        Growth::Statements | Growth::ParametersSummed | Growth::Lambdas | Growth::Lets => 100,
+        Growth::LetPlus | Growth::LetCall => 25,
+        Growth::Statements
+        | Growth::ParametersSummed
+        | Growth::Lambdas
+        | Growth::Lets
+        | Growth::ChainedMatches => 100,
         Growth::Matches => 200,
         Growth::Lists | Growth::ListOpen | Growth::Parameters => 400,
         Growth::Calls | Growth::RightPlus | Growth::LeftPlus => 250,
@@ -175,6 +179,7 @@ const HELD: &[Growth] = &[
     Growth::StringLiteral,
     Growth::Statements,
     Growth::Lambdas,
+    Growth::ChainedMatches,
 ];
 
 /// The growths every stage of which before Binaryen is linear today, where Binaryen or Cranelift is not: what Binaryen and Cranelift pay is `documentation/roadmap/compilation/211-binaryen-and-cranelift-compile-a-function-in-its-size.md`'s, and each moves to [`HELD`] once it is taken there.
@@ -207,38 +212,38 @@ const HELD_SLOPE: f64 = 3.0;
 ///
 /// # What it last printed
 ///
-/// Over the compiler of `be93acf08`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
+/// Over the compiler of `1a53c9734`, as instructions, looks, allocations and bytes, each the steepest slope and the stage it is at; `-` where no stage grows.
 ///
 /// | growth | n | instructions | looks | allocations | bytes |
 /// | --- | --- | --- | --- | --- | --- |
-/// | LetPlus | 25 | 2.18 binaryen | 2.00 erase | 2.09 ersd-optm | 2.08 erase |
-/// | LetCall | 25 | 2.20 binaryen | 2.00 erase | 2.10 cranelift | 2.73 parse |
+/// | LetPlus | 25 | 2.17 binaryen | 2.00 erase | 2.28 cranelift | 2.05 erase |
+/// | LetCall | 25 | 2.20 binaryen | 2.00 erase | 2.09 ersd-optm | 2.73 parse |
 /// | Statements | 100 | 2.15 elaborate | 2.00 erase | 2.04 cont-optm | 2.20 binaryen |
-/// | Definitions | 250 | 2.03 parse | 2.00 erase | 2.00 erase | 2.58 parse |
-/// | Functions | 250 | 3.03 binaryen | 2.00 erase | 2.11 cranelift | 2.75 cranelift |
-/// | Strings | 250 | 2.02 parse | 2.00 lower | 2.00 parse | 2.00 binaryen |
-/// | List | 1000 | 1.98 erase | 2.00 erase | 2.12 erase | 2.06 erase |
-/// | ListOpen | 400 | 3.82 binaryen | 2.00 erase | 2.12 cranelift | 2.85 cranelift |
-/// | Arms | 250 | 11.95 binaryen | 2.00 erase | 2.17 cranelift | 3.21 cranelift |
-/// | Parameters | 400 | 2.26 ersd-optm | 2.00 erase | 2.11 cont | 2.24 ersd-optm |
-/// | ParametersSummed | 100 | 2.49 binaryen | 2.00 erase | 2.08 cranelift | 2.53 cranelift |
-/// | Tuple | 250 | 2.01 lower | 2.00 erase | 2.00 parse | 2.02 elaborate |
-/// | Fields | 250 | 2.01 parse | 2.00 erase | 2.00 parse | 2.91 binaryen |
-/// | Constructors | 250 | 2.37 erase | 2.00 erase | 2.02 ersd-optm | 2.45 ersd-optm |
-/// | Methods | 250 | 2.07 cont | 2.00 erase | 2.01 elaborate | 2.18 cont |
-/// | Calls | 250 | 2.09 cont | 2.00 erase | 2.04 cont | 2.74 cont |
-/// | Parentheses | 1000 | 1.98 parse | - | 2.00 parse | 2.00 parse |
-/// | RightPlus | 250 | 3.56 cranelift | 2.00 erase | 2.07 cranelift | 3.60 cranelift |
-/// | LeftPlus | 250 | 3.05 binaryen | 2.00 erase | 2.08 cranelift | 2.72 cont |
-/// | Matches | 200 | 3.45 binaryen | 2.00 erase | 2.13 cranelift | 2.94 cranelift |
-/// | ChainedMatches | 25 | 5.52 elaborate | 5.47 elaborate | 5.85 elaborate | 5.81 elaborate |
-/// | Lambdas | 100 | 2.33 cont | 2.37 elaborate | 2.05 cont | 2.51 cont |
-/// | Lists | 400 | 3.72 binaryen | 2.00 erase | 2.01 emit | 2.68 ersd-optm |
-/// | Lets | 100 | 2.08 elaborate | 2.00 erase | 2.00 erase | 2.46 erase |
-/// | Arrow | 1000 | 2.06 elaborate | 2.00 erase | 2.06 elaborate | 2.03 elaborate |
-/// | StringLiteral | 2000 | 2.00 erase | 2.00 erase | 2.00 erase | 2.00 erase |
+/// | Definitions | 250 | 2.03 elaborate | 2.00 erase | 2.00 elaborate | 2.58 parse |
+/// | Functions | 250 | 3.04 binaryen | 2.00 erase | 2.11 cranelift | 2.81 cranelift |
+/// | Strings | 250 | 2.01 parse | 2.00 lower | 2.00 parse | 2.00 binaryen |
+/// | List | 1000 | 1.97 erase | 2.00 erase | 2.03 erase | 2.03 erase |
+/// | ListOpen | 400 | 3.82 binaryen | 2.00 erase | 2.12 cranelift | 2.90 cranelift |
+/// | Arms | 250 | 5.44 binaryen | 2.00 erase | 2.01 ersd-optm | 2.72 cranelift |
+/// | Parameters | 400 | 2.22 ersd-optm | 2.00 erase | 2.11 cont | 2.24 ersd-optm |
+/// | ParametersSummed | 100 | 2.49 binaryen | 2.00 erase | 2.11 cranelift | 2.75 cranelift |
+/// | Tuple | 250 | 2.01 parse | 2.00 erase | 2.00 parse | 2.02 elaborate |
+/// | Fields | 250 | 2.01 elaborate | 2.00 erase | 2.00 parse | 2.91 binaryen |
+/// | Constructors | 250 | 2.35 erase | 2.00 erase | 2.02 ersd-optm | 2.45 ersd-optm |
+/// | Methods | 250 | 2.22 cont-optm | 2.00 erase | 2.00 elaborate | 2.18 cont |
+/// | Calls | 250 | 2.05 cont | 2.00 erase | 2.04 cont | 2.74 cont |
+/// | Parentheses | 1000 | 1.97 parse | - | 2.00 parse | 2.00 parse |
+/// | RightPlus | 250 | 3.57 cranelift | 2.00 erase | 2.11 cranelift | 3.64 cranelift |
+/// | LeftPlus | 250 | 3.04 binaryen | 2.00 erase | 2.11 cranelift | 2.91 cranelift |
+/// | Matches | 200 | 3.44 binaryen | 2.00 erase | 2.12 cranelift | 3.02 cranelift |
+/// | ChainedMatches | 100 | 2.89 elaborate | 2.54 elaborate | 2.50 elaborate | 2.71 cranelift |
+/// | Lambdas | 100 | 2.26 cont | 2.37 elaborate | 2.05 elaborate | 2.51 cont |
+/// | Lists | 400 | 3.70 binaryen | 2.00 erase | 2.01 emit | 2.68 ersd-optm |
+/// | Lets | 100 | 2.05 elaborate | 2.00 erase | 2.01 erase | 2.38 erase |
+/// | Arrow | 1000 | 1.99 erase | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
+/// | StringLiteral | 2000 | 2.00 elaborate | 2.00 erase | 2.00 erase | 2.00 elaborate |
 ///
-/// **Fourteen growths are held linear in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements and nested lambdas, the ones [`HELD`] lists. **Eleven more are held in every stage before Binaryen**, the ones [`HELD_FRONT`] lists; what Binaryen and Cranelift pay for them is `documentation/roadmap/compilation/211-binaryen-and-cranelift-compile-a-function-in-its-size.md`'s. A growth is held where the stage that steepened it has been taken up: one reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cont` do. Matches each on the `let` before it grow past their square in elaboration, which `documentation/roadmap/compilation/100-what-is-written-is-compiled-in-its-size.md` takes up.
+/// **Fifteen growths are held linear in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements, nested lambdas and matches each on the `let` before it, the ones [`HELD`] lists. **Eleven more are held in every stage before Binaryen**, the ones [`HELD_FRONT`] lists; what Binaryen and Cranelift pay for them is `documentation/roadmap/compilation/211-binaryen-and-cranelift-compile-a-function-in-its-size.md`'s. A growth is held where the stage that steepened it has been taken up: one reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cont` do, and as matches each on the `let` before it do in `elaborate`, where a probe under an arm reduces again what the arm before it reduced (`documentation/roadmap/compilation/000-findings.md`).
 #[test]
 #[ignore = "measurement, counted: run by hand, alone in its invocation"]
 fn growth_slopes() {
