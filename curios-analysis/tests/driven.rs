@@ -1350,6 +1350,38 @@ fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
     }
 }
 
+/// The walks of the crate that read through a checker, over one doubling term, as `src/walk_tests.rs` holds those that read through a reducer alone: a tuple sixty levels deep, each level holding the one below twice, a tree no walk per path finishes and a graph of sixty-one nodes. A walk the crate adds that reads through a checker joins the table here.
+#[test]
+fn every_walk_answers_a_doubling_term_in_its_own_size() {
+    let x = Free::local(910, Some("x"));
+    let z = Free::local(911, Some("z"));
+    let doubled = |leaf: Term| {
+        (0..60).fold(leaf, |below, _| {
+            Term::from(Subterm::Tuple(Tuple {
+                fields: vec![below.clone(), below],
+                names: vec![None, None],
+            }))
+        })
+    };
+
+    let rows: Vec<(&str, bool)> = vec![(
+        "an index inverted against a target of its shape",
+        matches!(
+            invert_indices(
+                &mut kernel(),
+                &[doubled(Term::free_var(&x))],
+                &[doubled(Term::free_var(&z))],
+                slice::from_ref(&z),
+            ),
+            Ok(Invert::Solved(solutions)) if solutions == [(z, Term::free_var(&x))]
+        ),
+    )];
+
+    for (walk, answered) in rows {
+        assert!(answered, "{walk} over a doubling term did not answer");
+    }
+}
+
 /// The outer direction reaches a variable inside an index, and only a local's.
 ///
 /// A case whose target is `1`, met at an actual index `n + 1`, is reachable only when `n` is `0`: the peel reduces the pair to `0` against `n`, and the second direction solves the outer variable there. Both checkers get it from `solve_indices`. The control drops the one fact the rule reads from its driver: with `n` not a local the walk opened, it is a name no case can refine, and nothing is solved.

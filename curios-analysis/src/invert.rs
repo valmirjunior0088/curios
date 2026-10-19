@@ -13,7 +13,7 @@ use {
     curios_core::{
         Free, Instance, InstanceHead, Quality, Subterm, Telescope, Term, peel_intrinsic,
     },
-    std::collections::BTreeSet,
+    std::collections::{BTreeSet, HashMap},
 };
 
 /// The payload binders an index target set *determines* — the singleton rung's side condition, shared by both checkers exactly as the unifier below is: a total function of the targets alone, so a second copy would be a second run rather than a second opinion.
@@ -175,14 +175,14 @@ fn invert_with<J: Judge>(
     let mut solutions = Vec::new();
 
     for (actual, target) in actuals.iter().zip(targets) {
-        let mut position = Vec::new();
+        let mut position = Unifier::new(flex, solve_keys);
 
-        match unify_index(judge, actual, target, flex, true, solve_keys, &mut position)? {
+        match position.unify_index(judge, actual, target, true)? {
             Step::Clash => return Ok(Invert::Impossible),
             // A refused position contributes nothing — solutions found on the way in are discarded with it, conservatively.
             Step::Refuse => {}
             // A solved position's forcings join the pool; a binder forced here *and* in another position becomes a duplicate, reconciled by the deletion rule below.
-            Step::Ok => solutions.extend(position),
+            Step::Ok => solutions.extend(position.solutions),
         }
     }
 
@@ -191,7 +191,7 @@ fn invert_with<J: Judge>(
 
 /// The deletion rule (Goguen–McBride–McKinna), the last of the first-order set, as a *semantic* test rather than a syntactic refusal of non-linear targets. A flex arm binder forced in more than one index position must take convertible values; since `Eq : Prop` makes the system definitionally K, deleting the redundant constraint is sound. A *definite* yes from the boolean oracle (`Prop`-typed positions convert by irrelevance, so they delete for free) keeps one solution.
 ///
-/// **Two forcings that definitely clash make the case impossible**, which is the conflict rule arriving through a non-linear target: `refl(@z) : (z, z)` against `Eq()(false, true)` forces `z := false` and `z := true`, each by steps that were injective, so the case is reachable only if `false` is `true`. Whether they clash is asked of the same walk a linear position is put to — [`unify_index`], with nothing flexible, since both sides are the scrutinee's — so every license that walk checks is checked here: the tag test only at a relevant family, the literal test only where the peel answers `Impossible`. It is asked only after conversion has said *no* at a type that was in scope, which is what keeps a `Prop`-typed binder out of it: there the two forcings convert by irrelevance and the rule above has already deleted one.
+/// **Two forcings that definitely clash make the case impossible**, which is the conflict rule arriving through a non-linear target: `refl(@z) : (z, z)` against `Eq()(false, true)` forces `z := false` and `z := true`, each by steps that were injective, so the case is reachable only if `false` is `true`. Whether they clash is asked of the same walk a linear position is put to — [`Unifier::unify_index`], with nothing flexible, since both sides are the scrutinee's — so every license that walk checks is checked here: the tag test only at a relevant family, the literal test only where the peel answers `Impossible`. It is asked only after conversion has said *no* at a type that was in scope, which is what keeps a `Prop`-typed binder out of it: there the two forcings convert by irrelevance and the rule above has already deleted one.
 ///
 /// Anything short of either answer — forcings that neither convert nor clash, a `Blocked`, or a binder whose type is out of scope, where there is nothing to have compared at — drops that binder's solutions, conservatively.
 fn consolidate<J: Judge>(judge: &mut J, solutions: Vec<(Free, Term)>) -> Result<Invert, J::Error> {
@@ -215,7 +215,7 @@ fn consolidate<J: Judge>(judge: &mut J, solutions: Vec<(Free, Term)>) -> Result<
                 continue;
             }
             if let Step::Clash =
-                unify_index(judge, &prior, &value, &[], false, false, &mut Vec::new())?
+                Unifier::new(&[], false).unify_index(judge, &prior, &value, false)?
             {
                 return Ok(Invert::Impossible);
             }
@@ -241,113 +241,152 @@ fn key_shaped(actual: &Term) -> bool {
     )
 }
 
-fn unify_index<J: Judge>(
-    judge: &mut J,
-    actual: &Term,
-    target: &Term,
-    flex: &[Free],
-    top: bool,
+/// One position's unification: the binders it may solve, whether a key-shaped actual at its top may solve one, what it has forced so far, and the pairs of nodes beneath its top it has unified, each of which answered `Ok`: any other answer ends the position, so a pair met again within it is one already unified, and an index that holds a node twice is walked once per node and not once per path. A pair is keyed by its nodes' identities and holds the two nodes, so no identity is reused while the position runs: a peel and a forcing hand back nodes of their own.
+struct Unifier<'f> {
+    flex: &'f [Free],
     solve_keys: bool,
-    solutions: &mut Vec<(Free, Term)>,
-) -> Result<Step, J::Error> {
-    let actual = judge.force(actual)?;
-    let target = judge.force(target)?;
-
-    // Solve a flex arm binder against the rigid term it is forced to equal — forced because every decomposition step above it was injective. A binder already forced elsewhere is recorded again, not refused: the deletion rule in `consolidate` reconciles the two forcings by convertibility.
-    if let Subterm::Var(var) = &*target
-        && var.as_bound().is_none()
-        && flex.iter().any(|bound| bound == var.unwrap())
-    {
-        let binder = *var.unwrap();
-
-        // At the top of a position a key-shaped actual is index refinement's: it was refined *to* this binder, and solving the binder back to it would tie a reduction cycle. A flex actual (metavariable) is refused outright.
-        if (top && !solve_keys) && key_shaped(&actual) || matches!(&*actual, Subterm::Metavar(_)) {
-            return Ok(Step::Refuse);
-        }
-        // The forced value must be *rigid*: a key-shaped actual that index refinement already refined reduces back into this very arm's binders, and aliasing a binder to a term mentioning the arm's binders (itself included — `m := m`) would tie a reduction cycle.
-        if actual
-            .free_vars()
-            .iter()
-            .any(|free| flex.iter().any(|bound| bound == free))
-        {
-            return Ok(Step::Refuse);
-        }
-
-        solutions.push((binder, actual.clone()));
-
-        return Ok(Step::Ok);
-    }
-
-    match (&*actual, &*target) {
-        (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => Ok(Step::Refuse),
-
-        (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => match peel_intrinsic(this, that) {
-            Some(Deduction::Equal) => Ok(Step::Ok),
-            Some(Deduction::Impossible) => Ok(Step::Clash),
-            Some(Deduction::Undecided) => Ok(Step::Refuse),
-            Some(Deduction::Equivalent((left, right))) => {
-                unify_index(judge, &left, &right, flex, false, solve_keys, solutions)
-            }
-            None => Ok(Step::Refuse),
-        },
-
-        // The same rigid variable on both sides is trivially forced.
-        (Subterm::Var(a), Subterm::Var(t))
-            if a.as_bound().is_none() && t.as_bound().is_none() && a.unwrap() == t.unwrap() =>
-        {
-            Ok(Step::Ok)
-        }
-
-        (Subterm::Variant(a), Subterm::Variant(t)) => {
-            // A different inductive is incomparable; but two *different constructors* of the same inductive definitely clash — even though they legitimately differ in payload arity, so the tag check must precede the arity check (which is then just defensive: equal tags share an arity).
-            if a.name != t.name {
-                return Ok(Step::Refuse);
-            }
-            // Injectivity and tag disjointness are claims about values a program can tell apart, and a proposition's inhabitants are not: proof irrelevance makes every one of them definitionally equal. Deciding this position by either claim contradicts conversion — `Two/a()` against `Two/b()` reads as a clash while conversion calls them the same value, and `Tag/t(a)` against `Tag/t(7)` manufactures the *relevant* equation `a := 7` from a premise that `Tag/t(0)` satisfies equally. Both are inconsistent, and each would be a closed inhabitant of `False`: the first through a vacuous elimination, the second through the singleton rung of the large-elimination guard. So the position is satisfied — the two sides really are equal — and it yields nothing: no clash, no equations. That is strictly the refusing direction, since an arm a clash would excuse stays mandatory and a binder forced only here stays unsolved.
-            //
-            // Only a variant can reach this: an `Intrinsic` carrier is a relevant type, and a `Prop`-sorted tuple or structure has none but non-informative components, so decomposing one yields equations between proofs, which any inhabitant satisfies.
-            // Matched on the nose rather than reduced: `check_induct_decl` requires a declared result sort to be a literal sort, which is the clause this test is licensed by. Without it a family declared at a redex unfolding to `Prop` reads as relevant here and as a proposition everywhere else, and the clash below excuses an arm that irrelevance says is reachable.
-            // A family the registry cannot answer for is refused rather than read as relevant: the tag test's license is the declared sort, so a lookup that answers nothing licenses nothing — falling through to the clash would decide the strong verdict out of blindness, the one direction the analyses on this seam never take.
-            let Some(declaration) = judge.induct_decl(&a.name) else {
-                return Ok(Step::Refuse);
-            };
-            if matches!(&*declaration.result_sort, Subterm::Sort(Quality::Prop, _)) {
-                return Ok(Step::Ok);
-            }
-            if a.tag != t.tag {
-                return Ok(Step::Clash);
-            }
-            if a.payload.len() != t.payload.len() {
-                return Ok(Step::Refuse);
-            }
-            unify_all(judge, &a.payload, &t.payload, flex, solve_keys, solutions)
-        }
-
-        (Subterm::Tuple(a), Subterm::Tuple(t)) => {
-            if a.fields.len() != t.fields.len() {
-                return Ok(Step::Refuse);
-            }
-            unify_all(judge, &a.fields, &t.fields, flex, solve_keys, solutions)
-        }
-
-        _ => Ok(Step::Refuse),
-    }
+    solutions: Vec<(Free, Term)>,
+    unified: HashMap<(usize, usize), (Term, Term)>,
 }
 
-/// Unify a sequence of sub-positions pairwise, short-circuiting on the first that does not cleanly decompose. Each sub-position is non-`top`.
-fn unify_all<J: Judge>(
-    judge: &mut J,
-    actuals: &[Term],
-    targets: &[Term],
-    flex: &[Free],
-    solve_keys: bool,
-    solutions: &mut Vec<(Free, Term)>,
-) -> Result<Step, J::Error> {
-    for (actual, target) in actuals.iter().zip(targets) {
-        match unify_index(judge, actual, target, flex, false, solve_keys, solutions)? {
-            Step::Ok => {}
-            other => return Ok(other),
+impl<'f> Unifier<'f> {
+    fn new(flex: &'f [Free], solve_keys: bool) -> Self {
+        Self {
+            flex,
+            solve_keys,
+            solutions: Vec::new(),
+            unified: HashMap::new(),
         }
     }
-    Ok(Step::Ok)
+
+    fn unify_index<J: Judge>(
+        &mut self,
+        judge: &mut J,
+        actual: &Term,
+        target: &Term,
+        top: bool,
+    ) -> Result<Step, J::Error> {
+        let pair = (actual.identity(), target.identity());
+        if !top && self.unified.contains_key(&pair) {
+            return Ok(Step::Ok);
+        }
+        let step = self.unify_node(judge, actual, target, top)?;
+        if !top && matches!(step, Step::Ok) {
+            self.unified.insert(pair, (actual.clone(), target.clone()));
+        }
+
+        Ok(step)
+    }
+
+    fn unify_node<J: Judge>(
+        &mut self,
+        judge: &mut J,
+        actual: &Term,
+        target: &Term,
+        top: bool,
+    ) -> Result<Step, J::Error> {
+        let (flex, solve_keys) = (self.flex, self.solve_keys);
+        let actual = judge.force(actual)?;
+        let target = judge.force(target)?;
+
+        // Solve a flex arm binder against the rigid term it is forced to equal — forced because every decomposition step above it was injective. A binder already forced elsewhere is recorded again, not refused: the deletion rule in `consolidate` reconciles the two forcings by convertibility.
+        if let Subterm::Var(var) = &*target
+            && var.as_bound().is_none()
+            && flex.iter().any(|bound| bound == var.unwrap())
+        {
+            let binder = *var.unwrap();
+
+            // At the top of a position a key-shaped actual is index refinement's: it was refined *to* this binder, and solving the binder back to it would tie a reduction cycle. A flex actual (metavariable) is refused outright.
+            if (top && !solve_keys) && key_shaped(&actual)
+                || matches!(&*actual, Subterm::Metavar(_))
+            {
+                return Ok(Step::Refuse);
+            }
+            // The forced value must be *rigid*: a key-shaped actual that index refinement already refined reduces back into this very arm's binders, and aliasing a binder to a term mentioning the arm's binders (itself included — `m := m`) would tie a reduction cycle.
+            if actual
+                .free_vars()
+                .iter()
+                .any(|free| flex.iter().any(|bound| bound == free))
+            {
+                return Ok(Step::Refuse);
+            }
+
+            self.solutions.push((binder, actual.clone()));
+
+            return Ok(Step::Ok);
+        }
+
+        match (&*actual, &*target) {
+            (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => Ok(Step::Refuse),
+
+            (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
+                match peel_intrinsic(this, that) {
+                    Some(Deduction::Equal) => Ok(Step::Ok),
+                    Some(Deduction::Impossible) => Ok(Step::Clash),
+                    Some(Deduction::Undecided) => Ok(Step::Refuse),
+                    Some(Deduction::Equivalent((left, right))) => {
+                        self.unify_index(judge, &left, &right, false)
+                    }
+                    None => Ok(Step::Refuse),
+                }
+            }
+
+            // The same rigid variable on both sides is trivially forced.
+            (Subterm::Var(a), Subterm::Var(t))
+                if a.as_bound().is_none() && t.as_bound().is_none() && a.unwrap() == t.unwrap() =>
+            {
+                Ok(Step::Ok)
+            }
+
+            (Subterm::Variant(a), Subterm::Variant(t)) => {
+                // A different inductive is incomparable; but two *different constructors* of the same inductive definitely clash — even though they legitimately differ in payload arity, so the tag check must precede the arity check (which is then just defensive: equal tags share an arity).
+                if a.name != t.name {
+                    return Ok(Step::Refuse);
+                }
+                // Injectivity and tag disjointness are claims about values a program can tell apart, and a proposition's inhabitants are not: proof irrelevance makes every one of them definitionally equal. Deciding this position by either claim contradicts conversion — `Two/a()` against `Two/b()` reads as a clash while conversion calls them the same value, and `Tag/t(a)` against `Tag/t(7)` manufactures the *relevant* equation `a := 7` from a premise that `Tag/t(0)` satisfies equally. Both are inconsistent, and each would be a closed inhabitant of `False`: the first through a vacuous elimination, the second through the singleton rung of the large-elimination guard. So the position is satisfied — the two sides really are equal — and it yields nothing: no clash, no equations. That is strictly the refusing direction, since an arm a clash would excuse stays mandatory and a binder forced only here stays unsolved.
+                //
+                // Only a variant can reach this: an `Intrinsic` carrier is a relevant type, and a `Prop`-sorted tuple or structure has none but non-informative components, so decomposing one yields equations between proofs, which any inhabitant satisfies.
+                // Matched on the nose rather than reduced: `check_induct_decl` requires a declared result sort to be a literal sort, which is the clause this test is licensed by. Without it a family declared at a redex unfolding to `Prop` reads as relevant here and as a proposition everywhere else, and the clash below excuses an arm that irrelevance says is reachable.
+                // A family the registry cannot answer for is refused rather than read as relevant: the tag test's license is the declared sort, so a lookup that answers nothing licenses nothing — falling through to the clash would decide the strong verdict out of blindness, the one direction the analyses on this seam never take.
+                let Some(declaration) = judge.induct_decl(&a.name) else {
+                    return Ok(Step::Refuse);
+                };
+                if matches!(&*declaration.result_sort, Subterm::Sort(Quality::Prop, _)) {
+                    return Ok(Step::Ok);
+                }
+                if a.tag != t.tag {
+                    return Ok(Step::Clash);
+                }
+                if a.payload.len() != t.payload.len() {
+                    return Ok(Step::Refuse);
+                }
+                self.unify_all(judge, &a.payload, &t.payload)
+            }
+
+            (Subterm::Tuple(a), Subterm::Tuple(t)) => {
+                if a.fields.len() != t.fields.len() {
+                    return Ok(Step::Refuse);
+                }
+                self.unify_all(judge, &a.fields, &t.fields)
+            }
+
+            _ => Ok(Step::Refuse),
+        }
+    }
+
+    /// Unify a sequence of sub-positions pairwise, short-circuiting on the first that does not cleanly decompose. Each sub-position is non-`top`.
+    fn unify_all<J: Judge>(
+        &mut self,
+        judge: &mut J,
+        actuals: &[Term],
+        targets: &[Term],
+    ) -> Result<Step, J::Error> {
+        for (actual, target) in actuals.iter().zip(targets) {
+            match self.unify_index(judge, actual, target, false)? {
+                Step::Ok => {}
+                other => return Ok(other),
+            }
+        }
+        Ok(Step::Ok)
+    }
 }
