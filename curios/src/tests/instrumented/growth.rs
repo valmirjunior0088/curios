@@ -140,7 +140,7 @@ fn steepest(
 /// The size each growth is counted at, doubled twice: large enough that its own work outgrows the prelude's and a quadratic term shows past the linear one, small enough that a growth whose stage is quadratic or worse today is counted in seconds.
 fn base(growth: Growth) -> usize {
     match growth {
-        Growth::LetPlus | Growth::LetCall => 25,
+        Growth::LetPlus | Growth::LetCall | Growth::ChainedMatches => 25,
         Growth::Statements | Growth::ParametersSummed | Growth::Lambdas | Growth::Lets => 100,
         Growth::Matches => 200,
         Growth::Lists | Growth::ListOpen | Growth::Parameters => 400,

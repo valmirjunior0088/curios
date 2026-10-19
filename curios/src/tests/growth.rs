@@ -55,6 +55,8 @@ pub(super) enum Growth {
     LeftPlus,
     /// Matches, each the last arm of the one around it.
     Matches,
+    /// Matches, each on the option the `let` before it binds and binding the next.
+    ChainedMatches,
     /// Lambdas, each the body of the one around it, applied in turn.
     Lambdas,
     /// Singleton list literals, each the element of the next.
@@ -69,7 +71,7 @@ pub(super) enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub(super) const ALL: [Growth; 25] = [
+    pub(super) const ALL: [Growth; 26] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -90,6 +92,7 @@ impl Growth {
         Growth::RightPlus,
         Growth::LeftPlus,
         Growth::Matches,
+        Growth::ChainedMatches,
         Growth::Lambdas,
         Growth::Lists,
         Growth::Lets,
@@ -245,6 +248,22 @@ pub(super) fn grown(growth: Growth, size: usize) -> String {
                 format!("match a: (_) => Nat | 0 => {index} | _ => {inner} end")
             });
             program(&format!("let f(a: Nat) -> Nat = {term};\n"), "f(a)")
+        }
+        Growth::ChainedMatches => {
+            let mut body =
+                "let f(a: Nat) -> Nat =\n    let o0: /std/Option(Nat) = /std/Option/some(a);\n"
+                    .to_string();
+            for index in 1..size {
+                writeln!(
+                    body,
+                    "    let o{index}: /std/Option(Nat) = match o{} | some(x) => /std/Option/some(x + 1) | none() => /std/Option/none() end;",
+                    index - 1
+                )
+                .expect("a string takes a line");
+            }
+            writeln!(body, "    match o{last} | some(x) => x | none() => 0 end;")
+                .expect("a string takes a line");
+            program(&body, "f(a)")
         }
         Growth::Lambdas => {
             let lambdas = (0..size)

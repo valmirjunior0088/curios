@@ -74,6 +74,14 @@ A Binaryen `version_130` replay of the module `curios` hands `BinaryenModuleRead
 
 [Precompute-propagate's introduction](https://github.com/WebAssembly/binaryen/pull/1179) already kept it to higher levels for its compile time. The [LLVM WebAssembly backend](https://android.googlesource.com/platform/external/opencl/llvm-project/+/cd46354dbd10) counts excess locals among what makes it "easy to hit engine limitations of 50K locals" and code "slower to compile to native code".
 
+### A reduction another exposes waits a round
+
+The continuation optimizer runs its passes over the whole module a round at a time until a round changes nothing, and a pass sees only what the module held when it began. Where one rewrite makes the next possible, a chain of them takes a round a link, each round a walk of the module, and a chain longer than the 1 024-round backstop leaves the fixpoint unfinished: a release compile emits the module as the last round left it, and a debug one panics. The shrinking rewrites reduce what they expose in one pass (stage 7). A curried function applied in turn at two sites still cascades, through returned-closure uncurrying, which absorbs one level a round: 95 and 195 rounds at 100 and 200 levels at `ac56b70e5`, counted, where every other growth takes four.
+
+### A match on the `let` before it outgrows the cube of the chain
+
+`let o{i}: Option(Nat) = match o{i-1} | some(x) => Option/some(x + 1) | none() => Option/none() end;`, chained n deep (`ChainedMatches` in `tests::growth`): at `1ffce87eb`, counted in the profile build, elaboration's `reduce::settle` allocates 0.49, 4.87 and 60.3 GB of its own at 100, 200 and 400, `elaborate_let` 0.97, 5.85 and 39.2 GB, and erasure's `erase_unit` 25, 168 and 1 255 MB. Not known: what `settle` reduces again at each binding; the suspect is a refinement's reduct of the scrutinee through the `let`s before it, since a `let`-bound name is read by value. Settled by: samples of the elaboration at two sizes.
+
 ### The counted slopes reach every stage
 
 `growth_slopes`' reading over the compiler of `21cb5f586`, printed in its documentation, holds twelve growths linear in every stage: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow and a string literal. Besides the Binaryen costs above, these reach a stage that grows as its square or steeper:
@@ -112,6 +120,7 @@ Doubling a program along any axis an author can grow it at most doubles what eve
   - A struct type past 10 000 fields keeps the first 9 999 and nests the rest in a trailing struct.
   - A signature past 1 000 parameters or results passes the overflow as a trailing struct.
   - Acceptance stays independent of size.
+- **A shrinking reduction reduces what it exposes.** The continuation optimizer's shrinking rewrites are one pass reducing from a worklist until none is left, over a census of its own ([`curios-cont`'s decision](../../../curios-cont/README.md#a-shrinking-reduction-reduces-what-it-exposes)). This is Appel and Jim's imperative algorithm, which [SML.NET](https://www.microsoft.com/en-us/research/wp-content/uploads/2005/04/Shrinking-Reductions-in-SML-NET.pdf) implements; the rounds were their naïve algorithm, quadratic in the worst case.
 - **`curios-binaryen` holds Binaryen to the rule.** It is Binaryen's authority ([One crate is the authority for one external concern](../../design/one-crate-is-the-authority-for-one-external-concern.md)): a pass the growth suite refuses is skipped by name with its reason stated, and reported upstream with its reduced module. Constant propagation is the continuation optimizer's in any case ([`curios-binaryen`'s README](../../../curios-binaryen/README.md)).
 
 ## Stages
@@ -128,10 +137,11 @@ Each stage begins by attributing the growths its slopes name, by a debugger's sa
    - Two reads still hold a row whole: the shared row of an anonymous tuple, which each fragment that reads one registers with a blank field for each of its width, and the program an item is evaluated in, which links the whole row of each family it reaches. Each costs what the fragment that reads the row pays already, and no growth in the grid names either; they wait for one that does.
 
    Check: their rows held.
-7. **The Cont lowering and its optimizer.** A match's arms, a list built at run time, a tuple, a structure's fields, a telescope, a chain and a concept's wrappers lowered and optimized in their size. Landed: a region's lexical scope is the one it is nested in with what it binds, held persistent; the dataflow solver runs a rule again only where a fact it read moved; a continuation's parameters are replaced where they are named, each site noted for what the replacement brings in; the verifier spells an operand only where it refuses one; the recursion verdict reads the call graph closed under definition without closing it; and emission reads a region's sibling edges off what each region recorded as it was built. Remaining: nested lambdas optimized, and nested matches and an `Io` block emitted and their erasure optimized, in their size; what a list built at run time and a telescope's parameters summed still pay is Binaryen's and Cranelift's, stage 10's. Check: their rows held; nested calls at 10 000 levels join the depth fixture.
+7. **The Cont lowering and its optimizer.** A match's arms, a list built at run time, a tuple, a structure's fields, a telescope, a chain and a concept's wrappers lowered and optimized in their size. Landed: a region's lexical scope is the one it is nested in with what it binds, held persistent; the dataflow solver runs a rule again only where a fact it read moved; a continuation's parameters are replaced where they are named, each site noted for what the replacement brings in; the verifier spells an operand only where it refuses one; the recursion verdict reads the call graph closed under definition without closing it; emission reads a region's sibling edges off what each region recorded as it was built and emits a region's last item onto the code before it; the machine verifier follows each block to the entry once; the machine's free values are settled a function at a time, where what a reached function needs has grown; the closed evaluator sums a region's facts from the regions bound in it; and the shrinking rewrites reduce what they expose in one pass. Remaining: nested matches emitted in their size, retaken; a curried function applied in turn at two sites, which returned-closure uncurrying absorbs a level a round; what a list built at run time and a telescope's parameters summed still pay is Binaryen's and Cranelift's, stage 10's. Check: their rows held; nested calls at 10 000 levels join the depth fixture, and 2 000 nested lambdas compile in `tests::growth`.
 8. **Locals by liveness.** The coloring pass over each emitted function. Check: 10 100 `+` in one function compiles and runs; `curios-std`'s corpus.
 9. **Wide shapes.** The envelope fixtures, then the spill. Check: each crossing runs.
 10. **Binaryen and Cranelift.** The long-function shapes retaken after stage 8; each Binaryen pass still refused skipped, stated in `curios-binaryen`'s README, and its report prepared; what Cranelift pays for a long function attributed, and taken where `curios-cranelift` configures it or the emitted function shapes it. Check: every row held; `wasm-optm` sizes over `programs/` before and after.
+11. **A match on the `let` before it.** Its elaboration and erasure attributed by samples and taken in their size. Check: `ChainedMatches` held; 2 000 chained matches compile in `tests::growth`.
 
 ## Protocol
 
@@ -139,7 +149,7 @@ One program a shape and size, on standard input. Each body reads the argument co
 
 - **Length**: a `let` chain over `+`, the same over `Nat/add`, n top-level definitions, n top-level functions each calling the last, n string definitions, and an `Io` block of n statements.
 - **Width**: a list literal, a list built from `a`, a match of n literal arms, n parameters, a tuple, a structure of n fields, an `induct` of n constructors, and a concept of n methods.
-- **Depth**: nested calls, parentheses, right-nested `+`, matches, lambdas, singleton lists, parenthesized `let`s and a curried arrow.
+- **Depth**: nested calls, parentheses, right-nested `+`, matches, matches each on the `let` before it, lambdas, singleton lists, parenthesized `let`s and a curried arrow.
 - **Scope**: n parameters summed.
 - **Size**: one string literal of n characters.
 
