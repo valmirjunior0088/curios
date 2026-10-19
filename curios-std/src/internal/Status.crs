@@ -1,6 +1,5 @@
 use /std/{Nat, List, Io, Try};
 use /std/Bool/{True, Holds};
-use /std/internal/{unnamed};
 
 --- What a host operation answers beside its payload, read off the wire's code: what a reading of a reply decides by before it reads anything else.
 pub induct Status: pub Type
@@ -41,12 +40,12 @@ pub let of_code(code: Nat) -> Status =
                 (entry, acc) => match code == entry.0 | true => entry.1 | false => acc end))
     end;
 
---- Nothing where `code` is `ok`, and the failure it names otherwise: what a reading asks of a reply before it reads its payload. A read's end or a wait, which a reply read so cannot answer, is the failure no errno names.
+--- Nothing where `code` is `ok`, and the failure it names otherwise: what a reading asks of a reply before it reads its payload. A read's end or a wait, which a reply read so cannot answer, is a reply its row rules out.
 pub let succeeded(code: Nat) -> Try(Io, Io/Error, {}) =
     match of_code(code)
     | ok() => Try/pure(())
     | failed(e) => Try/raise(e)
-    | _ => Try/raise(unnamed)
+    | _ => Try/raise(Io/Error/invalid_reply())
     end;
 
 -- Every failure the wire names decodes to a case of its own: a status the wire's list gains is refused until `errors` names it.

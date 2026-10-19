@@ -26,6 +26,8 @@ pub induct Error: pub Type
 | too_long()
 --- What was read is not text: the length of its longest prefix that is.
 | not_text(Nat)
+--- The host answered what its row rules out: a status the row cannot answer, a code no table of the library names, or a write that accepted nothing of what it was handed.
+| invalid_reply()
 --- Anything else, carrying the host's own code.
 | other(Nat)
 end
@@ -47,6 +49,7 @@ satisfy Show(Error) {
         | broken_pipe() => "broken_pipe"
         | too_long() => "too_long"
         | not_text(valid) => Fmt/render("not_text(%)")(valid)
+        | invalid_reply() => "invalid_reply"
         | other(n) => Fmt/render("other(%)")(n)
         end,
 }

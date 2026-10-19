@@ -1,7 +1,7 @@
 use /std/{Nat, Bool, List, Option, Path, Try, Io, Show};
 use /std/ops/{Eql};
 use /std/time/{Timestamp};
-use /std/internal/{Status, unnamed};
+use /std/internal/{Status};
 
 --- What is at a path.
 pub induct Kind: pub Type
@@ -51,7 +51,7 @@ pub struct Metadata: pub Type {
 --- What is at this path: `ok` beside its kind, one of `/sys/file_kind`'s codes, its size in bytes and when its contents last changed, or the status of the failure.
 foreign file_stat(Bytes) -> {status: Nat, kind: Nat, size: Nat, mtime_secs: Int, mtime_nanos: Nat};
 
---- What is at `path`. A kind the host names by no code this library knows is a failure no errno names.
+--- What is at `path`. A kind the host names by no code this library knows is a reply its row rules out.
 pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
     let reply = file_stat(Path/to_bytes(path))!;
     let _ = Status/succeeded(reply.status)!;
@@ -64,7 +64,7 @@ pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
                 mtime =
                     Timestamp/of_unix_nanos(
                         reply.mtime_secs * 1000000000 + Nat/to_int(reply.mtime_nanos)) })
-    | none() => Try/raise(unnamed)
+    | none() => Try/raise(Io/Error/invalid_reply())
     end;
 
 let kind_is(path: Path, want: (Kind) -> Bool) -> Try(Io, Io/Error, Bool) =

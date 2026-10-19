@@ -63,6 +63,19 @@ fn a_status_a_row_is_not_expected_to_answer_is_the_failure_it_names() {
     );
 }
 
+/// A status the row has no case for — a stream's end, answered to an open — is a reply its row rules out, and is read as one rather than as a failure no errno names.
+#[test]
+fn a_status_its_row_cannot_answer_is_an_invalid_reply() {
+    assert_eq!(
+        written(
+            OPEN,
+            HostOp::FileOpen,
+            vec![RawValue::Nat(status::EOF), RawValue::Bytes(vec![])],
+        ),
+        b"invalid_reply"
+    );
+}
+
 /// A status past every named one, and past the largest errno an operating system reports, is still a failure, carried as the number it is.
 #[test]
 fn a_status_no_failure_is_named_by_is_carried_as_its_number() {
@@ -81,7 +94,7 @@ fn a_status_no_failure_is_named_by_is_carried_as_its_number() {
     );
 }
 
-/// A closed code is read by the library, which has no kind for a code it does not know: the stat fails, and no kind is made up.
+/// A closed code is read by the library, which has no kind for a code it does not know: the stat fails as a reply its row rules out, and no kind is made up.
 #[test]
 fn a_file_kind_no_code_names_fails_the_stat() {
     assert_eq!(
@@ -104,7 +117,7 @@ fn a_file_kind_no_code_names_fails_the_stat() {
                 RawValue::Nat(0),
             ],
         ),
-        b"other(0)"
+        b"invalid_reply"
     );
 }
 

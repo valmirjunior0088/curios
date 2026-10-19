@@ -8,10 +8,6 @@ pub use Status/{let Status};
 
 use /std/{Io};
 
---- The failure no errno names: what a reply its row rules out is read as, and a write that accepted nothing, as the host names the errno-less failure.
-pub let unnamed: Io/Error =
-    Io/Error/other(0);
-
 --- An argument refused before any host call, by the errno `/sys/errno` names for it.
 pub let invalid: Io/Error =
     Io/Error/other(/sys/errno/inval);

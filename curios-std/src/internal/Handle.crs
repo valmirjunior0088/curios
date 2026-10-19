@@ -9,7 +9,7 @@ use /std/{Bool, Byte, Bytes, Nat, List, Result, Io, Try};
 use /std/Io/{Error};
 use /std/Bool/{Holds};
 use /std/File/{Mode};
-use /std/internal/{Status, unnamed};
+use /std/internal/{Status};
 
 --- Open the file at this path in the mode this `/sys/open_mode` code names: `ok` beside its handle, or the status of the failure.
 foreign file_open(Bytes, Nat) -> {status: Nat, handle: Handle};
@@ -91,13 +91,13 @@ let read_waiting(h: Handle, n: Nat, @positive: Holds(0 < n)) -> Io(Result(Error,
     | failed(e) => Io/pure(Result/failure(e))
     end;
 
---- The whole of `b`, waiting while the host would block and resending a short write; the first failure is the answer. A write that accepted nothing of bytes there were is the failure no errno names: a loop that resent what is left would resend it for ever.
+--- The whole of `b`, waiting while the host would block and resending a short write; the first failure is the answer. A write that accepted nothing of bytes there were is a reply its row rules out, a write the host answers taking a byte at least: a loop that resent what is left would resend it for ever.
 let write_waiting(h: Handle, b: Bytes) -> Io(Result(Error, {})) =
     let reply = handle_write(h, b)!;
     match Status/of_code(reply.status)
     | ok() =>
         choose
-        | reply.written == 0 && 0 < Bytes/len(b) => Io/pure(Result/failure(unnamed))
+        | reply.written == 0 && 0 < Bytes/len(b) => Io/pure(Result/failure(Error/invalid_reply()))
         | reply.written < Bytes/len(b) => write_waiting(h, Bytes/drop(b, reply.written))
         | _ => Io/pure(Result/success(()))
         end

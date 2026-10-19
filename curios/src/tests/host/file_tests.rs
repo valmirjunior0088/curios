@@ -45,6 +45,7 @@ fn read_all_of_a_missing_path_is_not_found() {
                 | broken_pipe() => /std/print("broken pipe")
                 | too_long() => /std/print("too long")
                 | not_text(_) => /std/print("not text")
+                | invalid_reply() => /std/print("invalid reply")
                 | other(_) => /std/print("other")
                 end
             end;
