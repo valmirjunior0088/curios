@@ -224,18 +224,34 @@ pub(crate) fn lower(
         .copied()
         .map(|function| (function, referenced_functions(source, function)))
         .collect::<BTreeMap<_, _>>();
-    loop {
-        let previous = free_values.clone();
-        for (function, required) in &mut free_values {
-            let mut transitive = required.iter().copied().collect::<BTreeSet<_>>();
-            for dependency in &dependencies[function] {
-                transitive.extend(previous[dependency].iter().copied());
-            }
-            transitive.retain(|value| !owned_values[function].contains(value));
-            *required = transitive.into_iter().collect();
+    // A function needs what it reads and what each function it reaches needs, less what it binds itself, to a least fixpoint taken a function at a time: one is asked again only where what a function it reaches needs has grown. Asked whole until a round changes nothing, a nesting of n functions, each reaching the one inside it, would take n rounds over every function.
+    let mut dependents = BTreeMap::<curios_cont::FunctionId, Vec<curios_cont::FunctionId>>::new();
+    for (function, reached) in &dependencies {
+        for dependency in reached {
+            dependents.entry(*dependency).or_default().push(*function);
         }
-        if free_values == previous {
-            break;
+    }
+    let mut pending = free_values.keys().copied().collect::<VecDeque<_>>();
+    let mut queued = pending.iter().copied().collect::<BTreeSet<_>>();
+    while let Some(function) = pending.pop_front() {
+        queued.remove(&function);
+        let mut required = free_values[&function]
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        for dependency in &dependencies[&function] {
+            required.extend(free_values[dependency].iter().copied());
+        }
+        required.retain(|value| !owned_values[&function].contains(value));
+        let required = required.into_iter().collect::<Vec<_>>();
+        if required == free_values[&function] {
+            continue;
+        }
+        free_values.insert(function, required);
+        for dependent in dependents.get(&function).into_iter().flatten() {
+            if queued.insert(*dependent) {
+                pending.push_back(*dependent);
+            }
         }
     }
     let escaping = source.escaping_functions();
