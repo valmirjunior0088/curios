@@ -68,8 +68,8 @@ use {
     curios_archive::Bytes,
     curios_document::Documentation,
     curios_utilities::{
-        Mount, Object, Persistent, Plicity, Qualifier, Report, RootKind, Source, Span,
-        SyntaxRegistry, grown,
+        Digest, Filed, Mount, Object, Persistent, Plicity, Qualifier, Recorded, Report, RootKind,
+        Source, Span, SyntaxRegistry, grown,
     },
     std::{
         borrow::Cow,
@@ -464,6 +464,8 @@ pub(super) struct Loaded {
     source: Option<Arc<Source>>,
     /// The module's tree: in hand where the file was parsed for its heads, and otherwise parsed when a declaration of it is first lowered.
     tree: OnceCell<Module>,
+    /// The baseline's scan of the very text, where it stood in for parsing: what the unit keeps of the file again, with the digest it is stored under.
+    kept: Option<HeldScan>,
 }
 
 impl Loaded {
@@ -474,13 +476,14 @@ impl Loaded {
             heads: Rc::new(Headed::of(&tree)),
             source,
             tree: OnceCell::from(tree),
+            kept: None,
         }
     }
 
     /// The module `module` of `source`, read without being parsed where `scans` hold what the very text declared.
     fn of(
         source: &UnitSource<'_>,
-        scans: Option<&BTreeMap<Qualifier, Scan>>,
+        scans: Option<&Scans>,
         module: &Qualifier,
     ) -> Result<Self, Error> {
         let Some(text) = source.source.read(module)? else {
@@ -506,6 +509,7 @@ impl Loaded {
                 heads,
                 source: Some(text),
                 tree: OnceCell::new(),
+                kept: Some(Rc::clone(scan)),
             });
         }
 
@@ -550,12 +554,16 @@ impl Loaded {
             .expect("a tree just asked for is in hand"))
     }
 
-    /// What the unit keeps of the module's file for a later lowering: its heads, in the text they were read from. `None` for a module supplied already parsed.
-    fn scan(&self) -> Option<Scan> {
-        Some(Scan {
+    /// What the unit keeps of the module's file for a later lowering: its heads, in the text they were read from, as the baseline kept them where its scan of the very text stood in for parsing. `None` for a module supplied already parsed.
+    fn scan(&self) -> Option<HeldScan> {
+        if let Some(kept) = &self.kept {
+            return Some(Rc::clone(kept));
+        }
+
+        Some(Rc::new(Filed::new(Scan {
             source: Arc::clone(self.source.as_ref()?),
             heads: Rc::clone(&self.heads),
-        })
+        })))
     }
 }
 
@@ -659,9 +667,9 @@ pub struct PreparedText {
     anchors: curios_archive::Deferred<curios_core::Anchors>,
     /// What each source declaration lowered to beside its items, with what it asked of its scope, held by pointer since a unit lowered over this one keeps the ones that stand, and what each of the unit's files declared — see `lowered`.
     ///
-    /// **The unit's baseline half: what a later lowering of the same sources reads, and nothing compiled after this unit does.** So it is no part of what the unit is stored as for its successors. It is stored beside that ([`PreparedText::baseline_bytes`]), handed back as bytes where the unit is restored ([`PreparedText::with_baseline`]), and read out of them when a lowering first asks.
+    /// **The unit's baseline half: what a later lowering of the same sources reads, and nothing compiled after this unit does.** So it is no part of what the unit is stored as for its successors. It is stored beside that, each record and each file's scan an object ([`PreparedText::baseline_digests`]), handed back where the unit is restored ([`PreparedText::with_baseline`]), and read when a lowering first asks.
     #[archived_with(curios_archive::Skip)]
-    baseline: curios_archive::Deferred<BaselineHalf>,
+    baseline: Recorded<BaselineHalf>,
     /// Who read each binding, of the unit's lowered declarations read backwards: made the first time a lowering over the unit asks, or handed over by the lowering that made the unit over a baseline ([`LookupReaders`]).
     #[archived_with(curios_archive::Skip)]
     lookups: OnceCell<LookupReaders>,
@@ -837,7 +845,7 @@ impl PreparedText {
     }
 
     /// What each file of this unit declared, by the module it backs — see [`Scan`].
-    fn scans(&self) -> &BTreeMap<Qualifier, Scan> {
+    fn scans(&self) -> &Scans {
         &self.half().scans
     }
 
@@ -855,14 +863,32 @@ impl PreparedText {
             .unwrap_or_else(|error| panic!("a unit's baseline half failed to restore: {error}"))
     }
 
-    /// The bytes of this unit's baseline half: what a later lowering of the same sources keeps this unit's lowerings by, stored apart from what the unit is for its successors.
-    pub fn baseline_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
-        self.baseline.bytes()
+    /// What this unit's baseline half was restored from, where it was: its own part and the object of each entry, what it is stored as again.
+    pub fn baseline_stored(&self) -> Option<(&Bytes, &[Object])> {
+        self.baseline.as_stored()
     }
 
-    /// This unit with `bytes` as its baseline half, read when a lowering over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
-    pub fn with_baseline(mut self, bytes: impl Into<Bytes>) -> Self {
-        self.baseline = curios_archive::Deferred::stored(bytes);
+    /// The bytes of this unit's baseline half's own part, stored apart from what the unit is for its successors: the tables of each module body and each witness, each record and scan being an object of its own.
+    pub fn baseline_table(&self) -> Result<Vec<u8>, String> {
+        curios_archive::to_bytes(self.half()).map(|bytes| bytes.to_vec())
+    }
+
+    /// The digest of each record and each scan of this unit's baseline half, in the order the unit names them: what a later lowering of the same sources keeps this unit's lowerings by, each an object of its own.
+    pub fn baseline_digests(&self) -> Result<Vec<Digest>, String> {
+        self.half().digests()
+    }
+
+    /// The records and scans of this unit's baseline half that `wanted` asks for, as the objects a store keeps them as.
+    pub fn baseline_objects(
+        &self,
+        wanted: &dyn Fn(&Digest) -> bool,
+    ) -> Result<Vec<Object>, String> {
+        self.half().objects(wanted)
+    }
+
+    /// This unit with `table` and `entries` as its baseline half ([`PreparedText::baseline_table`], [`PreparedText::baseline_objects`]), read when a lowering over the unit first asks: what a unit restored without one is given, since restoring it leaves the half empty.
+    pub fn with_baseline(mut self, table: impl Into<Bytes>, entries: Vec<Object>) -> Self {
+        self.baseline = Recorded::stored(table, entries);
         self
     }
 
@@ -1061,7 +1087,7 @@ impl<'a> Resolved<'a> {
     fn of(
         source: &UnitSource<'_>,
         root: &[Headed],
-        scans: Option<&BTreeMap<Qualifier, Scan>>,
+        scans: Option<&Scans>,
         predecessor_tables: &'a [&'a Table<ModuleInfo>],
         predecessor_mounts: &[Mount],
         own: &[Mount],
@@ -1131,7 +1157,7 @@ impl<'a> Resolved<'a> {
         prefix: &Qualifier,
         standing: bool,
         source: &UnitSource<'_>,
-        scans: Option<&BTreeMap<Qualifier, Scan>>,
+        scans: Option<&Scans>,
     ) -> Result<(), Error> {
         let order = self.order.len();
         self.order.insert(*prefix, order);
@@ -1149,7 +1175,7 @@ impl<'a> Resolved<'a> {
         prefix: &Qualifier,
         standing: bool,
         source: &UnitSource<'_>,
-        scans: Option<&BTreeMap<Qualifier, Scan>>,
+        scans: Option<&Scans>,
     ) -> Result<(), Error> {
         for headed in heads {
             if let Head::Mod {
@@ -1304,7 +1330,7 @@ struct Lowering<'a> {
     baseline: Option<&'a Baseline<'a>>,
     items: Vec<FlatItem>,
     /// What each declaration lowered to beside its items, in the walk's order, holding what the unit-wide passes read of them — see [`LoweredDeclaration`].
-    declarations: Vec<Rc<LoweredDeclaration>>,
+    declarations: Vec<HeldRecord>,
     induct_decls: BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: BTreeMap<curios_core::Global, curios_core::StructDecl>,
     concepts: BTreeMap<curios_core::Global, curios_core::ConceptDecl>,
@@ -1357,12 +1383,13 @@ impl Lowering<'_> {
                 )
             })
             .collect();
-        self.declarations.push(Rc::new(LoweredDeclaration::made(
-            context,
-            &self.items[from..],
-            facts,
-            foreign,
-        )));
+        self.declarations
+            .push(Rc::new(Filed::new(LoweredDeclaration::made(
+                context,
+                &self.items[from..],
+                facts,
+                foreign,
+            ))));
     }
 }
 
@@ -3610,7 +3637,7 @@ fn into_core_unit_within(
         credited: BTreeSet::new(),
         reached,
         anchors: curios_archive::Deferred::held(shared.anchoring.into_anchors()),
-        baseline: curios_archive::Deferred::held(BaselineHalf {
+        baseline: Recorded::held(BaselineHalf {
             declarations: records,
             scans,
             uses,

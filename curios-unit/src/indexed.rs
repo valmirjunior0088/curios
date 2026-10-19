@@ -5,6 +5,7 @@ use {
     curios_archive::{Bytes, parted},
     curios_core::{Global, HeldReads, ItemRun, Module, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
+    curios_text::PreparedText,
     curios_utilities::{Digest, Member, Object, Recorded},
     std::{borrow::Cow, collections::BTreeSet, rc::Rc},
 };
@@ -58,6 +59,11 @@ pub(crate) enum Kind {
     Traces(Vec<(Digest, Global, HeldTrace)>),
     /// What judging definitions read, each with its digest and the definition's name.
     Reads(Vec<(Digest, Global, HeldReads)>),
+    /// The records and scans of a lowering's baseline half, each stored alone, by their digests.
+    Lowering {
+        text: Rc<PreparedText>,
+        digests: Vec<Digest>,
+    },
 }
 
 impl Kind {
@@ -68,6 +74,7 @@ impl Kind {
             Kind::Items { named, .. } => Box::new(named.iter().map(|(_, digest)| digest)),
             Kind::Traces(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
             Kind::Reads(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
+            Kind::Lowering { digests, .. } => Box::new(digests.iter()),
         }
     }
 
@@ -114,6 +121,14 @@ impl Kind {
                     entries.iter().map(|(digest, ..)| *digest),
                     run,
                 )
+            }
+            Kind::Lowering { text, digests } => {
+                let wanted = digests
+                    .iter()
+                    .filter(|digest| fresh(digest))
+                    .collect::<BTreeSet<_>>();
+
+                text.baseline_objects(&|digest| wanted.contains(digest))
             }
             Kind::Reads(entries) => {
                 let entries = entries
@@ -220,6 +235,24 @@ pub fn reads_restored(bytes: &Bytes) -> Option<(Bytes, Vec<Object>)> {
         .collect::<Option<_>>()?;
 
     Some((table, entries))
+}
+
+/// What a unit stores of the lowering's baseline half `text` holds: its own part and the kind of its entries, what it was restored from where it was and its own otherwise.
+pub(crate) fn lowering_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>, Kind), String> {
+    if let Some((table, entries)) = text.baseline_stored() {
+        return Ok((
+            Cow::Borrowed(table.as_slice()),
+            Kind::Stored(entries.to_vec()),
+        ));
+    }
+
+    Ok((
+        Cow::Owned(text.baseline_table()?),
+        Kind::Lowering {
+            text: Rc::clone(text),
+            digests: text.baseline_digests()?,
+        },
+    ))
 }
 
 /// What a unit stores of the traces `recorded`: their own part and the kind of their entries, what they were restored from where they were and their own otherwise, each trace by the digest it is stored under ([`TraceTable::identity`]).

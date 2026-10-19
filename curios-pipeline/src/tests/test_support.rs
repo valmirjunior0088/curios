@@ -7,7 +7,7 @@ use {
     curios_core::{Item, Module, Sharing, Variance},
     curios_elab::{DEFAULT_STEP_BUDGET, Erasures, TraceTable, Traces, erase_program},
     curios_prelude::with_prelude,
-    curios_text::{Entrypoint, LintKind, RootSource, SYNTAX, UnitSource},
+    curios_text::{Entrypoint, LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
     curios_unit::{Pack, Predecessors, Unit, packed},
     curios_utilities::{RootKind, test_support::Temporary},
     std::{fs, rc::Rc},
@@ -416,6 +416,19 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
     assert_eq!(whole.tests, incremental.tests);
 }
 
+/// What a unit stores of the lowering's baseline half `text` holds: its own part, then each record and scan, each stored alone.
+pub(crate) fn lowering_stored(text: &PreparedText) -> Vec<u8> {
+    let mut bytes = text.baseline_table().expect("a baseline half serializes");
+    for object in text
+        .baseline_objects(&|_| true)
+        .expect("a baseline half serializes")
+    {
+        bytes.extend_from_slice(object.bytes.as_slice());
+    }
+
+    bytes
+}
+
 /// What a unit stores of `traces`: the rest of them, then each declaration's trace, all in one run.
 pub(crate) fn traces_stored(traces: &Traces) -> Vec<u8> {
     let mut bytes = curios_archive::to_bytes(traces)
@@ -453,12 +466,7 @@ pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
     let consed = |unit: &Unit| {
         curios_archive::to_bytes(&unit.core().shared(&Sharing::new())).expect("a module serializes")
     };
-    let baseline = |unit: &Unit| {
-        unit.text()
-            .baseline_bytes()
-            .expect("a baseline half serializes")
-            .into_owned()
-    };
+    let baseline = |unit: &Unit| lowering_stored(unit.text());
     let traces = traces_stored;
     let erasures = |unit: &Unit| {
         traces(

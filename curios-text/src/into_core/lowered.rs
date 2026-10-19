@@ -13,9 +13,8 @@ use {
         Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Step, Table,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
-    curios_utilities::{Ordered, Persistent, Qualifier, Report, Sorted},
+    curios_utilities::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Report, Sorted},
     std::{
-        borrow::Borrow,
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashSet},
         rc::Rc,
@@ -25,8 +24,17 @@ use {
 /// A lowered declaration as a later lowering finds it: by its anchor and the stamp of its text.
 pub(super) type Key = (curios_core::Anchor, u32);
 
+/// A declaration's record as a unit holds it: shared with every version that keeps it, beside the digest it is stored under.
+pub(crate) type HeldRecord = Rc<Filed<LoweredDeclaration>>;
+
+/// A file's scan as a unit holds it: shared with every version that keeps it, beside the digest it is stored under.
+pub(crate) type HeldScan = Rc<Filed<Scan>>;
+
+/// Each file-backed module's scan, by the module.
+pub(crate) type Scans = BTreeMap<Qualifier, HeldScan>;
+
 /// A unit's records, by the place of each declaration's first item among the unit's items ([`curios_core::Items::places`]): the declarations lie in the order their items do.
-pub(crate) type Records = Ordered<Rc<LoweredDeclaration>>;
+pub(crate) type Records = Ordered<HeldRecord>;
 
 /// Who read each binding, of a unit's lowered declarations and of the `use` declarations of its module bodies, read backwards: what a lowering over the unit finds the declarations and the bodies an edit could reach by, from the bindings it moved ([`Consulted`]).
 ///
@@ -364,29 +372,8 @@ impl LoweredDeclaration {
     }
 }
 
-/// How a unit's records are archived: as the records in the order their items stand, each restored at the index its first item has among the unit's.
-pub(crate) struct WalkOrder;
-
-/// The field adapter: `#[archived_with(InWalkOrder)]`.
-pub(crate) type InWalkOrder = curios_archive::Via<WalkOrder>;
-
-impl curios_archive::Proxy<Records> for WalkOrder {
-    type Archivable = Vec<Rc<LoweredDeclaration>>;
-
-    fn to_archivable(records: &Records) -> impl Borrow<Vec<Rc<LoweredDeclaration>>> {
-        records
-            .iter()
-            .map(|(_, record)| Rc::clone(record))
-            .collect::<Vec<_>>()
-    }
-
-    fn from_archivable(stored: Vec<Rc<LoweredDeclaration>>) -> Result<Records, String> {
-        Ok(in_walk_order(stored))
-    }
-}
-
 /// `records`, in the order their items stand, each at the index its first item has among the unit's.
-pub(super) fn in_walk_order(records: impl IntoIterator<Item = Rc<LoweredDeclaration>>) -> Records {
+pub(super) fn in_walk_order(records: impl IntoIterator<Item = HeldRecord>) -> Records {
     let mut ordered = Records::new();
     let mut first = 0;
     for record in records {
@@ -402,23 +389,118 @@ pub(super) fn in_walk_order(records: impl IntoIterator<Item = Rc<LoweredDeclarat
 }
 
 /// A unit's baseline half: what a later lowering of the same sources reads of it, and nothing compiled after the unit does.
+///
+/// **Each record and each scan an object of its own** ([`HalfEntry`]), stored apart and handed back where the half is restored ([`curios_utilities::Records`]): what is archived with the unit is the rest, the tables of each module body and each witness.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub(crate) struct BaselineHalf {
     /// What each source declaration lowered to beside its items, by the place of its first item ([`Records`]).
-    #[archived_with(InWalkOrder)]
-    pub declarations: Records,
+    #[archived_with(curios_archive::Skip)]
+    pub(crate) declarations: Records,
     /// Each file-backed module's scan, by the module.
-    pub scans: BTreeMap<Qualifier, Scan>,
+    #[archived_with(curios_archive::Skip)]
+    pub(crate) scans: Scans,
     /// Every binding the `use` declarations of each module body read, by the module: what the scope of its body can move with. A body that reads none holds none.
     #[archived_with(curios_utilities::InSharedKeyOrder)]
-    pub uses: Table<Vec<Consulted>>,
+    pub(crate) uses: Table<Vec<Consulted>>,
     /// Every lint each module body's declarations and `use` declarations were found to leave, by the body, before elaboration credits a binder: what a body a later lowering passes unwalked contributes. A body that leaves none holds none.
     #[archived_with(curios_utilities::InSharedKeyOrder)]
-    pub lints: Table<Vec<Lint>>,
+    pub(crate) lints: Table<Vec<Lint>>,
     /// Every name each witness's key read, by the witness: what its name can move with.
     #[archived_with(curios_utilities::InSharedKeyOrder)]
-    pub keyed: Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
+    pub(crate) keyed: Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
+}
+
+/// An entry of a unit's baseline half as a store keeps it, an object of its own bytes: a declaration's record, or a file's scan.
+#[curios_archive::archived]
+pub(crate) enum HalfEntry {
+    Record(LoweredDeclaration),
+    Scan(Qualifier, Scan),
+}
+
+impl HalfEntry {
+    /// The object this entry is stored as: its archive, and the digest of it.
+    fn object(&self) -> Result<Object, String> {
+        curios_archive::to_bytes(self).map(|bytes| Object::of(bytes.to_vec()))
+    }
+}
+
+impl BaselineHalf {
+    /// Each entry of this half, in the order the unit names them: each declaration's record in the order its items stand, then each file's scan by its module.
+    fn entries(&self) -> impl Iterator<Item = Entry<'_>> {
+        self.declarations
+            .iter()
+            .map(|(_, record)| Entry::Record(record))
+            .chain(
+                self.scans
+                    .iter()
+                    .map(|(module, scan)| Entry::Scan(module, scan)),
+            )
+    }
+
+    /// The digest of each entry, in the order the unit names them: the one it was restored with or first filed under, and its object's otherwise.
+    pub(crate) fn digests(&self) -> Result<Vec<Digest>, String> {
+        self.entries().map(|entry| entry.digest()).collect()
+    }
+
+    /// The entries `wanted` asks for, as the objects a store keeps them as, each archived now.
+    pub(crate) fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
+        let mut objects = Vec::new();
+        for entry in self.entries() {
+            if wanted(&entry.digest()?) {
+                objects.push(entry.stored().object()?);
+            }
+        }
+
+        Ok(objects)
+    }
+}
+
+/// An entry of a baseline half as it holds it.
+enum Entry<'h> {
+    Record(&'h HeldRecord),
+    Scan(&'h Qualifier, &'h HeldScan),
+}
+
+impl Entry<'_> {
+    /// The entry as a store keeps it.
+    fn stored(&self) -> HalfEntry {
+        match self {
+            Entry::Record(record) => HalfEntry::Record(LoweredDeclaration::clone(record)),
+            Entry::Scan(module, scan) => HalfEntry::Scan(**module, Scan::clone(scan)),
+        }
+    }
+
+    /// The digest this entry is stored under.
+    fn digest(&self) -> Result<Digest, String> {
+        let stored = || self.stored().object().map(|object| object.digest);
+        match self {
+            Entry::Record(record) => record.digest(|_| stored()),
+            Entry::Scan(_, scan) => scan.digest(|_| stored()),
+        }
+    }
+}
+
+/// A baseline half restored out of what a unit stores of it: the rest, archived with the unit, and each record and scan an object of its own, restored beside the digest it was found by.
+impl curios_utilities::Records for BaselineHalf {
+    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+        let mut half = curios_archive::from_bytes::<BaselineHalf>(table)?;
+        let mut records = Vec::new();
+        for object in entries {
+            match curios_archive::from_bytes::<HalfEntry>(object.bytes.as_slice())? {
+                HalfEntry::Record(record) => {
+                    records.push(Rc::new(Filed::stored(record, object.digest)));
+                }
+                HalfEntry::Scan(module, scan) => {
+                    half.scans
+                        .insert(module, Rc::new(Filed::stored(scan, object.digest)));
+                }
+            }
+        }
+        half.declarations = in_walk_order(records);
+
+        Ok(half)
+    }
 }
 
 /// A unit an earlier text of the same sources lowered to, as a later one is lowered over it: its declarations by the text each was lowered from, each by the place of its first item.
@@ -563,8 +645,8 @@ impl<'a> Baseline<'a> {
     /// Who read what of the unit lowered over this baseline, `uses` being what the `use` declarations of its bodies read: the baseline's, with the edges of every declaration `gone` takes away and every one `made` lowers replaced, of every body of `bodies`, each one whose `use` declarations were resolved again or that the unit no longer holds, and of every witness of `witnesses`, whose key `keyed` records what it read of.
     pub(super) fn readers_of<'r>(
         &self,
-        gone: impl IntoIterator<Item = &'r Rc<LoweredDeclaration>>,
-        made: impl IntoIterator<Item = &'r Rc<LoweredDeclaration>>,
+        gone: impl IntoIterator<Item = &'r HeldRecord>,
+        made: impl IntoIterator<Item = &'r HeldRecord>,
         uses: &Table<Vec<Consulted>>,
         bodies: impl IntoIterator<Item = Qualifier>,
         keyed: &Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
@@ -633,7 +715,7 @@ impl<'a> Baseline<'a> {
     }
 
     /// The record of the declaration whose first item stands at `first`.
-    fn record(&self, first: i64) -> &'a Rc<LoweredDeclaration> {
+    fn record(&self, first: i64) -> &'a HeldRecord {
         self.unit
             .lowerings()
             .get(first)

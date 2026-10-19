@@ -6,7 +6,7 @@ use {
         Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, compile_unit, compile_unit_over, recheck_over,
         tests::test_support::{
             assert_stored_alike, compile_with_units, elaborated_above, elaborated_wholesale,
-            traces_stored,
+            lowering_stored, traces_stored,
         },
     },
     curios_core::{
@@ -24,7 +24,7 @@ use {
         Label, LetSignature, Overlay, PreparedText, RootSource, SYNTAX, TopItem, TopLet, TopMod,
         Translation, UnitSource, into_core_unit, into_core_unit_over,
     },
-    curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed},
+    curios_unit::{Pack, Predecessors, Unit, apart_parts, halves, packed, reads_filed},
     curios_utilities::{Qualifier, RootKind, digest, test_support::Temporary},
     std::{
         cell::RefCell,
@@ -424,12 +424,15 @@ fn std_image_division() {
 
         let stored = std.stored().expect("the library's unit serializes");
         let (unit, apart) = halves(&stored.index).expect("a unit's index");
-        let [apart, reads]: [curios_archive::Bytes; 2] =
+        let [apart, _, _]: [curios_archive::Bytes; 3] =
             curios_archive::parted(&curios_archive::Bytes::from(apart.to_vec()))
                 .and_then(|parts| parts.try_into().ok())
                 .expect("what a certified unit stores apart");
-        let reads = reads.as_slice().len();
-        let [lowered, forms, _, _, _, anchors, imports, records, _, _] = apart_parts(&apart)
+        let reads = reads_filed(std.certification().recorded())
+            .expect("the certifier's reads serialize")
+            .len();
+        let records = lowering_stored(std.text()).len();
+        let [lowered, forms, _, _, _, _, anchors, imports, _, _, _] = apart_parts(&apart)
             .expect("what a unit stores apart")
             .map(|part| part.as_slice().len());
         // Each lowered item, then each erased form, is an object stored alone, and the elaborated items are the members of one run.
@@ -499,14 +502,7 @@ fn std_image_division() {
         );
         part!("  its import scopes", Imports, std.text().imports());
         row("  what its verdicts stand on", reads, None);
-        row(
-            "  the lowering's records and scans",
-            std.text()
-                .baseline_bytes()
-                .expect("the lowering's half serializes")
-                .len(),
-            None,
-        );
+        row("  the lowering's records and scans", records, None);
         row("  what its declarations asked", asked, None);
         row("  what its erasures asked", erasures, None);
 

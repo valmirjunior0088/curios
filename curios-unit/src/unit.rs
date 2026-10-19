@@ -2,7 +2,8 @@
 
 use {
     crate::{
-        Indexed, Kind, apart_parts, digests, found, halved, halves, reads_indexed, traces_indexed,
+        Indexed, Kind, apart_parts, digests, found, halved, halves, lowering_indexed,
+        reads_indexed, traces_indexed,
     },
     curios_abi::ForeignStore,
     curios_archive::{Bytes, joined, parted},
@@ -42,7 +43,7 @@ pub struct Uncertified {
     erased: Rc<ErasedUnit>,
     /// What each of the unit's declarations asked of the declarations around it as it elaborated: what a later compile of the same sources keeps a declaration's elaboration by.
     ///
-    /// **Of the unit's baseline half, with the text's** ([`PreparedText::baseline_bytes`]): nothing compiled after the unit reads it, so it is stored beside what the unit is for its successors, each declaration's trace an object, and read when a compile over the unit first asks.
+    /// **Of the unit's baseline half, with the text's** ([`PreparedText::baseline_digests`]): nothing compiled after the unit reads it, so it is stored beside what the unit is for its successors, each declaration's trace an object, and read when a compile over the unit first asks.
     #[archived_with(curios_archive::Skip)]
     traces: Rc<Recorded<Traces>>,
     /// Who asked what, of the unit's traces read backwards: what a recompile over the unit finds what an edit could reach by. Made the first time a recompile over the unit asks, or handed over by the recompile that made the unit, and kept beside its places; never stored, being read off the traces.
@@ -166,10 +167,10 @@ impl Uncertified {
         };
         let (traces_table, traces) = traces_indexed(&self.traces)?;
         let (asked_table, asked) = traces_indexed(self.erased.recorded())?;
+        let (text, lowering) = lowering_indexed(&self.text)?;
         let anchors = self.text.anchors_bytes()?;
         let imports = self.text.imports_bytes()?;
-        let text = self.text.baseline_bytes()?;
-        let mut kinds = vec![elaborated, traces, asked];
+        let mut kinds = vec![elaborated, traces, asked, lowering];
 
         let mut parts = vec![
             digests(items.iter().map(|object| &object.digest)),
@@ -241,6 +242,7 @@ impl Uncertified {
             elaborated,
             traces,
             asked,
+            lowering,
             anchors,
             imports,
             text,
@@ -252,7 +254,7 @@ impl Uncertified {
             fixed,
             text: Rc::new(
                 Rc::unwrap_or_clone(self.text)
-                    .with_baseline(text)
+                    .with_baseline(text, found(&lowering, find)?)
                     .with_reported(imports, anchors)
                     .with_items(found(&items, find)?)?,
             ),

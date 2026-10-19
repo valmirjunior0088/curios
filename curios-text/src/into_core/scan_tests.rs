@@ -3,7 +3,7 @@
 use {
     super::{Headed, Loaded, Scan, UnitSource, into_core_unit, test_support::syntax},
     crate::{RootSource, tree_of},
-    curios_utilities::{Qualifier, RootKind, Source, test_support::Temporary},
+    curios_utilities::{Filed, Qualifier, RootKind, Source, test_support::Temporary},
     std::{collections::BTreeMap, fs, path::Path, rc::Rc, sync::Arc},
 };
 
@@ -126,10 +126,10 @@ fn what_a_scan_kept_is_placed_in_the_file_as_it_is_read() {
     let elsewhere = Source::held("elsewhere/a.crs", EVERY_KIND);
     let scans = BTreeMap::from([(
         module,
-        Scan {
+        Rc::new(Filed::new(Scan {
             source: Arc::clone(&elsewhere),
             heads: Rc::new(Headed::of(&tree_of(&elsewhere).unwrap())),
-        },
+        })),
     )]);
 
     let source = library(&root);

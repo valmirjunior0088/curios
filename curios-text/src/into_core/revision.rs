@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    super::{Key, LoweredDeclaration, PreparedText, Records},
+    super::{HeldRecord, Key, LoweredDeclaration, PreparedText, Records},
     curios_abi::ForeignStore,
     curios_utilities::{Ordered, Persistent, Qualifier, Sorted},
     std::{
@@ -59,7 +59,7 @@ pub(super) struct Revised {
 pub(super) fn revise(
     baseline: &PreparedText,
     steps: &[Step],
-    records: &[Rc<LoweredDeclaration>],
+    records: &[HeldRecord],
     made: &[curios_core::Item],
     gone: &[Gone<'_>],
 ) -> Revised {
@@ -136,7 +136,7 @@ pub(super) fn revise(
 
 /// One of a baseline's declarations a walk did not keep: its record, the place of its first item in the baseline, and the places and the names of its items there.
 pub(super) struct Gone<'b> {
-    pub record: &'b Rc<LoweredDeclaration>,
+    pub record: &'b HeldRecord,
     pub first: i64,
     pub places: Vec<usize>,
     pub names: Vec<curios_core::Global>,
@@ -185,7 +185,7 @@ pub(super) fn gone<'b>(
 }
 
 /// The texts of the declarations `gone` takes away that no record of `records` was lowered from or kept by: what the unit's anchors no longer hold.
-pub(super) fn texts_gone(gone: &[Gone<'_>], records: &[Rc<LoweredDeclaration>]) -> Vec<Key> {
+pub(super) fn texts_gone(gone: &[Gone<'_>], records: &[HeldRecord]) -> Vec<Key> {
     let sited = records
         .iter()
         .filter_map(|record| record.text())
@@ -459,7 +459,7 @@ impl Tables {
 struct Walk<'w> {
     steps: &'w [Step],
     ends: &'w [usize],
-    records: &'w [Rc<LoweredDeclaration>],
+    records: &'w [HeldRecord],
     made: &'w [curios_core::Item],
     /// The walk's items, by their place among them, that are kept items named otherwise.
     named: &'w HashSet<usize>,
