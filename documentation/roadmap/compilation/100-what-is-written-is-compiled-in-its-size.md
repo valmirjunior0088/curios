@@ -76,12 +76,11 @@ A Binaryen `version_130` replay of the module `curios` hands `BinaryenModuleRead
 
 ### The counted slopes reach every stage
 
-`growth_slopes`' reading over the compiler of `ca0e3d02c`, printed in its documentation, holds nine growths linear in every stage: definitions, strings, a list literal, a family's constructors, parentheses, nested list literals, `let`s, an arrow and a string literal. The others reach a stage that grows as its square or steeper. Besides the Binaryen costs above:
+`growth_slopes`' reading over the compiler of `ad8841072`, printed in its documentation, holds eight growths linear in every stage: definitions, strings, a list literal, a family's constructors, parentheses, `let`s, an arrow and a string literal. Besides the Binaryen costs above, these reach a stage that grows as its square or steeper:
 
-- **The Cont lowering**: a list built at run time, a tuple, a structure's fields, a telescope's parameters summed, nested calls and a chain of operators either way (slopes 3.4 to 4.0 in `cont`).
-- **The Cont optimizer**: a match's arms, a telescope's parameters, an `Io` block, a concept's methods and nested lambdas (3.1 to 4.3 in `cont-optm`).
-- **Emission**: nested matches (3.4 in `emit`).
-- **Cranelift**: a long function's bytes (3.6 in `cranelift`).
+- **The Cont lowering**: a list built at run time, a telescope's parameters, nested list literals and nested matches (slopes 3.1 to 4.9 in `cont`).
+- **Emission**: nested matches (3.6 in `emit`).
+- **Cranelift**: a long function's bytes and a chain of operators nested to the right (3.5 to 3.8 in `cranelift`).
 
 ## Goal
 
@@ -128,7 +127,7 @@ Each stage begins by attributing the growths its slopes name, by a debugger's sa
    - Two reads still hold a row whole: the shared row of an anonymous tuple, which each fragment that reads one registers with a blank field for each of its width, and the program an item is evaluated in, which links the whole row of each family it reaches. Each costs what the fragment that reads the row pays already, and no growth in the grid names either; they wait for one that does.
 
    Check: their rows held.
-7. **The Cont lowering and its optimizer.** A function's lexical scope shared with the one it is nested in, where `lexical_scopes` (`curios-cont/src/verify.rs`) copies it, so every function holds the set of every function above it; a match's arms, a list built at run time, a tuple, a structure's fields, a telescope, a chain and a concept's wrappers lowered and optimized in their size. Check: their rows held; nested calls at 10 000 levels join the depth fixture.
+7. **The Cont lowering and its optimizer.** A match's arms, a list built at run time, a tuple, a structure's fields, a telescope, a chain and a concept's wrappers lowered and optimized in their size. Landed: a region's lexical scope is the one it is nested in with what it binds, held persistent; the dataflow solver runs a rule again only where a fact it read moved; a continuation's parameters are replaced where they are named; the verifier spells an operand only where it refuses one; and the recursion verdict reads the call graph closed under definition without closing it. Remaining: a list built at run time, a telescope's parameters, nested list literals and nested matches, lowered in their size. Check: their rows held; nested calls at 10 000 levels join the depth fixture.
 8. **Locals by liveness.** The coloring pass over each emitted function. Check: 10 100 `+` in one function compiles and runs; `curios-std`'s corpus.
 9. **Wide shapes.** The envelope fixtures, then the spill. Check: each crossing runs.
 10. **Binaryen and Cranelift.** The long-function shapes retaken after stage 8; each Binaryen pass still refused skipped, stated in `curios-binaryen`'s README, and its report prepared; what Cranelift pays for a long function attributed, and taken where `curios-cranelift` configures it or the emitted function shapes it. Check: every row held; `wasm-optm` sizes over `programs/` before and after.
