@@ -14,8 +14,8 @@
 
 use {
     super::{
-        Compiled, ForeignBindings, HostOps, Lower, MachineCode, host_rows, instantiate,
-        lower_scalars, on_guest_stack, shared_engine, words_array_type,
+        Compiled, ForeignBindings, GUEST_HEAP, Guest, HostOps, Lower, MachineCode, guest_store,
+        host_rows, instantiate, lower_scalars, on_guest_stack, shared_engine, words_array_type,
     },
     curios_abi::HostOp,
     log::{LevelFilter, Log, Metadata, Record, set_logger, set_max_level},
@@ -57,7 +57,7 @@ impl GuestValue {
 
 /// An instantiated module together with the store it lives in, so neither escapes into a caller's signature.
 pub struct GuestInstance {
-    store: Store<()>,
+    store: Store<Guest>,
     instance: Instance,
 }
 
@@ -66,7 +66,7 @@ impl GuestInstance {
     pub fn instantiate(code: &MachineCode) -> Result<Self, String> {
         let engine = shared_engine();
         let (store, instance) = on_guest_stack(|| {
-            let mut store = Store::new(engine, ());
+            let mut store = guest_store(engine, GUEST_HEAP);
 
             Linker::new(engine)
                 .instantiate(&mut store, &code.0)
@@ -249,7 +249,7 @@ pub enum RawValue {
 
 /// Write `values` into an import's result slots, one each, through the plain encodings and nothing else.
 fn write_raw(
-    caller: &mut Caller<'_, ()>,
+    caller: &mut Caller<'_, Guest>,
     values: &[RawValue],
     results: &mut [Val],
 ) -> wasmtime::Result<()> {
@@ -278,6 +278,25 @@ fn write_raw(
     Ok(())
 }
 
+/// Run `compiled` under `host` in a store whose heap grows to `heap` bytes and no further, where [`Compiled::run`] gives it the bound every program has: what a program whose live set grows without end meets, met at a size a test can reach.
+pub fn run_within_heap<H: HostOps + Send + Sync + 'static>(
+    compiled: &Compiled,
+    host: H,
+    heap: usize,
+) -> Result<u8, String> {
+    let host = Arc::new(host);
+
+    instantiate(
+        shared_engine(),
+        heap,
+        &compiled.module,
+        &compiled.foreigns,
+        ForeignBindings::empty(),
+        host_rows(Arc::clone(&host)),
+        host,
+    )
+}
+
 /// Run `compiled` under `host`, except that each of the host's rows in `raw` answers its values on every call, raw — the adapter's lowering bypassed, so what reaches the guest is exactly what the test wrote. `bindings` implements the program's own `foreign` declarations, as [`Compiled::run`]'s does.
 pub fn run_raw<H: HostOps + Send + Sync + 'static>(
     compiled: &Compiled,
@@ -296,6 +315,7 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
 
     instantiate(
         shared_engine(),
+        GUEST_HEAP,
         &compiled.module,
         &compiled.foreigns,
         bindings,

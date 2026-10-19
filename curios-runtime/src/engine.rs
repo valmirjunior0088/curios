@@ -17,7 +17,7 @@ use {
     },
     wasmtime::{
         AnyRef, ArrayType, Caller, Config, Engine, FuncType, HeapType, Linker, Module, RefType,
-        Rooted, Store, Val, ValType,
+        Rooted, Store, StoreLimits, StoreLimitsBuilder, Val, ValType,
     },
 };
 
@@ -38,6 +38,31 @@ pub fn validate(bytes: &[u8]) -> Result<(), String> {
 
 /// The stack a module's calls nest on, in bytes.
 const GUEST_STACK: usize = 1 << 30;
+
+/// The heap a program's live set may grow to, in bytes: the bound every store states to the engine ([`Guest`]), so a program whose live set grows without end stops on the engine's own refusal to grow it. The decision and its reason are this crate's `README.md`, "The heap is sized ahead of its churn".
+pub(crate) const GUEST_HEAP: usize = 4 << 30;
+
+/// What a program's store holds beside its instances: the bound its heap, and each memory a module declares, may grow to, which the engine asks of the store's limiter before it grows one.
+pub struct Guest {
+    limits: StoreLimits,
+}
+
+impl Guest {
+    /// A store's data whose heap grows to `heap` bytes and no further.
+    pub(crate) fn bounded(heap: usize) -> Self {
+        Self {
+            limits: StoreLimitsBuilder::new().memory_size(heap).build(),
+        }
+    }
+}
+
+/// A store against `engine` whose heap grows to `heap` bytes and no further: every store a module runs in.
+pub(crate) fn guest_store(engine: &Engine, heap: usize) -> Store<Guest> {
+    let mut store = Store::new(engine, Guest::bounded(heap));
+    store.limiter(|guest| &mut guest.limits);
+
+    store
+}
 
 /// What a host operation still has to run in when a module calls it from its deepest frame. The engine checks its limit where a module is entered and where it calls, never inside a host operation, so one called from the last frame the limit allows runs past it, and the thread has this much there.
 const HOST_RESERVE: usize = 16 << 20;
@@ -129,18 +154,18 @@ fn wire_func_type(engine: &Engine, params: &[WireType], results: &[WireType]) ->
 
 /// A type-erased implementation of one import: the closure wasmtime calls, already wrapped in its [`Lift`] and [`Reply`] plumbing.
 pub(crate) type Trampoline =
-    Arc<dyn Fn(&mut Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
+    Arc<dyn Fn(&mut Caller<'_, Guest>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
 
 /// Ask an answer for its reply to a call's operands: written into the call's results at once, or the future of one handed back for the host to file.
 type Ask = Arc<
-    dyn Fn(&mut Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<Option<Answer>>
+    dyn Fn(&mut Caller<'_, Guest>, &[Val], &mut [Val]) -> wasmtime::Result<Option<Answer>>
         + Send
         + Sync,
 >;
 
 /// Write what a filed future of an answer settled with into the results of the call that asks for it again.
 type Settle =
-    Arc<dyn Fn(&mut Caller<'_, ()>, Settled, &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
+    Arc<dyn Fn(&mut Caller<'_, Guest>, Settled, &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
 
 /// How an answer is entered: asked once a call's operands are lifted, and, where it handed back a future, settled from what the future came to.
 #[derive(Clone)]
@@ -166,11 +191,11 @@ impl Entered {
 
     /// An answer whose reply `R` comes when `ask` says: the reply it writes at once, or the future of one, which settles as `R` and is written by `reply`.
     fn of<R: Send + 'static>(
-        ask: impl Fn(&mut Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<Option<Answer>>
+        ask: impl Fn(&mut Caller<'_, Guest>, &[Val], &mut [Val]) -> wasmtime::Result<Option<Answer>>
         + Send
         + Sync
         + 'static,
-        reply: impl Fn(&mut Caller<'_, ()>, R, &mut [Val]) -> wasmtime::Result<()>
+        reply: impl Fn(&mut Caller<'_, Guest>, R, &mut [Val]) -> wasmtime::Result<()>
         + Send
         + Sync
         + 'static,
@@ -371,7 +396,7 @@ impl Answers {
     #[cfg(feature = "test-support")]
     pub(crate) fn replace_raw<F>(&mut self, name: &str, f: F)
     where
-        F: Fn(&mut Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()>
+        F: Fn(&mut Caller<'_, Guest>, &[Val], &mut [Val]) -> wasmtime::Result<()>
             + Send
             + Sync
             + 'static,
@@ -573,7 +598,7 @@ fn laned(
 
 /// Define the `ffi` import declared as `name` into `linker`, entered as [`answering`] finds it answered, and filing what it answers later with `host`.
 fn link(
-    linker: &mut Linker<()>,
+    linker: &mut Linker<Guest>,
     engine: &Engine,
     foreigns: &ForeignStore,
     bindings: &Answers,
@@ -592,13 +617,13 @@ fn link(
             let name = name.to_string();
 
             Arc::new(
-                move |caller: &mut Caller<'_, ()>, params: &[Val], results: &mut [Val]| match ask(
-                    caller, params, results,
-                )? {
-                    None => Ok(()),
-                    Some(_) => Err(wasmtime::Error::msg(format!(
-                        "{name}: a call that does not return cannot be answered later"
-                    ))),
+                move |caller: &mut Caller<'_, Guest>, params: &[Val], results: &mut [Val]| {
+                    match ask(caller, params, results)? {
+                        None => Ok(()),
+                        Some(_) => Err(wasmtime::Error::msg(format!(
+                            "{name}: a call that does not return cannot be answered later"
+                        ))),
+                    }
                 },
             ) as Trampoline
         }
@@ -667,7 +692,7 @@ impl Error for PanicTrap {}
 /// What a run answers of how a program ended: one reading where its entry returned, of the result it handed back, and one where `proc_exit` unwound it, of the code. A trap is neither, and is every run's error alike.
 pub(crate) trait Ended: Sized + Send {
     /// The entry returned `result`, read while the store it lives in is open.
-    fn returned(store: &Store<()>, result: Option<Rooted<AnyRef>>) -> Result<Self, String>;
+    fn returned(store: &Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, String>;
 
     /// `proc_exit` ended the run with `code`.
     fn exited(code: u8) -> Self;
@@ -675,7 +700,7 @@ pub(crate) trait Ended: Sized + Send {
 
 /// A program's exit code: the code it exited with, and `0` where its entry returned. What the entry hands back there is the unit every program's description yields, which says nothing and is not read.
 impl Ended for u8 {
-    fn returned(_: &Store<()>, _: Option<Rooted<AnyRef>>) -> Result<Self, String> {
+    fn returned(_: &Store<Guest>, _: Option<Rooted<AnyRef>>) -> Result<Self, String> {
         Ok(0)
     }
 
@@ -695,7 +720,7 @@ pub enum TestEnd {
 
 /// A test program's entry answers a `Bool` ([`ENTRY`]), read as the reference it is handed back as, and a reference that is none is refused rather than read as a verdict. The unit a program's entry hands back is the reference `false` is, so a module that is no test program is never read as one whose tests held.
 impl Ended for TestEnd {
-    fn returned(store: &Store<()>, result: Option<Rooted<AnyRef>>) -> Result<Self, String> {
+    fn returned(store: &Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, String> {
         let refused = || format!("{ENTRY} answered no Bool");
         let word = result
             .ok_or_else(refused)?
@@ -784,6 +809,7 @@ impl Compiled {
 
         instantiate(
             shared_engine(),
+            GUEST_HEAP,
             &self.module,
             &self.foreigns,
             bindings,
@@ -802,6 +828,7 @@ impl Compiled {
 
         instantiate(
             shared_engine(),
+            GUEST_HEAP,
             &self.module,
             &self.foreigns,
             bindings,
@@ -811,28 +838,30 @@ impl Compiled {
     }
 }
 
-/// Instantiate `module` against `engine`, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `foreigns` holds the rows the module's `ffi` imports are declared as, `bindings` the answers a module or an embedder gives, `host` the ones the host gives itself, and `waiter` the host that waits between a suspending program's turns and files what a row answers later.
+/// Instantiate `module` against `engine` in a store whose heap grows to `heap` bytes, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `foreigns` holds the rows the module's `ffi` imports are declared as, `bindings` the answers a module or an embedder gives, `host` the ones the host gives itself, and `waiter` the host that waits between a suspending program's turns and files what a row answers later.
 pub(crate) fn instantiate<E: Ended>(
     engine: &Engine,
+    heap: usize,
     module: &Module,
     foreigns: &ForeignStore,
     bindings: ForeignBindings,
     host: Answers,
     waiter: Arc<dyn HostOps + Send + Sync>,
 ) -> Result<E, String> {
-    on_guest_stack(move || entered(engine, module, foreigns, bindings, host, waiter))?
+    on_guest_stack(move || entered(engine, heap, module, foreigns, bindings, host, waiter))?
 }
 
 /// [`instantiate`], on the thread it is called on.
 fn entered<E: Ended>(
     engine: &Engine,
+    heap: usize,
     module: &Module,
     foreigns: &ForeignStore,
     bindings: ForeignBindings,
     host: Answers,
     waiter: Arc<dyn HostOps + Send + Sync>,
 ) -> Result<E, String> {
-    let mut store = Store::new(engine, ());
+    let mut store = guest_store(engine, heap);
 
     // A module is instantiated into the program's own store, ahead of the program, and answers its rows there beside an embedder's.
     let ForeignBindings {

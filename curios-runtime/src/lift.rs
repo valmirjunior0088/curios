@@ -1,5 +1,5 @@
 use {
-    super::{Handle, Mode, SerialFlow, SerialOp, SerialParity, StdioMode},
+    super::{Guest, Handle, Mode, SerialFlow, SerialOp, SerialParity, StdioMode},
     curios_abi::{ClosedCode, WireLeaf, WireType},
     wasmtime::{Caller, Val},
 };
@@ -12,7 +12,7 @@ pub trait Lift: Sized {
     fn shape() -> Vec<WireType>;
 
     /// Decode `Self` from the import's incoming `params`, reading any GC arrays through `caller`. Contract: every single-value impl consumes exactly `params[0]` — the alignment the tuple impls rely on to re-slice per component.
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error>;
+    fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error>;
 }
 
 impl Lift for () {
@@ -20,7 +20,7 @@ impl Lift for () {
         vec![]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, _: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, _: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(())
     }
 }
@@ -31,7 +31,7 @@ impl Lift for Handle {
         vec![WireType::Handle]
     }
 
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(Handle::from_bytes(Vec::<u8>::lift(caller, params)?))
     }
 }
@@ -48,7 +48,7 @@ impl Lift for Mode {
         vec![WireType::Nat]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         lift_code(params, "an open mode")
     }
 }
@@ -58,7 +58,7 @@ impl Lift for StdioMode {
         vec![WireType::Nat]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         lift_code(params, "a stdio mode")
     }
 }
@@ -68,7 +68,7 @@ impl Lift for SerialParity {
         vec![WireType::Nat]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         lift_code(params, "a serial parity")
     }
 }
@@ -78,7 +78,7 @@ impl Lift for SerialFlow {
         vec![WireType::Nat]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         lift_code(params, "a serial flow control")
     }
 }
@@ -88,7 +88,7 @@ impl Lift for SerialOp {
         vec![WireType::Nat]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         lift_code(params, "a serial control")
     }
 }
@@ -99,7 +99,7 @@ impl Lift for u8 {
         vec![WireType::Byte]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         let word = params[0].unwrap_i32();
 
         u8::try_from(word).map_err(|_| wasmtime::Error::msg(format!("{word} is not a byte")))
@@ -121,7 +121,7 @@ impl Lift for bool {
         vec![WireType::Bool]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         bool_of(params[0].unwrap_i32())
     }
 }
@@ -132,7 +132,7 @@ impl Lift for u64 {
         vec![WireType::Nat]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(params[0].unwrap_i64().cast_unsigned())
     }
 }
@@ -143,7 +143,7 @@ impl Lift for i64 {
         vec![WireType::Int]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(params[0].unwrap_i64())
     }
 }
@@ -154,7 +154,7 @@ impl Lift for f64 {
         vec![WireType::Flt]
     }
 
-    fn lift(_: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(params[0].unwrap_f64())
     }
 }
@@ -167,7 +167,7 @@ macro_rules! lift_tuple {
                 [$($name::shape()),+].concat()
             }
 
-            fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+            fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
                 Ok(($($name::lift(caller, &params[$index..$index + 1])?,)+))
             }
         }
@@ -183,7 +183,7 @@ lift_tuple!(A 0, B 1, C 2, D 3, E 4, F 5);
 lift_tuple!(A 0, B 1, C 2, D 3, E 4, F 5, G 6);
 
 /// Read a list of scalars: the guest's flat array, one element per slot, each already narrowed by the guest to what the wire carries — `$longs` for a `Nat` or `Int`, `$words` for a `Bool`.
-fn lift_scalars(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<Val>, wasmtime::Error> {
+fn lift_scalars(caller: &mut Caller<'_, Guest>, param: &Val) -> Result<Vec<Val>, wasmtime::Error> {
     let Val::AnyRef(Some(anyref)) = param else {
         return Err(wasmtime::Error::msg("expected non-null anyref"));
     };
@@ -205,7 +205,7 @@ impl Lift for Vec<u64> {
         vec![WireType::List(WireLeaf::Nat)]
     }
 
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(lift_scalars(caller, &params[0])?
             .into_iter()
             .map(|value| value.unwrap_i64().cast_unsigned())
@@ -219,7 +219,7 @@ impl Lift for Vec<i64> {
         vec![WireType::List(WireLeaf::Int)]
     }
 
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(lift_scalars(caller, &params[0])?
             .into_iter()
             .map(|value| value.unwrap_i64())
@@ -233,7 +233,7 @@ impl Lift for Vec<bool> {
         vec![WireType::List(WireLeaf::Bool)]
     }
 
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         lift_scalars(caller, &params[0])?
             .into_iter()
             .map(|value| bool_of(value.unwrap_i32()))
@@ -246,7 +246,7 @@ impl Lift for Vec<u8> {
         vec![WireType::Bytes]
     }
 
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         let Val::AnyRef(Some(anyref)) = &params[0] else {
             return Err(wasmtime::Error::msg("expected non-null anyref"));
         };
@@ -266,7 +266,7 @@ impl Lift for Vec<u8> {
 
 /// Read a `List(Bytes)` host-import argument: a `params[0]` anyref array whose elements are themselves `Bytes` (i8 arrays). The inbound dual of `lower.rs`'s `Vec<Vec<u8>>` lowering; `List(Handle)` rides this shape, a handle being its token's bytes.
 fn lift_bytes_array(
-    caller: &mut Caller<'_, ()>,
+    caller: &mut Caller<'_, Guest>,
     param: &Val,
 ) -> Result<Vec<Vec<u8>>, wasmtime::Error> {
     let Val::AnyRef(Some(anyref)) = param else {
@@ -294,7 +294,7 @@ impl Lift for Vec<Vec<u8>> {
         vec![WireType::List(WireLeaf::Bytes)]
     }
 
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         lift_bytes_array(caller, &params[0])
     }
 }
@@ -305,7 +305,7 @@ impl Lift for Vec<Handle> {
         vec![WireType::List(WireLeaf::Handle)]
     }
 
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(lift_bytes_array(caller, &params[0])?
             .into_iter()
             .map(Handle::from_bytes)
@@ -347,7 +347,7 @@ where
         vec![WireType::Option(T::LEAF)]
     }
 
-    fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
+    fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         if let Val::AnyRef(None) = params[0] {
             return Ok(None);
         }

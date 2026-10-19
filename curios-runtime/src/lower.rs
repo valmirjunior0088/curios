@@ -1,5 +1,5 @@
 use {
-    super::{Element, ExitTrap, Handle, Returned, Termination},
+    super::{Element, ExitTrap, Guest, Handle, Returned, Termination},
     curios_abi::{Encoded, HostOp, ReplyShape, WireLeaf, WireReply, WireType, WireValue},
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
@@ -13,8 +13,11 @@ pub trait Lower {
     fn shape() -> Vec<WireType>;
 
     /// Encode `self` into the import's `results` slots, allocating any GC values through `caller`. Contract: every single-value impl fills exactly `results[0]` — the alignment the tuple impls rely on to re-slice per component.
-    fn lower(self, caller: &mut Caller<'_, ()>, results: &mut [Val])
-    -> Result<(), wasmtime::Error>;
+    fn lower(
+        self,
+        caller: &mut Caller<'_, Guest>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error>;
 }
 
 impl Lower for () {
@@ -22,7 +25,7 @@ impl Lower for () {
         vec![]
     }
 
-    fn lower(self, _: &mut Caller<'_, ()>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
+    fn lower(self, _: &mut Caller<'_, Guest>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
         Ok(())
     }
 }
@@ -35,7 +38,7 @@ impl Lower for Handle {
 
     fn lower(
         self,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         self.bytes().lower(caller, results)
@@ -48,7 +51,7 @@ impl Lower for i64 {
         vec![WireType::Int]
     }
 
-    fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+    fn lower(self, _: &mut Caller<'_, Guest>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
         results[0] = Val::I64(self);
 
         Ok(())
@@ -61,7 +64,7 @@ impl Lower for u64 {
         vec![WireType::Nat]
     }
 
-    fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+    fn lower(self, _: &mut Caller<'_, Guest>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
         results[0] = Val::I64(self.cast_signed());
 
         Ok(())
@@ -74,7 +77,7 @@ impl Lower for u8 {
         vec![WireType::Byte]
     }
 
-    fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+    fn lower(self, _: &mut Caller<'_, Guest>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
         results[0] = Val::I32(i32::from(self));
 
         Ok(())
@@ -87,7 +90,7 @@ impl Lower for bool {
         vec![WireType::Bool]
     }
 
-    fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+    fn lower(self, _: &mut Caller<'_, Guest>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
         results[0] = Val::I32(i32::from(self));
 
         Ok(())
@@ -100,7 +103,7 @@ impl Lower for f64 {
         vec![WireType::Flt]
     }
 
-    fn lower(self, _: &mut Caller<'_, ()>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
+    fn lower(self, _: &mut Caller<'_, Guest>, results: &mut [Val]) -> Result<(), wasmtime::Error> {
         results[0] = Val::F64(self.to_bits());
 
         Ok(())
@@ -117,7 +120,7 @@ macro_rules! lower_tuple {
 
             fn lower(
                 self,
-                caller: &mut Caller<'_, ()>,
+                caller: &mut Caller<'_, Guest>,
                 results: &mut [Val],
             ) -> Result<(), wasmtime::Error> {
                 let ($($value,)+) = self;
@@ -170,7 +173,7 @@ pub(crate) fn words_array_type(engine: &Engine) -> ArrayType {
 
 /// Lower `values` as a flat array of `array_type`, the guest's `$longs` or `$words`.
 pub(crate) fn lower_scalars(
-    caller: &mut Caller<'_, ()>,
+    caller: &mut Caller<'_, Guest>,
     array_type: ArrayType,
     values: impl IntoIterator<Item = Val>,
     results: &mut [Val],
@@ -193,7 +196,7 @@ impl Lower for Vec<u64> {
 
     fn lower(
         self,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         let values = self.into_iter().map(|value| Val::I64(value.cast_signed()));
@@ -212,7 +215,7 @@ impl Lower for Vec<i64> {
 
     fn lower(
         self,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         let values = self.into_iter().map(Val::I64);
@@ -231,7 +234,7 @@ impl Lower for Vec<bool> {
 
     fn lower(
         self,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         let values = self.into_iter().map(|value| Val::I32(i32::from(value)));
@@ -249,7 +252,7 @@ impl Lower for Vec<u8> {
 
     fn lower(
         self,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         let array_type = i8_array_type(caller.engine());
@@ -271,7 +274,7 @@ impl Lower for Vec<Vec<u8>> {
 
     fn lower(
         self,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         let byte_type = i8_array_type(caller.engine());
@@ -311,8 +314,11 @@ pub trait Reply {
     fn returned() -> Returned;
 
     /// Carry the answer back across: its values into `results`, or the trap that ends the instance.
-    fn reply(self, caller: &mut Caller<'_, ()>, results: &mut [Val])
-    -> Result<(), wasmtime::Error>;
+    fn reply(
+        self,
+        caller: &mut Caller<'_, Guest>,
+        results: &mut [Val],
+    ) -> Result<(), wasmtime::Error>;
 }
 
 impl<T: Lower> Reply for T {
@@ -322,7 +328,7 @@ impl<T: Lower> Reply for T {
 
     fn reply(
         self,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         self.lower(caller, results)
@@ -335,7 +341,7 @@ impl Reply for Termination {
         Returned::Never
     }
 
-    fn reply(self, _: &mut Caller<'_, ()>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
+    fn reply(self, _: &mut Caller<'_, Guest>, _: &mut [Val]) -> Result<(), wasmtime::Error> {
         Err(wasmtime::Error::from(ExitTrap(self.0)))
     }
 }
@@ -343,7 +349,7 @@ impl Reply for Termination {
 /// Write a reply's values into the slots they cross in, each as its wire type crosses.
 fn written(
     values: Vec<WireValue>,
-    caller: &mut Caller<'_, ()>,
+    caller: &mut Caller<'_, Guest>,
     results: &mut [Val],
 ) -> Result<(), wasmtime::Error> {
     for (value, slot) in values.into_iter().zip(results.iter_mut()) {
@@ -379,7 +385,7 @@ impl<R: WireReply> Reply for Replied<R> {
 
     fn reply(
         self,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         let refused =
@@ -405,7 +411,7 @@ impl Lower for Vec<Handle> {
 
     fn lower(
         self,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         self.into_iter()
@@ -426,7 +432,7 @@ where
 
     fn lower(
         self,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
         match self {
@@ -442,7 +448,7 @@ where
 
 /// Fill `replies` with a value of each of `results`, a reply nothing reads: a zero for a scalar, an empty payload for a reference, and null for an option, whose carrier admits it.
 pub(crate) fn filled(
-    caller: &mut Caller<'_, ()>,
+    caller: &mut Caller<'_, Guest>,
     results: &[WireType],
     replies: &mut [Val],
 ) -> Result<(), wasmtime::Error> {

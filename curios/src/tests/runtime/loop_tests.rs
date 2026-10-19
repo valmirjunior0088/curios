@@ -1,9 +1,9 @@
 //! Loops that stay linear, and the values they carry through storage and retrieval.
 
 use {
-    crate::tests::{cont_optm, cont_optm_module, run, run_text},
+    crate::tests::{compile, cont_optm, cont_optm_module, run, run_text},
     curios_cont::{Callee, Node, ValueExpr},
-    curios_runtime::MockHost,
+    curios_runtime::{MockHost, test_support::run_within_heap},
     curios_utilities::fill,
     std::collections::BTreeSet,
 };
@@ -399,6 +399,32 @@ fn a_sequence_built_under_its_recursion_is_a_loop() {
             &cont_optm[..cont_optm.len().min(4000)]
         );
     }
+}
+
+/// A program whose live set outgrows the heap its store states stops on the engine's refusal to grow it: the bound is one a program meets, as the stack's is. Met here at sixty-four mebibytes, where a program has four gibibytes, by a list of eight million naturals the program holds whole, which that bound refuses and the engine's own would take; the list is built under a cons, which the monoid rebase threads, so the build keeps no frame and only the heap can stop it.
+#[test]
+fn a_live_set_past_the_heap_it_was_given_stops_on_the_engines_refusal() {
+    let compiled = compile(
+        r#"
+        use /std/{Nat, List, Io};
+        let build(n: Nat) -> List(Nat) =
+            match n | 0 => [] | m + 1 => [n, ..build(m)] end;
+        let entry() -> /std/Io({}) =
+            let first = match build(8000000) | [] => 0 | [n, .._] => n end;
+            let _ = /std/print(Nat/to_str(first))!;
+            /std/Io/pure(());
+        entry()
+        "#,
+    )
+    .expect("the build compiles");
+    let (system, _io) = MockHost::builder().build();
+    let refusal = run_within_heap(&compiled, system, 64 << 20)
+        .expect_err("a live set past the heap cannot be held");
+
+    assert!(
+        refusal.contains("GC heap out of memory"),
+        "the program must stop on the engine's refusal to grow its heap: {refusal}"
+    );
 }
 
 /// A recursion with no end that keeps its frames still stops, on the engine's own trap, once the stack it was given is spent: the limit is a bound a program meets, never the thread's. The chain is built under a constructor, which no monoid closes, so the recursion keeps a frame a level.

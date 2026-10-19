@@ -14,7 +14,7 @@
 
 use {
     super::{
-        Answers, BundledPlugin, Entered, ForeignBindings, Lift, Lower, MachineCode, Stated,
+        Answers, BundledPlugin, Entered, ForeignBindings, Guest, Lift, Lower, MachineCode, Stated,
         Trampoline, shared_engine,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireReturn, WireType},
@@ -172,7 +172,7 @@ impl Plugin {
     /// A trampoline holds the instance's handles and enters them through the caller it is called with, which is that same store: the module's frames are counted where the program's are.
     pub(crate) fn instantiate(
         self: &Arc<Self>,
-        store: &mut Store<()>,
+        store: &mut Store<Guest>,
         answers: &mut Answers,
     ) -> Result<(), String> {
         let subject = &self.subject;
@@ -265,7 +265,7 @@ impl Instantiated {
     fn write(
         &self,
         subject: &Subject,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         bytes: &[u8],
     ) -> wasmtime::Result<u32> {
         let length = u32::try_from(bytes.len()).map_err(|_| {
@@ -301,7 +301,7 @@ impl Instantiated {
         &self,
         subject: &Subject,
         export: &str,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         offset: u32,
         length: u32,
     ) -> wasmtime::Result<Vec<u8>> {
@@ -398,7 +398,7 @@ impl Returns {
 fn lower_scalar(
     crossing: Crossing,
     value: Val,
-    caller: &mut Caller<'_, ()>,
+    caller: &mut Caller<'_, Guest>,
     slot: &mut [Val],
     subject: &Subject,
     export: &str,
@@ -505,7 +505,7 @@ impl Row {
         subject: &Subject,
         instantiated: &Instantiated,
         entry: Entry,
-        caller: &mut Caller<'_, ()>,
+        caller: &mut Caller<'_, Guest>,
         given: &[Val],
         answers: &mut [Val],
     ) -> wasmtime::Result<()> {

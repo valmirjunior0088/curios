@@ -3,7 +3,7 @@
 //! The entry answers the first turn and [`ADVANCE`] every later one, each turn the five values [`ADVANCE`] states. What crosses from one turn to the next — the rest, and the cancel a deadlock runs — is held as an owned root, and everything else a turn hands back is read inside a root scope of its own, so a run of any length holds what its present suspension needs and nothing it has finished with.
 
 use {
-    super::ExitTrap,
+    super::{ExitTrap, Guest},
     crate::{Handle, HostOps},
     curios_abi::{ADVANCE, DEADLOCK},
     wasmtime::{
@@ -37,7 +37,7 @@ enum Turned {
 ///
 /// A suspension on no handle can never be advanced, since no wait could end: its cancel is run to its end, [`DEADLOCK`] is reported on standard error, and the run ends with code `1`, as an exit does.
 pub(super) fn run_turns(
-    store: &mut Store<()>,
+    store: &mut Store<Guest>,
     instance: &Instance,
     entry: Func,
     host: &(dyn HostOps + Send + Sync),
@@ -74,7 +74,7 @@ pub(super) fn run_turns(
 
 /// Advance `description` by one turn.
 fn step(
-    store: &mut Store<()>,
+    store: &mut Store<Guest>,
     advance: &Advance,
     description: Option<OwnedRooted<AnyRef>>,
 ) -> Result<Turned, wasmtime::Error> {
@@ -87,7 +87,7 @@ fn step(
 
 /// Run `cancel` to its end, waiting where it suspends. One that suspends on no handle in turn is left where it stands, since nothing could wake it either.
 fn finish(
-    store: &mut Store<()>,
+    store: &mut Store<Guest>,
     advance: &Advance,
     cancel: Option<OwnedRooted<AnyRef>>,
     host: &(dyn HostOps + Send + Sync),
@@ -113,7 +113,7 @@ fn waited(host: &(dyn HostOps + Send + Sync), on: Vec<Handle>) -> Result<(), was
 
 /// What `turn` leaves to do, its references owned past the scope it was read in.
 fn took(
-    scope: &mut RootScope<&mut Store<()>>,
+    scope: &mut RootScope<&mut Store<Guest>>,
     (suspended, value, on, cancel, rest): Turn,
 ) -> Result<Turned, wasmtime::Error> {
     let mut owned = |reference: Option<Rooted<AnyRef>>| {
