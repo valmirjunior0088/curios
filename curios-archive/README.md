@@ -18,6 +18,14 @@ Zero-copy archiving for the workspace: the one crate that names rkyv ([One crate
 
 **Rationale.** A hand-written field adapter is that three-impl shape around one idea; written once here, a crate declaring a proxy names no rkyv trait. The stand-in is handed over borrowed rather than by value because the fixed prelude holds on the order of a hundred thousand qualifier occurrences over a couple of thousand distinct paths, and a by-value signature would clone once per occurrence on the way out.
 
+### A value interned by its spelling is read where the spelling lies
+
+**Decision.** `Spelled<Value>` states how a value spelled by a sequence of strings is archived as them and read back from them, and `BySpelling<P>` supplies the three rkyv adapter impls; `SpelledText` and `ByText` do the same for one string. Reading hands the implementor the archived strings where they lie (`Segments`), never strings of their own.
+
+**Rationale.** A path or a spelling is interned once per process, and an archive names the same few thousand of them a hundred thousand times. Read through a `Proxy`, each occurrence is deserialized as strings of its own and then looked up and dropped: an allocation for the path and for each segment, every time. Read where it lies, an occurrence of a name the process holds is a lookup, and the archived form is unchanged.
+
+**Rejected.** Archiving a path as a shared pointer, written once for an archive and restored through its pool: it moves the archived form of every unit, and an object of its own bytes is one archive, so a path two objects hold is restored once for each.
+
 ### The entry points fix the error type
 
 **Decision.** `to_bytes`, `from_bytes`, `access` and `deserialize` fix rkyv's error type to `rancor::Error`, hand back a `String`, and take rkyv's serializer, validator and deserializer bounds on themselves. `to_bytes` returns rkyv's aligned buffer behind a newtype rather than a `Vec<u8>`.

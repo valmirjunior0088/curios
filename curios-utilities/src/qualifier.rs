@@ -1,6 +1,6 @@
 //! `Qualifier` is a canonical, resolved identity: a sequence of module segments rooted at the module root. It is what the resolution tables key on, and what the elaborator tracks a binding's declaring and use-site module by, without re-deriving structure from a flattened string. It lives in the shared leaf every pipeline crate depends on because it depends on nothing of the core calculus.
 //!
-//! **A qualifier is a copyable identity.** Its segments are interned once per process — one allocation per distinct path, never freed — and a qualifier is a `&'static` reference to that allocation, so copying one is copying a pointer, two equal qualifiers share it, and one can cross a thread. The archive reads a path back through the same table ([`Interned`]). Why the segments are shared at all, and why no structural hash is cached on top, is `README.md`'s; the restore half of the interning figure is retaken by `curios-prelude-archive`'s `stored_prelude_measurements`, which is where a figure for it belongs.
+//! **A qualifier is a copyable identity.** Its segments are interned once per process — one allocation per distinct path, never freed — and a qualifier is a `&'static` reference to that allocation, so copying one is copying a pointer, two equal qualifiers share it, and one can cross a thread. The archive reads a path back through the same table, by its archived segments where they lie ([`Interned`]). Why the segments are shared at all, and why no structural hash is cached on top, is `README.md`'s; the restore half of the interning figure is retaken by `curios-prelude-archive`'s `stored_prelude_measurements`, which is where a figure for it belongs.
 //!
 //! **What a segment may spell lives here too**, as [`is_identifier`] and [`is_keyword`], rather than inside the lexer: `curios-text` refuses a keyword when it parses a path, and `curios-package` refuses one when it parses the name a package declares for itself, and one list below both keeps those two refusals the same refusal — `README.md`'s decision.
 
@@ -8,14 +8,15 @@
 mod tests;
 
 use {
-    super::{Table, intern},
+    curios_archive::Segments,
     std::{
+        borrow::Borrow,
         cmp::Ordering,
         collections::HashMap,
         fmt,
         hash::{Hash, Hasher},
         ptr,
-        sync::{LazyLock, Mutex},
+        sync::{LazyLock, Mutex, PoisonError},
     },
 };
 
@@ -54,12 +55,117 @@ pub struct Qualifier {
     segments: &'static Vec<String>,
 }
 
-/// Every path this process has named. See the `interner` module for why nothing is freed.
-static PATHS: LazyLock<Table<[String], Vec<String>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Every path this process has named, keyed by its segments. See the `interner` module for why nothing is freed.
+static PATHS: LazyLock<Mutex<HashMap<PathKey, &'static Vec<String>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// The segments of a path, as the table is asked for one: a path in hand, or one an archive holds where it lies.
+trait Spelling {
+    fn count(&self) -> usize;
+    fn segment(&self, index: usize) -> &str;
+}
+
+/// The segments of a path in hand.
+struct InHand<'a>(&'a [String]);
+
+impl Spelling for InHand<'_> {
+    fn count(&self) -> usize {
+        self.0.len()
+    }
+
+    fn segment(&self, index: usize) -> &str {
+        &self.0[index]
+    }
+}
+
+impl Spelling for Vec<String> {
+    fn count(&self) -> usize {
+        self.len()
+    }
+
+    fn segment(&self, index: usize) -> &str {
+        &self[index]
+    }
+}
+
+/// The segments an archive holds, read where they lie.
+struct Archived<'a>(&'a dyn Segments);
+
+impl Spelling for Archived<'_> {
+    fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    fn segment(&self, index: usize) -> &str {
+        self.0.segment(index)
+    }
+}
+
+/// Hashed segment by segment, so a path in hand and the same path an archive holds hash alike, whichever form the table is asked with.
+impl Hash for dyn Spelling + '_ {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_usize(self.count());
+        for index in 0..self.count() {
+            state.write(self.segment(index).as_bytes());
+            state.write_u8(0xff);
+        }
+    }
+}
+
+impl PartialEq for dyn Spelling + '_ {
+    fn eq(&self, other: &Self) -> bool {
+        self.count() == other.count()
+            && (0..self.count()).all(|index| self.segment(index) == other.segment(index))
+    }
+}
+
+impl Eq for dyn Spelling + '_ {}
+
+/// A path the table holds, as it keys it: borrowed as its segments, so a lookup by segments that lie in an archive builds nothing.
+#[derive(Clone, Copy)]
+struct PathKey(&'static Vec<String>);
+
+impl Hash for PathKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (self.0 as &dyn Spelling).hash(state);
+    }
+}
+
+impl PartialEq for PathKey {
+    fn eq(&self, other: &Self) -> bool {
+        (self.0 as &dyn Spelling) == (other.0 as &dyn Spelling)
+    }
+}
+
+impl Eq for PathKey {}
+
+impl<'a> Borrow<dyn Spelling + 'a> for PathKey {
+    fn borrow(&self) -> &(dyn Spelling + 'a) {
+        self.0
+    }
+}
+
+/// The one allocation of the path `spelling` spells, made only when this process has not named the path before.
+///
+/// A poisoned lock is taken as it stands, for the reason the `interner` module gives.
+fn interned_spelling(spelling: &dyn Spelling) -> &'static Vec<String> {
+    let mut paths = PATHS.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(&held) = paths.get(spelling) {
+        return held;
+    }
+    let held: &'static Vec<String> = Box::leak(Box::new(
+        (0..spelling.count())
+            .map(|index| spelling.segment(index).to_string())
+            .collect(),
+    ));
+    paths.insert(PathKey(held), held);
+
+    held
+}
 
 /// The one allocation of the path `segments` spells, copied into the table only when this process has not named the path before.
 fn interned(segments: &[String]) -> &'static Vec<String> {
-    intern(&PATHS, segments, || segments.to_vec(), Vec::as_slice)
+    interned_spelling(&InHand(segments))
 }
 
 /// The default qualifier is the root, which is a legitimate value.
@@ -226,24 +332,22 @@ where
     }
 }
 
-/// Reads an archived qualifier back into the process table every other occurrence of the same path already uses, instead of giving each occurrence its own allocation.
+/// Reads an archived qualifier back into the process table every other occurrence of the same path already uses, found by the archived segments where they lie, so an occurrence of a path the process has named allocates nothing.
 ///
-/// The archived bytes are the bare segment sequence, so the live representation is no part of the archive format. The fixed prelude's Core carries on the order of a hundred thousand qualifier occurrences drawn from a couple of thousand distinct paths, and reading each back through the table is what keeps that a couple of thousand allocations.
+/// The archived bytes are the bare segment sequence, so the live representation is no part of the archive format. The fixed prelude's Core carries on the order of a hundred thousand qualifier occurrences drawn from a couple of thousand distinct paths, and reading each back through the table where it lies is what keeps that a couple of thousand allocations, made once each.
 pub struct Interning;
 
 /// The field adapter: `#[archived_with(Interned)]`.
-pub type Interned = curios_archive::Via<Interning>;
+pub type Interned = curios_archive::BySpelling<Interning>;
 
-impl curios_archive::Proxy<&'static Vec<String>> for Interning {
-    type Archivable = Vec<String>;
-
+impl curios_archive::Spelled<&'static Vec<String>> for Interning {
     /// Borrowed, never cloned: the archived form is the `Vec` the table already holds, which is why the table holds a `Vec` rather than a slice.
-    fn to_archivable(path: &&'static Vec<String>) -> impl std::borrow::Borrow<Vec<String>> {
+    fn spelling(path: &&'static Vec<String>) -> impl Borrow<Vec<String>> {
         *path
     }
 
     /// The interning happens here, on the way in — the direction [`Interning`] is for.
-    fn from_archivable(segments: Vec<String>) -> Result<&'static Vec<String>, String> {
-        Ok(interned(&segments))
+    fn read(spelling: &dyn Segments) -> Result<&'static Vec<String>, String> {
+        Ok(interned_spelling(&Archived(spelling)))
     }
 }

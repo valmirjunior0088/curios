@@ -39,6 +39,9 @@ pub use pooled::*;
 mod proxy;
 pub use proxy::*;
 
+mod spelled;
+pub use spelled::*;
+
 mod serialize;
 pub use serialize::*;
 

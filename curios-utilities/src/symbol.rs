@@ -93,17 +93,16 @@ impl fmt::Display for Symbol {
 pub struct InterningText;
 
 /// The field adapter: `#[archived_with(InternedText)]`.
-pub type InternedText = curios_archive::Via<InterningText>;
+pub type InternedText = curios_archive::ByText<InterningText>;
 
-impl curios_archive::Proxy<&'static String> for InterningText {
-    type Archivable = String;
-
+impl curios_archive::SpelledText<&'static String> for InterningText {
     /// Borrowed, never cloned: the archived form is the `String` the table already holds.
-    fn to_archivable(text: &&'static String) -> impl std::borrow::Borrow<String> {
+    fn text(text: &&'static String) -> impl std::borrow::Borrow<String> {
         *text
     }
 
-    fn from_archivable(text: String) -> Result<&'static String, String> {
-        Ok(interned(&text))
+    /// Found by the archived spelling where it lies, so a spelling this process has interned allocates nothing.
+    fn read(text: &str) -> Result<&'static String, String> {
+        Ok(interned(text))
     }
 }

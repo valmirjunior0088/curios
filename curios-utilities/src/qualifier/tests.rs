@@ -65,3 +65,26 @@ fn a_qualifier_built_on_another_thread_is_the_same_identity() {
 
     assert_eq!(there, Qualifier::from(["crossing", "threads"]));
 }
+
+/// A path read back from an archive is the one the process table holds, whether the table held it before or the read names it first.
+#[test]
+fn a_qualifier_read_from_an_archive_is_the_one_interned() {
+    let named = Qualifier::from(["archived", "named", "before"]);
+    let bytes = curios_archive::to_bytes(&named).expect("a path archives");
+    assert_eq!(
+        curios_archive::from_bytes::<Qualifier>(&bytes).expect("a path reads back"),
+        named
+    );
+
+    // The same bytes with a segment the process has not named: the read names it.
+    let mut fresh = curios_archive::to_bytes(&Qualifier::from(["archived", "read", "first"]))
+        .expect("a path archives")
+        .to_vec();
+    let at = fresh
+        .windows(b"first".len())
+        .position(|window| window == b"first")
+        .expect("the archive spells the segment");
+    fresh[at..at + 5].copy_from_slice(b"fresh");
+    let read = curios_archive::from_bytes::<Qualifier>(&fresh).expect("a path reads back");
+    assert_eq!(read, Qualifier::from(["archived", "read", "fresh"]));
+}
