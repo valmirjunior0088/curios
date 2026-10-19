@@ -17,7 +17,9 @@ mod tests;
 
 use {
     crate::Global,
-    curios_utilities::{InKeyOrder, Qualifier, Sorted, Source, Span, Table, intern},
+    curios_utilities::{
+        Digest, InKeyOrder, Object, Qualifier, Records, Sorted, Source, Span, Table, intern,
+    },
     std::{
         cell::RefCell,
         cmp::Ordering,
@@ -196,18 +198,139 @@ struct Sited {
 /// Where each text of each anchor of one unit lies, and where each of the unit's definitions is named: what an [`Extent`] is resolved against, and where a report about a definition is placed when it holds no position of its own.
 ///
 /// **Persistent**, so the anchors of a unit lowered over a baseline are the baseline's with the texts and names of what it lowered again placed again.
+///
+/// **Each source's texts an object of its own** ([`SourceTexts`]), holding the source once, stored apart and handed back where the table is restored ([`Records`]): what is archived with the unit is where each definition is named. A source is the grain its texts are stored at, as a file is the grain a lowering reads at: the texts of every source are grouped and digested where the unit is filed, which reads each source once, as a compile reads each file.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Anchors {
     /// By anchor and then by stamp, so an anchor's texts are neighbours, and ordered by what is anchored, so a stored table is the same bytes whichever process wrote it.
-    #[archived_with(InKeyOrder)]
+    #[archived_with(curios_archive::Skip)]
     texts: Sorted<(Anchor, u32), Sited>,
     /// Where each definition's name was written, for the ones a name was written for: a constructor's tag and a method's label as much as a `let`'s, the head of a `satisfy` for the witness it declares.
     #[archived_with(InKeyOrder)]
     labels: Sorted<Global, Extent>,
 }
 
+/// The texts of one source as a store keeps them, an object of its own: the source, once, and each text's key with where it lies in it.
+#[curios_archive::archived]
+pub struct SourceTexts {
+    source: Source,
+    texts: Vec<SourceText>,
+}
+
+/// One text of a [`SourceTexts`]: its anchor and stamp, and where it lies in the source.
+#[curios_archive::archived]
+struct SourceText {
+    anchor: Anchor,
+    stamp: u32,
+    start: u64,
+    end: u64,
+}
+
+impl SourceTexts {
+    /// The object these texts are stored as: their archive, and the digest of it.
+    fn object(&self) -> Result<Object, String> {
+        curios_archive::to_bytes(self).map(|bytes| Object::of(bytes.to_vec()))
+    }
+}
+
+/// Where each declaration lies, restored out of what a unit stores of it: where each definition is named, archived with the unit, and each source's texts an object of its own, restored with the source shared by every text of it.
+impl Records for Anchors {
+    fn restored(table: &[u8], entries: &[Object]) -> Result<Self, String> {
+        let mut anchors = curios_archive::from_bytes::<Anchors>(table)?;
+        for object in entries {
+            let SourceTexts { source, texts } =
+                curios_archive::from_bytes::<SourceTexts>(object.bytes.as_slice())?;
+            let source = Arc::new(source);
+            for text in texts {
+                let (start, end) = (
+                    usize::try_from(text.start).map_err(|error| error.to_string())?,
+                    usize::try_from(text.end).map_err(|error| error.to_string())?,
+                );
+                if start > end || end > source.text.len() {
+                    return Err("a stored text lies outside its source".to_string());
+                }
+                anchors.texts.insert(
+                    (text.anchor, text.stamp),
+                    Sited {
+                        source: Arc::clone(&source),
+                        start,
+                        end,
+                    },
+                );
+            }
+        }
+
+        Ok(anchors)
+    }
+}
+
 impl Anchors {
+    /// Each source's texts, as a store keeps them: the sources in the order of the first text each holds, two holding the same path and text being one.
+    fn sources(&self) -> Vec<SourceTexts> {
+        let mut sources = Vec::<SourceTexts>::new();
+        // Where each source a text was sited in went, by where it lies in memory, and by its path.
+        let mut placed = HashMap::<*const Source, usize>::new();
+        let mut by_path = HashMap::<Option<&std::path::Path>, Vec<usize>>::new();
+        for ((anchor, stamp), sited) in self.texts.iter() {
+            let held = Arc::as_ptr(&sited.source);
+            let at = match placed.get(&held) {
+                Some(at) => *at,
+                None => {
+                    let path = sited.source.path.as_deref();
+                    let alike = by_path.get(&path).and_then(|candidates| {
+                        candidates
+                            .iter()
+                            .find(|at| sources[**at].source.text == sited.source.text)
+                            .copied()
+                    });
+                    let at = alike.unwrap_or_else(|| {
+                        sources.push(SourceTexts {
+                            source: Source {
+                                path: sited.source.path.clone(),
+                                text: sited.source.text.clone(),
+                            },
+                            texts: Vec::new(),
+                        });
+                        by_path.entry(path).or_default().push(sources.len() - 1);
+                        sources.len() - 1
+                    });
+                    placed.insert(held, at);
+                    at
+                }
+            };
+            sources[at].texts.push(SourceText {
+                anchor: *anchor,
+                stamp: *stamp,
+                start: sited.start as u64,
+                end: sited.end as u64,
+            });
+        }
+
+        sources
+    }
+
+    /// The digest of each source's texts, in the order a unit names them ([`Anchors::objects`]).
+    pub fn digests(&self) -> Result<Vec<Digest>, String> {
+        self.sources()
+            .iter()
+            .map(|texts| texts.object().map(|object| object.digest))
+            .collect()
+    }
+
+    /// The source texts `wanted` asks for, as the objects a store keeps them as, made now.
+    pub fn objects(&self, wanted: &dyn Fn(&Digest) -> bool) -> Result<Vec<Object>, String> {
+        let mut objects = Vec::new();
+        for texts in self.sources() {
+            let object = texts.object()?;
+            if wanted(&object.digest) {
+                objects.push(object);
+            }
+        }
+
+        Ok(objects)
+    }
+
     /// Record that `name` was written at `label`.
     pub fn name(&mut self, name: Global, label: Extent) {
         self.labels.insert(name, label);

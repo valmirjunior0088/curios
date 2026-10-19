@@ -131,3 +131,33 @@ fn an_unnamed_declaration_is_found_by_its_text() {
     assert_eq!(resolved.line_column(), (1, 22));
     assert!(later.resolve(&nat).is_none());
 }
+
+/// Where declarations lie is stored a source at a time: two texts of one source, the second sited in another copy of the same source, are one object, and the table restored from what it stores places each text where it lay.
+#[test]
+fn texts_are_stored_a_source_at_a_time() {
+    let text = "let first = 1;\nlet second = first;\n";
+    let (source, copy) = (Source::inline(text), Source::inline(text));
+    let other = Source::inline("let other = 2;");
+    let mut anchors = Anchors::default();
+    anchors.site(anchor("first"), &span_of(&source, "let first = 1;"));
+    anchors.site(anchor("second"), &span_of(&copy, "let second = first;"));
+    anchors.site(anchor("other"), &span_of(&other, "let other = 2;"));
+
+    let objects = anchors.objects(&|_| true).expect("the texts archive");
+    assert_eq!(objects.len(), 2, "one object a source");
+    assert_eq!(
+        objects
+            .iter()
+            .map(|object| object.digest)
+            .collect::<Vec<_>>(),
+        anchors.digests().expect("the texts archive")
+    );
+    let table = curios_archive::to_bytes(&anchors).expect("the table archives");
+    let restored = Anchors::restored(&table, &objects).expect("the table restores");
+    for (key, span) in anchors.texts() {
+        assert_eq!(
+            restored.text_of(key).as_ref().map(text_of),
+            Some(text_of(&span))
+        );
+    }
+}

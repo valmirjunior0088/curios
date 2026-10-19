@@ -10,7 +10,7 @@ use {
         },
     },
     curios_core::{
-        Anchors, Certification, Definition, DefinitionKind, Global, Item, Module, Nominal, Places,
+        Certification, Definition, DefinitionKind, Global, Item, Module, Nominal, Places,
         ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
     },
     curios_elab::{
@@ -432,6 +432,18 @@ fn std_image_division() {
             .expect("the certifier's reads serialize")
             .len();
         let records = lowering_stored(std.text()).len();
+        let anchors = {
+            let held = std.text().anchors();
+            curios_archive::to_bytes(held)
+                .expect("the anchors serialize")
+                .len()
+                + held
+                    .objects(&|_| true)
+                    .expect("the anchors serialize")
+                    .iter()
+                    .map(|object| object.bytes.as_slice().len())
+                    .sum::<usize>()
+        };
         let imports = {
             let held = std.text().imports();
             curios_archive::to_bytes(held)
@@ -444,7 +456,7 @@ fn std_image_division() {
                     .map(|object| object.bytes.as_slice().len())
                     .sum::<usize>()
         };
-        let [lowered, forms, _, _, _, _, _, anchors, _, _, _, _] = apart_parts(&apart)
+        let [lowered, forms, _, _, _, _, _, _, _, _, _, _, _] = apart_parts(&apart)
             .expect("what a unit stores apart")
             .map(|part| part.as_slice().len());
         // Each lowered item, then each erased form, is an object stored alone, and the elaborated items are the members of one run.
@@ -502,10 +514,10 @@ fn std_image_division() {
         row("  its erased forms, each stored alone", forms, None);
         row("  its elaborated items, one run read by item", module, None);
         row("what a report restores", anchors, None);
-        part!(
-            "  where its declarations lie",
-            Anchors,
-            std.text().anchors()
+        row(
+            "  where its declarations lie, each source's texts alone",
+            anchors,
+            None,
         );
         row(
             "what a recompile alone restores",

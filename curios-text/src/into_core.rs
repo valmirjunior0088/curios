@@ -72,7 +72,6 @@ use {
         Source, Span, SyntaxRegistry, grown,
     },
     std::{
-        borrow::Cow,
         cell::{OnceCell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
@@ -662,9 +661,9 @@ pub struct PreparedText {
     broken: Vec<BrokenItem>,
     /// Where each source declaration this unit was lowered from lies: what a position in one of its terms is resolved against where a report is made — see `curios_core::Anchors`.
     ///
-    /// **Stored apart from the unit** ([`PreparedText::anchors_bytes`]): a report placed in one of the unit's declarations reads them, and a lowering over the unit, and no compilation that reports nothing.
+    /// **Stored apart from the unit**, each source's texts an object ([`PreparedText::anchors_recorded`]): a report placed in one of the unit's declarations reads them, and a lowering over the unit, and no compilation that reports nothing.
     #[archived_with(curios_archive::Skip)]
-    anchors: curios_archive::Deferred<curios_core::Anchors>,
+    anchors: Recorded<curios_core::Anchors>,
     /// What each source declaration lowered to beside its items, with what it asked of its scope, held by pointer since a unit lowered over this one keeps the ones that stand, and what each of the unit's files declared — see `lowered`.
     ///
     /// **The unit's baseline half: what a later lowering of the same sources reads, and nothing compiled after this unit does.** So it is no part of what the unit is stored as for its successors. It is stored beside that, each record and each file's scan an object ([`PreparedText::baseline_digests`]), handed back where the unit is restored ([`PreparedText::with_baseline`]), and read when a lowering first asks.
@@ -897,20 +896,19 @@ impl PreparedText {
         &self.imports
     }
 
-    /// The bytes of where this unit's declarations lie, stored apart as its import scopes are.
-    pub fn anchors_bytes(&self) -> Result<Cow<'_, [u8]>, String> {
-        self.anchors.bytes()
+    /// Where this unit's declarations lie as it holds them, stored apart as its import scopes are, each source's texts an object.
+    pub fn anchors_recorded(&self) -> &Recorded<curios_core::Anchors> {
+        &self.anchors
     }
 
-    /// This unit with `imports` and `entries` as its import scopes and `anchors` as where its declarations lie ([`PreparedText::imports_recorded`], [`PreparedText::anchors_bytes`]), each read when something first asks: what a restored unit is given, since restoring it leaves it with neither.
+    /// This unit with `imports` as its import scopes and `anchors` as where its declarations lie, each its own part and the objects of its entries ([`PreparedText::imports_recorded`], [`PreparedText::anchors_recorded`]), each read when something first asks: what a restored unit is given, since restoring it leaves it with neither.
     pub fn with_reported(
         mut self,
-        imports: impl Into<Bytes>,
-        entries: Vec<Object>,
-        anchors: impl Into<Bytes>,
+        imports: (impl Into<Bytes>, Vec<Object>),
+        anchors: (impl Into<Bytes>, Vec<Object>),
     ) -> Self {
-        self.imports = Recorded::stored(imports, entries);
-        self.anchors = curios_archive::Deferred::stored(anchors);
+        self.imports = Recorded::stored(imports.0, imports.1);
+        self.anchors = Recorded::stored(anchors.0, anchors.1);
         self
     }
 
@@ -3641,7 +3639,7 @@ fn into_core_unit_within(
         ),
         credited: BTreeSet::new(),
         reached,
-        anchors: curios_archive::Deferred::held(shared.anchoring.into_anchors()),
+        anchors: Recorded::held(shared.anchoring.into_anchors()),
         baseline: Recorded::held(BaselineHalf {
             declarations: records,
             scans,

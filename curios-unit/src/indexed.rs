@@ -3,7 +3,7 @@
 use {
     crate::rerun,
     curios_archive::{Bytes, parted},
-    curios_core::{Global, HeldReads, Imports, ItemRun, Module, Read, ReadTable},
+    curios_core::{Anchors, Global, HeldReads, Imports, ItemRun, Module, Read, ReadTable},
     curios_elab::{HeldTrace, TraceTable, Traces},
     curios_text::PreparedText,
     curios_utilities::{Digest, Member, Object, Recorded},
@@ -69,6 +69,11 @@ pub(crate) enum Kind {
         text: Rc<PreparedText>,
         digests: Vec<Digest>,
     },
+    /// Where a lowering's declarations lie, each source's texts stored alone, by their digests.
+    Anchors {
+        text: Rc<PreparedText>,
+        digests: Vec<Digest>,
+    },
 }
 
 impl Kind {
@@ -79,9 +84,9 @@ impl Kind {
             Kind::Items { named, .. } => Box::new(named.iter().map(|(_, digest)| digest)),
             Kind::Traces(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
             Kind::Reads(entries) => Box::new(entries.iter().map(|(digest, ..)| digest)),
-            Kind::Lowering { digests, .. } | Kind::Imports { digests, .. } => {
-                Box::new(digests.iter())
-            }
+            Kind::Lowering { digests, .. }
+            | Kind::Imports { digests, .. }
+            | Kind::Anchors { digests, .. } => Box::new(digests.iter()),
         }
     }
 
@@ -144,6 +149,14 @@ impl Kind {
                     .collect::<BTreeSet<_>>();
 
                 imports(text)?.objects(&|digest| wanted.contains(digest))
+            }
+            Kind::Anchors { text, digests } => {
+                let wanted = digests
+                    .iter()
+                    .filter(|digest| fresh(digest))
+                    .collect::<BTreeSet<_>>();
+
+                anchors(text)?.objects(&|digest| wanted.contains(digest))
             }
             Kind::Reads(entries) => {
                 let entries = entries
@@ -288,6 +301,30 @@ pub(crate) fn imports_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>,
     Ok((
         Cow::Owned(curios_archive::to_bytes(held)?.to_vec()),
         Kind::Imports {
+            text: Rc::clone(text),
+            digests: held.digests()?,
+        },
+    ))
+}
+
+/// Where the declarations `text` lowered lie.
+fn anchors(text: &PreparedText) -> Result<&Anchors, String> {
+    text.anchors_recorded().get()
+}
+
+/// What a unit stores of where the declarations `text` lowered lie: its own part and the kind of its entries, what it was restored from where it was and its own otherwise.
+pub(crate) fn anchors_indexed(text: &Rc<PreparedText>) -> Result<(Cow<'_, [u8]>, Kind), String> {
+    if let Some((table, entries)) = text.anchors_recorded().as_stored() {
+        return Ok((
+            Cow::Borrowed(table.as_slice()),
+            Kind::Stored(entries.to_vec()),
+        ));
+    }
+    let held = anchors(text)?;
+
+    Ok((
+        Cow::Owned(curios_archive::to_bytes(held)?.to_vec()),
+        Kind::Anchors {
             text: Rc::clone(text),
             digests: held.digests()?,
         },

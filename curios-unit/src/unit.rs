@@ -2,8 +2,8 @@
 
 use {
     crate::{
-        Indexed, Kind, apart_parts, digests, found, halved, halves, imports_indexed,
-        lowering_indexed, reads_indexed, traces_indexed,
+        Indexed, Kind, anchors_indexed, apart_parts, digests, found, halved, halves,
+        imports_indexed, lowering_indexed, reads_indexed, traces_indexed,
     },
     curios_abi::ForeignStore,
     curios_archive::{Bytes, joined, parted},
@@ -169,8 +169,8 @@ impl Uncertified {
         let (asked_table, asked) = traces_indexed(self.erased.recorded())?;
         let (text, lowering) = lowering_indexed(&self.text)?;
         let (imports, scopes) = imports_indexed(&self.text)?;
-        let anchors = self.text.anchors_bytes()?;
-        let mut kinds = vec![elaborated, traces, asked, lowering, scopes];
+        let (anchors, places) = anchors_indexed(&self.text)?;
+        let mut kinds = vec![elaborated, traces, asked, lowering, scopes, places];
 
         let mut parts = vec![
             digests(items.iter().map(|object| &object.digest)),
@@ -244,6 +244,7 @@ impl Uncertified {
             asked,
             lowering,
             scopes,
+            places,
             anchors,
             imports,
             text,
@@ -256,7 +257,10 @@ impl Uncertified {
             text: Rc::new(
                 Rc::unwrap_or_clone(self.text)
                     .with_baseline(text, found(&lowering, find)?)
-                    .with_reported(imports, found(&scopes, find)?, anchors)
+                    .with_reported(
+                        (imports, found(&scopes, find)?),
+                        (anchors, found(&places, find)?),
+                    )
                     .with_items(found(&items, find)?)?,
             ),
             erased: Rc::new(
