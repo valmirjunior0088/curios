@@ -1,15 +1,23 @@
 //! What one unit provides to its successors, and what it is before a certifier has walked it.
 
 use {
-    crate::{apart_parts, halved, halves},
+    crate::{apart_parts, digests, found, halved, halves},
     curios_abi::ForeignStore,
     curios_archive::{Bytes, Deferred, joined, parted},
     curios_core::{Certification, Lexicon, Module, Places, Sharing},
     curios_elab::{ErasedUnit, Projection, Readers, Traces},
     curios_text::PreparedText,
-    curios_utilities::Mount,
+    curios_utilities::{Digest, Mount, Object},
     std::{cell::OnceCell, rc::Rc},
 };
+
+/// A unit as it is stored: its index, which every compilation after the unit restores and which names each object the unit stores on its own by its digest alone, and those objects.
+///
+/// **The index is a function of what was compiled**, since it names an object by what the object holds and never by where it is kept: a recompile files the index a whole compile files, and a record digests the index alone and so vouches for every object it names.
+pub struct Indexed {
+    pub index: Vec<u8>,
+    pub objects: Vec<Object>,
+}
 
 /// A unit as its compilation produced it, before the kernel has judged it: everything a [`Unit`] holds except the certifier's record.
 ///
@@ -154,10 +162,10 @@ impl Uncertified {
         self.readers.get_or_init(|| Readers::of(self.traces()))
     }
 
-    /// The bytes this unit stores apart from itself, each part behind its length ([`joined`]) and read by whoever asks for it: its lowered items and its erased forms, one on its own for each ([`PreparedText::items_bytes`], [`ErasedUnit::items_bytes`]), its elaborated module's archive, read by item ([`Module::stored`]), then its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
-    pub fn apart_bytes(&self) -> Result<Vec<u8>, String> {
-        let items = self.text.items_bytes()?;
-        let forms = self.erased.items_bytes()?;
+    /// What this unit stores apart from itself, each part behind its length ([`joined`]) and read by whoever asks for it, with the objects it names: its lowered items and its erased forms, each an object of its own named by its digest ([`PreparedText::items_objects`], [`ErasedUnit::items_objects`]), its elaborated module's archive, read by item ([`Module::stored`]), then its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
+    pub fn apart(&self) -> Result<(Vec<u8>, Vec<Object>), String> {
+        let items = self.text.items_objects()?;
+        let forms = self.erased.items_objects()?;
         let module = curios_archive::to_bytes(&*self.core)?;
         let anchors = self.text.anchors_bytes()?;
         let imports = self.text.imports_bytes()?;
@@ -165,27 +173,37 @@ impl Uncertified {
         let traces = self.traces.bytes()?;
         let erased = self.erased.baseline_bytes()?;
 
-        Ok(joined(&[
-            &items[..],
-            &forms[..],
+        let apart = joined(&[
+            &digests(&items)[..],
+            &digests(&forms)[..],
             &module[..],
             &anchors[..],
             &imports[..],
             &text[..],
             &traces[..],
             &erased[..],
-        ]))
+        ]);
+
+        Ok((apart, items.into_iter().chain(forms).collect()))
     }
 
-    /// The bytes this unit is imaged as: itself, then what it stores apart from itself ([`halved`]).
-    pub fn stored(&self) -> Result<Vec<u8>, String> {
+    /// This unit as it is imaged: its index, itself and then what it stores apart from itself ([`halved`]), and the objects the index names.
+    pub fn stored(&self) -> Result<Indexed, String> {
         let unit = curios_archive::to_bytes(self)?;
+        let (apart, objects) = self.apart()?;
 
-        Ok(halved(&unit, &self.apart_bytes()?))
+        Ok(Indexed {
+            index: halved(&unit, &apart),
+            objects,
+        })
     }
 
-    /// This unit with `bytes` as what it stores apart from itself ([`Uncertified::apart_bytes`]), each part a run of the buffer they are in and read when something first asks for it — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing.
-    pub fn with_apart(self, bytes: impl Into<Bytes>) -> Result<Self, String> {
+    /// This unit with `bytes` as what it stores apart from itself ([`Uncertified::apart`]), each part a run of the buffer they are in and read when something first asks for it, and each object they name found by `find` now — see [`PreparedText::with_items`] and [`PreparedText::with_baseline`]. `Err` is bytes that are no such thing, or name an object `find` holds none for.
+    pub fn with_apart(
+        self,
+        bytes: impl Into<Bytes>,
+        find: &dyn Fn(&Digest) -> Option<Bytes>,
+    ) -> Result<Self, String> {
         let bytes = bytes.into();
         let fixed = matches!(bytes, Bytes::Constant(_));
         let [items, forms, module, anchors, imports, text, traces, erased] =
@@ -197,12 +215,12 @@ impl Uncertified {
                 Rc::unwrap_or_clone(self.text)
                     .with_baseline(text)
                     .with_reported(imports, anchors)
-                    .with_items(items)?,
+                    .with_items(found(&items, find)?)?,
             ),
             erased: Rc::new(
                 Rc::unwrap_or_clone(self.erased)
                     .with_baseline(erased)
-                    .with_items(forms)?,
+                    .with_items(found(&forms, find)?)?,
             ),
             traces: Rc::new(Deferred::stored(traces)),
             readers: Rc::default(),
@@ -308,14 +326,14 @@ impl Unit {
         Rc::ptr_eq(&self.unit.core, &other.unit.core)
     }
 
-    /// The bytes this unit is stored as: itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]), then what it stores apart from itself ([`Uncertified::apart_bytes`]) and what the certifier's record does, what judging each definition read ([`Certification::reads_bytes`]), each behind its length.
+    /// This unit as it is stored: its index, itself, its elaborated module hash-consed in a table of its own ([`Module::shared`]), then what it stores apart from itself ([`Uncertified::apart`]) and what the certifier's record does, what judging each definition read ([`Certification::reads_bytes`]), each behind its length; and the objects the index names.
     ///
     /// **A stored unit says what its items mean, not where they were written or how they were come by.** A consed module is one node for each structure as it is spelled, under no position, so an item elaborated now and the same item reused from a baseline are the same nodes, and one moved by an edit above it is stored as it was. The fixed prelude's images are consed by the same pass, where they are built.
     ///
     /// Run here and not where a unit is assembled: the pass builds a node for every node of the module, and a unit that is neither filed nor followed — a keystroke's — is never serialized.
-    pub fn stored(&self) -> Result<Vec<u8>, String> {
+    pub fn stored(&self) -> Result<Indexed, String> {
         let consed = self.unit.consed();
-        let apart = consed.apart_bytes()?;
+        let (apart, objects) = consed.apart()?;
         let unit = curios_archive::to_bytes(&Unit {
             unit: consed,
             certification: Rc::clone(&self.certification),
@@ -323,19 +341,22 @@ impl Unit {
 
         let reads = self.certification.reads_bytes()?;
 
-        Ok(halved(&unit, &joined(&[&apart[..], &reads[..]])))
+        Ok(Indexed {
+            index: halved(&unit, &joined(&[&apart[..], &reads[..]])),
+            objects,
+        })
     }
 
-    /// The unit stored as `artifact` ([`Unit::stored`]): decoded, what it stores apart from itself kept as the bytes it is, for whoever asks. `Err` is bytes that hold no unit.
-    pub fn restored(artifact: &[u8]) -> Result<Self, String> {
-        let (unit, apart) = halves(artifact).ok_or("not a unit's artifact")?;
+    /// The unit whose index is `index` ([`Unit::stored`]), each object it names found by `find`: decoded, what it stores apart from itself kept as the bytes it is, for whoever asks. `Err` is bytes that hold no unit, or an object `find` holds none for.
+    pub fn restored(index: &[u8], find: impl Fn(&Digest) -> Option<Bytes>) -> Result<Self, String> {
+        let (unit, apart) = halves(index).ok_or("not a unit's index")?;
         let restored = curios_archive::from_bytes::<Unit>(unit)?;
         let [apart, reads]: [Bytes; 2] = parted(&Bytes::from(apart.to_vec()))
             .and_then(|parts| parts.try_into().ok())
             .ok_or("not what a certified unit stores apart from itself")?;
 
         Ok(Self {
-            unit: restored.unit.with_apart(apart)?,
+            unit: restored.unit.with_apart(apart, &find)?,
             certification: Rc::new(Rc::unwrap_or_clone(restored.certification).with_reads(reads)),
         })
     }

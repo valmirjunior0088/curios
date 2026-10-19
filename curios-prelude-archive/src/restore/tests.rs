@@ -116,8 +116,9 @@ fn string_literal_machinery_is_monomorphic() {
 
 #[test]
 fn a_truncated_archive_is_rejected() {
-    for (root, bytes) in ROOTS {
-        assert!(validate_bytes(root, &bytes[..bytes.len() / 2]).is_err());
+    for (root, bytes, pack) in ROOTS {
+        assert!(validate_bytes(root, &bytes[..bytes.len() / 2], pack).is_err());
+        assert!(validate_bytes(root, bytes, &pack[..pack.len() / 2]).is_err());
     }
 }
 
@@ -344,10 +345,10 @@ fn a_declaration_of_a_pure_module_reaches_no_foreign_declaration() {
     assert!(crossings.is_empty(), "{crossings:#?}");
 }
 
-/// The record ahead of each image digests exactly the unit segment behind it, as a slot's record digests the unit it was filed with.
+/// The record ahead of each image digests exactly the index behind it, as a slot's record digests the index it was filed with.
 #[test]
-fn each_record_digests_the_unit_segment_it_sits_ahead_of() {
-    for (root, bytes) in ROOTS {
+fn each_record_digests_the_index_it_sits_ahead_of() {
+    for (root, bytes, _) in ROOTS {
         let (record, unit) = segments(bytes).unwrap_or_else(|| panic!("/{root} is a stored unit"));
         let record = curios_archive::from_bytes::<Record>(record)
             .unwrap_or_else(|error| panic!("/{root} record restores: {error}"));

@@ -2,7 +2,7 @@
 //!
 //! `.curios/` sits beside the governing root — the umbrella's manifest when one governs the invocation, the package's otherwise — and it is **the only generated directory in the tree**: member directories hold user files and nothing else.
 //!
-//! It holds six families, each in its own subtree rather than sharing one namespace, and each named for what it holds:
+//! It holds seven families, each in its own subtree rather than sharing one namespace, and each named for what it holds:
 //!
 //! ```text
 //! .curios/
@@ -11,6 +11,7 @@
 //!   sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
 //!   foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
 //!   verdicts/       <slot>          judged units, one file per unit and compiler
+//!   objects/        <slot>/<pack>   what each unit's slot names, in packs beside it
 //!   payloads/       <slot>          precompiled payloads, one file per executable, compiler and engine
 //! ```
 //!
@@ -18,7 +19,7 @@
 //!
 //! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
 //!
-//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `sources/`, `foreign/`, `verdicts/` and `payloads/` families — never `executables/` or `documentation/`, which belong to the package that declared them — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
+//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `sources/`, `foreign/`, `verdicts/`, `objects/` and `payloads/` families — never `executables/` or `documentation/`, which belong to the package that declared them — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
 //!
 //! The family names are the plural of their contents, and the words are the ones the rest of the toolchain already uses: the manifest's `[[executables]]`, the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing store rebuilds once.
 
@@ -34,9 +35,9 @@ use {
 /// The generated directory itself.
 pub const STORE: &str = ".curios";
 
-/// Where a project's generated things go: two families beside it, four in a cache it shares with every other project.
+/// Where a project's generated things go: two families beside it, five in a cache it shares with every other project.
 ///
-/// **The split is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a fetched foreign module by its `f1:` hash, a judged unit by an address over its mounts, its compiler and its predecessors, and a precompiled payload by an address over that chain, the executable's identity and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all four are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they stay local. Content-derived keys are what make an upper layer possible at all; a path-keyed store could only ever have been local.
+/// **The split is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a fetched foreign module by its `f1:` hash, a judged unit by an address over its mounts, what it declared and its compiler, the objects its slot names by that address and their own digests, and a precompiled payload by an address over the executable's identity, the compiler and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all five are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they stay local. Content-derived keys are what make an upper layer possible at all; a path-keyed store could only ever have been local.
 pub struct Store {
     /// The governing root — the umbrella's directory when one governs, the package's otherwise.
     project: PathBuf,
@@ -105,6 +106,13 @@ impl Store {
         self.shared.join("verdicts").join(slot)
     }
 
+    /// Where the objects the slots at `slot` name are kept: the packs its filings wrote, beside the slot and named by what they hold.
+    ///
+    /// A directory for each address rather than one for the store, because an address is a unit's through every edit and a unit's baseline is its own address's slot: what a slot names is in its own directory, so finding it lists one directory, and two units never write one.
+    pub fn objects(&self, slot: &str) -> PathBuf {
+        self.shared.join("objects").join(slot)
+    }
+
     /// Where an executable's precompiled payload is filed, under the address its own identity, the compiler and the engine decide: one file, laid out as a unit's is, with what it was compiled *from* verified when the slot is opened.
     ///
     /// Shared rather than project-local, for the reason the type states: the address says nothing about which project asked. `executables/` stays local because a built executable's identity *is* project-relative; the payload inside it is not.
@@ -130,7 +138,7 @@ fn shared() -> Option<PathBuf> {
 /// What version of the verdict family's layout a key names.
 ///
 /// In the key rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what a slot holds, or what a hit is verified against, changes.
-const SCHEMA: &str = "u61";
+const SCHEMA: &str = "u62";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
 const PAYLOAD_SCHEMA: &str = "p9";

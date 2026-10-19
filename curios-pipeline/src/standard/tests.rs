@@ -23,7 +23,7 @@ use {
         Label, LetSignature, Overlay, PreparedText, RootSource, SYNTAX, TopItem, TopLet, TopMod,
         Translation, UnitSource, into_core_unit, into_core_unit_over,
     },
-    curios_unit::{Predecessors, Unit, apart_parts, halves},
+    curios_unit::{Pack, Packed, Predecessors, Unit, apart_parts, halves, packed},
     curios_utilities::{Qualifier, RootKind, digest, test_support::Temporary},
     std::{
         cell::RefCell,
@@ -248,8 +248,8 @@ fn std_unit_reproduction() {
         println!("  items       {}", first.core().items.len());
         println!("  differing   {differing:?}");
         assert!(
-            first.stored().expect("a unit serializes")
-                == second.stored().expect("a unit serializes")
+            first.stored().expect("a unit serializes").index
+                == second.stored().expect("a unit serializes").index
                 && stored!(&first) == stored!(&second),
             "two compilations of the standard library store two units, differing in {differing:?}"
         );
@@ -353,8 +353,8 @@ fn std_recompile_reproduction() {
             println!("{label}");
             assert_stored_alike(&whole, &over);
             println!(
-                "  stored      {:>10} bytes either way",
-                whole.stored().expect("a unit serializes").len()
+                "  indexed     {:>10} bytes either way",
+                whole.stored().expect("a unit serializes").index.len()
             );
         }
     });
@@ -420,7 +420,7 @@ fn std_image_division() {
         }
 
         let stored = std.stored().expect("the library's unit serializes");
-        let (unit, apart) = halves(&stored).expect("a unit's artifact");
+        let (unit, apart) = halves(&stored.index).expect("a unit's index");
         let [apart, reads]: [curios_archive::Bytes; 2] =
             curios_archive::parted(&curios_archive::Bytes::from(apart.to_vec()))
                 .and_then(|parts| parts.try_into().ok())
@@ -438,9 +438,22 @@ fn std_image_division() {
         ] = apart_parts(&apart)
             .expect("what a unit stores apart")
             .map(|part| part.as_slice().len());
+        // Each lowered item, then each erased form, is an object the index names by its digest.
+        let objects = |range: std::ops::Range<usize>| {
+            stored.objects[range]
+                .iter()
+                .map(|object| object.bytes.as_slice().len())
+                .sum::<usize>()
+        };
+        let (lowered, forms) = (lowered / 32, forms / 32);
+        let (lowered, forms) = (objects(0..lowered), objects(lowered..lowered + forms));
 
         println!("\n=== how /std's stored unit divides ===");
-        row("the artifact", stored.len(), None);
+        row(
+            "the index and its objects",
+            stored.index.len() + lowered + forms,
+            None,
+        );
         row(
             "what a successor restores",
             unit.len(),
@@ -549,10 +562,21 @@ fn std_image_division() {
             "    serializing the unit, consed",
             std.stored().expect("a unit serializes")
         );
-        timed!("    digesting the artifact", digest(&stored));
+        timed!("    digesting the index", digest(&stored.index));
+        let pack = Pack::read(curios_archive::Bytes::from(packed(
+            stored.objects.iter().map(|object| Packed {
+                digest: object.digest,
+                bytes: object.bytes.as_slice(),
+                member: None,
+            }),
+        )))
+        .expect("a unit's objects pack");
         timed!(
-            "    restoring the artifact",
-            Unit::restored(&stored).expect("a unit restores")
+            "    restoring the unit",
+            Unit::restored(&stored.index, |digest| pack
+                .get(digest)
+                .map(|found| found.bytes))
+            .expect("a unit restores")
         );
     });
 }

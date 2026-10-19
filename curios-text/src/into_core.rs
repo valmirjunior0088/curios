@@ -65,11 +65,11 @@ use {
         TupleField, UseGroup, WithoutItems, func_sugar_type_params, ordered, tree_of,
     },
     curios_abi::{ForeignFunction, ForeignStore},
-    curios_archive::{Bytes, joined, parted},
+    curios_archive::Bytes,
     curios_document::Documentation,
     curios_utilities::{
-        Mount, Persistent, Plicity, Qualifier, Report, RootKind, Source, Span, SyntaxRegistry,
-        grown,
+        Mount, Object, Persistent, Plicity, Qualifier, Report, RootKind, Source, Span,
+        SyntaxRegistry, grown,
     },
     std::{
         borrow::Cow,
@@ -883,8 +883,8 @@ impl PreparedText {
         self
     }
 
-    /// The bytes of this unit's lowered items, each stored on its own behind how many they are and how long each is ([`joined`]): the ones an item was restored from where the unit holds it as it was read, of this unit or of a baseline it is a version of, and its archive, made now, otherwise.
-    pub fn items_bytes(&self) -> Result<Vec<u8>, String> {
+    /// This unit's lowered items, each an object stored on its own, in the order of the items: the one an item was restored from where the unit holds it as it was read, of this unit or of a baseline it is a version of, and its archive, made and digested now, otherwise.
+    pub fn items_objects(&self) -> Result<Vec<Object>, String> {
         let items = &self.core.items;
         items
             .places()
@@ -892,24 +892,22 @@ impl PreparedText {
                 Some(stored) => {
                     debug_assert!(
                         curios_archive::to_bytes(&items[place])
-                            .is_ok_and(|made| *made == *stored.as_slice()),
+                            .is_ok_and(|made| *made == *stored.bytes.as_slice()),
                         "an item kept as it was stored is stored as it was"
                     );
 
-                    Ok(Cow::Borrowed(stored.as_slice()))
+                    Ok(stored.clone())
                 }
                 None => {
-                    curios_archive::to_bytes(&items[place]).map(|made| Cow::Owned(made.to_vec()))
+                    curios_archive::to_bytes(&items[place]).map(|made| Object::of(made.to_vec()))
                 }
             })
-            .collect::<Result<Vec<_>, String>>()
-            .map(|parts| joined(&parts))
+            .collect()
     }
 
-    /// This unit with `bytes` as its lowered items ([`PreparedText::items_bytes`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves its module without one. `Err` is bytes that hold no such items, or not one for each the unit outlines.
-    pub fn with_items(mut self, bytes: impl Into<Bytes>) -> Result<Self, String> {
-        let parts = parted(&bytes.into()).ok_or("not a unit's lowered items")?;
-        self.core.items = self.core.items.with_parts(parts)?;
+    /// This unit with `objects` as its lowered items ([`PreparedText::items_objects`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves its module without one. `Err` is not one for each item the unit outlines.
+    pub fn with_items(mut self, objects: Vec<Object>) -> Result<Self, String> {
+        self.core.items = self.core.items.with_parts(objects)?;
 
         Ok(self)
     }

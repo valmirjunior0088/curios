@@ -11,9 +11,9 @@
 use {
     super::{Binding, Environment, Projection},
     crate::{Answered, Foreign, Question, Readers, Traces, part_digest},
-    curios_archive::{Bytes, Deferred, joined, parted},
+    curios_archive::{Bytes, Deferred},
     curios_core::{Extent, Free, Global, Item, Module, Places, Trace},
-    curios_utilities::{Ordered, Persistent, digest},
+    curios_utilities::{Digest, Object, Ordered, Persistent, digest},
     std::{
         borrow::{Borrow, Cow},
         cell::OnceCell,
@@ -254,7 +254,7 @@ type InductRowRead<'a> = (
 #[derive(Debug, Clone, Default)]
 pub struct ErasedIndex {
     /// Each item's erased form, by its place.
-    items: Ordered<Rc<Deferred<ErasedItem>>>,
+    items: Ordered<Rc<Form>>,
     /// The place of the item that declares each name.
     declared: Persistent<Global, i64>,
     /// The places of the items whose evaluation at initialization computes ([`curios_ersd::Module::computes`]): what a program links whether or not it names them, since whether one is observable is the program's to say.
@@ -330,7 +330,7 @@ fn place_of(position: i64) -> usize {
 ///
 /// Each is held by a handle of its own, the form or the bytes it was stored as until something reads it: a unit compiled over a baseline keeps the baseline's own handle for every item it does not erase again, so it copies none and reads none, and where it is filed that form's bytes are the ones it was restored from.
 ///
-/// **What the unit is restored with is its index**, which name each item declares and which items compute: the forms are stored beside it, one on its own for each ([`ErasedUnit::items_bytes`]), since erasing a unit reads the forms of the names its items use and a program the forms it links.
+/// **What the unit is restored with is its index**, which name each item declares and which items compute: the forms are stored beside it, each an object of its own ([`ErasedUnit::items_objects`]), since erasing a unit reads the forms of the names its items use and a program the forms it links.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct ErasedUnit {
@@ -367,7 +367,10 @@ impl ErasedUnit {
             place,
             item,
             Held {
-                erased: Rc::new(Deferred::held(erased)),
+                erased: Rc::new(Form {
+                    erased: Deferred::held(erased),
+                    digest: None,
+                }),
                 computes,
             },
         );
@@ -403,12 +406,13 @@ impl ErasedUnit {
     /// The erased form of the item at `place`, read out of its bytes now where the unit was restored and nothing has read it before.
     pub(super) fn item(&self, place: usize) -> &ErasedItem {
         self.form(place)
+            .erased
             .get()
             .unwrap_or_else(|error| panic!("a unit's erased form failed to restore: {error}"))
     }
 
     /// The handle of the erased form at `place`, which the unit holds.
-    fn form(&self, place: usize) -> &Rc<Deferred<ErasedItem>> {
+    fn form(&self, place: usize) -> &Rc<Form> {
         self.index
             .items
             .get(position(place))
@@ -418,7 +422,8 @@ impl ErasedUnit {
     /// The erased forms, in item order, each read as [`ErasedUnit::item`] reads it.
     pub(super) fn forms(&self) -> impl Iterator<Item = &ErasedItem> {
         self.index.items.iter().map(|(_, form)| {
-            form.get()
+            form.erased
+                .get()
                 .unwrap_or_else(|error| panic!("a unit's erased form failed to restore: {error}"))
         })
     }
@@ -443,7 +448,7 @@ impl ErasedUnit {
         })
     }
 
-    /// Whether the item declaring `name` holds one erased form in this unit and in `other`: the one handle, or two forms stored as the same bytes.
+    /// Whether the item declaring `name` holds one erased form in this unit and in `other`: the one handle, or two forms stored as the same bytes, told by their digests where both were restored.
     pub(super) fn form_alike(&self, other: &ErasedUnit, name: &Global) -> bool {
         let (Some(this), Some(that)) = (self.place(name), other.place(name)) else {
             return false;
@@ -453,12 +458,18 @@ impl ErasedUnit {
             return true;
         }
 
-        matches!((this.bytes(), that.bytes()), (Ok(this), Ok(that)) if this == that)
+        match (this.digest, that.digest) {
+            (Some(this), Some(that)) => this == that,
+            _ => matches!(
+                (this.erased.bytes(), that.erased.bytes()),
+                (Ok(this), Ok(that)) if this == that
+            ),
+        }
     }
 
     /// The digest of the erased form of the item at `place`, whole, as it is stored.
     fn form_digest(&self, place: usize) -> Result<String, String> {
-        self.form(place).bytes().map(|bytes| digest(&bytes))
+        self.form(place).object().map(|object| object.digest.hex())
     }
 
     /// The places of the items that compute at initialization, ascending.
@@ -516,19 +527,17 @@ impl ErasedUnit {
         self
     }
 
-    /// The bytes of this unit's erased forms, each stored on its own behind how many they are and how long each is ([`joined`]): the ones a form was restored from, and otherwise its archive, made now.
-    pub fn items_bytes(&self) -> Result<Vec<u8>, String> {
+    /// This unit's erased forms, each an object stored on its own, in the order of the items: the one a form was restored from, and otherwise its archive, made and digested now.
+    pub fn items_objects(&self) -> Result<Vec<Object>, String> {
         self.index
             .items
             .iter()
-            .map(|(_, erased)| erased.bytes())
-            .collect::<Result<Vec<_>, _>>()
-            .map(|parts| joined(&parts))
+            .map(|(_, form)| form.object())
+            .collect()
     }
 
-    /// This unit with `bytes` as its erased forms ([`ErasedUnit::items_bytes`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves it with none. `Err` is bytes that hold no such forms, or not one for each item the unit's index names.
-    pub fn with_items(mut self, bytes: impl Into<Bytes>) -> Result<Self, String> {
-        let items = parted(&bytes.into()).ok_or("not a unit's erased forms")?;
+    /// This unit with `objects` as its erased forms ([`ErasedUnit::items_objects`]), each read when something first asks for it: what a restored unit is given, since restoring it leaves it with none. `Err` is not one for each item the unit's index names.
+    pub fn with_items(mut self, items: Vec<Object>) -> Result<Self, String> {
         let named = |at: i64| usize::try_from(at).is_ok_and(|place| place < items.len());
         if !self.index.declared.iter().all(|(_, at)| named(*at))
             || !self.index.computing.iter().all(|(at, _)| named(at))
@@ -537,8 +546,14 @@ impl ErasedUnit {
         }
 
         let mut forms = Ordered::new();
-        for (place, bytes) in items.into_iter().enumerate() {
-            forms.insert(position(place), Rc::new(Deferred::stored(bytes)));
+        for (place, object) in items.into_iter().enumerate() {
+            forms.insert(
+                position(place),
+                Rc::new(Form {
+                    erased: Deferred::stored(object.bytes),
+                    digest: Some(object.digest),
+                }),
+            );
         }
         self.index.items = forms;
 
@@ -592,8 +607,32 @@ impl ErasedUnit {
 /// An item's erased form as a unit holds it, with whether evaluating it at initialization computes: what another unit keeps of it without reading it.
 #[derive(Debug, Clone)]
 pub(super) struct Held {
-    erased: Rc<Deferred<ErasedItem>>,
+    erased: Rc<Form>,
     computes: bool,
+}
+
+/// An item's erased form, in hand or read out of the object it was stored as, whose digest it keeps: what it is stored as again and compared by, digesting nothing.
+#[derive(Debug)]
+struct Form {
+    erased: Deferred<ErasedItem>,
+    /// The digest of the object the form was restored from, where it was.
+    digest: Option<Digest>,
+}
+
+impl Form {
+    /// The object this form is stored as: the one it was restored from, and otherwise its archive, made and digested now.
+    fn object(&self) -> Result<Object, String> {
+        match (self.digest, self.erased.as_stored()) {
+            (Some(digest), Some(bytes)) => Ok(Object {
+                digest,
+                bytes: bytes.clone(),
+            }),
+            _ => self
+                .erased
+                .bytes()
+                .map(|bytes| Object::of(bytes.into_owned())),
+        }
+    }
 }
 
 /// The units in scope, as what erasing another reads: the Core each was erased from, and its items' erased forms.

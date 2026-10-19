@@ -8,7 +8,7 @@ use {
     curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, RootSource, SYNTAX, UnitSource},
-    curios_unit::{Predecessors, Unit},
+    curios_unit::{Pack, Packed, Predecessors, Unit, packed},
     curios_utilities::{RootKind, test_support::Temporary},
     std::{fs, rc::Rc},
 };
@@ -416,11 +416,29 @@ pub(super) fn assert_modules_agree(whole: &Module, incremental: &Module) {
     assert_eq!(whole.tests, incremental.tests);
 }
 
-/// That `incremental` is stored as `whole` is: the same bytes, and where they are not, which parts.
+/// `unit` stored and restored, the objects its index names found in one pack of their own, as a store keeps them beside a slot.
+pub(crate) fn restored(unit: &Unit) -> Unit {
+    let stored = unit.stored().expect("a unit serializes");
+    let pack = Pack::read(curios_archive::Bytes::from(packed(
+        stored.objects.iter().map(|object| Packed {
+            digest: object.digest,
+            bytes: object.bytes.as_slice(),
+            member: None,
+        }),
+    )))
+    .expect("a unit's objects pack");
+
+    Unit::restored(&stored.index, |digest| {
+        pack.get(digest).map(|found| found.bytes)
+    })
+    .expect("a stored unit restores")
+}
+
+/// That `incremental` is stored as `whole` is: the same index, which names each object by its digest, and where they are not, which parts.
 ///
 /// A unit is stored with its elaborated module consed up to spelling under no position ([`Unit::stored`]), so what is left to differ is what the two compilations concluded.
 pub(crate) fn assert_stored_alike(whole: &Unit, incremental: &Unit) {
-    let stored = |unit: &Unit| unit.stored().expect("a unit serializes");
+    let stored = |unit: &Unit| unit.stored().expect("a unit serializes").index;
     if stored(whole) == stored(incremental) {
         return;
     }

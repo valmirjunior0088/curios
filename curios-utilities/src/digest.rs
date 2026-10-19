@@ -1,4 +1,4 @@
-//! SHA-256 as the workspace's one content digest: the hex digest of some bytes, and a [`Hasher`] that finishes into one.
+//! SHA-256 as the workspace's one content digest: the hex digest of some bytes, the [`Digest`] a store names an [`Object`] by, and a [`Hasher`] that finishes into one.
 //!
 //! This crate is the authority for `sha2`, on the rule that one crate names one external concern. Every digest a record is checked against, every store key and every tree hash is spelled through here, and every part of a key is framed the one way [`Fingerprint::feed`] states — so nothing above this crate names the algorithm, and no two keys can disagree about how their parts are separated.
 
@@ -6,8 +6,9 @@
 mod tests;
 
 use {
-    sha2::{Digest, Sha256},
-    std::hash::Hasher,
+    curios_archive::Bytes,
+    sha2::{Digest as _, Sha256},
+    std::{fmt, hash::Hasher},
 };
 
 /// The digest of `bytes`, for a caller checking one thing against a record of it.
@@ -18,6 +19,57 @@ pub fn digest(bytes: &[u8]) -> String {
     fingerprint.write(bytes);
 
     fingerprint.hex()
+}
+
+/// The digest of some bytes as its thirty-two bytes, for a caller that keeps many and compares them: what [`digest`] spells in hex, and what a store names an object by.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Digest([u8; 32]);
+
+impl Digest {
+    /// The digest of `bytes`.
+    pub fn of(bytes: &[u8]) -> Self {
+        Self(Sha256::digest(bytes).into())
+    }
+
+    /// The digest whose thirty-two bytes are `bytes`, as a table that keeps digests spells them.
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    /// The thirty-two bytes of this digest.
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// This digest in the hex [`digest`] spells it in.
+    pub fn hex(&self) -> String {
+        self.0.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+}
+
+impl fmt::Debug for Digest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", &self.hex()[..12])
+    }
+}
+
+/// The bytes a value was stored as, beside their digest: what a store keeps the value as and finds it by. A value restored from a store keeps the object it was read from, so storing it again digests nothing.
+#[derive(Debug, Clone)]
+pub struct Object {
+    pub digest: Digest,
+    pub bytes: Bytes,
+}
+
+impl Object {
+    /// `bytes` as an object, digested now.
+    pub fn of(bytes: impl Into<Bytes>) -> Self {
+        let bytes = bytes.into();
+
+        Self {
+            digest: Digest::of(bytes.as_slice()),
+            bytes,
+        }
+    }
 }
 
 /// A [`Hasher`] that finishes into a digest, for a key part whose producer speaks `std::hash` and whose consumer speaks SHA-256.

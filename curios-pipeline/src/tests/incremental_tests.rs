@@ -6,7 +6,7 @@ use {
     super::test_support::{
         assert_modules_agree, assert_stored_alike, carried_variances, compile_modules,
         keeps_lowered, mounted, read_from, recompile_after, recompile_modules, recompile_over,
-        reuses_body, unit_after, unit_of, unused_binders, written, written_files,
+        restored, reuses_body, unit_after, unit_of, unused_binders, written, written_files,
     },
     curios_core::{Enter, Item, Variance},
     curios_unit::Unit,
@@ -884,8 +884,7 @@ const FILES: [(&str, &str); 5] = [
 fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_a_name_it_wrote() {
     let (directory, modules) = written_files("standing-file", &FILES);
     let compiled = compile_modules(&modules).expect("the unit compiles");
-    let baseline = Unit::restored(&compiled.stored().expect("a unit serializes"))
-        .expect("a stored unit restores");
+    let baseline = restored(&compiled);
 
     fs::write(directory.join("b.crs"), "pub use /lib/d/{x};\n").expect("a fixture is rewritten");
     let incremental = recompile_modules(&read_from("lib", &directory), &baseline).unwrap();
@@ -925,8 +924,7 @@ fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_
 fn a_file_no_edit_reached_keeps_what_its_declarations_read_without_asking_them() {
     let (directory, modules) = written_files("unreached-file", &FILES);
     let compiled = compile_modules(&modules).expect("the unit compiles");
-    let baseline = Unit::restored(&compiled.stored().expect("a unit serializes"))
-        .expect("a stored unit restores");
+    let baseline = restored(&compiled);
 
     fs::write(directory.join("d.crs"), "pub let x: /std/Nat = 3;\n")
         .expect("a fixture is rewritten");

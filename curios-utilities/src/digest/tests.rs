@@ -41,3 +41,12 @@ fn the_same_bytes_split_into_different_parts_are_different_keys() {
         "and it is a function"
     );
 }
+
+/// A digest kept as its bytes is the digest a record spells in hex, and is read back from them.
+#[test]
+fn a_digest_kept_as_bytes_is_the_one_spelled_in_hex() {
+    let kept = Digest::of(b"one");
+
+    assert_eq!(kept.hex(), digest(b"one"));
+    assert_eq!(Digest::from_bytes(*kept.as_bytes()), kept);
+}

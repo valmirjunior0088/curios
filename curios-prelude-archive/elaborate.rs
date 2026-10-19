@@ -14,7 +14,7 @@ use {
         PreparedText, RootSource, SYNTAX, Translation, UnitSource, document_unit, prepare_prelude,
         sys_source,
     },
-    curios_unit::{Record, Uncertified, framed},
+    curios_unit::{Packed, Record, Uncertified, framed, packed},
     curios_utilities::{Qualifier, Report, Source, digest},
     std::{
         collections::BTreeSet,
@@ -203,7 +203,7 @@ fn archive(
     Uncertified::new(prepared, core, ersd, traces)
 }
 
-/// Serialize one uncertified unit to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of it — serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the unit's digest, which is what the next root's record names it by.
+/// Serialize one uncertified unit to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the objects its index names to `<root>.pack`, one pack as a store keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.
 ///
 /// The image carries no version and is no stable interchange format: Cargo regenerates it whenever its inputs change — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare a build against itself.
 ///
@@ -215,22 +215,40 @@ fn write_image(
     reads: Vec<(PathBuf, Arc<Source>)>,
     after: Vec<(String, String)>,
 ) -> String {
+    let pack = |stored: &curios_unit::Indexed| {
+        packed(stored.objects.iter().map(|object| Packed {
+            digest: object.digest,
+            bytes: object.bytes.as_slice(),
+            member: None,
+        }))
+    };
     let first = image
         .stored()
         .unwrap_or_else(|error| panic!("/{root} archive serialization failed: {error}"));
     let second = image
         .stored()
         .unwrap_or_else(|error| panic!("/{root} archive repeat serialization failed: {error}"));
-    assert_eq!(first, second, "/{root} archive is not deterministic");
+    let objects = pack(&first);
+    assert!(
+        first.index == second.index && objects == pack(&second),
+        "/{root} archive is not deterministic"
+    );
 
     // The compiler's own library is no package's, and no manifest claims a declaration of it: its rows are the host's to answer.
-    let record = Record::of(reads, after, Vec::new(), digest(&first));
+    let record = Record::of(reads, after, Vec::new(), digest(&first.index));
     let recorded = curios_archive::to_bytes(&record)
         .unwrap_or_else(|error| panic!("/{root} record serialization failed: {error}"));
 
     let path = directory.join(format!("{root}.rkyv"));
-    println!("/{root} archived to {} bytes", first.len());
-    fs::write(&path, framed(&recorded, &first))
+    println!(
+        "/{root} archived to {} bytes, its objects to {}",
+        first.index.len(),
+        objects.len()
+    );
+    fs::write(&path, framed(&recorded, &first.index))
+        .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
+    let path = directory.join(format!("{root}.pack"));
+    fs::write(&path, objects)
         .unwrap_or_else(|error| panic!("failed to write {}: {error}", path.display()));
 
     record.unit

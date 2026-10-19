@@ -7,6 +7,9 @@
 mod slot;
 pub(crate) use slot::*;
 
+mod packs;
+pub(crate) use packs::*;
+
 mod verdicts;
 pub use verdicts::*;
 

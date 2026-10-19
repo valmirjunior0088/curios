@@ -121,18 +121,31 @@ fn project(name: &str) -> Temporary {
     root
 }
 
-/// Copy every slot `from`'s store holds into `into`'s, replacing whatever was there.
+/// Copy every slot `from`'s store holds into `into`'s, with the packs of objects beside each, replacing whatever was there.
 ///
 /// How both cross-project tests stage a shared store: by copying rather than by setting `CURIOS_CACHE`, since the store's own hermeticity rests on no test ever setting it, and what is under test is the verification, which cannot tell how a foreign slot arrived.
 fn stage(from: &Path, into: &Path) {
-    let (from, into) = (from.join(".curios/verdicts"), into.join(".curios/verdicts"));
+    copied(
+        &from.join(".curios/verdicts"),
+        &into.join(".curios/verdicts"),
+    );
+    copied(&from.join(".curios/objects"), &into.join(".curios/objects"));
+}
 
-    let _ = fs::remove_dir_all(&into);
-    fs::create_dir_all(&into).unwrap();
+/// Copy the tree `from` into `into`, replacing whatever was there.
+fn copied(from: &Path, into: &Path) {
+    let _ = fs::remove_dir_all(into);
+    fs::create_dir_all(into).unwrap();
 
-    for slot in fs::read_dir(&from).expect("a store with units in it") {
-        let slot = slot.unwrap().path();
-        fs::copy(&slot, into.join(slot.file_name().unwrap())).unwrap();
+    for entry in fs::read_dir(from).expect("a store with units in it") {
+        let entry = entry.unwrap().path();
+        let to = into.join(entry.file_name().unwrap());
+        match entry.is_dir() {
+            true => copied(&entry, &to),
+            false => {
+                fs::copy(&entry, to).unwrap();
+            }
+        }
     }
 }
 
@@ -580,4 +593,87 @@ fn an_entry_no_executable_names_is_filed_nowhere() {
 
     assert_eq!(entered(&root, "exe.crs", None), "compiled");
     assert_eq!(entered(&root, "exe.crs", None), "compiled");
+}
+
+/// The dependency's library, saying `word` beside two declarations that never change.
+fn library_of_three(word: &str) -> String {
+    format!(
+        "{}\npub let other: Str = \"other\";\n\npub let third: Str = \"third\";\n",
+        library(word)
+    )
+}
+
+/// The packs of the store at `root`, each by where it is kept.
+fn packs(root: &Path) -> Vec<PathBuf> {
+    fs::read_dir(root.join(".curios/objects"))
+        .expect("a store with objects in it")
+        .flat_map(|address| fs::read_dir(address.unwrap().path()).unwrap())
+        .map(|pack| pack.unwrap().path())
+        .collect()
+}
+
+/// How many objects each pack of the store at `root` holds, fewest first.
+fn packed_counts(root: &Path) -> Vec<usize> {
+    let mut counts = packs(root)
+        .into_iter()
+        .map(|pack| {
+            let mut file = fs::File::open(pack).unwrap();
+            curios_unit::pack_names(&mut file).expect("a pack").len()
+        })
+        .collect::<Vec<_>>();
+    counts.sort();
+
+    counts
+}
+
+/// A unit compiled over its slot files the objects it made and none it kept: an edit to one declaration of three writes a pack of that declaration's lowered item and erased form, beside the pack the first filing wrote.
+#[test]
+fn a_refiling_writes_only_the_objects_it_made() {
+    let root = project("refiled-objects");
+    write(&root, "shape/lib.crs", &library_of_three("first"));
+    reused(&root);
+    let [first] = packed_counts(&root)[..] else {
+        panic!("one pack after one filing");
+    };
+
+    write(&root, "shape/lib.crs", &library_of_three("second"));
+    assert!(!reused(&root), "an edited unit is compiled again");
+
+    assert_eq!(packed_counts(&root), [2, first]);
+    assert!(reused(&root), "and what it filed is restored");
+}
+
+/// A slot names objects it does not hold: one whose objects are gone is not restored, and the compile that misses writes them again.
+#[test]
+fn a_unit_whose_objects_are_gone_is_compiled_again() {
+    let root = project("objects-gone");
+    reused(&root);
+    assert!(reused(&root), "filed by the first compilation");
+
+    fs::remove_dir_all(root.join(".curios/objects")).expect("the packs a filing wrote");
+
+    assert!(!reused(&root), "a slot naming objects nowhere is no unit");
+    assert!(reused(&root), "and the recompile writes them again");
+}
+
+/// A pack is held to its name where it is read: a damaged one is taken away, the unit it held objects of is compiled again, and the filing that follows writes them again, as the very pack they were, since a pack is a function of what it holds.
+#[test]
+fn a_damaged_pack_is_taken_away_and_written_again() {
+    let root = project("damaged-pack");
+    reused(&root);
+    let [pack] = &packs(&root)[..] else {
+        panic!("one pack after one filing");
+    };
+    let filed = fs::read(pack).unwrap();
+    let mut bytes = filed.clone();
+    bytes[0] ^= 0xff;
+    fs::write(pack, &bytes).unwrap();
+
+    assert!(!reused(&root), "a damaged pack's objects are not believed");
+    assert_eq!(
+        fs::read(pack).unwrap(),
+        filed,
+        "and the recompile writes the pack again whole"
+    );
+    assert!(reused(&root), "and what it wrote is restored");
 }

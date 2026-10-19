@@ -14,11 +14,11 @@
 mod tests;
 
 use {
-    crate::{opened, replace},
+    crate::{Packs, opened, replace},
     curios_package::{Store, compiler, entry_slot, unit_slot},
     curios_pipeline::{After, Cache, Earlier},
     curios_text::{Overlay, UnitSource},
-    curios_unit::{Record, Unit, digested, read_within},
+    curios_unit::{Indexed, Packed, Record, Unit, digested, read_within},
     curios_utilities::{Qualifier, digest},
     std::{
         cell::{OnceCell, RefCell},
@@ -157,6 +157,8 @@ pub struct Verdicts {
     session: Option<Session>,
     /// The executable the entry this handle's fold ends in is, by its package's name and its own — `None` for a handle told of none, which files no entry's unit. See [`Verdicts::executing`].
     executable: Option<(String, String)>,
+    /// The packs of each slot's address this handle has read or filed objects at, by the slot: a pack is read once for as long as the handle lives, so a filing after a restore reads no pack the restore read.
+    packs: RefCell<BTreeMap<String, Rc<Packs>>>,
 }
 
 impl Verdicts {
@@ -171,6 +173,7 @@ impl Verdicts {
             refused: RefCell::new(None),
             session: None,
             executable: None,
+            packs: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -185,6 +188,7 @@ impl Verdicts {
             refused: RefCell::new(None),
             session: Some(session),
             executable: None,
+            packs: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -381,6 +385,52 @@ impl Verdicts {
         Some(unit_slot(compiler, &source.claims(), source.declared()))
     }
 
+    /// The packs of `slot`'s address, opened the first time this handle asks for them. `None` for a handle with no store.
+    fn packs(&self, slot: &str) -> Option<Rc<Packs>> {
+        let store = self.store.as_ref()?;
+        let packs = self
+            .packs
+            .borrow_mut()
+            .entry(slot.to_string())
+            .or_insert_with(|| Rc::new(Packs::at(store.objects(slot))))
+            .clone();
+
+        Some(packs)
+    }
+
+    /// The unit whose index `slot` holds as `index`, each object it names found among the packs of the slot's address: `None` where one of them is not found there, or the index holds no unit.
+    fn restored(&self, slot: &str, index: &[u8]) -> Option<Unit> {
+        curios_profile::profile!("verdicts::restored");
+        let packs = self.packs(slot)?;
+
+        Unit::restored(index, |digest| packs.find(digest).map(|found| found.bytes)).ok()
+    }
+
+    /// File the objects of `stored` the packs of `slot`'s address do not hold, in one pack: what a slot naming them is renamed into place after.
+    fn file_objects(&self, slot: &str, stored: &Indexed) -> io::Result<()> {
+        curios_profile::profile!("verdicts::file_objects");
+        let packs = self
+            .packs(slot)
+            .ok_or_else(|| io::Error::other("a store files objects"))?;
+        let missing = packs
+            .missing(stored.objects.iter().map(|object| &object.digest))
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+
+        packs.write(
+            stored
+                .objects
+                .iter()
+                .filter(|object| missing.contains(&object.digest))
+                .map(|object| Packed {
+                    digest: object.digest,
+                    bytes: object.bytes.as_slice(),
+                    member: None,
+                })
+                .collect(),
+        )
+    }
+
     /// What each unit of `sources` is filed as, in order, verified against the store without deserializing any of it — the probe [`Verdicts::payload_get`] decides a hit with.
     ///
     /// **This is the verification half of [`Cache::get`], and it is shared rather than restated.** Each source's slot and record are decided by exactly the calls the fold makes, so the two cannot come to different answers about whether a unit is still good; all that is left out is the `Unit` decode, which a payload hit has no use for. A stale unit is `None` and so a payload miss by construction — it is about to recompile into bytes no record of the payload could match.
@@ -456,12 +506,12 @@ impl Verdicts {
         let restored = match self.in_hand(source, &slot, &contained) {
             Some(held) => held,
             None => {
-                let artifact = opened.artifact()?;
-                if !intact(&contained, &artifact) {
+                let index = opened.artifact()?;
+                if !intact(&contained, &index) {
                     return None;
                 }
 
-                Unit::restored(&artifact).ok()?
+                self.restored(&slot, &index)?
             }
         };
         // Held as a compiled unit is, so the first edit to this unit is recompiled over the copy in hand rather than over the slot read back again.
@@ -490,12 +540,12 @@ impl Verdicts {
         if !read_within(&source.directories(), &record.reads) {
             return None;
         }
-        let artifact = opened.artifact()?;
-        if !intact(&record.unit, &artifact) {
+        let index = opened.artifact()?;
+        if !intact(&record.unit, &index) {
             return None;
         }
 
-        let unit = Unit::restored(&artifact).ok()?;
+        let unit = self.restored(&slot, &index)?;
         let after = self
             .taken
             .borrow()
@@ -514,7 +564,7 @@ impl Verdicts {
         })
     }
 
-    /// The place `unit` takes after everything taken so far — its slot, what each unit it could have read contains, and the bytes it would be filed as with their digest — or `None` when it may not be placed at all.
+    /// The place `unit` takes after everything taken so far — its slot, what each unit it could have read contains, and what it would be filed as with its index's digest — or `None` when it may not be placed at all.
     ///
     /// A unit this refuses has no place, and neither has a unit that could have read it: a record would vouch for a unit nothing here can produce again.
     fn placement(&self, source: &UnitSource<'_>, unit: &Unit) -> Option<Placement> {
@@ -539,14 +589,14 @@ impl Verdicts {
             return None;
         }
 
-        let bytes = unit.stored().ok()?;
+        let stored = unit.stored().ok()?;
 
         Some(Placement {
             path: store.verdict(&slot),
             slot,
             after,
-            contained: digest(&bytes),
-            bytes,
+            contained: digest(&stored.index),
+            stored,
         })
     }
 }
@@ -557,7 +607,7 @@ struct Placement {
     slot: String,
     after: Vec<(String, String)>,
     contained: String,
-    bytes: Vec<u8>,
+    stored: Indexed,
 }
 
 /// Whether two units in hand are one: the same handle, which is what a fold hands on and a session keeps.
@@ -608,9 +658,11 @@ impl Cache for Verdicts {
             source.answered().to_vec(),
             placement.contained.clone(),
         );
-        let filed = curios_archive::to_bytes(&record)
-            .map_err(io::Error::other)
-            .and_then(|record| replace(&placement.path, &record, &placement.bytes));
+        // The objects first, so a slot never names one not yet written.
+        let filed = self
+            .file_objects(&placement.slot, &placement.stored)
+            .and_then(|()| curios_archive::to_bytes(&record).map_err(io::Error::other))
+            .and_then(|record| replace(&placement.path, &record, &placement.stored.index));
 
         // Best effort: a store that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit takes its place below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
         match filed {
@@ -645,9 +697,9 @@ fn agrees(
         && unchanged(&record.reads, overlay)
 }
 
-/// Whether `artifact` is the bytes a record naming `contained` was written with: what makes a damaged slot that still deserializes a miss rather than a belief.
-fn intact(contained: &str, artifact: &[u8]) -> bool {
-    contained == digest(artifact)
+/// Whether `index` is the bytes a record naming `contained` was written with: what makes a damaged slot that still deserializes a miss rather than a belief.
+fn intact(contained: &str, index: &[u8]) -> bool {
+    contained == digest(index)
 }
 
 /// Whether `recorded` is what `filed` holds, position by position.

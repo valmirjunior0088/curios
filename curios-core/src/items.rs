@@ -4,7 +4,7 @@
 //!
 //! **What a place declares is known without its item.** Where a module holds each name, which of its items are groups and whether two units declare one name are asked of every unit in scope by every compilation, and none of them reads a term: a stored module keeps the names each place declares beside its cells ([`Outlines`]).
 //!
-//! **An item stored on its own is stored again as it was read.** A module whose items were each archived apart is restored from those parts, and a version that shares one of its items hands back the part it was read from ([`Items::part`]), so a unit filed again writes the bytes of what it did not change as they were.
+//! **An item stored on its own is stored again as it was read.** A module whose items were each archived apart is restored from those parts, each an object of the store with its digest, and a version that shares one of its items hands back the object it was read from ([`Items::part`]), so a unit filed again names what it did not change by the digest it had, digesting nothing.
 //!
 //! **Reading it is indexing it.** Every reader that goes by place is written as it would be over a vector, and a reader that walks every item restores every item: slow where a walk was not looked for, and never another answer.
 //!
@@ -12,7 +12,7 @@
 
 use {
     crate::{Declared, Global, Item},
-    curios_utilities::Ordered,
+    curios_utilities::{Object, Ordered},
     std::{
         cell::OnceCell,
         fmt,
@@ -147,8 +147,8 @@ struct Stored {
 enum Source {
     /// What the module's unit hands it, asked for one item at a time.
     Restorer(Box<dyn Fn(usize) -> Item>),
-    /// The bytes each item was archived as on its own: none where they were not handed over, and no item can be read.
-    Parts(Vec<curios_archive::Bytes>),
+    /// The object each item was archived as on its own: none where they were not handed over, and no item can be read.
+    Parts(Vec<Object>),
 }
 
 impl Stored {
@@ -160,14 +160,14 @@ impl Stored {
                 let part = parts
                     .get(index)
                     .expect("a stored module's items are handed over before one is read");
-                curios_archive::from_bytes::<Item>(part.as_slice())
+                curios_archive::from_bytes::<Item>(part.bytes.as_slice())
                     .unwrap_or_else(|error| panic!("a stored item failed to restore: {error}"))
             }
         })
     }
 
-    /// The bytes the item at `index` was archived as on its own, where it was.
-    fn part(&self, index: usize) -> Option<&curios_archive::Bytes> {
+    /// The object the item at `index` was archived as on its own, where it was.
+    fn part(&self, index: usize) -> Option<&Object> {
         match &self.source {
             Source::Parts(parts) => parts.get(index),
             Source::Restorer(_) => None,
@@ -235,7 +235,7 @@ impl Entry {
         }
     }
 
-    fn part(&self) -> Option<&curios_archive::Bytes> {
+    fn part(&self) -> Option<&Object> {
         match self {
             Entry::Made(_) => None,
             Entry::Stored(stored, index) => stored.part(*index),
@@ -322,7 +322,7 @@ impl Items {
     }
 
     /// The items of a stored module whose items were each archived on its own: one for each of `outlines`, the item at a place read out of its part the first time it is asked for. No part is handed over yet where `parts` is empty, and reading an item is then a fault; `Err` is parts that are neither none nor one for each item.
-    pub fn parted(outlines: Outlines, parts: Vec<curios_archive::Bytes>) -> Result<Self, String> {
+    pub fn parted(outlines: Outlines, parts: Vec<Object>) -> Result<Self, String> {
         if !parts.is_empty() && parts.len() != outlines.len() {
             return Err(format!(
                 "a module outlines {} items and stores {}",
@@ -338,8 +338,8 @@ impl Items {
         }))))
     }
 
-    /// These items, a stored module's archived on their own ([`Items::parted`]), with `parts` handed over as their bytes.
-    pub fn with_parts(&self, parts: Vec<curios_archive::Bytes>) -> Result<Self, String> {
+    /// These items, a stored module's archived on their own ([`Items::parted`]), with `parts` handed over as the objects they were archived as.
+    pub fn with_parts(&self, parts: Vec<Object>) -> Result<Self, String> {
         match &self.0 {
             Held::Stored(stored) if matches!(stored.source, Source::Parts(_)) => {
                 Self::parted(stored.outlines.clone(), parts)
@@ -348,8 +348,8 @@ impl Items {
         }
     }
 
-    /// The bytes the item at `place` was archived as on its own, where it was read from them and these items hold it as it was read: what it is archived as again.
-    pub fn part(&self, place: usize) -> Option<&curios_archive::Bytes> {
+    /// The object the item at `place` was archived as on its own, where it was read from one and these items hold it as it was read: what it is archived as again.
+    pub fn part(&self, place: usize) -> Option<&Object> {
         match &self.0 {
             Held::Made(_) => None,
             Held::Stored(stored) => stored.part(place),

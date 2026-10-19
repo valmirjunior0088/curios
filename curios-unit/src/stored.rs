@@ -8,7 +8,7 @@ mod tests;
 use {
     crate::Uncertified,
     curios_archive::{Bytes, parted},
-    curios_utilities::{Source, digest},
+    curios_utilities::{Digest, Object, Source, digest},
     std::{
         path::{Path, PathBuf},
         sync::Arc,
@@ -27,7 +27,7 @@ pub struct Record {
     pub after: Vec<(String, String)>,
     /// The `foreign` declarations the unit's package said a module answers when it was compiled, each beside the manifest row that names it, as its source carried them. A claim is held to a declaration of the unit where the unit is compiled or restored, and a program's stored payload is taken with no unit compiled or restored at all: recorded here, a manifest whose claims have changed since is a disagreement, so the claims it holds now are held as any are.
     pub answers: Vec<(String, String)>,
-    /// The stored unit's own digest, so a damaged unit that still deserializes is a miss rather than a belief, as the payload family's own digest makes a damaged artifact. Bytecheck confirms a unit's structure and nothing about its contents: a flipped byte inside a string reads back as a different string. Concurrent filing is not its concern: a slot is one file renamed into place, so no write can leave a record beside a unit it was not made from.
+    /// The digest of the stored unit's index, so a damaged unit that still deserializes is a miss rather than a belief, as the payload family's own digest makes a damaged artifact. Bytecheck confirms a unit's structure and nothing about its contents: a flipped byte inside a string reads back as a different string. The index names every object the unit stores on its own by its digest, so this vouches for them too, each held to its pack's name where it is read. Concurrent filing is not its concern: a slot is one file renamed into place, after the objects it names, so no write can leave a record beside a unit it was not made from.
     pub unit: String,
 }
 
@@ -133,7 +133,7 @@ pub fn segments(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
 ///
 /// **Two halves by reader, in the one segment a record vouches for.** A slot's record digests its artifact, so both halves are believed together, and a slot stays one file replaced by one rename. What differs is who decodes which: opening a unit decodes the first and keeps the second as bytes.
 ///
-/// What a unit stores apart is a part for each reader, every one behind its length ([`Uncertified::apart_bytes`], [`apart_parts`]): its lowered items and its erased forms, each on its own, read by whoever names its declaration or links it; its elaborated module, read by item; where its declarations lie, read by a report placed in one of them; then what only a later compile of the same unit or a command about it reads: its import scopes, and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
+/// What a unit stores apart is a part for each reader, every one behind its length ([`Uncertified::apart`], [`apart_parts`]): the digests of its lowered items and its erased forms, each an object of its own, found where the unit is restored and read by whoever names its declaration or links it; its elaborated module, read by item; where its declarations lie, read by a report placed in one of them; then what only a later compile of the same unit or a command about it reads: its import scopes, and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
 pub fn halved(unit: &[u8], baseline: &[u8]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(8 + unit.len() + baseline.len());
     bytes.extend_from_slice(&(unit.len() as u64).to_le_bytes());
@@ -151,7 +151,37 @@ pub fn halves(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
     (length <= rest.len()).then(|| rest.split_at(length))
 }
 
-/// The eight parts of what a unit stores apart from itself ([`Uncertified::apart_bytes`]), each a run of the buffer `stored` is in: its lowered items, its erased forms, its elaborated module's archive, where its declarations lie, which a report reads, then what only a compile of the same unit or a command about it reads: its import scopes, and the text's, the elaborator's and erasure's parts of its baseline half. `None` for bytes that are no such layout, one cut short among them: every part states its length, and together they are the bytes.
+/// The eight parts of what a unit stores apart from itself ([`Uncertified::apart`]), each a run of the buffer `stored` is in: the digests of its lowered items and of its erased forms ([`digests`]), its elaborated module's archive, where its declarations lie, which a report reads, then what only a compile of the same unit or a command about it reads: its import scopes, and the text's, the elaborator's and erasure's parts of its baseline half. `None` for bytes that are no such layout, one cut short among them: every part states its length, and together they are the bytes.
 pub fn apart_parts(stored: &Bytes) -> Option<[Bytes; 8]> {
     parted(stored)?.try_into().ok()
+}
+
+/// The digests of `objects`, one after another: how an index names the objects a unit stores on its own, by what each holds and nothing of where it is kept.
+pub(crate) fn digests(objects: &[Object]) -> Vec<u8> {
+    objects
+        .iter()
+        .flat_map(|object| *object.digest.as_bytes())
+        .collect()
+}
+
+/// The objects `named` names ([`digests`]), each found by `find`. `Err` for bytes that are no list of digests, or one `find` holds no object for.
+pub(crate) fn found(
+    named: &Bytes,
+    find: &dyn Fn(&Digest) -> Option<Bytes>,
+) -> Result<Vec<Object>, String> {
+    let named = named.as_slice();
+    if !named.len().is_multiple_of(32) {
+        return Err("not a list of digests".to_string());
+    }
+
+    named
+        .chunks_exact(32)
+        .map(|digest| {
+            let digest = Digest::from_bytes(digest.try_into().expect("thirty-two bytes"));
+            let bytes = find(&digest)
+                .ok_or_else(|| format!("no object {digest:?} the unit names is held"))?;
+
+            Ok(Object { digest, bytes })
+        })
+        .collect()
 }
