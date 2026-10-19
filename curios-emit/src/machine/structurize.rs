@@ -81,15 +81,15 @@ fn convert_wrapper(machine: &MachineModule, wrapper: &MachineWrapper) -> Emissio
         fields,
         params,
         resume: resume.clone(),
-        region: EmissionBody {
-            values: vec![],
-            blocks: vec![],
-            tail: EmissionTail::Call(EmissionCallTarget::Direct {
+        region: EmissionBody::new(
+            vec![],
+            vec![],
+            EmissionTail::Call(EmissionCallTarget::Direct {
                 target: direct_name(machine, wrapper.function),
                 params: call_params,
                 resume,
             }),
-        },
+        ),
     }
 }
 
@@ -188,11 +188,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 .into_iter()
                 .map(|block| self.convert_scoped_block(block)),
         );
-        EmissionBody {
-            values,
-            blocks,
-            tail,
-        }
+        EmissionBody::new(values, blocks, tail)
     }
 
     fn convert_scoped_block(
@@ -381,14 +377,14 @@ impl<'a> MachineFunctionBridge<'a> {
             resume.clone(),
             EmissionBlock {
                 params: results,
-                region: EmissionBody {
-                    values: vec![],
-                    blocks: vec![],
-                    tail: EmissionTail::Jump(EmissionJumpTarget {
+                region: EmissionBody::new(
+                    vec![],
+                    vec![],
+                    EmissionTail::Jump(EmissionJumpTarget {
                         target: self.block_name(target),
                         params,
                     }),
-                },
+                ),
             },
         ));
         resume

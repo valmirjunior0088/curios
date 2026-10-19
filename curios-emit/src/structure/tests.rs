@@ -7,11 +7,7 @@ use {
 };
 
 fn body(tail: EmissionTail) -> EmissionBody {
-    EmissionBody {
-        values: vec![],
-        blocks: vec![],
-        tail,
-    }
+    EmissionBody::new(vec![], vec![], tail)
 }
 
 fn jump(target: &EmissionBlockName) -> EmissionTail {
@@ -41,22 +37,19 @@ fn switch(operand: &str, arms: &[(u32, &EmissionBlockName)]) -> EmissionTail {
 }
 
 fn region(blocks: Vec<(EmissionBlockName, EmissionTail)>, tail: EmissionTail) -> EmissionBody {
-    EmissionBody {
-        values: vec![],
-        blocks: blocks
-            .into_iter()
-            .map(|(name, tail)| {
-                (
-                    name,
-                    EmissionBlock {
-                        params: vec![],
-                        region: body(tail),
-                    },
-                )
-            })
-            .collect(),
-        tail,
-    }
+    let blocks = blocks
+        .into_iter()
+        .map(|(name, tail)| {
+            (
+                name,
+                EmissionBlock {
+                    params: vec![],
+                    region: body(tail),
+                },
+            )
+        })
+        .collect();
+    EmissionBody::new(vec![], blocks, tail)
 }
 
 #[test]

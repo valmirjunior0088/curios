@@ -5,10 +5,8 @@
 //! Every routine is iterative and orders its output by node index, so the layout is deterministic and stack-safe regardless of block count.
 
 use {
-    super::{
-        EmissionBlockName, EmissionBody, EmissionCallTarget, EmissionHostTarget, EmissionTail,
-    },
-    std::collections::{BTreeSet, HashMap, HashSet},
+    super::EmissionBody,
+    std::collections::{BTreeSet, HashMap},
 };
 
 /// The control-flow graph of one region over its sibling blocks plus a virtual entry node. Blocks are numbered by their position in `region.blocks`; the entry node — the region's prologue and tail transfer — is numbered one past the last block. The entry has no predecessors and is the root every block is reached from.
@@ -34,7 +32,9 @@ impl RegionCfg {
         let mut succ = vec![Vec::new(); blocks + 1];
 
         // The entry node branches wherever the region's own tail transfers — never recursing into the blocks, which are separate nodes. A match may name one block from several arms; keep one edge, ordered.
-        let mut entry_targets = tail_targets(&region.tail)
+        let mut entry_targets = region
+            .tail
+            .targets()
             .into_iter()
             .filter_map(|name| index.get(name).copied())
             .collect::<Vec<_>>();
@@ -42,12 +42,12 @@ impl RegionCfg {
         entry_targets.dedup();
         succ[entry] = entry_targets;
 
-        // A block branches to a sibling whenever the block's region — through any of its own nested blocks — transfers there. One walk per block collects every transferred-to name; mapping through the sibling index and sorting keeps each successor list sorted and duplicate-free (the set already deduplicates).
+        // A block branches to a sibling whenever the block's region — through any of its own nested blocks — transfers there, which the region recorded as it was built ([`EmissionBody::escapes`]); mapping through the sibling index and sorting keeps each successor list sorted and duplicate-free (the set already deduplicates).
         for (source, (_, block)) in region.blocks.iter().enumerate() {
-            let mut names = HashSet::new();
-            collect_region_targets(&block.region, &mut names);
-            let mut targets = names
-                .into_iter()
+            let mut targets = block
+                .region
+                .escapes()
+                .iter()
                 .filter_map(|name| index.get(name).copied())
                 .collect::<Vec<_>>();
             targets.sort_unstable();
@@ -91,35 +91,6 @@ impl RegionCfg {
 
 /// Undefined-node sentinel for Tarjan state. `node_count()` never approaches `usize::MAX`, so it can never collide with a real node.
 const NONE: usize = usize::MAX;
-
-/// The blocks a single tail transfers to directly, in source order — not recursing into any nested region.
-fn tail_targets(tail: &EmissionTail) -> Vec<&EmissionBlockName> {
-    match tail {
-        EmissionTail::Jump(target) => vec![&target.target],
-        EmissionTail::Match(target) => target
-            .cases
-            .values()
-            .map(|jump| &jump.target)
-            .chain(target.default.as_ref().map(|jump| &jump.target))
-            .collect(),
-        EmissionTail::Call(
-            EmissionCallTarget::Direct { resume, .. } | EmissionCallTarget::Indirect { resume, .. },
-        ) => vec![resume],
-        EmissionTail::Host(EmissionHostTarget::Foreign { resume, .. }) => vec![resume],
-        EmissionTail::Host(EmissionHostTarget::Halt { .. }) => vec![],
-        EmissionTail::Cell(cell) => vec![cell.resume()],
-        EmissionTail::Channel(channel) => vec![&channel.resume],
-        EmissionTail::Panic(_) | EmissionTail::Unreachable => vec![],
-    }
-}
-
-/// Every block name `region`, or any region nested inside its blocks, branches into — the sibling-level edge oracle, collected in one traversal: a branch from deep inside a block to a sibling is an edge between those two blocks.
-fn collect_region_targets<'a>(region: &'a EmissionBody, out: &mut HashSet<&'a EmissionBlockName>) {
-    out.extend(tail_targets(&region.tail));
-    for (_, block) in &region.blocks {
-        collect_region_targets(&block.region, out);
-    }
-}
 
 /// The structured layout of a region's blocks: an ordered nesting of `loop`, forward `block`, and localized-dispatcher scopes the emitter walks to place each block. Items at one level are already in a topological order of the condensation, so a forward branch to a later item's entry is a forward `br` out of the enclosing scopes.
 #[derive(Debug, Clone, PartialEq, Eq)]

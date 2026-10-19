@@ -5,7 +5,7 @@ use {
     curios_abi::ForeignFunction,
     curios_num::{Binary, Integer, Natural},
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashSet},
         sync::Arc,
     },
 };
@@ -151,15 +151,70 @@ pub(crate) enum EmissionTail {
     Unreachable,
 }
 
+impl EmissionTail {
+    /// The blocks this tail transfers to directly, in source order — not reaching into any nested region.
+    pub(crate) fn targets(&self) -> Vec<&EmissionBlockName> {
+        match self {
+            EmissionTail::Jump(target) => vec![&target.target],
+            EmissionTail::Match(target) => target
+                .cases
+                .values()
+                .map(|jump| &jump.target)
+                .chain(target.default.as_ref().map(|jump| &jump.target))
+                .collect(),
+            EmissionTail::Call(
+                EmissionCallTarget::Direct { resume, .. }
+                | EmissionCallTarget::Indirect { resume, .. },
+            ) => vec![resume],
+            EmissionTail::Host(EmissionHostTarget::Foreign { resume, .. }) => vec![resume],
+            EmissionTail::Host(EmissionHostTarget::Halt { .. }) => vec![],
+            EmissionTail::Cell(cell) => vec![cell.resume()],
+            EmissionTail::Channel(channel) => vec![&channel.resume],
+            EmissionTail::Panic(_) | EmissionTail::Unreachable => vec![],
+        }
+    }
+}
+
 /// One straight-line body fragment and the sub-structure hanging off it: bindings evaluated in order, the labeled join blocks its jumps enter, and the single [`EmissionTail`] transfer that ends it. All control flow in a body lives in its region tree — an [`EmissionValue`] binding never branches.
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionBody {
     pub(crate) values: Vec<(EmissionValueName, EmissionValue)>,
     pub(crate) blocks: Vec<(EmissionBlockName, EmissionBlock)>,
     pub(crate) tail: EmissionTail,
+    /// The blocks this region's tail and every region nested in it branch to, other than its own: what the region it sits in reads its sibling edges off ([`EmissionBody::escapes`]).
+    escapes: HashSet<EmissionBlockName>,
 }
 
 impl EmissionBody {
+    /// A region of `values`, `blocks` and `tail`, its escaping branches read off its tail and its blocks' own records.
+    ///
+    /// **A region is read once, where it is built.** Its blocks are built before it, so what they branch to is in hand, and a region nested n deep is not walked again by each of the n regions it sits in to find its edges — the square of a nesting.
+    pub(crate) fn new(
+        values: Vec<(EmissionValueName, EmissionValue)>,
+        blocks: Vec<(EmissionBlockName, EmissionBlock)>,
+        tail: EmissionTail,
+    ) -> Self {
+        let mut escapes = tail.targets().into_iter().cloned().collect::<HashSet<_>>();
+        for (_, block) in &blocks {
+            escapes.extend(block.region.escapes.iter().cloned());
+        }
+        for (name, _) in &blocks {
+            escapes.remove(name);
+        }
+
+        Self {
+            values,
+            blocks,
+            tail,
+            escapes,
+        }
+    }
+
+    /// The blocks this region branches to, at any depth, other than its own.
+    pub(crate) fn escapes(&self) -> &HashSet<EmissionBlockName> {
+        &self.escapes
+    }
+
     /// Collect the arity of every *indirect* call site in this region (and its nested blocks). A closure of that arity is invoked here even when the optimizer has specialized its definition away (a higher-order function's argument inlined, dropping the only closure of that arity while a `call_indirect` in its body survives), so a closure type for the arity is needed even though no closure of it is defined.
     fn collect_indirect_arities(&self, out: &mut BTreeSet<usize>) {
         if let EmissionTail::Call(EmissionCallTarget::Indirect { params, .. }) = &self.tail {
