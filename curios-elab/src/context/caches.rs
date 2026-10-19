@@ -8,7 +8,7 @@
 //!
 //! **A reduct has one of two lives within it**, as the kernel's memos have them (`curios-cert`'s `memos` module). One whose term and reduct are both [`lasting`] reads nothing a scope holds: no equation is recorded under a spelling that names no local, reduction puts no question to conversion about a term that names none, and such a term names no local definition and no level a rewrite moves. It stands for the declaration, and only a change to a definition it may have read clears it: a redefinition, and a rollback, since a definition still being elaborated may hold a solution the rollback unwinds. Every other reduct goes at each boundary of the scope as well.
 //!
-//! **A bracket of the scope is no boundary of the window around it.** A settlement withholds the frames from its entry's inwards and restores them, and a judgment standing on held frames sets the live ones aside and takes them back; what the live window remembered is what asking again gives once either closes, so each sets it aside at its entry and hands it back at its exit ([`Caches::enter_window`]). What a settlement remembered is kept by its entry's frame for the next settlement made there, for as long as the frames that stood when it was filed all still stand and what else it rests on does (`Frame::settled_windows`, [`Footing`]).
+//! **A bracket of the scope is no boundary of the window around it.** A settlement withholds the frames from its entry's inwards and restores them, and a judgment standing on held frames sets the live ones aside and takes them back; what the live window remembered is what asking again gives once either closes, so each sets it aside at its entry and hands it back at its exit ([`Caches::enter_window`]). What a settlement remembered is kept for the next settlement made under the same refinements, for as long as the deepest frame it read still stands and what else it rests on does (`Frames::begin_reads`, `Frame::settled_windows`, [`Footing`]).
 //!
 //! The *policies* — what is cacheable, and what a probe's groundness gate admits — stay on `Context`, which alone can read the solution and universe stores they consult. This type owns the storage and the write discipline.
 
@@ -824,7 +824,7 @@ impl Caches {
         }
     }
 
-    /// The bracket [`Caches::enter_window`] began closes, and the window it set aside is handed back. What a settlement remembered is handed to its caller, for the frame of the entry it settled to keep for as long as what it read stands (`Frames::keep_settled_window`). A stand's goes. A settlement's sorts and verdicts come back with its reducts and answer under the stamps as they stand, since reduction alone ran in between; a stand's go.
+    /// The bracket [`Caches::enter_window`] began closes, and the window it set aside is handed back. What a settlement remembered is handed to its caller, to keep under the refinements it read for as long as what it read stands (`Frames::keep_settled_window`). A stand's goes. A settlement's sorts and verdicts come back with its reducts and answer under the stamps as they stand, since reduction alone ran in between; a stand's go.
     pub(crate) fn leave_window(&mut self) -> Option<Window> {
         if self.wholesale {
             self.clear_reductions();

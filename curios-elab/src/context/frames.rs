@@ -6,6 +6,8 @@
 //!
 //! One bracket narrows what a lookup reads: withholding hides a settlement's own frame and every frame inside it.
 //!
+//! **A settlement is kept for as long as what it read stands.** While one is under way, every lookup that answers from a frame counts that frame's depth ([`Frames::begin_reads`]): a binding and a definition the frame they were made in, a question put to the refinements in view the innermost frame in view that registers one, and a read of the whole scope the innermost frame. What it remembered is kept by the frame whose refinements it read under, the nearest one beneath its entry that registers any, or the base frame, for the next settlement made under the same refinements, wherever its entry stands; it answers while the deepest frame it read still stands. A chain of matches, each on the `let` before it, is settled once a link that way, where kept by the entry's own frame it was settled again from its start at every link.
+//!
 //! **A frame is shared, and copied for a writer.** What waits takes the frames above the base as they stand ([`HeldFrames`]), a parked problem where it parks and a metavariable where it is born, and a write to a frame something holds copies the frame first, so a holder has what stood and nothing written since. A judgment made away from the live context stands on the frames held ([`Frames::stand_on`]), a retry on its problem's and what is judged of a metavariable on its birth's: the live ones above the base are set aside, the held ones stand in their place, and nothing is assumed, defined or registered again, so the frame an entry stands in is the frame it was registered in.
 
 use {
@@ -21,6 +23,7 @@ use {
     },
     curios_utilities::Keyed,
     std::{
+        cell::RefCell,
         collections::{BTreeMap, HashMap},
         rc::Rc,
     },
@@ -49,6 +52,8 @@ pub(crate) struct Frames<'s> {
     withhold_refinements_from: Option<usize>,
     /// How many frames have been entered: the number the next one takes ([`Frame::number`]).
     entered: u64,
+    /// The deepest frame each settlement under way has read, the innermost settlement last ([`Frames::begin_reads`]).
+    reads: RefCell<Vec<usize>>,
 }
 
 impl<'s> Frames<'s> {
@@ -63,7 +68,35 @@ impl<'s> Frames<'s> {
             members: HashMap::new(),
             withhold_refinements_from: None,
             entered: 0,
+            reads: RefCell::new(Vec::new()),
         }
+    }
+
+    /// Begin counting the frames a settlement reads, from `from`, the deepest frame what it starts from read. Until [`Frames::end_reads`], every lookup that answers from a frame raises the count to that frame's depth, and a read of the whole scope to the innermost frame's; a gate that only tells whether a question is worth asking counts nothing, since asking finds the same either way.
+    pub(crate) fn begin_reads(&self, from: usize) {
+        self.reads.borrow_mut().push(from);
+    }
+
+    /// Stop counting for the settlement [`Frames::begin_reads`] began last, answering the deepest frame it read: what it remembered rests on that frame and the frames beneath it. A settlement made inside another counts for the other too.
+    pub(crate) fn end_reads(&self) -> usize {
+        let mut reads = self.reads.borrow_mut();
+        let deepest = reads.pop().expect("a settlement's reads were begun");
+        if let Some(outer) = reads.last_mut() {
+            *outer = (*outer).max(deepest);
+        }
+        deepest
+    }
+
+    /// Count a read of the frame at `depth` for the settlement under way, where one is.
+    fn read(&self, depth: usize) {
+        if let Some(deepest) = self.reads.borrow_mut().last_mut() {
+            *deepest = (*deepest).max(depth);
+        }
+    }
+
+    /// Count a read of the whole scope: the innermost frame.
+    fn read_scope(&self) {
+        self.read(self.top.as_ref().map_or(0, |top| top.depth));
     }
 
     /// Read through to `scope` where no frame holds a name.
@@ -145,6 +178,7 @@ impl<'s> Frames<'s> {
 
     /// Whether a frame that stands is a function's body.
     pub(crate) fn in_body(&self) -> bool {
+        self.read_scope();
         self.base.body || self.top.as_ref().is_some_and(|top| top.body)
     }
 
@@ -163,6 +197,7 @@ impl<'s> Frames<'s> {
 
     /// The `use`-plicity binders in scope, in binding order (innermost last).
     pub(crate) fn witness_scope(&self) -> impl Iterator<Item = &(Free, Term)> {
+        self.read_scope();
         self.base
             .witnesses
             .iter()
@@ -190,10 +225,15 @@ impl<'s> Frames<'s> {
 
     /// The innermost binding of `name` a frame holds.
     fn binding(&self, name: &Free) -> Option<&super::frame::Binding> {
-        self.top
+        let binding = self
+            .top
             .as_ref()
             .and_then(|top| top.assumptions.get(name))
-            .or_else(|| self.base.assumptions.get(name))
+            .or_else(|| self.base.assumptions.get(name));
+        if let Some(binding) = binding {
+            self.read(binding.depth);
+        }
+        binding
     }
 
     /// The frames that register a refinement, innermost first, among those that stand — the base frame last.
@@ -218,11 +258,13 @@ impl<'s> Frames<'s> {
 
     /// The frames above the base as they stand, shared: what a parked problem takes where it parks and a metavariable where it is born, and a judgment standing on held frames takes them with the frame it runs in. The base frame is the elaboration's and is never held, so what waits with no local frame standing holds none. Taking them is taking the innermost.
     pub(crate) fn hold(&self) -> HeldFrames {
+        self.read_scope();
         HeldFrames::of(self.top.as_ref())
     }
 
     /// Whether `held`, the frames a metavariable was born under, are where a lookup reads now: they still stand, outermost first, the frames that stand register no refinement they do not, and no settlement withholds any. The live context is then the birth's with binders and definitions added, and what is judged of the metavariable names none of them.
     pub(crate) fn stands_on(&self, held: &HeldFrames) -> bool {
+        self.read_scope();
         self.withhold_refinements_from.is_none()
             && stand(self.top.as_ref(), held.innermost())
             && self.reads_the_refinements_of(held)
@@ -230,6 +272,7 @@ impl<'s> Frames<'s> {
 
     /// Whether the refinements a lookup reads now are the ones `held` registers, as sets: two frames may have recorded the same refinements in different orders. What the solver asks before it commits a spelling reduced where it stands: one that rests on a guard the metavariable's birth lacks is not the metavariable's.
     pub(crate) fn reads_the_refinements_of(&self, held: &HeldFrames) -> bool {
+        self.read_scope();
         let read = self.refined_in_view().collect::<Vec<_>>();
         let held = held.refined_frames();
         refinements_within(&read, &held) && refinements_within(&held, &read)
@@ -237,6 +280,7 @@ impl<'s> Frames<'s> {
 
     /// Whether a lookup reads every name `held` binds as `held` binds it: no local frame in view bound one again or replaced its type since it was held. Asked of frames that stand over `held`, as a judgment made for what holds them stands ([`Context::at_birth`](crate::Context::at_birth)), where the local frames through the innermost count every such rebinding.
     pub(crate) fn binds_as(&self, held: &HeldFrames) -> bool {
+        self.read_scope();
         let rebound = |frame: Option<&Rc<Frame>>| frame.map_or(0, |frame| frame.rebound);
 
         rebound(self.top.as_ref()) == rebound(held.innermost())
@@ -244,6 +288,7 @@ impl<'s> Frames<'s> {
 
     /// The innermost frame as it stands: the frame a block's end leaves.
     pub(crate) fn innermost_frame(&self) -> &Frame {
+        self.read_scope();
         self.top.as_deref().unwrap_or(&self.base)
     }
 
@@ -259,6 +304,7 @@ impl<'s> Frames<'s> {
 
     /// The definitions `held` holds that the frames in view may hold otherwise or not at all, each name's innermost: every one `held` holds, less those the innermost frame in view holds as `held` does, passed over unread where the two share them. What a judgment standing on `held` compares with [`Frames::definition`] before it stands.
     pub(crate) fn held_definitions_apart(&self, held: &HeldFrames) -> Vec<(Free, DefEntry)> {
+        self.read_scope();
         let Some(held) = held.innermost() else {
             return Vec::new();
         };
@@ -350,6 +396,7 @@ impl<'s> Frames<'s> {
     /// Every frame's locals in binding order (outermost first), the base frame's top-level names first: what a test reads of a declaration forgotten everywhere, where a judgment reads [`Frames::local_binders`].
     #[cfg(test)]
     pub(crate) fn locals(&self) -> impl Iterator<Item = &(Free, Term)> {
+        self.read_scope();
         self.base
             .locals
             .iter()
@@ -359,6 +406,7 @@ impl<'s> Frames<'s> {
 
     /// The locals of the frames past the base, in scope order: the binders a term stands under, without the declarations of every unit in scope the base frame holds, so a question about them costs the scope a judgment stands in and not the program's size.
     pub(crate) fn local_binders(&self) -> impl Iterator<Item = &(Free, Term)> {
+        self.read_scope();
         self.top
             .iter()
             .flat_map(|top| top.locals.iter())
@@ -390,7 +438,8 @@ impl<'s> Frames<'s> {
             }
         }
         let frame = self.innermost();
-        frame.definitions.insert(name, entry);
+        let depth = frame.depth;
+        frame.definitions.insert(name, entry.defined_at(depth));
         frame.defines = true;
     }
 
@@ -442,10 +491,15 @@ impl<'s> Frames<'s> {
 
     /// The innermost definition of `name` a frame holds.
     fn defined(&self, name: &Free) -> Option<&DefEntry> {
-        self.top
+        let entry = self
+            .top
             .as_ref()
             .and_then(|top| top.definitions.get(name))
-            .or_else(|| self.base.definitions.get(name))
+            .or_else(|| self.base.definitions.get(name));
+        if let Some(entry) = entry {
+            self.read(entry.depth());
+        }
+        entry
     }
 
     /// The [`DefinitionKind`] of the module item that defined `label`, or `None` for a local binding or an undefined name.
@@ -470,6 +524,7 @@ impl<'s> Frames<'s> {
 
     /// Every top-level `rec` group defined in any frame, each with its members' global names in member order. A member's definition is the group with a projecting tail, so the groups are read off the members and their names gathered by index; a group read only partially — a member never defined — is dropped, since a spelling with a gap is no spelling.
     pub(crate) fn rec_definitions(&self) -> Vec<(RecGroup, Vec<Global>)> {
+        self.read_scope();
         let mut groups: Vec<(RecGroup, Vec<Option<Global>>)> = Vec::new();
         let definitions = self
             .base
@@ -542,18 +597,22 @@ impl<'s> Frames<'s> {
 
     /// Register a counterfactual match-arm refinement of a variable. Unlike a definition, this is the arm's alone: a judgment made for a metavariable born outside the arm stands on frames that hold none of it. The façade clears the caches first.
     pub(crate) fn refine(&mut self, name: &Free, term: &Term) {
-        self.innermost().refinements.insert(*name, term.clone());
+        let frame = self.innermost();
+        frame.refinements.insert(*name, term.clone());
+        forget_settled_windows(frame);
     }
 
     /// Register a counterfactual refinement of a projection (`refine_head` on a `Proj` scrutinee). The façade clears the caches first.
     pub(crate) fn refine_projection(&mut self, base: Term, index: usize, value: Term) {
-        self.innermost().refinement_projections.insert(
+        let frame = self.innermost();
+        frame.refinement_projections.insert(
             Keyed::new((project_erased_universes(&base), index)),
             ProjectionEntry {
                 original: base,
                 value,
             },
         );
+        forget_settled_windows(frame);
     }
     /// Register a counterfactual refinement of a stuck-application scrutinee (`refine_head` on a non-key head). `canonical` is the cheap key (as written, metas and universes normalized); `original` is the unerased spelling a settlement reduces; `value` is the arm's constructor. Sound for the same reason `refine` is — the arm is reached only when the scrutinee equals `value` — and non-cyclic because `value` is a constructor of the scrutinee's inductive, a normal form. The façade clears the caches first.
     pub(crate) fn refine_scrutinee(&mut self, canonical: Term, entry: ScrutineeEntry) {
@@ -563,9 +622,11 @@ impl<'s> Frames<'s> {
             spellings.remove(&canonical);
         }
         frame.refinement_scrutinees.insert(canonical, entry);
+        forget_settled_windows(frame);
     }
     /// What the entry `key` registered in the frame at depth `frame` settled to under the reduction `plain` names, where a probe has asked for it, beside what it rests on: the context reads whether that still stands (`Context::settled_key`).
     pub(super) fn spelling(&self, frame: usize, key: &Term, plain: bool) -> Option<Spelling> {
+        self.read(frame);
         self.frame_at(frame)?.scrutinee_spellings.borrow()[usize::from(plain)]
             .get(key)
             .cloned()
@@ -599,40 +660,50 @@ impl<'s> Frames<'s> {
                 kept.window.retain_without(name);
             }
         }
+        for kept in self.base.settled_windows.borrow_mut().iter_mut().flatten() {
+            kept.window.retain_without(name);
+        }
     }
 
-    /// What the last settlement of an entry registered in the frame at depth `frame` remembered under the reduction `plain` names, taken for the next one to start from, where the frames that stood when it was filed all still stand ([`Frame::settled_windows`](super::Frame)): the context reads whether the rest of what it rests on does.
+    /// The frame whose refinements a settlement of an entry registered in the frame at depth `frame` reads innermost: the nearest frame beneath that registers one, or the base frame. Settlements under one such frame read the same refinements, wherever their entries stand.
+    fn settled_under(&self, frame: usize) -> Option<&Frame> {
+        let entry = self.frame_at(frame)?;
+
+        Some(
+            entry
+                .refined_beneath()
+                .map_or(&self.base, |beneath| &**beneath),
+        )
+    }
+
+    /// What the last settlement made under the refinements a settlement of an entry registered in the frame at depth `frame` reads remembered, under the reduction `plain` names, taken for this one to start from, where the deepest frame it read still stands ([`Frame::settled_windows`](super::Frame)): the context reads whether the rest of what it rests on does.
     pub(super) fn take_settled_window(&self, frame: usize, plain: bool) -> Option<KeptWindow> {
-        let kept = self.frame_at(frame)?.settled_windows.borrow_mut()[usize::from(plain)].take()?;
+        let kept =
+            self.settled_under(frame)?.settled_windows.borrow_mut()[usize::from(plain)].take()?;
 
         self.still_stand(kept.stood).then_some(kept)
     }
 
-    /// File what a settlement of an entry registered in the frame at depth `frame` remembered under the reduction `plain` names, on what it rests on, for the next one.
+    /// File what a settlement of an entry registered in the frame at depth `frame` remembered under the reduction `plain` names, on what it rests on: `read`, the deepest frame it read ([`Frames::end_reads`]), and `footing`. Kept for the next settlement made under the same refinements.
     pub(crate) fn keep_settled_window(
         &self,
         frame: usize,
         plain: bool,
         window: Window,
         footing: Footing,
+        read: usize,
     ) {
-        if let Some(frame) = self.frame_at(frame) {
-            frame.settled_windows.borrow_mut()[usize::from(plain)] = Some(KeptWindow {
+        let stood = Prefix {
+            stand: self.stand_number(),
+            depth: read + 1,
+            innermost: self.frame_at(read).map_or(0, |frame| frame.number),
+        };
+        if let Some(under) = self.settled_under(frame) {
+            under.settled_windows.borrow_mut()[usize::from(plain)] = Some(KeptWindow {
                 window,
-                stood: self.prefix(),
+                stood,
                 footing,
             });
-        }
-    }
-
-    /// The frames that stand now, for [`Frames::still_stand`] to be asked about later.
-    fn prefix(&self) -> Prefix {
-        let innermost = self.innermost_frame();
-
-        Prefix {
-            stand: self.stand_number(),
-            depth: innermost.depth + 1,
-            innermost: innermost.number,
         }
     }
 
@@ -725,13 +796,15 @@ impl<'s> Frames<'s> {
 
     /// Withhold, for as long as the current frame stands, the equation `entry` holds under `key` in a frame outside. The façade clears the caches first.
     pub(crate) fn withhold_scrutinee(&mut self, key: Term, entry: ScrutineeEntry) {
-        self.innermost().refinement_scrutinees.insert(
+        let frame = self.innermost();
+        frame.refinement_scrutinees.insert(
             key,
             ScrutineeEntry {
                 withheld: true,
                 ..entry
             },
         );
+        forget_settled_windows(frame);
     }
 
     /// Whether a frame inside the one at depth `frame`, below `ceiling`, withholds the equation `key` holds there.
@@ -771,6 +844,9 @@ impl<'s> Frames<'s> {
 
     /// Whether `canonical` is a scrutinee key registered in a frame a judgment standing on held frames set aside, and in none that stands: a guard the judgment's own frames register is its own, whether or not a settlement withholds it, and unfolds where it does not answer as it would with nothing set aside. A `Var`/`Proj` key stays neutral there for free (its refinement is not in view, so it does not unfold); an application key would otherwise unfold to its definition body and stop being a key. The reducer consults this to keep such a key neutral, so a solution committed where a guard is not in view stays a term the guard can still fire on where it is.
     pub(crate) fn is_key_set_aside(&self, canonical: &Term) -> bool {
+        if !self.aside.is_empty() {
+            self.read_scope();
+        }
         let registers = |frame: &Frame| frame.refinement_scrutinees.contains_key(canonical);
 
         self.refined_aside().any(registers) && !self.refined_standing().any(registers)
@@ -787,8 +863,15 @@ impl<'s> Frames<'s> {
     /// The frames the window leaves visible that register a refinement, innermost first: those whose refinements a lookup reads.
     fn refined_in_view(&self) -> impl Iterator<Item = &Frame> {
         let ceiling = self.refinement_ceiling();
-        self.refined_standing()
+        let mut in_view = self
+            .refined_standing()
             .filter(move |frame| frame.depth < ceiling)
+            .peekable();
+        // A question put to the refinements in view reads the innermost frame in view that registers one and the frames beneath it, whose refinements hold still while it stands.
+        if let Some(innermost) = in_view.peek() {
+            self.read(innermost.depth);
+        }
+        in_view
     }
 
     /// Begin withholding the refinements of the frame at depth `frame` and every frame inside it, returning the previous limit — the bracket intrinsic for `Context::with_refinements_withheld_from`.
@@ -812,11 +895,17 @@ impl<'s> Frames<'s> {
     ///
     /// Γ is the *local* binders only — the locals of the frames past the base, each name once at its innermost binding. Top-level definitions are excluded so an item's elaboration is independent of how much else is in scope: a metavariable born deep in a proof carries just its enclosing binders, not the whole prelude, keeping the contextual solve's spine a small pattern (and the prelude cacheable). Globals a solution mentions are admitted by the solver's scope check via [`Frames::is_top_level`] instead.
     pub(crate) fn identity_snapshot(&self) -> (BirthTelescope, SharedSpine) {
+        self.read_scope();
         match &self.top {
             Some(top) => (top.telescope.clone(), top.spine.clone()),
             None => (BirthTelescope::default(), SharedSpine::new()),
         }
     }
+}
+
+/// Forget what the settlements made under `frame`'s refinements remembered: the frame registers another, which they were not made under.
+fn forget_settled_windows(frame: &Frame) {
+    *frame.settled_windows.borrow_mut() = Default::default();
 }
 
 /// What a judgment standing on held frames set aside beside the frames themselves ([`Frames::stand_on`]): the withholding in force among them.

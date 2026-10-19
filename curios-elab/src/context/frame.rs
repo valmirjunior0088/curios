@@ -21,12 +21,20 @@ use {
 /// One definition: the definiens, plus the [`DefinitionKind`] of the module item that introduced it. Every `DefEntry` — whether a plain `let`/`rec` member or mid-window rec-group registration — is treated uniformly; there is no `recursive` marker distinguishing them.
 ///
 /// `kind` is `None` for a genuine *local* binding — a `let` binder, an opened match scrutinee, a lambda parameter — which no module item declared. It is carried rather than re-derived: the kind is elaboration metadata `into_core` attached where the item was generated, and splitting the definition's name apart to recover it would misread an ordinary definition that merely happens to sit under a generated namespace (see [`DefinitionKind`]'s own docs).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub(crate) struct DefEntry {
     term: Term,
     kind: Option<DefinitionKind>,
     /// Whether the name is a proof its item published ([`curios_core::Definition::proof`]): it stays bound to `term`, which is what says which group it is a member of, and unfolds to nothing.
     proof: bool,
+    /// The depth of the frame that defines the name: what a settlement reading the definition rests on ([`Frames::begin_reads`](super::Frames::begin_reads)). No part of what the definition is, so two definitions alike in all else are one.
+    depth: usize,
+}
+
+impl PartialEq for DefEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.term == other.term && self.kind == other.kind && self.proof == other.proof
+    }
 }
 
 impl DefEntry {
@@ -35,6 +43,7 @@ impl DefEntry {
             term,
             kind,
             proof: false,
+            depth: 0,
         }
     }
 
@@ -44,7 +53,18 @@ impl DefEntry {
             term,
             kind: Some(kind),
             proof,
+            depth: 0,
         }
+    }
+
+    /// The entry as the frame at `depth` defines it.
+    pub(super) fn defined_at(self, depth: usize) -> Self {
+        Self { depth, ..self }
+    }
+
+    /// The depth of the frame that defines the name.
+    pub(super) fn depth(&self) -> usize {
+        self.depth
     }
 
     pub(crate) fn body(&self) -> &Term {
@@ -79,7 +99,7 @@ pub(crate) struct Settled {
     pub(crate) unerased: Term,
 }
 
-/// What a settlement of one of a frame's entries remembered, beside the frames that stood when it was filed and what else it rests on: it answers only while both stand.
+/// What a settlement remembered, beside the deepest frame it read and what else it rests on: it answers only while both stand.
 #[derive(Debug)]
 pub(super) struct KeptWindow {
     pub(super) window: Window,
@@ -87,9 +107,9 @@ pub(super) struct KeptWindow {
     pub(super) footing: Footing,
 }
 
-/// The frames that stand at one moment, as a later moment can ask whether they all still do: the stand they stand in, how many there are, and the number the innermost took.
+/// The frames through one that stands at one moment, as a later moment can ask whether they all still do: the stand they stand in, how many there are, and the number the last took.
 ///
-/// A frame leaves only after every frame inside it, and no two frames take one number, so they all stand while the innermost does. A copy a stand holds keeps the number of the frame it copies and may hold less than that frame does now, so the stand is what tells the two apart.
+/// A frame leaves only after every frame inside it, and no two frames take one number, so they all stand while the last does. A copy a stand holds keeps the number of the frame it copies and may hold less than that frame does now, so the stand is what tells the two apart.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Prefix {
     pub(super) stand: u64,
@@ -232,6 +252,8 @@ pub(super) struct Binding {
     pub(super) type_: Term,
     pub(super) universes: UniverseContext,
     place: i64,
+    /// The depth of the frame that binds the name: what a settlement reading the binding rests on.
+    pub(super) depth: usize,
 }
 
 /// One frame: what the scope it was entered for adds, and the scope through it. See the module documentation.
@@ -285,9 +307,9 @@ pub(crate) struct Frame {
     ///
     /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the kernel settles an equation's reduct once for each.
     pub(super) scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
-    /// What the last settlement of one of this frame's entries remembered, of each of the two reductions: the next settlement made here starts from it (`Caches::enter_window`).
+    /// What the last settlement made under this frame's refinements remembered, of each of the two reductions: the settlement of an entry registered in a frame this is the nearest one beneath to register a refinement, or, kept by the base frame, of one no frame beneath refines. The next settlement made under them starts from it (`Caches::enter_window`).
     ///
-    /// **It rests on what a settled spelling rests on, and on the frames that stood when it was filed.** Every settlement of an entry registered here reads the frames outside this one under the same window, and those cannot change while this one stands. But what a settlement remembers is not its key's alone: a stuck form put to an entry is the probe's, and names what the frames inside stand for, a local definition under a label another frame may define again among them. So the window is filed with the frames that stand ([`Prefix`]) and answers only while they all still do, and with a footing that reads every part, since its reducts are many.
+    /// **It rests on the refinements it read, and on the deepest frame it read.** Every settlement of such an entry withholds the frames from its entry's inwards and reads the refinements of this frame and the frames beneath, which hold still while this one registers nothing more: a registration, and an equation withheld, land in the innermost frame and forget what is kept here. But what a settlement remembers is not its key's alone: a stuck form put to an entry is the probe's, and names what the frames inside stand for, a local definition under a label another frame may define again among them. So the window is filed with the deepest frame it read ([`Prefix`], `Frames::begin_reads`) and answers only while that frame still stands, and with a footing that reads every part, since its reducts are many.
     ///
     /// **Shared by the frame's copies**, which the prefix tells apart where a stand holds one.
     pub(super) settled_windows: Rc<RefCell<[Option<KeptWindow>; 2]>>,
@@ -374,6 +396,11 @@ impl Frame {
         }
     }
 
+    /// The nearest frame beneath that registers a refinement of any kind, where one does.
+    pub(super) fn refined_beneath(&self) -> Option<&Rc<Frame>> {
+        self.refined_beneath.as_ref()
+    }
+
     /// Whether the frame registers a refinement of any kind.
     pub(super) fn refined(&self) -> bool {
         !self.refinements.is_empty()
@@ -410,6 +437,7 @@ impl Frame {
                 type_: type_.clone(),
                 universes: UniverseContext::empty(),
                 place,
+                depth: self.depth,
             },
         );
         match (self.depth > 0, again) {

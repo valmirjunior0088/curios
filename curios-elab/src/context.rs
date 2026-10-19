@@ -1836,7 +1836,7 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`] carries the rule, and the caches set the live window's scoped answers aside for the bracket and hand them back where it ends ([`Caches::enter_window`]). What the settlement remembers is kept by `frame`, for the next settlement of an entry registered there, which reads the same frames ([`Frames::take_settled_window`]).
+    /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`] carries the rule, and the caches set the live window's scoped answers aside for the bracket and hand them back where it ends ([`Caches::enter_window`]). What the settlement remembers is kept under the refinements it read, for the next settlement made under them, for as long as the deepest frame it read stands ([`Frames::take_settled_window`], [`Frames::begin_reads`]).
     pub(crate) fn with_refinements_withheld_from<R>(
         &mut self,
         frame: usize,
@@ -1847,19 +1847,22 @@ impl<'s> Context<'s> {
             .typing
             .frames
             .take_settled_window(frame, plain)
-            .filter(|kept| self.stands(&kept.footing))
-            .map(|kept| kept.window);
+            .filter(|kept| self.stands(&kept.footing));
+        self.typing
+            .frames
+            .begin_reads(kept.as_ref().map_or(0, |kept| kept.stood.depth - 1));
         self.typing
             .caches
-            .enter_window(Bracket::Settlement { plain }, kept);
+            .enter_window(Bracket::Settlement { plain }, kept.map(|kept| kept.window));
         let previous = self.typing.frames.withhold_refinements_from(frame);
         let result = f(self);
         self.typing.frames.restore_withheld_refinements(previous);
+        let read = self.typing.frames.end_reads();
         if let Some(own) = self.typing.caches.leave_window() {
             let footing = self.footing(false, None, true, true);
             self.typing
                 .frames
-                .keep_settled_window(frame, plain, own, footing);
+                .keep_settled_window(frame, plain, own, footing, read);
         }
 
         result
