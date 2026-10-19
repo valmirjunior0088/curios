@@ -144,40 +144,46 @@ pub(crate) fn part_digest(
     places: &Places,
     question: &Question,
 ) -> Result<Option<String>, String> {
-    let Some(name) = question.subject() else {
+    let Some(place) = question.subject().and_then(|name| places.place(name)) else {
         return Ok(None);
     };
-    let Some(place) = places.place(name) else {
-        return Ok(None);
-    };
+
+    item_part_digest(&module.items[place.item()], place, question)
+}
+
+/// [`part_digest`] of the part `question` asks of the declaration `item` holds at `place`: what a walk asks of an item it holds in hand, before any module places it.
+pub(crate) fn item_part_digest(
+    item: &Item,
+    place: Place,
+    question: &Question,
+) -> Result<Option<String>, String> {
     let sharing = Sharing::new();
     // A definition of its own, or a group's member with the group it is read through.
-    let (name, held, island, totality, proof, group, plain) =
-        match (&module.items[place.item()], place) {
-            (Item::Let(definition), Place::Let(_)) => (
+    let (name, held, island, totality, proof, group, plain) = match (item, place) {
+        (Item::Let(definition), Place::Let(_)) => (
+            definition.name,
+            &definition.kind,
+            definition.island,
+            definition.totality,
+            definition.proof,
+            None,
+            Some(definition),
+        ),
+        (Item::Rec(rec), Place::Member { member, .. }) => {
+            let definition = &rec.definitions[member as usize];
+
+            (
                 definition.name,
                 &definition.kind,
                 definition.island,
                 definition.totality,
                 definition.proof,
+                Some(rec),
                 None,
-                Some(definition),
-            ),
-            (Item::Rec(rec), Place::Member { member, .. }) => {
-                let definition = &rec.definitions[member as usize];
-
-                (
-                    definition.name,
-                    &definition.kind,
-                    definition.island,
-                    definition.totality,
-                    definition.proof,
-                    Some(rec),
-                    None,
-                )
-            }
-            _ => unreachable!("a name's place is its item's"),
-        };
+            )
+        }
+        _ => unreachable!("a name's place is its item's"),
+    };
 
     // What the name is declared as, the entry a former carries left out: the entry is a part of its own.
     let origin = (!matches!(held, DefinitionKind::Nominal(_))).then(|| held.clone());
@@ -188,7 +194,7 @@ pub(crate) fn part_digest(
 
             sealed(curios_archive::to_bytes(&(
                 kind.clone(),
-                definition.universe_context.clone(),
+                definition.universe_context.unplaced(),
                 type_,
             )))
         }
@@ -208,7 +214,7 @@ pub(crate) fn part_digest(
 
             sealed(curios_archive::to_bytes(&(
                 kind.clone(),
-                rec.group.universe_context().clone(),
+                rec.group.universe_context().unplaced(),
                 members,
             )))
         }

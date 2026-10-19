@@ -1,9 +1,11 @@
 //! Which parts of a definition elaborated again answer as its baseline's.
 
 use {
-    crate::{Question, Same},
+    crate::{Question, Same, item_part_digest},
     curios_core::{
-        Definition, DefinitionKind, Global, Intrinsic, Item, Nat, Term, Totality, UniverseContext,
+        Anchor, Anchored, Definition, DefinitionKind, Extent, Global, Intrinsic, Item, Level, Nat,
+        Place, Sharing, Term, Totality, UniverseConstraint, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseParam,
     },
     curios_utilities::Qualifier,
 };
@@ -62,4 +64,38 @@ fn a_definition_whose_mark_moved_unfolds_to_something_else() {
         unfolds_alike(&stated(1, false), &stated(1, true)),
         (false, true)
     );
+}
+
+/// A definition's signature digests as the unit stores it: where its scheme's constraint was raised is a position of its text, which no stored form holds, so the definition elaborated now and the one restored from a store digest alike.
+#[test]
+fn a_signature_digests_alike_wherever_its_constraints_were_raised() {
+    let raised = Item::Let(Definition {
+        universe_context: UniverseContext {
+            parameter_count: 2,
+            quality_count: 0,
+            constraints: vec![UniverseConstraint {
+                lower: Level::param(UniverseParam(0)),
+                upper: Level::param(UniverseParam(1)),
+                origin: UniverseConstraintOrigin {
+                    extent: Some(Extent {
+                        anchor: Anchor::of(Anchored::Entry),
+                        start: 0,
+                        end: 4,
+                        stamp: 0,
+                    }),
+                    ..UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity)
+                },
+            }],
+        },
+        ..match stated(1, false) {
+            Item::Let(definition) => definition,
+            Item::Rec(_) => unreachable!("a definition of its own"),
+        }
+    });
+    let digest = |item: &Item| {
+        item_part_digest(item, Place::Let(0), &Question::Signature(name()))
+            .expect("a signature digests")
+    };
+
+    assert_eq!(digest(&raised), digest(&raised.shared(&Sharing::new())));
 }
