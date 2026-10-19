@@ -9,6 +9,8 @@
 //! **Kept geometric where it is filed.** The filing that writes a pack merges the smallest packs of the address into one, wherever each no longer holds at least twice the objects of the one before it, as `git repack --geometric` rolls a repository's packs up: the address holds a logarithmic number of packs, and an object is written again a logarithmic number of times over its life. The elaborated declarations of the merged packs are consed again in one table ([`repacked`]), so a pack keeps one however it was made.
 //!
 //! **A pack another filer merged away is looked for again.** The packs are listed once for a handle, and again where an object is not found among them, so a merge that renamed what a reader was about to read is a second listing, never a miss.
+//!
+//! **What no slot names is collected where a filing finds a day has passed since the last collection** ([`Packs::collect`]): an object the address's slot has not named for five days is dropped from its pack. Each address keeps a table of the objects a collection found its slot not naming, with when one first did, and forgets one named again, as git keeps a time for each unreachable object of a cruft pack ([`gitformat-pack`](https://git-scm.com/docs/gitformat-pack#_cruft_packs)) rather than one for the pack: a pack holding a live unit is read by every restore of it, so a time renewed by reads, as Go's build cache keeps one for each file ([`cache.go`](https://go.dev/src/cmd/go/internal/cache/cache.go)), would keep every dead object beside the live ones for as long as the unit is used. A read writes nothing. A filer that found an object present as a collection beside it drops it names an object no pack holds, which is a miss and never a belief. Every time is asked of the clock the handle was opened at.
 
 #[cfg(test)]
 mod tests;
@@ -19,11 +21,12 @@ use {
     curios_utilities::{Digest, Object},
     std::{
         cell::RefCell,
-        collections::BTreeMap,
+        collections::{BTreeMap, BTreeSet},
         fs::{self, File},
         io,
-        path::PathBuf,
+        path::{Path, PathBuf},
         rc::Rc,
+        time::{Duration, SystemTime},
     },
 };
 
@@ -32,6 +35,15 @@ const EXTENSION: &str = "pack";
 
 /// How many times the objects of the pack before it each pack holds, in a geometric address.
 const FACTOR: usize = 2;
+
+/// The file that says when the address was last collected, and which objects a collection found its slot not naming, since when ([`Collection`]).
+const COLLECTION: &str = "collection";
+
+/// How long an address goes between collections.
+const INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// How long an object goes unnamed by its address's slot before a collection drops it.
+const GRACE: Duration = Duration::from_secs(5 * 24 * 60 * 60);
 
 /// The packs of one address.
 pub(crate) struct Packs {
@@ -42,16 +54,19 @@ pub(crate) struct Packs {
     names: RefCell<BTreeMap<String, Option<Rc<[Digest]>>>>,
     /// Each pack read whole so far, by its name, `None` for one that could not be read or was no pack.
     read: RefCell<BTreeMap<String, Option<Rc<Pack>>>>,
+    /// The time this handle collects by.
+    now: SystemTime,
 }
 
 impl Packs {
-    /// The packs kept in `directory`.
-    pub(crate) fn at(directory: PathBuf) -> Self {
+    /// The packs kept in `directory`, collected at the time `now`.
+    pub(crate) fn at(directory: PathBuf, now: SystemTime) -> Self {
         Self {
             directory,
             listed: RefCell::new(None),
             names: RefCell::new(BTreeMap::new()),
             read: RefCell::new(BTreeMap::new()),
+            now,
         }
     }
 
@@ -81,6 +96,78 @@ impl Packs {
             .filter(|digest| !held.iter().any(|names| names.binary_search(digest).is_ok()))
             .copied()
             .collect()
+    }
+
+    /// Collect this address where a day has passed since it was last collected, `named` being what its slot names: an object it does not name is noted with the time a collection first found it so, one named again is forgotten, and one unnamed for [`GRACE`] is dropped from its pack, which is taken away where it holds nothing else and written again holding the rest otherwise. Nothing is collected at an address never collected before, which starts its clock.
+    pub(crate) fn collect(&self, named: &BTreeSet<Digest>) -> io::Result<()> {
+        let path = self.directory.join(COLLECTION);
+        let earlier = fs::read(&path)
+            .ok()
+            .and_then(|bytes| Collection::read(&bytes));
+        let Some(earlier) = earlier else {
+            return self.collected(&Collection::at(self.now));
+        };
+        if self.since(earlier.at) < INTERVAL {
+            return Ok(());
+        }
+
+        let mut collection = Collection::at(self.now);
+        for name in self.list() {
+            let Some(names) = self.names(&name) else {
+                continue;
+            };
+            let mut dropped = false;
+            for digest in names.iter().filter(|digest| !named.contains(*digest)) {
+                let since = earlier.unnamed.get(digest).copied().unwrap_or(self.now);
+                match self.since(since) >= GRACE {
+                    true => dropped = true,
+                    false => {
+                        collection.unnamed.insert(*digest, since);
+                    }
+                }
+            }
+            // A pack that cannot be read is left where it is, and collected by a later filing that can read it.
+            if dropped && let Some(pack) = self.pack(&name) {
+                let kept = pack
+                    .objects()
+                    .filter(|object| {
+                        named.contains(&object.digest)
+                            || collection.unnamed.contains_key(&object.digest)
+                    })
+                    .collect::<Vec<_>>();
+                let into = match kept.is_empty() {
+                    true => None,
+                    false => Some(self.put(repacked(kept).map_err(io::Error::other)?)?),
+                };
+                if into.as_deref() != Some(name.as_str()) {
+                    let _ = fs::remove_file(self.path(&name));
+                }
+            }
+        }
+        // What a filer that stopped short left staged is never renamed into place, and nothing reads it.
+        for entry in fs::read_dir(&self.directory)?.flatten() {
+            let staged = entry.path();
+            let part = staged
+                .extension()
+                .is_some_and(|extension| extension == "part");
+            if part && modified(&staged).is_some_and(|written| self.since(written) >= GRACE) {
+                let _ = fs::remove_file(&staged);
+            }
+        }
+        self.listed.borrow_mut().take();
+
+        self.collected(&collection)
+    }
+
+    /// File `collection` as what this address's last collection found, staged and renamed into place as a pack is.
+    fn collected(&self, collection: &Collection) -> io::Result<()> {
+        fs::create_dir_all(&self.directory)?;
+        let path = self.directory.join(COLLECTION);
+        let staged = path.with_extension(format!("{}.part", std::process::id()));
+        fs::write(&staged, collection.bytes())?;
+        fs::rename(&staged, &path).inspect_err(|_| {
+            let _ = fs::remove_file(&staged);
+        })
     }
 
     /// File `objects` as one pack beside what the address holds, then merge the smallest packs where they are no longer geometric. Nothing is written for no objects.
@@ -136,7 +223,8 @@ impl Packs {
         if merged.len() < 2 {
             return Ok(());
         }
-        let merging = repacked(merged.iter().map(|(_, pack)| &**pack)).map_err(io::Error::other)?;
+        let merging = repacked(merged.iter().flat_map(|(_, pack)| pack.objects()))
+            .map_err(io::Error::other)?;
         let into = self.put(merging)?;
         for (name, _) in &merged {
             if *name != into {
@@ -220,9 +308,79 @@ impl Packs {
         read
     }
 
+    /// How long before this handle's time `then` is: none where it is after it.
+    fn since(&self, then: SystemTime) -> Duration {
+        self.now.duration_since(then).unwrap_or_default()
+    }
+
     /// Where the pack named `name` is kept.
     fn path(&self, name: &str) -> PathBuf {
         self.directory.join(name).with_extension(EXTENSION)
+    }
+}
+
+/// When the file at `path` was last changed: `None` where it cannot be asked.
+fn modified(path: &Path) -> Option<SystemTime> {
+    fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+}
+
+/// What an address's last collection found: when it ran, and each object it found the slot not naming, with when a collection first did.
+struct Collection {
+    at: SystemTime,
+    unnamed: BTreeMap<Digest, SystemTime>,
+}
+
+impl Collection {
+    /// A collection run at `at` that found every object named.
+    fn at(at: SystemTime) -> Self {
+        Self {
+            at,
+            unnamed: BTreeMap::new(),
+        }
+    }
+
+    /// The bytes this collection is filed as: when it ran, then each object it found unnamed with since when, each time in seconds after the epoch.
+    fn bytes(&self) -> Vec<u8> {
+        let seconds = |time: SystemTime| {
+            time.duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+                .to_le_bytes()
+        };
+        let mut bytes = Vec::with_capacity(8 + 40 * self.unnamed.len());
+        bytes.extend_from_slice(&seconds(self.at));
+        for (digest, since) in &self.unnamed {
+            bytes.extend_from_slice(digest.as_bytes());
+            bytes.extend_from_slice(&seconds(*since));
+        }
+
+        bytes
+    }
+
+    /// The collection filed as `bytes` ([`Collection::bytes`]), or `None` for bytes that are no such thing.
+    fn read(bytes: &[u8]) -> Option<Self> {
+        let time = |seconds: &[u8]| {
+            let seconds = u64::from_le_bytes(seconds.try_into().ok()?);
+            SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(seconds))
+        };
+        let (at, rest) = bytes.split_first_chunk::<8>()?;
+        if !rest.len().is_multiple_of(40) {
+            return None;
+        }
+        let unnamed = rest
+            .chunks_exact(40)
+            .map(|entry| {
+                let digest = Digest::from_bytes(entry[..32].try_into().ok()?);
+                Some((digest, time(&entry[32..])?))
+            })
+            .collect::<Option<_>>()?;
+
+        Some(Self {
+            at: time(at)?,
+            unnamed,
+        })
     }
 }
 

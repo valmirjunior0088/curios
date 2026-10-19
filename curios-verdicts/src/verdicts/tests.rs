@@ -609,6 +609,10 @@ fn packs(root: &Path) -> Vec<PathBuf> {
         .expect("a store with objects in it")
         .flat_map(|address| fs::read_dir(address.unwrap().path()).unwrap())
         .map(|pack| pack.unwrap().path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "pack")
+        })
         .collect()
 }
 

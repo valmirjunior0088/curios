@@ -125,7 +125,8 @@ fn pack_of(items: &[Item], alone: &[Object]) -> Pack {
 fn a_merge_conses_its_runs_into_one() {
     let (first, second) = ([item("a"), item("b")], [item("c")]);
     let alone = [whole(b"alone")];
-    let merged = repacked([&pack_of(&first, &alone), &pack_of(&second, &[])]).expect("packs merge");
+    let packs = [pack_of(&first, &alone), pack_of(&second, &[])];
+    let merged = repacked(packs.iter().flat_map(Pack::objects)).expect("packs merge");
     let merged = Pack::read(Bytes::from(merged)).expect("a merge is a pack");
 
     assert_eq!(merged.len(), 4);

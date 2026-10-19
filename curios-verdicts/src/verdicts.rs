@@ -26,6 +26,7 @@ use {
         fs, io,
         path::{Path, PathBuf},
         rc::Rc,
+        time::SystemTime,
     },
 };
 
@@ -392,7 +393,7 @@ impl Verdicts {
             .packs
             .borrow_mut()
             .entry(slot.to_string())
-            .or_insert_with(|| Rc::new(Packs::at(store.objects(slot))))
+            .or_insert_with(|| Rc::new(Packs::at(store.objects(slot), SystemTime::now())))
             .clone();
 
         Some(packs)
@@ -421,6 +422,15 @@ impl Verdicts {
             .map_err(io::Error::other)?;
 
         packs.write(&objects)
+    }
+
+    /// Collect the packs of `slot`'s address, whose slot now names what `stored` names ([`Packs::collect`]).
+    fn collect(&self, slot: &str, stored: &Indexed) -> io::Result<()> {
+        let packs = self
+            .packs(slot)
+            .ok_or_else(|| io::Error::other("a store collects objects"))?;
+
+        packs.collect(&stored.digests().copied().collect())
     }
 
     /// What each unit of `sources` is filed as, in order, verified against the store without deserializing any of it — the probe [`Verdicts::payload_get`] decides a hit with.
@@ -650,11 +660,12 @@ impl Cache for Verdicts {
             source.answered().to_vec(),
             placement.contained.clone(),
         );
-        // The objects first, so a slot never names one not yet written.
+        // The objects first, so a slot never names one not yet written; then what the address's slot no longer names is collected.
         let filed = self
             .file_objects(&placement.slot, &placement.stored)
             .and_then(|()| curios_archive::to_bytes(&record).map_err(io::Error::other))
-            .and_then(|record| replace(&placement.path, &record, &placement.stored.index));
+            .and_then(|record| replace(&placement.path, &record, &placement.stored.index))
+            .and_then(|()| self.collect(&placement.slot, &placement.stored));
 
         // Best effort: a store that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit takes its place below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
         match filed {

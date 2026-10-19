@@ -199,13 +199,13 @@ impl Pack {
     }
 }
 
-/// The bytes of one pack holding every object of `packs`, each once: an object stored alone as it is, and every member of a run read out of it and consed again with the others in one run ([`ItemRun::of`]), so a merged pack keeps one table of nodes for the declarations it holds. `Err` is a run that holds no items, or no member an entry names.
-pub fn repacked<'p>(packs: impl IntoIterator<Item = &'p Pack>) -> Result<Vec<u8>, String> {
+/// The bytes of one pack holding `objects`, each once, read out of other packs: an object stored alone as it is, and every member of a run read out of it and consed again with the others in one run ([`ItemRun::of`]), so a pack made of others keeps one table of nodes for the declarations it holds. `Err` is a run that holds no items, or no member an entry names.
+pub fn repacked(objects: impl IntoIterator<Item = Object>) -> Result<Vec<u8>, String> {
     let mut alone = Vec::new();
     let mut members = BTreeMap::<Digest, Item>::new();
     // Each run read, by where it lies in memory: its members are read out of it once.
     let mut runs = HashMap::<(*const u8, usize), ItemRun>::new();
-    for object in packs.into_iter().flat_map(Pack::objects) {
+    for object in objects {
         let Some(member) = object.member else {
             alone.push(object);
             continue;
