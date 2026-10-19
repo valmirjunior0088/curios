@@ -49,3 +49,11 @@ Foundational utilities shared across every pipeline stage: source spans and repo
 **Decision.** Recursive walks over data-shaped depth run inside `recurse`, which grows the native stack when the reserve runs low, and a stage's entry point inside `grown`, which takes a segment unconditionally; the two figures are written here and nowhere else ([Depth is bought with stack, not with hand-rolled frames](../documentation/design/compilation/depth-is-bought-with-stack-not-with-hand-rolled-frames.md)).
 
 **Rationale.** Figures kept once cannot drift, where three call sites carrying their own constants could.
+
+### A persistent map's shape is a function of the keys it holds
+
+**Decision.** A unit's tables are held in this crate's persistent maps (`Persistent`, `Ordered`, `Sorted`): a treap whose shape is a function of the keys it holds, so two versions holding one set of keys are one tree. A table a unit stores is held in a map read back in a stated order — `Ordered`, by a declaration's place, or `Sorted`, by name, archived as its entries in that order (`KeyOrder`) — and never in `Persistent`, whose order follows the process; an index a walk only looks up in may be. Two versions are compared by the nodes they do not share (`Ordered::diff`).
+
+**Rationale.** A recompile makes a version of its baseline ([A compile costs what it reads](../documentation/design/compilation/a-compile-costs-what-it-reads.md)): replacing an entry costs a path, and two versions are compared by what they do not share, which a shape that is a function of the keys lets a walk find node beside node. A table stored in an order the process chose makes a unit's bytes follow the process ([`curios-unit`'s README](../curios-unit/README.md#a-unit-is-a-function-of-what-it-was-compiled-from)).
+
+**Rejected.** A stored table held in `Persistent`, whose order is a hash's the process draws.
