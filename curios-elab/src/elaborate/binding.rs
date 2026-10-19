@@ -52,7 +52,8 @@ pub(super) fn elaborate_let(
             };
             let label = context.fresh_for(let_.tail.hint(index), let_.tail.written(index));
 
-            // Define the binding with the *rebuilt* body so the tail's type-level evaluation does not reduce through the lowered (under-applied) original.
+            // Define the binding with the *rebuilt* body so the tail's type-level evaluation does not reduce through the lowered (under-applied) original, its committed solutions substituted: a solved metavariable left in it stands over a spine of every binding before it, which each reduction through the definition would read again, a chain of definitions paying its length at every link. The type stays as written, since what a tail's unification solves from it is spelled as it is.
+            let body_elaborated = zonk_solved_term_metas(context, &body_elaborated);
             context.define_assuming(&label, &type_elaborated, &body_elaborated, None);
 
             label_terms.push(Term::free_var(&label));
