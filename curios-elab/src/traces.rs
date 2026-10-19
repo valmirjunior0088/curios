@@ -43,7 +43,7 @@ pub struct Traces {
     before: Rc<BTreeSet<Global>>,
     /// The order the unit's items are stored in, with what each reaches of the unit and its depth: what a unit compiled over this one gives the order again from the items it made by ([`Order::revised`]).
     order: Order,
-    /// The candidate each declaration's elaboration was filed as ([`Candidating`](crate::Candidating)), by the name it is written as, where a filing made one.
+    /// The candidate each declaration was filed as by the stage these are the traces of, by the name it is written as, where a filing made one: its elaboration ([`Candidating`](crate::Candidating)), or its item's erasure ([`ErasedUnit::erasure_candidate`](crate::ErasedUnit::erasure_candidate)).
     ///
     /// **Carried with the trace it was made beside.** A declaration kept over a baseline asked what it asked there and read each part as it was, so its candidate is the one its baseline filed, and a unit compiled over this one names it again without making it; one made again or dropped is taken out with its trace.
     #[archived_with(InKeyOrder)]
@@ -132,6 +132,19 @@ impl Traces {
     ) {
         self.declarations.insert(name, Rc::new(Filed::new(trace)));
         self.candidates.insert(name, *candidate.as_bytes());
+    }
+
+    /// File `trace` as what the item first naming `name` asked where it was made now, beside `candidate`, the candidate it was taken from where it was: in place of any trace and candidate held under the name.
+    pub(crate) fn file_held(&mut self, name: Global, trace: HeldTrace, candidate: Option<Digest>) {
+        self.declarations.insert(name, trace);
+        match candidate {
+            Some(candidate) => {
+                self.candidates.insert(name, *candidate.as_bytes());
+            }
+            None => {
+                self.candidates.remove(&name);
+            }
+        }
     }
 
     /// File `trace` as what the declaration written as `name` asked: another unit's trace of it, held where that unit holds it.

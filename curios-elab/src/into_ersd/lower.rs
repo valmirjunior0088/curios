@@ -664,13 +664,27 @@ pub(super) fn erase_items<'s>(
         let item = &module.items[place];
         let names = item.declared_names();
         let kept = over.as_mut().and_then(|over| over.keep(place, item, &unit));
-        let trace = match kept {
-            Some((held, trace)) => {
+        let taken = match kept {
+            Some(_) => None,
+            None => over
+                .as_ref()
+                .and_then(|over| over.taken(place, item, &unit)),
+        };
+        let (trace, candidate) = match (kept, taken) {
+            (Some((held, trace)), _) => {
+                unit.keep(place, item, held);
+                if let Some(name) = names.first() {
+                    asked.share(**name, trace);
+                }
+                continue;
+            }
+            (None, Some((held, trace, candidate))) => {
+                curios_profile::sample!("erase::taken", trace.len());
                 unit.keep(place, item, held);
 
-                trace
+                (trace, Some(candidate))
             }
-            None => {
+            (None, None) => {
                 let read = RefCell::new(Vec::new());
                 let externals = |name: &Global| {
                     read.borrow_mut().push(*name);
@@ -703,20 +717,19 @@ pub(super) fn erase_items<'s>(
                 let trace = context.take_trace();
                 // One sample for each item erased, with how much its erasure asked.
                 curios_profile::sample!("erase::asked", trace.len());
-
                 unit.push(place, item, erased);
-                made.extend(names.first().map(|name| **name));
-                // A trace is filed under the first name, so one the baseline filed under another is a declaration this one now holds the name of.
-                for name in names.iter().skip(1) {
-                    asked.forget(name);
-                    others.push(**name);
-                }
 
-                Rc::new(Filed::new(trace))
+                (trace, None)
             }
         };
+        made.extend(names.first().map(|name| **name));
+        // A trace is filed under the first name, so one the baseline filed under another is a declaration this one now holds the name of.
+        for name in names.iter().skip(1) {
+            asked.forget(name);
+            others.push(**name);
+        }
         if let Some(name) = names.first() {
-            asked.share(**name, trace);
+            asked.file_held(**name, Rc::new(Filed::new(trace)), candidate);
         }
     }
     // Who asked what of the unit's traces: the baseline's, with the edges of every item erased again, or no longer held, replaced.

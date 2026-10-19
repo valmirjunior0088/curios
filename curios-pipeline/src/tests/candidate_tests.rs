@@ -45,6 +45,26 @@ fn identity(unit: &Unit, name: &str) -> Digest {
     ItemRun::identity(&unit.core().items[place.item()]).expect("an item archives")
 }
 
+/// The digest of the erased form `unit` holds for the item declaring `name`.
+fn form(unit: &Unit, name: &str) -> Digest {
+    let place = unit
+        .places()
+        .place(&named(name))
+        .expect("the unit declares the name")
+        .item();
+    let at = unit
+        .core()
+        .items
+        .places()
+        .position(|held| held == place)
+        .expect("the unit holds the item");
+
+    unit.erased()
+        .items_objects()
+        .expect("an erased form archives")[at]
+        .digest
+}
+
 /// What the declaration `unit` lowered as `name` was made from, as a candidate is found by.
 fn input(unit: &Unit, name: &str) -> Digest {
     let (lowered, declarations) = (unit.text().core(), unit.text().declarations());
@@ -64,7 +84,7 @@ const FIRST: &str = "use /std/{Nat};\n\npub let base: Nat = 1;\n\npub let next: 
 
 const EDITED: &str = "use /std/{Nat};\n\npub let base: Nat = 2;\n\npub let next: Nat = base;\n";
 
-/// An edit undone elaborates nothing: the declaration it made again is lowered as it was first, every part it read stands, and its item is read out of the store, the unit coming out as a whole compile of the first text.
+/// An edit undone elaborates and erases nothing: the declaration it made again is lowered as it was first and every part and binding read stands, so its item is read out of the store, then its erased form and the one of the declaration that read its value, the unit coming out as a whole compile of the first text.
 #[test]
 fn an_edit_undone_takes_what_it_made_from_the_store() {
     let first = unit_of(FIRST);
@@ -76,7 +96,14 @@ fn an_edit_undone_takes_what_it_made_from_the_store() {
     let undone = recompile_from(FIRST, &edited, &store);
 
     assert_stored_alike(&first, &undone);
-    assert_eq!(*store.read.borrow(), vec![identity(&first, "base")]);
+    assert_eq!(
+        *store.read.borrow(),
+        vec![
+            identity(&first, "base"),
+            form(&first, "base"),
+            form(&first, "next")
+        ]
+    );
 }
 
 const ALIASED: &str =

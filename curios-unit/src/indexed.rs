@@ -59,7 +59,7 @@ pub(crate) enum Kind {
     Traces(Vec<(Digest, Global, HeldTrace)>),
     /// What judging definitions read, each with its digest and the definition's name.
     Reads(Vec<(Digest, Global, HeldReads)>),
-    /// The candidates of a unit's declarations' elaborations, stored alone: the ones a filing made now, and the digests of the ones it carried, which `unit` makes again for a store that lacks one ([`Uncertified::candidates_again`]).
+    /// The candidates of a unit's declarations' elaborations and of its items' erasures, stored alone: the ones a filing made now, and the digests of the ones it carried, which `unit` makes again for a store that lacks one ([`Uncertified::candidates_again`]).
     Candidates {
         made: Vec<Object>,
         carried: Vec<Digest>,

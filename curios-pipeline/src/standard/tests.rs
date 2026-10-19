@@ -415,7 +415,7 @@ fn std_undo_reproduction() {
             .expect("the library recompiles over the edit");
 
             println!("{label}");
-            println!("  items read  {:>10}", store.read.borrow().len());
+            println!("  objects read {:>9}", store.read.borrow().len());
             assert_stored_alike(&original, &undone);
         }
     });

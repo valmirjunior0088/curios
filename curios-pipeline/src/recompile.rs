@@ -238,6 +238,7 @@ pub(crate) fn compile_lowered_over(
             made: &made,
             dropped: &dropped,
             now: &places,
+            candidates,
         },
     )
     .map_err(|error| {

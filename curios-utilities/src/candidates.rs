@@ -11,6 +11,7 @@ use {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Facet {
     Elaboration,
+    Erasure,
 }
 
 impl Facet {
@@ -18,6 +19,7 @@ impl Facet {
     fn tag(self) -> u8 {
         match self {
             Facet::Elaboration => 1,
+            Facet::Erasure => 2,
         }
     }
 }
@@ -26,6 +28,7 @@ impl fmt::Debug for Facet {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Facet::Elaboration => "elaboration",
+            Facet::Erasure => "erasure",
         })
     }
 }

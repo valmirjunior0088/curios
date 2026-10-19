@@ -468,7 +468,7 @@ impl ErasedUnit {
     }
 
     /// The digest of the erased form of the item at `place`, whole, as it is stored.
-    fn form_digest(&self, place: usize) -> Result<String, String> {
+    pub(super) fn form_digest(&self, place: usize) -> Result<String, String> {
         self.form(place).object().map(|object| object.digest.hex())
     }
 
@@ -612,6 +612,19 @@ impl ErasedUnit {
 pub(super) struct Held {
     erased: Rc<Form>,
     computes: bool,
+}
+
+impl Held {
+    /// The erased form `object` holds, as a store keeps it, with whether it computes: what a unit takes from a candidate, stored again as the bytes it was read from.
+    pub(super) fn stored(object: Object) -> Result<Held, String> {
+        let erased = Rc::new(Form {
+            erased: Deferred::stored(object.bytes),
+            digest: Some(object.digest),
+        });
+        let computes = erased.erased.get()?.module.computes();
+
+        Ok(Held { erased, computes })
+    }
 }
 
 /// An item's erased form, in hand or read out of the object it was stored as, whose digest it keeps: what it is stored as again and compared by, digesting nothing.

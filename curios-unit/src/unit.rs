@@ -159,7 +159,7 @@ impl Uncertified {
 
     /// This unit as it is stored, `unit` being its own archive and `reads`, of a certified unit, what judging each definition read, its own part and its entries: its index, the unit and then what it stores apart from itself ([`halved`]), and the objects the index names. What it stores apart is each part behind its length ([`joined`]) and read by whoever asks for it: the digests of its lowered items, its erased forms, its elaborated items, what each declaration asked as it elaborated and what erasing each item asked ([`digests`]), then where its declarations lie, its import scopes and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's, and `reads` behind them.
     ///
-    /// **With `candidates`, what a store files: the candidate of each declaration's elaboration beside them** ([`Candidating`]), named by the traces' own part, each made now where the traces hold none of it and carried otherwise, as the one its baseline filed.
+    /// **With `candidates`, what a store files: the candidate of each declaration's elaboration and of each item's erasure beside them** ([`Candidating`], [`ErasedUnit::erasure_candidate`]), named by the own part of the stage's traces, each made now where the traces hold none of it and carried otherwise, as the one its baseline filed.
     fn indexed(
         &self,
         unit: &[u8],
@@ -170,16 +170,20 @@ impl Uncertified {
         let forms = self.erased.items_objects()?;
         let named = self.elaborated()?;
         // A unit whose traces are as it restored them files the candidates it restored them beside.
-        let made = match candidates && self.traces.as_stored().is_none() {
+        let elaborations = match candidates && self.traces.as_stored().is_none() {
             true => self.candidates(&items, &named, |held| held.is_none())?,
+            false => Vec::new(),
+        };
+        let erasures = match candidates && self.erased.recorded().as_stored().is_none() {
+            true => self.erasure_candidates(&forms, &named, |held| held.is_none())?,
             false => Vec::new(),
         };
         let elaborated = Kind::Items {
             core: Rc::clone(&self.core),
             named,
         };
-        let (traces_table, traces) = traces_indexed(&self.traces, &made)?;
-        let (asked_table, asked) = traces_indexed(self.erased.recorded(), &[])?;
+        let (traces_table, traces) = traces_indexed(&self.traces, &elaborations)?;
+        let (asked_table, asked) = traces_indexed(self.erased.recorded(), &erasures)?;
         let (text, lowering) = lowering_indexed(&self.text)?;
         let (imports, scopes) = imports_indexed(&self.text)?;
         let (anchors, places) = anchors_indexed(&self.text)?;
@@ -213,20 +217,14 @@ impl Uncertified {
             None => apart,
         };
         if candidates {
-            let carried = match self.traces.as_stored() {
-                Some((table, _)) => curios_archive::from_bytes::<Traces>(table.as_slice())?
-                    .candidates()
-                    .map(|(_, digest)| digest)
-                    .collect(),
-                None => self
-                    .traces
-                    .get()?
-                    .candidates()
-                    .map(|(_, digest)| digest)
-                    .collect(),
-            };
+            let mut carried = held_candidates(&self.traces)?;
+            carried.extend(held_candidates(self.erased.recorded())?);
             kinds.push(Kind::Candidates {
-                made: made.into_iter().map(|(_, object)| object).collect(),
+                made: elaborations
+                    .into_iter()
+                    .chain(erasures)
+                    .map(|(_, object)| object)
+                    .collect(),
                 carried,
                 unit: self.clone(),
             });
@@ -286,28 +284,67 @@ impl Uncertified {
         Ok(made)
     }
 
+    /// The candidate of the erasure of each item of the unit that `wanted` asks for by the digest its erasure's traces hold of one, made now ([`ErasedUnit::erasure_candidate`]), by the first name the item declares: `forms` being the objects its erased forms are stored as and `named` the digest of each elaborated item, each in the order of the items. None is made of an item a candidate cannot be made of.
+    fn erasure_candidates(
+        &self,
+        forms: &[Object],
+        named: &[(usize, Digest)],
+        wanted: impl Fn(Option<Digest>) -> bool,
+    ) -> Result<Vec<(Global, Object)>, String> {
+        let asked = self.erased.recorded().get()?;
+        let items = &self.core.items;
+
+        let mut made = Vec::new();
+        for ((place, identity), form) in named.iter().zip(forms) {
+            let Some(first) = items.names(*place).first().copied() else {
+                continue;
+            };
+            if !wanted(asked.candidate(first)) {
+                continue;
+            }
+            let erased = self.erased.erasure_candidate(
+                &self.core,
+                self.places(),
+                *place,
+                *identity,
+                form.digest,
+            )?;
+            if let Some(object) = erased {
+                made.push((*first, object));
+            }
+        }
+
+        Ok(made)
+    }
+
     /// The candidates named `lacking`, which this unit's traces hold the digests of and a store does not, made again: what a filing writes where it carried a candidate the store it files into lost or never held. `Err` where one made again is not the one carried, which a candidate is a function of the unit for.
     pub(crate) fn candidates_again(
         &self,
         lacking: &BTreeSet<Digest>,
     ) -> Result<Vec<Object>, String> {
-        let items = self.text.items_objects()?;
+        let wanted = |held: Option<Digest>| held.is_some_and(|held| lacking.contains(&held));
+        let (items, forms) = (self.text.items_objects()?, self.erased.items_objects()?);
         let named = self.elaborated()?;
-        let made = self.candidates(&items, &named, |held| {
-            held.is_some_and(|held| lacking.contains(&held))
-        })?;
-        let traces = self.traces.get()?;
+        let (traces, asked) = (self.traces.get()?, self.erased.recorded().get()?);
+        let made = self
+            .candidates(&items, &named, wanted)?
+            .into_iter()
+            .map(|(name, object)| (traces.candidate(&name), name, object))
+            .chain(
+                self.erasure_candidates(&forms, &named, wanted)?
+                    .into_iter()
+                    .map(|(name, object)| (asked.candidate(&name), name, object)),
+            );
 
-        made.into_iter()
-            .map(
-                |(name, object)| match traces.candidate(&name) == Some(object.digest) {
-                    true => Ok(object),
-                    false => Err(format!(
-                        "the candidate of {name:?} made again is not the one its unit carried"
-                    )),
-                },
-            )
-            .collect()
+        made.map(
+            |(carried, name, object)| match carried == Some(object.digest) {
+                true => Ok(object),
+                false => Err(format!(
+                    "the candidate of {name:?} made again is not the one its unit carried"
+                )),
+            },
+        )
+        .collect()
     }
 
     /// The digest of the elaborated item at each place: the one it was stored under where the module holds it as it was read, and what it is named by alone otherwise ([`ItemRun::identity`]), which a whole compile and a recompile name it by alike.
@@ -379,6 +416,16 @@ impl Uncertified {
             lexicon: Rc::default(),
         })
     }
+}
+
+/// The digest of the candidate each declaration of `recorded` was filed as: read off the traces' own part where they are as they were restored.
+fn held_candidates(recorded: &Recorded<Traces>) -> Result<Vec<Digest>, String> {
+    let digests = |traces: &Traces| traces.candidates().map(|(_, digest)| digest).collect();
+
+    Ok(match recorded.as_stored() {
+        Some((table, _)) => digests(&curios_archive::from_bytes::<Traces>(table.as_slice())?),
+        None => digests(recorded.get()?),
+    })
 }
 
 /// One compiled and certified unit: everything a later unit needs in order to be compiled against it.
