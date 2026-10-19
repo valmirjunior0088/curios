@@ -763,7 +763,7 @@ fn lambda_parameters(
     Some(body)
 }
 
-/// A call's arguments as a reader writes them, each under its mark: a `use` argument resolution would restore is left out where nothing hidden is written after it in its run, and holds its place as `use _` where something is, since hidden members are written in order from the first of their run and a later one written past a slot left out would be read at that slot.
+/// A call's arguments as a reader writes them, each under its mark: a hidden argument elaboration fills where the reader stands ([`restorable`]) is left out where nothing hidden is written after it in its run, and holds its place as `use _` or `@_` where something is, since hidden members are written in order from the first of their run and a later one written past a slot left out would be read at that slot.
 fn call_arguments(arguments: Vec<curios_core::Argument>, frame: Frame) -> Option<Vec<Argument>> {
     let members = arguments
         .into_iter()
@@ -777,7 +777,7 @@ fn call_arguments(arguments: Vec<curios_core::Argument>, frame: Frame) -> Option
 fn hidden_run(members: Vec<(Plicity, curios_core::Term)>, frame: Frame) -> Option<Vec<Argument>> {
     let restored = members
         .iter()
-        .map(|(plicity, term)| *plicity == Plicity::Witness && restorable(term))
+        .map(|(plicity, term)| restorable(*plicity, term))
         .collect::<Vec<_>>();
 
     // Read from the back: whether a hidden member is written later in the run a position stands in.
@@ -794,7 +794,7 @@ fn hidden_run(members: Vec<(Plicity, curios_core::Term)>, frame: Frame) -> Optio
     {
         match (restored, written_after) {
             (true, false) => {}
-            (true, true) => written.push(argument(Plicity::Witness, placeholder())),
+            (true, true) => written.push(argument(plicity, placeholder())),
             (false, _) => written.push(argument(plicity, sub(term, frame)?)),
         }
     }
@@ -802,7 +802,7 @@ fn hidden_run(members: Vec<(Plicity, curios_core::Term)>, frame: Frame) -> Optio
     Some(written)
 }
 
-/// A nominal type's arguments from position `offset` of its declaration on, each marked as the declaration marks it, and a witness resolution would restore left out.
+/// A nominal type's arguments from position `offset` of its declaration on, each marked as the declaration marks it, and a place held for elaboration to fill left out ([`call_arguments`]).
 fn nominal_arguments(
     group: Vec<curios_core::Term>,
     marks: Option<&[Plicity]>,
@@ -1006,14 +1006,15 @@ fn written_flt<T>(value: Floating, writer: &impl Writer<T>) -> Option<Term> {
     ))
 }
 
-/// Whether `argument`, standing at a `use` position, is left out: an open witness slot, which is what a witness resolution puts back where the reader stands was settled into before the term reached here, and what a goal still open is.
-fn restorable(argument: &curios_core::Term) -> bool {
+/// Whether `member`, standing at a hidden position under `mark`, is a place held for elaboration to fill. At a `use` position it is an open witness slot, which is what a witness resolution puts back where the reader stands was settled into before the term reached here, and what a goal still open is; at an `@` position it is a hole, which is what `@_` lowers to and what a proof elaboration fills again where the reader stands was settled into.
+fn restorable(mark: Plicity, member: &curios_core::Term) -> bool {
+    let curios_core::Subterm::Metavar(curios_core::Metavar { origin, .. }) = &**member else {
+        return false;
+    };
     matches!(
-        &**argument,
-        curios_core::Subterm::Metavar(curios_core::Metavar {
-            origin: curios_core::MetavarOrigin::Witness(_),
-            ..
-        })
+        (mark, origin),
+        (Plicity::Witness, curios_core::MetavarOrigin::Witness(_))
+            | (Plicity::Implicit, curios_core::MetavarOrigin::Hole)
     )
 }
 
@@ -1080,7 +1081,7 @@ fn written_struct(literal: curios_core::Struct, frame: Frame) -> Option<Term> {
     let restored = fields
         .iter()
         .zip(&marks)
-        .map(|(field, mark)| *mark == Plicity::Witness && restorable(field))
+        .map(|(field, mark)| restorable(*mark, field))
         .collect::<Vec<_>>();
     // Which hidden entries are written is the rule a call's arguments follow ([`call_arguments`]).
     let mut written_after = vec![false; fields.len()];
@@ -1098,8 +1099,11 @@ fn written_struct(literal: curios_core::Struct, frame: Frame) -> Option<Term> {
             value,
         };
         match (marks[index], restored[index], written_after[index]) {
-            (Plicity::Witness, true, false) => {}
+            (_, true, false) => {}
             (Plicity::Witness, true, true) => entries.push(StructLitEntry::Use(placeholder())),
+            (Plicity::Implicit, true, true) => {
+                entries.push(StructLitEntry::Implicit(entry(None, placeholder())));
+            }
             (Plicity::Witness, false, _) => {
                 entries.push(StructLitEntry::Use(sub(field, frame)?));
             }

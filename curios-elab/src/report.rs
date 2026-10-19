@@ -280,18 +280,26 @@ fn said_beside(reporting: &mut Reporting, report: Error, beside: Option<Beside>)
     }
 }
 
-/// The report of a candidate conversion found for a metavariable and saw refused where the metavariable was born ([`Rejected`]): the metavariable by what it is, the candidate as a report shows a term, and the check's refusal. It stands in place of the mismatch of the pair conversion was comparing, which was not found apart.
+/// The report of a candidate conversion found for a metavariable and saw refused where the metavariable was born ([`Rejected`]): the metavariable by what it is, the candidate as a report shows a term, and the check's refusal, standing where the metavariable was born, which is where the candidate is written for its reader. It stands in place of the mismatch of the pair conversion was comparing, which was not found apart.
 fn rejected_candidate(reporting: &mut Reporting, rejected: Rejected) -> Error {
     let Rejected {
         metavar,
         candidate,
         error,
     } = rejected;
+    // The check ran where the metavariable was born, so its refusal stands there already, unless nothing scoped it.
+    let born = reporting
+        .metavar_entry(metavar.id)
+        .map(|entry| entry.frames.clone());
+    let scope = match born {
+        Some(born) => reporting.at_birth(&born, |context| context.reader_scope()),
+        None => reporting.reader_scope(),
+    };
 
     Error::rejected_candidate(
         watched(reporting, metavar.id, Some(&metavar.origin)),
         resolved_for_display(reporting, &candidate),
-        error,
+        error.in_scope(scope),
     )
 }
 

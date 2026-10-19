@@ -505,7 +505,7 @@ pub enum Error {
         /// The metavariable, by what it is.
         watched: Watched,
         candidate: Box<Term>,
-        /// Why the candidate does not check at the metavariable's type, where it was born.
+        /// Why the candidate does not check at the metavariable's type, where it was born, standing there ([`Error::InScope`]): where the candidate's reader stands, at the argument left out there.
         error: Box<Error>,
     },
     /// The `/std/Monad/bind` application a postfix `!` desugars to, checked against a region that has nothing to sequence in: `bind` produces `M(B)` and the region's type stands over no result at all.
@@ -1944,13 +1944,43 @@ impl Error {
             .and_then(|scope| scope.frames.clone())
             .unwrap_or_default();
         context.reporting(|context| {
-            context.standing_on(&frames, |context| {
-                error.visit_terms_mut(&mut |term| *term = written(context, term));
-            });
+            context.standing_on(&frames, |context| error.write_terms(context));
         });
         error.let_go_of_frames();
 
         error
+    }
+
+    /// Every term this error shows written as a program writes it where its reader stands ([`written`](fn@crate::written)), the context standing where the error arose: a rejected candidate, and the check's refusal of it, are written where its metavariable was born, at the argument left out there, which is where its reader would write it.
+    fn write_terms(&mut self, context: &mut Context) {
+        match self {
+            Self::Located { error, .. }
+            | Self::InDeclaration { error, .. }
+            | Self::InScope { error, .. } => error.write_terms(context),
+            Self::InUnreachableArm { dead, error } => {
+                for term in dead.terms_mut() {
+                    *term = written(context, term);
+                }
+                error.write_terms(context);
+            }
+            Self::Batch(errors) => errors
+                .iter_mut()
+                .for_each(|error| error.write_terms(context)),
+            Self::RejectedCandidate {
+                candidate, error, ..
+            } => {
+                let born = error.reader_scope().and_then(|scope| scope.frames.clone());
+                let mut write = |context: &mut Context| {
+                    **candidate = written(context, candidate);
+                    error.write_terms(context);
+                };
+                match born {
+                    Some(born) => context.standing_on(&born, write),
+                    None => write(context),
+                }
+            }
+            error => error.visit_terms_mut(&mut |term| *term = written(context, term)),
+        }
     }
 
     /// The collision-aware rename map axis (a) needs: one map over every name this error's terms mention, so `inferred` and `expected` agree on what each name means. Globals are reserved under the spelling `spelling` displays them by, which stands where this error's reader does.

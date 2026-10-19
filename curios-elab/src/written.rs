@@ -1,6 +1,6 @@
-//! A term a report shows, as a program writes it where the report's reader stands: each witness resolution puts back there left as an open slot, and each method projected off one called as a program calls it.
+//! A term a report shows, as a program writes it where the report's reader stands: each witness resolution puts back there left as an open slot, each proof elaboration fills again there left as a held place, and each method projected off one called as a program calls it.
 //!
-//! **What a report leaves out for elaboration to fill is settled by the procedure that fills it, where the reader stands.** A witness has no spelling, so a report leaves one out exactly where resolution, run where the reader stands, answers with a dictionary that converts with it, and declines the term elsewhere. The answer is resolution's own ([`resolve_witness`]), under the binders the term opens, the equations of the arms it enters, and the definitions as they elaborated: a model of it beside the printer would be a second statement held to the first by nothing. Why is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
+//! **What a report leaves out for elaboration to fill is settled by the procedure that fills it, where the reader stands.** A witness has no spelling, so a report leaves one out exactly where resolution, run where the reader stands, answers with a dictionary that converts with it, and declines the term elsewhere. The answer is resolution's own ([`resolve_witness`]), under the binders the term opens, the equations of the arms it enters, and the definitions as they elaborated: a model of it beside the printer would be a second statement held to the first by nothing. A proof has a spelling, but not always one that reads back: the procedure that proves a bound writes its proof over the bound's reduct, the definitions it opened included. So a hidden member whose type is a proposition is left out exactly where what fills an omitted one, run where the reader stands, proves it ([`Writing::filled_again`]); the proof it gives converts with the term's, a proposition being proof-irrelevant. Why is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //!
 //! **The term is walked closed**, as `curios-core`'s marking walk walks one: no scope is opened and closed again, the variables standing for the binders entered are kept, and what is asked is released against them. A node nothing in changed comes back as it was, so a term keeps its sharing. A binder is entered into the context at its type, under its mark, so a `use` one joins the witness scope; an arm is entered with the equations elaboration typed it under; a local `let` is entered at its definition. A scope the walk crosses with no type for its binders leaves a question about them unanswered, and an arm whose equations it could not install leaves every witness under it as it stands.
 //!
@@ -9,14 +9,14 @@
 use {
     crate::{
         Binders, Context, Entailed, InductCase, Opened, Outcome, Resolution, convert_outcome,
-        entail, enter_induct_case, reduce_with, refine_head, resolve_witness, synth_neutral,
-        trivially_inhabited, zonk_solved_term_metas,
+        entail, enter_induct_case, is_prop, reduce_with, refine_head, resolve_witness,
+        synth_neutral, trivially_inhabited, zonk_solved_term_metas,
     },
     curios_core::{
         Apply, Argument, Arity, Atom, Bound, CalleeId, Carrier, Cases, Field, Free, Func, FuncType,
-        Global, InductArm, InductType, Infix, Intrinsic, Let, LetBinding, Many, Match, MatchResult,
-        Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Transient,
-        TupleType, Var, Visit, WitnessOrigin,
+        Global, InductArm, InductType, Infix, Instance, InstanceHead, Intrinsic, Let, LetBinding,
+        Many, Match, MatchResult, Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope,
+        Term, Three, Transient, TupleType, Var, Visit, WitnessOrigin,
     },
     curios_num::Binary,
     curios_utilities::{Plicity, recurse},
@@ -111,12 +111,22 @@ impl Writing {
                     return called;
                 }
                 let callee = callee_of(head);
+                let members = arguments
+                    .iter()
+                    .map(|argument| (argument.plicity, &argument.term))
+                    .collect::<Vec<_>>();
+                let opened = self.released(head);
+                let filled = self.filled_again(context, &members, |context| {
+                    parameters_of(context, &as_named(&opened))
+                });
                 let head = self.term(context, head);
                 let arguments = arguments
                     .iter()
-                    .map(|argument| Argument {
-                        term: match argument.plicity {
-                            Plicity::Witness => {
+                    .zip(filled)
+                    .map(|(argument, filled)| Argument {
+                        term: match (argument.plicity, filled) {
+                            (_, true) => held(context),
+                            (Plicity::Witness, false) => {
                                 self.witness(context, &argument.term, callee.clone())
                             }
                             _ => self.term(context, &argument.term),
@@ -172,9 +182,21 @@ impl Writing {
                     .unwrap_or_default();
                 let callee = CalleeId::Function(Free::Global(variant.name));
                 let (leading, payload) = marks.split_at(variant.params.len().min(marks.len()));
+                let params = self.released_all(&variant.params);
+                let filled =
+                    self.filled_again(context, &with_marks(&variant.payload, payload), |context| {
+                        let declaration = context.induct_decl(&variant.name)?;
+                        let universe_context = declaration.universe_context.clone();
+                        let signature = declaration.constructor(&variant.tag)?.telescope.clone();
+                        let (signature, _) = context
+                            .instantiate_universe_bound(&universe_context, &signature, None)
+                            .ok()?;
+                        Some(signature.open_params(&params))
+                    });
                 let mut written = variant.clone();
                 written.params = self.marked(context, &variant.params, leading, &callee);
-                written.payload = self.marked(context, &variant.payload, payload, &callee);
+                written.payload =
+                    self.held_or_marked(context, &variant.payload, payload, &filled, &callee);
                 rebuilt(term, Subterm::Variant(written))
             }
             Subterm::Struct(literal) => {
@@ -183,9 +205,30 @@ impl Writing {
                     .map(|declaration| (declaration.arity.marks(), declaration.fields().marks()))
                     .unwrap_or_default();
                 let callee = CalleeId::Structure(literal.name);
+                // A literal elaboration has not rebuilt holds its fields as written, under no declared slot.
+                let filled = match literal.entries.is_empty() {
+                    true => {
+                        let params = self.released_all(&literal.params);
+                        self.filled_again(
+                            context,
+                            &with_marks(&literal.fields, &fields),
+                            |context| {
+                                let declaration = context.struct_decl(&literal.name)?;
+                                let universe_context = declaration.universe_context.clone();
+                                let arity = declaration.arity.clone();
+                                let (arity, _) = context
+                                    .instantiate_universe_bound(&universe_context, &arity, None)
+                                    .ok()?;
+                                Some(arity.open(&params.iter().collect::<Vec<_>>()))
+                            },
+                        )
+                    }
+                    false => vec![false; literal.fields.len()],
+                };
                 let mut written = literal.clone();
                 written.params = self.marked(context, &literal.params, &parameters, &callee);
-                written.fields = self.marked(context, &literal.fields, &fields, &callee);
+                written.fields =
+                    self.held_or_marked(context, &literal.fields, &fields, &filled, &callee);
                 rebuilt(term, Subterm::Struct(written))
             }
             // A match as it is written has arms whose equations are not compiled yet: what is under them is left as it stands.
@@ -212,6 +255,63 @@ impl Writing {
                 _ => self.term(context, member),
             })
             .collect()
+    }
+
+    /// [`Writing::marked`], each member `filled` marks as elaboration fills it again left as a held place ([`held`]).
+    fn held_or_marked(
+        &mut self,
+        context: &mut Context,
+        members: &[Term],
+        marks: &[Plicity],
+        filled: &[bool],
+        callee: &CalleeId,
+    ) -> Vec<Term> {
+        members
+            .iter()
+            .enumerate()
+            .map(|(slot, member)| match (filled.get(slot), marks.get(slot)) {
+                (Some(true), _) => held(context),
+                (_, Some(Plicity::Witness)) => self.witness(context, member, callee.clone()),
+                _ => self.term(context, member),
+            })
+            .collect()
+    }
+
+    /// Which of `members`, filled at one site against the telescope `telescope_of` reads where the walk stands, elaboration would fill again there were it left out: a hidden member whose type is a proposition the fill proves, or the procedure that proves a bound from the facts in scope ([`proved_there`]). The telescope is the declaration's at levels of its own, as the name the reader writes is read, and each member's type is read with the members before it as they stand. None where the telescope cannot be read, and none under an arm whose equations were not installed.
+    fn filled_again<B: Bound>(
+        &self,
+        context: &mut Context,
+        members: &[(Plicity, &Term)],
+        telescope_of: impl FnOnce(&mut Context) -> Option<Telescope<B>>,
+    ) -> Vec<bool> {
+        let mut filled = vec![false; members.len()];
+        // An open slot is a held place already.
+        let asked = |(mark, member): &(Plicity, &Term)| {
+            *mark == Plicity::Implicit && !matches!(&***member, Subterm::Metavar(_))
+        };
+        if self.unrefined > 0 || !members.iter().any(asked) {
+            return filled;
+        }
+        let opened = members
+            .iter()
+            .map(|(_, member)| self.released(*member))
+            .collect::<Vec<_>>();
+
+        context.asking(|context| {
+            let Some(telescope) = telescope_of(context) else {
+                return;
+            };
+            let mut cursor = telescope.cursor();
+            for (slot, (member, opened)) in members.iter().zip(opened).enumerate() {
+                let Some((_, bound)) = cursor.entry() else {
+                    return;
+                };
+                filled[slot] = asked(member) && proved_there(context, &bound);
+                cursor.advance(opened);
+            }
+        });
+
+        filled
     }
 
     /// `witness`, standing at a `use` position under the binders entered, as a program writes it there: the open slot elaboration would mint for it, where resolution answers with it, and itself walked otherwise.
@@ -364,47 +464,15 @@ impl Writing {
             head: self.released(dictionary),
             field: Field::Struct(*concept, index),
         }));
-        let opened = arguments
+        let members = arguments
             .iter()
-            .map(|argument| self.released(&argument.term))
+            .map(|argument| (argument.plicity, &argument.term))
             .collect::<Vec<_>>();
+        let filled = self.filled_again(context, &members, |context| {
+            parameters_of(context, &projection)
+        });
 
-        context.asking(|context| {
-            let Ok(Some(type_)) = synth_neutral(
-                context,
-                &Binders::default(),
-                &Opened::default(),
-                &projection,
-            ) else {
-                return false;
-            };
-            let Ok(reduced) = reduce_with(context, &type_) else {
-                return false;
-            };
-            let Subterm::FuncType(FuncType { telescope }) = &*reduced else {
-                return false;
-            };
-            let mut cursor = telescope.cursor();
-            for (slot, argument) in opened.iter().enumerate() {
-                let Some((_, bound)) = cursor.entry() else {
-                    return false;
-                };
-                // Filled as elaboration fills an omitted bound: by its reduct's one inhabitant, and otherwise from the facts in scope.
-                if slot >= 2 {
-                    let Ok((reduced, inhabitant)) = trivially_inhabited(context, &bound) else {
-                        return false;
-                    };
-                    if inhabitant.is_none()
-                        && !matches!(entail(context, &bound, &reduced), Ok(Entailed::Proved(_)))
-                    {
-                        return false;
-                    }
-                }
-                cursor.advance(argument.clone());
-            }
-
-            true
-        })
+        filled[2..].iter().all(|filled| *filled)
     }
 
     /// A telescope's entries entered in order, each type walked and its binder entered into the context at that type under its mark, and `payload` walked under every binder.
@@ -873,6 +941,11 @@ impl Writing {
         value.release(&terms)
     }
 
+    /// Each of `values` as it stands under the binders entered.
+    fn released_all(&self, values: &[Term]) -> Vec<Term> {
+        values.iter().map(|value| self.released(value)).collect()
+    }
+
     /// `opened`, a term as it stands under the binders entered, with each binder entered as a variable bound again: what stands where the walk is.
     fn closed_over(&self, opened: &Term) -> Term {
         let unused = Free::local(u64::MAX, None);
@@ -888,6 +961,63 @@ impl Writing {
 
         opened.capture(&labels)
     }
+}
+
+/// `head` as a program names it: a reference at levels of its own, as a name is read where it is written, and not at the instance elaboration settled for it.
+fn as_named(head: &Term) -> Term {
+    match &**head {
+        Subterm::Instance(Instance {
+            head: InstanceHead::Var(var),
+            ..
+        }) => Term::var(var.clone()),
+        Subterm::Apply(Apply { head, arguments }) => Term::from(Subterm::Apply(Apply {
+            head: as_named(head),
+            arguments: arguments.clone(),
+        })),
+        _ => head.clone(),
+    }
+}
+
+/// The parameters of the function `head` is, `head` standing where the context stands: `None` where its type cannot be synthesized or is no function's.
+fn parameters_of(context: &mut Context, head: &Term) -> Option<Telescope<Term>> {
+    let type_ = synth_neutral(context, &Binders::default(), &Opened::default(), head)
+        .ok()
+        .flatten()?;
+    match Term::unwrap_or_clone(reduce_with(context, &type_).ok()?) {
+        Subterm::FuncType(FuncType { telescope }) => Some(telescope),
+        _ => None,
+    }
+}
+
+/// Whether elaboration fills an omitted hidden member of type `bound` where the context stands with a proof, as it fills an omitted `@` argument: `bound` is a proposition its reduct's one inhabitant proves, or the procedure that proves a bound from the facts in scope does. Any proof does where one is asked, a proposition being proof-irrelevant.
+fn proved_there(context: &mut Context, bound: &Term) -> bool {
+    if !matches!(is_prop(context, bound), Ok(true)) {
+        return false;
+    }
+    let Ok((reduced, inhabitant)) = trivially_inhabited(context, bound) else {
+        return false;
+    };
+
+    inhabitant.is_some() || matches!(entail(context, bound, &reduced), Ok(Entailed::Proved(_)))
+}
+
+/// A place held for elaboration to fill, as `@_` holds one: the hole it lowers to.
+fn held(context: &mut Context) -> Term {
+    Term::hole(context.mint_metavar())
+}
+
+/// `members` beside the marks their slots take, a member past the marks plain.
+fn with_marks<'m>(members: &'m [Term], marks: &[Plicity]) -> Vec<(Plicity, &'m Term)> {
+    members
+        .iter()
+        .enumerate()
+        .map(|(slot, member)| {
+            (
+                marks.get(slot).copied().unwrap_or(Plicity::Explicit),
+                member,
+            )
+        })
+        .collect()
 }
 
 /// Install the equation an arm stands under, `head` being `value` there, as elaboration installs it: whether it was installed.

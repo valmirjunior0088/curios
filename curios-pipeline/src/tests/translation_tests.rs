@@ -1,6 +1,6 @@
 //! A term a report shows reads as its reader wrote it: a declaration's type and body, as elaboration left them, translated back to the surface tree where its reader stands and printed by the printer that formats source.
 //!
-//! A program per form. What is expected is the program's own text wherever elaboration adds nothing a reader writes, and the fuller form where it does: an argument the declaration marks `@` that the program left to inference is written, since the term holds it.
+//! A program per form. What is expected is the program's own text wherever elaboration adds nothing a reader writes, and the fuller form where it does: an argument the declaration marks `@` that the program left to inference is written, since the term holds it, except a proof elaboration fills again where the reader stands, which is left out as the program left it.
 
 use {
     super::test_support::*,
@@ -176,19 +176,54 @@ fn a_structures_projection_is_written_by_its_label_or_its_plain_place() {
     );
 }
 
+// The proof is the instance of a statement over every `k`, which the procedure that proves a bound from the facts in scope does not take: elaboration would not fill the field again.
 #[test]
 fn a_structures_literal_is_written_with_its_hidden_field_under_its_mark() {
     let source = r#"
         use /std/{Nat, Str};
-        use /std/Bool/{Holds, True};
+        use /std/Bool/{Holds};
         pub struct Wide: pub Type { a: Nat, @small: Holds(a < 10), b: Str }
-        pub let subject: Wide = Wide { 3, @small = True/qed(), "x" };
+        pub let subject(n: Nat, below: (k: Nat) -> Holds(k < 10)) -> Wide =
+            Wide { n, @small = below(n), "x" };
     "#;
 
     assert_eq!(
         body(source, "subject"),
-        "Wide { 3, @small = True/qed(), \"x\" }"
+        "(n, below) => Wide { n, @small = below(n), \"x\" }"
     );
+}
+
+#[test]
+fn a_hidden_proof_elaboration_fills_again_is_left_out() {
+    let source = r#"
+        use /std/{Nat, Str};
+        use /std/Bool/{Holds, True};
+        pub struct Wide: pub Type { a: Nat, @small: Holds(a < 10), b: Str }
+        pub induct Positive: pub Type
+        | at(n: Nat, @Holds(0 < n))
+        end
+        pub let below(a: Nat, b: Nat, @_: Holds(a <= b)) -> Nat = a;
+        pub let called(n: Nat, @small: Holds(n < 10)) -> Nat = below(n, 10);
+        pub let constructed: Positive = Positive/at(3);
+        pub let literal: Wide = Wide { 3, @small = True/qed(), "x" };
+    "#;
+
+    assert_eq!(body(source, "called"), "(n, @small) => below(n, 10)");
+    assert_eq!(body(source, "constructed"), "Positive/at(3)");
+    assert_eq!(body(source, "literal"), "Wide { 3, \"x\" }");
+}
+
+// A hidden member written after the proof keeps the proof's place, as `@_`, so the member is read at its own slot.
+#[test]
+fn a_proof_left_out_ahead_of_a_written_hidden_member_holds_its_place() {
+    let source = r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+        pub let pinned(@_: Holds(0 < 1), @A: Type, value: A) -> A = value;
+        pub let subject: Nat = pinned(@_, @Nat, 3);
+    "#;
+
+    assert_eq!(body(source, "subject"), "pinned(@_, @Nat, 3)");
 }
 
 #[test]
