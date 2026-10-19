@@ -30,6 +30,14 @@ Specialization spends a non-refundable, module-wide allowance of copied nodes, i
 
 **Rejected.** Draining one-step passes by rebuilding their analyses after each candidate; holding executable copy plans across mutation; resetting or refunding expansion fuel; moving all specialization after shrinking has settled; and a general analysis cache or speculative optimizer for work that pass-local snapshots can decide.
 
+### A nest applied in turn is one function
+
+**Decision.** A function whose body binds a lambda and returns it, that lambda doing the same, as many levels deep as every call of the function applies what it returns in turn, is collapsed into one function of all those levels' parameters, `uncurry_nests`. Its body becomes the innermost level's, each call passes the arguments its resumes applied, and each resume hands the answer on. A level is the next lambda's only name, so the levels' bodies are moved, never copied; a function named as a value, a call returning to a resume something else enters, and an application whose arguments the resume binds itself leave the nest as written.
+
+**Rationale.** Returned-closure uncurrying absorbs one application a round, since the next level is called by name only once the level before it has been rewritten, so a curried function applied at full arity from several calls would cost the optimizer a round a level, the square of the nest. Absorbing every level in one plan by handing each level the arguments of the levels inside it would give the nest the square of its depth in parameters instead. Collapsed, a nest costs its levels, and its calls build no closure, as a function of several parameters written at once does.
+
+**Rejected.** Absorbing a level a round; handing the remaining arguments on through each level; and copying the nest into each call, which pays its whole extent at every call.
+
 ### A shrinking reduction reduces what it exposes
 
 **Decision.** The rewrites that only make the graph smaller are one pass, `shrink`, which reduces from a worklist until none is left. They are: dropping a binding, a continuation or a function nothing reaches; folding an intrinsic over literals or by an identity law; answering a projection or a row test of a visible construction; taking a switch's edge on a literal; putting a continuation with one jump in its place; and moving a function with one call, which names it nowhere else, into that call. Each rewrite queues what it may have made reducible. The pass reads what names, jumps to, calls, binds and refers to what off the module where it begins and keeps that census exact through its own rewrites; none of it outlives the pass. A function is moved only where the call graph closed under definition puts it on no cycle as the pass begins, and a continuation that may be entered from within its own body is put in place only once its one jump is found outside it; with that jump inside, it is entered from nowhere and is dropped.

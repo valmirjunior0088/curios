@@ -790,7 +790,7 @@ impl<'m> Shrink<'m> {
             .unwrap_or_default();
         for site in returns {
             let mut node = self.module.node(site).expect("a return is live").clone();
-            retarget(&mut node, definition.return_cont, return_to);
+            retarget_transfers(&mut node, definition.return_cont, return_to);
             self.set(site, node);
         }
         let body = self.remove(definition.body);
@@ -814,7 +814,7 @@ impl<'m> Shrink<'m> {
 }
 
 /// Make every transfer of `node` to `from` a transfer to `to`.
-fn retarget(node: &mut Node, from: ContinuationId, to: ContinuationId) {
+pub(crate) fn retarget_transfers(node: &mut Node, from: ContinuationId, to: ContinuationId) {
     let mut edge = |edge: &mut Edge| {
         if edge.target == from {
             edge.target = to;

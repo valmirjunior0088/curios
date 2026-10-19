@@ -5,6 +5,9 @@
 #[cfg(test)]
 mod tests;
 
+mod nest;
+pub(crate) use nest::*;
+
 use {
     crate::{
         Atom, CallAnalysis, Callee, ContinuationId, Edge, FunctionId, Module, Node, NodeId,

@@ -404,6 +404,21 @@ fn a_nest_of_lambdas_applied_in_turn_compiles_in_its_size() {
     assert_eq!(compiles(&grown(Growth::Lambdas, 2_000)), Ok(()));
 }
 
+/// Two thousand lambdas applied in turn at two calls compile: the nest is collapsed into one function of all its parameters, which both calls pass, where absorbing a level a round would run the optimizer past its backstop.
+#[test]
+fn a_nest_of_lambdas_applied_in_turn_at_two_calls_compiles_in_its_size() {
+    let size = 2_000;
+    let lambdas = (0..size)
+        .map(|index| format!("(x{index}) => "))
+        .collect::<String>();
+    let applied = format!("g{}", "(a)".repeat(size));
+    let source = program(
+        &format!("let g: {}Nat = {lambdas}x0;\n", "(Nat) -> ".repeat(size)),
+        &format!("{applied} + {applied}"),
+    );
+    assert_eq!(compiles(&source), Ok(()));
+}
+
 /// Nesting ten thousand deep compiles on a test thread's stack: parentheses, each a nonterminal the parser re-enters, and an arrow, each parameter a term the lowering lowers inside the one before. The depth is bought with stack where it is spent, so no stage's acceptance follows the thread it runs on.
 #[test]
 fn nesting_ten_thousand_deep_compiles_on_a_test_thread() {
