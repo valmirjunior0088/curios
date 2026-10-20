@@ -603,15 +603,17 @@ fn window(
 ///
 /// **The cap is by *operand*, and that is the load-bearing half.** Under a cap on the *result* an accumulator is re-copied within every chunk, so the cost stays quadratic in the chunk size and is merely divided by the number of chunks. Under an operand cap the accumulator stops being fusible after a handful of steps whatever its chunk size, every later step is one node, and the leaves of a loop appending the same run share one payload.
 ///
-/// **Chosen from a census, not picked.** Instrumenting the two `merge` closures over a fixed-prelude build (elaboration *and* kernel certification of every `/sys` and `/std` module) and over `curios`'s test corpus:
+/// **Chosen from a census, not picked.** Counted at `9c543476a`, in a scratch copy where each of the two `merge` closures appends a line to a file a variable names at every call — its carrier, its operand count, its largest operand and their total — and a second variable lifts the cap. Run over a prelude build (its two build scripts: the elaboration, then the kernel certification, of every `/sys` and `/std` module), over each of `curios`'s tests run alone, and over `curios run` of `tests::reduction`'s `bytes_growing(800)`, which appends ten bytes to its own result 800 times under a bound that evaluates it:
 ///
 /// | Corpus | Fusing concatenations | Largest operand |
 /// | --- | --- | --- |
-/// | Fixed prelude | 207, all bit-grain | 1 generator |
-/// | Cross-stage corpus | 210 — 207 bit-grain, 3 `List`, **0 byte-grain** | 3 generators |
-/// | The accumulation reproducer alone, at n = 800 | 1600 | 7990 generators |
+/// | Prelude build, elaboration | 18 — 10 `Bytes`, 8 `List` | 1 generator |
+/// | Prelude build, certification | 26 — 13 `Bytes`, 13 `List` | 1 generator |
+/// | `curios`'s tests, but the five that accumulate to the cap | 1146 — 334 `Bytes`, 812 `List` | 7 generators |
+/// | The five that accumulate to the cap | 119 — 98 `Bytes`, 21 `List` | 60 generators |
+/// | `bytes_growing(800)`, the cap lifted | 2400 — 800 for each of the elaborator, the kernel and erasure | 7990 generators |
 ///
-/// So the corpus fuses almost nothing, and what it does fuse is one to three generators; the pathological case is unbounded. Any cap of four or more leaves every normal form the corpus reaches untouched, and this one clears the observed maximum by more than an order of magnitude while stopping the accumulation within a handful of steps. The third row is the whole defect in one line: operands of 10, 20, 30 … 7990, the accumulator recopied every step.
+/// So the corpus fuses little, and what it does fuse is one to seven generators; the pathological case is unbounded. Any cap of eight or more leaves every normal form the rest of the corpus reaches untouched, and this one clears the observed maximum by nine times while stopping the accumulation within a handful of steps: the five tests that accumulate (`tests::reduction`'s two, `tests::numeric::bound_tests`' two and `tests::runtime`'s `accumulation_loops_are_linear_by_construction`) fuse no operand past 60, and `bytes_growing(800)` at the cap fuses seven times a walk. The last row is the whole defect in one line: operands of 10, 20, 30 … 7990, the accumulator recopied every step.
 ///
 /// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that would close by literal equality failing to close through the peel. It does not: `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges adjacent runs, so a capped spelling and the literal it would have fused to decompose identically. `curios-core`'s `spine` tests state that per carrier, `curios`'s `tests::aggregates::monoid_tests::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
 pub(crate) const FUSION_CAP: usize = 64;

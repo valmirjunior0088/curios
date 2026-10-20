@@ -70,7 +70,7 @@ pub(super) fn timed(compiled: &Compiled, n: u64) -> f64 {
 ///
 /// # What it last printed
 ///
-/// Taken at `7f2ce2cfd`, release, x86-64 Linux, seven readings in one sitting: 665, 666, 670, 671, 672, 684, 686 ns/insert, median 671. This sitting read unimodally, inside ±1.6%; an earlier one on another box read bimodally, two clusters about 10% apart, so a figure is compared only within one sitting.
+/// Taken at `9c543476a`, release, x86-64 Linux, at a load average under two, seven readings in one sitting: 644, 647, 649, 656, 664, 672, 676 ns/insert, median 656. This sitting read unimodally, within 2% under and 3% over its median; an earlier one on another box read bimodally, two clusters about 10% apart, so a figure is compared only within one sitting.
 ///
 /// # What the design rests on
 ///
@@ -168,16 +168,16 @@ entry()
 ///
 /// # What it last printed
 ///
-/// Taken at `7f2ce2cfd`, release, x86-64 Linux, seven readings in the sitting `map_wall_spines_slope`'s were taken in, the first of which printed:
+/// Taken at `9c543476a`, release, x86-64 Linux, seven readings in the sitting `map_wall_spines_slope`'s were taken in, alternating with its, the first of which printed:
 ///
 /// ```text
 /// outputs at N=1000: encoded "927554", control "925689"
-///   encoded 43 ns/iter, control 5 ns/iter, key construction 38 ns/insert
+///   encoded 45 ns/iter, control 6 ns/iter, key construction 39 ns/insert
 /// ```
 ///
-/// Over the seven: encoded 41, 41, 42, 43, 43, 43, 44, median 43; control 3, 5, 5, 5, 6, 6, 7, median 5; key construction 35, 36, 37, 38, 38, 38, 40, median 38 ns/insert. The two encodings an insert builds are 38 of its 671 nanoseconds, under 6%.
+/// Over the seven: encoded 43, 44, 44, 45, 45, 45, 46, median 45; control 4, 5, 5, 6, 6, 7, 7, median 6; key construction 37, 37, 39, 39, 40, 40, 41, median 39 ns/insert. The two encodings an insert builds are 39 of its 656 nanoseconds, under 6%.
 ///
-/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the optimized `spines` module's ten surviving `br_table`s, as `wonder stage wasm-optm` prints it at that commit, five sit in `main`, three in text decoding (`/std/Str/scan_from` and `/std/Str/At/next`) and two in `/std/Map/Node/insert` itself, none in `bits/bit`, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
+/// Beside the key class, the collector's share measured nil (`spines_collection_decomposition`). Of the optimized `spines` module's fifteen surviving `br_table`s, as `wonder stage wasm-optm` prints it at that commit, eleven sit in the program's entry, one in `/std/answered`, one in text decoding (`/std/Str/At/next`) and two in `/std/Map/internal/Node/insert` itself, none in a bit test, so the descent still holds tables. What else remains of the insert is the uniform-representation tax, which `documentation/design/compilation/a-field-is-declared-at-the-carrier-its-shape-names.md` takes up.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn map_wall_key_share() {

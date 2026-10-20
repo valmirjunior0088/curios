@@ -298,14 +298,14 @@ entry()
 ///
 /// # What it last printed
 ///
-/// Release, x86-64 Linux:
+/// Release, x86-64 Linux, at a load average under two:
 ///
 /// ```text
 /// outputs at 300 rounds: bare "491113", payload "161671"
-/// Taken at `447fbb0a1`, seven readings in one sitting: bare 14.26–14.61 ns/element, payload 16.47–16.70 ns/element, boxed-field read 1.93–2.31 ns, median 2.18 (13–14%)
+/// Taken at `9c543476a`, seven readings in one sitting: bare 13.37–13.58 ns/element, payload 15.55–16.09 ns/element, boxed-field read 1.99–2.70 ns, median 2.25 (13–17%, median 14%)
 /// ```
 ///
-/// What the figure decided: one always-boxed scalar field costs about a fifth of even this dispatch-heavy loop's per-element budget, and it is pure representation tax — the same fold over the same list, differing by one `ref.i31` at the store and one `ref.cast (ref i31)` + `i31.get_u` at the read. Across takes that cut the fold's per-dispatch cost out from under it, the absolute price fell while the *relative* share held or grew: the class scales with the loop around it, which is what makes it worth deleting at the representation rather than the site.
+/// What the figure decided: one always-boxed scalar field costs about a seventh of even this dispatch-heavy loop's per-element budget, and it is pure representation tax — the same fold over the same list, differing by one `ref.i31` at the store and one `ref.cast (ref i31)` + `i31.get_u` at the read. Across takes that cut the fold's per-dispatch cost out from under it, the *relative* share held or grew: the class scales with the loop around it, which is what makes it worth deleting at the representation rather than the site.
 #[test]
 #[ignore = "measurement, timed: reports timings rather than asserting"]
 fn boxed_field_read_measurements() {

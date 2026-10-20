@@ -149,10 +149,7 @@ struct Invocation {
     arguments: Vec<String>,
 }
 
-/// How `contestant` runs `workload` at `size`.
-///
-/// Every contestant reads its size from its arguments. The same spelling is what the agreement check runs and what is timed, so the two cannot run different things.
-/// Where the bench's build of `contestant` on `workload` lands. The one place the layout is spelled, so what is run and what is weighed cannot name different files.
+/// Where the bench's build of `contestant` on `workload` lands. The one place the layout is spelled, so what is built and what is run cannot name different files.
 fn artifact(contestant: &str, workload: &Workload, root: &Path) -> PathBuf {
     let built = root
         .join(ARTIFACTS)
@@ -167,6 +164,9 @@ fn artifact(contestant: &str, workload: &Workload, root: &Path) -> PathBuf {
     })
 }
 
+/// How `contestant` runs `workload` at `size`.
+///
+/// Every contestant reads its size from its arguments. The same spelling is what the agreement check runs and what is timed, so the two cannot run different things.
 fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> Invocation {
     let artifact = artifact(contestant, workload, root);
 
@@ -185,23 +185,6 @@ fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> 
             ],
         },
     }
-}
-
-/// What each contestant's build of `workload` weighs.
-fn weigh(
-    workload: &Workload,
-    root: &Path,
-) -> Result<Vec<(&'static str, &'static str, u64)>, String> {
-    CONTESTANTS
-        .iter()
-        .map(|contestant| {
-            let artifact = artifact(contestant.name, workload, root);
-            let weighed = fs::metadata(&artifact)
-                .map_err(|error| format!("{} cannot be weighed: {error}", artifact.display()))?;
-
-            Ok((workload.name, contestant.name, weighed.len()))
-        })
-        .collect()
 }
 
 /// Run one contestant once: what it printed, and how long the whole process took, in milliseconds.
@@ -272,33 +255,20 @@ fn asked(program: &str, arguments: &[&str], directory: &Path) -> Result<String, 
 fn build(workload: &Workload, root: &Path) -> Result<(), String> {
     let name = workload.name;
     let source = format!("programs/{name}/{name}");
-    let built = format!("{ARTIFACTS}/{name}");
+    let output = |contestant| artifact(contestant, workload, root).display().to_string();
     eprintln!(">> building {name}");
 
     let rust = root.join(format!("{source}.rs")).display().to_string();
-    let rust_built = root.join(format!("{built}_rust")).display().to_string();
-    run("rustc", &["-O", &rust, "-o", &rust_built], root)?;
+    run("rustc", &["-O", &rust, "-o", &output("rust")], root)?;
     run(
         "rustc",
-        &[
-            "-O",
-            "--target",
-            TARGET,
-            &rust,
-            "-o",
-            &format!("{rust_built}.wasm"),
-        ],
+        &["-O", "--target", TARGET, &rust, "-o", &output("rust-wasm")],
         root,
     )?;
 
     run(
         "target/release/curios",
-        &[
-            "compile",
-            &format!("{source}.crs"),
-            "-o",
-            &format!("{built}_curios"),
-        ],
+        &["compile", &format!("{source}.crs"), "-o", &output("curios")],
         root,
     )
 }
@@ -382,7 +352,6 @@ fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<f64>>
     Ok(samples)
 }
 
-/// A reading as the module that records it, ready to be filed as `src/reading_NN.rs` and listed in `main.rs`.
 /// Everything one sitting captured, which is the subject `recorded` writes out. It travels as one value because it is one thing: what a reading will say.
 #[derive(Debug)]
 struct Sitting {
@@ -391,10 +360,10 @@ struct Sitting {
     platform: Captured,
     pinned: Vec<(&'static str, String)>,
     sizes: Vec<(&'static str, u64)>,
-    built: Vec<(&'static str, &'static str, u64)>,
     timed: Vec<(&'static str, &'static str, Vec<Vec<f64>>)>,
 }
 
+/// A reading as the module that records it, ready to be filed as `src/reading_NN.rs` and listed in `main.rs`.
 fn recorded(number: usize, sitting: &Sitting) -> String {
     let Sitting {
         taken,
@@ -410,7 +379,7 @@ fn recorded(number: usize, sitting: &Sitting) -> String {
         unpadded(&taken[8..10]),
     );
     let mut module = format!(
-        "use crate::{{Date, Platform, Reading, took, weighed}};\n\npub(super) const READING_{number:02}: Reading = Reading {{\n    taken: Date::new({year}, {month}, {day}),\n    subject: {subject:?},\n    platform: Platform {{\n        machine: {:?},\n        state: {:?},\n        software: {:?},\n    }},\n    pinned: &[\n",
+        "use crate::{{Date, Platform, Reading, took}};\n\npub(super) const READING_{number:02}: Reading = Reading {{\n    taken: Date::new({year}, {month}, {day}),\n    subject: {subject:?},\n    platform: Platform {{\n        machine: {:?},\n        state: {:?},\n        software: {:?},\n    }},\n    pinned: &[\n",
         platform.machine, platform.state, platform.software
     );
 
@@ -420,12 +389,6 @@ fn recorded(number: usize, sitting: &Sitting) -> String {
     module.push_str("    ],\n    sizes: &[\n");
     for (workload, size) in &sitting.sizes {
         module.push_str(&format!("        ({workload:?}, {size}),\n"));
-    }
-    module.push_str("    ],\n    built: &[\n");
-    for (workload, contestant, bytes) in &sitting.built {
-        module.push_str(&format!(
-            "        weighed({workload:?}, {contestant:?}, {bytes}),\n"
-        ));
     }
     module.push_str("    ],\n    timed: &[\n");
 
@@ -465,10 +428,8 @@ pub(crate) fn collect(taken: usize) -> Result<(), String> {
         asked("target/release/curios", &["--version"], &root)?
     );
 
-    let mut built = Vec::new();
     for workload in WORKLOADS {
         build(workload, &root)?;
-        built.extend(weigh(workload, &root)?);
     }
     for workload in WORKLOADS {
         agree(workload, workload.check, &root)?;
@@ -509,7 +470,6 @@ pub(crate) fn collect(taken: usize) -> Result<(), String> {
         platform,
         pinned,
         sizes,
-        built,
         timed,
     };
 

@@ -1,4 +1,4 @@
-use crate::{Date, Platform, Reading, took, weighed};
+use crate::{Date, Platform, Reading, took};
 
 pub(super) const READING_00: Reading = Reading {
     taken: Date::new(2026, 10, 3),
@@ -20,26 +20,6 @@ pub(super) const READING_00: Reading = Reading {
         ("churn", 75000000),
         ("walk", 150000),
         ("spines", 75000),
-    ],
-    built: &[
-        weighed("lcg", "curios", 5104864),
-        weighed("lcg", "rust", 4341376),
-        weighed("lcg", "rust-wasm", 2477715),
-        weighed("trees", "curios", 5105032),
-        weighed("trees", "rust", 4342728),
-        weighed("trees", "rust-wasm", 2478142),
-        weighed("chain", "curios", 5108968),
-        weighed("chain", "rust", 4342080),
-        weighed("chain", "rust-wasm", 2477886),
-        weighed("churn", "curios", 5104864),
-        weighed("churn", "rust", 4341648),
-        weighed("churn", "rust-wasm", 2477853),
-        weighed("walk", "curios", 5105608),
-        weighed("walk", "rust", 4344176),
-        weighed("walk", "rust-wasm", 2480246),
-        weighed("spines", "curios", 5129864),
-        weighed("spines", "rust", 4363024),
-        weighed("spines", "rust-wasm", 2484795),
     ],
     timed: &[
         took(

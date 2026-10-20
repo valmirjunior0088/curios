@@ -197,25 +197,25 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 ///
 /// # What it last printed
 ///
-/// Taken on top of `d5046c5cc`, **release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation.
+/// Taken at `9c543476a`, **release**, on `x86_64-unknown-linux-gnu`, at a load average under two, with the closed machine evaluating the accumulation. Mixed: the floors are counted, and each time is one reading of the whole compile.
 ///
 /// ```text
 /// Bytes
 ///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        800    176.8ms    167.9ms    178.7ms          0.0ns         10.9ms         65536        131072
-///       1600    144.0ms    196.3ms    217.4ms         52.3ms         21.1ms        131072        262144
-///       3200    144.1ms    251.9ms    288.6ms        107.8ms         36.7ms        262144        524288
-///       6400    143.9ms    359.0ms    437.6ms        215.2ms         78.6ms        524288       1048576
+///        800    129.8ms    107.5ms    129.5ms          0.0ns         21.9ms         65536        131072
+///       1600     55.0ms    162.9ms    211.5ms        107.9ms         48.6ms        131072        262144
+///       3200     55.1ms    271.7ms    368.2ms        216.6ms         96.5ms        262144        524288
+///       6400     54.6ms    502.7ms    764.3ms        448.2ms        261.5ms        524288       1048576
 ///
 /// List
 ///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        250    169.8ms    164.5ms    184.3ms          0.0ns         19.9ms         32768         32768
-///        500    203.6ms    162.4ms    235.0ms          0.0ns         72.6ms         65536         65536
-///       1000    201.0ms    188.3ms    272.6ms          0.0ns         84.2ms        131072        131072
-///       2000    202.6ms    237.8ms    341.3ms         35.2ms        103.4ms        262144        262144
+///        250     65.8ms     67.2ms     86.9ms          1.4ms         19.7ms         32768         32768
+///        500     84.1ms     96.6ms    130.9ms         12.6ms         34.3ms         65536         65536
+///       1000     84.1ms    132.0ms    178.8ms         47.9ms         46.9ms        131072        131072
+///       2000     83.8ms    200.1ms    272.6ms        116.3ms         72.5ms        262144        262144
 /// ```
 ///
-/// **The two arms' floors sit within one power of two of each other at every rung**, and both double with the input: the transitions are what a budget sees, and ten bytes of payload price six units a step. Construction shows in the wall-time excess of the `growing-fixed` column alone — tens of milliseconds, growing linearly.
+/// **The two arms' floors sit within one power of two of each other at every rung**, and both double with the input: the transitions are what a budget sees, and ten bytes of payload price six units a step. Construction shows in the wall-time excess of the `growing-fixed` column alone, which grows with the input: on `List` by under twice a rung, to 72.5 ms, and on `Bytes` by about twice a rung to 96.5 ms, then by 2.7 times, to 261.5 ms at 6400. The first `Bytes` opaque arm is the process's first compile, slower than the fixed arm after it, so its `fixed-opaque` reads zero.
 ///
 /// # Peak memory
 ///
@@ -257,7 +257,7 @@ fn type_level_sequence_cost_measurements() {
         );
 
         for n in ladder {
-            // The three arms elaborate the same loop the same number of times, so the excesses below subtract everything they share: the ~0.2 s of prelude restore, backend and Wasm emission that the opaque arm is made of, and then the transition machinery the fixed arm adds. What survives both subtractions is construction.
+            // The three arms elaborate the same loop the same number of times, so the excesses below subtract everything they share: the prelude restore, backend and Wasm emission that the opaque arm is made of, under a tenth of a second once the process has compiled once, and then the transition machinery the fixed arm adds. What survives both subtractions is construction.
             let (fixed_source, growing_source) = (fixed(n), growing(n));
             let opaque_time = elaboration_time(&opaque(n));
             let fixed_time = elaboration_time(&fixed_source);
@@ -289,7 +289,7 @@ fn type_level_sequence_cost_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken at `ac663f240`, **release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation on both sides.
+/// Counted, at `9c543476a`, **release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the accumulation on both sides.
 ///
 /// ```text
 /// Bytes
@@ -307,9 +307,9 @@ fn type_level_sequence_cost_measurements() {
 ///       2000            262144        262144          1x
 /// ```
 ///
-/// **Parity holds, and structurally.** The two checkers run one shared evaluator for the closed accumulation, and the two floors are one power of two at every rung, which is as fine as the sweep tells them apart. Where the two checkers *do* part is a `Str` literal — [`str_literal_cost_measurements`] carries that table — and it is a difference in how many times the elaborator demands one scan, not in what a demand costs.
+/// **Parity holds, and structurally.** The two checkers run one shared evaluator for the closed accumulation, and the two floors are one power of two at every rung, which is as fine as the sweep tells them apart. Nor do they part on a `Str` literal, whose scan each demands once: [`str_literal_cost_measurements`] reads the kernel 24 units over the elaborator at every length.
 ///
-/// **A memo hit is free in both checkers.** A kernel charging a hit the whole recorded cost of the computation it replaced would refuse for exhaustion, at 8–16× the elaborator's floor, programs the elaborator accepts within its budget — and since the compile path puts one budget to both and meets the larger, that is the number a user would meet, with no disagreement about any rule.
+/// **A memo hit is free in both checkers.** A kernel charging a hit the whole recorded cost of the computation it replaced would refuse for exhaustion programs the elaborator accepts within its budget — and since the compile path puts one budget to both and meets the larger, that refusal is what a user would meet, with no disagreement about any rule.
 #[test]
 #[ignore = "measurement, counted: reports what a memo hit costs the kernel rather than asserting"]
 fn kernel_memo_charge_measurements() {
@@ -526,7 +526,7 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 ///
 /// # What it last printed
 ///
-/// Counted, at `bad41555e`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
+/// Counted, at `9c543476a`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
 ///
 /// ```text
 ///   program                      units   depth      other       units   depth      other  kernel/elab
@@ -538,7 +538,7 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 ///   Str literal, n=8000         556938       1     555914      556962       1     555938     1.0x
 ///   Str n=500, 1 uses            39438       1      38414       39462       1      38438     1.0x
 ///   Str n=500, 3 uses            39438       1      38414       39462       1      38438     1.0x
-///   Bytes literal, n=500          2255       2        207        1276       1        252     0.6x
+///   Bytes literal, n=500          2258       2        210        1289       1        265     0.6x
 ///   Str n=500, cut               39438       1      38414       39462       1      38438     1.0x
 /// ```
 ///
@@ -593,25 +593,25 @@ fn str_literal_cost_measurements() {
 ///
 /// # What it last printed
 ///
-/// Counted, at `bad41555e`.
+/// Counted, at `9c543476a`.
 ///
 /// ```text
 ///   program                      units   depth      other       units   depth      other  kernel/elab
-///   web n=8, applied              6169       6         25        3676       3        604     0.6x
-///   web n=8, scrutinized          6169       6         25        3676       3        604     0.6x
-///   web n=8, closed               6169       6         25        3676       3        604     0.6x
-///   web n=12, applied             6169       6         25        3676       3        604     0.6x
-///   web n=12, scrutinized         6169       6         25        3676       3        604     0.6x
-///   web n=12, closed              6169       6         25        3676       3        604     0.6x
-///   web n=13, applied             6169       6         25        3676       3        604     0.6x
-///   web n=13, scrutinized         6169       6         25        3676       3        604     0.6x
-///   web n=13, closed              6169       6         25        3676       3        604     0.6x
-///   web n=14, applied             6169       6         25        3676       3        604     0.6x
-///   web n=14, scrutinized         6169       6         25        3676       3        604     0.6x
-///   web n=14, closed              6169       6         25        3676       3        604     0.6x
-///   web n=20, applied             6169       6         25        3676       3        604     0.6x
-///   web n=20, scrutinized         6169       6         25        3676       3        604     0.6x
-///   web n=20, closed              6169       6         25        3676       3        604     0.6x
+///   web n=8, applied              4121       4         25        3676       3        604     0.9x
+///   web n=8, scrutinized          4121       4         25        3676       3        604     0.9x
+///   web n=8, closed               4121       4         25        3676       3        604     0.9x
+///   web n=12, applied             4121       4         25        3676       3        604     0.9x
+///   web n=12, scrutinized         4121       4         25        3676       3        604     0.9x
+///   web n=12, closed              4121       4         25        3676       3        604     0.9x
+///   web n=13, applied             4121       4         25        3676       3        604     0.9x
+///   web n=13, scrutinized         4121       4         25        3676       3        604     0.9x
+///   web n=13, closed              4121       4         25        3676       3        604     0.9x
+///   web n=14, applied             4121       4         25        3676       3        604     0.9x
+///   web n=14, scrutinized         4121       4         25        3676       3        604     0.9x
+///   web n=14, closed              4121       4         25        3676       3        604     0.9x
+///   web n=20, applied             4121       4         25        3676       3        604     0.9x
+///   web n=20, scrutinized         4121       4         25        3676       3        604     0.9x
+///   web n=20, closed              4121       4         25        3676       3        604     0.9x
 /// ```
 ///
 /// **Every unit column is constant across the sizes**, under each consumption and on both checkers: twenty definitions cost what eight do. Keyed on the reduced spelling rather than the written one, the middle row would grow by a factor of two per definition.
@@ -1102,17 +1102,17 @@ fn primitive_claim(carrier: &str, parser: &str, input: &str) -> String {
 ///
 /// # What it last printed
 ///
-/// At `76a6cf3cf`:
+/// At `9c543476a`:
 ///
 /// ```text
 ///   primitive            text elab      kernel  bytes elab      kernel
-///   literal                  72800       72721       18537       18458
-///   take_while               48133       48054       10067        9988
-///   char, byte               59075       58996       32175       32096
-///   char_if, byte_if         65131       65052       38238       38159
-///   expect                   61448       61369       35241       35162
-///   rest                      8476        6102        9476        6115
-///   until                    46809       46730
+///   literal                  70365       70286       17516       17437
+///   take_while               47188       47109       10035        9956
+///   char, byte               57134       57055       31182       31103
+///   char_if, byte_if         63148       63069       37203       37124
+///   expect                   58931       58852       33712       33633
+///   rest                      8283        5908        9385        5914
+///   until                    46834       46755
 /// ```
 ///
 /// **A text primitive costs about four times its twin, or near five, where the primitive is the walk**, `literal` and `take_while`, and under twice where each step is a parser run through `times`: `char`, `char_if` and `expect`. `rest` cuts once and reads nothing.
@@ -1189,27 +1189,27 @@ fn parse_primitive_measurements() {
 /// cargo test --package curios --all-features -- --ignored --nocapture type_level_claim_measurements
 /// ```
 ///
-/// Counted, so a reading transports between machines. A change to how a `Str` or a `Flt` is read at the type level retakes it and accounts for each row that moved. Each checker reports its heaviest declaration, and a program that states no claim reads under 1 300 units ([`str_literal_cost_measurements`]'s `Bytes` row), so each row is its claim's.
+/// Counted, so a reading transports between machines. A change to how a `Str` or a `Flt` is read at the type level retakes it and accounts for each row that moved. Each checker reports its heaviest declaration, and a program that states no claim reads under 2 300 units ([`str_literal_cost_measurements`]'s `Bytes` row), so each row is its claim's.
 ///
 /// # What it last printed
 ///
-/// At `96d967b9b`:
+/// At `9c543476a`:
 ///
 /// ```text
 ///   claim                        units   depth      other       units   depth      other  kernel/elab
-///   Str/split                    83152      19      63696       49320       1      48296     0.6x
-///   Str/split_once               63563       3      60491       50490       2      48442     0.8x
-///   Str/lines                    54456      12      42168       36288       1      35264     0.7x
-///   Str/replace                  65983      15      50623       36678       1      35654     0.6x
-///   Str/trim                     60698       3      57626       47570       1      46546     0.8x
-///   Str/strip_suffix             55609       3      52537       55317       2      53269     1.0x
-///   Flt/of_str                   67810       3      64738       66967       2      64919     1.0x
-///   Str/index_of                 42154       3      39082       41630       2      39582     1.0x
+///   Str/split                    30109       3      27037       28387       1      27363     0.9x
+///   Str/split_once               19238       3      16166       18213       2      16165     0.9x
+///   Str/lines                    27178       3      24106       25487       1      24463     0.9x
+///   Str/replace                  24644       3      21572       22901       1      21877     0.9x
+///   Str/trim                     20360       3      17288       18295       1      17271     0.9x
+///   Str/strip_suffix             17601       3      14529       16525       2      14477     0.9x
+///   Flt/of_str                   35209       3      32137       34155       2      32107     1.0x
+///   Str/index_of                 26790       3      23718       20916       2      18868     0.8x
 /// ```
 ///
-/// **A builder nests in the elaborator**: `Str/split`, `Str/lines` and `Str/replace` hand on what they have built, an argument the elaborator's reducer holds a level deeper for each piece, where the kernel's depth stays at one.
+/// **A builder holds no depth**: `Str/split`, `Str/lines` and `Str/replace` hand on what they have built, and the elaborator's guarded depth is 3 on their rows as on every other, the kernel's 1.
 ///
-/// **The first five rows cost the kernel six to eight tenths of what they cost the elaborator**, and the last three cost the two alike.
+/// **The kernel spends about nine tenths of the elaborator's units on seven rows**, between 0.89 and 0.97, and 0.78 on `Str/index_of`.
 ///
 /// **`Flt/of_str` is a grammar run**: reading `"-Infinity"` runs the reader's `Parse(Str, Flt)` grammar over nine characters, so its row is what the grammar costs each checker.
 #[test]

@@ -162,23 +162,23 @@ const SHAPES: [Shape; 4] = [
 ///
 /// # What it last printed
 ///
-/// Taken on top of `f823cf562` on `x86_64-unknown-linux-gnu`, at a load average under two. The nested and summed rows are accepted, and both towers are refused, as their claim is.
+/// Taken at `9c543476a` on `x86_64-unknown-linux-gnu`, at a load average under two. The nested and summed rows are accepted, and both towers are refused, as their claim is.
 ///
 /// | shape | size | compile |
 /// | --- | --- | --- |
-/// | nested | 8 | 0.01 s [0.01–0.04] |
+/// | nested | 8 | 0.01 s [0.01–0.05] |
 /// | nested | 16 | 0.02 s [0.02–0.02] |
-/// | nested | 32 | 0.04 s [0.04–0.04] |
-/// | nested | 64 | 0.11 s [0.11–0.12] |
+/// | nested | 32 | 0.03 s [0.03–0.03] |
+/// | nested | 64 | 0.05 s [0.05–0.05] |
 /// | summed | 16 | 0.02 s [0.02–0.02] |
-/// | summed | 64 | 0.17 s [0.17–0.20] |
-/// | summed | 256 | 3.07 s [3.05–4.27] |
-/// | remainders | 12 | 0.10 s [0.10–0.11] |
+/// | summed | 64 | 0.06 s [0.06–0.07] |
+/// | summed | 256 | 0.46 s [0.45–0.55] |
+/// | remainders | 12 | 0.09 s [0.09–0.11] |
 /// | remainders | 24 | 0.45 s [0.45–0.45] |
 /// | conjunctions | 12 | 0.03 s [0.03–0.03] |
-/// | conjunctions | 24 | 0.15 s [0.15–0.15] |
+/// | conjunctions | 24 | 0.16 s [0.16–0.16] |
 ///
-/// **A nested term costs its depth and no doubling of it.** **A long sum's rows are its reducers' walks at `f823cf562`**, where every stuck sum walks the sum beneath it whether or not a summand is respelled; since `f7375e49e` a stuck fold extends the classification the fold beneath it filed (`curios_analysis::Classification`), and the rows are this measurement's to take again. **Two towers of remainders grow as two of conjunctions do**, by four and a half times from twelve to twenty-four against five: no remainder is put to a checker beside another.
+/// **A nested term costs its depth and no doubling of it.** **A long sum grows by 7.7 times from 64 summands to 256**, each stuck fold extending the classification the fold beneath it filed (`curios_analysis::Classification`). **Two towers of remainders grow as two of conjunctions do**, by five times from twelve to twenty-four against five and a third: no remainder is put to a checker beside another.
 #[test]
 #[ignore = "measurement, timed: reports what a size costs rather than asserting"]
 fn nested_operation_measurements() {

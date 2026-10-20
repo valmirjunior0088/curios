@@ -34,24 +34,24 @@ use {
 ///
 /// ## What it last printed
 ///
-/// Timed, taken on top of `a439dba6a`. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration. Times are milliseconds; sample 0 is the warmup and is excluded from the medians.
+/// Timed, taken on top of `9c543476a` at a load average under two. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration. Times are milliseconds; sample 0 is the warmup and is excluded from the medians.
 ///
 /// | Workload | Sample | Compile (ms) | Run (ms) | Output bytes |
 /// | --- | ---: | ---: | ---: | ---: |
-/// | `monad_suspend` | 0 (warmup) | 823.813 | 21.616 | 6 |
-/// | `monad_suspend` | 1 | 791.173 | 19.914 | 6 |
-/// | `monad_suspend` | 2 | 792.721 | 19.737 | 6 |
-/// | `monad_suspend` | 3 | 777.809 | 20.596 | 6 |
-/// | `monad_suspend` | 4 | 786.896 | 20.457 | 6 |
-/// | `monad_suspend` | 5 | 770.452 | 19.935 | 6 |
-/// | `tui` | 0 (warmup) | 5033.656 | 63.509 | 11368 |
-/// | `tui` | 1 | 5018.438 | 52.253 | 11368 |
-/// | `tui` | 2 | 4984.113 | 48.168 | 11368 |
-/// | `tui` | 3 | 5063.733 | 48.786 | 11368 |
-/// | `tui` | 4 | 5032.786 | 46.899 | 11368 |
-/// | `tui` | 5 | 4995.298 | 45.700 | 11368 |
+/// | `monad_suspend` | 0 (warmup) | 736.712 | 19.431 | 6 |
+/// | `monad_suspend` | 1 | 627.725 | 18.892 | 6 |
+/// | `monad_suspend` | 2 | 630.897 | 18.454 | 6 |
+/// | `monad_suspend` | 3 | 626.117 | 18.409 | 6 |
+/// | `monad_suspend` | 4 | 626.660 | 18.231 | 6 |
+/// | `monad_suspend` | 5 | 634.514 | 17.789 | 6 |
+/// | `tui` | 0 (warmup) | 6888.458 | 85.949 | 8747 |
+/// | `tui` | 1 | 7071.752 | 86.232 | 8747 |
+/// | `tui` | 2 | 7071.995 | 88.813 | 8747 |
+/// | `tui` | 3 | 7057.008 | 86.677 | 8747 |
+/// | `tui` | 4 | 6976.908 | 80.627 | 8747 |
+/// | `tui` | 5 | 7093.195 | 98.006 | 8747 |
 ///
-/// Compilation medians are **786.896 ms** for `monad_suspend` and **5018.438 ms** for `tui`; execution medians are **19.935 ms** and **48.168 ms**.
+/// Compilation medians are **627.725 ms** for `monad_suspend` and **7071.752 ms** for `tui`; execution medians are **18.409 ms** and **86.677 ms**.
 ///
 /// All twelve captures passed the behavior and closed-span assertions, terminal restoration and all three screen clears included.
 #[test]

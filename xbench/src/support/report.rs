@@ -1,8 +1,8 @@
 //! The report: every figure computed from the samples when it is asked, so none can disagree with what it is a figure of.
 //!
-//! **A difference is proven only where two spans are disjoint.** A contestant's span is the least and greatest of its group medians, and two readings whose spans overlap could have produced each other, so the report says `no difference proven` rather than a ratio. The rule assumes nothing about how the samples are distributed, and it errs toward missing a real movement rather than announcing one: a single bad batch widens a span and hides a change, which is the direction worth being wrong in.
+//! **A difference is proven only where two spans are disjoint.** A figure's span is the least and greatest of what its groups give, and two readings whose spans overlap could have produced each other, so the report says `no difference proven` rather than a percentage. The rule assumes nothing about how the samples are distributed, and it errs toward missing a real movement rather than announcing one: a single bad batch widens a span and hides a change, which is the direction worth being wrong in.
 //!
-//! **A control that moved disqualifies the comparison.** Rust is the control. Where it moved between two readings the machine was not the same machine twice, whatever the platform lines say, and no Curios figure is drawn from it.
+//! **A movement is read against Rust.** Across two readings the report compares Curios's time over Rust's, group by group. The two ran interleaved in each group, so what moved the machine during a group or between the two sittings reaches both and cancels in the ratio, and what is left is Curios's own.
 //!
 //! **No figure states a precision its span does not support.** Every number is rounded to the place of the first significant digit of its half-span, so a median of 438.2 with a span of six milliseconds prints as 438.
 
@@ -14,7 +14,7 @@ use {
     std::fmt::Write,
 };
 
-/// The anchor every other contestant is read against, and the control a comparison across readings is held by.
+/// The anchor every other contestant is read against, within a reading and across two.
 const CONTROL: &str = "rust";
 
 /// The subject, whose movement the bench exists to report.
@@ -48,19 +48,34 @@ fn median(samples: &[f64]) -> Option<f64> {
     })
 }
 
+/// The median of what each group gave, and the least and greatest of it.
+fn spanned(values: &[f64]) -> Option<Figure> {
+    Some(Figure {
+        middle: median(values)?,
+        least: values.iter().copied().fold(f64::INFINITY, f64::min),
+        most: values.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+    })
+}
+
 /// What `groups` amount to: the median of each group's median, and the least and greatest of them.
 pub(crate) fn figure(groups: &[&[f64]]) -> Option<Figure> {
-    let middles = groups
-        .iter()
-        .filter_map(|group| median(group))
-        .collect::<Vec<_>>();
-    let middle = median(&middles)?;
+    spanned(
+        &groups
+            .iter()
+            .filter_map(|group| median(group))
+            .collect::<Vec<_>>(),
+    )
+}
 
-    Some(Figure {
-        middle,
-        least: middles.iter().copied().fold(f64::INFINITY, f64::min),
-        most: middles.iter().copied().fold(f64::NEG_INFINITY, f64::max),
-    })
+/// `subject` over `against`, group by group: each group's median of the one over the other's in the same group, where the two ran interleaved, so what disturbed the machine during it reaches both and cancels.
+fn relative(subject: &[&[f64]], against: &[&[f64]]) -> Option<Figure> {
+    spanned(
+        &subject
+            .iter()
+            .zip(against)
+            .filter_map(|(subject, against)| Some(median(subject)? / median(against)?))
+            .collect::<Vec<_>>(),
+    )
 }
 
 impl Figure {
@@ -140,7 +155,7 @@ fn tabulated(headers: &[&str], rows: &[Vec<String>]) -> String {
     out
 }
 
-/// One workload's table, over however its samples are held: the contestants fastest first, each with its span and how many times the control it is.
+/// One workload's table, over however its samples are held: the contestants fastest first, each with its span and how many times Rust it is.
 pub(crate) fn table(title: &str, letter: &str, size: u64, rows: &[(&str, &[&[f64]])]) -> String {
     let mut figures = rows
         .iter()
@@ -203,35 +218,6 @@ fn header(number: usize, reading: &Reading) -> String {
     )
 }
 
-/// What each contestant's build weighed.
-///
-/// It is read down a column and never across one: the Curios contestant is a self-contained executable with the engine compiled into it, so its weight against `rust`'s says nothing. What a column answers is whether that contestant's build grew between two readings.
-fn weights(reading: &Reading) -> String {
-    let mut headers = vec!["Workload"];
-    headers.extend(CONTESTANTS.iter().map(|contestant| contestant.title));
-
-    let mut rows = Vec::new();
-    for workload in WORKLOADS {
-        let weighed = CONTESTANTS
-            .iter()
-            .map(|contestant| reading.weight(workload.name, contestant.name))
-            .collect::<Vec<_>>();
-        if weighed.iter().all(Option::is_none) {
-            continue;
-        }
-
-        let mut row = vec![format!("`{}`", workload.name)];
-        row.extend(
-            weighed
-                .into_iter()
-                .map(|bytes| bytes.map_or_else(|| "—".to_string(), |bytes| bytes.to_string())),
-        );
-        rows.push(row);
-    }
-
-    format!("\n### Builds (bytes)\n\n{}", tabulated(&headers, &rows))
-}
-
 /// The reading numbered `number`, in full: what it says of itself, then a table per workload it measured.
 pub(crate) fn one(number: usize, reading: &Reading) -> String {
     let mut out = header(number, reading);
@@ -258,16 +244,12 @@ pub(crate) fn one(number: usize, reading: &Reading) -> String {
         );
     }
 
-    if !reading.built.is_empty() {
-        out.push_str(&weights(reading));
-    }
-
     out
 }
 
 /// Why `before` and `after` cannot be compared, where they cannot.
 ///
-/// The software line is not among these. A kernel or microcode update rarely moves a figure past its span, and where it does the control moves with it and the comparison is disqualified anyway, so gating on it would strand the record at every patch while catching nothing the control does not.
+/// The software line is not among these. A kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it, so gating on it would strand the record at every patch for nothing.
 fn incomparable(before: &Reading, after: &Reading) -> Option<String> {
     let differs = |what: &str, before: &str, after: &str| {
         (before != after).then(|| format!("  {what}  {before:?}\n       -> {after:?}"))
@@ -293,29 +275,15 @@ pub(crate) fn compare(number: usize, before: &Reading, after: &Reading) -> Strin
         return format!("{heading}Not comparable.\n\n```\n{why}\n```\n");
     }
 
-    let drifted = before.platform.software != after.platform.software;
     let mut out = heading;
-    if drifted {
-        let _ = writeln!(
-            out,
-            "The software differs — `{}` → `{}` — and is not gated: a movement it caused moves the control too.\n",
-            before.platform.software, after.platform.software
-        );
-    }
-
     let mut rows = Vec::new();
     for workload in WORKLOADS {
-        let read = |reading: &Reading, contestant: &str| {
-            figure(reading.took(workload.name, contestant)?.groups)
+        let read = |reading: &Reading| {
+            let groups = |contestant| Some(reading.took(workload.name, contestant)?.groups);
+            relative(groups(SUBJECT)?, groups(CONTROL)?)
         };
-        let (Some(was), Some(is)) = (read(before, SUBJECT), read(after, SUBJECT)) else {
+        let (Some(was), Some(is)) = (read(before), read(after)) else {
             continue;
-        };
-
-        // The control first: where it moved, the machine was not the same machine twice and nothing is drawn from the subject's rows.
-        let control = match (read(before, CONTROL), read(after, CONTROL)) {
-            (Some(was), Some(is)) => moved(&was, &is),
-            _ => false,
         };
 
         let half = was.half().max(is.half());
@@ -324,10 +292,9 @@ pub(crate) fn compare(number: usize, before: &Reading, after: &Reading) -> Strin
             (Some(then), Some(now)) if then != now => {
                 format!("sized {then}, then {now}; not compared")
             }
-            _ => match (control, moved(&was, &is)) {
-                (true, _) => "control did not hold; nothing drawn".to_string(),
-                (false, false) => "no difference proven".to_string(),
-                (false, true) => format!(
+            _ => match moved(&was, &is) {
+                false => "no difference proven".to_string(),
+                true => format!(
                     "moved, {}%",
                     stated(
                         (is.middle - was.middle) / was.middle * 100.0,
@@ -339,53 +306,18 @@ pub(crate) fn compare(number: usize, before: &Reading, after: &Reading) -> Strin
 
         rows.push(vec![
             format!("`{}`", workload.name),
-            format!("{} ms", stated(was.middle, half)),
-            format!("{} ms", stated(is.middle, half)),
+            format!("{}×", stated(was.middle, half)),
+            format!("{}×", stated(is.middle, half)),
             said,
         ]);
     }
 
-    out.push_str(&tabulated(&["Workload", "Was", "Is", ""], &rows));
-
-    // A build's weight is deterministic under the pins, so a difference is stated as itself: there is no span to clear and no control to hold.
-    let reweighed = reweighed(before, after);
-    if !reweighed.is_empty() {
-        out.push_str("\n### Builds that changed (bytes)\n\n");
-        out.push_str(&tabulated(
-            &["Workload", "Contestant", "Was", "Is", "Δ"],
-            &reweighed,
-        ));
-    }
+    out.push_str(&tabulated(
+        &["Workload", "Was, × Rust", "Is, × Rust", ""],
+        &rows,
+    ));
 
     out
-}
-
-/// Every build whose weight differs between two readings.
-fn reweighed(before: &Reading, after: &Reading) -> Vec<Vec<String>> {
-    let mut rows = Vec::new();
-
-    for workload in WORKLOADS {
-        for contestant in CONTESTANTS {
-            let (Some(then), Some(now)) = (
-                before.weight(workload.name, contestant.name),
-                after.weight(workload.name, contestant.name),
-            ) else {
-                continue;
-            };
-
-            if then != now {
-                rows.push(vec![
-                    format!("`{}`", workload.name),
-                    contestant.title.to_string(),
-                    then.to_string(),
-                    now.to_string(),
-                    format!("{:+}", i128::from(now) - i128::from(then)),
-                ]);
-            }
-        }
-    }
-
-    rows
 }
 
 /// Every reading so far: each in full, with what changed between consecutive ones.

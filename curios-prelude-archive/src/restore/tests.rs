@@ -696,14 +696,14 @@ fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
 ///
 /// # What it last printed
 ///
-/// The latest reading of each row, taken on top of `d5046c5cc` in release on `x86_64-unknown-linux-gnu`, over two runs of one host. Kept here rather than in a document that cites this test, so a number cannot drift from the thing that would check it.
+/// The latest reading of each row, taken on top of `9c543476a` in release on `x86_64-unknown-linux-gnu`, at a load average under two, over two runs of one host. Kept here rather than in a document that cites this test, so a number cannot drift from the thing that would check it.
 ///
 /// | What | Measured |
 /// | --- | --- |
-/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the items' erased forms | 19.2–20.3 ms |
-/// | Re-erasing one whole unit over the stored Core | 1.2 s |
-/// | Certifying one whole unit | 3.5–3.6 s, 0 refusals |
-/// | Heaviest declaration that certification makes | 982 481 units, peak depth 17 |
+/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the items' erased forms | 19.3–19.8 ms |
+/// | Re-erasing `/std` whole over the stored Core | 2.6–2.7 s |
+/// | Certifying `/std` whole | 6.7–6.8 s, 0 refusals |
+/// | Heaviest declaration that certification makes | 980 868 units, peak depth 17 |
 ///
 /// The heaviest declaration's figure counts the closed machine re-deriving within a run — the trade that buys a closed fold's check back a thousandfold — and at thirty times under the default budget it decides nothing.
 #[test]

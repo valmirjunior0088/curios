@@ -4,7 +4,7 @@
 //!
 //! The engine pin is the load-bearing one: `rust-wasm` runs under the `wasmtime` on the path while `curios` runs under the one it embeds, so unless the two agree the wasm comparison is between two engines rather than between two compilers.
 //!
-//! What a pin buys is that a control cannot drift for a reason the record does not show. The control still catches everything else, and a pin moved deliberately is a visible commit; a toolchain that floats is the drift that left run 04's result unattributable in the bench this one replaces.
+//! What a pin buys is that Rust cannot drift for a reason the record does not show: a comparison reads Curios against it, and a new toolchain moves Rust alone. The ratio still cancels what moves both, and a pin moved deliberately is a visible commit; a toolchain that floats is the drift that left run 04's result unattributable in the bench this one replaces.
 
 #[cfg(test)]
 mod tests;

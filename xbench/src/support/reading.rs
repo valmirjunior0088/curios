@@ -4,21 +4,19 @@
 //!
 //! A reading is a historical fact and cannot be re-run, which is what separates this crate from `xboard`, whose witnesses are put to the checkers on every run and fail where they disagree with their ticket. Nothing here can regress; what a run holds is that the record is well formed.
 
-use crate::{Built, Date, Platform};
+use crate::{Date, Platform};
 
 /// One sitting of the bench.
 #[derive(Debug)]
 pub(crate) struct Reading {
     pub(crate) taken: Date,
-    /// The compiler the reading is about: the version it reports of itself and the commit it was built from. A reading is emitted only from a clean tree, so the commit holds what was measured.
+    /// The compiler the reading is about: the version it reports of itself and the commit it was built from.
     pub(crate) subject: &'static str,
     pub(crate) platform: Platform,
     /// The tool pins it ran under, true because a check refused to proceed otherwise. Recorded because readings outlive a pin, and nothing else would say which era one belongs to.
     pub(crate) pinned: &'static [(&'static str, &'static str)],
     /// The size each workload was measured at, once for the whole reading. Recorded rather than read from the contest, so changing a workload's size later cannot relabel what an earlier reading measured.
     pub(crate) sizes: &'static [(&'static str, u64)],
-    /// What each contestant's build weighed, taken without running anything. Deterministic, so a difference between two readings is real.
-    pub(crate) built: &'static [Built],
     pub(crate) timed: &'static [Timed],
 }
 
@@ -59,13 +57,5 @@ impl Reading {
         self.timed
             .iter()
             .find(|timed| timed.workload == workload && timed.contestant == contestant)
-    }
-
-    /// What `contestant`'s build of `workload` weighed, where this reading weighed it.
-    pub(crate) fn weight(&self, workload: &str, contestant: &str) -> Option<u64> {
-        self.built
-            .iter()
-            .find(|built| built.workload == workload && built.contestant == contestant)
-            .map(|built| built.bytes)
     }
 }

@@ -106,7 +106,6 @@ fn a_recorded_reading_is_the_module_that_files_it() {
             platform,
             pinned: vec![("rustc", "1.95.0".to_string())],
             sizes: vec![("lcg", 100_000_000)],
-            built: vec![("lcg", "curios", 12_000_000)],
             timed: vec![("lcg", "curios", vec![vec![1.5, 2.5], vec![3.0]])],
         },
     );
@@ -118,7 +117,6 @@ fn a_recorded_reading_is_the_module_that_files_it() {
     assert!(module.contains("machine: \"A Processor, x86_64, 16 cpus, 31.3 GiB\""));
     assert!(module.contains("(\"rustc\", \"1.95.0\")"));
     assert!(module.contains("(\"lcg\", 100000000)"));
-    assert!(module.contains("weighed(\"lcg\", \"curios\", 12000000)"));
     assert!(module.contains("took(\"lcg\", \"curios\", &["));
     assert!(module.contains("&[1.500, 2.500]"));
     assert!(module.contains("&[3.000]"));

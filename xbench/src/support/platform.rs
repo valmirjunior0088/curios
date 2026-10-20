@@ -1,6 +1,6 @@
 //! Where a reading was taken, in three lines the host answers for itself.
 //!
-//! The division is what the report does with each. [`Platform::machine`] and [`Platform::state`] gate a comparison, because a different machine or a different arrangement of the same one makes two readings incomparable and nothing else would notice. [`Platform::software`] is recorded and not gated: a kernel or microcode update rarely moves a figure past its span, and where it does the control moves with it and the comparison is disqualified on its own. Gating on it would strand the record at every patch.
+//! The division is what the report does with each. [`Platform::machine`] and [`Platform::state`] gate a comparison, because a different machine or a different arrangement of the same one makes two readings incomparable and nothing else would notice. [`Platform::software`] is recorded and not gated: a kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it. Gating on it would strand the record at every patch.
 //!
 //! Each line is read from `/proc` and `/sys` rather than asked of a program, so a capture spawns nothing and cannot be told a different story by a tool on the path. Reading a file and reading what it says are separate here, so what the parsing decides is held by tests over text rather than over this machine.
 

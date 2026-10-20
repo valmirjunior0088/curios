@@ -11,25 +11,6 @@ use {
 const LEAST_GROUPS: usize = 2;
 
 #[test]
-fn every_weighed_build_is_one_the_contest_makes() {
-    for (number, reading) in READINGS.iter().enumerate() {
-        for built in reading.built {
-            assert!(
-                WORKLOADS
-                    .iter()
-                    .any(|workload| workload.name == built.workload)
-                    && CONTESTANTS
-                        .iter()
-                        .any(|contestant| contestant.name == built.contestant),
-                "reading {number:02} weighs {} on {}, which the contest does not build",
-                built.contestant,
-                built.workload
-            );
-        }
-    }
-}
-
-#[test]
 fn every_reading_measures_what_the_contest_names() {
     for (number, reading) in READINGS.iter().enumerate() {
         for timed in reading.timed {

@@ -50,18 +50,11 @@ A contestant is measured in **five groups of five executions**, one untimed roun
 
 - Within a group is iteration noise. Between the group medians is the **span**.
 - A contestant's figure is the median of its group medians; its span is the least and greatest of them.
+- Across two readings, what is compared is **Curios over Rust, group by group**: each group's Curios median over its Rust median, read as a figure is.
 - A difference is **proven only where two spans are disjoint**. Overlapping spans could have produced each other, so the report says `no difference proven`.
 - Every figure is stated to the place of the first significant digit of its half-span, so no number claims a precision its span does not support.
 
 Interleaving is what makes the ratio survive a disturbance: a compile elsewhere on the machine, a thermal ramp or a cache warming reaches all three contestants alike when they run adjacent in time, and unevenly when each runs to exhaustion in turn.
-
-## What a build weighs
-
-A reading also records what each contestant's build weighs, taken by stating the file rather than by running it. That figure is **deterministic** under the pins — same compilers, same sources, same weight — so it needs no span, no warmup and no control: a difference between two readings is real, and the report states it as itself.
-
-It is read **down a column, never across one**. The Curios contestant is a self-contained executable with the engine compiled into it, so its weight is the engine's with the program's on top, while `rust` is an ordinary native binary and `rust-wasm` a module. Putting two of them side by side would compare three different kinds of file. What a column answers is whether one contestant's build grew between two readings.
-
-This is the whole of the counted evidence for now. What it cannot see is work: a loop body executed a hundred million times weighs what it weighs. The figures that answer *where the work goes* — fuel consumed, allocations, collections — need the program to run and report on itself, which reaches `curios-runtime`'s engine configuration and the command line, and is deliberately left to its own change.
 
 ## When a comparison is refused
 
@@ -70,11 +63,10 @@ This is the whole of the counted evidence for now. What it cannot see is work: a
 | `machine` | refuses, naming it |
 | `state` — governor, boost, SMT | refuses, naming it |
 | `pinned` — the tool versions | refuses, naming it |
-| `sizes` | refuses, naming it |
-| `software` — kernel, microcode | notes it and compares |
-| the **control** moved past its span | draws no Curios figure for that workload |
+| a workload's size | compares that workload no further, naming both sizes on its row |
+| `software` — kernel, microcode | compares |
 
-Software is not gated because a patch rarely moves a figure past its span, and where it does the control moves with it and the comparison is disqualified anyway; gating on it would strand the record at every update while catching nothing the control does not.
+Software is not gated because a patch that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it; gating on it would strand the record at every update for nothing.
 
 ## Design
 
@@ -94,13 +86,13 @@ Software is not gated because a patch rarely moves a figure past its span, and w
 
 **Rejected.** A threshold written by hand, "ignore moves under two percent": a number someone believed, where the machine can measure the real one. Student's t over the samples, as `ministat` does: the samples are not independent and not normal, and the assumption buys a confidence level to argue about rather than an answer. Two groups rather than five: the span would be a single difference between two numbers instead of an estimate of one.
 
-### The control can disqualify a comparison
+### A movement is read against Rust
 
-**Decision.** Rust is the control. Where it moved past its own span between two readings, the report draws no Curios figure for that workload and says so.
+**Decision.** Across two readings the report compares Curios's time over Rust's, taken group by group — each group's Curios median over that group's Rust median — and a movement is proven where the two readings' spans of that ratio are disjoint.
 
-**Rationale.** It is the only reasoning the bench this one replaces ever produced that was worth the harness, and it was done by hand in prose every sitting — "the controls did **not** hold still… no attribution should be drawn." A rule a person must remember to apply is the perimeter before it was a board. It also covers what nothing else can: a kernel change, a thermal state, a machine running something else all move the control, so the check detects them without the record having to anticipate them.
+**Rationale.** The contestants run interleaved inside a group, so what moves the machine during a group or between two sittings — a kernel update, a thermal state, something else running — reaches both and cancels in the ratio, where Curios's time alone would carry it as a movement of the compiler. The bench this one replaces asked of every sitting, by hand in prose, whether the controls held still; the ratio answers that in the figure itself, on every workload, with nothing left for a person to remember to apply.
 
-**Rejected.** Reporting the movement with a caveat beside it: a caveat is read after the number, and the number is what gets quoted.
+**Rejected.** Curios's time alone, which reports a movement of the machine as one of the compiler. Drawing no figure for a workload whose Rust moved past its span: it leaves the workload without a verdict, and a Rust span wide enough to hold still hides a shift that moved Curios with it. Reporting the movement with a caveat beside it: a caveat is read after the number, and the number is what gets quoted.
 
 ### The contestants are Curios and Rust, compiled two ways
 

@@ -309,7 +309,7 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
 ///
 /// # The dynamic half, and how to retake it
 ///
-/// Timings are taken over native binaries, same protocol as [`string_walk_ladder_measurements`], rather than in-process: the debug-built runtime executes the same modules fourteen to forty times slower than the native binaries — the GC libcalls compile at opt-level zero — which overweights exactly the allocation shares this family exists to divide.
+/// The test times the family in process, in the test profile, which is optimized as release is, so an allocation share reads as the shipped runtime's. The native protocol of [`string_walk_ladder_measurements`] retakes it outside a test:
 ///
 /// ```sh
 /// cargo xtask compiler build
@@ -319,17 +319,17 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
 ///
 /// # What it last measured
 ///
-/// Taken at `447fbb0a1`, x86-64 Linux, in process at N = 300 000: one warmup round, then seven rounds over the whole family, each round timing every member so no member is measured on a warmer machine than another. Median of the seven, with their span.
+/// Taken at `9c543476a`, x86-64 Linux, at a load average under two, in process in the test profile at N = 300 000: one warmup round, then seven rounds over the whole family, each round timing every member so no member is measured on a warmer machine than another. Median of the seven, with their span.
 ///
 /// | Rung | raw | binaryen | Isolates | Reading |
 /// | --- | --- | --- | --- | --- |
-/// | `baseline` | 2.105s [2.097–2.347] | 1.120s [1.063–1.192] | — | the reference the rest are read against |
-/// | `flat_acc` | 5.017s [4.990–5.559] | 4.084s [4.069–4.091] | the accumulator tuple | 2.35× the baseline, spans far apart on both paths: the `{Nat, Nat}` tuple is *cheaper* than the per-arm tail calls that replace it |
-/// | `held_scan` | 2.250s [2.115–2.387] | 1.124s [1.055–1.126] | the scan argument reconstruction | no difference proven — its spans overlap the baseline's on both paths here and at N = 2000, so this family cannot measure the obligation |
-/// | `inline_step` | 3.203s [3.190–3.614] | 2.141s [2.134–2.244] | the returned scan state and its call | 1.5× the baseline, and indistinguishable from `indexed` once Binaryen has run |
-/// | `indexed` | 3.102s [3.078–3.463] | 2.122s [1.989–2.260] | nothing — a negative result | `Bytes/get`'s checked `Option` path costs more than the suffix view it replaces, so this rung cannot attribute the suffix view; the window split's own transformation is that obligation's only honest instrument |
+/// | `baseline` | 0.2939s [0.2901–0.2953] | 0.2072s [0.2045–0.2092] | — | the reference the rest are read against |
+/// | `flat_acc` | 0.2942s [0.2918–0.2976] | 0.2049s [0.2040–0.2121] | the accumulator tuple | no difference proven: its spans overlap the baseline's on both paths |
+/// | `held_scan` | 0.2992s [0.2955–0.3013] | 0.2091s [0.2063–0.2098] | the scan argument reconstruction | 2% over the baseline raw, its span clearing the baseline's by two tenths of a millisecond, and no difference proven once Binaryen has run |
+/// | `inline_step` | 0.2582s [0.2566–0.2600] | 0.1731s [0.1720–0.1743] | the returned scan state and its call | 0.88× the baseline raw and 0.84× once Binaryen has run, spans far apart on both paths |
+/// | `indexed` | 0.3769s [0.3730–0.3789] | 0.2930s [0.2907–0.2977] | nothing — a negative result | 1.28× the baseline raw and 1.41× once Binaryen has run: `Bytes/get`'s checked `Option` path costs more than the suffix view it replaces, so this rung cannot attribute the suffix view; the window split's own transformation is that obligation's only honest instrument |
 ///
-/// **What this family can and cannot attribute.** One obligation is measurable here: the accumulator tuple, and its sign is the opposite of what removing an obligation suggests. One is not: the scan argument reconstruction is inside the noise at two input sizes two orders of magnitude apart. The remaining two are a single figure rather than two — `inline_step` and `indexed` agree once optimized — so the returned scan state and the suffix view cannot be told apart by this instrument.
+/// **What this family can and cannot attribute.** One obligation is measurable here: the returned scan state and its call, which `inline_step` removes for about a sixth of the walk once optimized. The accumulator tuple is not: `flat_acc` reads inside the baseline's span on both paths. Nor, once optimized, is the scan argument reconstruction: `held_scan`'s raw excess of 2% is gone once Binaryen has run. The suffix view cannot be attributed by this family, since `indexed` replaces it with a path that costs more.
 #[test]
 #[ignore = "measurement, mixed: attributes the walk's obligations rather than asserting"]
 fn walk_mirror_attribution_measurements() {
