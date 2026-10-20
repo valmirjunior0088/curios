@@ -1017,9 +1017,13 @@ pub(crate) fn answered_guard(
     Ok(answer.and_then(|answer| answer.as_bool()))
 }
 
-/// Whether `probe` could be the term the scrutinee recorded as `original` reduces to (`curios_analysis::could_reduce_to`), read on the scrutinee as the kernel spells it ([`Context::kernel_spelling`]), whose key the kernel's own filter reads. A solved metavariable stands over a spine of every local in scope where it was born — a guard written through a concept holds its witness as one — so left standing it reads as naming them all, and the filter would pass what the kernel's does not. A local definition left named reads the other way: under `let n = m + 0`, a guard over `n` names no `m`, and a form over `m` would be put to no equation where the kernel, which holds the guard by value, answers it.
+/// Whether `probe` could be the term the scrutinee recorded as `original` reduces to (`curios_analysis::could_reduce_to`), both read as the kernel spells them ([`Context::kernel_spelling`]), as the kernel's own filter reads its own. A solved metavariable stands over a spine of every local in scope where it was born — a guard written through a concept holds its witness as one — so left standing it reads as naming them all, and the filter would pass what the kernel's does not. A local definition left named reads the other way, on either side: under `let n = m + 0`, a guard over `n` names no `m`, and a form over `m` would be put to no equation, and a form over `n` names no `m` where the guard is read over it, where the kernel, which holds both by value, answers each.
 fn could_settle(context: &Context, original: &Term, probe: &Term, proofs: &[Free]) -> bool {
-    could_reduce_to(&context.kernel_spelled(original), probe, proofs)
+    could_reduce_to(
+        &context.kernel_spelled(original),
+        &context.kernel_spelled(probe),
+        proofs,
+    )
 }
 
 /// The binders `probe` names that are themselves proofs: assumed at a proposition, so conversion reads them nowhere, and a stuck form naming one a scrutinee does not may still be that scrutinee's term. The kernel's `proofs_named`, by the elaborator's own classifier. A global is passed over, as the kernel passes over one: the filter this answers for tests a local alone (`could_reduce_to`).

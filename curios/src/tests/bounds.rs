@@ -610,6 +610,12 @@ const ROWS: &[Row] = &[
         "total / (n + m)",
     ),
     claim("n: Nat, p: Holds(0 < n)", "Nat/NonZero(n)"),
+    // A bound over an operand reduction opens, written over a local definition: the split on the bound answers the goal its arm is checked at, which names the definition where the split's key is read through it.
+    body(
+        "a: Nat, b: Nat, g: Nat, p: Holds(0 < g), back: Eq()(g, Nat/gcd(a, b) * g), needs: (m: Nat, @Holds(m <= 1)) -> Nat",
+        "Nat",
+        "let x = a; needs(Nat/gcd(x, b))",
+    ),
     // And under a guard that is a disequality, which its own split reads: three ordered values, the middle one ruled out.
     body(
         "i: Nat, p: Holds(i <= 2)",
