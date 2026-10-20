@@ -31,10 +31,11 @@ Two files are found by *presence* rather than declared, because they are the two
 | `lib.crs` | the package's library, mounted at its declared `name` |
 | `exe.crs` | the package's own executable, run by that same name |
 
-So the smallest complete package is one line of manifest:
+So the smallest complete package is two lines of manifest, its name and the oldest compiler it accepts:
 
 ```toml
 name = "hello"
+compiler = "0.16.9"
 ```
 
 Neither stem enters a qualified name — `lib` and `exe` are spellings nothing can refer to, exactly so a package's own name never means two things at once. `lib.crs`'s modules load from the manifest's directory (`pub mod parse;` reads `parse.crs`), which is the one place a header's namespace is not its stem directory.
@@ -327,7 +328,7 @@ A package is a namespace for definitions and an umbrella a namespace for package
 
 ```toml
 name = "hello"
-compiler = "0.16.7"
+compiler = "0.16.9"
 default = "bench"
 
 [[executables]]
@@ -340,7 +341,7 @@ path = "tools/serve.crs"  # unless the row says otherwise
 
 An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..` or leading `/`, since the stem-space checks compare it as written.
 
-`compiler` states a minimum, not a range or an exact toolchain pin: `compiler = "0.16.7"` accepts that version and newer, using SemVer precedence and ignoring build metadata. An older compiler is refused before compilation or cached execution, naming the manifest, the required minimum and the running version. Every dependency is checked against its own effective requirement too. There is no implicit minimum for a standalone package, and `curios new` writes the running compiler's version when it starts one. Loose programs and standard input have no manifest requirement.
+`compiler` states a minimum, not a range or an exact toolchain pin: `compiler = "0.16.9"` accepts that version and newer, using SemVer precedence and ignoring build metadata. An older compiler is refused before compilation or cached execution, naming the manifest, the required minimum and the running version. Every dependency is checked against its own effective requirement too. A standalone package must state one: there is no implicit minimum, so a manifest without `compiler` is refused, naming the line that would satisfy the running compiler, and `curios new` writes that line when it starts a package. Loose programs and standard input have no manifest requirement.
 
 An umbrella must declare `compiler`, and every package its `members` enumerates inherits that minimum. A member cannot declare a local override; the refusal points to its umbrella. A package merely beneath an umbrella directory is still standalone unless enumerated. Inheritance follows each dependency's own membership, never its consumer's umbrella. A dependency delivered without the umbrella it needs cannot inherit and must declare a standalone minimum in its own manifest.
 
@@ -374,7 +375,7 @@ A dependency is pinned exactly, and its name is how every consumer refers to it.
 
 ```toml
 name = "app"
-compiler = "0.16.7"
+compiler = "0.16.9"
 
 [dependencies]
 json = { source = "git", url = "https://github.com/you/json", rev = "…", hash = "c1:…" }
@@ -391,7 +392,7 @@ shape = { source = "path", path = "../shape" }
 No `url` or `rev` may begin with `-`: [`curate`](#curate) hands both to `git` as positional arguments, which would read a leading `-` as an option. `member` and `catalog` are markers rather than resolvers, so a `[catalog]` row may name neither — umbrellas do not nest, and nothing sits above one to answer a marker it wrote. A catalog row on its own fetches nothing: activation lives in the package that names it.
 
 ```toml
-compiler = "0.16.7"
+compiler = "0.16.9"
 members = ["app", "base"]
 
 [catalog]
