@@ -536,7 +536,7 @@ fn sole(package: &Package) -> Result<&Executable, String> {
             package.name
         )),
         _ => Err(format!(
-            "{:?} declares more than one executable and no `default`, so a bare target means nothing in particular{}",
+            "{:?} declares more than one executable and no `default`, so a bare command means none of them in particular{}",
             package.name,
             candidates(package)
         )),

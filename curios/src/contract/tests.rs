@@ -8,20 +8,20 @@ use {
     std::{collections::BTreeSet, fmt::Write, fs, iter},
 };
 
-/// Where a command line spells its target.
-const TARGET: &str = "TARGET";
+/// Where a command line spells its subject.
+const SUBJECT: &str = "SUBJECT";
 
 /// Every command, as the command line that invokes it.
 ///
 /// A function rather than a `const`, because the set the tree actually holds is feature-dependent — `profile` carries a command of its own — and `#[cfg]` does not reach an element of an array literal. What [`every_command_the_parser_knows_is_in_the_table`] compares this against is the tree clap built for *this* build, so the table has to vary exactly as that tree does or one of the two builds would be checked against the other's surface.
 fn commands() -> Vec<&'static [&'static str]> {
     let mut lines: Vec<&'static [&'static str]> = vec![
-        &["run", TARGET],
-        &["compile", TARGET],
-        &["compile", TARGET, "--output", "out"],
-        &["document", TARGET],
+        &["run", SUBJECT],
+        &["compile", SUBJECT],
+        &["compile", SUBJECT, "--output", "out"],
+        &["document", SUBJECT],
         &["document", "--std", "site"],
-        &["test", TARGET],
+        &["test", SUBJECT],
         &["curate"],
         &["pin", "foreign", "probe", "--path", "probe.wasm"],
         &[
@@ -45,15 +45,15 @@ fn commands() -> Vec<&'static [&'static str]> {
         &["pin", "dependency", "json", "--rev", "abc"],
         &["pin", "dependency", "json", "--refresh"],
         &["new", "fresh"],
-        &["lint", TARGET],
-        &["format", TARGET],
-        &["wonder", "diagnostics", TARGET],
-        &["wonder", "tests", TARGET],
-        &["wonder", "cost", TARGET],
-        &["wonder", "stage", "core", TARGET],
-        &["wonder", "stage", "ersd", TARGET],
-        &["wonder", "at", "1:1", TARGET],
-        &["wonder", "declarations", TARGET],
+        &["lint", SUBJECT],
+        &["format", SUBJECT],
+        &["wonder", "diagnostics", SUBJECT],
+        &["wonder", "tests", SUBJECT],
+        &["wonder", "cost", SUBJECT],
+        &["wonder", "stage", "core", SUBJECT],
+        &["wonder", "stage", "ersd", SUBJECT],
+        &["wonder", "at", "1:1", SUBJECT],
+        &["wonder", "declarations", SUBJECT],
         &["wonder", "server"],
     ];
 
@@ -121,9 +121,9 @@ fn tree() -> Temporary {
     root
 }
 
-/// `line` as the parser receives it, `TARGET` replaced by `argument` or dropped when there is none.
+/// `line` as the parser receives it, `SUBJECT` replaced by `argument` or dropped when there is none.
 fn parsed(line: &[&str], argument: Option<&str>) -> Mode {
-    let words = iter::once("curios").chain(line.iter().filter_map(|word| match *word == TARGET {
+    let words = iter::once("curios").chain(line.iter().filter_map(|word| match *word == SUBJECT {
         true => argument,
         false => Some(*word),
     }));
@@ -240,36 +240,36 @@ impl Standing<'_> {
     /// What `mode` admits its argument as, standing here, or the refusal it earns.
     fn admitted(&self, mode: &Mode) -> String {
         let contract = mode.contract();
-        let target = mode.target();
+        let subject = mode.subject();
         let directory = self.directory.as_path();
 
         let admitted = match contract.accepts {
             Accepts::Program => contract
-                .admit_program(target, None, mode.output(), directory)
+                .admit_program(subject, None, mode.output(), directory)
                 .map(|program| self.program(&program)),
             Accepts::ProgramOrLibrary => {
                 contract
-                    .admit_staged(target, None, directory)
+                    .admit_staged(subject, None, directory)
                     .map(|staged| match staged {
                         Staged::Program(program) => self.program(&program),
                         Staged::Library(library) => self.library(&library),
                     })
             }
             Accepts::Library => contract
-                .admit_library(target, None, directory)
+                .admit_library(subject, None, directory)
                 .map(|library| self.library(&library)),
             Accepts::Any => contract
-                .admit_any(target, None, directory)
+                .admit_any(subject, None, directory)
                 .map(|selection| match selection {
                     Selection::Program(program) => self.program(&program),
                     Selection::Library(library) => self.library(&library),
                     Selection::Entire(entire) => package_entire(&entire),
                 }),
             Accepts::Entire => contract
-                .admit_entire(target, None, directory)
+                .admit_entire(subject, None, directory)
                 .map(|entire| package_entire(&entire)),
             Accepts::Files => contract
-                .admit_files(target, None, directory)
+                .admit_files(subject, None, directory)
                 .map(|rewritten| self.rewritten(&rewritten)),
             Accepts::Nothing => Ok("takes no subject".to_string()),
         };
@@ -312,10 +312,10 @@ fn table(root: &Path) -> String {
             continue;
         }
 
-        let takes_target = line.contains(&TARGET);
+        let takes_subject = line.contains(&SUBJECT);
         for &(standpoint, written) in ROWS {
-            // A command taking no target reads no argument, so only the rows spelling none are its.
-            if !takes_target && written.is_some() {
+            // A command taking no subject reads no argument, so only the rows spelling none are its.
+            if !takes_subject && written.is_some() {
                 continue;
             }
 
@@ -355,7 +355,7 @@ fn expected() -> String {
     expected
 }
 
-const EXPECTED: &str = r#"run TARGET — Program (its own file), store Write, leaves Nothing, options --budget --manifest
+const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -375,7 +375,7 @@ const EXPECTED: &str = r#"run TARGET — Program (its own file), store Write, le
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-compile TARGET — Program (its own file), store Write, leaves Executable, options --output --budget --manifest
+compile SUBJECT — Program (its own file), store Write, leaves Executable, options --output --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -395,7 +395,7 @@ compile TARGET — Program (its own file), store Write, leaves Executable, optio
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-compile TARGET --output out — Program (its own file), store Write, leaves Executable, options --output --budget --manifest
+compile SUBJECT --output out — Program (its own file), store Write, leaves Executable, options --output --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -415,7 +415,7 @@ compile TARGET --output out — Program (its own file), store Write, leaves Exec
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-document TARGET — Library, store Write, leaves Pages, options --std --output --budget --manifest
+document SUBJECT — Library, store Write, leaves Pages, options --std --output --budget --manifest
   work/app: (none) → library app
   work/app: serve → refused: `document` takes a library, and a program is not one
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -437,7 +437,7 @@ document TARGET — Library, store Write, leaves Pages, options --std --output -
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 document --std site — Nothing, store None, leaves Pages, options --std --output --budget --manifest
   takes no subject
-test TARGET — Any, store Write, leaves Nothing, options --filter --budget --manifest
+test SUBJECT — Any, store Write, leaves Nothing, options --filter --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -479,7 +479,7 @@ pin dependency json --refresh — Nothing, store None, leaves Manifest, options 
   takes no subject
 new fresh — Nothing, store None, leaves Package, options none
   takes no subject
-lint TARGET — Any, store Write, leaves Nothing, options --budget --manifest
+lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -499,7 +499,7 @@ lint TARGET — Any, store Write, leaves Nothing, options --budget --manifest
   work/app/serve: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-format TARGET — Files, store None, leaves Rewritten, options --check --manifest
+format SUBJECT — Files, store None, leaves Rewritten, options --check --manifest
   work/app: (none) → files lib.crs util.crs serve.crs serve/helper.crs bench.crs
   work/app: serve → files serve.crs serve/helper.crs
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -519,7 +519,7 @@ format TARGET — Files, store None, leaves Rewritten, options --check --manifes
   work/app/serve: bench → files <root>/work/app/bench.crs
   work/app/nested: (none) → files lib.crs
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder diagnostics TARGET — Any, store Write, leaves Nothing, options --budget --manifest
+wonder diagnostics SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -539,7 +539,7 @@ wonder diagnostics TARGET — Any, store Write, leaves Nothing, options --budget
   work/app/serve: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder tests TARGET — Any, store Write, leaves Nothing, options --budget --manifest
+wonder tests SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -559,7 +559,7 @@ wonder tests TARGET — Any, store Write, leaves Nothing, options --budget --man
   work/app/serve: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder cost TARGET — Program, store Write, leaves Nothing, options --budget --manifest
+wonder cost SUBJECT — Program, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -579,7 +579,7 @@ wonder cost TARGET — Program, store Write, leaves Nothing, options --budget --
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder stage core TARGET — ProgramOrLibrary, store Write, leaves Nothing, options --budget --manifest
+wonder stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -599,7 +599,7 @@ wonder stage core TARGET — ProgramOrLibrary, store Write, leaves Nothing, opti
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder stage ersd TARGET — Program, store Write, leaves Nothing, options --budget --manifest
+wonder stage ersd SUBJECT — Program, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -619,7 +619,7 @@ wonder stage ersd TARGET — Program, store Write, leaves Nothing, options --bud
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder at 1:1 TARGET — ProgramOrLibrary, store Write, leaves Nothing, options --budget --manifest
+wonder at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
@@ -639,7 +639,7 @@ wonder at 1:1 TARGET — ProgramOrLibrary, store Write, leaves Nothing, options 
   work/app/serve: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-wonder declarations TARGET — ProgramOrLibrary, store Write, leaves Nothing, options --budget --manifest
+wonder declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"

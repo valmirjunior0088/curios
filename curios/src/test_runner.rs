@@ -1,6 +1,6 @@
-//! `curios test`: every declared test of what the target selects — for the governing package entire its library's and then each executable's, and for a library, a program or a loose file its own — each unit compiled as a test program, the synthesized `Test/main` tail in place of the authored one, and every registered test run in an instantiation of its own, `[argv0, index]` as the program's arguments. The guest prints its own outcome line and answers its verdict, which is read off what its entry hands back and never off an exit code; what only the compiler knows — the failing declaration's body as written, the count line — is printed here from the records the compile hands back.
+//! `curios test`: every declared test of what the subject selects — for the governing package entire its library's and then each executable's, and for a library, a program or a loose file its own — each unit compiled as a test program, the synthesized `Test/main` tail in place of the authored one, and every registered test run in an instantiation of its own, `[argv0, index]` as the program's arguments. The guest prints its own outcome line and answers its verdict, which is read off what its entry hands back and never off an exit code; what only the compiler knows — the failing declaration's body as written, the count line — is printed here from the records the compile hands back.
 //!
-//! The store is consulted exactly as `run` consults it: one payload per declared target, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records beside the machine code so a warm run recompiles nothing and still reports everything. A loose program has no store, so its tests are compiled every time.
+//! The store is consulted exactly as `run` consults it: one payload per declared subject, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records beside the machine code so a warm run recompiles nothing and still reports everything. A loose program has no store, so its tests are compiled every time.
 
 #[cfg(test)]
 mod tests;
@@ -62,7 +62,7 @@ impl Totals {
     }
 }
 
-/// Run the tests `selection` declares, optionally narrowed to those at or under the path `filter`, each declared target filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed.
+/// Run the tests `selection` declares, optionally narrowed to those at or under the path `filter`, each declared subject filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed.
 pub(crate) fn run_tests(
     budget: u64,
     selection: Selection,
@@ -86,7 +86,7 @@ pub(crate) fn run_tests(
                 root: &governing.root,
                 manifest: &governing.manifest,
             };
-            // The same scope for every target: the dependency graph, with the governing package's own library last — the order `wonder` walks and `run` compiles.
+            // The same scope for every subject: the dependency graph, with the governing package's own library last — the order `wonder` walks and `run` compiles.
             let units = order(&governing).map_err(CompileError::failure)?;
 
             // The library first, when there is one, then every executable in declaration order — each a test program of its own, scheduling only its own unit's tests.
@@ -148,14 +148,14 @@ pub(crate) fn run_tests(
     run.finish()
 }
 
-/// Where a declared target's test payload is filed and whom it is reported under: the package it is filed under, the governing root its store sits beside, and the manifest a report names.
+/// Where a declared subject's test payload is filed and whom it is reported under: the package it is filed under, the governing root its store sits beside, and the manifest a report names.
 struct Declared<'a> {
     package: &'a str,
     root: &'a Path,
     manifest: &'a Path,
 }
 
-/// One target's test program as it is compiled: the units it stands on, its entry with the loader that entry's `mod` lines resolve through, the text the entry was parsed from and the file it is, and the tail that schedules the tests.
+/// One subject's test program as it is compiled: the units it stands on, its entry with the loader that entry's `mod` lines resolve through, the text the entry was parsed from and the file it is, and the tail that schedules the tests.
 struct Tests<'a> {
     units: &'a [RootSource],
     entrypoint: &'a Entrypoint,
@@ -165,7 +165,7 @@ struct Tests<'a> {
     tail: EntryTail,
 }
 
-/// Where a target's test payload is filed and whom its compilation is reported under: the store, the package and the name reserved in it for the payload, the subject a progress line names and the manifest a report names.
+/// Where a subject's test payload is filed and whom its compilation is reported under: the store, the package and the name reserved in it for the payload, the subject a progress line names and the manifest a report names.
 struct Filing<'a> {
     store: Option<&'a Verdicts>,
     package: &'a str,
@@ -175,7 +175,7 @@ struct Filing<'a> {
 }
 
 impl<'a> Filing<'a> {
-    /// A loose target's: filed nowhere and under no package, reported under `subject` alone.
+    /// A loose subject's: filed nowhere and under no package, reported under `subject` alone.
     fn nowhere(subject: &'a Subject) -> Self {
         Self {
             store: None,
@@ -187,7 +187,7 @@ impl<'a> Filing<'a> {
     }
 }
 
-/// What a filter met among the tests of the targets compiled so far: whether any stood at or under it, and the paths of the tests it passed over, which a filter that matched nothing is answered with.
+/// What a filter met among the tests of the subjects compiled so far: whether any stood at or under it, and the paths of the tests it passed over, which a filter that matched nothing is answered with.
 #[derive(Default)]
 struct Met {
     any: bool,
@@ -251,14 +251,14 @@ fn edits(path: &str, filter: &str) -> usize {
     row[filter.len()]
 }
 
-/// One `curios test` invocation as it goes: how each target is compiled, which of its tests run, and what has been tallied.
+/// One `curios test` invocation as it goes: how each subject is compiled, which of its tests run, and what has been tallied.
 struct Run<'a> {
     budget: u64,
     access: Access,
     filter: Option<&'a str>,
     totals: Totals,
     met: Met,
-    /// The first reason a store refused filing, since a store nobody can write refuses every target for one reason.
+    /// The first reason a store refused filing, since a store nobody can write refuses every subject for one reason.
     refusal: Option<String>,
 }
 
@@ -271,7 +271,7 @@ impl Run<'_> {
     ) -> Result<(), CompileError> {
         let library = declared.manifest.with_file_name(LIBRARY);
         let subject = Subject::package(declared.package);
-        // One store handle per target, as `run` holds one per invocation: a handle's placed chain is one compilation's, and a second fold on the same handle would carry the first's placements into the chain the second payload is filed against — one entry too long, which the store withholds without a word.
+        // One store handle per subject, as `run` holds one per invocation: a handle's placed chain is one compilation's, and a second fold on the same handle would carry the first's placements into the chain the second payload is filed against — one entry too long, which the store withholds without a word.
         let store = self.access.filed(declared.root);
         let (records, cwasm, foreigns) = tests_payload(
             self.budget,
@@ -368,7 +368,7 @@ impl Run<'_> {
             Filing::nowhere(subject),
         )?;
 
-        // A loose target has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
+        // A loose subject has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
         self.selected(&records, &cwasm, invoked, subject, None, &foreigns)
     }
 
@@ -392,7 +392,7 @@ impl Run<'_> {
             Filing::nowhere(subject),
         )?;
 
-        // A loose target has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
+        // A loose subject has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
         self.selected(&records, &cwasm, invoked, subject, None, &foreigns)
     }
 
@@ -404,7 +404,7 @@ impl Run<'_> {
             .or_else(|| store.and_then(Verdicts::refused));
     }
 
-    /// Run every record of one compiled target the filter selects, one instantiation each, between a `↳ Testing` step and a `↳ Tested` step carrying the unit's tally, which is folded into the run's. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
+    /// Run every record of one compiled subject the filter selects, one instantiation each, between a `↳ Testing` step and a `↳ Tested` step carrying the unit's tally, which is folded into the run's. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
     fn selected(
         &mut self,
         records: &[TestRecord],
@@ -501,7 +501,7 @@ impl Run<'_> {
     }
 }
 
-/// The records and machine code of one target compiled as a test program — from the filing's store when nothing it was made from has changed, and compiled and filed there otherwise. Without a store, compiled and filed nowhere.
+/// The records and machine code of one subject compiled as a test program — from the filing's store when nothing it was made from has changed, and compiled and filed there otherwise. Without a store, compiled and filed nowhere.
 fn tests_payload(
     budget: u64,
     tests: Tests<'_>,

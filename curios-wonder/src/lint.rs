@@ -1,6 +1,6 @@
 //! `curios lint`: the gate over what `wonder diagnostics` reports.
 //!
-//! The same subjects, the same records, the same rendering: a lint is a diagnostic the compilation reports and nothing stops on, and this subcommand is where it turns into an exit code. What it adds is the one lint no unit can decide alone — a declared dependency nothing in the package wrote, read off the union of the prefixes every unit spelled — and it adds it only when the target is the package entire, because a dependency is a fact of the package and a file asked about alone reaches what it reaches.
+//! The same subjects, the same records, the same rendering: a lint is a diagnostic the compilation reports and nothing stops on, and this subcommand is where it turns into an exit code. What it adds is the one lint no unit can decide alone — a declared dependency nothing in the package wrote, read off the union of the prefixes every unit spelled — and it adds it only when the subject is the package entire, because a dependency is a fact of the package and a file asked about alone reaches what it reaches.
 
 use {
     crate::{Asked, Diagnosed, Severity},
@@ -21,7 +21,7 @@ pub enum Linted {
     Findings,
 }
 
-/// `curios lint [TARGET]`: every diagnostic, goal and lint of what `selection` selects rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached. `unfiled` is told why, where a store took nothing of what the lint compiled, which changes neither the report nor what is returned.
+/// `curios lint [SUBJECT]`: every diagnostic, goal and lint of what `selection` selects rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached. `unfiled` is told why, where a store took nothing of what the lint compiled, which changes neither the report nor what is returned.
 pub fn lint(
     budget: u64,
     selection: Selection,

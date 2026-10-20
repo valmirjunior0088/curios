@@ -1,23 +1,23 @@
-//! The boundary between compiler options, the optional target and opaque program arguments.
+//! The boundary between compiler options, the optional subject and opaque program arguments.
 
 use {super::*, curios_pipeline::DEFAULT_STEP_BUDGET, std::iter};
 
 fn run(words: &[&str]) -> (Option<String>, Vec<OsString>, Elaboration) {
     let cli = Cli::try_parse_from(iter::once("curios").chain(words.iter().copied())).unwrap();
     let Mode::Run {
-        target,
+        subject,
         args,
         elaboration,
     } = cli.mode
     else {
         panic!("the fixture names run");
     };
-    (target, args, elaboration)
+    (subject, args, elaboration)
 }
 
 #[test]
-fn the_target_and_program_arguments_follow_one_boundary() {
-    for (words, target, arguments) in [
+fn the_subject_and_program_arguments_follow_one_boundary() {
+    for (words, subject, arguments) in [
         (vec!["run"], None, vec![]),
         (vec!["run", "--"], None, vec![]),
         (vec!["run", "serve"], Some("serve"), vec![]),
@@ -69,8 +69,8 @@ fn the_target_and_program_arguments_follow_one_boundary() {
         ),
         (vec!["run", "serve", ""], Some("serve"), vec![""]),
     ] {
-        let (actual_target, args, elaboration) = run(&words);
-        assert_eq!(actual_target.as_deref(), target, "{words:?}");
+        let (actual_subject, args, elaboration) = run(&words);
+        assert_eq!(actual_subject.as_deref(), subject, "{words:?}");
         assert_eq!(
             args,
             arguments.iter().map(OsString::from).collect::<Vec<_>>(),
@@ -83,7 +83,7 @@ fn the_target_and_program_arguments_follow_one_boundary() {
 
 #[test]
 fn compiler_options_are_read_only_before_the_program_tail() {
-    let (target, args, elaboration) = run(&[
+    let (subject, args, elaboration) = run(&[
         "run",
         "--budget",
         "5",
@@ -93,7 +93,7 @@ fn compiler_options_are_read_only_before_the_program_tail() {
         "--budget",
         "0",
     ]);
-    assert_eq!(target.as_deref(), Some("serve"));
+    assert_eq!(subject.as_deref(), Some("serve"));
     assert_eq!(args, ["--budget", "0"]);
     assert_eq!(elaboration.budget, 5);
     assert_eq!(
@@ -101,13 +101,13 @@ fn compiler_options_are_read_only_before_the_program_tail() {
         Some(PathBuf::from("app/curios.toml"))
     );
 
-    let (target, args, elaboration) = run(&["run", "--budget=5", "--", "--budget", "0"]);
-    assert!(target.is_none());
+    let (subject, args, elaboration) = run(&["run", "--budget=5", "--", "--budget", "0"]);
+    assert!(subject.is_none());
     assert_eq!(args, ["--budget", "0"]);
     assert_eq!(elaboration.budget, 5);
 
-    let (target, args, _) = run(&["run", "--manifest=--", "serve"]);
-    assert_eq!(target.as_deref(), Some("serve"));
+    let (subject, args, _) = run(&["run", "--manifest=--", "serve"]);
+    assert_eq!(subject.as_deref(), Some("serve"));
     assert!(args.is_empty());
 }
 
@@ -138,18 +138,18 @@ fn compiler_failures_and_help_still_belong_to_the_prefix() {
 }
 
 #[test]
-fn help_describes_the_optional_target_and_program_tail() {
+fn help_describes_the_optional_subject_and_program_tail() {
     let error = Cli::try_parse_from(["curios", "run", "--help"]).unwrap_err();
     let help = error.to_string();
-    assert!(help.contains("curios run [OPTIONS] [TARGET] [ARGS]..."));
-    assert!(help.contains(&RUN.target_help()));
-    assert!(help.contains("begin with -- to omit TARGET"));
+    assert!(help.contains("curios run [OPTIONS] [SUBJECT] [ARGS]..."));
+    assert!(help.contains(&RUN.subject_help()));
+    assert!(help.contains("begin with -- to omit SUBJECT"));
     Cli::command().debug_assert();
 }
 
 #[cfg(unix)]
 #[test]
-fn program_arguments_remain_opaque_while_targets_require_utf8() {
+fn program_arguments_remain_opaque_while_subjects_require_utf8() {
     use std::os::unix::ffi::OsStringExt;
 
     let raw = OsString::from_vec(vec![0xff, 0xfe]);

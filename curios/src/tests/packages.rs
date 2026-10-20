@@ -16,9 +16,9 @@ use {
     },
 };
 
-/// The entry file and the units `target` resolves to as `run` resolves it, standing in `directory`.
-fn resolved(directory: &Path, target: Option<&str>) -> (PathBuf, Vec<RootSource>) {
-    let program = match Selection::of(Spelling::of(target), None, directory, &Overlay::default())
+/// The entry file and the units `subject` resolves to as `run` resolves it, standing in `directory`.
+fn resolved(directory: &Path, subject: Option<&str>) -> (PathBuf, Vec<RootSource>) {
+    let program = match Selection::of(Spelling::of(subject), None, directory, &Overlay::default())
         .expect("a governed package")
     {
         Selection::Program(program) => program,
@@ -26,7 +26,7 @@ fn resolved(directory: &Path, target: Option<&str>) -> (PathBuf, Vec<RootSource>
         Selection::Library(_) => panic!("these fixtures name their executables, never a library"),
     };
     let Entry::File(entry) = program.entry().clone() else {
-        panic!("these fixtures name a target on disk");
+        panic!("these fixtures name a subject on disk");
     };
 
     (entry, program.into_units())
@@ -47,16 +47,16 @@ fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
     root
 }
 
-/// What `curios run` prints, standing in `directory` and asking for `target`.
+/// What `curios run` prints, standing in `directory` and asking for `subject`.
 ///
 /// The same three steps `main` takes: resolve what was asked for, compile it against what its manifest declares, run it.
-fn run(directory: &Path, target: Option<&str>) -> Vec<u8> {
-    cached(directory, target, None)
+fn run(directory: &Path, subject: Option<&str>) -> Vec<u8> {
+    cached(directory, subject, None)
 }
 
 /// The same, consulting `cache` — which is what the command line does inside a project.
-fn cached(directory: &Path, target: Option<&str>, cache: Option<&dyn Cache>) -> Vec<u8> {
-    let (entry, units) = resolved(directory, target);
+fn cached(directory: &Path, subject: Option<&str>, cache: Option<&dyn Cache>) -> Vec<u8> {
+    let (entry, units) = resolved(directory, subject);
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
     let (module, foreigns) = Fold::new(DEFAULT_STEP_BUDGET, &units, cache)
@@ -69,9 +69,9 @@ fn cached(directory: &Path, target: Option<&str>, cache: Option<&dyn Cache>) -> 
     io.output().to_vec()
 }
 
-/// What the fold did to each unit `target` resolves to, standing in `directory`, through `cache`: read off its progress, one line a unit, in fold order.
-fn folded(directory: &Path, target: Option<&str>, cache: &dyn Cache) -> Vec<String> {
-    let (entry, units) = resolved(directory, target);
+/// What the fold did to each unit `subject` resolves to, standing in `directory`, through `cache`: read off its progress, one line a unit, in fold order.
+fn folded(directory: &Path, subject: Option<&str>, cache: &dyn Cache) -> Vec<String> {
+    let (entry, units) = resolved(directory, subject);
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
     let mut events = Vec::new();

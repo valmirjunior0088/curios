@@ -642,7 +642,7 @@ impl Analyst {
         overlay: &Overlay,
         session: &Session,
     ) -> Result<(), String> {
-        // The document's own directory stands in for a working directory, which a file's placement never reads — so a server started somewhere since deleted still answers. A warming job names the workspace root rather than a file, and asks about the package governing it, which is the same question with no target.
+        // The document's own directory stands in for a working directory, which a file's placement never reads — so a server started somewhere since deleted still answers. A warming job names the workspace root rather than a file, and asks about the package governing it, which is the same question with no subject.
         let (spelling, directory) = match raised {
             Raised::Warming => (Spelling::Nothing, document),
             Raised::Opened | Raised::Edited => (

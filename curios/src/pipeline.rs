@@ -83,7 +83,7 @@ pub(crate) fn payload_of(
     if let Some((cache, program)) = &filed
         && let Some((payload, foreigns)) = cache.payload_get(program, &sources, engine())
     {
-        // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step names the target rather than a unit, because what came back is the whole program's machine code.
+        // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step names the subject rather than a unit, because what came back is the whole program's machine code.
         processing(&subject, manifest.as_deref());
         let mut line = Line::nested(Heading::Compiling, &subject);
         line.outcome("reused");
@@ -199,7 +199,7 @@ pub(crate) fn compile_entry(
     manifest: Option<&Path>,
     cache: Option<&dyn Cache>,
 ) -> Result<(Module, ForeignStore), CompileError> {
-    // Every target heads a group, since a compile and a handover always follow it. What the scope decides is whether the entry's own compile is a step of its own: with units to fold, those are the steps and the entry finishes among them unannounced; with none, the entry's compile is the one step there is.
+    // Every subject heads a group, since a compile and a handover always follow it. What the scope decides is whether the entry's own compile is a step of its own: with units to fold, those are the steps and the entry finishes among them unannounced; with none, the entry's compile is the one step there is.
     let has_units = !units.is_empty();
     processing(subject, manifest);
 
@@ -226,7 +226,7 @@ pub(crate) fn compile_entry(
 /// The line outlives each event, which is why it is threaded rather than owned here: `↳ Compiling /hello` and the `; 1.4s` that completes it are two separate writes to one line.
 pub(crate) fn report(
     line: &mut Option<Line>,
-    target: &Subject,
+    subject: &Subject,
     has_units: bool,
     progress: Progress<'_>,
 ) {
@@ -235,10 +235,10 @@ pub(crate) fn report(
         Progress::Compiling(prefix) | Progress::Recompiling(prefix) => {
             *line = Some(Line::nested(Heading::Compiling, &Subject::Mounted(*prefix)));
         }
-        // The entry program *is* the target the header named, so among unit steps its compile adds none of its own. With no units there is no other step, and this is it.
+        // The entry program *is* the subject the header named, so among unit steps its compile adds none of its own. With no units there is no other step, and this is it.
         Progress::Entry => {
             if !has_units {
-                *line = Some(Line::nested(Heading::Compiling, target));
+                *line = Some(Line::nested(Heading::Compiling, subject));
             }
         }
         Progress::Reused(prefix) => {

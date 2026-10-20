@@ -1,4 +1,4 @@
-//! The command-line surface: clap reads compiler options and a verbatim `run` tail, then `Cli` separates that tail into its target and program arguments before dispatch or admission can read it. A target's help comes from its command's contract.
+//! The command-line surface: clap reads compiler options and a verbatim `run` tail, then `Cli` separates that tail into its subject and program arguments before dispatch or admission can read it. A subject's help comes from its command's contract.
 
 #[cfg(test)]
 mod tests;
@@ -52,20 +52,20 @@ pub(crate) enum Mode {
     /// What the four forms mean is `documentation/usage.md`'s Running and compiling. The dispatch is lexical and probes no disk: the four spaces cannot overlap, so nothing here needs to look before deciding.
     #[command(
         about = "Execute an executable, a .crs file, or standard input",
-        override_usage = "curios run [OPTIONS] [TARGET] [ARGS]..."
+        override_usage = "curios run [OPTIONS] [SUBJECT] [ARGS]..."
     )]
     Run {
-        // Filled only by `Cli`: clap must stop recognizing options at the first word of the tail, including the target itself.
+        // Filled only by `Cli`: clap must stop recognizing options at the first word of the tail, including the subject itself.
         #[arg(skip)]
-        target: Option<String>,
+        subject: Option<String>,
 
         #[command(flatten)]
         elaboration: Elaboration,
 
         #[arg(
             trailing_var_arg = true,
-            value_name = "TARGET_OR_ARGS",
-            help = format!("{}. Following words are program arguments (read via /std/Process/args); begin with -- to omit TARGET", RUN.target_help())
+            value_name = "SUBJECT_OR_ARGS",
+            help = format!("{}. Following words are program arguments (read via /std/Process/args); begin with -- to omit SUBJECT", RUN.subject_help())
         )]
         args: Vec<OsString>,
     },
@@ -73,8 +73,8 @@ pub(crate) enum Mode {
     /// Dispatched through the same code as `run`, so the two cannot drift apart. A declared executable is filed under the package that declares it; a program no package declares — a file no unit declares, or standard input — has nowhere to be filed, and is built where `--output` says.
     #[command(about = "Compile a program to a native executable")]
     Compile {
-        #[arg(value_name = "TARGET", help = COMPILE.target_help())]
-        target: Option<String>,
+        #[arg(value_name = "SUBJECT", help = COMPILE.subject_help())]
+        subject: Option<String>,
 
         #[arg(
             short = 'o',
@@ -88,16 +88,16 @@ pub(crate) enum Mode {
         elaboration: Elaboration,
     },
 
-    /// A library is the one thing with an interface, so the target names one — none for the governing package's, or a file its library declares — and `--std` names the standard library this compiler was built with, which has no package to be compiled from and so no store to file its pages under: the flag takes the directory they go in. Where the pages go is `documentation/usage.md`'s Documenting.
+    /// A library is the one thing with an interface, so the subject names one — none for the governing package's, or a file its library declares — and `--std` names the standard library this compiler was built with, which has no package to be compiled from and so no store to file its pages under: the flag takes the directory they go in. Where the pages go is `documentation/usage.md`'s Documenting.
     #[command(about = "Write a library's interface as pages")]
     Document {
-        #[arg(value_name = "TARGET", help = DOCUMENT.target_help())]
-        target: Option<String>,
+        #[arg(value_name = "SUBJECT", help = DOCUMENT.subject_help())]
+        subject: Option<String>,
 
         #[arg(
             long,
             value_name = "DIR",
-            conflicts_with_all = ["target", "output_path"],
+            conflicts_with_all = ["subject", "output_path"],
             help = "Document the standard library this compiler was built with, writing the pages under DIR"
         )]
         std: Option<PathBuf>,
@@ -114,11 +114,11 @@ pub(crate) enum Mode {
         elaboration: Elaboration,
     },
 
-    /// The target is placed as every command places one, and narrows the run to what it selects; the reasoning is `documentation/usage.md`'s Testing.
+    /// The subject is placed as every command places one, and narrows the run to what it selects; the reasoning is `documentation/usage.md`'s Testing.
     #[command(about = "Run the declared tests of a package, a program, a library or a file")]
     Test {
-        #[arg(value_name = "TARGET", help = TEST.target_help())]
-        target: Option<String>,
+        #[arg(value_name = "SUBJECT", help = TEST.subject_help())]
+        subject: Option<String>,
 
         #[arg(
             long,
@@ -155,23 +155,23 @@ pub(crate) enum Mode {
         directory: PathBuf,
     },
 
-    /// The gate over what `wonder diagnostics` reports: every diagnostic, goal and lint of the target, and — for the package entire — the dependencies nothing reached, with the exit code turning on them. The reasoning is `documentation/usage.md`'s Linting.
+    /// The gate over what `wonder diagnostics` reports: every diagnostic, goal and lint of the subject, and — for the package entire — the dependencies nothing reached, with the exit code turning on them. The reasoning is `documentation/usage.md`'s Linting.
     #[command(
         about = "Report every unused import, binder, declaration and dependency; exit 1 when any"
     )]
     Lint {
-        #[arg(value_name = "TARGET", help = LINT.target_help())]
-        target: Option<String>,
+        #[arg(value_name = "SUBJECT", help = LINT.subject_help())]
+        subject: Option<String>,
 
         #[command(flatten)]
         elaboration: Elaboration,
     },
 
-    /// Each target is admitted alone, and what they name is rewritten once however many of them name it; the reasoning is `documentation/usage.md`'s Formatting.
+    /// Each subject is admitted alone, and what they name is rewritten once however many of them name it; the reasoning is `documentation/usage.md`'s Formatting.
     #[command(about = "Format .crs files canonically, in place")]
     Format {
-        #[arg(value_name = "TARGET", help = FORMAT.target_help())]
-        targets: Vec<String>,
+        #[arg(value_name = "SUBJECT", help = FORMAT.subject_help())]
+        subjects: Vec<String>,
 
         #[arg(
             long,
@@ -183,7 +183,7 @@ pub(crate) enum Mode {
         manifest: ManifestFlag,
     },
 
-    /// Questions about a program, answered by the compilation that would build it. The query is first and the target last, so `wonder diagnostics app` and `wonder stage core app` read as the sentence they are; `server` sits in the query position because it is the same questions asked over a protocol.
+    /// Questions about a program, answered by the compilation that would build it. The query is first and the subject last, so `wonder diagnostics app` and `wonder stage core app` read as the sentence they are; `server` sits in the query position because it is the same questions asked over a protocol.
     #[command(about = "Ask what the compiler knows about a program")]
     Wonder {
         #[command(subcommand)]
@@ -194,7 +194,7 @@ pub(crate) enum Mode {
     ///
     /// Not the last step of a profiled run, deliberately. A stream is worth reading exactly when the run did not finish — a hang, a kill, a trap — and such a run never reaches its own last step, so folding there could serve every case but the one profiling exists for. It is a separate pass over a file the compiler has already closed.
     ///
-    /// PATH is the command's own argument rather than a TARGET: the argument resolver reads a path-bearing word as a `.crs` file and would refuse a stream as no program, so this takes its subject as a path the resolver never sees.
+    /// PATH is the command's own argument rather than a SUBJECT: the argument resolver reads a path-bearing word as a `.crs` file and would refuse a stream as no program, so this takes its subject as a path the resolver never sees.
     #[cfg(feature = "profile")]
     #[command(about = "Summarize a profile stream filed by --profile")]
     Profile {
@@ -320,24 +320,24 @@ pub(crate) struct CheckFlag {
     pub(crate) check: bool,
 }
 
-/// One question each, of fixed arity. A target takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Selection`'s.
+/// One question each, of fixed arity. A subject takes the four forms `run` takes, with the one difference `documentation/usage.md`'s Asking about a program states; the placement itself is `curios_package::Selection`'s.
 #[derive(Debug, Subcommand)]
 pub(crate) enum Query {
     #[command(
         about = "Every diagnostic and goal, located; exit 0 once answered, whatever the answer"
     )]
     Diagnostics {
-        #[arg(value_name = "TARGET", help = DIAGNOSTICS.target_help())]
-        target: Option<String>,
+        #[arg(value_name = "SUBJECT", help = DIAGNOSTICS.subject_help())]
+        subject: Option<String>,
 
         #[command(flatten)]
         elaboration: Elaboration,
     },
 
-    #[command(about = "Every test the target declares, one path per line; nothing executes")]
+    #[command(about = "Every test the subject declares, one path per line; nothing executes")]
     Tests {
-        #[arg(value_name = "TARGET", help = TESTS.target_help())]
-        target: Option<String>,
+        #[arg(value_name = "SUBJECT", help = TESTS.subject_help())]
+        subject: Option<String>,
 
         #[command(flatten)]
         elaboration: Elaboration,
@@ -348,8 +348,8 @@ pub(crate) enum Query {
         about = "What became of each declaration by the time the optimizer settled, one row per line"
     )]
     Cost {
-        #[arg(value_name = "TARGET", help = COST.target_help())]
-        target: Option<String>,
+        #[arg(value_name = "SUBJECT", help = COST.subject_help())]
+        subject: Option<String>,
 
         #[command(flatten)]
         elaboration: Elaboration,
@@ -366,8 +366,8 @@ pub(crate) enum Query {
         )]
         name: String,
 
-        #[arg(value_name = "TARGET", help = STAGE.target_help())]
-        target: Option<String>,
+        #[arg(value_name = "SUBJECT", help = STAGE.subject_help())]
+        subject: Option<String>,
 
         #[command(flatten)]
         elaboration: Elaboration,
@@ -384,8 +384,8 @@ pub(crate) enum Query {
         )]
         place: Place,
 
-        #[arg(value_name = "TARGET", help = AT.target_help())]
-        target: Option<String>,
+        #[arg(value_name = "SUBJECT", help = AT.subject_help())]
+        subject: Option<String>,
 
         #[command(flatten)]
         elaboration: Elaboration,
@@ -395,8 +395,8 @@ pub(crate) enum Query {
         about = "Every definition a file declares, one row per line, in the order they are written"
     )]
     Declarations {
-        #[arg(value_name = "TARGET", help = DECLARATIONS.target_help())]
-        target: Option<String>,
+        #[arg(value_name = "SUBJECT", help = DECLARATIONS.subject_help())]
+        subject: Option<String>,
 
         #[command(flatten)]
         elaboration: Elaboration,
@@ -442,7 +442,7 @@ struct ParsedCli {
     pub(crate) mode: Mode,
 }
 
-/// A command line whose `run` target and program arguments have been separated. The private clap input cannot reach dispatch without this normalization.
+/// A command line whose `run` subject and program arguments have been separated. The private clap input cannot reach dispatch without this normalization.
 #[derive(Debug)]
 pub(crate) struct Cli {
     #[cfg(feature = "profile")]
@@ -466,21 +466,21 @@ impl Cli {
         Self::try_parse_from(env::args_os()).unwrap_or_else(|error| error.exit())
     }
 
-    /// Parse once with clap, preserving the original OS words so a consumed leading separator can be distinguished from a target.
+    /// Parse once with clap, preserving the original OS words so a consumed leading separator can be distinguished from a subject.
     pub(crate) fn try_parse_from(
         words: impl IntoIterator<Item = impl Into<OsString>>,
     ) -> Result<Self, Error> {
         let words = words.into_iter().map(Into::into).collect::<Vec<_>>();
         let mut parsed = ParsedCli::try_parse_from(&words)?;
 
-        if let Mode::Run { target, args, .. } = &mut parsed.mode {
+        if let Mode::Run { subject, args, .. } = &mut parsed.mode {
             // This argument has no delimiter, defaults or transformations: trailing collection is exactly a suffix, including every option-looking word after its first word. Only clap's leading `--` is consumed before that suffix starts.
             let start = words.len() - args.len();
             debug_assert_eq!(&words[start..], args.as_slice());
             let omitted = words[..start].last().is_some_and(|word| word == "--");
             if !omitted && !args.is_empty() {
                 let mut tail = mem::take(args).into_iter().peekable();
-                *target = Some(tail.next().unwrap().into_string().map_err(|_| {
+                *subject = Some(tail.next().unwrap().into_string().map_err(|_| {
                     let mut command = Self::command();
                     Error::new(ErrorKind::InvalidUtf8)
                         .with_cmd(command.find_subcommand_mut("run").unwrap())

@@ -1,6 +1,6 @@
 //! What the CLI says while it works.
 //!
-//! One fixed heading column, then a subject. A top-level line takes a target on: it is the header of the steps beneath it, or a complete fact of its own. A line marked with `↳` is a step of the header above it — one action on that target, closed by what it came to:
+//! One fixed heading column, then a subject. A top-level line takes a subject on: it is the header of the steps beneath it, or a complete fact of its own. A line marked with `↳` is a step of the header above it — one action on that subject, closed by what it came to:
 //!
 //! ```text
 //! Processing     hello
@@ -13,7 +13,7 @@
 //!
 //! **A step's line is built by unterminated writes.** The prefix reaches the reader *before* the work it announces rather than after, which is the whole point — and a compiler that dies mid-operation leaves the line unterminated, so the last thing on screen is exactly how far it got. Rust's stderr is unbuffered, so this needs no flushing of its own. It also needs no cursor control, no repainting and no terminal detection: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal.
 //!
-//! **A header is the one line terminated before its work is done.** Nesting costs that much of the rule above: `Processing hello` has to close so the `↳` lines can follow it, and the group ends by dedent rather than by a closing line of its own. What the rule protects survives and sharpens — the unterminated line is the innermost one, so an interrupted compile names the step it died in rather than the target around it. A header carries no outcome of its own: what became of the target is what its steps say.
+//! **A header is the one line terminated before its work is done.** Nesting costs that much of the rule above: `Processing hello` has to close so the `↳` lines can follow it, and the group ends by dedent rather than by a closing line of its own. What the rule protects survives and sharpens — the unterminated line is the innermost one, so an interrupted compile names the step it died in rather than the subject around it. A header carries no outcome of its own: what became of the subject is what its steps say.
 
 #[cfg(test)]
 mod tests;
@@ -86,13 +86,13 @@ macro_rules! headings {
 }
 
 headings! {
-    /// A target being taken on: the header of the steps that deal with it. Deliberately neutral about which steps those are, since what follows may be a compile or a reuse, then a run or a test.
+    /// A subject being taken on: the header of the steps that deal with it. Deliberately neutral about which steps those are, since what follows may be a compile or a reuse, then a run or a test.
     Processing => "Processing",
-    /// A unit or a target's payload being obtained — closed by the time the compile took, or by `reused` when the store already held it.
+    /// A unit or a subject's payload being obtained — closed by the time the compile took, or by `reused` when the store already held it.
     Compiling => "Compiling",
-    /// The handover of a target's tests to their scheduler, whose report follows on stdout.
+    /// The handover of a subject's tests to their scheduler, whose report follows on stdout.
     Testing => "Testing",
-    /// A target's tests finished, with their tally.
+    /// A subject's tests finished, with their tally.
     Tested => "Tested",
     /// The handover to the program itself.
     Running => "Running",

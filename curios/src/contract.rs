@@ -1,6 +1,6 @@
 //! What each command accepts, stated once, and the one place a command's argument is admitted as its subject.
 //!
-//! **A contract is data, and dispatch reads it.** Every command's [`Contract`] says what its argument may select, whether a program must be named by its own file, how the command reaches the store and what it leaves on disk, and [`Mode::contract`] is an exhaustive match, so no command exists without one. What a command refuses is decided here too — a library where a program is needed, a module where a program's own file is, a build with nowhere to be filed, a flag written before the command that reads it — so a refusal is one sentence per kind naming the command, never a sentence each command words for itself. A TARGET's help is read off the same contract, so the help cannot describe an argument its command admits another way.
+//! **A contract is data, and dispatch reads it.** Every command's [`Contract`] says what its argument may select, whether a program must be named by its own file, how the command reaches the store and what it leaves on disk, and [`Mode::contract`] is an exhaustive match, so no command exists without one. What a command refuses is decided here too — a library where a program is needed, a module where a program's own file is, a build with nowhere to be filed, a flag written before the command that reads it — so a refusal is one sentence per kind naming the command, never a sentence each command words for itself. A SUBJECT's help is read off the same contract, so the help cannot describe an argument its command admits another way.
 //!
 //! **A question's access is a build's, and what it files is decided below.** A command that asks the `wonder` engine reads the store and files what it compiled as a build would have: the engine opens the store beside what it is asked about and files a unit where the disk holds every text its fold has read. What dispatch chooses from a contract is a build's store: whether one is opened for it to file into.
 
@@ -13,7 +13,7 @@ use {
     curios_pipeline::Stage,
     curios_text::Overlay,
     curios_verdicts::Verdicts,
-    curios_wonder::{Staged, file_target},
+    curios_wonder::{Staged, file_subject},
     std::{
         env,
         path::{Path, PathBuf},
@@ -31,7 +31,7 @@ pub(crate) enum Accepts {
     Library,
     /// Whatever the argument selects.
     Any,
-    /// The governing package entire and nothing else: the command's argument, when it has one, is not a target.
+    /// The governing package entire and nothing else: the command's argument, when it has one, is not a subject.
     Entire,
     /// Files to rewrite: every file what the argument selects declares, a file itself, or standard input.
     Files,
@@ -143,7 +143,7 @@ pub(crate) const CURATE: Contract = Contract {
     product: Product::Sources,
 };
 
-/// Its subject is the governing package's own manifest, which it resolves nothing against and writes back: no target, and the store it reaches is the one a delivery is filed in rather than one it compiles into.
+/// Its subject is the governing package's own manifest, which it resolves nothing against and writes back: no argument names it, and the store it reaches is the one a delivery is filed in rather than one it compiles into.
 pub(crate) const PIN: Contract = Contract {
     command: "pin",
     accepts: Accepts::Nothing,
@@ -283,25 +283,25 @@ impl Mode {
         }
     }
 
-    /// The argument the contract resolves: the target, for a command that takes one — for `format`, the first of its targets, each of which is admitted alone the same way.
-    pub(crate) fn target(&self) -> Option<&str> {
+    /// The argument the contract resolves: the subject, for a command that takes one — for `format`, the first of its subjects, each of which is admitted alone the same way.
+    pub(crate) fn subject(&self) -> Option<&str> {
         match self {
-            Mode::Run { target, .. }
-            | Mode::Compile { target, .. }
-            | Mode::Document { target, .. }
-            | Mode::Test { target, .. }
-            | Mode::Lint { target, .. } => target.as_deref(),
-            Mode::Format { targets, .. } => targets.first().map(String::as_str),
+            Mode::Run { subject, .. }
+            | Mode::Compile { subject, .. }
+            | Mode::Document { subject, .. }
+            | Mode::Test { subject, .. }
+            | Mode::Lint { subject, .. } => subject.as_deref(),
+            Mode::Format { subjects, .. } => subjects.first().map(String::as_str),
             Mode::Wonder { query } => match query {
-                Query::Diagnostics { target, .. }
-                | Query::Tests { target, .. }
-                | Query::Cost { target, .. }
-                | Query::Stage { target, .. }
-                | Query::At { target, .. }
-                | Query::Declarations { target, .. } => target.as_deref(),
+                Query::Diagnostics { subject, .. }
+                | Query::Tests { subject, .. }
+                | Query::Cost { subject, .. }
+                | Query::Stage { subject, .. }
+                | Query::At { subject, .. }
+                | Query::Declarations { subject, .. } => subject.as_deref(),
                 Query::Server { .. } => None,
             },
-            // A directory to create is an argument, and no target. So is a filed stream to read.
+            // A directory to create is an argument, and no subject. So is a filed stream to read.
             Mode::Curate { .. } | Mode::New { .. } | Mode::Pin { .. } => None,
             #[cfg(feature = "profile")]
             Mode::Profile { .. } => None,
@@ -369,7 +369,7 @@ impl Mode {
     }
 }
 
-/// What `format` rewrites for one target.
+/// What `format` rewrites for one subject.
 pub(crate) enum Rewritten {
     /// Files on disk, rewritten in place.
     Files(Vec<PathBuf>),
@@ -378,8 +378,8 @@ pub(crate) enum Rewritten {
 }
 
 impl Contract {
-    /// What a TARGET's help says for this command: the forms its argument takes, and what none means.
-    pub(crate) fn target_help(&self) -> String {
+    /// What a SUBJECT's help says for this command: the forms its argument takes, and what none means.
+    pub(crate) fn subject_help(&self) -> String {
         let forms = match (self.accepts, self.own_file_only) {
             (Accepts::Library, _) => "A .crs file a library declares",
             (_, true) => {
@@ -402,32 +402,32 @@ impl Contract {
         format!("{forms} (default: {none})")
     }
 
-    /// What `target` selects standing in `directory`, before any kind of subject is refused — the same for every contract, since a file is placed one way whichever command asks.
+    /// What `subject` selects standing in `directory`, before any kind of subject is refused — the same for every contract, since a file is placed one way whichever command asks.
     fn selection(
-        target: Option<&str>,
+        subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
     ) -> Result<Selection, String> {
-        let spelling = match Spelling::of(target) {
+        let spelling = match Spelling::of(subject) {
             // A file is placed by what declares it, which starts from a file the disk holds: a path it does not hold is refused here, in the words the read would have failed with.
-            Spelling::File(path) => Spelling::File(file_target(path)?),
+            Spelling::File(path) => Spelling::File(file_subject(path)?),
             spelling => spelling,
         };
 
         Selection::of(spelling, manifest, directory, &Overlay::default())
     }
 
-    /// The program `target` selects: a program, or the package entire's sole or `default` one — named by its own file where the contract says so, and with somewhere to put what is built, `output` included.
+    /// The program `subject` selects: a program, or the package entire's sole or `default` one — named by its own file where the contract says so, and with somewhere to put what is built, `output` included.
     pub(crate) fn admit_program(
         &self,
-        target: Option<&str>,
+        subject: Option<&str>,
         manifest: Option<&Path>,
         output: Option<&Path>,
         directory: &Path,
     ) -> Result<Program, String> {
         debug_assert_eq!(self.accepts, Accepts::Program, "{}", self.command);
 
-        let program = match Self::selection(target, manifest, directory)? {
+        let program = match Self::selection(subject, manifest, directory)? {
             Selection::Program(program) => program,
             Selection::Entire(entire) => entire.default_program()?,
             Selection::Library(_) => {
@@ -457,32 +457,32 @@ impl Contract {
         Ok(program)
     }
 
-    /// What `target` selects for a rung a unit has: a program as [`Contract::admit_program`] admits one, or the library a file of one selects.
+    /// What `subject` selects for a rung a unit has: a program as [`Contract::admit_program`] admits one, or the library a file of one selects.
     pub(crate) fn admit_staged(
         &self,
-        target: Option<&str>,
+        subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
     ) -> Result<Staged, String> {
         debug_assert_eq!(self.accepts, Accepts::ProgramOrLibrary, "{}", self.command);
 
-        Ok(match Self::selection(target, manifest, directory)? {
+        Ok(match Self::selection(subject, manifest, directory)? {
             Selection::Program(program) => Staged::Program(program),
             Selection::Entire(entire) => Staged::Program(entire.default_program()?),
             Selection::Library(library) => Staged::Library(library),
         })
     }
 
-    /// The library `target` selects: a library, or the package entire's own.
+    /// The library `subject` selects: a library, or the package entire's own.
     pub(crate) fn admit_library(
         &self,
-        target: Option<&str>,
+        subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
     ) -> Result<Library, String> {
         debug_assert_eq!(self.accepts, Accepts::Library, "{}", self.command);
 
-        match Self::selection(target, manifest, directory)? {
+        match Self::selection(subject, manifest, directory)? {
             Selection::Library(library) => Ok(library),
             Selection::Entire(entire) => entire.library()?.ok_or_else(|| {
                 format!(
@@ -497,48 +497,48 @@ impl Contract {
         }
     }
 
-    /// Whatever `target` selects.
+    /// Whatever `subject` selects.
     pub(crate) fn admit_any(
         &self,
-        target: Option<&str>,
+        subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
     ) -> Result<Selection, String> {
         debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
 
-        Self::selection(target, manifest, directory)
+        Self::selection(subject, manifest, directory)
     }
 
-    /// The governing package entire, which is all a command taking no target selects.
+    /// The governing package entire, which is all a command taking no subject selects.
     pub(crate) fn admit_entire(
         &self,
-        target: Option<&str>,
+        subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
     ) -> Result<Entire, String> {
         debug_assert_eq!(self.accepts, Accepts::Entire, "{}", self.command);
 
-        match Self::selection(target, manifest, directory)? {
+        match Self::selection(subject, manifest, directory)? {
             Selection::Entire(entire) => Ok(entire),
             Selection::Library(_) | Selection::Program(_) => Err(format!(
-                "`{}` takes the governing package entire, and no target",
+                "`{}` takes the governing package entire, and no subject",
                 self.command
             )),
         }
     }
 
-    /// What `target` rewrites: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or standard input.
+    /// What `subject` rewrites: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or standard input.
     pub(crate) fn admit_files(
         &self,
-        target: Option<&str>,
+        subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
     ) -> Result<Rewritten, String> {
         debug_assert_eq!(self.accepts, Accepts::Files, "{}", self.command);
 
-        Ok(match Spelling::of(target) {
-            Spelling::File(path) => Rewritten::Files(vec![file_target(path)?]),
-            spelling => match Self::selection(target, manifest, directory)? {
+        Ok(match Spelling::of(subject) {
+            Spelling::File(path) => Rewritten::Files(vec![file_subject(path)?]),
+            spelling => match Self::selection(subject, manifest, directory)? {
                 Selection::Entire(entire) => Rewritten::Files(entire.declared_files()?),
                 Selection::Library(library) => Rewritten::Files(library.declared_files()?),
                 Selection::Program(_) if spelling == Spelling::Stdin => Rewritten::Stdin,

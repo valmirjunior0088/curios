@@ -1,6 +1,6 @@
-//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path, or `-`, as argv[0]) and its exit code as the process's; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable. Both take the same target four ways — no argument for the governing package's default executable, an identifier for one it declares, a path for a `.crs` file placed by what declares it, and `-` for the program on standard input — because what a bare invocation means inside a package should not depend on which subcommand asked.
+//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path, or `-`, as argv[0]) and its exit code as the process's; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable. Both take the same subject four ways — no argument for the governing package's default executable, an identifier for one it declares, a path for a `.crs` file placed by what declares it, and `-` for the program on standard input — because what a bare invocation means inside a package should not depend on which subcommand asked.
 //!
-//! **Neither subcommand compiles unconditionally.** A manifest target's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. A loose program has no project, so it consults nothing. `pipeline` owns that decision and everything downstream of it.
+//! **Neither subcommand compiles unconditionally.** A declared executable's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. A loose program has no project, so it consults nothing. `pipeline` owns that decision and everything downstream of it.
 //!
 //! Argument parsing lives in `cli`, what each command accepts and the admission of its argument in `contract`, compilation and payload reuse in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
 
@@ -222,8 +222,8 @@ fn dispatch() -> Result<(), Failure> {
 
     // Read before the match takes the command apart, so every arm admits its argument through the one contract its command has.
     let contract = mode.contract();
-    let target = mode.target().map(str::to_owned);
-    let target = target.as_deref();
+    let subject = mode.subject().map(str::to_owned);
+    let subject = subject.as_deref();
     let manifest = mode.manifest().map(Path::to_path_buf);
     let manifest = manifest.as_deref();
     let destination = mode.output().map(Path::to_path_buf);
@@ -233,7 +233,7 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Run {
             elaboration, args, ..
         } => {
-            let program = contract.admit_program(target, manifest, None, &here()?)?;
+            let program = contract.admit_program(subject, manifest, None, &here()?)?;
             // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by. Every argument crosses as the bytes the OS holds, since `/std/Process/args` promises opaque byte strings and a path or an argument need not be UTF-8.
             let entry = match program.entry() {
                 Entry::Stdin => Spelling::STDIN.as_bytes().to_vec(),
@@ -273,7 +273,7 @@ fn dispatch() -> Result<(), Failure> {
             elaboration,
             ..
         } => {
-            let selection = contract.admit_any(target, manifest, &here()?)?;
+            let selection = contract.admit_any(subject, manifest, &here()?)?;
 
             if !run_tests(
                 elaboration.budget,
@@ -287,7 +287,7 @@ fn dispatch() -> Result<(), Failure> {
         // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
         Mode::Lint { elaboration, .. } => match lint(
             elaboration.budget,
-            contract.admit_any(target, manifest, &here()?)?,
+            contract.admit_any(subject, manifest, &here()?)?,
             unfiled,
         )? {
             Linted::Clean => {}
@@ -299,7 +299,7 @@ fn dispatch() -> Result<(), Failure> {
             elaboration,
             ..
         } => {
-            let program = contract.admit_program(target, manifest, destination, &here()?)?;
+            let program = contract.admit_program(subject, manifest, destination, &here()?)?;
 
             // Admission refuses a program with nowhere to go, so one no package declares came with `--output`.
             let output = match (output_path, program.home()) {
@@ -354,7 +354,7 @@ fn dispatch() -> Result<(), Failure> {
                 &output,
             )?;
 
-            // Where it landed rather than what it was called: that is the one fact a finished build is read for, and the group above already named the target twice. The time is the whole invocation's, payload and emission both, so it is measured here rather than by the line.
+            // Where it landed rather than what it was called: that is the one fact a finished build is read for, and the group above already named the subject twice. The time is the whole invocation's, payload and emission both, so it is measured here rather than by the line.
             let mut line = Line::open(Heading::Finished, &Subject::File(output));
             line.outcome(&format!("{:.1}s", started.elapsed().as_secs_f64()));
             eprintln!();
@@ -369,7 +369,7 @@ fn dispatch() -> Result<(), Failure> {
                 // The standard library has no package to file its pages under, so the flag names where they go rather than a directory being guessed.
                 Some(directory) => (std_documentation()?, directory),
                 None => {
-                    let library = contract.admit_library(target, manifest, &here()?)?;
+                    let library = contract.admit_library(subject, manifest, &here()?)?;
                     let store = contract.access.filed(&library.root);
                     let record =
                         documentation_of(elaboration.budget, &library.units, store.as_ref())?;
@@ -403,7 +403,7 @@ fn dispatch() -> Result<(), Failure> {
             );
         }
         Mode::Curate { .. } => {
-            let entire = contract.admit_entire(target, manifest, &here()?)?;
+            let entire = contract.admit_entire(subject, manifest, &here()?)?;
 
             // Past tense because it is: every round has fetched before the acquisitions come back to be reported.
             let curated = curate(&entire.governing)?;
@@ -476,19 +476,24 @@ fn dispatch() -> Result<(), Failure> {
                 process::exit(1);
             }
         }
-        Mode::Format { targets, check, .. } => {
+        Mode::Format {
+            subjects, check, ..
+        } => {
             let directory = here()?;
-            // No target is every file the governing package declares, as no target is the package entire for every command that takes one.
-            let targets = match targets.is_empty() {
+            // No subject is every file the governing package declares, as no subject is the package entire for every command that takes one.
+            let subjects = match subjects.is_empty() {
                 true => vec![None],
-                false => targets.iter().map(|target| Some(target.as_str())).collect(),
+                false => subjects
+                    .iter()
+                    .map(|subject| Some(subject.as_str()))
+                    .collect(),
             };
 
             // The formatter is pure and reports changedness in its result; whether a `Changed` verdict fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.
             let mut dirty = Vec::new();
             let mut rewritten = BTreeSet::new();
-            for target in targets {
-                match contract.admit_files(target, manifest, &directory)? {
+            for subject in subjects {
+                match contract.admit_files(subject, manifest, &directory)? {
                     // Standard input is answered on standard output, whole, so a pipe gets the canonical text whether or not anything moved.
                     Rewritten::Stdin => {
                         let text = io::read_to_string(io::stdin())
@@ -504,7 +509,7 @@ fn dispatch() -> Result<(), Failure> {
                         }
                     }
                     Rewritten::Files(paths) => {
-                        // Two targets naming one file rewrite it once.
+                        // Two subjects naming one file rewrite it once.
                         for path in paths
                             .into_iter()
                             .filter(|path| rewritten.insert(path.clone()))
@@ -531,17 +536,17 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Wonder { query } => match query {
             Query::Diagnostics { elaboration, .. } => wonder_diagnostics(
                 elaboration.budget,
-                contract.admit_any(target, manifest, &here()?)?,
+                contract.admit_any(subject, manifest, &here()?)?,
                 unfiled,
             )?,
             Query::Tests { elaboration, .. } => wonder_tests(
                 elaboration.budget,
-                contract.admit_any(target, manifest, &here()?)?,
+                contract.admit_any(subject, manifest, &here()?)?,
                 unfiled,
             )?,
             Query::Cost { elaboration, .. } => wonder_cost(
                 elaboration.budget,
-                contract.admit_program(target, manifest, None, &here()?)?,
+                contract.admit_program(subject, manifest, None, &here()?)?,
                 unfiled,
             )?,
             // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
@@ -553,11 +558,14 @@ fn dispatch() -> Result<(), Failure> {
                 // A rung a unit has is a library's as well as a program's, and the contract the rung selected says which.
                 match contract.accepts {
                     Accepts::ProgramOrLibrary => {
-                        contract.admit_staged(target, manifest, &here()?)?
+                        contract.admit_staged(subject, manifest, &here()?)?
                     }
-                    _ => {
-                        Staged::Program(contract.admit_program(target, manifest, None, &here()?)?)
-                    }
+                    _ => Staged::Program(contract.admit_program(
+                        subject,
+                        manifest,
+                        None,
+                        &here()?,
+                    )?),
                 },
                 |module| {
                     optimize(&module, true, |stage| println!("{stage}"));
@@ -568,13 +576,13 @@ fn dispatch() -> Result<(), Failure> {
                 place, elaboration, ..
             } => wonder_at(
                 elaboration.budget,
-                contract.admit_staged(target, manifest, &here()?)?,
+                contract.admit_staged(subject, manifest, &here()?)?,
                 place,
                 unfiled,
             )?,
             Query::Declarations { elaboration, .. } => wonder_declarations(
                 elaboration.budget,
-                contract.admit_staged(target, manifest, &here()?)?,
+                contract.admit_staged(subject, manifest, &here()?)?,
                 unfiled,
             )?,
             Query::Server { elaboration } => serve(elaboration.budget, manifest)?,

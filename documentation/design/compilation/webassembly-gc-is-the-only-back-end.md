@@ -1,4 +1,4 @@
-# WebAssembly-GC is the only target
+# WebAssembly-GC is the only back end
 
 **Decision.** The pipeline emits Wasm-GC exclusively. Program values live in GC references, never linear memory, and one backend serves the native and browser products; a module `curios-emit` produces declares no memory. `curios-wasm` models the whole envelope's memory and table surface, since a representation that omits what the format has cannot encode a module that uses it, and the emitter uses part of it — a passive data segment behind every `array.new_data`, a typed table per closure arity — so nothing below `curios-emit` would refuse a value in linear memory: this decision is what enforces it.
 

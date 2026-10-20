@@ -3,7 +3,7 @@ name = "curios-wasm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios WebAssembly-GC target: symbolic module model, parser, and binary encoder"
+description = "The Curios WebAssembly-GC back end: symbolic module model, parser, and binary encoder"
 
 [lints]
 workspace = true
