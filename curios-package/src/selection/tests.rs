@@ -238,7 +238,7 @@ fn a_declared_executable_builds_into_the_store() {
         .home()
         .expect("an enumerated member is a declared executable");
     assert!(
-        home.output.ends_with(".curios/executables/json/serve"),
+        home.output.ends_with(".curios/native/json/serve"),
         "{}",
         home.output.display()
     );

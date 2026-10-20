@@ -46,6 +46,44 @@ fn a_carried_module_is_pinned_to_the_hash_of_its_bytes() {
     let written = fs::read_to_string(&governing.manifest).expect("read it back");
     assert!(written.contains(&hash.to_string()), "{written}");
     assert!(written.contains("name = \"probe\""), "{written}");
+    assert!(written.contains("[foreign.native]"), "{written}");
+
+    let crate::Manifest::Package(package) = written.parse().expect("what was written reads back")
+    else {
+        panic!("a package");
+    };
+    assert_eq!(
+        package.foreign[0].native.module,
+        crate::Module::Filed("foreign/probe.wasm".into())
+    );
+}
+
+/// A delivery its author wrote inline, `native = { … }`, is re-pinned inline, as a dependency row is, rather than gaining a table beside it.
+#[test]
+fn an_inline_delivery_is_re_pinned_inline() {
+    let (root, governing) = governed(
+        "inline",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"probe\"\nnative = { path = \"old.wasm\", hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }\n",
+    );
+    let hash = carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
+
+    pin(
+        &governing,
+        Subject::Foreign,
+        "probe",
+        &Repoint::Carried("probe.wasm".into()),
+        false,
+    )
+    .expect("the row is re-pinned");
+
+    let written = fs::read_to_string(&governing.manifest).expect("read it back");
+    assert!(
+        written.contains(&format!(
+            "native = {{ path = \"probe.wasm\", hash = \"{hash}\" }}"
+        )),
+        "{written}"
+    );
+    assert!(!written.contains("[foreign.native]"), "{written}");
 }
 
 #[test]

@@ -216,7 +216,7 @@ Delivered      sha2: 12484 bytes, a WebAssembly module
 
 The export list is read by compiling the module, so it also answers whether this toolchain can link it at all; one that will not compile reports why instead of listing nothing. The last line appears only for a fetch — a module the package carries arrived inside the tree its consumer pinned — and it is not a formality: a re-pin is the one moment a hash stops being a check and becomes a claim. Which mismatches are ordinary and which are worth stopping for is [`curate`](#curate)'s refusal to say.
 
-Writing is checked rather than trusted: the manifest is edited in place, keeping its comments and ordering, and the result is read back and compared key by key against what went in, so a row written here cannot have disturbed one it was not asked about. Pinning a row to what it already says writes nothing and reports that it did.
+A foreign row's module is written into its `[foreign.native]` table, inline where its author wrote the table inline. Writing is checked rather than trusted: the manifest is edited in place, keeping its comments and ordering, and the result is read back and compared key by key against what went in, so a row written here cannot have disturbed one it was not asked about. Pinning a row to what it already says writes nothing and reports that it did.
 
 ## `new`
 
@@ -324,7 +324,7 @@ A package is a namespace for definitions and an umbrella a namespace for package
 | `default` | which executable a bare `run`, `compile` or `test` means; it may name a declared row or the package's own `exe.crs` program |
 | `[dependencies]` | one row per package this one reaches, keyed by that package's name |
 | `[[executables]]` | one row per program beyond `exe.crs`: `name`, and `path` when the file is not `<name>.crs` |
-| `[[foreign]]` | one row per WebAssembly module implementing this package's [`foreign` declarations](syntax.md#foreign-declarations) |
+| `[[foreign]]` | one row per provider of this package's [`foreign` declarations](syntax.md#foreign-declarations): the module the native target links, in `[foreign.native]`, and what its exports answer |
 
 ```toml
 name = "hello"
@@ -345,11 +345,13 @@ An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..
 
 An umbrella must declare `compiler`, and every package its `members` enumerates inherits that minimum. A member cannot declare a local override; the refusal points to its umbrella. A package merely beneath an umbrella directory is still standalone unless enumerated. Inheritance follows each dependency's own membership, never its consumer's umbrella. A dependency delivered without the umbrella it needs cannot inherit and must declare a standalone minimum in its own manifest.
 
-A `[[foreign]]` row names a module and says which of its exports answers each of the package's `foreign` declarations it is named for:
+A `[[foreign]]` row names a module in the table of the target that links it, and says which of its exports answers each of the package's `foreign` declarations it is named for:
 
 ```toml
 [[foreign]]
 name = "sha2"                    # a handle for `curios pin`; no program refers to it
+
+[foreign.native]                 # the WebAssembly module the native target links
 path = "foreign/libsha2.wasm"    # or `url`, never both
 hash = "f1:9c3a…"                # either way
 
@@ -357,7 +359,7 @@ hash = "f1:9c3a…"                # either way
 "digest/sha256" = "SHA256_Digest"  # in the package `crypto`: `/crypto/digest/sha256`
 ```
 
-`path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the shared store. `hash` is stated for both, and the carried case is the one it matters most for: a fetched module is obviously unvouched-for until it is checked, while a carried one *looks* covered by the tree hash its consumer pinned — and is, when the package came from git. But the entry package is hashed against nothing and `path` and `member` dependencies are deliberately unpinned, which is exactly where a locally built module lives.
+The table may be written inline, `native = { path = "…", hash = "…" }`, and a row with none is refused where the manifest is read, saying where its module goes. `path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the shared store. `hash` is stated for both, and the carried case is the one it matters most for: a fetched module is obviously unvouched-for until it is checked, while a carried one *looks* covered by the tree hash its consumer pinned — and is, when the package came from git. But the entry package is hashed against nothing and `path` and `member` dependencies are deliberately unpinned, which is exactly where a locally built module lives.
 
 `f1:` is plain SHA-256 over the file's bytes, so `sha256sum` computes it and a release's checksum file already states it. A delivery that fails its hash is refused naming both digests, whichever way it arrived.
 
@@ -455,11 +457,11 @@ The program's own standard input is spent on reading the source, so a read of it
 
 ## Where things go
 
-Everything generated lands under `.curios/`, beside the governing manifest, in seven entries each named for what it holds:
+Everything generated lands under `.curios/`, beside the governing manifest, in seven entries, a product's named for the target it is built for and every other for what it holds:
 
 | Entry | Holds | Where |
 | --- | --- | --- |
-| `executables/<package>/<name>` | what `compile` emits | beside the project |
+| `native/<package>/<name>` | what `compile` emits for the native target | beside the project |
 | `documentation/<package>/` | what `document` emits | beside the project |
 | `sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against | shared |
 | `foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way | shared |
@@ -469,7 +471,7 @@ Everything generated lands under `.curios/`, beside the governing manifest, in s
 
 One transient entry passes through beside them: [`pin`](#pin) stages a delivery at `pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.
 
-`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the shared half — everything above whose key says nothing about which project asked. `executables/` and `documentation/` are products of the package that declared them and always stay beside it. A source's scheme is a directory of its own so a successor scheme can sit beside `c1` rather than replace it.
+`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the shared half — everything above whose key says nothing about which project asked. `native/` and `documentation/` are products of the package that declared them and always stay beside it. A source's scheme is a directory of its own so a successor scheme can sit beside `c1` rather than replace it.
 
 Set `CURIOS_CACHE` to share that half across projects; unset, each project keeps its own. There is deliberately no divined default, because a toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for.
 

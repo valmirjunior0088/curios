@@ -420,38 +420,52 @@ pub enum Module {
     Fetched(String),
 }
 
-/// One declared provider of `foreign` implementations: a module, and the export of it that answers each of the package's declarations it is named for.
+/// One declared provider of `foreign` implementations: what each target links, and the export of it that answers each of the package's declarations it is named for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Foreign {
     /// A single legal identifier, which exists for the same reason an [`Executable`]'s does — so a command can name this row. Nothing in Curios source refers to it: a `foreign` declaration is reached by its own qualified name, never through the module that implements it.
     pub name: String,
-    pub module: Module,
-    /// What the module must be, whichever way it arrived.
-    ///
-    /// **Stated for a carried module too, and that is the case it matters most for.** A fetched one is obviously unvouched-for until it is checked. A carried one *looks* covered by the tree hash its consumer pinned — and is, when the package was fetched from git. But the entry package is hashed against nothing, and `source = "path"` and `member` dependencies are deliberately unpinned, because live code has no pin. That is exactly where a locally built module lives, so without this the common case is the unchecked one.
-    pub hash: FileHash,
+    /// The WebAssembly module the native target links, from the row's `[foreign.native]` table.
+    pub native: Delivery,
     /// The export that answers each declaration, as `fully qualified path -> export name`: keyed by what is answered, so a row states one export a declaration, and a declaration two rows claim is refused where the manifest is read. The manifest names each from the package's own root, and the qualified path is made of it and the package's name where the row is read (`own_declaration`), so every path here lies under the package's prefix. A row no entry names is the host's to answer, or is refused by name where a program reaches it.
     pub answers: BTreeMap<String, String>,
 }
 
-/// One `[[foreign]]` row as TOML spells it — the union of every field either delivery takes, for the reason [`DependencyRow`] is a union.
+/// One file a target links for a `[[foreign]]` row: where it comes from, and what it must be.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Delivery {
+    pub module: Module,
+    /// What the file must be, whichever way it arrived.
+    ///
+    /// **Stated for a carried file too, and that is the case it matters most for.** A fetched one is obviously unvouched-for until it is checked. A carried one *looks* covered by the tree hash its consumer pinned — and is, when the package was fetched from git. But the entry package is hashed against nothing, and `source = "path"` and `member` dependencies are deliberately unpinned, because live code has no pin. That is exactly where a locally built module lives, so without this the common case is the unchecked one.
+    pub hash: FileHash,
+}
+
+/// One `[[foreign]]` row as TOML spells it: its name, each target's delivery in a table of its own, and what its exports answer.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ForeignRow {
     name: String,
-    path: Option<String>,
-    url: Option<String>,
-    hash: Option<String>,
+    native: Option<DeliveryRow>,
     answers: Option<BTreeMap<String, String>>,
 }
 
-impl Foreign {
-    /// The module's bytes, accepted against this row's `hash`.
+/// One target's table of a `[[foreign]]` row as TOML spells it — the union of every field either delivery takes, for the reason [`DependencyRow`] is a union.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeliveryRow {
+    path: Option<String>,
+    url: Option<String>,
+    hash: Option<String>,
+}
+
+impl Delivery {
+    /// The file's bytes, accepted against this delivery's `hash`, for the row `name`.
     ///
     /// **One check for both deliveries, at the moment the bytes are used.** A fetched module was already accepted once, when `curate` placed it — checking again costs one digest over a file about to be compiled, which is nothing beside that, and it means a store entry corrupted after the fact is caught rather than linked. A carried module has no fetch to have been checked at, so this is its only check and the reason the row states a hash at all.
     ///
     /// `directory` is the package's own, which a carried module's path is relative to; `store` answers for a fetched one, where the entry's name is already the digest.
-    pub fn bytes(&self, directory: &Path, store: &Store) -> Result<Vec<u8>, String> {
+    pub fn bytes(&self, name: &str, directory: &Path, store: &Store) -> Result<Vec<u8>, String> {
         let path = match &self.module {
             Module::Filed(path) => directory.join(path),
             Module::Fetched(_) => store.foreign(&self.hash),
@@ -459,8 +473,7 @@ impl Foreign {
 
         let bytes = fs::read(&path).map_err(|error| {
             format!(
-                "the foreign module {:?} is not at {}: {error}",
-                self.name,
+                "the foreign module {name:?} is not at {}: {error}",
                 path.display()
             )
         })?;
@@ -469,11 +482,9 @@ impl Foreign {
         if delivered != self.hash {
             // The two conditions rather than one instruction: a re-pin is the ordinary answer here and the alarming one, and which it is depends on something only the reader knows.
             return Err(format!(
-                "the foreign module {:?} at {} is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: you rebuilt the module from source you control — then `curios pin foreign {} --refresh`\n  pay close attention if: you did not rebuild it, or a dependency delivered it rather than you building it",
-                self.name,
+                "the foreign module {name:?} at {} is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: you rebuilt the module from source you control — then `curios pin foreign {name} --refresh`\n  pay close attention if: you did not rebuild it, or a dependency delivered it rather than you building it",
                 path.display(),
                 self.hash,
-                self.name
             ));
         }
 
@@ -486,9 +497,7 @@ impl ForeignRow {
     fn foreign(self, package: &str, declared: &[Foreign]) -> Result<Foreign, String> {
         let Self {
             name,
-            path,
-            url,
-            hash,
+            native,
             answers,
         } = self;
 
@@ -498,30 +507,12 @@ impl ForeignRow {
             return Err(format!("the foreign row {name:?} is declared twice"));
         }
 
-        // Where the module comes from: one spelling or the other, checked in both directions so neither is quietly ignored nor quietly defaulted — `DependencyRow`'s rule, applied to the other thing a manifest delivers.
-        let module = match (path, url) {
-            (Some(path), None) => Module::Filed(plain_relative(&path, &name)?),
-            (None, Some(url)) => {
-                Module::Fetched(optionless("url", url, &format!("foreign row {name:?}"))?)
-            }
-            (Some(_), Some(_)) => {
-                return Err(format!(
-                    "the foreign row {name:?} states `path` beside `url`; a module is carried by the package or fetched, never both"
-                ));
-            }
-            (None, None) => {
-                return Err(format!(
-                    "the foreign row {name:?} names no module: state `path` for one the package carries, or `url` for one it fetches"
-                ));
-            }
-        };
-
-        // Both deliveries state it, because it answers what the module *is* rather than where it came from — and the carried case is the one that would otherwise go unchecked, since the tree holding it may be the entry package or a live path dependency, neither of which is pinned.
-        let Some(hash) = hash else {
+        let Some(native) = native else {
             return Err(format!(
-                "the foreign row {name:?} states no `hash`; a module is accepted against one however it arrives, and `curios pin foreign --refresh {name}` writes the one it currently has"
+                "the foreign row {name:?} names no module: state `[foreign.native]`, with a `path` for one the package carries or a `url` for one it fetches, beside its `hash`"
             ));
         };
+        let native = native.delivery(&name, "native")?;
 
         // Each declaration is claimed once across the package's rows: nothing chooses between two answers, and the rows of one manifest are where two claims on one declaration can be written.
         let mut claimed = BTreeMap::new();
@@ -542,11 +533,47 @@ impl ForeignRow {
         }
 
         Ok(Foreign {
-            name: name.clone(),
+            name,
+            native,
+            answers: claimed,
+        })
+    }
+}
+
+impl DeliveryRow {
+    /// This table of the foreign row `name`, the one for `target`, as what that target links.
+    fn delivery(self, name: &str, target: &str) -> Result<Delivery, String> {
+        let Self { path, url, hash } = self;
+
+        // Where the file comes from: one spelling or the other, checked in both directions so neither is quietly ignored nor quietly defaulted — `DependencyRow`'s rule, applied to the other thing a manifest delivers.
+        let module = match (path, url) {
+            (Some(path), None) => Module::Filed(plain_relative(&path, name)?),
+            (None, Some(url)) => {
+                Module::Fetched(optionless("url", url, &format!("foreign row {name:?}"))?)
+            }
+            (Some(_), Some(_)) => {
+                return Err(format!(
+                    "the foreign row {name:?} states `path` beside `url` in `[foreign.{target}]`; a module is carried by the package or fetched, never both"
+                ));
+            }
+            (None, None) => {
+                return Err(format!(
+                    "the foreign row {name:?} names no module in `[foreign.{target}]`: state `path` for one the package carries, or `url` for one it fetches"
+                ));
+            }
+        };
+
+        // Both deliveries state it, because it answers what the file *is* rather than where it came from — and the carried case is the one that would otherwise go unchecked, since the tree holding it may be the entry package or a live path dependency, neither of which is pinned.
+        let Some(hash) = hash else {
+            return Err(format!(
+                "the foreign row {name:?} states no `hash` in `[foreign.{target}]`; a module is accepted against one however it arrives, and `curios pin foreign {name} --refresh` writes the one it currently has"
+            ));
+        };
+
+        Ok(Delivery {
             module,
             hash: FileHash::parse(&hash)
                 .map_err(|refusal| format!("the foreign row {name:?}: {refusal}"))?,
-            answers: claimed,
         })
     }
 }

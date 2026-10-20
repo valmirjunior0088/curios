@@ -126,7 +126,7 @@ fn calling_double(root: &Path, name: &str, rows: &[(&str, &str)]) -> std::path::
         .iter()
         .map(|(row, export)| {
             format!(
-                "\n[[foreign]]\nname = \"{row}\"\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"{export}\"\n",
+                "\n[[foreign]]\nname = \"{row}\"\n\n[foreign.native]\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"{export}\"\n",
                 digest(&wasm)
             )
         })

@@ -391,6 +391,8 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
 
             [[foreign]]
             name = "sha2"
+
+            [foreign.native]
             path = "foreign/libsha2.wasm"
             hash = "f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
@@ -399,15 +401,14 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
 
             [[foreign]]
             name = "blake3"
-            url = "https://example.com/libblake3.wasm"
-            hash = "f1:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+            native = { url = "https://example.com/libblake3.wasm", hash = "f1:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" }
         "#,
     ) else {
         panic!("a package");
     };
 
     assert_eq!(
-        package.foreign[0].module,
+        package.foreign[0].native.module,
         Module::Filed(PathBuf::from("foreign/libsha2.wasm"))
     );
     assert_eq!(
@@ -418,7 +419,7 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
         Some("SHA256_Digest")
     );
     assert_eq!(
-        package.foreign[1].module,
+        package.foreign[1].native.module,
         Module::Fetched("https://example.com/libblake3.wasm".to_string())
     );
 }
@@ -426,7 +427,7 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
 /// A row answers its own package's declarations: each is named from the package's root, so a claim on another package's row, or on the standard library's, has no spelling. A path a manifest once wrote in full is refused with the spelling it has now, and one that leads elsewhere with why it names nothing here.
 #[test]
 fn an_export_answers_a_declaration_named_from_its_own_package() {
-    const ROW: &str = "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\npath = \"m.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.answers]\n";
+    const ROW: &str = "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n\n[foreign.native]\npath = \"m.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.answers]\n";
 
     for (claim, expected) in [
         (
@@ -455,7 +456,7 @@ fn a_declaration_two_rows_answer_is_refused() {
         "hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"";
     let row = |name: &str, export: &str| {
         format!(
-            "[[foreign]]\nname = \"{name}\"\npath = \"{name}.wasm\"\n{PIN}\n\n[foreign.answers]\n\"digest/sha256\" = \"{export}\"\n\n"
+            "[[foreign]]\nname = \"{name}\"\n\n[foreign.native]\npath = \"{name}.wasm\"\n{PIN}\n\n[foreign.answers]\n\"digest/sha256\" = \"{export}\"\n\n"
         )
     };
 
@@ -475,7 +476,7 @@ fn a_declaration_two_rows_answer_is_refused() {
     );
 }
 
-/// Every wrong combination of the delivery fields, each refused by name rather than by whichever shape was tried second.
+/// Every wrong combination of a delivery's fields, each refused by name rather than by whichever shape was tried second.
 #[test]
 fn a_foreign_row_states_one_delivery_and_no_half_of_another() {
     const PIN: &str =
@@ -506,11 +507,22 @@ fn a_foreign_row_states_one_delivery_and_no_half_of_another() {
     ] {
         let row = row.as_str();
         let refusal = refuse(&format!(
-            "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n{row}\n"
+            "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n\n[foreign.native]\n{row}\n"
         ));
 
         assert!(refusal.contains(expected), "{row:?} reported {refusal}");
     }
+}
+
+/// A row states its module in the native target's table, and one with no such table links nothing: refused where the manifest is read, saying where a module goes.
+#[test]
+fn a_foreign_row_with_no_delivery_says_where_one_goes() {
+    let refusal = refuse("name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n");
+
+    assert!(
+        refusal.contains("names no module: state `[foreign.native]`"),
+        "{refusal}"
+    );
 }
 
 /// There is no privilege field, and a manifest cannot invent one.

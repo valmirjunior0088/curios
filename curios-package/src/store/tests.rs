@@ -9,23 +9,23 @@ fn a_binary_nests_under_its_package() {
     let store = Store::at(PathBuf::from("/w/u"));
 
     assert_eq!(
-        store.executable("json", "serve"),
-        PathBuf::from("/w/u/.curios/executables/json/serve")
+        store.native("json", "serve"),
+        PathBuf::from("/w/u/.curios/native/json/serve")
     );
     assert_ne!(
-        store.executable("json", "serve"),
-        store.executable("other", "serve")
+        store.native("json", "serve"),
+        store.native("other", "serve")
     );
 }
 
 /// The path inside `.curios/` does not depend on what encloses the package, so a binary does not move when its package joins an umbrella — only the root it hangs from changes.
 #[test]
 fn joining_an_umbrella_moves_only_the_root() {
-    let alone = Store::at(PathBuf::from("/w/json")).executable("json", "serve");
-    let enclosed = Store::at(PathBuf::from("/w/u")).executable("json", "serve");
+    let alone = Store::at(PathBuf::from("/w/json")).native("json", "serve");
+    let enclosed = Store::at(PathBuf::from("/w/u")).native("json", "serve");
 
-    assert!(alone.ends_with(".curios/executables/json/serve"));
-    assert!(enclosed.ends_with(".curios/executables/json/serve"));
+    assert!(alone.ends_with(".curios/native/json/serve"));
+    assert!(enclosed.ends_with(".curios/native/json/serve"));
 }
 
 /// A hash's scheme is a directory of its own, which is what lets a successor sit beside `c1` rather than replace it.
@@ -48,7 +48,7 @@ fn the_families_do_not_share_a_namespace() {
 
     let module = FileHash::parse(&format!("f1:{}", "b".repeat(64))).unwrap();
 
-    let binary = store.executable("c1", "tool");
+    let binary = store.native("c1", "tool");
     let tree = store.source(&hash);
     let fetched = store.foreign(&module);
 

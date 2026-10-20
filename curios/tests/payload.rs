@@ -110,7 +110,7 @@ fn one_slot_serves_run_and_compile() {
     assert_eq!(slots(&root), 1, "one program, one slot, whoever asked");
 
     assert!(
-        root.join(".curios/executables/app/app").exists(),
+        root.join(".curios/native/app/app").exists(),
         "and the bundle was written from it"
     );
 }

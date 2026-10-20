@@ -337,7 +337,7 @@ fn program(governing: &Governing, executable: &Executable) -> Result<Program, St
                 executable: executable.name.clone(),
                 output: governing
                     .store()
-                    .executable(&governing.package.name, &executable.name),
+                    .native(&governing.package.name, &executable.name),
             },
             declares: reachable(&governing.package),
             units: order(governing)?,

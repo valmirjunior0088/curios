@@ -122,7 +122,7 @@ fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Declar
                 .any(|declaration| foreigns.get(declaration).is_some())
         })
         .map(|(package, directory, foreign)| {
-            let code = curios_cranelift::compile(&foreign.bytes(&directory, &store)?).map_err(
+            let code = curios_cranelift::compile(&foreign.native.bytes(&foreign.name, &directory, &store)?).map_err(
                 |error| {
                     format!(
                         "the module {:?} of {package} is not a WebAssembly module this engine accepts: {error}",

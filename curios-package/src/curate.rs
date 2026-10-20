@@ -167,12 +167,12 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
 
         for foreign in &package.foreign {
             // A carried module needs no fetch: it is in the tree already, and what it must be is checked where it is read rather than here.
-            if let Module::Fetched(url) = &foreign.module {
+            if let Module::Fetched(url) = &foreign.native.module {
                 reachable.fetches.insert(ModuleAcquisition {
                     package: package.name.clone(),
                     name: foreign.name.clone(),
                     url: url.clone(),
-                    hash: foreign.hash.clone(),
+                    hash: foreign.native.hash.clone(),
                 });
             }
 

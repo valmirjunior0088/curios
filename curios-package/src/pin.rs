@@ -426,7 +426,7 @@ fn declares(directory: &Path) -> Result<String, String> {
     }
 }
 
-/// Read one field of the row `name` keys, without borrowing it mutably.
+/// Read one field of the row `name` keys, without borrowing it mutably: of a `[[foreign]]` row, a field of the delivery [`DELIVERY`] names.
 fn stated(document: &DocumentMut, subject: Subject, name: &str, key: &str) -> Option<String> {
     let item = match subject {
         Subject::Foreign => document
@@ -434,6 +434,8 @@ fn stated(document: &DocumentMut, subject: Subject, name: &str, key: &str) -> Op
             .as_array_of_tables()?
             .iter()
             .find(|table| table.get("name").and_then(Item::as_str) == Some(name))?
+            .get(DELIVERY)?
+            .as_table_like()?
             .get(key)?
             .as_str()?,
         Subject::Dependency => match document.get("dependencies")?.as_table()?.get(name)? {
@@ -621,9 +623,12 @@ fn settled_dependency(
     }
 }
 
-/// The row `name` keys, created empty if it is not there yet.
+/// The table of a `[[foreign]]` row that `pin foreign` writes: what the native target links, which is the one delivery a row states.
+const DELIVERY: &str = "native";
+
+/// The row `name` keys, created empty if it is not there yet — of a `[[foreign]]` row, its [`DELIVERY`] table, created too.
 ///
-/// A created row carries the one field that identifies it — a `[[foreign]]` row its `name`, since the array is keyed by nothing else — so the row is findable the moment it exists rather than only once the caller has finished filling it.
+/// A created row carries the one field that identifies it — a `[[foreign]]` row its `name`, since the array is keyed by nothing else — so the row is findable the moment it exists rather than only once the caller has finished filling it. A delivery table already written inline, `native = { … }`, is written inline, as a dependency row is.
 fn row_mut<'a>(document: &'a mut DocumentMut, subject: Subject, name: &str) -> Row<'a> {
     match subject {
         Subject::Foreign => {
@@ -645,7 +650,14 @@ fn row_mut<'a>(document: &'a mut DocumentMut, subject: Subject, name: &str) -> R
                 tables.len() - 1
             });
 
-            Row::Table(tables.get_mut(index).expect("the row just located"))
+            let row = tables.get_mut(index).expect("the row just located");
+
+            match row.entry(DELIVERY).or_insert(Item::Table(Table::new())) {
+                Item::Value(Value::InlineTable(inline)) => Row::Inline(inline),
+                item => Row::Table(item.as_table_mut().expect(
+                    "a foreign row's delivery is a table, as the manifest reader holds it",
+                )),
+            }
         }
         Subject::Dependency => {
             let table = document
