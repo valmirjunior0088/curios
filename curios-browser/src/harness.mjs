@@ -666,12 +666,10 @@ export async function run(config) {
         : withToken(row, reply, null);
     };
 
-  // The `ffi` import object, built from the module's own imports. A hook answers a row before this host does, as a module answers one before the native host, and is held to the row `compile` described; a row no hook implements is this host's where it answers that name. Each row that returns is entered through the lane, read off the row's description. A declaration the program never calls is never imported, so it needs no hook; a hook naming no row is a hook for a program other than this one.
-  const ffiEnv = (module) => {
-    const rows = new Map(
-      config.compiled.foreigns.map((row) => [row.name, row]),
-    );
+  // The `ffi` import object, built from the rows the program reaches, which are every row its module may import: the compiler harvests them from the calls it emits, and an optimizer drops an import but never adds one, so an entry the module does not import is one it never reads. Reading the rows rather than the module's own imports is what runs a page in an engine that cannot reflect a GC module's imports, as JavaScriptCore cannot. A hook answers a row before this host does, as a module answers one before the native host, and is held to the row `compile` described; a row no hook implements is this host's where it answers that name, and otherwise refused before anything runs, as the native link refuses it. Each row that returns is entered through the lane, read off the row's description. A hook naming no row is a hook for a program other than this one.
+  const ffiEnv = () => {
     const implemented = hooks.foreign ?? {};
+    const rows = new Set(config.compiled.foreigns.map((row) => row.name));
 
     for (const name of Object.keys(implemented)) {
       if (!rows.has(name)) {
@@ -683,33 +681,20 @@ export async function run(config) {
 
     const env = {};
 
-    for (const { module: namespace, name } of WebAssembly.Module.imports(
-      module,
-    )) {
-      if (namespace !== "ffi") {
-        continue;
-      }
+    for (const row of config.compiled.foreigns) {
+      const hooked = typeof implemented[row.name] === "function";
 
-      const hooked = typeof implemented[name] === "function";
-      const row = rows.get(name);
-
-      if (row === undefined) {
+      if (!hooked && !answered.has(row.name)) {
         throw new Error(
-          `the program imports ffi ${name}, which its compiled rows do not describe`,
-        );
-      }
-
-      if (!hooked && !answered.has(name)) {
-        throw new Error(
-          `the program calls ffi ${name}, and hooks.foreign implements no ${name}`,
+          `the program calls ffi ${row.name}, and hooks.foreign implements no ${row.name}`,
         );
       }
 
       const answer = hooked
-        ? checked(row, implemented[name])
-        : answered.get(name);
+        ? checked(row, implemented[row.name])
+        : answered.get(row.name);
 
-      env[name] = row.never ? answer : laned(row, answer);
+      env[row.name] = row.never ? answer : laned(row, answer);
     }
 
     return env;
@@ -801,7 +786,7 @@ export async function run(config) {
     const module = await WebAssembly.compile(config.compiled.program);
     const instance = await WebAssembly.instantiate(module, {
       sys: { panic },
-      ffi: ffiEnv(module),
+      ffi: ffiEnv(),
     });
 
     const advance = instance.exports["func/advance"];

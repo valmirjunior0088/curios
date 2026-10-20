@@ -289,3 +289,17 @@ fn the_configuration_holds_what_the_harness_reads() {
         assert_eq!(configuration["rows"][op.declared().as_str()], op.name());
     }
 }
+
+/// JavaScriptCore cannot list the imports of a module that crosses GC types, and refuses with a `TypeError` where asked, so a harness or a loader asking would stop every page in Safari before its program ran. The import object is built from the program's rows instead, and no CI engine is JavaScriptCore, so the question is held absent here.
+#[test]
+fn neither_the_harness_nor_the_loader_asks_an_engine_for_a_modules_imports() {
+    for (file, source) in [
+        ("harness.mjs", include_str!("harness.mjs")),
+        ("templates/index.js", include_str!("../templates/index.js")),
+    ] {
+        assert!(
+            !source.contains("Module.imports"),
+            "{file} asks for a module's imports"
+        );
+    }
+}

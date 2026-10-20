@@ -667,6 +667,7 @@ test("a row the program calls needs a hook, a row it never calls needs none, and
     /hooks\.foreign implements \/other, which the program declares no foreign row for/,
   );
 
+  // The rows are what the import object is built from, so a module importing a row they do not describe is refused by the engine where it is instantiated, naming the import.
   const compiled = compile(HOOKS);
   const { trap } = await run(
     {
@@ -676,10 +677,7 @@ test("a row the program calls needs a hook, a row it never calls needs none, and
     { foreign: {} },
   );
 
-  assert.match(
-    trap,
-    /the program imports ffi \/used, which its compiled rows do not describe/,
-  );
+  assert.match(trap, /\/used/);
 });
 
 test("a deadlock cancellation that suspends finishes its cleanup before reporting", async () => {
