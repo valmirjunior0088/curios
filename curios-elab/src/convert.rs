@@ -33,8 +33,7 @@ mod variance_tests;
 
 use {
     super::{
-        Context, applied_head, check, infer, reduce, reduce_forced, stalled_unfolding, unfold_rec,
-        unfold_rec_apply,
+        Context, applied_head, check, infer, reduce, reduce_forced, unfold_rec, unfold_rec_apply,
     },
     crate::{
         Declined, Error, Occurrence, Scoped, metavar_origins, metavar_spines, named_members,
@@ -2696,7 +2695,11 @@ impl Convert {
             .collect()
     }
 
-    /// Solve flex–rigid with a candidate spelled under the refinements the metavariable was born under. The drain reduces problems under the live frame, where the refinements of the arm the problem sits in apply — sound for discharging a problem, but not for committing a solution: a metavariable must not be pinned to a value that holds only inside an arm it was not born in (`?k := 0` because the nil arm refined `n := 0`). Where the refinements in view are its birth's — the metavariable solved in the arm it was born in — the rigid side is its spelling, or what it was reduced from where the reduct does not re-check; otherwise the original rigid term is re-reduced under its birth's alone and solved against that spelling. Refinements only ever *add* reductions, so a solution found this way still discharges the problem as it stands. A problem whose verdict changes at the birth's refinements is the other refinements' doing — nothing is globally forced, so it postpones rather than failing or committing.
+    /// Solve flex–rigid with the rigid side as the problem writes it, and otherwise with a candidate spelled under the refinements the metavariable was born under.
+    ///
+    /// **The rigid side as written, wherever reduction changed it and that spelling passes every check.** The problem says the metavariable is that term, so it is a solution whatever refinements stand, and it keeps what reduction unfolded: a call by its name rather than its group's body, a projection off a local definition rather than off what the definition computes, a dictionary by its name rather than its methods. That is what a report shows of the solution, what re-validation elaborates again and what the kernel receives. A raw side headed by a solved metavariable spells what that one was solved to: an implicit another call hands on, as `Eq/sym` does each side of the equation it turns, holds the name its reduct no longer shows.
+    ///
+    /// **Otherwise the reduct, under the birth's refinements** — a written side out of scope where the metavariable was born, or one that does not re-check there. The drain reduces problems under the live frame, where the refinements of the arm the problem sits in apply — sound for discharging a problem, but not for committing a solution: a metavariable must not be pinned to a value that holds only inside an arm it was not born in (`?k := 0` because the nil arm refined `n := 0`). Where the refinements in view are its birth's — the metavariable solved in the arm it was born in — the reduct is committed as reduced; otherwise the original rigid term is re-reduced under its birth's alone and solved against that spelling. Refinements only ever *add* reductions, so a solution found this way still discharges the problem as it stands. A problem whose verdict changes at the birth's refinements is the other refinements' doing — nothing is globally forced, so it postpones rather than failing or committing.
     fn solve_at_birth(
         &mut self,
         context: &mut Context,
@@ -2711,36 +2714,21 @@ impl Convert {
             None => return self.solve_rigid(context, metavar, rigid, standing),
         };
 
-        if context.reads_the_refinements_of(&birth) {
-            // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation the reduced spelling decides is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
-            //
-            // A `use` slot is committed as written for the same reason, whatever its dictionary unfolds to: a witness is a name for a structure of methods, and committed reduced the slot would spell the structure out at every use, for the kernel to receive and for erasure to build again where the program calls a global.
-            // A raw side headed by a solved metavariable spells what that one was solved to: an implicit another call hands on, as `Eq/sym` does each side of the equation it turns, holds the name its reduct no longer shows.
-            let behind = match &**applied_head(rigid_raw) {
-                Subterm::Metavar(Metavar { id, .. }) if context.metavar_solution(*id).is_some() => {
-                    Some(zonk_solved_term_metas(context, rigid_raw))
-                }
-                _ => None,
-            };
-            let rigid_raw = behind.as_ref().unwrap_or(rigid_raw);
-            let written = stalled_unfolding(rigid_raw, rigid)
-                || (matches!(metavar.origin, MetavarOrigin::Witness(_)) && rigid_raw != rigid);
-            if written
-                && let Solved::Done = self.solve_rigid(context, metavar, rigid_raw, standing)?
-            {
-                return Ok(Solved::Done);
+        let behind = match &**applied_head(rigid_raw) {
+            Subterm::Metavar(Metavar { id, .. }) if context.metavar_solution(*id).is_some() => {
+                Some(zonk_solved_term_metas(context, rigid_raw))
             }
+            _ => None,
+        };
+        let written = behind.as_ref().unwrap_or(rigid_raw);
+        if written != rigid
+            && let Solved::Done = self.solve_rigid(context, metavar, written, standing)?
+        {
+            return Ok(Solved::Done);
+        }
 
-            // A reduct need not re-check where what it was reduced from does. Typing a match reads its scrutinee's type as spelled, and a reduct that inlined a definition's absurd arm — `hop`'s `match some end`, typed there because the arm refines the variable `b` — spells that type afresh from the substituted scrutinee, where no equation reaches it, and re-validation refuses it; the kernel reads a match's scrutinee type the same way. A refused reduct is therefore tried as written before the problem fails, unless the rule above already tried that spelling — which can only turn a refusal into a solution. `implicit_tests`' `a_solution_whose_reduct_does_not_recheck_is_committed_as_written` is the program.
-            return Ok(match self.solve_rigid(context, metavar, rigid, standing)? {
-                Solved::Failed if !written && rigid_raw != rigid => {
-                    match self.solve_rigid(context, metavar, rigid_raw, standing)? {
-                        Solved::Done => Solved::Done,
-                        Solved::Postponed | Solved::Failed => Solved::Failed,
-                    }
-                }
-                verdict => verdict,
-            });
+        if context.reads_the_refinements_of(&birth) {
+            return self.solve_rigid(context, metavar, rigid, standing);
         }
 
         let at_birth = context.at_birth(&birth, |context| reduce(context, rigid_raw.clone()))?;

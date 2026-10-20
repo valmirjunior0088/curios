@@ -1317,29 +1317,15 @@ fn clipped(said: &str) -> String {
 }
 
 /// The `let`s of the library the translation declines, each holding a form its module cannot write, under their reason and in the order of their names. A report raised in one shows the term as the compiler holds it.
-const DECLINED: [&str; 14] = [
+const DECLINED: [&str; 3] = [
     // Each holds a string past the length a report prints one whole.
     "/std/Cli/main",
     "/std/http/Url/part",
     "/std/http/syntax/status_line",
-    // Each names a declaration its module cannot: another module's own, reached by unfolding (`documentation/roadmap/tools/303-a-report-writes-an-intrinsic-by-the-call-that-reaches-it.md`).
-    "/std/Nat/Coprime/cancel",
-    "/std/Nat/Coprime/common",
-    "/std/Nat/Coprime/quotients",
-    "/std/Nat/Coprime/symmetric",
-    "/std/Nat/Gcd/common",
-    "/std/Nat/Gcd/euclid",
-    "/std/Nat/Gcd/scaled",
-    "/std/Nat/Gcd/unique",
-    "/std/Tui/Field/view",
-    "/std/Tui/Listing/view",
-    "/std/Tui/Pane/border/border",
 ];
 
 /// The `let`s of the library that are refused as a report prints them, under their reason.
-const REFUSED: [&str; 2] = [
-    // `rest`'s `Eq/subst` holds the implicit argument unification solved at `split.quotient`'s reduct, `of(n, d)` opened to the match on `Int/view(n)`, which as printed is refused (`documentation/roadmap/tools/000-findings.md`).
-    "/std/Int/DivMod/unique",
+const REFUSED: [&str; 1] = [
     // Its guard's fact proves a proof field over a recursive call, and the call written with its implicit argument, as a report prints it, holds the type its field's statement holds as a node by its name, so the guard's key meets no statement (`documentation/roadmap/theory/100-a-type-former-is-one-term-however-it-is-reached.md`).
     "/std/Tui/Glyph/of_cluster",
 ];

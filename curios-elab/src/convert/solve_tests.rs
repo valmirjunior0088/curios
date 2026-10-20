@@ -1373,9 +1373,9 @@ fn a_type_and_a_proposition_met_from_below_are_refused_in_either_order() {
     ));
 }
 
-// A `use` slot met against a dictionary's name is solved to the name: a witness names a structure of methods, and a slot committed reduced would spell the structure out wherever it stands. A hole of any other origin is solved to what the name reduces to, as it is for any value.
+// A slot met against a dictionary's name is solved to the name, whatever minted it: the rigid side as written passes every check, and committed reduced the slot would spell the structure of methods out wherever it stands.
 #[test]
-fn a_use_slot_is_solved_to_the_dictionary_as_it_is_named() {
+fn a_slot_met_against_a_dictionarys_name_is_solved_to_the_name() {
     let dictionary = Free::from(&nominal("dictionary"));
     let methods = || Term::tuple([nat(1), nat(2)]);
     let solved = |origin: MetavarOrigin| {
@@ -1405,7 +1405,10 @@ fn a_use_slot_is_solved_to_the_dictionary_as_it_is_named() {
     });
 
     assert_eq!(solved(premise), Some(Term::free_var(&dictionary)));
-    assert_eq!(solved(MetavarOrigin::Hole), Some(methods()));
+    assert_eq!(
+        solved(MetavarOrigin::Hole),
+        Some(Term::free_var(&dictionary))
+    );
 }
 
 // A metavariable met against another's solution is solved to what that one spells: `?0` holds the name `flat`, and `?1`, met against `?0`, holds the name too, where the reduct of either is the definition's lambda.

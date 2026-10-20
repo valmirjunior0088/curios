@@ -707,8 +707,8 @@ fn an_arms_goal_takes_the_case_where_an_operator_spells_the_scrutinee() {
     );
 
     assert!(
-        elaborated.contains("Bool.match false ~ Nat")
-            && elaborated.contains("Bool.match true ~ Nat"),
+        elaborated.contains("Bool.match false ~ /sys/Nat/Nat")
+            && elaborated.contains("Bool.match true ~ /sys/Nat/Nat"),
         "{elaborated}"
     );
 }

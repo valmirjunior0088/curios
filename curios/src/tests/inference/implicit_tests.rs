@@ -487,8 +487,48 @@ fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {
         .nth(1)
         .expect("the row is printed");
 
-    assert!(row.contains("refl.{Type; 0}(@Nat, @(f(n)).0)"), "{row}");
+    assert!(
+        row.contains("refl.{Type; 0}(@/sys/Nat/Nat, @(f(n)).0)"),
+        "{row}"
+    );
     assert!(!row.contains("rec "), "{row}");
+}
+
+/// A solution met against a projection off a local definition is that projection: `Eq/refl`'s implicit is solved to `p.a`, as the row states it, where reducing it opens the definition into the match `make`'s body is and projects off that, which a report would print and the kernel receive.
+#[test]
+fn a_solution_met_against_a_projection_off_a_local_definition_is_that_projection() {
+    let elaborated = core_elab(
+        r#"
+        use /std/{Nat, Eq, Io};
+
+        struct P: Type {
+            a: Nat,
+        }
+
+        let make(n: Nat) -> P =
+            match n
+            | 0 => P { a = 0 }
+            | m + 1 => P { a = m }
+            end;
+
+        pub let row(n: Nat) -> {} =
+            let p = make(n);
+            let _: Eq()(p.a, p.a) = Eq/refl();
+            ();
+
+        Io/pure(())
+        "#,
+    );
+    let row = elaborated
+        .split("let /row")
+        .nth(1)
+        .expect("the row is printed");
+
+    assert!(
+        row.contains("refl.{Type; 0}(@/sys/Nat/Nat, @(p).0)"),
+        "{row}"
+    );
+    assert!(!row.contains("Nat.fold"), "{row}");
 }
 
 /// A solution that holds a call of a recursive function is that call, where the function's body holds a proof the elaborator wrote. `of` leaves the bound of `of(n / 2)` to the elaborator, whose proof splits on the bound's decision and eliminates a contradiction under an elided motive, and `Eq/refl`'s implicit is solved to `of(n, @ok).count`. Committed as the copy of `of`'s group its reduct holds, the solution was re-validated by elaborating that group again, an inner goal came back in another spelling, and conversion unfolded the two groups side by side over arguments that grow until the budget was spent — so the budget here is one the program fits many times over and the regress does not.
