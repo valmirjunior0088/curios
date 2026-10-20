@@ -3,7 +3,7 @@
 use {
     crate::tests::{compile, cont_optm, cont_optm_module, run, run_text},
     curios_cont::{Callee, Node, ValueExpr},
-    curios_runtime::{MockHost, test_support::run_within_heap},
+    curios_native::{MockHost, test_support::run_within_heap},
     curios_utilities::fill,
     std::collections::BTreeSet,
 };
@@ -334,7 +334,7 @@ fn a_span_builds_its_answer_where_its_walk_stops() {
     );
 }
 
-/// A recursion as deep as its data runs: a chain built under a constructor, which no monoid closes, and an `Io` walk that binds its tail, each a frame an element. `curios-runtime`'s README, "A module runs on a stack of its own", is the decision.
+/// A recursion as deep as its data runs: a chain built under a constructor, which no monoid closes, and an `Io` walk that binds its tail, each a frame an element. `curios-native`'s README, "A module runs on a stack of its own", is the decision.
 #[test]
 fn a_recursion_as_deep_as_its_data_runs() {
     assert_eq!(

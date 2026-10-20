@@ -2,8 +2,8 @@
 
 use {
     crate::tests::{run, run_text},
+    curios_native::{ForeignBindings, MockHost, SocketEvent, Termination},
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{ForeignBindings, MockHost, SocketEvent, Termination},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::{fill, test_support::Temporary},
 };
@@ -72,7 +72,7 @@ fn https_perform_reaches_a_public_host_over_the_real_host() {
         path
     );
 
-    run_text(&source, curios_runtime::OsHost::with_args(vec![])).expect("expected result");
+    run_text(&source, curios_native::OsHost::with_args(vec![])).expect("expected result");
 
     let written = std::fs::read(&report).expect("the program wrote its report");
     assert_eq!(written, b"200");

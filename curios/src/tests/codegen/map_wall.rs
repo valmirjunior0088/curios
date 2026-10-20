@@ -2,8 +2,8 @@
 
 use {
     crate::to_compiled,
+    curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
-    curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
     std::time::Instant,
 };

@@ -27,13 +27,13 @@ use {
     curios_abi::ForeignStore,
     curios_cranelift::module_exports,
     curios_document::write_documentation,
+    curios_native::{
+        Bundle, Compiled, DeclaredModule, ForeignBindings, OsHost, host_answers, plugin_bindings,
+    },
     curios_package::{
         Entry, Governing, Repoint, Spelling, Store, curate, declared_modules, pin, scaffold,
     },
     curios_pipeline::CompileError,
-    curios_runtime::{
-        Bundle, Compiled, DeclaredModule, ForeignBindings, OsHost, host_answers, plugin_bindings,
-    },
     curios_text::Formatted,
     curios_utilities::Source,
     curios_wonder::{

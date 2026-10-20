@@ -6,7 +6,7 @@ What the compiler knows about a program, handed out as records: the `wonder` eng
 
 ### Under the native compiler, and free of what it links
 
-**Decision.** This crate depends on the pipeline, the package crate and `curios-verdicts`, and on nothing that links a back end: `cargo tree -p curios-wonder --edges normal` contains neither `curios-binaryen` nor `curios-runtime`. The one rung the driver cannot render, `wasm-optm`, is handed back as the emitted module for the transport that owns Binaryen to finish, through `wonder_stage`'s `finish` argument.
+**Decision.** This crate depends on the pipeline, the package crate and `curios-verdicts`, and on nothing that links a back end: `cargo tree -p curios-wonder --edges normal` contains neither `curios-binaryen` nor `curios-native`. The one rung the driver cannot render, `wasm-optm`, is handed back as the emitted module for the transport that owns Binaryen to finish, through `wonder_stage`'s `finish` argument.
 
 **Rationale.** A question costs the compiler and nothing after it, so answering one needs no optimizer, code generator or launcher, and paying for all three on every build and test of the engine is what a module inside `curios` cost. `curios-js` can reach the emitted module and not Binaryen, so taking the renderer as an argument states that fact at the crate boundary.
 

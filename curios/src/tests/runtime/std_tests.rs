@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{error, run, run_text},
-    curios_runtime::MockHost,
+    curios_native::MockHost,
 };
 
 // A struct type is nominal: it never converts with a structural tuple type of the same fields.

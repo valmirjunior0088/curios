@@ -3,8 +3,8 @@
 use {
     crate::to_compiled,
     curios_cont::{FieldGroup, Intrinsic, Node, ValueExpr},
+    curios_native::{ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
-    curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
 };
 

@@ -2,7 +2,7 @@
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
-use curios_runtime::{MockHost, MockIo};
+use curios_native::{MockHost, MockIo};
 
 // The terminal answers the session's questions first, supporting none of what it asks after, so the loop asks the terminal's size where it is quiet. The keys pause twice between two whole keys, so the loop's deadline passes once at each and it reads the two scripted resizes, 16×6 and then 12×5.
 pub(super) fn listing_host() -> (MockHost, MockIo) {

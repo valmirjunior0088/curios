@@ -2,7 +2,7 @@
 
 use {
     crate::tests::run_text,
-    curios_runtime::OsHost,
+    curios_native::OsHost,
     curios_utilities::{fill, test_support::Temporary},
 };
 

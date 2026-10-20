@@ -1,6 +1,6 @@
 //! Supplies the runtime launcher's path to the `curios` binary.
 //!
-//! The launcher is produced by `cargo xtask launcher build`, which builds `curios-runtime` in its own Cargo invocation so that workspace feature unification cannot reach it — this crate enables `curios-runtime/cranelift`, and a launcher built alongside it would carry a compiler. That isolation needs a second invocation, so it cannot happen here; this script only locates what that invocation left behind, and refuses clearly when it is absent or stale.
+//! The launcher is produced by `cargo xtask launcher build`, which builds `curios-native` in its own Cargo invocation so that workspace feature unification cannot reach it — this crate enables `curios-native/cranelift`, and a launcher built alongside it would carry a compiler. That isolation needs a second invocation, so it cannot happen here; this script only locates what that invocation left behind, and refuses clearly when it is absent or stale.
 //!
 //! The path is `.artifacts/<triple>` beside this crate rather than anywhere under Cargo's target tree, so `cargo clean` does not delete it and no build script has to reconstruct Cargo's internal directory layout to find it. `CARGO_MANIFEST_DIR` is a documented interface; `OUT_DIR`'s ancestry is not.
 
@@ -44,7 +44,7 @@ fn main() {
         println!(
             "cargo::warning=the {target_triple} runtime launcher's inputs are not filed beside it; run `cargo xtask launcher build` to file them"
         );
-        println!("cargo:rustc-env=CURIOS_RUNTIME_BIN={}", launcher.display());
+        println!("cargo:rustc-env=CURIOS_NATIVE_BIN={}", launcher.display());
         return;
     };
     let sources = listed
@@ -68,5 +68,5 @@ fn main() {
         );
     }
 
-    println!("cargo:rustc-env=CURIOS_RUNTIME_BIN={}", launcher.display());
+    println!("cargo:rustc-env=CURIOS_NATIVE_BIN={}", launcher.display());
 }

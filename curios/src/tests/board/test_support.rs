@@ -2,7 +2,7 @@
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
-use {crate::tests::run_text, curios_runtime::MockHost};
+use {crate::tests::run_text, curios_native::MockHost};
 
 /// Reject `source`, and by the diagnostic naming the rule under test.
 pub(super) fn rejected_by(source: &str, diagnostic: &str) {

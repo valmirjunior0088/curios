@@ -5,8 +5,8 @@ mod sequence_tests;
 
 use {
     super::{error, ersd_optm, ersd_optm_tests, run, run_tests_program, run_text},
+    curios_native::MockHost,
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
-    curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
 

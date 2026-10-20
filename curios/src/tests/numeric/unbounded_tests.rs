@@ -5,8 +5,8 @@
 use {
     super::test_support::*,
     crate::tests::{compile, run, run_text, typecheck, typecheck_within},
+    curios_native::MockHost,
     curios_pipeline::DEFAULT_STEP_BUDGET,
-    curios_runtime::MockHost,
     curios_utilities::fill,
 };
 

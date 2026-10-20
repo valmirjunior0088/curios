@@ -2,7 +2,7 @@
 //!
 //! The host's tags are spelled as numbers, since this crate names no `curios-abi` constant: parity none is 0 and even 1, flow control none is 0 and hardware 1, and the controls DTR, RTS and the input discard are 0, 1 and 2.
 
-use {crate::tests::run_text, curios_runtime::MockHost};
+use {crate::tests::run_text, curios_native::MockHost};
 
 // `config` asks for the frame nearly every device speaks, and a written `Config` reaches the host setting for setting.
 #[test]

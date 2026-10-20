@@ -2,7 +2,7 @@
 
 use {
     super::super::{run, run_tests_program, run_text},
-    curios_runtime::MockHost,
+    curios_native::MockHost,
 };
 
 #[test]

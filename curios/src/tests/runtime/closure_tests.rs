@@ -2,8 +2,8 @@
 
 use {
     crate::tests::{emits, run, run_text},
+    curios_native::MockHost,
     curios_pipeline::{Stage, compile_with_prelude},
-    curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
 

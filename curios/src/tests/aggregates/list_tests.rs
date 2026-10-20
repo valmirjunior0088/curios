@@ -3,7 +3,7 @@
 use {
     super::test_support::{ARRIVAL, LIST, extends_in_place, reads_in_every_shape},
     crate::tests::{run, run_text},
-    curios_runtime::MockHost,
+    curios_native::MockHost,
 };
 
 // `each` sequences under a `Monad`, and over `Io` the effects run in element order — which only host output can witness.

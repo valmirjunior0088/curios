@@ -3,8 +3,8 @@
 use {
     super::functions,
     curios_abi::ForeignStore,
+    curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
-    curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
     curios_wasm::to_bytes,

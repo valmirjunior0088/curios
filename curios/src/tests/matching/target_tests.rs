@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{error, run, run_text},
-    curios_runtime::MockHost,
+    curios_native::MockHost,
 };
 
 #[test]

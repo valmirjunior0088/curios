@@ -2,7 +2,7 @@
 //!
 //! Neither checker can see `curios-prelude` — the dependency runs the other way, which is the whole reason the registry is handed to `Kernel::new` and `Context::new` rather than spelled inside them — so their tests need their own values. This crate holds the one copy because it is the lowest crate both checkers depend on normally, and because its own `tests/driven.rs` is a third consumer. Nothing here is authoritative: no test resolves one of these names, they exist so a checker can be built at all, and production compilation never constructs it.
 //!
-//! **Behind `test-support`, not `#[cfg(test)]`.** That cfg is set only while *this* crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests — which is exactly the case here, and the same reason `curios-runtime`'s `test_support` is a feature. The gate also keeps this module out of every normal build, which matters more than convenience: it spells prelude names, and keeping them out of every build that ships is what the gate is for.
+//! **Behind `test-support`, not `#[cfg(test)]`.** That cfg is set only while *this* crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests — which is exactly the case here, and the same reason `curios-native`'s `test_support` is a feature. The gate also keeps this module out of every normal build, which matters more than convenience: it spells prelude names, and keeping them out of every build that ships is what the gate is for.
 
 use {
     crate::Env,

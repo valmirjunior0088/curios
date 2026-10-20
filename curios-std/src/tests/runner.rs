@@ -3,8 +3,8 @@
 use {
     crate::std_directory,
     curios::to_compiled,
+    curios_native::{ForeignBindings, MockHost, TestEnd},
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
-    curios_runtime::{ForeignBindings, MockHost, TestEnd},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::RootKind,
     std::path::PathBuf,

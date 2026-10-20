@@ -3,7 +3,7 @@
 use {
     crate::tests::{compile, typecheck},
     curios_abi::{HostOp, status},
-    curios_runtime::{
+    curios_native::{
         ForeignBindings, MockHost,
         test_support::{RawValue, run_raw},
     },

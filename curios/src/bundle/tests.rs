@@ -41,8 +41,8 @@ fn the_embedded_launcher_stays_slim() {
 ///
 /// To rebuild the failing image (about a minute):
 ///
-/// 1. `cargo build --release -p curios-runtime --target <triple> --features wasmtime/cranelift`
-/// 2. inspect `target/<triple>/release/curios-runtime`
+/// 1. `cargo build --release -p curios-native --target <triple> --features wasmtime/cranelift`
+/// 2. inspect `target/<triple>/release/curios-native`
 /// 3. re-run `cargo xtask launcher build`, which rebuilds that path without the backend
 ///
 /// **x86_64-unknown-linux-gnu, release profile (no `[profile]` section, so no stripping), counted at `00627ea06`.** Slim: 4,944,856 bytes, zero occurrences of every marker. Cranelift-linked: **17,197,648 bytes**, `cranelift-codegen` ×77 and `cranelift_codegen` ×6,579, so both guards fail against it, which is the evidence this test exists to record. `curios` itself, built at the same commit, is 138,664,896 bytes. Note that dead-code elimination does *not* remove the backend even though the launcher calls no compiling API — enabling the feature is enough.

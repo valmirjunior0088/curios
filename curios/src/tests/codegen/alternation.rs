@@ -1,8 +1,8 @@
-//! Runtime measurements behind `curios-emit/README.md`'s decision "A flattening extends the payload its first piece wrote last", and the bound they hold: a list grown an element a step and read in turn: at its first element (`rope_push_first.crs`) or by a window past it (`rope_push_drop.crs`), each of which a flattening reaches, against `rope_push_peek.crs`, which grows it alike and reads only the element it has just appended. Collections are counted from the engine's own records through `curios_runtime::test_support::collected`, as `churn.rs` counts them, and runs are timed interleaved.
+//! Runtime measurements behind `curios-emit/README.md`'s decision "A flattening extends the payload its first piece wrote last", and the bound they hold: a list grown an element a step and read in turn: at its first element (`rope_push_first.crs`) or by a window past it (`rope_push_drop.crs`), each of which a flattening reaches, against `rope_push_peek.crs`, which grows it alike and reads only the element it has just appended. Collections are counted from the engine's own records through `curios_native::test_support::collected`, as `churn.rs` counts them, and runs are timed interleaved.
 
 use {
     super::{compiled_of, run},
-    curios_runtime::{Compiled, test_support::collected},
+    curios_native::{Compiled, test_support::collected},
 };
 
 const PUSH_FIRST: &str = include_str!(concat!(

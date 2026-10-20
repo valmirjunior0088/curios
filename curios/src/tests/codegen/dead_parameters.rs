@@ -1,7 +1,7 @@
 //! Unused arguments preserve ordering, effects and captures across suspension through both Wasm paths.
 use {
     super::compile_raw_program,
-    curios_runtime::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, MockHost},
     curios_wasm::to_bytes,
 };
 

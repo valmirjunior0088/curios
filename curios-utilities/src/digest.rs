@@ -97,7 +97,7 @@ impl Object {
 
 /// A [`Hasher`] that finishes into a digest, for a key part whose producer speaks `std::hash` and whose consumer speaks SHA-256.
 ///
-/// One part of the payload address is not a string anybody here can build: the engine compatibility stamp, which only `curios-runtime` can describe and which it hands over by *writing into* a hasher rather than by returning a digest — keeping `sha2` out of that crate and `wasmtime` out of the one that assembles the address. This is the adapter between the two vocabularies, and it lives beside [`digest`] because what it produces is one.
+/// One part of the payload address is not a string anybody here can build: the engine compatibility stamp, which only `curios-native` can describe and which it hands over by *writing into* a hasher rather than by returning a digest — keeping `sha2` out of that crate and `wasmtime` out of the one that assembles the address. This is the adapter between the two vocabularies, and it lives beside [`digest`] because what it produces is one.
 ///
 /// [`Hasher::finish`] is not how a value is taken out of this. It has to exist, and a `u64` is not what a store key is spelled in, so it answers with the leading eight bytes of the digest so far and [`Fingerprint::hex`] is what a caller uses. Nothing in `std::hash` calls `finish` on the caller's behalf — `Hash::hash` only ever writes — so the narrow answer is never the one that reaches a key.
 pub struct Fingerprint(Sha256);

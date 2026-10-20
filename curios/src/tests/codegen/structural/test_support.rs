@@ -4,8 +4,8 @@
 
 use {
     curios_abi::ForeignStore,
+    curios_native::{Compiled, ForeignBindings, MockHost},
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{Compiled, ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::{Module, to_bytes},
     std::collections::BTreeSet,

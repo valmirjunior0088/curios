@@ -95,6 +95,6 @@ pub(crate) use proof_binders::*;
 mod test_tail;
 pub use test_tail::*;
 
-// A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: `curios_elab::test_support::declared_families` says at its use site that the caller reached for scaffolding rather than product API.
+// A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_elab::test_support::declared_families` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(feature = "test-support")]
 pub mod test_support;

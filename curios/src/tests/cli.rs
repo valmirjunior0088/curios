@@ -2,7 +2,7 @@
 
 use {
     super::{compile, error},
-    curios_runtime::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, MockHost},
     curios_utilities::fill,
 };
 

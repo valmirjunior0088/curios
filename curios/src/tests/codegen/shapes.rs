@@ -4,8 +4,8 @@ use {
     super::{compiled_of, run, timed},
     crate::{optimize, tests::ersd_optm},
     curios_ersd::{FieldShape, Module},
+    curios_native::Compiled,
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
-    curios_runtime::Compiled,
     curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,
 };

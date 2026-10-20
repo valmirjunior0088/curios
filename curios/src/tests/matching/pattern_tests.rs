@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{run, run_text},
-    curios_runtime::MockHost,
+    curios_native::MockHost,
 };
 
 // The `;` fold-hypothesis position accepts an irrefutable pattern: the destructuring binds the fold result's fields directly, lowering to the same projections a `let (t, live) = ih;` would.

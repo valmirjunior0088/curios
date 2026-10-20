@@ -50,7 +50,7 @@ struct Record {
     reads: Vec<(String, String)>,
     /// What each unit of the compilation contained, in fold order — the digest of the bytes its own unit slot holds.
     predecessors: Vec<String>,
-    /// The payload's own digest, so a damaged artifact is a miss here rather than a failure to deserialize at run time — or, for a flipped byte inside a function's code, machine code that runs wrong. Its segment of the slot is exactly the byte string a bundled executable carries and `curios_runtime::run_bytes` deserializes.
+    /// The payload's own digest, so a damaged artifact is a miss here rather than a failure to deserialize at run time — or, for a flipped byte inside a function's code, machine code that runs wrong. Its segment of the slot is exactly the byte string a bundled executable carries and `curios_native::run_bytes` deserializes.
     payload: String,
     /// The `ffi` rows the program imports, which is what a link types its marshalling by and holds each answer to: the standard library's that it reaches, which the host answers, and any of a package's own.
     foreigns: ForeignStore,

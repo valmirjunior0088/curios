@@ -1,11 +1,11 @@
 //! Optimize, precompile and run — the native back end, and the reason this crate exists.
 //!
-//! `curios` is the only product that links Cranelift (through `curios-cranelift`) and the only one that links Binaryen (via `curios-binaryen`); `curios-runtime` links neither, and `curios-pipeline` stays clear of both. Everything here is downstream of a `curios_wasm::Module` and indifferent to where one came from — the compiling half is `curios_pipeline::compile_with_prelude` and its siblings, next to the fold it configures.
+//! `curios` is the only product that links Cranelift (through `curios-cranelift`) and the only one that links Binaryen (via `curios-binaryen`); `curios-native` links neither, and `curios-pipeline` stays clear of both. Everything here is downstream of a `curios_wasm::Module` and indifferent to where one came from — the compiling half is `curios_pipeline::compile_with_prelude` and its siblings, next to the fold it configures.
 //!
-//! No wasmtime operation below is spelled here. `curios_runtime::validate`, `curios_cranelift::precompile` and `curios_cranelift::compile` are, because they belong with the engine whose configuration decides what a valid module is and what a `.cwasm` is compatible with; this crate names no wasmtime type at all.
+//! No wasmtime operation below is spelled here. `curios_native::validate`, `curios_cranelift::precompile` and `curios_cranelift::compile` are, because they belong with the engine whose configuration decides what a valid module is and what a `.cwasm` is compatible with; this crate names no wasmtime type at all.
 
 use {
-    curios_abi::ForeignStore, curios_runtime::Compiled, curios_utilities::Fingerprint,
+    curios_abi::ForeignStore, curios_native::Compiled, curios_utilities::Fingerprint,
     std::sync::LazyLock,
 };
 
@@ -29,7 +29,7 @@ pub fn engine() -> &'static str {
 ///
 /// A panic rather than an error: emitting a module that does not validate is the compiler's own broken contract rather than any program's fault, and no caller has a use for it. The check is wasmtime's rather than a second WasmGC validator on [`curios_wasm::Module`] — writing one would mean writing WasmGC subtyping, precisely the part a hand-rolled validator gets permissively wrong, and a validator that certifies wrongly is worse than none. The gap that leaves is `curios-js`, whose browser build links neither Binaryen nor wasmtime (its dependency on the latter is a dev-dependency, for the bridge tests) and so carries a malformed module all the way to `WebAssembly.compile`.
 fn validate(bytes: &[u8]) {
-    if let Err(error) = curios_runtime::validate(bytes) {
+    if let Err(error) = curios_native::validate(bytes) {
         panic!("`into_wasm` emitted a module that does not validate: {error}");
     }
 }
@@ -51,18 +51,18 @@ where
 
 /// `module` optimized with Binaryen, as the bytes Cranelift is handed.
 fn optimized(module: &curios_wasm::Module) -> Vec<u8> {
-    // Keep the name section only when this build is a profiling one: it is what lets a sampling profiler name emitted wasm functions, and it is dead weight in a shipped binary. Same flag as the guest-side perf map in `curios-runtime` and the compiler spans in `curios-profile`, so one feature makes a whole compile-and-run legible.
+    // Keep the name section only when this build is a profiling one: it is what lets a sampling profiler name emitted wasm functions, and it is dead weight in a shipped binary. Same flag as the guest-side perf map in `curios-native` and the compiler spans in `curios-profile`, so one feature makes a whole compile-and-run legible.
     optimize(module, cfg!(feature = "profile"), |_| {})
 }
 
-/// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload a bundled executable carries and a store files, which leaves this process and is read back by [`Compiled::deserialize`]. Uses `curios-runtime`'s shared engine so the precompiled artifact matches the configuration it is deserialized against.
+/// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload a bundled executable carries and a store files, which leaves this process and is read back by [`Compiled::deserialize`]. Uses `curios-native`'s shared engine so the precompiled artifact matches the configuration it is deserialized against.
 pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
     let bytes = optimized(module);
 
     curios_profile::profile!("precompile" => curios_cranelift::precompile(&bytes))
 }
 
-/// Optimize (Binaryen) and compile (Cranelift) a module to the program this process runs, on `curios-runtime`'s shared engine: [`to_cwasm`]'s machine code, held rather than written out, so running it reads nothing back. `foreigns` is the rows the compilation handed back beside `module`, which the program carries to its link.
+/// Optimize (Binaryen) and compile (Cranelift) a module to the program this process runs, on `curios-native`'s shared engine: [`to_cwasm`]'s machine code, held rather than written out, so running it reads nothing back. `foreigns` is the rows the compilation handed back beside `module`, which the program carries to its link.
 pub fn to_compiled(
     module: &curios_wasm::Module,
     foreigns: ForeignStore,
@@ -75,12 +75,12 @@ pub fn to_compiled(
     Ok(Compiled::of(code, foreigns))
 }
 
-/// Compile a module and run it in-process on the shared runtime engine. `foreigns` is the rows the compilation handed back beside it, and `bindings` answers rows ahead of the host, the program's own `foreign` declarations among them (pass [`curios_runtime::ForeignBindings::empty`] where the host answers every row). Returns the process exit code.
-pub fn run_wasm<H: curios_runtime::HostOps + Send + Sync + 'static>(
+/// Compile a module and run it in-process on the shared runtime engine. `foreigns` is the rows the compilation handed back beside it, and `bindings` answers rows ahead of the host, the program's own `foreign` declarations among them (pass [`curios_native::ForeignBindings::empty`] where the host answers every row). Returns the process exit code.
+pub fn run_wasm<H: curios_native::HostOps + Send + Sync + 'static>(
     module: &curios_wasm::Module,
     foreigns: ForeignStore,
     host: H,
-    bindings: curios_runtime::ForeignBindings,
+    bindings: curios_native::ForeignBindings,
 ) -> Result<u8, String> {
     to_compiled(module, foreigns)?.run(host, bindings)
 }

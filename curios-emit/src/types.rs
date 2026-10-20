@@ -1,4 +1,4 @@
-//! The fixed runtime heap-type shapes every emitted module declares: the data representations (`Flt`, the boxed form of a `Nat` or `Int`, packed binary sequences, `List`, `Cell`) whose structure is program-independent, unlike the per-program rows (`tuple/N`, closures, environments, `func/N`) the emitter derives from the module. Kept in one file so the emitter has one spelling for each shape. curios-js's bridge builder imports [`bytes_sub_type`] and declares the same `$bytes` shape: wasm-GC canonicalizes structural types, so any module declaring the exact shape can exchange byte-payload refs with a compiled program. curios-runtime's `host_func_type` mirrors the flat payloads — `$bytes`, `$longs`, `$words` and `$elems` — in wasmtime's type universe; keep that end in sync.
+//! The fixed runtime heap-type shapes every emitted module declares: the data representations (`Flt`, the boxed form of a `Nat` or `Int`, packed binary sequences, `List`, `Cell`) whose structure is program-independent, unlike the per-program rows (`tuple/N`, closures, environments, `func/N`) the emitter derives from the module. Kept in one file so the emitter has one spelling for each shape. curios-js's bridge builder imports [`bytes_sub_type`] and declares the same `$bytes` shape: wasm-GC canonicalizes structural types, so any module declaring the exact shape can exchange byte-payload refs with a compiled program. curios-native's `host_func_type` mirrors the flat payloads — `$bytes`, `$longs`, `$words` and `$elems` — in wasmtime's type universe; keep that end in sync.
 //!
 //! # The rope representation
 //!
@@ -14,7 +14,7 @@
 //!
 //! Naive accumulation loops are therefore O(n) by construction, and so are loops that read what they accumulate and head/tail peel loops (`get` head + `slice` tail): the first peel forces once, every later peel is an O(1) window over the settled payload. There is no compile-time recognition anywhere.
 //!
-//! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are taken exact before the call, a payload exactly its run, and results are embedded into fresh leaves after it), so curios-runtime and the curios-js bridge only ever see flat arrays, each read by its own length.
+//! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are taken exact before the call, a payload exactly its run, and results are embedded into fresh leaves after it), so curios-native and the curios-js bridge only ever see flat arrays, each read by its own length.
 
 use super::{ChannelData, RopeData, concrete_val};
 

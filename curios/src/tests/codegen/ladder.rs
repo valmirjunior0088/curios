@@ -16,7 +16,7 @@
 
 use {
     super::{compile_raw_program, functions, user_allocations, wat},
-    curios_runtime::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, MockHost},
     curios_wasm::to_bytes,
     std::time::Instant,
 };

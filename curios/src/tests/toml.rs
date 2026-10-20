@@ -8,7 +8,7 @@
 
 use {
     super::{compile, run},
-    curios_runtime::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, MockHost},
     curios_utilities::fill,
     std::sync::OnceLock,
 };

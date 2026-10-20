@@ -181,7 +181,7 @@ impl Step {
 }
 
 /// The package the launcher is built from, under its default features alone.
-const LAUNCHER: &str = "curios-runtime";
+const LAUNCHER: &str = "curios-native";
 
 /// What a step that compiles several of the workspace's crates hands cargo: go on past a crate that fails, so one run reports every crate's errors rather than the first's. A test run says the same of its tests with nextest's own flag.
 const KEEP_GOING: &str = "--keep-going";

@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{run, run_text, typecheck},
-    curios_runtime::MockHost,
+    curios_native::MockHost,
     curios_utilities::fill,
 };
 

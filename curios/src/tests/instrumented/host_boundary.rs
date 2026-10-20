@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::tests::{LISTING_PROGRAM, compile},
+    curios_native::{ForeignBindings, MockHost, MockIo},
     curios_profile::{Destination, fold, trace},
-    curios_runtime::{ForeignBindings, MockHost, MockIo},
     std::{
         fs::{File, create_dir_all, write},
         io::{BufReader, BufWriter},

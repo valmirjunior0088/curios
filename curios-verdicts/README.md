@@ -6,7 +6,7 @@ The store as a compilation sees it: the `Cache` the fold consults for units alre
 
 ### Beside the pipeline, over the package, and under neither
 
-**Decision.** This crate depends on `curios-pipeline`, whose `Cache` trait it implements, and on `curios-package`, whose store layout and keys it reads and writes through; neither holds the implementation. It links no back end: `cargo tree -p curios-verdicts --edges normal` contains neither `curios-binaryen` nor `curios-runtime`, and the one machine-dependent fact a payload address carries, the engine that will run it, is handed in by the crate that owns the runtime.
+**Decision.** This crate depends on `curios-pipeline`, whose `Cache` trait it implements, and on `curios-package`, whose store layout and keys it reads and writes through; neither holds the implementation. It links no back end: `cargo tree -p curios-verdicts --edges normal` contains neither `curios-binaryen` nor `curios-native`, and the one machine-dependent fact a payload address carries, the engine that will run it, is handed in by the crate that owns the runtime.
 
 **Rationale.** `Cache` in `curios-package` would make the crate answering what is in a compilation depend on the driver that folds stages over the answer; in `curios-pipeline` it would make the pure fold name a manifest. The `wonder` engine reads verdicts for every question it answers and links neither Binaryen nor Wasmtime, and a store read has no use for either. `curios-package` depends on `curios-text` and so links the surface language, its lowering and `curios-core`; the dependency this boundary keeps out is the driver's.
 

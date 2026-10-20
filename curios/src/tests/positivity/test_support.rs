@@ -1,6 +1,6 @@
 //! The refusal fixtures more than one theme needs.
 
-use {crate::tests::run_text, curios_runtime::MockHost};
+use {crate::tests::run_text, curios_native::MockHost};
 
 /// The declaration in `source` is refused, and by the rule `diagnostic` names.
 ///

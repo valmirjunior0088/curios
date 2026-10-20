@@ -6,7 +6,7 @@ use {
     super::test_support::Lying,
     crate::tests::{run_text, typecheck},
     curios_abi::{Failure, HostOp, TtySize},
-    curios_runtime::MockHost,
+    curios_native::MockHost,
 };
 
 // The palette bound is a decided proposition, so an index past the sixteen is refused where it is written rather than clamped or wrapped at runtime.

@@ -2,7 +2,7 @@
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
-use {crate::tests::run_text, curios_runtime::MockHost};
+use {crate::tests::run_text, curios_native::MockHost};
 
 pub(super) fn rejected(source: &str) {
     let (system, _io) = MockHost::builder().build();

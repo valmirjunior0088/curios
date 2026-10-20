@@ -4,7 +4,7 @@
 //!
 //! **Every row shares three clauses beside its own.** A handle that names nothing, or a resource of a kind that cannot do the operation at all, fails `NotFound` and leaves every resource as it was; a stream used in a direction it is not open for — reading `stdout` or `stderr`, writing `stdin`, or a file against its open mode — fails with `EBADF` through the errno lane, on every host. Every operand is copied in and every reply copied out, so no host keeps a reference to guest memory across a call. An operand that is no value of its type is refused by the host's adapter. A reply is lowered from its own type, which is what makes it a value of the row's wire types, and nothing checks it further: what a row's rustdoc promises beyond its types is its host's to keep, and the hosts' own tests hold them to it.
 //!
-//! The table is an exported X-macro: invoked with the name of a callback macro, it applies that callback to every row. `curios-abi` applies one, generating the [`HostOp`] enum, the roster its accessors read and the [`HostOps`] trait; `curios-runtime` applies its own to bind every import to its method, so the bindings are read off the table too. A callback matches the row grammar and passes each type through untouched — none maps a type to anything — which keeps the table's vocabulary the type system's rather than a macro's.
+//! The table is an exported X-macro: invoked with the name of a callback macro, it applies that callback to every row. `curios-abi` applies one, generating the [`HostOp`] enum, the roster its accessors read and the [`HostOps`] trait; `curios-native` applies its own to bind every import to its method, so the bindings are read off the table too. A callback matches the row grammar and passes each type through untouched — none maps a type to anything — which keeps the table's vocabulary the type system's rather than a macro's.
 //!
 //! A row whose reply is a [`Termination`] diverges: its call never returns, which is distinct from a row returning nothing, and it crosses no result. `proc_exit` is the one such row. No host implementation can return into the guest, since nothing but the adapter's guest-exit trap is made of a termination, and the guest holds no code for a return from it.
 //!
@@ -23,7 +23,7 @@ use {
 
 /// The one authored table of the host's operations. Invoked with the name of a callback macro (`for_each_host_op!(my_callback)`), it applies that callback to the whole table, so every projection comes off this single source. Each row is `Variant: fn method(param: Type, …) -> Reply { module: path, yields: label }`, `yields` there where the reply's type takes a label: the variant is the row's [`HostOp`], the method name the [`HostOps`] method and the label `module` declares the row by, and the brace group holds what the types cannot say.
 ///
-/// Exported so `curios-runtime` can generate its bindings from the rows it binds, and hidden because nothing else should read the table as tokens: every other consumer reads [`HostOp`] and [`HostOps`]. A callback must have in scope every type it expands, since the rows expand where the callback does.
+/// Exported so `curios-native` can generate its bindings from the rows it binds, and hidden because nothing else should read the table as tokens: every other consumer reads [`HostOp`] and [`HostOps`]. A callback must have in scope every type it expands, since the rows expand where the callback does.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! for_each_host_op {

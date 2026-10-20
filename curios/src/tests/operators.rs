@@ -1,6 +1,6 @@
 use {
     super::{error, run, run_text, typecheck_within},
-    curios_runtime::MockHost,
+    curios_native::MockHost,
 };
 
 #[test]

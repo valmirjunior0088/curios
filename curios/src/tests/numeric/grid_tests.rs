@@ -2,8 +2,8 @@
 
 use {
     crate::tests::run_text,
+    curios_native::MockHost,
     curios_num::{Floating, Integer, Natural, Rounding},
-    curios_runtime::MockHost,
 };
 
 /// The program under test: it reads `x y` pairs separated by `;` from its one line of input, so no operand is a literal a folder could reach, and prints one line of results per pair, in the order [`expected`] lists them.

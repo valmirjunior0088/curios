@@ -4,8 +4,8 @@
 
 use {
     super::{cont_optm, run},
+    curios_native::{ForeignBindings, MockHost},
     curios_pipeline::{Stage, compile_with_prelude},
-    curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
 };
 

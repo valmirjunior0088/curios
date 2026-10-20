@@ -3,7 +3,7 @@
 use {
     super::test_support::{ARRIVAL, BYTES, extends_in_place, reads_in_every_shape},
     crate::tests::{run, run_text},
-    curios_runtime::MockHost,
+    curios_native::MockHost,
 };
 
 #[test]

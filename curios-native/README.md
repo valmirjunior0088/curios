@@ -1,4 +1,4 @@
-# curios-runtime
+# curios-native
 
 The runtime-only Curios engine: deserialize a precompiled `.cwasm` module and run it on embedded Wasmtime, answering the rows it imports, plus the slim launcher the native compiler embeds into bundled executables. Host bindings and the bundle payload format belong to the crate rustdoc.
 

@@ -208,7 +208,7 @@ fn feed_declared(fingerprint: &mut Fingerprint, declared: Option<&[Qualifier]>) 
 ///
 /// **The executable's identity is its package's name and its own**, never a path. That pair is the one identity in a compilation that cannot collide (law 2), which is why two executables of one package occupy two slots and why nothing has to refuse an umbrella whose members both declare `serve`. A path here would key the payload on where a project sits rather than on what it builds.
 ///
-/// **The engine fingerprint is the part [`unit_slot`] has no counterpart for.** A unit is a judgment and travels anywhere the compiler binary does; a payload is machine code, and Cranelift compiled it for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. It rides here as an opaque string because deciding what makes two engines compatible is `curios-runtime`'s to answer, this crate's only job being to keep the answer in the address.
+/// **The engine fingerprint is the part [`unit_slot`] has no counterpart for.** A unit is a judgment and travels anywhere the compiler binary does; a payload is machine code, and Cranelift compiled it for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. It rides here as an opaque string because deciding what makes two engines compatible is `curios-native`'s to answer, this crate's only job being to keep the answer in the address.
 pub fn payload_slot(compiler: &str, package: &str, executable: &str, engine: &str) -> String {
     let mut fingerprint = Fingerprint::new();
 

@@ -10,8 +10,8 @@ use runner::*;
 use {
     crate::std_directory,
     curios::run_wasm,
+    curios_native::{ForeignBindings, MockHost},
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
-    curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, Formatted, Overlay, RootSource},
     curios_unicode::{
         east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,

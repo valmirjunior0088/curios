@@ -4,9 +4,9 @@
 
 use {
     crate::run_wasm,
+    curios_native::{ForeignBindings, MockHost},
     curios_package::{Entry, Selection, Spelling},
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold, Progress},
-    curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, Overlay, RootSource},
     curios_utilities::test_support::Temporary,
     curios_verdicts::Verdicts,

@@ -2,7 +2,7 @@
 
 use {
     curios_abi::{ENTRY, HostOp, PANIC},
-    curios_runtime::test_support::{GuestInstance, GuestValue},
+    curios_native::test_support::{GuestInstance, GuestValue},
     curios_utilities::fill,
     curios_wasm::{CompType, Export, SubType, TypeName},
 };

@@ -1,6 +1,6 @@
 //! Scaffolding for tests that pin what this crate built: a structural digest of a module, and assertions over the door's sequence-usage census.
 //!
-//! A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: nothing here collides with anything, but `curios_ersd::test_support::shape` says at its use site that the caller reached for scaffolding rather than product API. The census's admission is spelling-sensitive by necessity — a spread of a field's value is structurally indistinguishable from the builder-accumulator cliff — so a respelling can silently unmark a field, and the cost surfaces only in a profile. This surface is the loud guard: a test states the verdict it relies on, by name, and a breaking respelling fails it instead of quietly regressing.
+//! A namespace rather than a root export, for `curios-native`'s `test_support` reason: nothing here collides with anything, but `curios_ersd::test_support::shape` says at its use site that the caller reached for scaffolding rather than product API. The census's admission is spelling-sensitive by necessity — a spread of a field's value is structurally indistinguishable from the builder-accumulator cliff — so a respelling can silently unmark a field, and the cost surfaces only in a profile. This surface is the loud guard: a test states the verdict it relies on, by name, and a breaking respelling fails it instead of quietly regressing.
 
 use {
     super::{

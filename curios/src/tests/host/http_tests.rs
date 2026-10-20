@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{compile, typecheck},
-    curios_runtime::{Compiled, ForeignBindings, MockHost, MockHostBuilder, SocketEvent},
+    curios_native::{Compiled, ForeignBindings, MockHost, MockHostBuilder, SocketEvent},
     curios_utilities::fill,
 };
 

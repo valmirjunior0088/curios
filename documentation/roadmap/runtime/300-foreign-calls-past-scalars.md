@@ -4,7 +4,7 @@
 
 ## The ceiling
 
-A `foreign` declaration answered by a plugin — a WebAssembly module a package names in its manifest, filled into `curios-runtime`'s `ForeignBindings` — may take and answer scalars and byte strings. A `Handle`, a `List` and several results at once are each refused where the signature is read, because marshalling is the host copying between the guest's GC array and the plugin's linear memory, and only those shapes have a copy.
+A `foreign` declaration answered by a plugin — a WebAssembly module a package names in its manifest, filled into `curios-native`'s `ForeignBindings` — may take and answer scalars and byte strings. A `Handle`, a `List` and several results at once are each refused where the signature is read, because marshalling is the host copying between the guest's GC array and the plugin's linear memory, and only those shapes have a copy.
 
 ## Refinement
 

@@ -1,11 +1,11 @@
 ---
 paths:
   - "curios-abi/**"
-  - "curios-runtime/src/host.rs"
-  - "curios-runtime/src/os_host*"
-  - "curios-runtime/src/os_host/**"
-  - "curios-runtime/src/mock_host*"
-  - "curios-runtime/src/mock_host/**"
+  - "curios-native/src/host.rs"
+  - "curios-native/src/os_host*"
+  - "curios-native/src/os_host/**"
+  - "curios-native/src/mock_host*"
+  - "curios-native/src/mock_host/**"
   - "curios-js/src/**"
 ---
 

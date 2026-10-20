@@ -1,13 +1,13 @@
 //! The launcher stub. A bundled Curios executable is this binary with a program's payload, the modules answering its `foreign` declarations, and the record naming them appended to its tail (see `curios`'s `compile` subcommand). At startup it reads its own image, recovers that bundle, links the modules, and runs the program on the runtime-only engine.
 
 use {
-    curios_runtime::{
+    curios_native::{
         Bundle, Compiled, DeclaredModule, MachineCode, OsHost, extract_bundle, plugin_bindings,
     },
     std::{env, ffi::OsString, fs, process::ExitCode},
 };
 
-/// Recover the appended bundle from this executable's own tail. The tail format lives in `curios_runtime::bundle`, shared with the bundler.
+/// Recover the appended bundle from this executable's own tail. The tail format lives in `curios_native::bundle`, shared with the bundler.
 fn bundle() -> Result<Bundle, String> {
     let exe =
         env::current_exe().map_err(|error| format!("cannot locate own executable: {error}"))?;

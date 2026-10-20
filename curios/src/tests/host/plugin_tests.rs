@@ -4,8 +4,8 @@
 
 use {
     crate::tests::run_wasm,
+    curios_native::{DeclaredModule, MockHost, plugin_bindings},
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{DeclaredModule, MockHost, plugin_bindings},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::{
         AddressType, CompType, Export, Expr, Func, FuncName, FuncType, Instr, Limits, MemName,

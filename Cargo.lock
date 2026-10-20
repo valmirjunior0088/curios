@@ -570,11 +570,11 @@ dependencies = [
  "curios-elab",
  "curios-emit",
  "curios-ersd",
+ "curios-native",
  "curios-num",
  "curios-package",
  "curios-pipeline",
  "curios-profile",
- "curios-runtime",
  "curios-std",
  "curios-text",
  "curios-utilities",
@@ -676,7 +676,7 @@ dependencies = [
 name = "curios-cranelift"
 version = "0.16.9"
 dependencies = [
- "curios-runtime",
+ "curios-native",
  "wasmtime",
 ]
 
@@ -736,13 +736,31 @@ dependencies = [
  "curios-abi",
  "curios-cranelift",
  "curios-emit",
+ "curios-native",
  "curios-pipeline",
- "curios-runtime",
  "curios-text",
  "curios-utilities",
  "curios-wasm",
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "curios-native"
+version = "0.16.9"
+dependencies = [
+ "curios-abi",
+ "curios-archive",
+ "curios-utilities",
+ "getrandom 0.4.3",
+ "log",
+ "rustix",
+ "rustls",
+ "rustls-pemfile",
+ "signal-hook",
+ "socket2",
+ "wasmtime",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -845,31 +863,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "curios-runtime"
-version = "0.16.9"
-dependencies = [
- "curios-abi",
- "curios-archive",
- "curios-utilities",
- "getrandom 0.4.3",
- "log",
- "rustix",
- "rustls",
- "rustls-pemfile",
- "signal-hook",
- "socket2",
- "wasmtime",
- "webpki-roots",
-]
-
-[[package]]
 name = "curios-std"
 version = "0.16.9"
 dependencies = [
  "curios",
+ "curios-native",
  "curios-package",
  "curios-pipeline",
- "curios-runtime",
  "curios-text",
  "curios-unicode",
  "curios-utilities",

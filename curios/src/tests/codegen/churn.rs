@@ -1,11 +1,11 @@
-//! Runtime measurements behind `curios-runtime/README.md`'s decision "The heap is sized ahead of its churn": the collection decomposition of `chain` and `spines` under differently sized heaps, and the pinned absence of allocation in `churn`'s threaded-record loop. Both count the engine's collections through `curios_runtime::test_support::collected`, which hears the engine's own announcements.
+//! Runtime measurements behind `curios-native/README.md`'s decision "The heap is sized ahead of its churn": the collection decomposition of `chain` and `spines` under differently sized heaps, and the pinned absence of allocation in `churn`'s threaded-record loop. Both count the engine's collections through `curios_native::test_support::collected`, which hears the engine's own announcements.
 //!
 //! What the thirty-two-mebibyte initial heap buys: under death-birth churn an unsized heap parks within a doubling of the live set and the collector recopies it continually; sized, those collections are gone, the allocation-free `churn` does not move — the empirical pin on its exit from the churn class — and `trees` gains little, because an all-live tree must outgrow any constant.
 
 use {
     crate::to_compiled,
+    curios_native::{Compiled, ForeignBindings, MockHost, test_support::collected},
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
-    curios_runtime::{Compiled, ForeignBindings, MockHost, test_support::collected},
     curios_text::{Entrypoint, RootSource},
     std::time::Instant,
 };
@@ -133,11 +133,11 @@ fn collections(compiled: &Compiled, k: u64) -> (usize, Option<String>) {
 ///
 /// `--release` is load-bearing: the collector under measurement is host-side wasmtime code, and a debug build inflates exactly the share this probe exists to isolate.
 ///
-/// Three arrangements run the identical churn phase — `ROUNDS` rounds over the harness's 10 000-cell chain — inside heaps the dead ballast pre-grows to different sizes, and the churn cost is the K = `ROUNDS` time minus the K = 0 time, which cancels startup and the ballast phase itself. Collections are counted from the engine's own `Begin GC` records through `curios_runtime::test_support::collected`, in separate runs so the raised log level never touches a timed figure.
+/// Three arrangements run the identical churn phase — `ROUNDS` rounds over the harness's 10 000-cell chain — inside heaps the dead ballast pre-grows to different sizes, and the churn cost is the K = `ROUNDS` time minus the K = 0 time, which cancels startup and the ballast phase itself. Collections are counted from the engine's own `Begin GC` records through `curios_native::test_support::collected`, in separate runs so the raised log level never touches a timed figure.
 ///
 /// # What it last printed
 ///
-/// Taken on top of `9c543476a` on an x86-64 Linux dev machine at a load average under two, wasmtime 47.0.3 with the thirty-two-mebibyte default (see `curios-runtime/README.md`), the command above:
+/// Taken on top of `9c543476a` on an x86-64 Linux dev machine at a load average under two, wasmtime 47.0.3 with the thirty-two-mebibyte default (see `curios-native/README.md`), the command above:
 ///
 /// ```text
 /// == chain collection decomposition (K = 400)

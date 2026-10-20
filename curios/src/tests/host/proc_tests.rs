@@ -3,8 +3,8 @@
 use {
     crate::tests::{run, run_text, typecheck},
     curios_abi::ChildExit,
+    curios_native::{ForeignBindings, MockHost},
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
     std::num::NonZeroU32,

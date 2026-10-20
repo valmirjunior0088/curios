@@ -73,8 +73,8 @@ mod wasm_conformance;
 
 use {
     crate::{run_wasm, to_compiled},
+    curios_native::{Compiled, ForeignBindings, HostOps, MockHost, TestEnd},
     curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold, Stage, compile_with_prelude},
-    curios_runtime::{Compiled, ForeignBindings, HostOps, MockHost, TestEnd},
     curios_text::{Entrypoint, RootSource},
 };
 

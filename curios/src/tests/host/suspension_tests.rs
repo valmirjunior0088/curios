@@ -3,8 +3,8 @@
 use {
     crate::run_wasm,
     curios_abi::ForeignStore,
+    curios_native::{ForeignBindings, HostOps, MockHost, OsHost, blocking},
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
-    curios_runtime::{ForeignBindings, HostOps, MockHost, OsHost, blocking},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
 };

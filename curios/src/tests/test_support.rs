@@ -6,7 +6,7 @@ use {
         Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
         TtySize, for_each_host_op,
     },
-    curios_runtime::MockHost,
+    curios_native::MockHost,
     std::{any::Any, sync::Mutex},
 };
 

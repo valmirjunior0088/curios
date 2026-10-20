@@ -2,8 +2,8 @@
 
 use {
     crate::{run_wasm, tests::typecheck},
+    curios_native::{ForeignBindings, MockHost, MockHostBuilder},
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
-    curios_runtime::{ForeignBindings, MockHost, MockHostBuilder},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
 };

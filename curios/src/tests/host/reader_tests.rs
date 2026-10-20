@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{compile, run_text},
-    curios_runtime::{ForeignBindings, MockHost},
+    curios_native::{ForeignBindings, MockHost},
     curios_utilities::fill,
 };
 

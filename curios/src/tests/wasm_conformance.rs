@@ -1,11 +1,11 @@
 //! `curios-wasm`'s encoder, checked against the engine that has to accept what it writes — chiefly the memory, table, and segment surface, and anything else whose encoding the engine can tell apart from a plausible wrong one.
 //!
-//! These probes live here rather than in `curios-wasm` because that crate must not name wasmtime — the pin is `curios-runtime`'s single row — and `curios_runtime::validate` is the only thing that reads an encoded module back. With no binary reader in the tree, acceptance by the engine *is* the binary-side check: a flag byte, a limits header, or a memarg written wrong is a validation failure here rather than a silent miscompile later.
+//! These probes live here rather than in `curios-wasm` because that crate must not name wasmtime — the pin is `curios-native`'s single row — and `curios_native::validate` is the only thing that reads an encoded module back. With no binary reader in the tree, acceptance by the engine *is* the binary-side check: a flag byte, a limits header, or a memarg written wrong is a validation failure here rather than a silent miscompile later.
 //!
 //! Each module is written in the crate's own WAT dialect and parsed, so one source string exercises the parser, the printer's inverse, and the encoder at once.
 
 use {
-    curios_runtime::validate,
+    curios_native::validate,
     curios_wasm::{Module, to_bytes},
 };
 

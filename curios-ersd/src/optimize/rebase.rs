@@ -8,7 +8,7 @@
 //!      rec w(x, a, b) = … w(t, a ⊕ l, r ⊕ b) …     (base arms return a ⊕ v ⊕ b)
 //! ```
 //!
-//! A cost transform, not a correctness one: a module runs on a stack of its own, which holds a recursion left as written at any depth a program meets ([`curios-runtime`'s README](../../../curios-runtime/README.md#a-module-runs-on-a-stack-of-its-own)), and what the rewrite removes is a frame and a return an element, and the stack the depth touches. It is sound-but-incomplete: outside the recognized envelope it is a no-op, never a miscompile.
+//! A cost transform, not a correctness one: a module runs on a stack of its own, which holds a recursion left as written at any depth a program meets ([`curios-native`'s README](../../../curios-native/README.md#a-module-runs-on-a-stack-of-its-own)), and what the rewrite removes is a frame and a return an element, and the stack the depth touches. It is sound-but-incomplete: outside the recognized envelope it is a no-op, never a miscompile.
 //!
 //! **The envelope, structural in ANF.** A leaf tail block ends in a self-call followed by a chain of combines of one monoid — each reading the answer of the one before it, the call's first, exactly once and in a place the monoid's product takes, every other operand a value from before the call — and returns the chain's last answer; or it ends in a bare tail self-call; or it is a base. The chain is one word `l ⊕ □ ⊕ r` of the monoid, its later links wrapping the earlier: `l₂ ⊕ (l₁ ⊕ □ ⊕ r₁) ⊕ r₂`. Only the combines move across the call, so nothing observable is reordered: Koka's liberal context, whose operands after the hole are values. Every combine leaf shares one monoid, and every self-reference in the function's whole region stands on the spine.
 //!

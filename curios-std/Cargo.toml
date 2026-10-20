@@ -17,7 +17,7 @@ curios-package = { workspace = true }
 [dev-dependencies]
 curios = { workspace = true }
 curios-pipeline = { workspace = true }
-curios-runtime = { workspace = true }
+curios-native = { workspace = true }
 curios-wonder = { workspace = true }
 # The conformance cases `/std/Str/graphemes` is held to, and the lookups `/std/Char`'s answers are compared with.
 curios-unicode = { workspace = true, features = ["test-support"] }

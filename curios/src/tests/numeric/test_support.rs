@@ -6,7 +6,7 @@
 
 use {
     crate::tests::compile,
-    curios_runtime::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, MockHost},
     curios_utilities::fill,
 };
 
