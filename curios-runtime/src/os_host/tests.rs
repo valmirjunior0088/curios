@@ -144,7 +144,7 @@ fn a_taken_terminal_is_given_back_with_its_leave_bytes_and_its_settings() {
 /// The pseudo-terminal the child half of [`a_terminating_signal_gives_back_every_terminal_taken`] takes, named by the variable its parent sets.
 const SIGNALLED_TERMINAL: &str = "CURIOS_TEST_SIGNALLED_TERMINAL";
 
-/// Bytes the near end of a pseudo-terminal reads within ten seconds, until they end with `marker`; a child that never writes it fails the test rather than holding it.
+/// Bytes the near end of a pseudo-terminal reads within ten seconds, until they end with `marker`; a child that never writes it, or a far end that ends first, fails the test rather than holding it.
 fn read_until(near: &OwnedFd, marker: &[u8]) -> Vec<u8> {
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut seen = Vec::new();
@@ -156,10 +156,22 @@ fn read_until(near: &OwnedFd, marker: &[u8]) -> Vec<u8> {
         }];
         let ready = ready(&watched, Some(deadline)).expect("the near end is waited on");
         assert!(!ready.is_empty(), "nothing arrived in time; read {seen:?}");
-        seen.extend(written_to(near));
+        let read = written_to(near);
+        assert!(!read.is_empty(), "the far end ended first; read {seen:?}");
+        seen.extend(read);
     }
 
     seen
+}
+
+/// The far end of the pseudo-terminal named `name`, opened apart from any host. On macOS a terminal's last close discards what its near end has not read, so a test holds one, as a shell holds a program's terminal, to read what a host leaves.
+fn far_end(name: &[u8]) -> fs::File {
+    fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(OFlags::NOCTTY.bits().cast_signed())
+        .open(OsStr::from_bytes(name))
+        .expect("the far end opens")
 }
 
 /// A process ended by a terminating signal gives back every terminal it took first, then ends by that signal. A test cannot outlive the signal it sends itself, so its child is this test's own binary run again: given a pseudo-terminal by the variable above, it takes the terminal and waits, and the parent sends it SIGTERM and finds the terminal as the child found it, its leave bytes written.
@@ -176,6 +188,7 @@ fn a_terminating_signal_gives_back_every_terminal_taken() {
     }
 
     let (near, name) = pseudo_terminal();
+    let held = far_end(&name);
     let mut child = std::process::Command::new(env::current_exe().unwrap())
         .args([
             "--exact",
@@ -202,33 +215,22 @@ fn a_terminating_signal_gives_back_every_terminal_taken() {
         Some(SIGTERM)
     );
     assert_eq!(read_until(&near, b"\x1b[?1049l"), b"\x1b[?1049l");
-    let reopened = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .custom_flags(OFlags::NOCTTY.bits().cast_signed())
-        .open(OsStr::from_bytes(&name))
-        .expect("the far end opens again");
-    assert!(cooked(reopened.as_fd()));
+    assert!(cooked(held.as_fd()));
 }
 
 /// A host dropped with a terminal still taken gives it back, as a trap or an `exit` drops it: the leave bytes reach the terminal and its settings are the ones it had.
 #[test]
 fn a_dropped_host_gives_back_every_terminal_still_taken() {
     let (near, name) = pseudo_terminal();
+    let held = far_end(&name);
     let host = OsHost::with_args(vec![]);
-    let far = host.file_open(name.clone(), Mode::ReadWrite).unwrap();
+    let far = host.file_open(name, Mode::ReadWrite).unwrap();
 
     assert_eq!(host.tty_take(far, b"\x1b[?25h".to_vec()), Ok(()));
     drop(host);
 
-    let reopened = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .custom_flags(OFlags::NOCTTY.bits().cast_signed())
-        .open(OsStr::from_bytes(&name))
-        .expect("the far end opens again");
-    assert!(cooked(reopened.as_fd()));
-    assert_eq!(written_to(&near), b"\x1b[?25h");
+    assert_eq!(read_until(&near, b"\x1b[?25h"), b"\x1b[?25h");
+    assert!(cooked(held.as_fd()));
 }
 
 /// A piped child stream is filed non-blocking by `proc_spawn`: before the child writes, a read answers `WouldBlock` instead of blocking the caller; bytes it echoes come back through `handle_read` once a watch of it is ready; closing its stdin ends it, its stdout reads to its end, and `proc_wait` reaps it. These streams are what let a drain suspend instead of blocking the run.
