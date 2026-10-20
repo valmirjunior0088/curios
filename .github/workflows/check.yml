@@ -37,6 +37,9 @@ jobs:
           tool: ${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
+          workspaces: |
+            .
+            xtask
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -62,6 +65,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: runtime-macos
+          workspaces: |
+            .
+            xtask
       - name: Lint the runtime
         run: cargo xtask workspace lint curios-native
       - name: Test the runtime
@@ -81,6 +87,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: instrumented
+          workspaces: |
+            .
+            xtask
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -103,6 +112,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: compiler
+          workspaces: |
+            .
+            xtask
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -120,6 +132,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: docs
+          workspaces: |
+            .
+            xtask
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -140,6 +155,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
+          workspaces: |
+            .
+            xtask
       - name: Build
         run: cargo xtask bundle build
       - name: Test
@@ -161,6 +179,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: xtask
+          workspaces: xtask
       - name: Install
         run: cargo xtask grammar install
       - name: Check formatting
@@ -186,6 +205,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: xtask
+          workspaces: xtask
       - name: Install
         run: cargo xtask vscode install
       - name: Check formatting
@@ -203,13 +223,18 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE }}
+          cache: npm
+          cache-dependency-path: editors/grammar/package-lock.json
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-wasip2
           workspaces: |
-            .
+            xtask
             editors/zed
       - name: Check formatting
         run: cargo xtask zed format --check
@@ -217,5 +242,30 @@ jobs:
         run: cargo xtask zed lint
       - name: Build
         run: cargo xtask zed build
+      # The extension is held to the grammar `grammar build` generates, which needs the grammar's tools.
+      - name: Install the grammar's tools
+        run: cargo xtask grammar install
       - name: Check the extension against the tree
         run: cargo xtask zed test
+
+  xtask:
+    name: Recipes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: ${{ env.NEXTEST }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: xtask
+          workspaces: xtask
+      - name: Check formatting
+        run: cargo xtask xtask format --check
+      - name: Lint
+        run: cargo xtask xtask lint
+      - name: Test
+        run: cargo xtask xtask test

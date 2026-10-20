@@ -8,10 +8,10 @@ use {
     crate::{
         BIOME, BROWSER_TRIPLE, HOST_TRIPLE, Step, Tree, artifact, ask, bindgen_web, built, cargo,
         file_with_inputs, grammar, inputs, modified, root, run, spelled, target_directory, vscode,
-        zed,
+        xtask, zed,
     },
     clap::ValueEnum,
-    std::{fs, io::ErrorKind, path::Path, process::Command},
+    std::{fs, path::Path, process::Command, time::Instant},
 };
 
 #[cfg(test)]
@@ -24,8 +24,10 @@ pub(crate) struct Request {
     pub(crate) check: bool,
     /// The one package of the workspace a lint or a test is narrowed to.
     pub(crate) package: Option<String>,
-    /// The text a test's path must hold for it to run.
-    pub(crate) filter: Option<String>,
+    /// What a test's path must hold for it to run; with [`Request::binary`], one of them is enough, and nothing narrows a run when both are empty.
+    pub(crate) filter: Vec<String>,
+    /// The test binaries whose tests run, by name.
+    pub(crate) binary: Vec<String>,
 }
 
 impl Request {
@@ -34,7 +36,8 @@ impl Request {
         Self {
             check: true,
             package: None,
-            filter: None,
+            filter: Vec::new(),
+            binary: Vec::new(),
         }
     }
 
@@ -46,18 +49,25 @@ impl Request {
         }
     }
 
-    /// An action narrowed to a package, a test to the paths holding `filter`.
-    pub(crate) fn narrowed(package: Option<String>, filter: Option<String>) -> Self {
+    /// An action narrowed to a package built alone, and a test run to the tests a path of `filter` or a binary of `binary` selects.
+    pub(crate) fn narrowed(
+        package: Option<String>,
+        filter: Vec<String>,
+        binary: Vec<String>,
+    ) -> Self {
         Self {
             package,
             filter,
+            binary,
             ..Self::whole()
         }
     }
-}
 
-/// The base a step's path condition is read against: local `main`, which is where a branch started.
-const BASE: &str = "main";
+    /// Whether nothing narrows a test run by name.
+    fn unselected(&self) -> bool {
+        self.filter.is_empty() && self.binary.is_empty()
+    }
+}
 
 /// `asked` with every step they are run with first, in the table's order and each once.
 pub(crate) fn closed(asked: &[Step]) -> Vec<Step> {
@@ -79,45 +89,65 @@ pub(crate) fn closed(asked: &[Step]) -> Vec<Step> {
         .collect()
 }
 
-/// Why `step` is not to run, where its row's condition says so: nothing it reads differs between [`BASE`] and the working tree. A base that is no revision here spares it too, and says so: a shallow checkout holds nothing to compare with, and the step such a condition guards is one too costly to run on a guess.
-fn spared(step: Step) -> Option<String> {
-    let read = step.row().when?;
-    let mut git = Command::new("git");
-    git.args(["diff", "--name-only", BASE]);
-
-    match ask(git, &[]) {
-        Ok(changed) if changed.lines().any(|path| read.contains(&path)) => None,
-        Ok(_) => Some(format!("nothing it reads changed since {BASE}")),
-        Err(_) => Some(format!(
-            "`{BASE}` is no revision here to compare the working tree with"
-        )),
-    }
+/// The first step `step` ensures that failed or was not run, where there is one: what `step` reads is then not there.
+fn blocked(step: Step, failed: &[Step], unrun: &[Step]) -> Option<Step> {
+    step.row()
+        .ensures
+        .iter()
+        .copied()
+        .find(|ensured| failed.contains(ensured) || unrun.contains(ensured))
 }
 
-/// Run `asked` and what they are run with first, as `request` narrows them. A step a path condition holds back is skipped, and said to be; one lacking a tool it needs is refused with what installs it.
+/// Run `asked` and what they are run with first, as `request` narrows them, each to its end whatever the one before it did, and say of each how it ended and in how long. A step lacking a tool it needs is refused with what installs it, and a step whose prerequisite did not pass is not run, since what it reads is not there: the steps that read nothing of the failure go on, and the end names both lists.
 pub(crate) fn perform(asked: &[Step], request: &Request) -> Result<(), String> {
     let mut failed = Vec::new();
+    let mut unrun = Vec::new();
 
     for step in closed(asked) {
-        if let Some(reason) = spared(step) {
-            eprintln!("skipped {}: {reason}", spelled(step));
+        if let Some(missing) = blocked(step, &failed, &unrun) {
+            eprintln!(
+                "{} not run: {} did not pass",
+                spelled(step),
+                spelled(missing)
+            );
+            unrun.push(step);
             continue;
         }
 
+        let started = Instant::now();
         let unready = step.row().needs.iter().find_map(|tool| tool.ready().err());
         let outcome = match unready {
             Some(refusal) => Err(refusal),
             None => step.run(request),
         };
-        if let Err(message) = outcome {
-            eprintln!("{message}");
-            failed.push(spelled(step));
+        let took = started.elapsed().as_secs_f64();
+
+        match outcome {
+            Ok(()) => eprintln!("{} passed in {took:.1}s", spelled(step)),
+            Err(message) => {
+                eprintln!("{message}");
+                eprintln!("{} failed in {took:.1}s", spelled(step));
+                failed.push(step);
+            }
         }
     }
 
-    match failed.is_empty() {
-        true => Ok(()),
-        false => Err(format!("failed: {}", failed.join(", "))),
+    let named = |steps: &[Step]| {
+        steps
+            .iter()
+            .map(|step| spelled(*step))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+
+    match (failed.is_empty(), unrun.is_empty()) {
+        (true, true) => Ok(()),
+        (false, true) => Err(format!("failed: {}", named(&failed))),
+        (_, false) => Err(format!(
+            "failed: {}; not run: {}",
+            named(&failed),
+            named(&unrun)
+        )),
     }
 }
 
@@ -140,7 +170,11 @@ impl Step {
                 Some(_) => Ok(()),
                 None => biome_linting(Tree::Workspace),
             },
-            Step::WorkspaceTest => cargo(&testing(package, request.filter.as_deref())),
+            Step::WorkspaceTest => {
+                let arguments = testing(package, request)?;
+
+                cargo(&arguments.iter().map(String::as_str).collect::<Vec<_>>())
+            }
             Step::InstrumentedLint => cargo(&[
                 "clippy",
                 "--workspace",
@@ -153,9 +187,9 @@ impl Step {
             Step::CompilerBuild => {
                 cargo(&["build", "--release", "--package", "curios", KEEP_GOING])
             }
-            // Whoever narrows the run asks about a package's tests or one test's, which the cache of another crate's build script is not.
-            Step::WorkspaceBinaryenCache => match (package, request.filter.as_deref()) {
-                (None, None) => binaryen_cache(),
+            // Whoever narrows the run asks about a package's tests or some test's, which the cache of another crate's build script is not.
+            Step::WorkspaceBinaryenCache => match (package, request.unselected()) {
+                (None, true) => binaryen_cache(),
                 _ => Ok(()),
             },
             Step::BundleBuild => bundle_build(),
@@ -166,6 +200,7 @@ impl Step {
             Step::GrammarInstall => grammar(&["clean-install"]),
             Step::GrammarFormat => biome_formatting(Tree::Grammar, request.check),
             Step::GrammarLint => biome_linting(Tree::Grammar),
+            Step::GrammarBuild => grammar(&["run", "generate"]),
             Step::GrammarTest => grammar(&["test"]),
             Step::VscodeInstall => vscode(&["clean-install"]),
             Step::VscodeFormat => biome_formatting(Tree::Vscode, request.check),
@@ -176,6 +211,9 @@ impl Step {
             Step::ZedLint => zed(&["clippy", "--all-targets", "--target", EXTENSION_TRIPLE]),
             Step::ZedBuild => zed(&["build", "--release", "--target", EXTENSION_TRIPLE]),
             Step::ZedTest => zed(&["test"]),
+            Step::XtaskFormat => xtask(&formatting(request.check)),
+            Step::XtaskLint => xtask(&["clippy", "--all-targets"]),
+            Step::XtaskTest => xtask(&["nextest", "run", "--no-fail-fast"]),
         }
     }
 }
@@ -296,14 +334,43 @@ fn linting(package: Option<&str>) -> Vec<&str> {
 ///
 /// **Nextest rather than `cargo test`, for a process to a test.** Binaryen's settings are the process's and its optimizer serializes behind a lock, so tests that share a process queue for it, and a test that aborts — Binaryen answering a module it cannot parse with a C++ `assert` — takes every other result of its binary with it. Under nextest each test is a process of its own: the suite runs on every core, and an abort fails by name.
 ///
-/// The filter is last because nextest reads what follows its options as the names to match, and it is one narrowing rather than a tail: the action takes a single name and places it. A selection that matches nothing warns rather than fails, because a package with no test of its own is rightly empty, and nextest's own default would fail the run that named it.
-fn testing<'a>(package: Option<&'a str>, filter: Option<&'a str>) -> Vec<&'a str> {
-    ["nextest", "run"]
+/// **A name picks tests out of one build and never changes it.** A filter becomes nextest's matcher of a test's path and a binary its matcher of a binary's name, so the bundle suite, whose tests carry no word of their binary's name, is `--binary bundle`; all of them are one union, one run however many are named, and a binary no build has is nextest's own refusal. A package is the other narrowing and a build of its own, which a job on one machine asks for and a question about a few tests should not. A selection that matches nothing warns rather than fails, because a package with no test of its own is rightly empty, and nextest's own default would fail the run that named it.
+fn testing(package: Option<&str>, request: &Request) -> Result<Vec<String>, String> {
+    let mut arguments = ["nextest", "run"]
         .into_iter()
         .chain(scope(package))
         .chain(["--all-targets", "--no-fail-fast", "--no-tests=warn"])
-        .chain(filter)
-        .collect()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    if !request.unselected() {
+        arguments.extend(["-E".to_string(), selecting(request)?]);
+    }
+
+    Ok(arguments)
+}
+
+/// The filterset that runs a test one of `request`'s filters is part of the path of, or one of its binaries is the name of. A name holding a character the filterset's grammar reads — a parenthesis or a comma — is refused, since no test's path or binary's name holds one.
+fn selecting(request: &Request) -> Result<String, String> {
+    let names = request.filter.iter().chain(&request.binary);
+
+    match names.clone().find(|name| name.contains(['(', ')', ','])) {
+        Some(name) => Err(format!(
+            "{name:?} holds a parenthesis or a comma, which no test's path or binary's name does"
+        )),
+        None => Ok(request
+            .filter
+            .iter()
+            .map(|filter| format!("test(~{filter})"))
+            .chain(
+                request
+                    .binary
+                    .iter()
+                    .map(|binary| format!("binary(={binary})")),
+            )
+            .collect::<Vec<_>>()
+            .join(" | ")),
+    }
 }
 
 /// The package that holds the recorder.
@@ -360,19 +427,14 @@ fn docs_build() -> Result<(), String> {
     .map_err(|error| format!("{}: {error}", landing.display()))
 }
 
-/// Build Binaryen from its source and hold that a second cargo mode reuses the build.
+/// Hold that a second cargo mode reuses Binaryen's build.
 ///
-/// The cache is removed first, so the build that follows is the one from source. Linting the package is another cargo mode with a build-script fingerprint of its own: it must find the cache and run no CMake, which the cache's marker says by keeping its modification time.
+/// Nothing is removed first: the cache's key holds a hash of the build script, so the first build after an edit to it is the one from source, whichever step makes it, and this writes only what any build writes. Linting the package is another cargo mode with a build-script fingerprint of its own: it must find the cache and run no CMake, which the cache's marker says by keeping its modification time.
 fn binaryen_cache() -> Result<(), String> {
     let cache = root()
         .join("curios-binaryen")
         .join(".artifacts")
         .join(HOST_TRIPLE);
-    match fs::remove_dir_all(&cache) {
-        Ok(()) => {}
-        Err(error) if error.kind() == ErrorKind::NotFound => {}
-        Err(error) => return Err(format!("{}: {error}", cache.display())),
-    }
 
     cargo(&["build", "--package", "curios-binaryen"])?;
 

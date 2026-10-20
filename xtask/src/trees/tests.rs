@@ -2,7 +2,7 @@
 
 use super::*;
 
-const TRACKED: [&str; 9] = [
+const TRACKED: [&str; 10] = [
     "Cargo.toml",
     "biome.json",
     "curios-js/src/harness.js",
@@ -12,6 +12,7 @@ const TRACKED: [&str; 9] = [
     "editors/vscode/extension.js",
     "editors/zed/src/lib.rs",
     "programs/chain/chain.rs",
+    "xtask/src/main.rs",
 ];
 
 #[test]

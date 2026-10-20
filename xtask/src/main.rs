@@ -2,7 +2,7 @@
 //!
 //! **A step is an action on a subject, and the table of them is the one thing authored.** [`steps`] states every step once: what it is about, what it does, what it is run after, what it needs and the one thing only it catches. A subject's actions, a bare subject's sequence and what the check workflow must run are read off that table, so `/run-full-gate`, the workflow and a contributor run one spelling of each step and no two of them can drift.
 //!
-//! **A subject comes first, because a person works on one thing.** `cargo xtask vscode` runs everything about the VS Code extension, one step after another, and `cargo xtask vscode test` one action of it. An action a subject does not have is the parser's own error. No command runs every subject: what runs together is for whoever runs them to decide, and `/run-full-gate` states each subject's command.
+//! **A subject comes first, because a person works on one thing.** `cargo xtask vscode` runs everything about the VS Code extension, one step after another, and `cargo xtask vscode test` one action of it. An action a subject does not have is the parser's own error. `cargo xtask gate` runs every step of the table, which is the hand-off gate `/run-full-gate` runs, and a step that failed in it is run again by its subject and action.
 //!
 //! **A step is cargo with flags, and whatever cargo does not do.** Every step spawns `cargo` — or npm, in an editor tree — as a separate process, and then copies a file or generates the browser bindings, where there is such a thing to do. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
 //!
@@ -14,9 +14,9 @@
 //!
 //! **The test runner is a tool a contributor installs.** A test step runs under `cargo-nextest` and refuses before building when it is absent, naming the command that installs it; why nextest is the README's decision.
 //!
-//! **Four commands are not steps.** `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes what git does not track, except the worktrees under `.claude/worktrees`. None is a step, so none has a row; each keeps the parameters it had.
+//! **Five commands are not steps.** `gate` runs all of them, `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes what git does not track, except the worktrees under `.claude/worktrees`. None is a step, so none has a row; each keeps the parameters it had.
 //!
-//! **A dependency of nothing.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of it.
+//! **A dependency of nothing, and a workspace of its own.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of it, so it stands outside the compiler's workspace, where its dependencies' features unify into no build of the compiler and its own build waits on no lock of the compiler's target directory. Why, and what holds its manifest to the workspace's, is the README's decision.
 
 mod places;
 use places::*;
@@ -48,6 +48,9 @@ use installer::*;
 mod release;
 use release::*;
 
+#[cfg(test)]
+mod tests;
+
 use {
     clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum},
     std::{path::PathBuf, process::ExitCode},
@@ -75,6 +78,11 @@ struct Cli {
 enum Asked {
     #[command(flatten)]
     About(About),
+
+    #[command(
+        about = "Run every step of the table, one after another and each after what it reads, formatting as a check; a step whose prerequisite did not pass is not run"
+    )]
+    Gate,
 
     #[command(
         about = "Render the installer script for one release version under xtask/.artifacts/install.sh"
@@ -180,6 +188,11 @@ enum About {
         #[command(subcommand)]
         action: Option<ZedAction>,
     },
+
+    Xtask {
+        #[command(subcommand)]
+        action: Option<XtaskAction>,
+    },
 }
 
 /// The steps a subject's command line asks for: every step about it where it stands bare, formatting as a check, and otherwise one action's, with what the person narrowed it by.
@@ -207,6 +220,7 @@ impl About {
             About::Grammar { action } => selected(Subject::Grammar, action),
             About::Vscode { action } => selected(Subject::Vscode, action),
             About::Zed { action } => selected(Subject::Zed, action),
+            About::Xtask { action } => selected(Subject::Xtask, action),
         }
     }
 }
@@ -252,6 +266,7 @@ fn main() -> ExitCode {
 
             perform(&steps, &request)
         }
+        Asked::Gate => perform(Step::value_variants(), &Request::whole()),
         Asked::Installer { version } => installer(&version),
         Asked::Release { bump } => release(bump.as_deref()),
         Asked::Profile {

@@ -1,14 +1,14 @@
 //! The one authored table of the repository's steps.
 //!
-//! **A step is an action on a subject, and everything said of one is said here.** [`Step::row`] is an exhaustive match, so no step exists without a row: the subject and the action a person types to reach it, the steps run first whenever it is asked for, the tools it needs beyond cargo, the paths whose change is its only reason to run, and what it does, worded so that what only it catches is plain. The command line and its help, a bare subject's sequence and what the check workflow must run are read off these rows, so none of them is a second statement of one.
+//! **A step is an action on a subject, and everything said of one is said here.** [`Step::row`] is an exhaustive match, so no step exists without a row: the subject and the action a person types to reach it, the steps run first whenever it is asked for, the tools it needs beyond cargo, and what it does, worded so that what only it catches is plain. The command line and its help, a bare subject's sequence and what the check workflow must run are read off these rows, so none of them is a second statement of one.
 //!
-//! **Format and lint follow a tree; build, test and install follow what is built from one.** A tree is a manifest root — the Rust workspace, the two npm packages under `editors/`, the Zed extension's own workspace — and a tracked file belongs to the tree of its nearest one, so a file added anywhere is already some tree's. `compiler`, `launcher`, `bundle`, `docs` and `instrumented` are builds of the workspace's tree, each in the configuration it ships or is measured in.
+//! **Format and lint follow a tree; build, test and install follow what is built from one.** A tree is a manifest root — the Rust workspace, the two npm packages under `editors/`, the Zed extension's own workspace and this program's — and a tracked file belongs to the tree of its nearest one, so a file added anywhere is already some tree's. `compiler`, `launcher`, `bundle`, `docs` and `instrumented` are builds of the workspace's tree, each in the configuration it ships or is measured in.
 //!
 //! **Day to day, one configuration: the one that ships.** `workspace`'s lint and tests build with default features, so a change is checked as the compiler a user runs and the prelude's images are built once for both. What only a feature compiles — the instrumentation `profile` turns on — is `instrumented`'s: to lint, with every feature on, and to test where a test needs nothing of the compiler. `docs` documents every item there is.
 //!
 //! **The suite is compiled once.** `workspace test` is the one step that builds the compiler's tests, so a test of the compiler is in that run or in no step: a second run in another configuration, for the tests a feature adds or for one package alone, compiles the whole suite again for a handful of tests. The recorder's tests are the one second run, `instrumented test`, because theirs compiles none of it: `curios-profile` depends on nothing of the compiler, so its `enabled` feature is a build of that crate alone.
 //!
-//! **A bare subject is its steps in the table's order, one after another.** The order of the variants is the one order there is: a step that reads what another of its subject writes stands after it, as a test stands after its install and the Binaryen cache check, which deletes a build the compiler links, after every step of the workspace that builds one. No command runs every subject: what runs together is for whoever runs them to decide, and what orders two subjects is said where the subjects are listed, `.claude/commands/run-full-gate.md`.
+//! **A bare subject is its steps in the table's order, one after another.** The order of the variants is the one order there is: a step that reads what another writes stands after it, as a test stands after its install and after the build it checks, and a step that reads another subject's build ensures it, as `zed test` ensures the grammar's. `cargo xtask gate` walks every row the same way, so the one order there is also orders two subjects, and a prerequisite two of them share runs once.
 //!
 //! **The table says nothing of a machine.** A step runs wherever the checkout is; which machines run which subject is the check workflow's to say.
 
@@ -29,6 +29,7 @@ pub(crate) enum Subject {
     Grammar,
     Vscode,
     Zed,
+    Xtask,
 }
 
 impl Subject {
@@ -44,6 +45,7 @@ impl Subject {
             Subject::Grammar => "The tree-sitter grammar",
             Subject::Vscode => "The VS Code extension",
             Subject::Zed => "The Zed extension",
+            Subject::Xtask => "These recipes, a workspace of their own",
         }
     }
 }
@@ -86,6 +88,7 @@ pub(crate) enum Step {
     GrammarInstall,
     GrammarFormat,
     GrammarLint,
+    GrammarBuild,
     GrammarTest,
     VscodeInstall,
     VscodeFormat,
@@ -96,6 +99,9 @@ pub(crate) enum Step {
     ZedLint,
     ZedBuild,
     ZedTest,
+    XtaskFormat,
+    XtaskLint,
+    XtaskTest,
 }
 
 /// One step as the table states it.
@@ -106,8 +112,6 @@ pub(crate) struct Row {
     pub(crate) ensures: &'static [Step],
     /// The tools it needs beyond cargo.
     pub(crate) needs: &'static [Tool],
-    /// The paths whose change since the base is its only reason to run; `None` runs it always.
-    pub(crate) when: Option<&'static [&'static str]>,
     /// What the step does, worded so that what only it catches is plain: its help line.
     pub(crate) does: &'static str,
 }
@@ -120,7 +124,6 @@ impl Step {
             action,
             ensures,
             needs,
-            when: None,
             does,
         };
 
@@ -167,14 +170,13 @@ impl Step {
                 &[Tool::Nextest],
                 "Run the workspace's tests as it ships, the one compilation of the suite; alone reaches the back end, through the cross-stage corpus, renders the standard library's pages end to end and runs an executable the compiler wrote",
             ),
-            Step::WorkspaceBinaryenCache => Row {
-                subject: Subject::Workspace,
-                action: Action::Test,
-                ensures: &[],
-                needs: &[],
-                when: Some(&["curios-binaryen/build.rs"]),
-                does: "Build Binaryen from its source and hold that a second cargo mode reuses the build, where its build script changed",
-            },
+            Step::WorkspaceBinaryenCache => always(
+                Subject::Workspace,
+                Action::Test,
+                &[],
+                &[],
+                "Hold that a second cargo mode reuses Binaryen's build rather than making it again; the first build after an edit to its build script makes it from source, since its cache is keyed by the script's hash",
+            ),
             Step::InstrumentedLint => always(
                 Subject::Instrumented,
                 Action::Lint,
@@ -237,6 +239,13 @@ impl Step {
                 &[],
                 &[Tool::Npm],
                 "Lint the grammar's JavaScript and JSON",
+            ),
+            Step::GrammarBuild => always(
+                Subject::Grammar,
+                Action::Build,
+                &[],
+                &[Tool::Npm],
+                "Generate the parser from the grammar into `src/`, where the repository commits it",
             ),
             Step::GrammarTest => always(
                 Subject::Grammar,
@@ -304,9 +313,30 @@ impl Step {
             Step::ZedTest => always(
                 Subject::Zed,
                 Action::Test,
-                &[],
+                &[Step::GrammarBuild],
                 &[],
                 "Hold the Zed extension to the tree around it: the grammar revision it pins publishes this grammar, and its lints are the workspace's",
+            ),
+            Step::XtaskFormat => always(
+                Subject::Xtask,
+                Action::Format,
+                &[],
+                &[],
+                "Format these recipes; as a check, alone fails on formatting drift in them",
+            ),
+            Step::XtaskLint => always(
+                Subject::Xtask,
+                Action::Lint,
+                &[],
+                &[],
+                "Lint every target of these recipes",
+            ),
+            Step::XtaskTest => always(
+                Subject::Xtask,
+                Action::Test,
+                &[],
+                &[Tool::Nextest],
+                "Run these recipes' tests: the table held to the command line and the check workflow, and each recipe's own",
             ),
         }
     }

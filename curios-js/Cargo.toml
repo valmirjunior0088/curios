@@ -21,7 +21,8 @@ curios-text = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-wasm = { workspace = true }
 curios-emit = { workspace = true }
-wasm-bindgen = { workspace = true }
+# Moves with `xtask`'s `wasm-bindgen-cli-support`, which generates the glue for it: `xtask`'s `the_bindings_generator_is_the_bindings_version` holds the two equal across the two workspaces.
+wasm-bindgen = { version = "0.2.126" }
 js-sys = { version = "0.3.103" }
 
 [dev-dependencies]

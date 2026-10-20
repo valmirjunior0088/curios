@@ -139,6 +139,11 @@ pub(crate) fn zed(arguments: &[&str]) -> Result<(), String> {
     cargo_in(&root().join("editors").join("zed"), arguments)
 }
 
+/// cargo in `xtask`, these recipes' own workspace.
+pub(crate) fn xtask(arguments: &[&str]) -> Result<(), String> {
+    cargo_in(&root().join("xtask"), arguments)
+}
+
 /// What `wasm-bindgen --target web --out-dir` does, called as the library it wraps and echoed as the command line it stands for. The command line emits the TypeScript declarations unless told not to, where the library does not unless told to; asking for them keeps the bundle's file set what the command line produced.
 pub(crate) fn bindgen_web(module: &Path, bundle: &Path) -> Result<(), String> {
     eprintln!(

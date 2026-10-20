@@ -23,14 +23,14 @@ pub(crate) enum WorkspaceAction {
     Lint {
         #[arg(
             value_name = "PACKAGE",
-            help = "The package to lint; the whole workspace when omitted"
+            help = "Lint this package alone, a build of its own; the whole workspace when omitted"
         )]
         package: Option<String>,
     },
     Test {
         #[arg(
             value_name = "PACKAGE",
-            help = "The package whose tests to run; the whole workspace when omitted"
+            help = "Build and test this package alone, a build of its own; the whole workspace when omitted. To pick tests out of the workspace's one build, use --filter"
         )]
         package: Option<String>,
 
@@ -38,9 +38,16 @@ pub(crate) enum WorkspaceAction {
             long,
             short,
             value_name = "FILTER",
-            help = "Run only the tests whose path contains this; every test when omitted"
+            help = "Run only the tests whose path contains this; repeated, or beside --binary, a test any of them selects runs; every test when omitted"
         )]
-        filter: Option<String>,
+        filter: Vec<String>,
+
+        #[arg(
+            long,
+            value_name = "NAME",
+            help = "Run only the tests of the test binary of this name, as an integration test's, `bundle`; repeated, or beside --filter, a test any of them selects runs"
+        )]
+        binary: Vec<String>,
     },
 }
 
@@ -48,8 +55,15 @@ impl Asks for WorkspaceAction {
     fn asked(self) -> (Action, Request) {
         match self {
             Self::Format { check } => (Action::Format, Request::formatting(check)),
-            Self::Lint { package } => (Action::Lint, Request::narrowed(package, None)),
-            Self::Test { package, filter } => (Action::Test, Request::narrowed(package, filter)),
+            Self::Lint { package } => (
+                Action::Lint,
+                Request::narrowed(package, Vec::new(), Vec::new()),
+            ),
+            Self::Test {
+                package,
+                filter,
+                binary,
+            } => (Action::Test, Request::narrowed(package, filter, binary)),
         }
     }
 }
@@ -131,6 +145,7 @@ pub(crate) enum GrammarAction {
         check: bool,
     },
     Lint,
+    Build,
     Test,
 }
 
@@ -140,6 +155,7 @@ impl Asks for GrammarAction {
             Self::Install => (Action::Install, Request::whole()),
             Self::Format { check } => (Action::Format, Request::formatting(check)),
             Self::Lint => (Action::Lint, Request::whole()),
+            Self::Build => (Action::Build, Request::whole()),
             Self::Test => (Action::Test, Request::whole()),
         }
     }
@@ -186,6 +202,26 @@ impl Asks for ZedAction {
             Self::Format { check } => (Action::Format, Request::formatting(check)),
             Self::Lint => (Action::Lint, Request::whole()),
             Self::Build => (Action::Build, Request::whole()),
+            Self::Test => (Action::Test, Request::whole()),
+        }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum XtaskAction {
+    Format {
+        #[arg(long, help = "Write nothing; fail where a file would change")]
+        check: bool,
+    },
+    Lint,
+    Test,
+}
+
+impl Asks for XtaskAction {
+    fn asked(self) -> (Action, Request) {
+        match self {
+            Self::Format { check } => (Action::Format, Request::formatting(check)),
+            Self::Lint => (Action::Lint, Request::whole()),
             Self::Test => (Action::Test, Request::whole()),
         }
     }

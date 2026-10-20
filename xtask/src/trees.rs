@@ -1,6 +1,6 @@
-//! The four trees, and which of the repository's paths each holds.
+//! The five trees, and which of the repository's paths each holds.
 //!
-//! **A tree is a manifest root, and a tracked file belongs to the nearest one above it.** The Rust workspace's root is the repository's, and three more stand inside it: the two npm packages and the Zed extension's own workspace under `editors/`. So the workspace's tree is everything outside those three, and each of theirs is its own directory. Nothing lists the files: [`Tree::paths`] reads what git tracks, so a file added anywhere is already some tree's, and exactly one's.
+//! **A tree is a manifest root, and a tracked file belongs to the nearest one above it.** The Rust workspace's root is the repository's, and four more stand inside it: the two npm packages and the Zed extension's own workspace under `editors/`, and these recipes' own workspace. So the workspace's tree is everything outside those four, and each of theirs is its own directory. Nothing lists the files: [`Tree::paths`] reads what git tracks, so a file added anywhere is already some tree's, and exactly one's.
 
 use {crate::ask, std::process::Command};
 
@@ -14,10 +14,11 @@ pub(crate) enum Tree {
     Grammar,
     Vscode,
     Zed,
+    Xtask,
 }
 
 /// The trees that stand inside the workspace's.
-const INNER: [Tree; 3] = [Tree::Grammar, Tree::Vscode, Tree::Zed];
+const INNER: [Tree; 4] = [Tree::Grammar, Tree::Vscode, Tree::Zed, Tree::Xtask];
 
 impl Tree {
     /// Where the tree's manifest stands, from the repository's root, which is the empty path.
@@ -27,6 +28,7 @@ impl Tree {
             Tree::Grammar => "editors/grammar",
             Tree::Vscode => "editors/vscode",
             Tree::Zed => "editors/zed",
+            Tree::Xtask => "xtask",
         }
     }
 

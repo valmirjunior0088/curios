@@ -1,4 +1,4 @@
 [alias]
-xtask = "run --package xtask --"
+xtask = "run --manifest-path xtask/Cargo.toml --"
 xboard = "run --package xboard --"
 xbench = "run --package xbench --"
