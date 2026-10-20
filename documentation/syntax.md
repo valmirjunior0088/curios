@@ -1269,7 +1269,7 @@ Higher-kinded parameters are keyable. When conversion establishes a shape such a
 
 ## Foreign declarations
 
-A `foreign` declaration introduces a function implemented outside the program: by a module its package names, by the embedder, or by the host. It is written as a function with no body, its operands and its result in the wire grammar rather than arbitrary Curios types.
+A `foreign` declaration introduces a function implemented outside the program: by a WebAssembly module or a JavaScript gateway its package names, by the embedder, or by the host. It is written as a function with no body, its operands and its result in the wire grammar rather than arbitrary Curios types.
 
 ```crs
 foreign random() -> Nat;

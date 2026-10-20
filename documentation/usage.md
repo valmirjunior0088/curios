@@ -140,11 +140,26 @@ Dispatched through the same code as `run`, so the two cannot drift apart. `--tar
 | `index.wasm` | the program |
 | everything else | what the [`[[foreign]]`](#the-manifest) rows the program reaches put in the page |
 
-The page's root is the program's package's root. A gateway the package carries stands at its `path` from `curios.toml`, a fetched one at `<row>.js`, a `[foreign.browser.static]` entry's files at its page path, and everything a dependency's rows put in the page under the dependency's name, so a gateway reaches a file by the path it has in its own package, served from the package's directory or from the page. Only a row the program reaches puts anything in the page. A page path two files claim is refused naming both, and nothing written is root-absolute, so the page works under any path.
+The page's root is the program's package's root. A gateway the package carries stands at its `path` from `curios.toml`, a fetched one at `<row>.js`, a `[foreign.browser.static]` entry's files at its page path, and everything a dependency's rows put in the page under the dependency's name. Only a row the program reaches puts anything in the page.
+
+**A gateway names its package's files relative to its own address**, since its package's files keep their places beside each other in every page that holds them, and the page's root is its package's root only where its package is the program. An `import` the gateway writes resolves that way already; a URL it builds itself — for `fetch`, an image's `src`, a stylesheet — resolves against the document unless it is resolved against `import.meta.url`: from `web/dom.js`, `new URL("../art/pixel.png", import.meta.url)` reaches the entry `art`'s `pixel.png` in the package's own page and in every page that depends on it, where a bare `art/pixel.png` reaches it only in the first. The path is the page's: a `static` entry's files stand at its key, whatever directory of the package the entry reads them from, and `run --target browser` serves the same layout the written directory holds. A page path two files claim is refused naming both, and nothing written is root-absolute, so the page works under any path.
 
 The program and every JavaScript file the page loads are held to the build: the loader fetches `index.wasm` against its integrity, `index.html` states the loader's, and the import map states every other `.js` and `.mjs` file's, each the `sha256-` form of its SHA-256, so one changed after the build fails to load. A browser that predates import-map integrity loads the gateways unchecked.
 
 The program runs on the page's main thread, its output written to the `<pre>` and, line by line, to the console, where a program the runtime stops says why in both. Its arguments are the page's name — the executable's, a loose file's stem, or `stdin` — then each `arg=` of the URL's query in order, percent-decoded to its bytes, `+` included as itself: `index.html?arg=one&arg=two%20words`. Before the program runs, a gateway's export that is no function is refused, naming the row.
+
+Each export `[foreign.answers]` names is a function answering the declaration it is named for, held to the row where the page loads it: an export that is no function is refused before the program runs, naming the row. It is handed each operand as the JavaScript value its wire type names, a copy it owns, then an `AbortSignal` that fires where the call is cancelled, and it answers the row's results in the same values — nothing for a row with none, the value for a row with one, and an object keyed by exactly the results' labels for a row with several — at once, or as a promise of them, which the call waits on while the rest of the program runs. A row declared `-> Never` is answered by an export that ends the program by throwing. An answer outside the row, or a promise that rejects, stops the program naming the row; a value of another JavaScript type is refused rather than converted, so a `Number` where a `Nat` is declared stops the program instead of crossing wrong past 2⁵³.
+
+| Wire type | Handed and answered as |
+| --- | --- |
+| `Nat` | a `BigInt` from `0n` to 2⁶⁴ − 1 |
+| `Int` | a `BigInt` from −2⁶³ to 2⁶³ − 1 |
+| `Bool` | a boolean |
+| `Byte` | a number from 0 to 255 |
+| `Flt` | a number |
+| `Bytes`, `Handle` | a `Uint8Array` |
+| `List(T)` | an array of what `T` is handed as |
+| `Option(T)` | what `T` is handed as, or `null` |
 
 The page runs in Chrome 119, Firefox 121 and Safari 18.2 and every later version, the first to ship WebAssembly's garbage collection and tail calls together. A server must give `.js` and `.mjs` a JavaScript type, which a module script requires; `index.wasm` is compiled from its bytes, so its type does not matter. Curios runs no build of what a gateway imports: TypeScript, a bundler or a minifier runs before `compile`, into a directory a `static` entry serves.
 

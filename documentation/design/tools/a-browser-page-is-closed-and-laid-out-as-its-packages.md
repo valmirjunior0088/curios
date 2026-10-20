@@ -8,7 +8,8 @@ The loader fetches `index.wasm` against its integrity, `index.html` states the l
 
 **Rationale.**
 
-- **One layout for development and deployment.** A file stands in the page where it stands in the package, so a path a gateway writes — `./assets/logo.svg` — reaches the same file served from the package's directory and from the written page, and nothing has to be rewritten between the two.
+- **One layout for development and deployment.** `run --target browser` serves the layout the written directory holds, so a path that resolves in one resolves in the other, and nothing is rewritten between the two.
+- **A package's files keep their places beside each other in every page.** Only the program's package stands at the page's root, so a gateway names its own package's files relative to its own address, `new URL("../art/pixel.png", import.meta.url)`, which reaches the same file in its package's page and in every page that depends on it, as the `import`s it writes already do. A URL resolved against the document names the program's package's files, which are a dependency's only where it is the program.
 - **The toolchain owns the files it writes.** A page a package could replace is a page the loader cannot rely on: its script element, its import map and its element for the output are what the loader reads. Holding the three names for itself, in every package, keeps any package from coming to depend on standing there.
 - **A dependency is a namespace in the page as it is in the program.** Its name cannot collide with another package's, so nesting by it removes most collisions by construction, and the claim check names the rest.
 - **What a page holds is what it runs.** Carrying only the reached rows' files keeps a dependency's assets out of a page that never calls it, and the integrity of every module the page imports makes a file changed after the build fail to load rather than run.
@@ -17,6 +18,7 @@ The loader fetches `index.wasm` against its integrity, `index.html` states the l
 
 **Rejected.**
 
+- **Every package under its own name, the program's included**, so a document-relative path would be wrong everywhere rather than right in one page: the program's own files would no longer stand where its package holds them, and a gateway still names its files from its own address.
 - **A page the package supplies**, or a template of one: the loader's contract with the document would be the author's to keep.
 - **Files named after the program** — `<name>.wasm`, `<name>.js` — which move a page's own URLs with a rename and make two programs' pages different shapes.
 - **Build hooks** that run a command before or during the build, and **a bundler** of the page's JavaScript: a second toolchain inside the compiler, for what the author's own already does.
