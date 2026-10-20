@@ -2,11 +2,12 @@
 //!
 //! `.curios/` sits beside the governing root — the umbrella's manifest when one governs the invocation, the package's otherwise — and it is **the only generated directory in the tree**: member directories hold user files and nothing else.
 //!
-//! It holds seven families, each in its own subtree rather than sharing one namespace, and each named for what it holds:
+//! It holds eight families, each in its own subtree rather than sharing one namespace, and each named for what it holds:
 //!
 //! ```text
 //! .curios/
 //!   native/         json/serve      what `curios compile` emits for the native target
+//!   browser/        json/serve/     what it emits for a browser: the page's directory
 //!   documentation/  json/           what `curios document` emits
 //!   sources/        c1/<digest>/    materialized source trees, keyed by their manifest hash
 //!   foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
@@ -20,9 +21,9 @@
 //!
 //! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
 //!
-//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `sources/`, `foreign/`, `verdicts/`, `objects/` and `payloads/` families — never `native/` or `documentation/`, which belong to the package that declared them — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
+//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `sources/`, `foreign/`, `verdicts/`, `objects/` and `payloads/` families — never `native/`, `browser/` or `documentation/`, which belong to the package that declared them — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
 //!
-//! A product's family is named for the target it is built for, `native/` as the manifest's `[foreign.native]` names it, and every other family is the plural of its contents, in the words the rest of the toolchain already uses: the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing store rebuilds once.
+//! A product's family is named for the target it is built for, as the manifest's `[foreign.<target>]` tables name it, and every other family is the plural of its contents, in the words the rest of the toolchain already uses: the cache's `Verdicts`, the soundness entry "Cached verdicts". A rename orphans entries under an old name rather than misreading them, since a slot's schema tag lives inside its slot name and nothing looks in the old directory, so an existing store rebuilds once.
 
 #[cfg(test)]
 mod tests;
@@ -36,7 +37,7 @@ use {
 /// The generated directory itself.
 pub const STORE: &str = ".curios";
 
-/// Where a project's generated things go: two families beside it, five in a cache it shares with every other project.
+/// Where a project's generated things go: three families beside it, five in a cache it shares with every other project.
 ///
 /// **The split is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a fetched foreign module by its `f1:` hash, a judged unit by an address over its mounts, what it declared and its compiler, the objects its slot names by that address and their own digests, and a precompiled payload by an address over the executable's identity, the compiler and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all five are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable and a package's documentation are named by the package that declared them and belong to the project that built them, so they stay local. Content-derived keys are what make an upper layer possible at all; a path-keyed store could only ever have been local.
 pub struct Store {
@@ -55,13 +56,13 @@ impl Store {
         }
     }
 
-    /// Where a native executable is written: nested under the package that declares it, beside the project.
+    /// Where a build of an executable for `target` is written: a native executable's file, or a browser page's directory, nested under the package that declares it, beside the project.
     ///
-    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also fixes the path *inside* the store: `native/<package>/<executable>` does not depend on what encloses the package, so joining an umbrella re-roots a binary without renaming it.
-    pub fn native(&self, package: &str, executable: &str) -> PathBuf {
+    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also fixes the path *inside* the store: `<target>/<package>/<executable>` does not depend on what encloses the package, so joining an umbrella re-roots a build without renaming it.
+    pub fn built(&self, target: Target, package: &str, executable: &str) -> PathBuf {
         self.project
             .join(STORE)
-            .join("native")
+            .join(target.spelled())
             .join(package)
             .join(executable)
     }
@@ -116,7 +117,7 @@ impl Store {
 
     /// Where an executable's precompiled payload is filed, under the address its own identity, the compiler and the engine decide: one file, laid out as a unit's is, with what it was compiled *from* verified when the slot is opened.
     ///
-    /// Shared rather than project-local, for the reason the type states: the address says nothing about which project asked. `native/` stays local because a built executable's identity *is* project-relative; the payload inside it is not.
+    /// Shared rather than project-local, for the reason the type states: the address says nothing about which project asked. A build stays local because its identity *is* project-relative; the payload inside it is not.
     pub fn payload(&self, runs: Runs<'_>, slot: &str) -> PathBuf {
         self.shared
             .join("payloads")

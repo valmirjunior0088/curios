@@ -3,7 +3,7 @@ name = "curios-browser"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios browser host: the harness that runs a compiled program in a JavaScript engine, the bridge it reads the program's values through, and what it is configured with"
+description = "The Curios browser host: the harness that runs a compiled program in a JavaScript engine, the bridge it reads the program's values through, what it is configured with, and the page a browser build writes"
 
 [lints]
 workspace = true
@@ -12,10 +12,16 @@ workspace = true
 curios-abi = { workspace = true }
 curios-wasm = { workspace = true }
 curios-emit = { workspace = true }
+# The SHA-256 a page states each file's integrity by.
+curios-utilities = { workspace = true }
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.151"
+# The page's two templates, under `templates/`.
+askama = { version = "0.16.1", default-features = false, features = ["derive", "std"] }
+# What carries a digest in an integrity and the bridge's bytes in the loader.
+base64 = "0.22.1"
 
 [dev-dependencies]
 curios-native = { workspace = true, features = ["test-support"] }

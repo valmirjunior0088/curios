@@ -33,7 +33,7 @@ fn a_step_behind_one_that_did_not_pass_is_not_run() {
 fn a_bare_subject_brings_no_step_of_another_but_its_prerequisites() {
     assert_eq!(
         closed(&Step::about(Subject::Compiler)),
-        [Step::LauncherBuild, Step::CompilerBuild]
+        [Step::LauncherBuild, Step::CompilerBuild, Step::CompilerTest]
     );
 }
 

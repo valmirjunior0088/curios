@@ -1,8 +1,8 @@
-//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path, or `-`, as argv[0]) and its exit code as the process's; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable. Both take the same subject four ways — no argument for the governing package's default executable, an identifier for one it declares, a path for a `.crs` file placed by what declares it, and `-` for the program on standard input — because what a bare invocation means inside a package should not depend on which subcommand asked.
+//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path, or `-`, as argv[0]) and its exit code as the process's; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable, or, with `--target browser`, writes the module Binaryen produced beside the page that runs it. Both take the same subject four ways — no argument for the governing package's default executable, an identifier for one it declares, a path for a `.crs` file placed by what declares it, and `-` for the program on standard input — because what a bare invocation means inside a package should not depend on which subcommand asked.
 //!
 //! **Neither subcommand compiles unconditionally.** A declared executable's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. A loose program has no project, so it consults nothing. `pipeline` owns that decision and everything downstream of it.
 //!
-//! Argument parsing lives in `cli`, what each command accepts and the admission of its argument in `contract`, compilation and payload reuse in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
+//! Argument parsing lives in `cli`, what each command accepts and the admission of its argument in `contract`, compilation and payload reuse in `pipeline`, what answers a program's `foreign` rows in `link`, executable emission in `bundle` and a page's in `browser` — this file only dispatches, mapping any error to stderr and a failure exit.
 
 mod bundle;
 use bundle::*;
@@ -12,6 +12,12 @@ use cli::*;
 
 mod contract;
 use contract::*;
+
+mod link;
+use link::*;
+
+mod browser;
+use browser::*;
 
 mod pipeline;
 use pipeline::*;
@@ -24,15 +30,11 @@ use test_runner::*;
 
 use {
     curios::optimize,
-    curios_abi::ForeignStore,
+    curios_browser::page,
     curios_cranelift::module_exports,
     curios_document::write_documentation,
-    curios_native::{
-        Bundle, Compiled, DeclaredModule, ForeignBindings, OsHost, host_answers, plugin_bindings,
-    },
-    curios_package::{
-        Entry, Governing, Repoint, Spelling, Store, curate, declared_modules, pin, scaffold,
-    },
+    curios_native::{Bundle, Compiled, OsHost},
+    curios_package::{Entry, Governing, Repoint, Spelling, Store, Target, curate, pin, scaffold},
     curios_pipeline::CompileError,
     curios_text::Formatted,
     curios_utilities::Source,
@@ -92,71 +94,6 @@ impl From<CompileError> for Failure {
     }
 }
 
-/// What a program's package graph declares, natively, for the `foreign` declarations it reaches: the modules that answer them, and the rows that answer some of them and state no `[foreign.native]`, which link nothing natively.
-#[derive(Default)]
-struct Natively {
-    modules: Vec<DeclaredModule>,
-    /// Each reached row with no native table: the package that declares it, its name, and what it answers.
-    elsewhere: Vec<(String, String, Vec<String>)>,
-}
-
-/// The modules a program's package graph declares for the `foreign` declarations it reaches, each already accepted against the hash its row pins and compiled here, where Cranelift is, to the machine code `run`, `test` and `compile` alike resolve it from.
-///
-/// **Nothing is read where the host answers every row the program reaches**, which is very nearly every program, since each reaches the standard library's rows and few any other: no manifest is walked and no module opened, so the common case pays one pass over its rows. A module answers a declaration of its own package alone, so none could answer for such a program.
-///
-/// The graph walked is the one of the package whose `manifest` declares the program, an umbrella's member as a package standing alone: an umbrella's directory declares no package to walk from. A loose program has no manifest and so no module. What it reaches of the standard library's rows the host answers, and a row of its own is refused by [`bindings_of`], which says that it has nowhere to name what would answer it.
-fn modules_of(manifest: Option<&Path>, foreigns: &ForeignStore) -> Result<Natively, String> {
-    if foreigns
-        .iter()
-        .all(|function| host_answers(function.name()))
-    {
-        return Ok(Natively::default());
-    }
-
-    let Some(manifest) = manifest else {
-        return Ok(Natively::default());
-    };
-
-    let governing = Governing::at(manifest)?;
-    let store = governing.store();
-    let mut natively = Natively::default();
-
-    // Only a module that answers a row the program reaches is read: the rest of the graph's modules are neither linked nor carried.
-    for (package, directory, foreign) in declared_modules(&governing)? {
-        if !foreign
-            .answers
-            .keys()
-            .any(|declaration| foreigns.get(declaration).is_some())
-        {
-            continue;
-        }
-
-        let Some(native) = &foreign.native else {
-            natively
-                .elsewhere
-                .push((package, foreign.name, foreign.answers.into_keys().collect()));
-            continue;
-        };
-
-        let code = curios_cranelift::compile(&native.bytes(&foreign.name, &directory, &store)?)
-            .map_err(|error| {
-                format!(
-                    "the module {:?} of {package} is not a WebAssembly module this engine accepts: {error}",
-                    foreign.name
-                )
-            })?;
-
-        natively.modules.push(DeclaredModule {
-            package,
-            code,
-            name: foreign.name,
-            answers: foreign.answers,
-        });
-    }
-
-    Ok(natively)
-}
-
 /// What a `pin` subcommand asks for: which table, which row, where it should point, and whether to write it.
 ///
 /// The exclusivity is clap's — the delivery flags are one required group, and the ones that cannot stand together say so — so what is left here is reading which of them was given. A dependency fetched with no revision to pin, which `requires` already refuses for `--url`, is `curios_package::pin`'s to refuse for a caller that reaches it another way.
@@ -203,45 +140,6 @@ fn asked(row: Pinned) -> (curios_package::Subject, String, Repoint, bool) {
     }
 }
 
-/// What answers a program's rows ahead of the host: each module its packages declare, resolved against the rows the program reaches. Shared by `run`, `test` and `compile`, so what a bundled executable carries and what a run links are one resolution.
-///
-/// A reached row nothing stands to answer is refused here, before anything runs or is written, by what would answer it: a `[[foreign]]` row of a manifest, which a loose program has none to write in.
-fn bindings_of(
-    manifest: Option<&Path>,
-    foreigns: &ForeignStore,
-) -> Result<ForeignBindings, String> {
-    let natively = modules_of(manifest, foreigns)?;
-    let bindings = plugin_bindings(foreigns, natively.modules)?;
-
-    match foreigns
-        .iter()
-        .map(|function| function.name())
-        .find(|name| !bindings.answers(name) && !host_answers(name))
-    {
-        None => Ok(bindings),
-        // A row that answers the declaration in a browser alone is the author's statement that the native target links nothing for it.
-        Some(name) => Err(
-            match natively
-                .elsewhere
-                .iter()
-                .find(|(_, _, answers)| answers.iter().any(|answered| answered == name))
-            {
-                Some((package, row, _)) => format!(
-                    "`{name}` is answered by the foreign row {row:?} of {package}, which states no `[foreign.native]`: the native target has nothing to link for it"
-                ),
-                None => match manifest {
-                    Some(_) => format!(
-                        "`{name}` has no implementation: no `[[foreign]]` row of the package's manifests names an export that answers it"
-                    ),
-                    None => format!(
-                        "`{name}` has no implementation: a `foreign` is answered by a module that a `[[foreign]]` row of a manifest names, and a loose program has no manifest to write one in"
-                    ),
-                },
-            },
-        ),
-    }
-}
-
 fn dispatch() -> Result<(), Failure> {
     let cli = Cli::parse();
 
@@ -280,7 +178,7 @@ fn dispatch() -> Result<(), Failure> {
             });
             // Kept before the program is consumed: binding needs the manifest that declares it, and `payload_of` takes the program by value.
             let manifest = program.home().map(|home| home.manifest.clone());
-            let (cwasm, foreigns) = payload_of(elaboration.budget, program, store)?;
+            let (cwasm, foreigns) = payload_of(elaboration.budget, program, store, Target::Native)?;
             let bindings = bindings_of(manifest.as_deref(), &foreigns)?;
 
             step(Heading::Running, &subject);
@@ -328,6 +226,7 @@ fn dispatch() -> Result<(), Failure> {
             Linted::Findings => process::exit(1),
         },
         Mode::Compile {
+            target: TargetValue(target),
             output_path,
             elaboration,
             ..
@@ -335,9 +234,10 @@ fn dispatch() -> Result<(), Failure> {
             let program = contract.admit_program(subject, manifest, destination, &here()?)?;
 
             // Admission refuses a program with nowhere to go, so one no package declares came with `--output`.
+            let owned = output_path.is_none();
             let output = match (output_path, program.home()) {
                 (Some(output), _) => output,
-                (None, Some(home)) => home.output.clone(),
+                (None, Some(home)) => home.built(target),
                 (None, None) => unreachable!(
                     "`compile` admits a program no package declares only with `--output`"
                 ),
@@ -347,45 +247,80 @@ fn dispatch() -> Result<(), Failure> {
 
                 Some(store.executing(&home.package, &home.executable))
             });
-            // Kept before the program is consumed: resolving the declared modules needs the manifest that declares it, and `payload_of` takes the program by value.
+            // Kept before the program is consumed: resolving what answers its rows needs the manifest that declares it, a page names the program and stands at its package's root, and `payload_of` takes the program by value.
             let manifest = program.home().map(|home| home.manifest.clone());
+            let package = program.home().map(|home| home.package.clone());
+            let name = named(&program);
 
-            // `-o` can name the entry itself. Refuse before compiling rather than destroy the source.
-            if let Entry::File(entry) = program.entry()
-                && let (Ok(input), Ok(written)) = (entry.canonicalize(), output.canonicalize())
-                && input == written
-            {
-                return Err(Failure::Error(format!(
-                    "refusing to overwrite the input {}",
-                    entry.display()
-                )));
-            }
-            // A directory takes no executable's place, and the write would say so only after the whole compilation.
-            if output.is_dir() {
-                return Err(Failure::Error(format!(
-                    "{} is a directory; `--output` names the file to write",
-                    output.display()
-                )));
+            match target {
+                Target::Native => {
+                    // `-o` can name the entry itself. Refuse before compiling rather than destroy the source.
+                    if let Entry::File(entry) = program.entry()
+                        && let (Ok(input), Ok(written)) =
+                            (entry.canonicalize(), output.canonicalize())
+                        && input == written
+                    {
+                        return Err(Failure::Error(format!(
+                            "refusing to overwrite the input {}",
+                            entry.display()
+                        )));
+                    }
+                    // A directory takes no executable's place, and the write would say so only after the whole compilation.
+                    if output.is_dir() {
+                        return Err(Failure::Error(format!(
+                            "{} is a directory; `--output` names the file to write",
+                            output.display()
+                        )));
+                    }
+                }
+                // A file takes no page's place — the entry among them — and the write would say so only after the whole compilation.
+                Target::Browser => {
+                    if output.is_file() {
+                        return Err(Failure::Error(format!(
+                            "{} is a file; `--output` names the directory the page is written in",
+                            output.display()
+                        )));
+                    }
+                }
             }
 
             let started = Instant::now();
-            let (cwasm, foreigns) = payload_of(elaboration.budget, program, store)?;
+            let (payload, foreigns) = payload_of(elaboration.budget, program, store, target)?;
 
-            // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
-            let bindings = bindings_of(manifest.as_deref(), &foreigns)?;
-            bindings.check(&foreigns)?;
+            match target {
+                Target::Native => {
+                    // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
+                    let bindings = bindings_of(manifest.as_deref(), &foreigns)?;
+                    bindings.check(&foreigns)?;
 
-            // Written out here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
-            let plugins = bindings.bundled(curios_cranelift::serialize)?;
+                    // Written out here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
+                    let plugins = bindings.bundled(curios_cranelift::serialize)?;
 
-            emit_exe(
-                &Bundle {
-                    program: cwasm,
-                    foreigns,
-                    plugins,
-                },
-                &output,
-            )?;
+                    emit_exe(
+                        &Bundle {
+                            program: payload,
+                            foreigns,
+                            plugins,
+                        },
+                        &output,
+                    )?;
+                }
+                Target::Browser => {
+                    // Every gateway and file the page holds is read here, once, and what the page refuses is refused before anything is written.
+                    let linked = linked_of(manifest.as_deref(), &foreigns)?;
+                    let files = page(
+                        curios_browser::Program {
+                            name: &name,
+                            package: package.as_deref(),
+                            module: payload,
+                            foreigns: &foreigns,
+                        },
+                        linked,
+                    )?;
+
+                    emit_page(&output, &files, owned)?;
+                }
+            }
 
             // Where it landed rather than what it was called: that is the one fact a finished build is read for, and the group above already named the subject twice. The time is the whole invocation's, payload and emission both, so it is measured here rather than by the line.
             let mut line = Line::open(Heading::Finished, &Subject::File(output));

@@ -23,6 +23,11 @@ pub(crate) fn target_directory() -> PathBuf {
     }
 }
 
+/// What a `--release` build for the host left for `name`: the compiler `compiler build` files, which a step runs.
+pub(crate) fn released(name: &str) -> PathBuf {
+    target_directory().join("release").join(name)
+}
+
 /// What a `--release --target <triple>` build left for `name` — the file a recipe files or feeds onward.
 pub(crate) fn built(target: &str, name: &str) -> PathBuf {
     target_directory().join(target).join("release").join(name)

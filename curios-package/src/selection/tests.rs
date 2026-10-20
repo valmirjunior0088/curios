@@ -237,10 +237,11 @@ fn a_declared_executable_builds_into_the_store() {
     let home = program
         .home()
         .expect("an enumerated member is a declared executable");
+    let built = home.built(Target::Native);
     assert!(
-        home.output.ends_with(".curios/native/json/serve"),
+        built.ends_with(".curios/native/json/serve"),
         "{}",
-        home.output.display()
+        built.display()
     );
 }
 

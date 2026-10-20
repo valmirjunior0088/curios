@@ -12,7 +12,7 @@ mod tests;
 use {
     crate::{
         Dependency, FileHash, Foreign, Governing, MANIFEST, Manifest, Module, Snapshot, Store,
-        Target, TreeHash,
+        Subject, Target, TreeHash,
     },
     std::{
         collections::BTreeSet,
@@ -49,7 +49,7 @@ impl fmt::Display for Acquisition {
     }
 }
 
-/// One foreign module to bring into the store: the row that named it, the package that declared that row, and what the delivery must hash to.
+/// One foreign module to bring into the store: the row that named it, the package that declared that row, the target whose table names it, and what the delivery must hash to.
 ///
 /// A module reveals nothing further — it is a file, not a tree with a manifest — so these are gathered and fetched after the package fixed point rather than inside it.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -58,6 +58,8 @@ pub struct ModuleAcquisition {
     pub package: String,
     /// The row's own name, which is what a report and `curios pin --refresh` call it.
     pub name: String,
+    /// The target whose table names it, which `curios pin --target` names too.
+    pub target: Target,
     pub url: String,
     pub hash: FileHash,
 }
@@ -167,14 +169,15 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
 
         for foreign in &package.foreign {
             // A carried file needs no fetch: it is in the tree already, and what it must be is checked where it is read rather than here. Every target's is fetched, since nothing here knows which target a build will ask for.
-            for delivery in Target::ALL
+            for (target, delivery) in Target::ALL
                 .into_iter()
-                .filter_map(|target| foreign.delivery(target))
+                .filter_map(|target| Some((target, foreign.delivery(target)?)))
             {
                 if let Module::Fetched(url) = &delivery.module {
                     reachable.fetches.insert(ModuleAcquisition {
                         package: package.name.clone(),
                         name: foreign.name.clone(),
+                        target,
                         url: url.clone(),
                         hash: delivery.hash.clone(),
                     });
@@ -332,12 +335,12 @@ fn accept_module(
     if delivered != acquisition.hash {
         // The same two conditions `Foreign::bytes` states, with the likely one inverted: bytes that arrived from elsewhere changed without you, where bytes you build change because you built them.
         return Err(format!(
-            "the foreign module {} of {} was fetched from {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: the publisher re-cut this version and said so, or you repointed this row yourself — then `curios pin foreign {} --refresh`\n  pay close attention if: nothing announced a change — an artifact replaced in place, under a version already published, is what a compromised release looks like, and this hash is the only thing that noticed",
+            "the foreign module {} of {} was fetched from {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: the publisher re-cut this version and said so, or you repointed this row yourself — then `{} --refresh`\n  pay close attention if: nothing announced a change — an artifact replaced in place, under a version already published, is what a compromised release looks like, and this hash is the only thing that noticed",
             acquisition.name,
             acquisition.package,
             acquisition.url,
             acquisition.hash,
-            acquisition.name
+            Subject::Foreign(acquisition.target).invocation(&acquisition.name)
         ));
     }
 

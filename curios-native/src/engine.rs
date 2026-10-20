@@ -481,11 +481,6 @@ impl ForeignBindings {
     }
 }
 
-/// Whether this runtime's host answers the row declared as `name`: one of the rows of `curios-abi`'s table, which are the standard library's.
-pub fn host_answers(name: &str) -> bool {
-    HostOp::ALL.iter().any(|op| op.declared() == name)
-}
-
 /// What this runtime's host states of every row it answers, with nothing to enter: the table's own signatures, which [`host_rows`] answers by.
 fn host_stated() -> Answers<()> {
     let mut answers = Answers::default();

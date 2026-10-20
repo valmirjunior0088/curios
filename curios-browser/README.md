@@ -1,6 +1,6 @@
 # curios-browser
 
-The Curios browser host: `harness.mjs`, which runs a compiled program under a JavaScript engine against the browser's answers to the host rows and an embedder's hooks; the bridge module it reads the program's values through; and what it is configured with, rendered from `curios-abi`. Its wasm-bindgen `run` reaches the playground through the bundle `curios-js` is built into. Build steps belong to `xtask`.
+The Curios browser host: `harness.mjs`, which runs a compiled program under a JavaScript engine against the browser's answers to the host rows and an embedder's hooks; the bridge module it reads the program's values through; what it is configured with, rendered from `curios-abi`; and the page a browser build of a program is, which `curios compile --target browser` writes. Its wasm-bindgen `run` reaches the playground through the bundle `curios-js` is built into. How a page is laid out is [A browser page is closed and laid out as its packages](../documentation/design/tools/a-browser-page-is-closed-and-laid-out-as-its-packages.md); build steps belong to `xtask`.
 
 ## Design
 
@@ -25,6 +25,14 @@ The Curios browser host: `harness.mjs`, which runs a compiled program under a Ja
 **Rationale.** One rendering is one statement of each table: a live JavaScript object built in Rust beside a text a page carries would be two, free to drift. JSON carries no integer past 2⁵³ exactly, and a code is a `Nat`, so the codes cross as strings; the masks and the seed are small numbers and cross as themselves.
 
 **Rejected.** The configuration built with `js-sys` for the playground and written out as text for a page, two renderings of one table; a constants file copied by hand, which is how a harness drifts from the compiler; the code sets the harness answers no row with, which it never reads.
+
+### A page's loader is rendered, and carries the harness whole
+
+**Decision.** `page` answers a program's page as data: `index.html` and `index.js` rendered by askama from `templates/`, and `index.wasm` the module it is handed. The loader carries `harness.mjs` whole, the configuration and the rows as `configuration` and `rows` render them, the bridge in base64, and an import of every gateway, and calls its own `start` where it stands in a document; a test imports it and calls `start` with the program's bytes. The templates render JavaScript and are none, so `biome.json` lists no directory holding them, and `src/page.test.mjs` runs what they render: `cargo xtask compiler test` has the compiler as it is released write each fixture's page and starts its loader under Node.
+
+**Rationale.** The page is three files the toolchain owns, so the harness travels inside the loader rather than beside it, and each table is the one rendering the harness is configured from. A page is what `compile` writes, not what this crate's function returns, so its suite asks the compiler that writes it.
+
+**Rejected.** The harness as a fourth file of the page; the loader's logic moved into `harness.mjs`, which puts a page's concerns in the playground's harness for a linter's sake; a page suite through this crate's own function, which a change to `compile`'s side of the page would pass.
 
 ### The harness is tested under Node
 

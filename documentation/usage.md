@@ -76,7 +76,7 @@ Ten commands, and `wonder`'s seven queries — eleven where the compiler was bui
 | Command | Subject | Its own arguments | Writes | Store |
 | --- | --- | --- | --- | --- |
 | [`run`](#run) | a program | trailing `ARGS…` for the program | nothing | reads, files what it built |
-| [`compile`](#compile) | a program | `-o`/`--output <PATH>` | a native executable | reads, files what it built |
+| [`compile`](#compile) | a program | `--target <TARGET>`, `-o`/`--output <PATH>` | a native executable, or a page's directory | reads, files what it built |
 | [`document`](#document) | a library | `--std <DIR>`, `-o`/`--output <DIR>` | pages | reads, files what it built; none under `--std` |
 | [`test`](#test) | anything | `--filter <PREFIX>` | nothing | reads, files what it built |
 | [`curate`](#curate) | the governing package | — | materialized sources | none |
@@ -117,11 +117,31 @@ A running program's own exit code passes through untouched. A program that close
 curios compile                   # under the store, beside the governing manifest
 curios compile -o hello          # somewhere else
 curios compile scratch.crs -o s  # a loose program, which has nowhere else to go
+curios compile --target browser  # a page, under the store
 ```
 
-Dispatched through the same code as `run`, so the two cannot drift apart. A declared executable is written under the store beside the governing manifest, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
+Dispatched through the same code as `run`, so the two cannot drift apart. `--target` says what the program is built for: `native`, the default, writes an executable, and `browser` a directory holding a page. A declared executable's build is written under the store beside the governing manifest, under the target, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
 
 **The result is self-contained, including its `foreign` implementations.** Every [`[[foreign]]`](#the-manifest) module that answers a declaration the program reaches is compiled into the executable beside the program itself, so it runs where there is no manifest to read a row from, no `.wasm` beside it to hash and no compiler to turn one into a module. Nothing is read from the store or the package at run time, and the executable is the only file that has to travel. It is linked before it is written, as `run` links before it runs: a declaration the program reaches that no module and no operation of the host answers, a declaration two rows claim and an export of another type than its declaration crosses as are each refused, so no executable is written that would refuse to start.
+
+### The page
+
+`--target browser` writes the module Binaryen produced, with no Cranelift step after it, beside the page that runs it, all in one directory: under the store at `browser/<package>/<name>/`, emptied first so it holds nothing an earlier build left, or the directory `--output` names, which is created where it is missing and keeps whatever else it holds, a file of the page replacing the one of its name. The directory is the page whole, and copying it anywhere a static server serves deploys it.
+
+| File | Is |
+| --- | --- |
+| `index.html` | the page: the import map, the loader, and one `<pre id="output">` the program's output is written into while it stands in the document — a gateway may remove it |
+| `index.js` | the loader: the browser's host, what it is configured with, the program's rows, and an import of every gateway |
+| `index.wasm` | the program |
+| everything else | what the [`[[foreign]]`](#the-manifest) rows the program reaches put in the page |
+
+The page's root is the program's package's root. A gateway the package carries stands at its `path` from `curios.toml`, a fetched one at `<row>.js`, a `[foreign.browser.static]` entry's files at its page path, and everything a dependency's rows put in the page under the dependency's name, so a gateway reaches a file by the path it has in its own package, served from the package's directory or from the page. Only a row the program reaches puts anything in the page. A page path two files claim is refused naming both, and nothing written is root-absolute, so the page works under any path.
+
+The program and every JavaScript file the page loads are held to the build: the loader fetches `index.wasm` against its integrity, `index.html` states the loader's, and the import map states every other `.js` and `.mjs` file's, each the `sha256-` form of its SHA-256, so one changed after the build fails to load. A browser that predates import-map integrity loads the gateways unchecked.
+
+The program runs on the page's main thread, its output written to the `<pre>` and, line by line, to the console, where a program the runtime stops says why in both. Its arguments are the page's name — the executable's, a loose file's stem, or `stdin` — then each `arg=` of the URL's query in order, percent-decoded to its bytes, `+` included as itself: `index.html?arg=one&arg=two%20words`. Before the program runs, a gateway's export that is no function is refused, naming the row.
+
+The page runs in Chrome 119, Firefox 121 and Safari 18.2 and every later version, the first to ship WebAssembly's garbage collection and tail calls together. A server must give `.js` and `.mjs` a JavaScript type, which a module script requires; `index.wasm` is compiled from its bytes, so its type does not matter. Curios runs no build of what a gateway imports: TypeScript, a bundler or a minifier runs before `compile`, into a directory a `static` entry serves.
 
 ## `document`
 
@@ -470,11 +490,12 @@ The program's own standard input is spent on reading the source, so a read of it
 
 ## Where things go
 
-Everything generated lands under `.curios/`, beside the governing manifest, in seven entries, a product's named for the target it is built for and every other for what it holds:
+Everything generated lands under `.curios/`, beside the governing manifest, in eight entries, a product's named for the target it is built for and every other for what it holds:
 
 | Entry | Holds | Where |
 | --- | --- | --- |
 | `native/<package>/<name>` | what `compile` emits for the native target | beside the project |
+| `browser/<package>/<name>/` | what `compile` emits for a browser: the page's directory | beside the project |
 | `documentation/<package>/` | what `document` emits | beside the project |
 | `sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against | shared |
 | `foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way | shared |
@@ -484,7 +505,7 @@ Everything generated lands under `.curios/`, beside the governing manifest, in s
 
 One transient entry passes through beside them: [`pin`](#pin) stages a delivery at `pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.
 
-`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the shared half — everything above whose key says nothing about which project asked. `native/` and `documentation/` are products of the package that declared them and always stay beside it. A source's scheme is a directory of its own so a successor scheme can sit beside `c1` rather than replace it.
+`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the shared half — everything above whose key says nothing about which project asked. `native/`, `browser/` and `documentation/` are products of the package that declared them and always stay beside it. A source's scheme is a directory of its own so a successor scheme can sit beside `c1` rather than replace it.
 
 Set `CURIOS_CACHE` to share that half across projects; unset, each project keeps its own. There is deliberately no divined default, because a toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for.
 

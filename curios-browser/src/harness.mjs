@@ -57,6 +57,7 @@ const describe = (value) => {
  * - `bridge`: the bridge module's bytes, from `bridge_bytes`;
  * - `status`, `event`, `stdio`, `seed`, `deadlock`: the wire code tables, the standard streams' tokens, the first token this host may mint and the report of a program suspended on nothing, from the configuration curios-browser renders;
  * - `rows`: from that configuration too — the name the standard library declares each of the host's rows under, beside the host method that answers it;
+ * - `args`: optional, the program's arguments, each a `Uint8Array`, its name first, which a page passes and the playground does not;
  * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each receiving a copy of every write as a `Uint8Array`; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does — at once, or later by a promise, the call suspending while it is pending and the signal the hook was handed aborted where the call is cancelled.
  *
  * Resolves to `{ stdout, stderr, exitCode, trap }`: the accumulated output bytes, the code the program exited with (0 when `main` returns), and the trap message if execution failed instead.
@@ -273,11 +274,21 @@ export async function run(config) {
 
       return encodeBytes(bytes);
     },
-    // The playground has no arguments it could truthfully call a program's, so it refuses the call, as the row's reply lets a host, rather than answer an empty list a program would read as a fact.
+    // The arguments a page passes. The playground has none it could truthfully call a program's, so there the call is refused, as the row's reply lets a host, rather than answered with an empty list a program would read as a fact.
     proc_args: () => {
-      throw new Error(
-        "proc_args: the playground runs a program with no arguments",
-      );
+      if (config.args === undefined) {
+        throw new Error(
+          "proc_args: the playground runs a program with no arguments",
+        );
+      }
+
+      const list = bridge.list_new(config.args.length);
+
+      config.args.forEach((arg, i) => {
+        bridge.list_set(list, i, encodeBytes(arg));
+      });
+
+      return list;
     },
     proc_env: () => [status.NOT_FOUND, emptyBytes()],
     // The playground has no terminal to take, give back or measure, so every tty row is denied as `file_open` is.

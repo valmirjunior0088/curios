@@ -1,0 +1,14 @@
+{#- A program's page: the import map stating every JavaScript file's integrity but the loader's, the loader with its own, and the one element the program's output is written into, which a gateway may remove. Nothing here is root-absolute, so the page works under any path. -#}
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{{ name }}</title>
+        <script type="importmap">{{ import_map|safe }}</script>
+        <script type="module" src="{{ loader }}" integrity="{{ integrity }}"></script>
+    </head>
+    <body>
+        <pre id="{{ output }}"></pre>
+    </body>
+</html>

@@ -9,20 +9,35 @@ fn a_binary_nests_under_its_package() {
     let store = Store::at(PathBuf::from("/w/u"));
 
     assert_eq!(
-        store.native("json", "serve"),
+        store.built(Target::Native, "json", "serve"),
         PathBuf::from("/w/u/.curios/native/json/serve")
     );
     assert_ne!(
-        store.native("json", "serve"),
-        store.native("other", "serve")
+        store.built(Target::Native, "json", "serve"),
+        store.built(Target::Native, "other", "serve")
+    );
+}
+
+/// Each target's builds are a family of their own, spelled as `--target` spells the target, so a page and an executable of one name never stand at one path.
+#[test]
+fn each_target_builds_apart() {
+    let store = Store::at(PathBuf::from("/w/u"));
+
+    assert_eq!(
+        store.built(Target::Browser, "json", "serve"),
+        PathBuf::from("/w/u/.curios/browser/json/serve")
+    );
+    assert_ne!(
+        store.built(Target::Native, "json", "serve"),
+        store.built(Target::Browser, "json", "serve")
     );
 }
 
 /// The path inside `.curios/` does not depend on what encloses the package, so a binary does not move when its package joins an umbrella — only the root it hangs from changes.
 #[test]
 fn joining_an_umbrella_moves_only_the_root() {
-    let alone = Store::at(PathBuf::from("/w/json")).native("json", "serve");
-    let enclosed = Store::at(PathBuf::from("/w/u")).native("json", "serve");
+    let alone = Store::at(PathBuf::from("/w/json")).built(Target::Native, "json", "serve");
+    let enclosed = Store::at(PathBuf::from("/w/u")).built(Target::Native, "json", "serve");
 
     assert!(alone.ends_with(".curios/native/json/serve"));
     assert!(enclosed.ends_with(".curios/native/json/serve"));
@@ -48,7 +63,7 @@ fn the_families_do_not_share_a_namespace() {
 
     let module = FileHash::parse(&format!("f1:{}", "b".repeat(64))).unwrap();
 
-    let binary = store.native("c1", "tool");
+    let binary = store.built(Target::Native, "c1", "tool");
     let tree = store.source(&hash);
     let fetched = store.foreign(&module);
 

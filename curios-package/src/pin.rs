@@ -86,11 +86,13 @@ impl Subject {
         }
     }
 
-    /// The `curios pin` subcommand that reaches it, for a refusal to spell the command that would work.
-    fn command(self) -> &'static str {
+    /// The `curios pin` invocation that reaches its row `name`, for a refusal to spell the command that would work: the subcommand and the row, and for a foreign row the target whose table it is.
+    pub(crate) fn invocation(self, name: &str) -> String {
         match self {
-            Self::Foreign(_) => "foreign",
-            Self::Dependency => "dependency",
+            Self::Foreign(target) => {
+                format!("curios pin foreign {name} --target {}", target.spelled())
+            }
+            Self::Dependency => format!("curios pin dependency {name}"),
         }
     }
 }
@@ -211,10 +213,10 @@ pub fn pin(
     let existed = present(&before, subject, name);
     if repoint.edits_existing() && !existed {
         return Err(format!(
-            "there is no {} {name:?} in {} to re-pin; `curios pin {} {name} --url <URL>` is what writes one",
+            "there is no {} {name:?} in {} to re-pin; `{} --url <URL>` is what writes one",
             subject.noun(),
             governing.manifest.display(),
-            subject.command()
+            subject.invocation(name)
         ));
     }
 
@@ -541,7 +543,8 @@ fn settled_foreign(
         Repoint::Carried(path) => carried(path),
         Repoint::Fetched { url, .. } => fetched(url),
         Repoint::Revised(_) => Err(format!(
-            "the foreign module {name:?} has no revision to set: a module is one file, pinned by the hash of its bytes. `curios pin foreign {name} --url <URL>` repoints it, and `--refresh` re-pins what it already names"
+            "the foreign module {name:?} has no revision to set: a module is one file, pinned by the hash of its bytes. `{} --url <URL>` repoints it, and `--refresh` re-pins what it already names",
+            Subject::Foreign(target).invocation(name)
         )),
         // Whichever delivery the row already states, performed again. The row has one or the other, because a row stating both is refused where it is read.
         Repoint::Refresh => {

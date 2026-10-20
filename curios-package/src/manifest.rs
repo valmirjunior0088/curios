@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{CompilerVersion, FileHash, STORE, Store, TreeHash},
+    crate::{CompilerVersion, FileHash, STORE, Store, Subject, TreeHash},
     curios_utilities::{is_identifier, is_keyword},
     serde::Deserialize,
     std::{
@@ -475,6 +475,25 @@ pub struct Gateway {
     pub statics: BTreeMap<String, PathBuf>,
 }
 
+impl Gateway {
+    /// Where the gateway of the foreign row `name` stands in a page, from its package's root.
+    pub fn stands(&self, name: &str) -> String {
+        stands(&self.delivery.module, name)
+    }
+}
+
+/// Where a gateway delivered as `module` for the foreign row `name` stands in a page, from its package's root: at its path where the package carries it, and at `<name>.js` where it is fetched, since a fetched one has no path in the package.
+fn stands(module: &Module, name: &str) -> String {
+    match module {
+        Module::Filed(path) => path
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/"),
+        Module::Fetched(_) => format!("{name}.js"),
+    }
+}
+
 impl Foreign {
     /// What `target` links for this row, where the row states its table.
     pub fn delivery(&self, target: Target) -> Option<&Delivery> {
@@ -516,12 +535,18 @@ struct DeliveryRow {
 }
 
 impl Delivery {
-    /// The file's bytes, accepted against this delivery's `hash`, for the row `name`.
+    /// The file's bytes, accepted against this delivery's `hash`, for the row `name`'s table of `target`.
     ///
     /// **One check for both deliveries, at the moment the bytes are used.** A fetched module was already accepted once, when `curate` placed it — checking again costs one digest over a file about to be compiled, which is nothing beside that, and it means a store entry corrupted after the fact is caught rather than linked. A carried module has no fetch to have been checked at, so this is its only check and the reason the row states a hash at all.
     ///
     /// `directory` is the package's own, which a carried module's path is relative to; `store` answers for a fetched one, where the entry's name is already the digest.
-    pub fn bytes(&self, name: &str, directory: &Path, store: &Store) -> Result<Vec<u8>, String> {
+    pub fn bytes(
+        &self,
+        name: &str,
+        target: Target,
+        directory: &Path,
+        store: &Store,
+    ) -> Result<Vec<u8>, String> {
         let path = match &self.module {
             Module::Filed(path) => directory.join(path),
             Module::Fetched(_) => store.foreign(&self.hash),
@@ -538,9 +563,10 @@ impl Delivery {
         if delivered != self.hash {
             // The two conditions rather than one instruction: a re-pin is the ordinary answer here and the alarming one, and which it is depends on something only the reader knows.
             return Err(format!(
-                "the foreign module {name:?} at {} is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: you rebuilt the module from source you control — then `curios pin foreign {name} --refresh`\n  pay close attention if: you did not rebuild it, or a dependency delivered it rather than you building it",
+                "the foreign module {name:?} at {} is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: you rebuilt the module from source you control — then `{} --refresh`\n  pay close attention if: you did not rebuild it, or a dependency delivered it rather than you building it",
                 path.display(),
                 self.hash,
+                Subject::Foreign(target).invocation(name),
             ));
         }
 
@@ -623,11 +649,10 @@ impl GatewayRow {
         } = self;
 
         let delivery = delivered(path, url, hash, name, Target::Browser)?;
-        let stands = match &delivery.module {
-            Module::Filed(path) => path.to_string_lossy().into_owned(),
-            Module::Fetched(_) => format!("{name}.js"),
-        };
-        held_by_the_page(&stands, &format!("the gateway of the foreign row {name:?}"))?;
+        held_by_the_page(
+            &stands(&delivery.module, name),
+            &format!("the gateway of the foreign row {name:?}"),
+        )?;
 
         let mut served = BTreeMap::new();
         for (page, package) in statics.unwrap_or_default() {
@@ -689,6 +714,7 @@ fn delivered(
     name: &str,
     target: Target,
 ) -> Result<Delivery, String> {
+    let invocation = Subject::Foreign(target).invocation(name);
     let target = target.spelled();
 
     // Where the file comes from: one spelling or the other, checked in both directions so neither is quietly ignored nor quietly defaulted — `DependencyRow`'s rule, applied to the other thing a manifest delivers.
@@ -712,7 +738,7 @@ fn delivered(
     // Both deliveries state it, because it answers what the file *is* rather than where it came from — and the carried case is the one that would otherwise go unchecked, since the tree holding it may be the entry package or a live path dependency, neither of which is pinned.
     let Some(hash) = hash else {
         return Err(format!(
-            "the foreign row {name:?} states no `hash` in `[foreign.{target}]`; a module is accepted against one however it arrives, and `curios pin foreign {name} --refresh` writes the one it currently has"
+            "the foreign row {name:?} states no `hash` in `[foreign.{target}]`; a module is accepted against one however it arrives, and `{invocation} --refresh` writes the one it currently has"
         ));
     };
 

@@ -562,6 +562,7 @@ dependencies = [
  "curios-algebra",
  "curios-archive",
  "curios-binaryen",
+ "curios-browser",
  "curios-cert",
  "curios-cont",
  "curios-core",
@@ -639,6 +640,8 @@ dependencies = [
 name = "curios-browser"
 version = "0.16.9"
 dependencies = [
+ "askama",
+ "base64",
  "curios-abi",
  "curios-cranelift",
  "curios-emit",

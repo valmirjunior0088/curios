@@ -63,7 +63,7 @@ impl Access {
 pub(crate) enum Product {
     /// Nothing beyond what the store keeps.
     Nothing,
-    /// A native executable, under the store beside the package that declares it, or wherever `--output` says — the one place a program no package declares can go.
+    /// A native executable, or for a browser a directory holding its page, under the store beside the package that declares it, under the target it is built for, or wherever `--output` says — the one place a program no package declares can go.
     Executable,
     /// A library's pages, under the store beside its package unless `--output` says elsewhere.
     Pages,

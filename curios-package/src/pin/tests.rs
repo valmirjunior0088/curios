@@ -262,7 +262,7 @@ fn a_row_that_is_not_there_cannot_be_refreshed() {
         "{refusal}"
     );
     assert!(
-        refusal.contains("curios pin foreign absent --url"),
+        refusal.contains("curios pin foreign absent --target native --url"),
         "{refusal}"
     );
 }

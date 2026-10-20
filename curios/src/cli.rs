@@ -89,17 +89,26 @@ pub(crate) enum Mode {
         args: Vec<OsString>,
     },
 
-    /// Dispatched through the same code as `run`, so the two cannot drift apart. A declared executable is filed under the package that declares it; a program no package declares — a file no unit declares, or standard input — has nowhere to be filed, and is built where `--output` says.
-    #[command(about = "Compile a program to a native executable")]
+    /// Dispatched through the same code as `run`, so the two cannot drift apart. A declared executable is filed under the package that declares it, under the target it is built for; a program no package declares — a file no unit declares, or standard input — has nowhere to be filed, and is built where `--output` says.
+    #[command(about = "Compile a program to a native executable or a browser page")]
     Compile {
         #[arg(value_name = "SUBJECT", help = COMPILE.subject_help())]
         subject: Option<String>,
 
         #[arg(
+            long,
+            value_enum,
+            value_name = "TARGET",
+            default_value_t = TargetValue(Target::Native),
+            help = "What the program is built for: `native` writes an executable, `browser` a directory holding a page"
+        )]
+        target: TargetValue,
+
+        #[arg(
             short = 'o',
             long = "output",
             value_name = "PATH",
-            help = "Write the executable to PATH (default: under the store, beside the governing manifest; required for a program no package declares)"
+            help = "Write the executable, or the page's directory, to PATH (default: under the store, beside the governing manifest; required for a program no package declares)"
         )]
         output_path: Option<PathBuf>,
 

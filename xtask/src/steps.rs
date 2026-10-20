@@ -83,6 +83,7 @@ pub(crate) enum Step {
     InstrumentedTest,
     DocsBuild,
     CompilerBuild,
+    CompilerTest,
     BundleBuild,
     BundleTest,
     GrammarInstall,
@@ -204,6 +205,13 @@ impl Step {
                 &[Step::LauncherBuild],
                 &[],
                 "Build the compiler as it is released",
+            ),
+            Step::CompilerTest => always(
+                Subject::Compiler,
+                Action::Test,
+                &[Step::CompilerBuild],
+                &[Tool::Node],
+                "Compile fixture packages for a browser with the compiler as it is released and start each page's loader under a JavaScript engine: alone runs a page the compiler wrote, its gateways answering their rows",
             ),
             Step::BundleBuild => always(
                 Subject::Bundle,

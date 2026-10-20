@@ -1,4 +1,4 @@
-//! The `run` door over the JS harness. The heavy lifting — instantiating the program, satisfying the host imports, holding each `foreign` hook to its row, catching the exit signal — lives in `harness.mjs`, shipped as a wasm-bindgen snippet; this assembles its `config` from the [`configuration`] every host of the browser is given, so a playground calling `run` never spells a wire code itself.
+//! The `run` door over the JS harness. The heavy lifting — instantiating the program, satisfying the host imports, holding each `foreign` hook to its row, catching the exit signal — lives in `harness.mjs`, shipped as a wasm-bindgen snippet; this assembles its `config` from the [`configuration()`] every host of the browser is given, so a playground calling `run` never spells a wire code itself.
 
 use {
     crate::{bridge_bytes, configuration},

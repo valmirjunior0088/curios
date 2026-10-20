@@ -7,8 +7,8 @@
 use {
     crate::{
         BIOME, BROWSER_TRIPLE, HOST_TRIPLE, Step, Tree, artifact, ask, bindgen_web, built, cargo,
-        file_with_inputs, grammar, inputs, modified, root, run, spelled, target_directory, vscode,
-        xtask, zed,
+        file_with_inputs, grammar, inputs, modified, released, root, run, spelled,
+        target_directory, vscode, xtask, zed,
     },
     clap::ValueEnum,
     std::{fs, path::Path, process::Command, time::Instant},
@@ -186,6 +186,13 @@ impl Step {
             Step::DocsBuild => docs_build(),
             Step::CompilerBuild => {
                 cargo(&["build", "--release", "--package", "curios", KEEP_GOING])
+            }
+            // The compiler under test is the one `compiler build` filed, named to the suite rather than found on PATH, where an installed one would answer instead.
+            Step::CompilerTest => {
+                let mut node = Command::new("node");
+                node.env("CURIOS", released("curios"));
+
+                run(node, &["--test", "curios-browser/src/page.test.mjs"])
             }
             // Whoever narrows the run asks about a package's tests or some test's, which the cache of another crate's build script is not.
             Step::WorkspaceBinaryenCache => match (package, request.unselected()) {

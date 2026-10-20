@@ -258,3 +258,8 @@ impl HostOp {
         &self.row().signature
     }
 }
+
+/// Whether the host answers the row declared as `name`: one of this table's rows, which are the standard library's. Every host answers every row, denying what it cannot do, so this is one question whatever a program is linked for.
+pub fn host_answers(name: &str) -> bool {
+    HostOp::ALL.iter().any(|op| op.declared() == name)
+}

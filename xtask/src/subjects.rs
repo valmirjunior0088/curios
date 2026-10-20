@@ -86,12 +86,14 @@ impl Asks for InstrumentedAction {
 #[derive(Debug, Subcommand)]
 pub(crate) enum CompilerAction {
     Build,
+    Test,
 }
 
 impl Asks for CompilerAction {
     fn asked(self) -> (Action, Request) {
         match self {
             Self::Build => (Action::Build, Request::whole()),
+            Self::Test => (Action::Test, Request::whole()),
         }
     }
 }

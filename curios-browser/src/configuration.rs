@@ -18,7 +18,7 @@ fn token(handle: Handle) -> String {
 ///
 /// - `status`: every status code under its constant's name, as a decimal string, since a code is a `Nat` the harness answers as a `BigInt` and JSON carries no integer past 2⁵³ exactly.
 /// - Every code set a byte carries, the poll masks among them, under the set's name, as numbers.
-/// - `stdio`: the standard streams' tokens, as [`token`] spells them.
+/// - `stdio`: the standard streams' tokens, each the hex of its exact bytes.
 /// - `seed`: the first token the harness may mint.
 /// - `deadlock`: what a host reports of a program suspended on nothing.
 /// - `rows`: the name the standard library declares each host row under, beside the host method that answers it.

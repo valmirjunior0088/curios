@@ -1,13 +1,13 @@
-//! Driving the compile pipeline for the CLI, from an admitted program to the `.cwasm` payload both subcommands consume — including the store consultation that can skip the whole thing. Observing a stage is not here: that is a question about a program, and questions are `wonder`'s.
+//! Driving the compile pipeline for the CLI, from an admitted program to the payload a target consumes — natively the `.cwasm` both subcommands run or bundle, and for a browser the module Binaryen wrote — including the store consultation that can skip the whole thing. Observing a stage is not here: that is a question about a program, and questions are `wonder`'s.
 //!
-//! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
+//! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher or writes it beside a page. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
     crate::{Heading, Line, Subject, fact, note, processing},
-    curios::{engine, to_cwasm},
+    curios::{engine, optimize, to_cwasm},
     curios_abi::ForeignStore,
     curios_document::Documentation,
-    curios_package::{Entry, Program, Runs},
+    curios_package::{Entry, Program, Runs, Target},
     curios_pipeline::{Cache, CompileError, Fold, Progress},
     curios_text::{Entrypoint, Form, RootSource, UnitSource},
     curios_utilities::Source,
@@ -27,15 +27,20 @@ pub(crate) fn note_unlinked(program: &Program, taken: &str) {
     }
 }
 
-/// The precompiled payload for `program`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise. `cache` is the store its command opened for it to file into, and `None` compiles everything and files nothing.
+/// The payload `program` is built into for `target`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise: natively the precompiled `.cwasm`, filed under the engine that will run it, and for a browser the module Binaryen wrote, which any browser runs. `cache` is the store its command opened for it to file into, and `None` compiles everything and files nothing.
 ///
 /// The scope is the program's own dependency graph and nothing else: a manifest is the only thing that says what a unit is compiled against. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
 pub(crate) fn payload_of(
     budget: u64,
     program: Program,
     cache: Option<Verdicts>,
+    target: Target,
 ) -> Result<(Vec<u8>, ForeignStore), CompileError> {
     let subject = subject_of(&program);
+    let runs = match target {
+        Target::Native => Runs::Native { engine: engine() },
+        Target::Browser => Runs::Browser,
+    };
 
     note_unlinked(&program, "is compiled");
 
@@ -81,10 +86,9 @@ pub(crate) fn payload_of(
     let sources = units.iter().map(UnitSource::mounted).collect::<Vec<_>>();
 
     if let Some((cache, program)) = &filed
-        && let Some((payload, foreigns)) =
-            cache.payload_get(program, &sources, Runs::Native { engine: engine() })
+        && let Some((payload, foreigns)) = cache.payload_get(program, &sources, runs)
     {
-        // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step names the subject rather than a unit, because what came back is the whole program's machine code.
+        // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step names the subject rather than a unit, because what came back is the whole program's.
         processing(&subject, manifest.as_deref());
         let mut line = Line::nested(Heading::Compiling, &subject);
         line.outcome("reused");
@@ -103,19 +107,15 @@ pub(crate) fn payload_of(
         cache.as_ref().map(|cache| cache as &dyn Cache),
     )
     .and_then(|(module, foreigns)| {
-        to_cwasm(&module)
-            .map(|payload| (payload, foreigns))
-            .map_err(CompileError::failure)
+        match target {
+            Target::Native => to_cwasm(&module).map_err(CompileError::failure),
+            Target::Browser => Ok(optimize(&module, false, |_| {})),
+        }
+        .map(|payload| (payload, foreigns))
     });
 
     if let (Ok((payload, foreigns)), Some((cache, program))) = (&compiled, &filed) {
-        cache.payload_put(
-            program,
-            &sources,
-            payload,
-            foreigns,
-            Runs::Native { engine: engine() },
-        );
+        cache.payload_put(program, &sources, payload, foreigns, runs);
     }
 
     // After the fold rather than during it: one unwritable store refuses everything for the same reason, so this is one line however many units went past it. Reported even when the compilation failed, because a store nobody can write is true either way and the next run pays for it either way.

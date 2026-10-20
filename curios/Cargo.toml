@@ -3,7 +3,7 @@ name = "curios"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios native compiler: the CLI, Binaryen optimization, Wasmtime precompilation, executable bundling, and the documentation pages"
+description = "The Curios native compiler: the CLI, Binaryen optimization, Wasmtime precompilation, executable bundling, browser pages, and the documentation pages"
 
 [lints]
 workspace = true
@@ -31,6 +31,8 @@ curios-document = { workspace = true }
 curios-archive = { workspace = true }
 curios-binaryen = { workspace = true }
 curios-native = { workspace = true }
+# The browser's host: what a page holds and how it is laid out.
+curios-browser = { workspace = true }
 # Cranelift behind the runtime's engine: what compiles a module, which the launcher never links. Wasmtime itself is named nowhere in this crate.
 curios-cranelift = { workspace = true }
 clap = { version = "4.6.1", features = ["derive"] }

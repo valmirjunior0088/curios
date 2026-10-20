@@ -39,5 +39,8 @@ pub use pin::*;
 mod selection;
 pub use selection::*;
 
+mod served;
+pub use served::*;
+
 mod store;
 pub use store::*;

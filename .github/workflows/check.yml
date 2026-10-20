@@ -104,6 +104,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
@@ -120,6 +123,8 @@ jobs:
             curios-binaryen/.artifacts
       - name: Build
         run: cargo xtask compiler build
+      - name: Test
+        run: cargo xtask compiler test
 
   docs:
     name: Documentation

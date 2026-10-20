@@ -13,8 +13,8 @@ mod tests;
 
 use {
     crate::{
-        EXECUTABLE, EXTENSION, Executable, Governing, LIBRARY, MANIFEST, Manifest, Package,
-        module_of, nearest_manifest, order, reachable, stem_module_of,
+        EXECUTABLE, EXTENSION, Executable, Governing, LIBRARY, MANIFEST, Manifest, Package, Store,
+        Target, module_of, nearest_manifest, order, reachable, stem_module_of,
     },
     curios_text::{Entrypoint, Form, Overlay, RootSource, identity},
     curios_utilities::{Qualifier, RootKind},
@@ -216,8 +216,13 @@ pub struct Home {
     pub package: String,
     /// The executable's declared name.
     pub executable: String,
-    /// Where a native build of it is written, under the governing root's store.
-    pub output: PathBuf,
+}
+
+impl Home {
+    /// Where a build of the executable for `target` is written, under the governing root's store.
+    pub fn built(&self, target: Target) -> PathBuf {
+        Store::at(self.root.clone()).built(target, &self.package, &self.executable)
+    }
 }
 
 /// Why a file a package's directory holds is in none of its units, and the note a command that takes it on its own opens with ([`Unlinked::note`]).
@@ -335,9 +340,6 @@ fn program(governing: &Governing, executable: &Executable) -> Result<Program, St
                 manifest: governing.manifest.clone(),
                 package: governing.package.name.clone(),
                 executable: executable.name.clone(),
-                output: governing
-                    .store()
-                    .native(&governing.package.name, &executable.name),
             },
             declares: reachable(&governing.package),
             units: order(governing)?,

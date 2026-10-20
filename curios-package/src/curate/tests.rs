@@ -436,6 +436,7 @@ fn a_fetched_module_matching_its_pin_is_placed() {
     let acquisition = ModuleAcquisition {
         package: "crypto".to_string(),
         name: "sha2".to_string(),
+        target: Target::Native,
         url: format!("file://{}", module.display()),
         hash: hash.clone(),
     };
@@ -460,6 +461,7 @@ fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
     let acquisition = ModuleAcquisition {
         package: "crypto".to_string(),
         name: "sha2".to_string(),
+        target: Target::Native,
         url: format!("file://{}", module.display()),
         hash: pinned.clone(),
     };
