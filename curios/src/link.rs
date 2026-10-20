@@ -91,6 +91,13 @@ fn unanswered(
         return Ok(());
     };
 
+    // A gateway is tested natively through a module standing in for it, so the native refusal names that door.
+    let stand_in = match target {
+        Target::Native => {
+            "; a `.wasm` standing in for its gateway, stated as `[foreign.native]`, is what `run` and `test` link"
+        }
+        Target::Browser => "",
+    };
     let target = target.spelled();
 
     Err(
@@ -99,7 +106,7 @@ fn unanswered(
             .find(|(_, _, answers)| answers.iter().any(|answer| answer == name))
         {
             Some((package, row, _)) => format!(
-                "`{name}` is answered by the foreign row {row:?} of {package}, which states no `[foreign.{target}]`: the {target} target has nothing to link for it"
+                "`{name}` is answered by the foreign row {row:?} of {package}, which states no `[foreign.{target}]`: the {target} target has nothing to link for it{stand_in}"
             ),
             None => match manifest {
                 Some(_) => format!(

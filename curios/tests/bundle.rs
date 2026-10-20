@@ -228,7 +228,7 @@ fn an_umbrella_members_program_links_its_own_foreign_rows() {
     );
 }
 
-/// A row that states only `[foreign.browser]` is its author's word that the native target links nothing for it: a program reaching one of its declarations is refused natively, naming the row and the table it lacks, before anything is written.
+/// A row that states only `[foreign.browser]` is its author's word that the native target links nothing for it: a program reaching one of its declarations is refused natively, naming the row, the table it lacks, and the stand-in for its gateway that table would hold, before anything is written.
 #[test]
 fn a_row_with_no_native_table_is_refused_natively_by_name() {
     let root = Temporary::new("cli-bundle", "browser-only");
@@ -257,7 +257,7 @@ fn a_row_with_no_native_table_is_refused_natively_by_name() {
 
     assert!(
         refusal.contains(
-            "`/clock/double` is answered by the foreign row \"page\" of clock, which states no `[foreign.native]`: the native target has nothing to link for it"
+            "`/clock/double` is answered by the foreign row \"page\" of clock, which states no `[foreign.native]`: the native target has nothing to link for it; a `.wasm` standing in for its gateway, stated as `[foreign.native]`, is what `run` and `test` link"
         ),
         "{refusal}"
     );

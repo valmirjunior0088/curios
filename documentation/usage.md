@@ -161,6 +161,8 @@ Each export `[foreign.answers]` names is a function answering the declaration it
 | `List(T)` | an array of what `T` is handed as |
 | `Option(T)` | what `T` is handed as, or `null` |
 
+**Each side is tested with its own tools.** A row that states both tables links its `[foreign.native]` module wherever the program runs natively, so a `.wasm` standing in for a gateway is what `curios test` and `curios run` link for code that reaches the row, and the Curios side is tested with the JavaScript mocked. A gateway's exports are plain functions held to the values above, so a JavaScript test calls them with what a page would hand them and checks what they answer, and the JavaScript side is tested with the program mocked. A row with only `[foreign.browser]` is refused natively, naming the table a stand-in goes in.
+
 The page runs in Chrome 119, Firefox 121 and Safari 18.2 and every later version, the first to ship WebAssembly's garbage collection and tail calls together. A server must give `.js` and `.mjs` a JavaScript type, which a module script requires; `index.wasm` is compiled from its bytes, so its type does not matter. Curios runs no build of what a gateway imports: TypeScript, a bundler or a minifier runs before `compile`, into a directory a `static` entry serves.
 
 ## `document`
