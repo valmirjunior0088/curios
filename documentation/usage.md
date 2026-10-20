@@ -244,6 +244,8 @@ The export list is read by compiling the module, so it also answers whether this
 
 `--target` is required on `pin foreign`, and names the table of the row that is written, `[foreign.native]` or `[foreign.browser]`, inline where its author wrote it inline; the other table is left as it was. A browser delivery is described as the JavaScript gateway it is, whose exports are held to its rows where the page loads it, so nothing is read of them here. Writing is checked rather than trusted: the manifest is edited in place, keeping its comments and ordering, and the result is read back and compared key by key against what went in, so a row written here cannot have disturbed one it was not asked about. Pinning a row to what it already says writes nothing and reports that it did.
 
+A pin reads only the row it writes, so it repairs a row the manifest refuses: `--refresh` gives a row the `hash` it lacks, and `--path` or `--url` gives a row written by hand the table it names no file in. What is held to the manifest's rules is the manifest as the pin would leave it, read before it is written: one that would still be refused, for this row or another, is refused naming why, and nothing is written.
+
 ## `new`
 
 ```sh

@@ -2,17 +2,17 @@
 
 use {super::*, curios_utilities::test_support::Temporary, std::fs};
 
-/// A package whose manifest holds `manifest`, governed by itself.
+/// A package whose manifest holds `manifest`, and where a pin standing in it writes.
 ///
 /// `name` is the test's own, because `Temporary` separates fixtures by process and millisecond and these run in parallel in one process — two sharing a name would share a directory.
-fn governed(name: &str, manifest: &str) -> (Temporary, Governing) {
+fn governed(name: &str, manifest: &str) -> (Temporary, Pinning) {
     let root = Temporary::new("pin", name);
     fs::create_dir_all(&root).expect("create the package directory");
     fs::write(root.join(MANIFEST), manifest).expect("write the manifest");
 
-    let governing = Governing::of(&root).expect("the package governs itself");
+    let pinning = Pinning::found(None, &root).expect("the package's own manifest");
 
-    (root, governing)
+    (root, pinning)
 }
 
 /// A module the package carries, so nothing here reaches the network.
@@ -296,7 +296,7 @@ fn a_dependency_named_otherwise_than_it_declares_itself_is_refused() {
     fs::write(dep.join(MANIFEST), "compiler = \"0.0.0\"\nname = \"dep\"\n")
         .expect("write the dependency's manifest");
 
-    let governing = Governing::of(&app).expect("the package governs itself");
+    let governing = Pinning::found(None, &app).expect("the package's own manifest");
     let refusal = pin(
         &governing,
         Subject::Dependency,
@@ -307,4 +307,78 @@ fn a_dependency_named_otherwise_than_it_declares_itself_is_refused() {
     .expect_err("a package is referred to by the name it declares");
 
     assert!(refusal.contains("declares itself \"dep\""), "{refusal}");
+}
+
+/// The refusal of a row that states no `hash` names `--refresh` as what writes one, so `--refresh` must be able to: a pin reads only the row it writes, and holds the manifest it leaves to the manifest's rules.
+#[test]
+fn a_row_with_no_hash_is_given_one_by_a_refresh() {
+    let (root, pinning) = governed(
+        "unhashed",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.browser]\npath = \"web/dom.js\"\n\n[foreign.answers]\nclick = \"click\"\n",
+    );
+    let hash = carried(&root, "web/dom.js", b"export const click = () => {};\n");
+    crate::Manifest::from_path(&pinning.manifest).expect_err("a row with no hash is refused");
+
+    let pinned = pin(
+        &pinning,
+        Subject::Foreign(Target::Browser),
+        "dom",
+        &Repoint::Refresh,
+        false,
+    )
+    .expect("the refresh writes the hash the refusal asked for");
+
+    assert!(pinned.wrote);
+    let written = fs::read_to_string(&pinning.manifest).expect("read it back");
+    assert!(written.contains(&hash.to_string()), "{written}");
+    crate::Manifest::from_path(&pinning.manifest).expect("the manifest reads once pinned");
+}
+
+/// A row written by hand with no table yet is one the manifest refuses, and pinning its delivery is what gives it one.
+#[test]
+fn a_row_naming_no_file_is_given_its_table_by_a_pin() {
+    let (root, pinning) = governed(
+        "tableless",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.answers]\nclick = \"click\"\n",
+    );
+    carried(&root, "web/dom.js", b"export const click = () => {};\n");
+
+    pin(
+        &pinning,
+        Subject::Foreign(Target::Browser),
+        "dom",
+        &Repoint::Carried("web/dom.js".into()),
+        false,
+    )
+    .expect("the pin writes the table the row lacks");
+
+    let written = fs::read_to_string(&pinning.manifest).expect("read it back");
+    assert!(written.contains("[foreign.browser]"), "{written}");
+    crate::Manifest::from_path(&pinning.manifest).expect("the manifest reads once pinned");
+}
+
+/// A pin writes no manifest a command could not read: a refusal elsewhere in it is stated, and the file is left as it was.
+#[test]
+fn a_pin_that_would_leave_the_manifest_unreadable_writes_nothing() {
+    let manifest = "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\njson = { source = \"git\", url = \"https://example.invalid/json\", rev = \"abc\" }\n";
+    let (root, pinning) = governed("unreadable", manifest);
+    carried(&root, "web/dom.js", b"export const click = () => {};\n");
+
+    let refusal = pin(
+        &pinning,
+        Subject::Foreign(Target::Browser),
+        "dom",
+        &Repoint::Carried("web/dom.js".into()),
+        false,
+    )
+    .expect_err("the dependency row still lacks its hash");
+
+    assert!(
+        refusal.contains("as this pin would leave it") && refusal.contains("requires `hash`"),
+        "{refusal}"
+    );
+    assert_eq!(
+        fs::read_to_string(&pinning.manifest).expect("read it back"),
+        manifest
+    );
 }

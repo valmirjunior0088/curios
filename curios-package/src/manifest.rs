@@ -725,12 +725,12 @@ fn delivered(
         }
         (Some(_), Some(_)) => {
             return Err(format!(
-                "the foreign row {name:?} states `path` beside `url` in `[foreign.{target}]`; a module is carried by the package or fetched, never both"
+                "the foreign row {name:?} states `path` beside `url` in `[foreign.{target}]`; a file is carried by the package or fetched, never both"
             ));
         }
         (None, None) => {
             return Err(format!(
-                "the foreign row {name:?} names no module in `[foreign.{target}]`: state `path` for one the package carries, or `url` for one it fetches"
+                "the foreign row {name:?} names no file in `[foreign.{target}]`: state `path` for one the package carries, or `url` for one it fetches"
             ));
         }
     };
@@ -738,7 +738,7 @@ fn delivered(
     // Both deliveries state it, because it answers what the file *is* rather than where it came from — and the carried case is the one that would otherwise go unchecked, since the tree holding it may be the entry package or a live path dependency, neither of which is pinned.
     let Some(hash) = hash else {
         return Err(format!(
-            "the foreign row {name:?} states no `hash` in `[foreign.{target}]`; a module is accepted against one however it arrives, and `{invocation} --refresh` writes the one it currently has"
+            "the foreign row {name:?} states no `hash` in `[foreign.{target}]`; a file is accepted against one however it arrives, and `{invocation} --refresh` writes the one it currently has"
         ));
     };
 

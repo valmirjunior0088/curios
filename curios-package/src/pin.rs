@@ -9,14 +9,67 @@ mod tests;
 
 use {
     crate::{
-        FileHash, Governing, MANIFEST, Manifest, Store, Target, TreeHash, deliver, deliver_module,
+        FileHash, MANIFEST, Manifest, Store, Target, TreeHash, deliver, deliver_module,
+        nearest_manifest, umbrella_over,
     },
+    curios_text::identity,
     std::{
         fs,
         path::{Component, Path, PathBuf},
     },
     toml_edit::{ArrayOfTables, DocumentMut, InlineTable, Item, Table, Value},
 };
+
+/// Where `curios pin` writes: the manifest it was named or stands nearest, the directory a carried path is read from, and the root the store sits beside.
+///
+/// **Located without reading the manifest's rows**, since the row a pin is asked to repair — one missing its `hash`, or its table — is one the manifest cannot be read with yet: a governing package is a manifest read whole, which would refuse the very row the pin writes. What is held to the manifest's rules is what [`pin`] would write.
+pub struct Pinning {
+    /// The manifest written.
+    pub manifest: PathBuf,
+    /// Where the manifest sits, which a carried path is relative to.
+    pub directory: PathBuf,
+    /// The governing root, where the store sits: the umbrella's directory when one enumerates the package, and the package's otherwise.
+    root: PathBuf,
+}
+
+impl Pinning {
+    /// What a pin writes: the manifest `manifest` names where it names one, and the one nearest `directory` otherwise, as a command governed by it would find it.
+    pub fn found(manifest: Option<&Path>, directory: &Path) -> Result<Self, String> {
+        let manifest = match manifest {
+            Some(manifest) => identity(manifest),
+            None => {
+                let directory = directory
+                    .canonicalize()
+                    .map_err(|error| format!("{}: {error}", directory.display()))?;
+
+                nearest_manifest(&directory)
+                    .ok_or_else(|| {
+                        format!(
+                            "no `{MANIFEST}` in {} or any directory above it; `curios pin` writes a row into a package's manifest",
+                            directory.display()
+                        )
+                    })?
+                    .join(MANIFEST)
+            }
+        };
+        let directory = manifest
+            .parent()
+            .expect("a manifest's path names the directory it sits in")
+            .to_path_buf();
+        let root = umbrella_over(&directory)?.map_or_else(|| directory.clone(), |(_, root)| root);
+
+        Ok(Self {
+            manifest,
+            directory,
+            root,
+        })
+    }
+
+    /// The store a fetched delivery is filed in.
+    pub fn store(&self) -> Store {
+        Store::at(self.root.clone())
+    }
+}
 
 /// Where a delivery lands before the digest that will name it is known, removed however this ends.
 ///
@@ -194,35 +247,34 @@ impl Pinned {
 /// Write what `repoint` says the row `name` should state, answering what changed.
 ///
 /// **Nothing is written when nothing differs**, so pinning a row to what it already says is a no-op that reports one, and `check` turns the whole thing into a question — the delivery still happens, because what a row *should* say cannot be known without it, and only the write is withheld.
+///
+/// **What is held to the manifest's rules is the manifest as the pin leaves it**, read before it is written: a pin repairs a row the manifest could not be read with — a `hash` it lacks, a table it names no file in — and never writes one that no command could read.
 pub fn pin(
-    governing: &Governing,
+    pinning: &Pinning,
     subject: Subject,
     name: &str,
     repoint: &Repoint,
     check: bool,
 ) -> Result<Pinned, String> {
-    let text = fs::read_to_string(&governing.manifest)
-        .map_err(|error| format!("failed to read {}: {error}", governing.manifest.display()))?;
-    let before = text.parse::<DocumentMut>().map_err(|error| {
-        format!(
-            "{} is not valid TOML: {error}",
-            governing.manifest.display()
-        )
-    })?;
+    let text = fs::read_to_string(&pinning.manifest)
+        .map_err(|error| format!("failed to read {}: {error}", pinning.manifest.display()))?;
+    let before = text
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("{} is not valid TOML: {error}", pinning.manifest.display()))?;
 
     let existed = present(&before, subject, name);
     if repoint.edits_existing() && !existed {
         return Err(format!(
             "there is no {} {name:?} in {} to re-pin; `{} --url <URL>` is what writes one",
             subject.noun(),
-            governing.manifest.display(),
+            pinning.manifest.display(),
             subject.invocation(name)
         ));
     }
 
     let settled = match subject {
-        Subject::Foreign(target) => settled_foreign(governing, target, name, repoint, &before)?,
-        Subject::Dependency => settled_dependency(governing, name, repoint, &before)?,
+        Subject::Foreign(target) => settled_foreign(pinning, target, name, repoint, &before)?,
+        Subject::Dependency => settled_dependency(pinning, name, repoint, &before)?,
     };
 
     // What the row says now, against what it would say — so a second identical pin has nothing to write and says so.
@@ -249,10 +301,6 @@ pub fn pin(
         probe: settled.probe,
     };
 
-    if check || (!pinned.would_write() && !cleared && existed) {
-        return Ok(pinned);
-    }
-
     let mut after = before.clone();
     {
         let mut row = row_mut(&mut after, subject, name);
@@ -266,8 +314,21 @@ pub fn pin(
 
     undisturbed(&before, &after, subject, name)?;
 
-    fs::write(&governing.manifest, after.to_string())
-        .map_err(|error| format!("failed to write {}: {error}", governing.manifest.display()))?;
+    // What is written is what every later command reads, so it is read here first: a manifest a pin leaves is one each of them can read, whatever the one it found could not.
+    let written = after.to_string();
+    written.parse::<Manifest>().map_err(|refusal| {
+        format!(
+            "{}, as this pin would leave it: {refusal}",
+            pinning.manifest.display()
+        )
+    })?;
+
+    if check || (!pinned.would_write() && !cleared && existed) {
+        return Ok(pinned);
+    }
+
+    fs::write(&pinning.manifest, written)
+        .map_err(|error| format!("failed to write {}: {error}", pinning.manifest.display()))?;
 
     Ok(Pinned {
         wrote: true,
@@ -497,16 +558,16 @@ struct Settled {
 
 /// What a `[[foreign]]` row is to say.
 fn settled_foreign(
-    governing: &Governing,
+    pinning: &Pinning,
     target: Target,
     name: &str,
     repoint: &Repoint,
     document: &DocumentMut,
 ) -> Result<Settled, String> {
-    let store = governing.store();
+    let store = pinning.store();
     let carried = |path: &Path| -> Result<Settled, String> {
         let spelled = plain(path, name)?;
-        let at = governing.directory.join(path);
+        let at = pinning.directory.join(path);
         let bytes = fs::read(&at).map_err(|error| {
             format!(
                 "the foreign module {name:?} is not at {}: {error}",
@@ -566,12 +627,12 @@ fn settled_foreign(
 ///
 /// Every form but the carried one checks the name it was given against the name the delivery declares, which is the check [`Subject`] exists to make.
 fn settled_dependency(
-    governing: &Governing,
+    pinning: &Pinning,
     name: &str,
     repoint: &Repoint,
     document: &DocumentMut,
 ) -> Result<Settled, String> {
-    let store = governing.store();
+    let store = pinning.store();
     let agreed = |declared: &str, at: &str| -> Result<(), String> {
         match declared == name {
             true => Ok(()),
@@ -611,7 +672,7 @@ fn settled_dependency(
         // Not held to a plain relative path, unlike a module: a module is inside this package, while a `source = "path"` dependency reaches a separate project on disk — so `../shape` is exactly what it is for. A package of this project's own is a `member` of its umbrella, which is a marker row and nothing this writes.
         Repoint::Carried(path) => {
             let spelled = path.to_string_lossy().replace('\\', "/");
-            let at = governing.directory.join(path);
+            let at = pinning.directory.join(path);
             agreed(&declares(&at)?, &at.display().to_string())?;
 
             Ok(Settled {

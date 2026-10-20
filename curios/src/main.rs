@@ -36,7 +36,7 @@ use {
     curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost},
-    curios_package::{Entry, Governing, Repoint, Spelling, Store, Target, curate, pin, scaffold},
+    curios_package::{Entry, Pinning, Repoint, Spelling, Store, Target, curate, pin, scaffold},
     curios_pipeline::CompileError,
     curios_text::Formatted,
     curios_utilities::Source,
@@ -408,9 +408,10 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         Mode::Pin { row } => {
-            let governing = Governing::found(manifest, &here()?)?;
+            // Found without reading the manifest's rows, since the row a pin repairs may be one the manifest cannot be read with yet: what is written is what is checked.
+            let pinning = Pinning::found(manifest, &here()?)?;
             let (subject, name, repoint, check) = asked(row);
-            let pinned = pin(&governing, subject, &name, &repoint, check)?;
+            let pinned = pin(&pinning, subject, &name, &repoint, check)?;
             let named = Subject::Module(name);
 
             // Before what was written, because this is what the write is about to believe.

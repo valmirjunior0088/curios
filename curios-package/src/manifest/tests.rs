@@ -495,8 +495,8 @@ fn a_foreign_row_states_one_delivery_and_no_half_of_another() {
             format!("path = \"m.wasm\"\nurl = \"https://e.com/m.wasm\"\n{PIN}"),
             "never both",
         ),
-        (PIN.to_string(), "names no module"),
-        ("".to_string(), "names no module"),
+        (PIN.to_string(), "names no file"),
+        ("".to_string(), "names no file"),
         // Stated for a carried module too: the tree holding it need not be pinned, so this is the delivery the hash is load-bearing for.
         ("path = \"m.wasm\"".to_string(), "states no `hash`"),
         ("url = \"https://e.com/m.wasm\"".to_string(), "states no `hash`"),
