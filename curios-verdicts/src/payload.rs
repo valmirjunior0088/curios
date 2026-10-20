@@ -4,7 +4,7 @@
 //!
 //! **Taking a payload from here is believing a whole compilation, judgment included.** The entry's kernel recheck is skipped on the strength of the record exactly as a reused unit's is, and the argument for that is [Reused payloads](../../documentation/design/soundness/reused-payloads.md), which extends [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md) rather than restating it.
 //!
-//! **Two things the unit family has no counterpart for.** The entry's own header is never read through a loader — the caller parsed it before any resolution happened — so it is recorded separately, and from the text that was parsed rather than from a re-read of the path: re-reading races an edit landing between the parse and the digest, which records newer text against an older artifact, the one direction that admits stale. And the payload is machine code, so the engine that will run it joins the address — handed in by the caller, since the crate that can describe an engine is the one that links it; see [`Verdicts::payload_get`].
+//! **Two things the unit family has no counterpart for.** The entry's own header is never read through a loader — the caller parsed it before any resolution happened — so it is recorded separately, and from the text that was parsed rather than from a re-read of the path: re-reading races an edit landing between the parse and the digest, which records newer text against an older artifact, the one direction that admits stale. And a native payload is machine code, so the engine that will run it joins the address — handed in by the caller, since the crate that can describe an engine is the one that links it — where a browser's is a module any browser runs; see [`Verdicts::payload_get`].
 
 #[cfg(test)]
 mod tests;
@@ -12,7 +12,7 @@ mod tests;
 use {
     crate::{Verdicts, chained, replace, unchanged},
     curios_abi::ForeignStore,
-    curios_package::payload_slot,
+    curios_package::{Runs, payload_slot},
     curios_text::{RootSource, UnitSource},
     curios_unit::{digested, read_within, segments},
     curios_utilities::digest,
@@ -63,18 +63,18 @@ impl Verdicts {
     ///
     /// Consulting this does not enter the fold's chain: a hit means no fold runs at all, and a miss leaves the fold to place its own units.
     ///
-    /// `engine` is what decides whether a payload compiled on this machine runs on another, as a key part: a payload, unlike a unit, is machine-dependent. A unit is a judgment and travels wherever the compiler binary does; this is machine code emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. The crate that owns the runtime describes its engine, `curios-utilities`'s `Fingerprint` turns the description into a digest, and this crate files under it, so nothing here names wasmtime and nothing there names `sha2`.
+    /// `runs` is what runs the payload, as a key part: natively, the engine, which decides whether a payload compiled on this machine runs on another, since a payload, unlike a unit, is machine-dependent; in a browser, nothing of the machine. A unit is a judgment and travels wherever the compiler binary does; this is machine code emitted for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. The crate that owns the runtime describes its engine, `curios-utilities`'s `Fingerprint` turns the description into a digest, and this crate files under it, so nothing here names wasmtime and nothing there names `sha2`.
     pub fn payload_get(
         &self,
         program: &Program<'_>,
         units: &[UnitSource<'_>],
-        engine: &str,
+        runs: Runs<'_>,
     ) -> Option<(Vec<u8>, ForeignStore)> {
         let units = self.chain(units)?;
 
         // A file that is not a slot, or a stored record that will not read back, is a store to ignore, never a compile to fail.
         let store = self.store.as_ref()?;
-        let filed = fs::read(store.payload(&slot(self, program, engine)?)).ok()?;
+        let filed = fs::read(store.payload(runs, &slot(self, program, runs)?)).ok()?;
         let (recorded, bytes) = segments(&filed)?;
         let record = curios_archive::from_bytes::<Record>(recorded).ok()?;
 
@@ -95,14 +95,14 @@ impl Verdicts {
         units: &[UnitSource<'_>],
         bytes: &[u8],
         foreigns: &ForeignStore,
-        engine: &str,
+        runs: Runs<'_>,
     ) {
         // What every unit of the compilation was filed as: a payload vouches for the whole of it, so a unit with no place leaves nothing to file.
         let Some(filed) = self.filed().filter(|filed| filed.len() == units.len()) else {
             return;
         };
 
-        let (Some(store), Some(slot)) = (&self.store, slot(self, program, engine)) else {
+        let (Some(store), Some(slot)) = (&self.store, slot(self, program, runs)) else {
             return;
         };
 
@@ -116,7 +116,7 @@ impl Verdicts {
 
         let filed = curios_archive::to_bytes(&record)
             .map_err(io::Error::other)
-            .and_then(|record| replace(&store.payload(&slot), &record, bytes));
+            .and_then(|record| replace(&store.payload(runs, &slot), &record, bytes));
 
         if let Err(error) = filed {
             self.refused.borrow_mut().get_or_insert(error.to_string());
@@ -124,15 +124,15 @@ impl Verdicts {
     }
 }
 
-/// The slot `program` is filed in for `engine`, or `None` when it may not be filed at all — which is when the compiler cannot identify itself, and for the reason `Verdicts::compiler` gives.
-fn slot(verdicts: &Verdicts, program: &Program<'_>, engine: &str) -> Option<String> {
+/// The slot `program` is filed in for what `runs` it, or `None` when it may not be filed at all — which is when the compiler cannot identify itself, and for the reason `Verdicts::compiler` gives.
+fn slot(verdicts: &Verdicts, program: &Program<'_>, runs: Runs<'_>) -> Option<String> {
     let compiler = verdicts.compiler()?;
 
     Some(payload_slot(
         compiler,
         program.package,
         program.executable,
-        engine,
+        runs,
     ))
 }
 

@@ -12,7 +12,8 @@
 //!   foreign/        f1/<digest>     fetched foreign modules, keyed by the hash they were accepted against
 //!   verdicts/       <slot>          judged units, one file per unit and compiler
 //!   objects/        <slot>/<pack>   what each unit's slot names, in packs beside it
-//!   payloads/       <slot>          precompiled payloads, one file per executable, compiler and engine
+//!   payloads/       native/<slot>   precompiled payloads, one file per executable, compiler and target —
+//!                   browser/<slot>  and, natively, engine
 //! ```
 //!
 //! One transient entry passes through beside them: `pinning.<pid>`, where `curios pin` stages a delivery whose digest it has yet to compute, before renaming it into the family it belongs to. See [`Store::staging`].
@@ -27,7 +28,7 @@
 mod tests;
 
 use {
-    crate::{FileHash, TreeHash},
+    crate::{FileHash, Target, TreeHash},
     curios_utilities::{Fingerprint, Mount, Qualifier},
     std::path::PathBuf,
 };
@@ -116,8 +117,11 @@ impl Store {
     /// Where an executable's precompiled payload is filed, under the address its own identity, the compiler and the engine decide: one file, laid out as a unit's is, with what it was compiled *from* verified when the slot is opened.
     ///
     /// Shared rather than project-local, for the reason the type states: the address says nothing about which project asked. `native/` stays local because a built executable's identity *is* project-relative; the payload inside it is not.
-    pub fn payload(&self, slot: &str) -> PathBuf {
-        self.shared.join("payloads").join(slot)
+    pub fn payload(&self, runs: Runs<'_>, slot: &str) -> PathBuf {
+        self.shared
+            .join("payloads")
+            .join(runs.target().spelled())
+            .join(slot)
     }
 
     /// Where this machine's memo of its compiler's digest lives — a fact about the machine, so it belongs beside the things every project shares.
@@ -209,14 +213,33 @@ fn feed_declared(fingerprint: &mut Fingerprint, declared: Option<&[Qualifier]>) 
 /// **The executable's identity is its package's name and its own**, never a path. That pair is the one identity in a compilation that cannot collide (law 2), which is why two executables of one package occupy two slots and why nothing has to refuse an umbrella whose members both declare `serve`. A path here would key the payload on where a project sits rather than on what it builds.
 ///
 /// **The engine fingerprint is the part [`unit_slot`] has no counterpart for.** A unit is a judgment and travels anywhere the compiler binary does; a payload is machine code, and Cranelift compiled it for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. It rides here as an opaque string because deciding what makes two engines compatible is `curios-native`'s to answer, this crate's only job being to keep the answer in the address.
-pub fn payload_slot(compiler: &str, package: &str, executable: &str, engine: &str) -> String {
+pub fn payload_slot(compiler: &str, package: &str, executable: &str, runs: Runs<'_>) -> String {
     let mut fingerprint = Fingerprint::new();
 
     fingerprint.feed(PAYLOAD_SCHEMA);
     fingerprint.feed(compiler);
     fingerprint.feed(package);
     fingerprint.feed(executable);
-    fingerprint.feed(engine);
+    if let Runs::Native { engine } = runs {
+        fingerprint.feed(engine);
+    }
 
     fingerprint.hex()
+}
+
+/// What runs a precompiled payload, which is half its address: machine code one engine runs, named by that engine's fingerprint, or a module any browser runs, which needs no fingerprint. Each target's payloads are a directory of their own, so neither half of the family is read for the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Runs<'a> {
+    Native { engine: &'a str },
+    Browser,
+}
+
+impl Runs<'_> {
+    /// The target the payload is built for.
+    pub fn target(self) -> Target {
+        match self {
+            Runs::Native { .. } => Target::Native,
+            Runs::Browser => Target::Browser,
+        }
+    }
 }

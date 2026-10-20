@@ -7,7 +7,7 @@ use {
     curios::{engine, to_cwasm},
     curios_abi::ForeignStore,
     curios_document::Documentation,
-    curios_package::{Entry, Program},
+    curios_package::{Entry, Program, Runs},
     curios_pipeline::{Cache, CompileError, Fold, Progress},
     curios_text::{Entrypoint, Form, RootSource, UnitSource},
     curios_utilities::Source,
@@ -81,7 +81,8 @@ pub(crate) fn payload_of(
     let sources = units.iter().map(UnitSource::mounted).collect::<Vec<_>>();
 
     if let Some((cache, program)) = &filed
-        && let Some((payload, foreigns)) = cache.payload_get(program, &sources, engine())
+        && let Some((payload, foreigns)) =
+            cache.payload_get(program, &sources, Runs::Native { engine: engine() })
     {
         // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step names the subject rather than a unit, because what came back is the whole program's machine code.
         processing(&subject, manifest.as_deref());
@@ -108,7 +109,13 @@ pub(crate) fn payload_of(
     });
 
     if let (Ok((payload, foreigns)), Some((cache, program))) = (&compiled, &filed) {
-        cache.payload_put(program, &sources, payload, foreigns, engine());
+        cache.payload_put(
+            program,
+            &sources,
+            payload,
+            foreigns,
+            Runs::Native { engine: engine() },
+        );
     }
 
     // After the fold rather than during it: one unwritable store refuses everything for the same reason, so this is one line however many units went past it. Reported even when the compilation failed, because a store nobody can write is true either way and the next run pays for it either way.

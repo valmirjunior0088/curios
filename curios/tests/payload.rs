@@ -5,6 +5,7 @@
 //! Not `#[ignore]`d, unlike `bundle`: nothing here execs a produced executable. `curios run` runs its program in-process.
 
 use {
+    curios_package::Target,
     curios_utilities::test_support::Temporary,
     std::{
         fs,
@@ -57,9 +58,14 @@ fn reused(output: &Output) -> bool {
     String::from_utf8_lossy(&output.stderr).contains("; reused")
 }
 
-/// The payload slots the project at `root` holds.
+/// The native payload slots the project at `root` holds.
 fn slots(root: &Path) -> usize {
-    fs::read_dir(root.join(".curios").join("payloads")).map_or(0, Iterator::count)
+    fs::read_dir(
+        root.join(".curios")
+            .join("payloads")
+            .join(Target::Native.spelled()),
+    )
+    .map_or(0, Iterator::count)
 }
 
 /// The point of the thing, end to end: what the program does must not depend on whether it was compiled just now.

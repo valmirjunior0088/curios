@@ -76,7 +76,9 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
 
     let sources = scope.iter().map(UnitSource::mounted).collect::<Vec<_>>();
     // The rows come back beside the payload and are dropped here: what this suite asks is whether the *payload* was believed, and the rows ride along rather than deciding anything.
-    if let Some((payload, _foreigns)) = verdicts.payload_get(&program, &sources, ENGINE) {
+    if let Some((payload, _foreigns)) =
+        verdicts.payload_get(&program, &sources, Runs::Native { engine: ENGINE })
+    {
         return Invocation {
             reused: true,
             payload,
@@ -90,7 +92,13 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
 
     // The module's own bytes stand in for machine code: the store digests a payload and never reads it, and nothing here runs one.
     let payload = to_bytes(&module);
-    verdicts.payload_put(&program, &sources, &payload, &foreigns, ENGINE);
+    verdicts.payload_put(
+        &program,
+        &sources,
+        &payload,
+        &foreigns,
+        Runs::Native { engine: ENGINE },
+    );
 
     Invocation {
         reused: false,
@@ -157,21 +165,28 @@ fn greeting(word: &str) -> String {
     format!("pub let word : /std/Str =\n    \"{word}\";\n")
 }
 
+/// The directory the payload family files the native slots of the project at `root` in.
+fn payloads(root: &Path) -> PathBuf {
+    root.join(".curios")
+        .join("payloads")
+        .join(Runs::Native { engine: ENGINE }.target().spelled())
+}
+
 /// The payload slots at `root`, counting a store that was never created as the none it holds — which is what a refusal to file leaves behind.
 fn filed(root: &Path) -> usize {
-    fs::read_dir(root.join(".curios").join("payloads")).map_or(0, Iterator::count)
+    fs::read_dir(payloads(root)).map_or(0, Iterator::count)
 }
 
 /// The slots the payload family holds for the project at `root`.
 fn slots(root: &Path) -> usize {
-    fs::read_dir(root.join(".curios").join("payloads"))
+    fs::read_dir(payloads(root))
         .expect("a store with payloads in it")
         .count()
 }
 
 /// The one payload slot's file, for a test that has to damage what is in it.
 fn slot_of(root: &Path) -> PathBuf {
-    let mut slots = fs::read_dir(root.join(".curios").join("payloads"))
+    let mut slots = fs::read_dir(payloads(root))
         .expect("a store with payloads in it")
         .map(|slot| slot.unwrap().path())
         .collect::<Vec<_>>();
@@ -414,12 +429,13 @@ fn a_slot_does_not_answer_for_another_projects_program() {
 
 /// Copy every unit and payload slot `from`'s store holds into `into`'s, replacing whatever was there.
 fn stage(from: &Path, into: &Path) {
-    for family in ["verdicts", "payloads"] {
-        let (from, into) = (
-            from.join(".curios").join(family),
-            into.join(".curios").join(family),
-        );
-
+    for (from, into) in [
+        (
+            from.join(".curios").join("verdicts"),
+            into.join(".curios").join("verdicts"),
+        ),
+        (payloads(from), payloads(into)),
+    ] {
         let _ = fs::remove_dir_all(&into);
         fs::create_dir_all(&into).unwrap();
 

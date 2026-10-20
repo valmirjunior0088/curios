@@ -479,7 +479,7 @@ Everything generated lands under `.curios/`, beside the governing manifest, in s
 | `sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against | shared |
 | `foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way | shared |
 | `verdicts/<slot>` | judged units, one slot per unit: a library, or an executable's own declarations | shared |
-| `payloads/<slot>` | precompiled payloads, one slot per executable | shared |
+| `payloads/<target>/<slot>` | precompiled payloads, one slot per executable and target, each target's in a directory of its own | shared |
 | `compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary | shared |
 
 One transient entry passes through beside them: [`pin`](#pin) stages a delivery at `pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.

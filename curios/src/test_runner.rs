@@ -13,7 +13,7 @@ use {
     curios::{engine, to_cwasm},
     curios_abi::ForeignStore,
     curios_native::{Compiled, OsHost, TestEnd},
-    curios_package::{Entry, LIBRARY, Selection, Spelling, order},
+    curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, order},
     curios_pipeline::{Cache, CompileError, EntryTail, Fold, TestRecord},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_utilities::Source,
@@ -531,8 +531,8 @@ fn tests_payload(
         loader,
     };
 
-    if let Some((bytes, foreigns)) =
-        store.and_then(|store| store.payload_get(&program, &sources, engine()))
+    if let Some((bytes, foreigns)) = store
+        .and_then(|store| store.payload_get(&program, &sources, Runs::Native { engine: engine() }))
         && let Some((records, cwasm)) = decode(&bytes)
     {
         processing(subject, manifest);
@@ -561,7 +561,13 @@ fn tests_payload(
     if let Some(store) = store
         && let Some(bytes) = encode(&records, &cwasm)
     {
-        store.payload_put(&program, &sources, bytes.as_ref(), &foreigns, engine());
+        store.payload_put(
+            &program,
+            &sources,
+            bytes.as_ref(),
+            &foreigns,
+            Runs::Native { engine: engine() },
+        );
     }
 
     Ok((records, cwasm, foreigns))

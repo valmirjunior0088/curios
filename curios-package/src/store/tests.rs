@@ -75,7 +75,7 @@ fn the_families_do_not_share_a_namespace() {
     );
     assert_ne!(
         store.verdict("key"),
-        store.payload("key"),
+        store.payload(Runs::Native { engine: "e" }, "key"),
         "one slot name, two families, two places"
     );
 }
@@ -147,8 +147,8 @@ fn a_moved_boundary_is_a_different_slot() {
         "a length ahead of each part, so no part's bytes are read as another's"
     );
     assert_ne!(
-        payload_slot("c", "ab", "c", "e"),
-        payload_slot("c", "a", "bc", "e"),
+        payload_slot("c", "ab", "c", Runs::Native { engine: "e" }),
+        payload_slot("c", "a", "bc", Runs::Native { engine: "e" }),
         "and the payload address frames its own parts for the same reason"
     );
 }
@@ -156,16 +156,26 @@ fn a_moved_boundary_is_a_different_slot() {
 /// A payload's address is a function of every part — the same argument [`unit_slot`]'s makes, with the two this one adds in place of the mounts.
 #[test]
 fn every_part_of_a_payload_slot_changes_it() {
-    let slot = payload_slot("compiler", "app", "serve", "engine");
+    let slot = payload_slot(
+        "compiler",
+        "app",
+        "serve",
+        Runs::Native { engine: "engine" },
+    );
 
     assert_eq!(
         slot,
-        payload_slot("compiler", "app", "serve", "engine"),
+        payload_slot(
+            "compiler",
+            "app",
+            "serve",
+            Runs::Native { engine: "engine" }
+        ),
         "and it is a function"
     );
     assert_ne!(
         slot,
-        payload_slot("another", "app", "serve", "engine"),
+        payload_slot("another", "app", "serve", Runs::Native { engine: "engine" }),
         "the compiler is in it"
     );
 }
@@ -173,16 +183,31 @@ fn every_part_of_a_payload_slot_changes_it() {
 /// The executable's identity is the pair, so neither half alone decides a slot: two executables of one package are two, and one name declared by two packages is two.
 #[test]
 fn an_executables_identity_is_its_package_and_its_name() {
-    let slot = payload_slot("compiler", "app", "serve", "engine");
+    let slot = payload_slot(
+        "compiler",
+        "app",
+        "serve",
+        Runs::Native { engine: "engine" },
+    );
 
     assert_ne!(
         slot,
-        payload_slot("compiler", "app", "worker", "engine"),
+        payload_slot(
+            "compiler",
+            "app",
+            "worker",
+            Runs::Native { engine: "engine" }
+        ),
         "two executables of one package occupy two slots"
     );
     assert_ne!(
         slot,
-        payload_slot("compiler", "other", "serve", "engine"),
+        payload_slot(
+            "compiler",
+            "other",
+            "serve",
+            Runs::Native { engine: "engine" }
+        ),
         "and two packages declaring one name do too"
     );
 }
@@ -191,8 +216,34 @@ fn an_executables_identity_is_its_package_and_its_name() {
 #[test]
 fn two_engines_address_two_slots() {
     assert_ne!(
-        payload_slot("compiler", "app", "serve", "one"),
-        payload_slot("compiler", "app", "serve", "another")
+        payload_slot("compiler", "app", "serve", Runs::Native { engine: "one" }),
+        payload_slot(
+            "compiler",
+            "app",
+            "serve",
+            Runs::Native { engine: "another" }
+        )
+    );
+}
+
+/// A browser's payload is a module any browser runs, so it needs no engine in its address, and the two targets file under two directories, neither read for the other.
+#[test]
+fn each_target_files_its_payloads_apart() {
+    let store = Store::at(PathBuf::from("/w/u"));
+
+    assert_ne!(
+        store.payload(Runs::Native { engine: "e" }, "key"),
+        store.payload(Runs::Browser, "key")
+    );
+    assert!(
+        store
+            .payload(Runs::Browser, "key")
+            .ends_with("payloads/browser/key")
+    );
+    assert!(
+        store
+            .payload(Runs::Native { engine: "e" }, "key")
+            .ends_with("payloads/native/key")
     );
 }
 
@@ -200,8 +251,18 @@ fn two_engines_address_two_slots() {
 #[test]
 fn a_payload_slot_does_not_move_when_its_source_changes() {
     assert_eq!(
-        payload_slot("compiler", "app", "serve", "engine"),
-        payload_slot("compiler", "app", "serve", "engine")
+        payload_slot(
+            "compiler",
+            "app",
+            "serve",
+            Runs::Native { engine: "engine" }
+        ),
+        payload_slot(
+            "compiler",
+            "app",
+            "serve",
+            Runs::Native { engine: "engine" }
+        )
     );
 }
 
