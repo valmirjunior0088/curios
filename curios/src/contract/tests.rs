@@ -23,15 +23,25 @@ fn commands() -> Vec<&'static [&'static str]> {
         &["document", "--std", "site"],
         &["test", SUBJECT],
         &["curate"],
-        &["pin", "foreign", "probe", "--path", "probe.wasm"],
         &[
             "pin",
             "foreign",
             "probe",
-            "--url",
-            "https://example.invalid/probe.wasm",
+            "--target",
+            "native",
+            "--path",
+            "probe.wasm",
         ],
-        &["pin", "foreign", "probe", "--refresh"],
+        &[
+            "pin",
+            "foreign",
+            "probe",
+            "--target",
+            "browser",
+            "--url",
+            "https://example.invalid/probe.js",
+        ],
+        &["pin", "foreign", "probe", "--target", "native", "--refresh"],
         &["pin", "dependency", "json", "--path", "../json"],
         &[
             "pin",
@@ -463,11 +473,11 @@ curate — Entire, store None, leaves Sources, options --manifest
   work/app/serve: (none) → entire app
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-pin foreign probe --path probe.wasm — Nothing, store None, leaves Manifest, options --path --url --refresh --check --manifest
+pin foreign probe --target native --path probe.wasm — Nothing, store None, leaves Manifest, options --target --path --url --refresh --check --manifest
   takes no subject
-pin foreign probe --url https://example.invalid/probe.wasm — Nothing, store None, leaves Manifest, options --path --url --refresh --check --manifest
+pin foreign probe --target browser --url https://example.invalid/probe.js — Nothing, store None, leaves Manifest, options --target --path --url --refresh --check --manifest
   takes no subject
-pin foreign probe --refresh — Nothing, store None, leaves Manifest, options --path --url --refresh --check --manifest
+pin foreign probe --target native --refresh — Nothing, store None, leaves Manifest, options --target --path --url --refresh --check --manifest
   takes no subject
 pin dependency json --path ../json — Nothing, store None, leaves Manifest, options --path --url --rev --refresh --check --manifest
   takes no subject

@@ -8,7 +8,9 @@
 mod tests;
 
 use {
-    crate::{FileHash, Governing, MANIFEST, Manifest, Store, TreeHash, deliver, deliver_module},
+    crate::{
+        FileHash, Governing, MANIFEST, Manifest, Store, Target, TreeHash, deliver, deliver_module,
+    },
     std::{
         fs,
         path::{Component, Path, PathBuf},
@@ -67,9 +69,11 @@ impl Drop for Staged {
 /// Which of a manifest's two pinned tables a row belongs to.
 ///
 /// The two differ in what their name *is*, which is why they are one command's two subjects rather than one operation over a table name. A `[[foreign]]` row's `name` is a local handle nothing in Curios source refers to, so it is the user's to choose; a `[dependencies]` key is the package's mount prefix and the only way anything refers to it, so it is the dependency's to declare and the user's only to state. [`Subject::Dependency`] therefore checks the name it was given against the delivery, where [`Subject::Foreign`] has nothing to check it against.
+///
+/// A `[[foreign]]` row is pinned for one target at a time: what it says lands in that target's table, `[foreign.native]` or `[foreign.browser]`, and the other's is left as it was.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Subject {
-    Foreign,
+    Foreign(Target),
     Dependency,
 }
 
@@ -77,7 +81,7 @@ impl Subject {
     /// The subject as a refusal and a report name it.
     fn noun(self) -> &'static str {
         match self {
-            Self::Foreign => "foreign module",
+            Self::Foreign(_) => "foreign module",
             Self::Dependency => "dependency",
         }
     }
@@ -85,7 +89,7 @@ impl Subject {
     /// The `curios pin` subcommand that reaches it, for a refusal to spell the command that would work.
     fn command(self) -> &'static str {
         match self {
-            Self::Foreign => "foreign",
+            Self::Foreign(_) => "foreign",
             Self::Dependency => "dependency",
         }
     }
@@ -124,7 +128,7 @@ pub struct Probe {
     pub bytes: u64,
     /// What the bytes look like: a WebAssembly module by its magic, or what could be said instead.
     pub kind: String,
-    /// Whether the magic was there, so a caller that can read further knows whether it is worth trying. Bytes that are not a module at all have already been answered by [`Probe::kind`], and asking a WebAssembly implementation to confirm it earns a byte-by-byte report of the mismatch and no new fact.
+    /// Whether a caller that can read a WebAssembly module's exports should: a native delivery that opens with the magic. Bytes that are not a module at all have already been answered by [`Probe::kind`], and asking a WebAssembly implementation to confirm it earns a byte-by-byte report of the mismatch and no new fact; a browser delivery is a JavaScript gateway, whose exports are held to its rows where the page loads it.
     pub magic: bool,
     /// Whether these bytes came over the network, which is what nothing vouched for. A module the package carries is already in the tree its consumer pinned.
     pub fetched: bool,
@@ -133,15 +137,24 @@ pub struct Probe {
 }
 
 impl Probe {
-    /// Describe `bytes` by their leading magic, which is as far as this crate can read them.
-    fn of(bytes: &[u8], fetched: bool, at: PathBuf) -> Self {
+    /// Describe `bytes`, delivered for `target`, by their leading magic, which is as far as this crate can read them.
+    fn of(bytes: &[u8], fetched: bool, at: PathBuf, target: Target) -> Self {
         // The four bytes every WebAssembly module opens with. Enough to tell a module from an HTML error page a fetcher saved without being asked, which is the mistake worth catching even where nothing can read further.
-        let magic = bytes.starts_with(b"\0asm");
-        let kind = match magic {
-            true => "a WebAssembly module".to_string(),
-            false => {
-                "not a WebAssembly module — its first bytes are not the `\\0asm` magic".to_string()
-            }
+        let wasm = bytes.starts_with(b"\0asm");
+        let (kind, magic) = match (target, wasm) {
+            (Target::Native, true) => ("a WebAssembly module".to_string(), true),
+            (Target::Native, false) => (
+                "not a WebAssembly module — its first bytes are not the `\\0asm` magic".to_string(),
+                false,
+            ),
+            (Target::Browser, true) => (
+                "a WebAssembly module, which a browser does not link: `[foreign.browser]` names a JavaScript gateway".to_string(),
+                false,
+            ),
+            (Target::Browser, false) => (
+                "a JavaScript gateway, whose exports are held to the row where the page loads it".to_string(),
+                false,
+            ),
         };
 
         Self {
@@ -206,7 +219,7 @@ pub fn pin(
     }
 
     let settled = match subject {
-        Subject::Foreign => settled_foreign(governing, name, repoint, &before)?,
+        Subject::Foreign(target) => settled_foreign(governing, target, name, repoint, &before)?,
         Subject::Dependency => settled_dependency(governing, name, repoint, &before)?,
     };
 
@@ -270,7 +283,7 @@ fn undisturbed(
     name: &str,
 ) -> Result<(), String> {
     let touched = match subject {
-        Subject::Foreign => "foreign",
+        Subject::Foreign(_) => "foreign",
         Subject::Dependency => "dependencies",
     };
 
@@ -293,7 +306,7 @@ fn undisturbed(
     // Inside the touched table, every row but this one is the same text it was.
     let others = |document: &DocumentMut| -> Vec<(String, String)> {
         match subject {
-            Subject::Foreign => document
+            Subject::Foreign(_) => document
                 .get("foreign")
                 .and_then(Item::as_array_of_tables)
                 .map(|tables| {
@@ -381,8 +394,13 @@ fn plain(path: &Path, name: &str) -> Result<String, String> {
     }
 }
 
-/// Fetch `url` and file it under the digest it turns out to have, answering that digest and what arrived.
-fn fetched_module(store: &Store, url: &str, subject: &str) -> Result<(FileHash, Probe), String> {
+/// Fetch `url` and file it under the digest it turns out to have, answering that digest and what arrived, described for `target`.
+fn fetched_module(
+    store: &Store,
+    url: &str,
+    subject: &str,
+    target: Target,
+) -> Result<(FileHash, Probe), String> {
     let staged = Staged::new(store)?;
 
     deliver_module(staged.path(), url, subject)?;
@@ -394,7 +412,7 @@ fn fetched_module(store: &Store, url: &str, subject: &str) -> Result<(FileHash, 
     let placed = store.foreign(&hash);
     staged.file(&placed)?;
 
-    Ok((hash, Probe::of(&bytes, true, placed)))
+    Ok((hash, Probe::of(&bytes, true, placed, target)))
 }
 
 /// Fetch `rev` of `url` and file the tree under the digest it turns out to have, answering that digest and the package it declares itself to be.
@@ -426,15 +444,15 @@ fn declares(directory: &Path) -> Result<String, String> {
     }
 }
 
-/// Read one field of the row `name` keys, without borrowing it mutably: of a `[[foreign]]` row, a field of the delivery [`DELIVERY`] names.
+/// Read one field of the row `name` keys, without borrowing it mutably: of a `[[foreign]]` row, a field of its target's delivery table.
 fn stated(document: &DocumentMut, subject: Subject, name: &str, key: &str) -> Option<String> {
     let item = match subject {
-        Subject::Foreign => document
+        Subject::Foreign(target) => document
             .get("foreign")?
             .as_array_of_tables()?
             .iter()
             .find(|table| table.get("name").and_then(Item::as_str) == Some(name))?
-            .get(DELIVERY)?
+            .get(target.spelled())?
             .as_table_like()?
             .get(key)?
             .as_str()?,
@@ -451,7 +469,7 @@ fn stated(document: &DocumentMut, subject: Subject, name: &str, key: &str) -> Op
 /// Whether the row `name` keys is in `document` at all.
 fn present(document: &DocumentMut, subject: Subject, name: &str) -> bool {
     match subject {
-        Subject::Foreign => document
+        Subject::Foreign(_) => document
             .get("foreign")
             .and_then(Item::as_array_of_tables)
             .is_some_and(|tables| {
@@ -478,6 +496,7 @@ struct Settled {
 /// What a `[[foreign]]` row is to say.
 fn settled_foreign(
     governing: &Governing,
+    target: Target,
     name: &str,
     repoint: &Repoint,
     document: &DocumentMut,
@@ -500,12 +519,13 @@ fn settled_foreign(
             ],
             cleared: vec!["url"],
             // Described like any other delivery — what it exports is worth seeing whichever way it arrived — but not flagged as unvouched-for: a carried module is already inside the tree its consumer pinned.
-            probe: Some(Probe::of(&bytes, false, at)),
+            probe: Some(Probe::of(&bytes, false, at, target)),
         })
     };
 
     let fetched = |url: &str| -> Result<Settled, String> {
-        let (hash, probe) = fetched_module(&store, url, &format!("the foreign module {name:?}"))?;
+        let (hash, probe) =
+            fetched_module(&store, url, &format!("the foreign module {name:?}"), target)?;
 
         Ok(Settled {
             fields: vec![
@@ -526,8 +546,8 @@ fn settled_foreign(
         // Whichever delivery the row already states, performed again. The row has one or the other, because a row stating both is refused where it is read.
         Repoint::Refresh => {
             match (
-                stated(document, Subject::Foreign, name, "path"),
-                stated(document, Subject::Foreign, name, "url"),
+                stated(document, Subject::Foreign(target), name, "path"),
+                stated(document, Subject::Foreign(target), name, "url"),
             ) {
                 (Some(path), _) => carried(Path::new(&path)),
                 (None, Some(url)) => fetched(&url),
@@ -623,15 +643,12 @@ fn settled_dependency(
     }
 }
 
-/// The table of a `[[foreign]]` row that `pin foreign` writes: what the native target links, which is the one delivery a row states.
-const DELIVERY: &str = "native";
-
-/// The row `name` keys, created empty if it is not there yet — of a `[[foreign]]` row, its [`DELIVERY`] table, created too.
+/// The row `name` keys, created empty if it is not there yet — of a `[[foreign]]` row, its target's delivery table, created too.
 ///
 /// A created row carries the one field that identifies it — a `[[foreign]]` row its `name`, since the array is keyed by nothing else — so the row is findable the moment it exists rather than only once the caller has finished filling it. A delivery table already written inline, `native = { … }`, is written inline, as a dependency row is.
 fn row_mut<'a>(document: &'a mut DocumentMut, subject: Subject, name: &str) -> Row<'a> {
     match subject {
-        Subject::Foreign => {
+        Subject::Foreign(target) => {
             let tables = document
                 .entry("foreign")
                 .or_insert(Item::ArrayOfTables(ArrayOfTables::new()))
@@ -652,7 +669,10 @@ fn row_mut<'a>(document: &'a mut DocumentMut, subject: Subject, name: &str) -> R
 
             let row = tables.get_mut(index).expect("the row just located");
 
-            match row.entry(DELIVERY).or_insert(Item::Table(Table::new())) {
+            match row
+                .entry(target.spelled())
+                .or_insert(Item::Table(Table::new()))
+            {
                 Item::Value(Value::InlineTable(inline)) => Row::Inline(inline),
                 item => Row::Table(item.as_table_mut().expect(
                     "a foreign row's delivery is a table, as the manifest reader holds it",

@@ -172,9 +172,10 @@ curios curate
 ## `pin`
 
 ```sh
-curios pin foreign sha2 --path foreign/libsha2.wasm     # a module this package carries
-curios pin foreign sha2 --url https://…/libsha2.wasm    # one fetched and filed in the store
-curios pin foreign sha2 --refresh                       # deliver again, pin what arrives
+curios pin foreign sha2 --target native --path foreign/libsha2.wasm   # a module this package carries
+curios pin foreign sha2 --target native --url https://…/libsha2.wasm  # one fetched and filed in the store
+curios pin foreign dom --target browser --path web/dom.js             # a gateway a browser links
+curios pin foreign sha2 --target native --refresh                     # deliver again, pin what arrives
 curios pin dependency json --url https://…/json --rev abc123
 curios pin dependency json --rev def456                 # the same repository, a new revision
 curios pin dependency json --path ../json               # a live sibling on disk
@@ -216,7 +217,7 @@ Delivered      sha2: 12484 bytes, a WebAssembly module
 
 The export list is read by compiling the module, so it also answers whether this toolchain can link it at all; one that will not compile reports why instead of listing nothing. The last line appears only for a fetch — a module the package carries arrived inside the tree its consumer pinned — and it is not a formality: a re-pin is the one moment a hash stops being a check and becomes a claim. Which mismatches are ordinary and which are worth stopping for is [`curate`](#curate)'s refusal to say.
 
-A foreign row's module is written into its `[foreign.native]` table, inline where its author wrote the table inline. Writing is checked rather than trusted: the manifest is edited in place, keeping its comments and ordering, and the result is read back and compared key by key against what went in, so a row written here cannot have disturbed one it was not asked about. Pinning a row to what it already says writes nothing and reports that it did.
+`--target` is required on `pin foreign`, and names the table of the row that is written, `[foreign.native]` or `[foreign.browser]`, inline where its author wrote it inline; the other table is left as it was. A browser delivery is described as the JavaScript gateway it is, whose exports are held to its rows where the page loads it, so nothing is read of them here. Writing is checked rather than trusted: the manifest is edited in place, keeping its comments and ordering, and the result is read back and compared key by key against what went in, so a row written here cannot have disturbed one it was not asked about. Pinning a row to what it already says writes nothing and reports that it did.
 
 ## `new`
 
@@ -324,7 +325,7 @@ A package is a namespace for definitions and an umbrella a namespace for package
 | `default` | which executable a bare `run`, `compile` or `test` means; it may name a declared row or the package's own `exe.crs` program |
 | `[dependencies]` | one row per package this one reaches, keyed by that package's name |
 | `[[executables]]` | one row per program beyond `exe.crs`: `name`, and `path` when the file is not `<name>.crs` |
-| `[[foreign]]` | one row per provider of this package's [`foreign` declarations](syntax.md#foreign-declarations): the module the native target links, in `[foreign.native]`, and what its exports answer |
+| `[[foreign]]` | one row per provider of this package's [`foreign` declarations](syntax.md#foreign-declarations): what each target links, in `[foreign.native]` and `[foreign.browser]`, and what its exports answer |
 
 ```toml
 name = "hello"
@@ -359,7 +360,19 @@ hash = "f1:9c3a…"                # either way
 "digest/sha256" = "SHA256_Digest"  # in the package `crypto`: `/crypto/digest/sha256`
 ```
 
-The table may be written inline, `native = { path = "…", hash = "…" }`, and a row with none is refused where the manifest is read, saying where its module goes. `path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the shared store. `hash` is stated for both, and the carried case is the one it matters most for: a fetched module is obviously unvouched-for until it is checked, while a carried one *looks* covered by the tree hash its consumer pinned — and is, when the package came from git. But the entry package is hashed against nothing and `path` and `member` dependencies are deliberately unpinned, which is exactly where a locally built module lives.
+`[foreign.browser]` names the JavaScript gateway a browser links instead, its exports answering the same declarations, and `[foreign.browser.static]` what the page serves beside it:
+
+```toml
+[foreign.browser]                # the JavaScript gateway a browser links
+path = "web/dom.js"
+hash = "f1:…"
+
+[foreign.browser.static]         # page path = package path
+"app" = "build/app"
+"logo.png" = "art/logo.png"
+```
+
+A row states either table or both, and either may be written inline, `native = { path = "…", hash = "…" }`; a row with neither is refused where the manifest is read, saying where a module goes. A target that reaches a declaration whose row lacks its table is refused where the program is linked, naming the row and the table, so a row with only `[foreign.browser]` is its author's word that the native target links nothing for it. Both sides of a `static` entry are plain relative paths, as an executable's `path` is, and none reads from `.curios/`. No file of any package may stand at `index.html`, `index.js` or `index.wasm`, the names a page holds for itself: a `static` key, a carried gateway's `path` and a fetched gateway in a row named `index` that would stand on one are refused where the manifest is read, the rule holding for a library as for a program. `path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the shared store. `hash` is stated for both, and the carried case is the one it matters most for: a fetched module is obviously unvouched-for until it is checked, while a carried one *looks* covered by the tree hash its consumer pinned — and is, when the package came from git. But the entry package is hashed against nothing and `path` and `member` dependencies are deliberately unpinned, which is exactly where a locally built module lives.
 
 `f1:` is plain SHA-256 over the file's bytes, so `sha256sum` computes it and a release's checksum file already states it. A delivery that fails its hash is refused naming both digests, whichever way it arrived.
 

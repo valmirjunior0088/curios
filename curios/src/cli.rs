@@ -9,13 +9,32 @@ use {
         TESTS,
     },
     clap::{
-        ArgGroup, Args, Command, CommandFactory, Error, Parser, Subcommand,
-        builder::PossibleValuesParser, error::ErrorKind,
+        ArgGroup, Args, Command, CommandFactory, Error, Parser, Subcommand, ValueEnum,
+        builder::{PossibleValue, PossibleValuesParser},
+        error::ErrorKind,
     },
+    curios_package::Target,
     curios_pipeline::Stage,
     curios_wonder::Place,
     std::{env, ffi::OsString, mem, path::PathBuf, sync::LazyLock},
 };
+
+/// A target as `--target` takes it: the manifest's own spelling of each, read off [`Target::ALL`] and [`Target::spelled`], so the flag and the `[foreign.<target>]` tables cannot spell one target two ways.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TargetValue(pub(crate) Target);
+
+impl ValueEnum for TargetValue {
+    fn value_variants<'a>() -> &'a [Self] {
+        static VARIANTS: LazyLock<Vec<TargetValue>> =
+            LazyLock::new(|| Target::ALL.into_iter().map(TargetValue).collect());
+
+        &VARIANTS
+    }
+
+    fn to_possible_value(&self) -> Option<PossibleValue> {
+        Some(PossibleValue::new(self.0.spelled()))
+    }
+}
 
 /// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder stage`'s help text.
 static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
@@ -213,7 +232,7 @@ pub(crate) enum Mode {
 pub(crate) enum Pinned {
     // Required, so a row is never written pointing nowhere; multiple, because `--url` and `--rev` are one delivery spelled in two words.
     #[command(
-        about = "A WebAssembly module implementing this package's `foreign` declarations",
+        about = "What a target links for this package's `foreign` declarations: a WebAssembly module natively, a JavaScript gateway in a browser",
         group = ArgGroup::new("delivery").required(true).multiple(true)
     )]
     Foreign {
@@ -225,10 +244,17 @@ pub(crate) enum Pinned {
 
         #[arg(
             long,
+            value_name = "TARGET",
+            help = "The target whose table of the row is written: `native` for a WebAssembly module, `browser` for a JavaScript gateway"
+        )]
+        target: TargetValue,
+
+        #[arg(
+            long,
             value_name = "PATH",
             group = "delivery",
             conflicts_with_all = ["url", "refresh"],
-            help = "A module this package carries, by its path from the manifest"
+            help = "A file this package carries, by its path from the manifest"
         )]
         path: Option<PathBuf>,
 
@@ -237,7 +263,7 @@ pub(crate) enum Pinned {
             value_name = "URL",
             group = "delivery",
             conflicts_with = "refresh",
-            help = "A module fetched once and filed in the shared store"
+            help = "A file fetched once and filed in the shared store"
         )]
         url: Option<String>,
 

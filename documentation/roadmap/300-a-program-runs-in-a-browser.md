@@ -5,7 +5,6 @@ A program reaches a browser only through the playground, which compiles typed-in
 ## What is missing
 
 - **A browser product.** `curios compile` writes a native executable alone (`curios/src/main.rs`, `Mode::Compile`): the module goes through Binaryen and then Cranelift (`curios::to_cwasm`), and the launcher deserializes what Cranelift wrote. Nothing writes the module Binaryen produced, or a page that runs it: `curios-browser` holds the harness, the bridge and what they are configured with, and has no page format yet.
-- **A JavaScript answerer.** A `[[foreign]]` row's one delivery is `[foreign.native]`, a WebAssembly module (`curios-package/src/manifest.rs`, `ForeignRow`), resolved and linked natively (`modules_of`, `bindings_of`). No row can name a file for the browser to answer a declaration with.
 - **A way to look at the page.** No command serves what a browser build would write.
 
 ## What is known
@@ -20,8 +19,7 @@ A program reaches a browser only through the playground, which compiles typed-in
 ## Settled decisions
 
 - **Vocabulary.** `compile` and `run` take `--target native|browser`, native when omitted, beside the SUBJECT a command takes. `curios-native` holds the native host, and a new `curios-browser` holds the browser's: the harness, the bridge and the page's format.
-- **The manifest.** A `[[foreign]]` row keeps its `name` and one `[foreign.answers]`, shared by up to two deliveries: `[foreign.native]`, which every row states today, names a WebAssembly module, and `[foreign.browser]` will name a `.js` gateway, each by `path` or `url` beside a `hash`. Once both exist, either is optional: a target that reaches a row without its table is refused, naming the row and the table, so the refusal is one the author opted into, and a row with neither is refused where the manifest is read. `pin foreign` will require `--target`, and `curate` fetch both tables.
-- **The page is closed.** A browser build writes `index.html`, holding one `<pre>` a gateway may remove, `index.js`, the loader holding the harness, the code tables, the bridge, the rows and the gateways' imports, and `index.wasm`, the module Binaryen wrote. No package supplies any of the three, and none can be claimed: a `static` key, a carried gateway's path or a fetched gateway's row named `index` that would stand on one is refused where the manifest is read, for every package, with the reason, and `usage.md` says so.
+- **The page is closed.** A browser build writes `index.html`, holding one `<pre>` a gateway may remove, `index.js`, the loader holding the harness, the code tables, the bridge, the rows and the gateways' imports, and `index.wasm`, the module Binaryen wrote. No package supplies any of the three, and none can be claimed: `curios-package`'s `PAGE_FILES` refuses them where the manifest is read, and the names the page writer gives its files are held to it by a test in `curios`, which links both.
 - **The page's root is the package's root.** A gateway the package carries stands at its path from `curios.toml`, a fetched one at `<row>.js`, and a dependency's files under `<dep>/`. `[foreign.browser.static]` maps a page path, its key, to a package path, its value, both plain relative: a directory recursively, files starting with `.` inside it skipped, symlinks refused, nothing under `.curios/`, and every page path filled once, a second claim refused naming both. A row's gateway and static files are carried only where the program reaches one of the row's declarations. Nothing generated is root-absolute, so a page works under any path.
 - **What the page checks.** The loader fetches `index.wasm` with its integrity and the import map states every `.js` file's, each the `sha256-` form of the file's SHA-256. The program runs on the main thread. Its arguments come from the URL's query, each `arg=` one argument's bytes percent-encoded, after the page's name.
 - **The store.** A browser build is written under `.curios/browser/<package>/<executable>/`, beside `.curios/native/`; its `-o` names a directory.
@@ -30,13 +28,8 @@ A program reaches a browser only through the playground, which compiles typed-in
 
 ## Stages
 
-1. **The browser half of the manifest.** `[foreign.browser]` and `[foreign.browser.static]` with their refusals, the page's three names among them; `native` optional beside it, a row with neither refused, and a reached row with no `[foreign.native]` refused where a program is linked natively, naming the row and the table; `Target` as the one spelling of the two names; `pin foreign --target`; and `curate` over both tables. Check: `curios-package`'s suites, the contract tests, and `curios`'s `bundle` suite for the native refusal.
-2. **`compile --target browser`.** The module goes through Binaryen alone and is filed under a payload key of its own; a reached row neither the host nor a `[foreign.browser]` answers is refused, `host_answers` asked of `curios-abi`; `curios-browser` assembles the page as data, and `curios` writes it under `.curios/browser/` or where `-o` names; the harness answers `proc_args` with what the loader passes. Check: `curios-browser`'s page suite, and `compiler test`, which ensures `compiler build` and runs the released compiler over fixture pages under Node, with its job in `check.yml`.
-3. **`run --target browser`.** `curios/src/serve.rs`, a `Serving` heading, and `--port`. Check: the server's suite over a loopback socket and the contract tests.
-
-## Open questions
-
-- **How deep a page recurses.** A page runs on its engine's stack, which it cannot raise, where a native program has a gibibyte (`documentation/roadmap/runtime/000-findings.md`); `usage.md` states the browser's reach once that entry is settled.
+1. **`compile --target browser`.** The module goes through Binaryen alone and is filed under a payload key of its own; a reached row neither the host nor a `[foreign.browser]` answers is refused, `host_answers` asked of `curios-abi`; `curios-browser` assembles the page as data, and `curios` writes it under `.curios/browser/` or where `-o` names; the harness answers `proc_args` with what the loader passes. Check: `curios-browser`'s page suite, and `compiler test`, which ensures `compiler build` and runs the released compiler over fixture pages under Node, with its job in `check.yml`.
+2. **`run --target browser`.** `curios/src/serve.rs`, a `Serving` heading, and `--port`. Check: the server's suite over a loopback socket and the contract tests.
 
 ## Verification and retirement
 

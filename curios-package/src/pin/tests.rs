@@ -33,7 +33,7 @@ fn a_carried_module_is_pinned_to_the_hash_of_its_bytes() {
 
     let pinned = pin(
         &governing,
-        Subject::Foreign,
+        Subject::Foreign(Target::Native),
         "probe",
         &Repoint::Carried("foreign/probe.wasm".into()),
         false,
@@ -53,8 +53,62 @@ fn a_carried_module_is_pinned_to_the_hash_of_its_bytes() {
         panic!("a package");
     };
     assert_eq!(
-        package.foreign[0].native.module,
-        crate::Module::Filed("foreign/probe.wasm".into())
+        package.foreign[0]
+            .native
+            .as_ref()
+            .map(|native| &native.module),
+        Some(&crate::Module::Filed("foreign/probe.wasm".into()))
+    );
+}
+
+/// A gateway is pinned into the row's `[foreign.browser]` table, beside whatever its native table says, and described as the JavaScript it is rather than as a module to compile.
+#[test]
+fn a_gateway_is_pinned_into_the_browser_table() {
+    let (root, governing) = governed(
+        "gateway",
+        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\nnative = { path = \"dom.wasm\", hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }\n",
+    );
+    let hash = carried(&root, "web/dom.js", b"export const setText = () => {};\n");
+
+    let pinned = pin(
+        &governing,
+        Subject::Foreign(Target::Browser),
+        "dom",
+        &Repoint::Carried("web/dom.js".into()),
+        false,
+    )
+    .expect("the gateway is carried");
+
+    let probe = pinned.probe.expect("a delivery is described");
+    assert!(probe.kind.contains("JavaScript gateway"), "{}", probe.kind);
+    assert!(
+        !probe.magic,
+        "a gateway's exports are read where the page loads it"
+    );
+
+    let written = fs::read_to_string(&governing.manifest).expect("read it back");
+    assert!(written.contains("[foreign.browser]"), "{written}");
+    assert!(
+        written.contains("native = { path = \"dom.wasm\""),
+        "{written}"
+    );
+
+    let crate::Manifest::Package(package) = written.parse().expect("what was written reads back")
+    else {
+        panic!("a package");
+    };
+    let gateway = package.foreign[0]
+        .browser
+        .as_ref()
+        .expect("a browser delivery");
+    assert_eq!(
+        gateway.delivery.module,
+        crate::Module::Filed("web/dom.js".into())
+    );
+    assert_eq!(gateway.delivery.hash, hash);
+    assert!(
+        package.foreign[0].native.is_some(),
+        "the native table is left as it was"
     );
 }
 
@@ -69,7 +123,7 @@ fn an_inline_delivery_is_re_pinned_inline() {
 
     pin(
         &governing,
-        Subject::Foreign,
+        Subject::Foreign(Target::Native),
         "probe",
         &Repoint::Carried("probe.wasm".into()),
         false,
@@ -92,11 +146,24 @@ fn pinning_a_row_to_what_it_already_says_writes_nothing() {
     carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
 
     let repoint = Repoint::Carried("probe.wasm".into());
-    pin(&governing, Subject::Foreign, "probe", &repoint, false).expect("the first pin writes");
+    pin(
+        &governing,
+        Subject::Foreign(Target::Native),
+        "probe",
+        &repoint,
+        false,
+    )
+    .expect("the first pin writes");
     let after_first = fs::read_to_string(&governing.manifest).expect("read it back");
 
-    let again =
-        pin(&governing, Subject::Foreign, "probe", &repoint, false).expect("the second pin runs");
+    let again = pin(
+        &governing,
+        Subject::Foreign(Target::Native),
+        "probe",
+        &repoint,
+        false,
+    )
+    .expect("the second pin runs");
 
     assert!(!again.wrote);
     assert!(!again.would_write());
@@ -116,7 +183,7 @@ fn a_checked_pin_reports_what_it_would_write_and_writes_nothing() {
     let before = fs::read_to_string(&governing.manifest).expect("read it back");
     let checked = pin(
         &governing,
-        Subject::Foreign,
+        Subject::Foreign(Target::Native),
         "probe",
         &Repoint::Carried("probe.wasm".into()),
         true,
@@ -140,7 +207,7 @@ fn a_written_row_disturbs_nothing_beside_it() {
 
     pin(
         &governing,
-        Subject::Foreign,
+        Subject::Foreign(Target::Native),
         "probe",
         &Repoint::Carried("probe.wasm".into()),
         false,
@@ -162,7 +229,7 @@ fn repointing_a_module_to_a_url_clears_the_path_it_carried() {
 
     pin(
         &governing,
-        Subject::Foreign,
+        Subject::Foreign(Target::Native),
         "probe",
         &Repoint::Carried("probe.wasm".into()),
         false,
@@ -183,7 +250,7 @@ fn a_row_that_is_not_there_cannot_be_refreshed() {
 
     let refusal = pin(
         &governing,
-        Subject::Foreign,
+        Subject::Foreign(Target::Native),
         "absent",
         &Repoint::Refresh,
         false,
@@ -206,7 +273,7 @@ fn a_module_outside_the_package_is_refused_as_no_plain_relative_path() {
 
     let refusal = pin(
         &governing,
-        Subject::Foreign,
+        Subject::Foreign(Target::Native),
         "probe",
         &Repoint::Carried("../elsewhere.wasm".into()),
         false,

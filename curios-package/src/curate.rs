@@ -12,7 +12,7 @@ mod tests;
 use {
     crate::{
         Dependency, FileHash, Foreign, Governing, MANIFEST, Manifest, Module, Snapshot, Store,
-        TreeHash,
+        Target, TreeHash,
     },
     std::{
         collections::BTreeSet,
@@ -166,14 +166,19 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
         }
 
         for foreign in &package.foreign {
-            // A carried module needs no fetch: it is in the tree already, and what it must be is checked where it is read rather than here.
-            if let Module::Fetched(url) = &foreign.native.module {
-                reachable.fetches.insert(ModuleAcquisition {
-                    package: package.name.clone(),
-                    name: foreign.name.clone(),
-                    url: url.clone(),
-                    hash: foreign.native.hash.clone(),
-                });
+            // A carried file needs no fetch: it is in the tree already, and what it must be is checked where it is read rather than here. Every target's is fetched, since nothing here knows which target a build will ask for.
+            for delivery in Target::ALL
+                .into_iter()
+                .filter_map(|target| foreign.delivery(target))
+            {
+                if let Module::Fetched(url) = &delivery.module {
+                    reachable.fetches.insert(ModuleAcquisition {
+                        package: package.name.clone(),
+                        name: foreign.name.clone(),
+                        url: url.clone(),
+                        hash: delivery.hash.clone(),
+                    });
+                }
             }
 
             reachable

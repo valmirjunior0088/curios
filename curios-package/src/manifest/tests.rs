@@ -408,8 +408,11 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
     };
 
     assert_eq!(
-        package.foreign[0].native.module,
-        Module::Filed(PathBuf::from("foreign/libsha2.wasm"))
+        package.foreign[0]
+            .native
+            .as_ref()
+            .map(|native| native.module.clone()),
+        Some(Module::Filed(PathBuf::from("foreign/libsha2.wasm")))
     );
     assert_eq!(
         package.foreign[0]
@@ -419,8 +422,13 @@ fn foreign_rows_state_a_carried_module_or_a_fetched_one() {
         Some("SHA256_Digest")
     );
     assert_eq!(
-        package.foreign[1].native.module,
-        Module::Fetched("https://example.com/libblake3.wasm".to_string())
+        package.foreign[1]
+            .native
+            .as_ref()
+            .map(|native| native.module.clone()),
+        Some(Module::Fetched(
+            "https://example.com/libblake3.wasm".to_string()
+        ))
     );
 }
 
@@ -523,6 +531,107 @@ fn a_foreign_row_with_no_delivery_says_where_one_goes() {
         refusal.contains("names no module: state `[foreign.native]`"),
         "{refusal}"
     );
+}
+
+/// A row's browser table names its gateway and the files the page serves beside it, and a row may state it alone: what each target links is optional, and a target reaching a row without its table is refused where it links.
+#[test]
+fn a_browser_table_names_a_gateway_and_what_its_page_serves() {
+    let Manifest::Package(package) = parse(
+        r#"
+            name = "clock"
+
+            [[foreign]]
+            name = "dom"
+
+            [foreign.browser]
+            path = "web/dom.js"
+            hash = "f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+            [foreign.browser.static]
+            "app" = "build/app"
+            "logo.png" = "art/logo.png"
+        "#,
+    ) else {
+        panic!("a package");
+    };
+
+    let row = &package.foreign[0];
+    assert!(row.native.is_none());
+    let gateway = row.browser.as_ref().expect("a browser table");
+    assert_eq!(
+        gateway.delivery.module,
+        Module::Filed(PathBuf::from("web/dom.js"))
+    );
+    assert_eq!(
+        gateway.statics,
+        BTreeMap::from([
+            ("app".to_string(), PathBuf::from("build/app")),
+            ("logo.png".to_string(), PathBuf::from("art/logo.png")),
+        ])
+    );
+    assert_eq!(row.delivery(Target::Browser), Some(&gateway.delivery));
+    assert_eq!(row.delivery(Target::Native), None);
+}
+
+/// The page holds `index.html`, `index.js` and `index.wasm` for itself, so no package's file may stand at one: a static key, a carried gateway's path and a fetched gateway's `<row>.js` are each refused where the manifest is read.
+#[test]
+fn the_page_s_own_names_are_refused() {
+    const PIN: &str =
+        "hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"";
+
+    for (name, table) in [
+        (
+            "dom",
+            format!(
+                "path = \"web/dom.js\"\n{PIN}\n\n[foreign.browser.static]\n\"index.js\" = \"own.js\""
+            ),
+        ),
+        ("dom", format!("path = \"index.html\"\n{PIN}")),
+        (
+            "index",
+            format!("url = \"https://e.com/gateway.js\"\n{PIN}"),
+        ),
+    ] {
+        let refusal = refuse(&format!(
+            "name = \"clock\"\n\n[[foreign]]\nname = \"{name}\"\n\n[foreign.browser]\n{table}\n"
+        ));
+
+        assert!(
+            refusal.contains("which the page holds for itself"),
+            "{table:?} reported {refusal}"
+        );
+    }
+}
+
+/// Both sides of a `static` entry are plain relative paths naming something, and the store is no file a page serves.
+#[test]
+fn a_static_entry_names_plain_paths_outside_the_store() {
+    const PIN: &str =
+        "hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"";
+
+    for (entry, expected) in [
+        ("\"../up\" = \"art\"", "no plain relative path"),
+        ("\"art\" = \"/etc\"", "no plain relative path"),
+        ("\"\" = \"art\"", "an empty page path"),
+        ("\"art\" = \"\"", "an empty package path"),
+        ("\"art\" = \".curios/native\"", "under `.curios`"),
+    ] {
+        let refusal = refuse(&format!(
+            "name = \"clock\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.browser]\npath = \"web/dom.js\"\n{PIN}\n\n[foreign.browser.static]\n{entry}\n"
+        ));
+
+        assert!(refusal.contains(expected), "{entry:?} reported {refusal}");
+    }
+}
+
+/// A file a page serves is the browser's concern, so the native table takes no `static`.
+#[test]
+fn the_native_table_serves_nothing() {
+    let refusal = refuse(
+        "name = \"clock\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.native]\npath = \"dom.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.native.static]\n\"a\" = \"b\"\n",
+    );
+
+    assert!(refusal.contains("static"), "{refusal}");
 }
 
 /// There is no privilege field, and a manifest cannot invent one.

@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{CompilerVersion, FileHash, Store, TreeHash},
+    crate::{CompilerVersion, FileHash, STORE, Store, TreeHash},
     curios_utilities::{is_identifier, is_keyword},
     serde::Deserialize,
     std::{
@@ -420,13 +420,38 @@ pub enum Module {
     Fetched(String),
 }
 
+/// What a program is built to run on: the native host, or a browser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Target {
+    Native,
+    Browser,
+}
+
+impl Target {
+    /// Every target, in the order a reader meets them.
+    pub const ALL: [Target; 2] = [Target::Native, Target::Browser];
+
+    /// The target's one spelling: what `--target` takes, the `[foreign.<target>]` table a row states its delivery in, and the `.curios/<target>/` entry its products are written under.
+    pub fn spelled(self) -> &'static str {
+        match self {
+            Target::Native => "native",
+            Target::Browser => "browser",
+        }
+    }
+}
+
+/// The names a browser page holds for itself — its page, its loader and its module — which no file of any package may stand at: a `static` key, a carried gateway's path, or a fetched gateway's `<row>.js`.
+pub const PAGE_FILES: [&str; 3] = ["index.html", "index.js", "index.wasm"];
+
 /// One declared provider of `foreign` implementations: what each target links, and the export of it that answers each of the package's declarations it is named for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Foreign {
     /// A single legal identifier, which exists for the same reason an [`Executable`]'s does — so a command can name this row. Nothing in Curios source refers to it: a `foreign` declaration is reached by its own qualified name, never through the module that implements it.
     pub name: String,
-    /// The WebAssembly module the native target links, from the row's `[foreign.native]` table.
-    pub native: Delivery,
+    /// The WebAssembly module the native target links, where the row states `[foreign.native]`.
+    pub native: Option<Delivery>,
+    /// The JavaScript gateway a browser links, and the files its page serves beside it, where the row states `[foreign.browser]`.
+    pub browser: Option<Gateway>,
     /// The export that answers each declaration, as `fully qualified path -> export name`: keyed by what is answered, so a row states one export a declaration, and a declaration two rows claim is refused where the manifest is read. The manifest names each from the package's own root, and the qualified path is made of it and the package's name where the row is read (`own_declaration`), so every path here lies under the package's prefix. A row no entry names is the host's to answer, or is refused by name where a program reaches it.
     pub answers: BTreeMap<String, String>,
 }
@@ -441,13 +466,44 @@ pub struct Delivery {
     pub hash: FileHash,
 }
 
+/// What a browser links for a `[[foreign]]` row: its gateway, and the files the page serves beside it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Gateway {
+    /// The `.js` module whose exports answer the row's declarations.
+    pub delivery: Delivery,
+    /// Each file or directory the page serves, by the page path it is served at, beside the package path it is read from, both plain relative: `[foreign.browser.static]`.
+    pub statics: BTreeMap<String, PathBuf>,
+}
+
+impl Foreign {
+    /// What `target` links for this row, where the row states its table.
+    pub fn delivery(&self, target: Target) -> Option<&Delivery> {
+        match target {
+            Target::Native => self.native.as_ref(),
+            Target::Browser => self.browser.as_ref().map(|gateway| &gateway.delivery),
+        }
+    }
+}
+
 /// One `[[foreign]]` row as TOML spells it: its name, each target's delivery in a table of its own, and what its exports answer.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ForeignRow {
     name: String,
     native: Option<DeliveryRow>,
+    browser: Option<GatewayRow>,
     answers: Option<BTreeMap<String, String>>,
+}
+
+/// A `[[foreign]]` row's `[foreign.browser]` table as TOML spells it: a delivery, and the files its page serves.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GatewayRow {
+    path: Option<String>,
+    url: Option<String>,
+    hash: Option<String>,
+    #[serde(rename = "static")]
+    statics: Option<BTreeMap<String, String>>,
 }
 
 /// One target's table of a `[[foreign]]` row as TOML spells it — the union of every field either delivery takes, for the reason [`DependencyRow`] is a union.
@@ -498,6 +554,7 @@ impl ForeignRow {
         let Self {
             name,
             native,
+            browser,
             answers,
         } = self;
 
@@ -507,12 +564,15 @@ impl ForeignRow {
             return Err(format!("the foreign row {name:?} is declared twice"));
         }
 
-        let Some(native) = native else {
+        if native.is_none() && browser.is_none() {
             return Err(format!(
-                "the foreign row {name:?} names no module: state `[foreign.native]`, with a `path` for one the package carries or a `url` for one it fetches, beside its `hash`"
+                "the foreign row {name:?} names no module: state `[foreign.native]` for what the native target links or `[foreign.browser]` for what a browser does, each with a `path` for a file the package carries or a `url` for one it fetches, beside its `hash`"
             ));
-        };
-        let native = native.delivery(&name, "native")?;
+        }
+        let native = native
+            .map(|row| row.delivery(&name, Target::Native))
+            .transpose()?;
+        let browser = browser.map(|row| row.gateway(&name)).transpose()?;
 
         // Each declaration is claimed once across the package's rows: nothing chooses between two answers, and the rows of one manifest are where two claims on one declaration can be written.
         let mut claimed = BTreeMap::new();
@@ -535,6 +595,7 @@ impl ForeignRow {
         Ok(Foreign {
             name,
             native,
+            browser,
             answers: claimed,
         })
     }
@@ -542,40 +603,124 @@ impl ForeignRow {
 
 impl DeliveryRow {
     /// This table of the foreign row `name`, the one for `target`, as what that target links.
-    fn delivery(self, name: &str, target: &str) -> Result<Delivery, String> {
+    fn delivery(self, name: &str, target: Target) -> Result<Delivery, String> {
         let Self { path, url, hash } = self;
 
-        // Where the file comes from: one spelling or the other, checked in both directions so neither is quietly ignored nor quietly defaulted — `DependencyRow`'s rule, applied to the other thing a manifest delivers.
-        let module = match (path, url) {
-            (Some(path), None) => Module::Filed(plain_relative(&path, name)?),
-            (None, Some(url)) => {
-                Module::Fetched(optionless("url", url, &format!("foreign row {name:?}"))?)
-            }
-            (Some(_), Some(_)) => {
+        delivered(path, url, hash, name, target)
+    }
+}
+
+impl GatewayRow {
+    /// This `[foreign.browser]` table of the foreign row `name`, as what a browser links for it.
+    ///
+    /// **The page's own names are refused here, for every package.** A gateway the package carries stands at its path in the page, a fetched one at `<row>.js`, and a `static` key at itself, so each of [`PAGE_FILES`] is refused where the manifest is read rather than where a page is put together, and in a library as in a program, so no package can come to depend on standing there.
+    fn gateway(self, name: &str) -> Result<Gateway, String> {
+        let Self {
+            path,
+            url,
+            hash,
+            statics,
+        } = self;
+
+        let delivery = delivered(path, url, hash, name, Target::Browser)?;
+        let stands = match &delivery.module {
+            Module::Filed(path) => path.to_string_lossy().into_owned(),
+            Module::Fetched(_) => format!("{name}.js"),
+        };
+        held_by_the_page(&stands, &format!("the gateway of the foreign row {name:?}"))?;
+
+        let mut served = BTreeMap::new();
+        for (page, package) in statics.unwrap_or_default() {
+            let subject = format!("the static file {page:?} of the foreign row {name:?}");
+
+            plain_static(&page, &subject, "page path")?;
+            held_by_the_page(&page, &subject)?;
+            let read = plain_static(&package, &subject, "package path")?;
+            // The store is the toolchain's, and a page that served it would serve every build product the project holds.
+            if read.starts_with(STORE) {
                 return Err(format!(
-                    "the foreign row {name:?} states `path` beside `url` in `[foreign.{target}]`; a module is carried by the package or fetched, never both"
+                    "{subject} is read from {package}, under `{STORE}`, which is the toolchain's and no file a page serves"
                 ));
             }
-            (None, None) => {
-                return Err(format!(
-                    "the foreign row {name:?} names no module in `[foreign.{target}]`: state `path` for one the package carries, or `url` for one it fetches"
-                ));
-            }
-        };
 
-        // Both deliveries state it, because it answers what the file *is* rather than where it came from — and the carried case is the one that would otherwise go unchecked, since the tree holding it may be the entry package or a live path dependency, neither of which is pinned.
-        let Some(hash) = hash else {
-            return Err(format!(
-                "the foreign row {name:?} states no `hash` in `[foreign.{target}]`; a module is accepted against one however it arrives, and `curios pin foreign {name} --refresh` writes the one it currently has"
-            ));
-        };
+            served.insert(page, read);
+        }
 
-        Ok(Delivery {
-            module,
-            hash: FileHash::parse(&hash)
-                .map_err(|refusal| format!("the foreign row {name:?}: {refusal}"))?,
+        Ok(Gateway {
+            delivery,
+            statics: served,
         })
     }
+}
+
+/// Refuse a page path `stands` that one of [`PAGE_FILES`] is, for `subject`.
+fn held_by_the_page(stands: &str, subject: &str) -> Result<(), String> {
+    match PAGE_FILES.contains(&stands) {
+        true => Err(format!(
+            "{subject} would stand at `{stands}`, which the page holds for itself: no file of a package may stand at {}",
+            PAGE_FILES.map(|file| format!("`{file}`")).join(", ")
+        )),
+        false => Ok(()),
+    }
+}
+
+/// `path`, one side of a `static` entry for `subject`, as a plain relative path naming something: no `.`, `..`, leading `/` or empty spelling.
+fn plain_static(path: &str, subject: &str, side: &str) -> Result<PathBuf, String> {
+    let spelled = PathBuf::from(path);
+
+    match spelled
+        .components()
+        .find(|component| !matches!(component, Component::Normal(_)))
+    {
+        _ if path.is_empty() => Err(format!("{subject} has an empty {side}")),
+        Some(component) => Err(format!(
+            "{subject} has the {side} {path}, whose `{}` is no plain relative path; a `static` entry names a page path and a file of the package each with no `.`, `..` or leading `/`",
+            component.as_os_str().to_string_lossy()
+        )),
+        None => Ok(spelled),
+    }
+}
+
+/// The delivery a target's table states, for the foreign row `name`.
+fn delivered(
+    path: Option<String>,
+    url: Option<String>,
+    hash: Option<String>,
+    name: &str,
+    target: Target,
+) -> Result<Delivery, String> {
+    let target = target.spelled();
+
+    // Where the file comes from: one spelling or the other, checked in both directions so neither is quietly ignored nor quietly defaulted — `DependencyRow`'s rule, applied to the other thing a manifest delivers.
+    let module = match (path, url) {
+        (Some(path), None) => Module::Filed(plain_relative(&path, name)?),
+        (None, Some(url)) => {
+            Module::Fetched(optionless("url", url, &format!("foreign row {name:?}"))?)
+        }
+        (Some(_), Some(_)) => {
+            return Err(format!(
+                "the foreign row {name:?} states `path` beside `url` in `[foreign.{target}]`; a module is carried by the package or fetched, never both"
+            ));
+        }
+        (None, None) => {
+            return Err(format!(
+                "the foreign row {name:?} names no module in `[foreign.{target}]`: state `path` for one the package carries, or `url` for one it fetches"
+            ));
+        }
+    };
+
+    // Both deliveries state it, because it answers what the file *is* rather than where it came from — and the carried case is the one that would otherwise go unchecked, since the tree holding it may be the entry package or a live path dependency, neither of which is pinned.
+    let Some(hash) = hash else {
+        return Err(format!(
+            "the foreign row {name:?} states no `hash` in `[foreign.{target}]`; a module is accepted against one however it arrives, and `curios pin foreign {name} --refresh` writes the one it currently has"
+        ));
+    };
+
+    Ok(Delivery {
+        module,
+        hash: FileHash::parse(&hash)
+            .map_err(|refusal| format!("the foreign row {name:?}: {refusal}"))?,
+    })
 }
 
 /// The qualified name of the declaration `spelled` names in the library of the package `package`, for the foreign row `row`.

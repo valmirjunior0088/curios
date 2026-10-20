@@ -92,53 +92,69 @@ impl From<CompileError> for Failure {
     }
 }
 
+/// What a program's package graph declares, natively, for the `foreign` declarations it reaches: the modules that answer them, and the rows that answer some of them and state no `[foreign.native]`, which link nothing natively.
+#[derive(Default)]
+struct Natively {
+    modules: Vec<DeclaredModule>,
+    /// Each reached row with no native table: the package that declares it, its name, and what it answers.
+    elsewhere: Vec<(String, String, Vec<String>)>,
+}
+
 /// The modules a program's package graph declares for the `foreign` declarations it reaches, each already accepted against the hash its row pins and compiled here, where Cranelift is, to the machine code `run`, `test` and `compile` alike resolve it from.
 ///
 /// **Nothing is read where the host answers every row the program reaches**, which is very nearly every program, since each reaches the standard library's rows and few any other: no manifest is walked and no module opened, so the common case pays one pass over its rows. A module answers a declaration of its own package alone, so none could answer for such a program.
 ///
 /// A loose program has no manifest and so no module. What it reaches of the standard library's rows the host answers, and a row of its own is refused by [`bindings_of`], which says that it has nowhere to name what would answer it.
-fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<DeclaredModule>, String> {
+fn modules_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<Natively, String> {
     if foreigns
         .iter()
         .all(|function| host_answers(function.name()))
     {
-        return Ok(Vec::new());
+        return Ok(Natively::default());
     }
 
     let Some(root) = root else {
-        return Ok(Vec::new());
+        return Ok(Natively::default());
     };
 
     let governing = Governing::of(root)?;
     let store = governing.store();
+    let mut natively = Natively::default();
 
     // Only a module that answers a row the program reaches is read: the rest of the graph's modules are neither linked nor carried.
-    declared_modules(&governing)?
-        .into_iter()
-        .filter(|(_, _, foreign)| {
-            foreign
-                .answers
-                .keys()
-                .any(|declaration| foreigns.get(declaration).is_some())
-        })
-        .map(|(package, directory, foreign)| {
-            let code = curios_cranelift::compile(&foreign.native.bytes(&foreign.name, &directory, &store)?).map_err(
-                |error| {
-                    format!(
-                        "the module {:?} of {package} is not a WebAssembly module this engine accepts: {error}",
-                        foreign.name
-                    )
-                },
-            )?;
+    for (package, directory, foreign) in declared_modules(&governing)? {
+        if !foreign
+            .answers
+            .keys()
+            .any(|declaration| foreigns.get(declaration).is_some())
+        {
+            continue;
+        }
 
-            Ok(DeclaredModule {
-                package,
-                code,
-                name: foreign.name,
-                answers: foreign.answers,
-            })
-        })
-        .collect()
+        let Some(native) = &foreign.native else {
+            natively
+                .elsewhere
+                .push((package, foreign.name, foreign.answers.into_keys().collect()));
+            continue;
+        };
+
+        let code = curios_cranelift::compile(&native.bytes(&foreign.name, &directory, &store)?)
+            .map_err(|error| {
+                format!(
+                    "the module {:?} of {package} is not a WebAssembly module this engine accepts: {error}",
+                    foreign.name
+                )
+            })?;
+
+        natively.modules.push(DeclaredModule {
+            package,
+            code,
+            name: foreign.name,
+            answers: foreign.answers,
+        });
+    }
+
+    Ok(natively)
 }
 
 /// What a `pin` subcommand asks for: which table, which row, where it should point, and whether to write it.
@@ -158,13 +174,14 @@ fn asked(row: Pinned) -> (curios_package::Subject, String, Repoint, bool) {
     match row {
         Pinned::Foreign {
             name,
+            target,
             path,
             url,
             refresh,
             check,
             ..
         } => (
-            curios_package::Subject::Foreign,
+            curios_package::Subject::Foreign(target.0),
             name,
             repoint(path, url, None, refresh),
             check.check,
@@ -190,7 +207,8 @@ fn asked(row: Pinned) -> (curios_package::Subject, String, Repoint, bool) {
 ///
 /// A reached row nothing stands to answer is refused here, before anything runs or is written, by what would answer it: a `[[foreign]]` row of a manifest, which a loose program has none to write in.
 fn bindings_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<ForeignBindings, String> {
-    let bindings = plugin_bindings(foreigns, modules_of(root, foreigns)?)?;
+    let natively = modules_of(root, foreigns)?;
+    let bindings = plugin_bindings(foreigns, natively.modules)?;
 
     match foreigns
         .iter()
@@ -198,14 +216,26 @@ fn bindings_of(root: Option<&Path>, foreigns: &ForeignStore) -> Result<ForeignBi
         .find(|name| !bindings.answers(name) && !host_answers(name))
     {
         None => Ok(bindings),
-        Some(name) => Err(match root {
-            Some(_) => format!(
-                "`{name}` has no implementation: no `[[foreign]]` row of the package's manifests names an export that answers it"
-            ),
-            None => format!(
-                "`{name}` has no implementation: a `foreign` is answered by a module that a `[[foreign]]` row of a manifest names, and a loose program has no manifest to write one in"
-            ),
-        }),
+        // A row that answers the declaration in a browser alone is the author's statement that the native target links nothing for it.
+        Some(name) => Err(
+            match natively
+                .elsewhere
+                .iter()
+                .find(|(_, _, answers)| answers.iter().any(|answered| answered == name))
+            {
+                Some((package, row, _)) => format!(
+                    "`{name}` is answered by the foreign row {row:?} of {package}, which states no `[foreign.native]`: the native target has nothing to link for it"
+                ),
+                None => match root {
+                    Some(_) => format!(
+                        "`{name}` has no implementation: no `[[foreign]]` row of the package's manifests names an export that answers it"
+                    ),
+                    None => format!(
+                        "`{name}` has no implementation: a `foreign` is answered by a module that a `[[foreign]]` row of a manifest names, and a loose program has no manifest to write one in"
+                    ),
+                },
+            },
+        ),
     }
 }
 

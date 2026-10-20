@@ -197,6 +197,41 @@ fn compile_refuses_a_row_nothing_answers_and_says_what_would() {
     );
 }
 
+/// A row that states only `[foreign.browser]` is its author's word that the native target links nothing for it: a program reaching one of its declarations is refused natively, naming the row and the table it lacks, before anything is written.
+#[test]
+fn a_row_with_no_native_table_is_refused_natively_by_name() {
+    let root = Temporary::new("cli-bundle", "browser-only");
+    let package = root.join("clock");
+    fs::create_dir_all(package.join("web")).expect("create the temp package");
+
+    let gateway = b"export const double = (n) => n * 2n;\n";
+    fs::write(package.join("web/double.js"), gateway).expect("write the gateway");
+    fs::write(
+        package.join("curios.toml"),
+        format!(
+            "compiler = \"0.0.0\"\nname = \"clock\"\n\n[[foreign]]\nname = \"page\"\n\n[foreign.browser]\npath = \"web/double.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
+            digest(gateway)
+        ),
+    )
+    .expect("write the manifest");
+    fs::write(package.join("lib.crs"), "pub foreign double(Nat) -> Nat;\n")
+        .expect("write the library");
+    fs::write(
+        package.join("exe.crs"),
+        "let main() -> /std/Io({}) = let doubled = /clock/double(3)!;\n/std/print(/std/Nat/to_str(doubled));\nmain()\n",
+    )
+    .expect("write the temp source");
+
+    let refusal = refused(&package, &root.join("clock.out"), &[]);
+
+    assert!(
+        refusal.contains(
+            "`/clock/double` is answered by the foreign row \"page\" of clock, which states no `[foreign.native]`: the native target has nothing to link for it"
+        ),
+        "{refusal}"
+    );
+}
+
 /// A loose program has no manifest to write a `[[foreign]]` row in, and `compile` and `run` both say so of a row of its own, where the link would say only that nothing answered.
 #[test]
 fn a_loose_program_is_told_it_has_no_manifest_to_answer_its_foreign_in() {
