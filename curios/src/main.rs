@@ -1,8 +1,8 @@
-//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path, or `-`, as argv[0]) and its exit code as the process's; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable, or, with `--target browser`, writes the module Binaryen produced beside the page that runs it. Both take the same subject four ways — no argument for the governing package's default executable, an identifier for one it declares, a path for a `.crs` file placed by what declares it, and `-` for the program on standard input — because what a bare invocation means inside a package should not depend on which subcommand asked.
+//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path, or `-`, as argv[0]) and its exit code as the process's, or, with `--target browser`, serves the page it is built into on loopback, the arguments in the page's address; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable, or, with `--target browser`, writes the module Binaryen produced beside the page that runs it. Both take the same subject four ways — no argument for the governing package's default executable, an identifier for one it declares, a path for a `.crs` file placed by what declares it, and `-` for the program on standard input — because what a bare invocation means inside a package should not depend on which subcommand asked.
 //!
 //! **Neither subcommand compiles unconditionally.** A declared executable's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. A loose program has no project, so it consults nothing. `pipeline` owns that decision and everything downstream of it.
 //!
-//! Argument parsing lives in `cli`, what each command accepts and the admission of its argument in `contract`, compilation and payload reuse in `pipeline`, what answers a program's `foreign` rows in `link`, executable emission in `bundle` and a page's in `browser` — this file only dispatches, mapping any error to stderr and a failure exit.
+//! Argument parsing lives in `cli`, what each command accepts and the admission of its argument in `contract`, compilation and payload reuse in `pipeline`, what answers a program's `foreign` rows in `link`, executable emission in `bundle`, a page's in `browser` and its serving in `serve` — this file only dispatches, mapping any error to stderr and a failure exit.
 
 mod bundle;
 use bundle::*;
@@ -25,12 +25,14 @@ use pipeline::*;
 mod report;
 use report::*;
 
+mod serve;
+use serve::*;
+
 mod test_runner;
 use test_runner::*;
 
 use {
     curios::optimize,
-    curios_browser::page,
     curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost},
@@ -162,9 +164,41 @@ fn dispatch() -> Result<(), Failure> {
 
     match mode {
         Mode::Run {
-            elaboration, args, ..
+            target: TargetValue(target),
+            port,
+            elaboration,
+            args,
+            ..
         } => {
+            if target == Target::Native && port.is_some() {
+                return Err(Failure::Error(
+                    "`--port` is where a page is served, and `--target native` runs the program here: `--target browser` serves its page".to_string(),
+                ));
+            }
+
             let program = contract.admit_program(subject, manifest, None, &here()?)?;
+
+            // The program's arguments reach it through the page's address, and its name is its first.
+            if target == Target::Browser {
+                let store = program.home().and_then(|home| {
+                    let store = contract.access.filed(&home.root)?;
+
+                    Some(store.executing(&home.package, &home.executable))
+                });
+                let (name, files) = built(elaboration.budget, program, store)?;
+                let listener = bound(port.unwrap_or(PORT))?;
+                let port = listener
+                    .local_addr()
+                    .map_err(|error| format!("cannot read the address served on: {error}"))?
+                    .port();
+                let served = Served { name, files };
+
+                serving(&served.url(port, &args));
+                serve_page(&listener, served)?;
+
+                return Ok(());
+            }
+
             // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by. Every argument crosses as the bytes the OS holds, since `/std/Process/args` promises opaque byte strings and a path or an argument need not be UTF-8.
             let entry = match program.entry() {
                 Entry::Stdin => Spelling::STDIN.as_bytes().to_vec(),
@@ -247,10 +281,8 @@ fn dispatch() -> Result<(), Failure> {
 
                 Some(store.executing(&home.package, &home.executable))
             });
-            // Kept before the program is consumed: resolving what answers its rows needs the manifest that declares it, a page names the program and stands at its package's root, and `payload_of` takes the program by value.
+            // Kept before the program is consumed: resolving the declared modules needs the manifest that declares it, and `payload_of` takes the program by value.
             let manifest = program.home().map(|home| home.manifest.clone());
-            let package = program.home().map(|home| home.package.clone());
-            let name = named(&program);
 
             match target {
                 Target::Native => {
@@ -285,10 +317,12 @@ fn dispatch() -> Result<(), Failure> {
             }
 
             let started = Instant::now();
-            let (payload, foreigns) = payload_of(elaboration.budget, program, store, target)?;
 
             match target {
                 Target::Native => {
+                    let (payload, foreigns) =
+                        payload_of(elaboration.budget, program, store, target)?;
+
                     // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
                     let bindings = bindings_of(manifest.as_deref(), &foreigns)?;
                     bindings.check(&foreigns)?;
@@ -306,17 +340,7 @@ fn dispatch() -> Result<(), Failure> {
                     )?;
                 }
                 Target::Browser => {
-                    // Every gateway and file the page holds is read here, once, and what the page refuses is refused before anything is written.
-                    let linked = linked_of(manifest.as_deref(), &foreigns)?;
-                    let files = page(
-                        curios_browser::Program {
-                            name: &name,
-                            package: package.as_deref(),
-                            module: payload,
-                            foreigns: &foreigns,
-                        },
-                        linked,
-                    )?;
+                    let (_, files) = built(elaboration.budget, program, store)?;
 
                     emit_page(&output, &files, owned)?;
                 }

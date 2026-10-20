@@ -70,13 +70,29 @@ pub(crate) struct Elaboration {
 pub(crate) enum Mode {
     /// What the four forms mean is `documentation/usage.md`'s Running and compiling. The dispatch is lexical and probes no disk: the four spaces cannot overlap, so nothing here needs to look before deciding.
     #[command(
-        about = "Execute an executable, a .crs file, or standard input",
+        about = "Execute an executable, a .crs file, or standard input, or serve its page to a browser",
         override_usage = "curios run [OPTIONS] [SUBJECT] [ARGS]..."
     )]
     Run {
         // Filled only by `Cli`: clap must stop recognizing options at the first word of the tail, including the subject itself.
         #[arg(skip)]
         subject: Option<String>,
+
+        #[arg(
+            long,
+            value_enum,
+            value_name = "TARGET",
+            default_value_t = TargetValue(Target::Native),
+            help = "What the program runs on: `native` runs it here, `browser` serves its page on loopback until stopped"
+        )]
+        target: TargetValue,
+
+        #[arg(
+            long,
+            value_name = "PORT",
+            help = "The loopback port a page is served on, beside `--target browser` (default: 8000)"
+        )]
+        port: Option<u16>,
 
         #[command(flatten)]
         elaboration: Elaboration,

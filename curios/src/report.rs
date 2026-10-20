@@ -96,6 +96,8 @@ headings! {
     Tested => "Tested",
     /// The handover to the program itself.
     Running => "Running",
+    /// A program's page being served, at the address a browser opens it at.
+    Serving => "Serving",
     /// Work that could not be done and was not required — never a failure, always a reason.
     Skipped => "Skipped",
     /// The whole invocation, summarized by what it produced.
@@ -173,6 +175,11 @@ pub(crate) fn detail(text: impl fmt::Display) {
 /// One complete step of the header above, on a line of its own — `↳ Running hello`, whose consequence is what follows on stdout rather than an outcome of its own.
 pub(crate) fn step(heading: Heading, subject: &Subject) {
     eprintln!("{}{subject}", head(NESTED, heading));
+}
+
+/// The step a page is served with, naming where a browser opens it — the one fact a reader needs from what follows, which is nothing until the server is stopped.
+pub(crate) fn serving(url: &str) {
+    eprintln!("{}{url}", head(NESTED, Heading::Serving));
 }
 
 /// The header a build takes `subject` on with — `Processing serve` — naming `manifest` beside it when the invocation does not stand in the manifest's directory, which is the one case where what governs could otherwise be a guess.

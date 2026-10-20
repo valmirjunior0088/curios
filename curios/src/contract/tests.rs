@@ -365,7 +365,7 @@ fn expected() -> String {
     expected
 }
 
-const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, leaves Nothing, options --budget --manifest
+const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, leaves Nothing, options --target --port --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"

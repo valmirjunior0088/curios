@@ -177,3 +177,17 @@ fn nothing_the_page_writes_is_root_absolute() {
         }
     }
 }
+
+#[test]
+fn a_file_is_typed_by_its_extension_whatever_its_case_and_by_nothing_else() {
+    for (path, expected) in [
+        ("index.html", "text/html; charset=utf-8"),
+        ("index.js", "text/javascript; charset=utf-8"),
+        ("web/app.MJS", "text/javascript; charset=utf-8"),
+        ("index.wasm", "application/wasm"),
+        ("assets.v2/logo", "application/octet-stream"),
+        ("archive.tar.gz", "application/octet-stream"),
+    ] {
+        assert_eq!(content_type(path), expected, "{path}");
+    }
+}

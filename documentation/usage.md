@@ -75,7 +75,7 @@ Ten commands, and `wonder`'s seven queries — eleven where the compiler was bui
 
 | Command | Subject | Its own arguments | Writes | Store |
 | --- | --- | --- | --- | --- |
-| [`run`](#run) | a program | trailing `ARGS…` for the program | nothing | reads, files what it built |
+| [`run`](#run) | a program | `--target <TARGET>`, `--port <PORT>`, trailing `ARGS…` for the program | nothing | reads, files what it built |
 | [`compile`](#compile) | a program | `--target <TARGET>`, `-o`/`--output <PATH>` | a native executable, or a page's directory | reads, files what it built |
 | [`document`](#document) | a library | `--std <DIR>`, `-o`/`--output <DIR>` | pages | reads, files what it built; none under `--std` |
 | [`test`](#test) | anything | `--filter <PREFIX>` | nothing | reads, files what it built |
@@ -103,6 +103,7 @@ curios run serve --port 8080     # a declared executable, and its own arguments
 curios run scratch.crs           # a file
 curios run -- mock               # the default executable, with argument mock
 curios run serve --help          # the program's help
+curios run --target browser      # the default executable's page, served on loopback
 ```
 
 Everything after the subject belongs to the program and reaches it through `/std/Process/args`, including `--help`, `--budget`, `--manifest` and, in a profiling build, `--profile`. Compiler flags go before the subject. A leading `--` omits the subject and passes the words after it to the governing package's sole or `default` executable. One `--` immediately after an explicit subject is an optional separator too: `curios run serve -- --help` passes `--help`. Every later word is collected verbatim, hyphens and further separators included; `curios run -- -- mock` passes `--` and `mock`. Program arguments retain their OS bytes, including text that is not UTF-8; an explicit subject must be UTF-8. A file whose name starts with a hyphen can be named with its directory, such as `./-sample.crs`.
@@ -110,6 +111,10 @@ Everything after the subject belongs to the program and reaches it through `/std
 A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` argument to a `foreign` function past what the wire carries, a value past what the runtime can hold, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names. A call the runtime refuses where it crosses to what answers it is no panic: `execution failed:` and a sentence naming the declaration and what was wrong, as when a module answers `256` to a `foreign` declared `-> Byte`, or a host cannot answer a call that has no failure to report.
 
 A running program's own exit code passes through untouched. A program that closes with a description that may fail, and fails, writes the failure on stderr and exits 1, and one that closes with a test that did not hold reports it and exits 1 ([`documentation/syntax.md`](syntax.md#declarations-and-modules)). A `print` or `print_err` that cannot write ends the program with 141 where its reader has gone and 1 otherwise ([`curios-std`](../curios-std/README.md#a-loose-printer-that-cannot-write-ends-the-program)).
+
+### Serving a page
+
+`--target browser` builds the program's [page](#the-page) as `compile --target browser` does, reads every file of it once, and serves it from memory on `127.0.0.1`, at port 8000 unless `--port <PORT>` names another, until the command is stopped. It prints where a browser opens it — `↳ Serving   http://127.0.0.1:8000/serve/?arg=--help` — and opens no browser. The page stands under `/<name>/`, its program's name, with `/` and `/<name>` redirected there, and the program's arguments are the address's query, each an `arg=` percent-encoded, so the printed address runs it with the words after the subject. Nothing reloads: a changed program is served by running the command again, and every reply says `Cache-Control: no-store`, so the browser asks for the new page rather than keeping the old. Only `GET` is answered, and a request naming a host other than `127.0.0.1` or `localhost` at the port is refused, so a page another site loads cannot reach this one through a name that resolves to the machine. A port another process holds is refused, naming the flag that picks another, and `--port` beside the native target is refused.
 
 ## `compile`
 
@@ -185,7 +190,7 @@ The test *verdicts* are never cached — every invocation runs every selected te
 curios curate
 ```
 
-`curate` materializes what the manifests reference. It and [`pin`](#pin), whose `--url` and `--refresh` fetch through the same delivery, are the only commands that reach the network — the compiler itself never fetches. A delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin, and a delivery that fails its hash is refused whoever fetched it.
+`curate` materializes what the manifests reference. It and [`pin`](#pin), whose `--url` and `--refresh` fetch through the same delivery, are the only commands that fetch — the compiler itself never does, and [`run --target browser`](#serving-a-page) only listens, on loopback. A delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin, and a delivery that fails its hash is refused whoever fetched it.
 
 **It reaches the network through programs already on the machine**, for the reason acceptance is by hash: any transport may deliver the bytes, so the one already installed is the right one rather than a client vendored into the compiler. A package tree comes through `git`, and a `[[foreign]]` module through `curl` or `wget`, whichever is on `PATH`. A project with no `[[foreign]]` row that names a `url` needs neither of those two; one that has one and has neither installed is refused naming the module and both programs.
 
@@ -445,6 +450,8 @@ Exit status is a tri-state, so tooling can tell "here is your goal batch" from "
 | `2` | the program contains [written goals](syntax.md#written-goals) (`?`) and nothing else stopped it, and their report went to stderr — for `wonder stage`, `cost` and `tests` too, when goals alone kept them from answering |
 
 A running program's own exit code passes through untouched, so `0` never hides a failure — and once the program has started, the code is the program's, which the tri-state cannot tell from the compiler's: a program may exit 1 or 2 itself. Tooling that needs to know whether a program was ever started checks it first, with [`lint`](#lint) or [`wonder diagnostics`](#wonder), or runs the executable [`compile`](#compile) wrote.
+
+`run --target browser` serves until it is stopped, so it ends by the signal that stops it, or with `1` before it serves: a page that cannot be built, a port that is taken.
 
 The tri-state describes a command line that parsed. One that did not — an unknown command, an unknown flag, no command at all — also exits 2, with the usage message on stderr rather than a compiler report; `--help` and `--version` exit 0.
 

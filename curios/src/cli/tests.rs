@@ -8,11 +8,45 @@ fn run(words: &[&str]) -> (Option<String>, Vec<OsString>, Elaboration) {
         subject,
         args,
         elaboration,
+        ..
     } = cli.mode
     else {
         panic!("the fixture names run");
     };
     (subject, args, elaboration)
+}
+
+/// `--target` and `--port` are `run`'s before the subject, and the program's after it, as every option is.
+#[test]
+fn a_target_and_a_port_before_the_subject_are_the_commands_own() {
+    let parsed = |words: &[&str]| {
+        let cli = Cli::try_parse_from(iter::once("curios").chain(words.iter().copied())).unwrap();
+        let Mode::Run {
+            target,
+            port,
+            subject,
+            args,
+            ..
+        } = cli.mode
+        else {
+            panic!("the fixture names run");
+        };
+
+        (target.0, port, subject, args)
+    };
+
+    assert_eq!(
+        parsed(&[
+            "run", "--target", "browser", "--port", "8001", "serve", "--port", "9"
+        ]),
+        (
+            Target::Browser,
+            Some(8001),
+            Some("serve".to_string()),
+            vec![OsString::from("--port"), OsString::from("9")]
+        )
+    );
+    assert_eq!(parsed(&["run", "serve"]).0, Target::Native);
 }
 
 #[test]

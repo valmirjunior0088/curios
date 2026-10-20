@@ -1,6 +1,6 @@
 # A browser delivery may be a WebAssembly module
 
-**Not refined yet.** This specification reserves linking a WebAssembly module that a `[foreign.browser]` table names. It is not an implementation plan: it waits on [A program runs in a browser](../300-a-program-runs-in-a-browser.md), which makes a browser delivery a JavaScript gateway, and on a program that needs a module in a page.
+**Not refined yet.** This specification reserves linking a WebAssembly module that a `[foreign.browser]` table names. It is not an implementation plan: a browser delivery is a JavaScript gateway ([A foreign row states a delivery for each target](../../design/tools/a-foreign-row-states-a-delivery-for-each-target.md)), and this waits on a program that needs a module in a page.
 
 ## What is missing
 

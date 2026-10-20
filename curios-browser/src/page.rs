@@ -239,9 +239,14 @@ fn subresource(bytes: &[u8]) -> String {
     format!("sha256-{}", STANDARD.encode(Digest::of(bytes).as_bytes()))
 }
 
-/// The page path `path` as a URL relative to the page's root: `./` ahead, so an import reads it as a path rather than as a name the import map would have to resolve, and every byte a path segment does not carry as itself percent-encoded — `<` among them, so a path spelling `</script` ends no `<script>` it is written in.
+/// The page path `path` as a URL relative to the page's root: `./` ahead of what [`encoded`] spells, so an import reads it as a path rather than as a name the import map would have to resolve.
 fn relative(path: &str) -> String {
-    let mut url = String::from("./");
+    format!("./{}", encoded(path))
+}
+
+/// The page path `path` as a URL's path spells it: every byte a path segment does not carry as itself percent-encoded — `<` among them, so a path spelling `</script` ends no `<script>` it is written in — and `/` between segments as itself. A server decodes a request's path back to the page path it names.
+pub fn encoded(path: &str) -> String {
+    let mut url = String::new();
 
     for byte in path.bytes() {
         match byte {
@@ -271,4 +276,46 @@ fn relative(path: &str) -> String {
     }
 
     url
+}
+
+/// The `Content-Type` a server gives the file at the page path `path`, by its extension, whatever its case: the page's own files', the JavaScript type a module script requires for `.js` and `.mjs`, and the common types a `static` entry serves, with `application/octet-stream` for the rest.
+pub fn content_type(path: &str) -> &'static str {
+    const TYPES: &[(&str, &str)] = &[
+        ("html", "text/html; charset=utf-8"),
+        ("js", "text/javascript; charset=utf-8"),
+        ("mjs", "text/javascript; charset=utf-8"),
+        ("wasm", "application/wasm"),
+        ("css", "text/css; charset=utf-8"),
+        ("json", "application/json"),
+        ("map", "application/json"),
+        ("txt", "text/plain; charset=utf-8"),
+        ("svg", "image/svg+xml"),
+        ("png", "image/png"),
+        ("jpg", "image/jpeg"),
+        ("jpeg", "image/jpeg"),
+        ("gif", "image/gif"),
+        ("webp", "image/webp"),
+        ("avif", "image/avif"),
+        ("ico", "image/x-icon"),
+        ("woff", "font/woff"),
+        ("woff2", "font/woff2"),
+        ("ttf", "font/ttf"),
+        ("otf", "font/otf"),
+        ("mp3", "audio/mpeg"),
+        ("ogg", "audio/ogg"),
+        ("wav", "audio/wav"),
+        ("mp4", "video/mp4"),
+        ("webm", "video/webm"),
+        ("pdf", "application/pdf"),
+    ];
+
+    let name = path.rsplit('/').next().unwrap_or(path);
+
+    name.rsplit_once('.')
+        .and_then(|(_, extension)| {
+            TYPES
+                .iter()
+                .find(|(known, _)| known.eq_ignore_ascii_case(extension))
+        })
+        .map_or("application/octet-stream", |(_, content)| content)
 }
