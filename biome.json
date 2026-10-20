@@ -2,10 +2,15 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "includes": [
-      "**/*.js",
-      "**/*.mjs",
-      "**/*.json",
-      "**/*.css",
+      "biome.json",
+      ".claude/settings.json",
+      "curios-browser/src/**/*.mjs",
+      "curios-document/static/**/*.js",
+      "curios-document/static/**/*.css",
+      "editors/grammar/**/*.js",
+      "editors/grammar/**/*.json",
+      "editors/vscode/**/*.js",
+      "editors/vscode/**/*.json",
       "!**/package-lock.json",
       "!editors/grammar/src"
     ]
