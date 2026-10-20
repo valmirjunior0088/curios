@@ -555,7 +555,7 @@ dependencies = [
 
 [[package]]
 name = "curios"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "clap",
  "curios-abi",
@@ -586,7 +586,7 @@ dependencies = [
 
 [[package]]
 name = "curios-abi"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-archive",
  "curios-num",
@@ -594,14 +594,14 @@ dependencies = [
 
 [[package]]
 name = "curios-algebra"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-num",
 ]
 
 [[package]]
 name = "curios-analysis"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-algebra",
@@ -615,7 +615,7 @@ dependencies = [
 
 [[package]]
 name = "curios-archive"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-archive-derive",
  "rkyv",
@@ -623,11 +623,11 @@ dependencies = [
 
 [[package]]
 name = "curios-archive-derive"
-version = "0.16.9"
+version = "0.16.10"
 
 [[package]]
 name = "curios-binaryen"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "cmake",
  "flate2",
@@ -638,7 +638,7 @@ dependencies = [
 
 [[package]]
 name = "curios-browser"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "askama",
  "base64",
@@ -656,7 +656,7 @@ dependencies = [
 
 [[package]]
 name = "curios-cert"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-algebra",
@@ -670,7 +670,7 @@ dependencies = [
 
 [[package]]
 name = "curios-cont"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-num",
@@ -680,7 +680,7 @@ dependencies = [
 
 [[package]]
 name = "curios-core"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-algebra",
@@ -693,7 +693,7 @@ dependencies = [
 
 [[package]]
 name = "curios-cranelift"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-native",
  "wasmtime",
@@ -701,7 +701,7 @@ dependencies = [
 
 [[package]]
 name = "curios-document"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "askama",
  "curios-archive",
@@ -710,7 +710,7 @@ dependencies = [
 
 [[package]]
 name = "curios-elab"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-algebra",
@@ -726,7 +726,7 @@ dependencies = [
 
 [[package]]
 name = "curios-emit"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-cont",
@@ -738,7 +738,7 @@ dependencies = [
 
 [[package]]
 name = "curios-ersd"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-archive",
@@ -750,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "curios-js"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-browser",
  "curios-pipeline",
@@ -762,7 +762,7 @@ dependencies = [
 
 [[package]]
 name = "curios-native"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-archive",
@@ -780,7 +780,7 @@ dependencies = [
 
 [[package]]
 name = "curios-num"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-archive",
  "num-bigint",
@@ -789,7 +789,7 @@ dependencies = [
 
 [[package]]
 name = "curios-package"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-text",
  "curios-utilities",
@@ -801,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "curios-parse"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-profile",
  "curios-unicode",
@@ -810,7 +810,7 @@ dependencies = [
 
 [[package]]
 name = "curios-pipeline"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-archive",
@@ -832,7 +832,7 @@ dependencies = [
 
 [[package]]
 name = "curios-prelude"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-archive",
  "curios-cert",
@@ -847,7 +847,7 @@ dependencies = [
 
 [[package]]
 name = "curios-prelude-archive"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-archive",
@@ -866,11 +866,11 @@ dependencies = [
 
 [[package]]
 name = "curios-print"
-version = "0.16.9"
+version = "0.16.10"
 
 [[package]]
 name = "curios-profile"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-utilities",
  "libc",
@@ -879,7 +879,7 @@ dependencies = [
 
 [[package]]
 name = "curios-std"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios",
  "curios-native",
@@ -893,7 +893,7 @@ dependencies = [
 
 [[package]]
 name = "curios-text"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-archive",
@@ -910,7 +910,7 @@ dependencies = [
 
 [[package]]
 name = "curios-unicode"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "sha2 0.11.0",
  "ureq",
@@ -918,7 +918,7 @@ dependencies = [
 
 [[package]]
 name = "curios-unit"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-archive",
@@ -931,7 +931,7 @@ dependencies = [
 
 [[package]]
 name = "curios-utilities"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-archive",
  "curios-unicode",
@@ -941,7 +941,7 @@ dependencies = [
 
 [[package]]
 name = "curios-verdicts"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-abi",
  "curios-archive",
@@ -957,7 +957,7 @@ dependencies = [
 
 [[package]]
 name = "curios-wasm"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-parse",
  "curios-print",
@@ -966,7 +966,7 @@ dependencies = [
 
 [[package]]
 name = "curios-wonder"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "curios-cont",
  "curios-core",
@@ -2536,14 +2536,14 @@ dependencies = [
 
 [[package]]
 name = "xbench"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "clap",
 ]
 
 [[package]]
 name = "xboard"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "clap",
  "curios-cert",
