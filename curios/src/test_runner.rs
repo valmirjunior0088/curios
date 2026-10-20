@@ -148,7 +148,7 @@ pub(crate) fn run_tests(
     run.finish()
 }
 
-/// Where a declared subject's test payload is filed and whom it is reported under: the package it is filed under, the governing root its store sits beside, and the manifest a report names.
+/// Where a declared subject's test payload is filed and whom it is reported under: the package it is filed under, the governing root its store sits beside, and the manifest a report names and its rows are linked from.
 struct Declared<'a> {
     package: &'a str,
     root: &'a Path,
@@ -298,7 +298,7 @@ impl Run<'_> {
             &cwasm,
             &library,
             &subject,
-            Some(declared.root),
+            Some(declared.manifest),
             &foreigns,
         )
     }
@@ -343,7 +343,7 @@ impl Run<'_> {
             &cwasm,
             entry,
             &subject,
-            Some(declared.root),
+            Some(declared.manifest),
             &foreigns,
         )
     }
@@ -411,7 +411,7 @@ impl Run<'_> {
         cwasm: &[u8],
         entry: &Path,
         subject: &Subject,
-        root: Option<&Path>,
+        manifest: Option<&Path>,
         foreigns: &ForeignStore,
     ) -> Result<(), CompileError> {
         let filter = self.filter;
@@ -442,7 +442,7 @@ impl Run<'_> {
         let mut unit = Totals::default();
 
         // Resolved once for the unit: its manifests are walked and its modules compiled here, and each test below is handed the resolution. A run instantiates a module in its own store, so every test still meets an instance of its own, which keeps one test's marks in a module's memory out of the next one's.
-        let bindings = bindings_of(root, foreigns).map_err(CompileError::failure)?;
+        let bindings = bindings_of(manifest, foreigns).map_err(CompileError::failure)?;
 
         for (index, record) in selected {
             let arguments = vec![argv0.clone(), index.to_string().into_bytes()];

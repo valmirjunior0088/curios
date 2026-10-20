@@ -197,6 +197,37 @@ fn compile_refuses_a_row_nothing_answers_and_says_what_would() {
     );
 }
 
+/// A member of an umbrella links the rows of its own manifest, as a package standing alone does: the graph walked for them is the one of the package that declares the program, and the umbrella's directory, where the store sits, declares no package to walk from.
+#[test]
+fn an_umbrella_members_program_links_its_own_foreign_rows() {
+    let root = Temporary::new("cli-bundle", "member");
+    let package = calling_double(&root, "ffi", &[("probe", "double")]);
+    fs::write(
+        root.join("curios.toml"),
+        "compiler = \"0.0.0\"\nmembers = [\"ffi\"]\n",
+    )
+    .expect("write the umbrella");
+
+    // A member inherits its umbrella's `compiler`, and is refused for stating one of its own.
+    let manifest = package.join("curios.toml");
+    let stated = fs::read_to_string(&manifest).expect("read the member's manifest");
+    fs::write(&manifest, stated.replace("compiler = \"0.0.0\"\n", ""))
+        .expect("write the member's manifest");
+
+    let run = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .arg("run")
+        .current_dir(&package)
+        .output()
+        .expect("run the compiler");
+
+    assert_eq!(
+        run.status.code(),
+        Some(6),
+        "the member's plugin did not answer: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+}
+
 /// A row that states only `[foreign.browser]` is its author's word that the native target links nothing for it: a program reaching one of its declarations is refused natively, naming the row and the table it lacks, before anything is written.
 #[test]
 fn a_row_with_no_native_table_is_refused_natively_by_name() {
