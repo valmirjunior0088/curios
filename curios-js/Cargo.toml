@@ -3,7 +3,7 @@ name = "curios-js"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios browser boundary: wasm-bindgen compiler exports and the JavaScript run harness"
+description = "The Curios compiler in the browser: the wasm-bindgen export of the pure compile pipeline, bundled with the run of what it compiles"
 
 [lints]
 workspace = true
@@ -16,18 +16,9 @@ profile = ["curios-pipeline/profile"]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-curios-abi = { workspace = true }
+curios-browser = { workspace = true }
 curios-text = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-wasm = { workspace = true }
-curios-emit = { workspace = true }
-# Moves with `xtask`'s `wasm-bindgen-cli-support`, which generates the glue for it: `xtask`'s `the_bindings_generator_is_the_bindings_version` holds the two equal across the two workspaces.
-wasm-bindgen = { version = "0.2.126" }
-js-sys = { version = "0.3.103" }
-
-[dev-dependencies]
-curios-native = { workspace = true, features = ["test-support"] }
-# What compiles the bridge module the suite drives by hand.
-curios-cranelift = { workspace = true }
-# `fill!`, by which a fixture splices a value into text whose own braces stay single.
-curios-utilities = { workspace = true, features = ["test-support"] }
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }

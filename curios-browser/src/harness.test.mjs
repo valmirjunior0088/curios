@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const bundle = new URL(
-  "../.artifacts/wasm32-unknown-unknown/",
+  "../../curios-js/.artifacts/wasm32-unknown-unknown/",
   import.meta.url,
 );
 const { initSync, compile, run } = await import(

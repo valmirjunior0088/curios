@@ -1,32 +1,20 @@
-//! The Curios ↔ JavaScript boundary, for a browser build (`cargo xtask bundle build`: `cargo build` for wasm32, then `--target web` bindings — no `wasm-pack`): a wasm-bindgen export of the pure compile pipeline ([`compile`]) plus the browser run harness ([`run`]). The harness spells the wire names (the `sys` and `ffi` namespaces, `panic`, the entry export) and its host's methods directly, like any embedder; the codes and tokens it answers with, and the name each method is declared under, derive from `curios-abi`, the same source the compiler and runtime cite, and a program's `foreign` rows arrive with the program, as `compile` described them.
-
-mod abi;
-use abi::*;
-
-mod bridge;
-use bridge::*;
-
-mod foreigns;
-use foreigns::*;
-
-mod harness;
-pub use harness::*;
-
-#[cfg(test)]
-mod tests;
+//! The Curios compiler in the browser, for a browser build (`cargo xtask bundle build`: `cargo build` for wasm32, then `--target web` bindings — no `wasm-pack`): a wasm-bindgen export of the pure compile pipeline, [`compile`]. Running what it compiles is `curios-browser`'s, whose `run` the same bundle exports, and the rows `compile` hands back are rendered by it, so the playground's two calls agree on one description of a program.
 
 use {
     curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::to_bytes,
-    js_sys::{Object, Reflect, Uint8Array},
+    js_sys::{JSON, Object, Reflect, Uint8Array},
     wasm_bindgen::prelude::*,
 };
+
+/// `run`, exported by the crate that owns running a program in the browser, and named here so the bundle links it.
+pub use curios_browser::run;
 
 /// The same budget the native compiler uses, so a program that compiles in the playground compiles at the command line and the reverse. A wall-clock bound could not promise that: the tab and the terminal are different machines.
 const BUDGET: u64 = DEFAULT_STEP_BUDGET;
 
-pub(crate) fn set(target: &Object, key: &str, value: &JsValue) {
+fn set(target: &Object, key: &str, value: &JsValue) {
     Reflect::set(target, &JsValue::from_str(key), value).expect("Reflect::set on a plain object");
 }
 
@@ -46,7 +34,11 @@ pub fn compile(source: &str) -> Result<Object, String> {
         "program",
         &Uint8Array::from(to_bytes(&module).as_slice()),
     );
-    set(&compiled, "foreigns", &foreign_rows(&foreigns));
+    set(
+        &compiled,
+        "foreigns",
+        &JSON::parse(&curios_browser::rows(&foreigns)).expect("the rows render as JSON"),
+    );
 
     Ok(compiled)
 }

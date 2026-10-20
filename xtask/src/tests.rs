@@ -1,4 +1,4 @@
-//! What holds this workspace of its own to the compiler's beside it: the lints it is held to are the workspace's, and the bindings generator it calls is the version of the bindings `curios-js` builds against.
+//! What holds this workspace of its own to the compiler's beside it: the lints it is held to are the workspace's, and the bindings generator it calls is the version of the bindings the browser's crates build against.
 
 use {
     crate::root,
@@ -35,10 +35,9 @@ fn lints(table: Option<&Item>) -> BTreeMap<String, BTreeMap<String, String>> {
         .collect()
 }
 
-/// The version a manifest's dependency row states.
-fn version(manifest: &DocumentMut, dependency: &str) -> Option<String> {
-    manifest
-        .get("dependencies")?
+/// The version a dependency row of `table` states.
+fn version(table: Option<&Item>, dependency: &str) -> Option<String> {
+    table?
         .get(dependency)?
         .get("version")?
         .as_str()
@@ -59,14 +58,17 @@ fn the_lint_table_is_the_workspace_s() {
     assert_eq!(lints(manifest("xtask/Cargo.toml").get("lints")), held);
 }
 
-/// `wasm-bindgen-cli-support` generates the glue for the `wasm-bindgen` that `curios-js` builds against, and the two refuse each other across versions. They sit in two workspaces, so no one row can state them: this holds the two pins equal.
+/// `wasm-bindgen-cli-support` generates the glue for the `wasm-bindgen` the browser's crates build against, and the two refuse each other across versions. They sit in two workspaces, so no one row can state them: this holds the generator's pin to the workspace's row.
 #[test]
 fn the_bindings_generator_is_the_bindings_version() {
-    let generator = version(&manifest("xtask/Cargo.toml"), "wasm-bindgen-cli-support");
+    let recipes = manifest("xtask/Cargo.toml");
+    let generator = version(recipes.get("dependencies"), "wasm-bindgen-cli-support");
+
+    let workspace = manifest("Cargo.toml");
+    let rows = workspace
+        .get("workspace")
+        .and_then(|table| table.get("dependencies"));
 
     assert!(generator.is_some(), "xtask pins the bindings generator");
-    assert_eq!(
-        generator,
-        version(&manifest("curios-js/Cargo.toml"), "wasm-bindgen")
-    );
+    assert_eq!(generator, version(rows, "wasm-bindgen"));
 }

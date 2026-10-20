@@ -29,6 +29,7 @@ members = [
     "curios-wonder",
     "curios-document",
     "curios-profile",
+    "curios-browser",
     "curios-js",
     "curios",
     "curios-binaryen",
@@ -86,12 +87,16 @@ curios-package = { path = "curios-package" }
 curios-verdicts = { path = "curios-verdicts" }
 curios-wonder = { path = "curios-wonder" }
 curios-document = { path = "curios-document" }
+curios-browser = { path = "curios-browser" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-native = { path = "curios-native" }
 curios-cranelift = { path = "curios-cranelift" }
 curios = { path = "curios" }
 # One row for the engine's two crates: `curios-native` takes the runtime, `curios-cranelift` the backend, and a `.cwasm` the second writes is read back by the first, which Wasmtime refuses across versions.
 wasmtime = { version = "47.0.3", default-features = false }
+# One row each for the browser's two crates, `curios-js` exporting the compiler and `curios-browser` the run of what it compiles, which bind to one JavaScript side; `xtask`'s `wasm-bindgen-cli-support` generates that side's glue, and `the_bindings_generator_is_the_bindings_version` holds it to the `wasm-bindgen` row.
+wasm-bindgen = { version = "0.2.126" }
+js-sys = { version = "0.3.103" }
 
 [profile.dev]
 opt-level = 3

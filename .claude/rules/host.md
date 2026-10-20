@@ -6,7 +6,7 @@ paths:
   - "curios-native/src/os_host/**"
   - "curios-native/src/mock_host*"
   - "curios-native/src/mock_host/**"
-  - "curios-js/src/**"
+  - "curios-browser/src/**"
 ---
 
 # Host operations

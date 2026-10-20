@@ -1,6 +1,6 @@
-// The browser run harness: instantiates a compiled curios program against a JS implementation of the host boundary and drives its entrypoint. Like any embedder, this file spells the wire names itself — the host's method names, the `sys`/`ffi` namespaces, the `func/main` export; the contract is pinned by the Rust test suite and by the Node suite under `tests/`. The codes, the standard streams' tokens and the name the standard library declares each of the host's rows under arrive via `config`, built Rust-side from curios-abi (see src/abi.rs), and the `foreign` rows the program reaches arrive with the program, as `compile` described them (see src/foreigns.rs).
+// The browser run harness: instantiates a compiled curios program against a JS implementation of the host boundary and drives its entrypoint. Like any embedder, this file spells the wire names itself — the host's method names, the `sys`/`ffi` namespaces, the `func/main` export; the contract is pinned by the Rust test suite and by the Node suite beside this file, `harness.test.mjs`. The codes, the standard streams' tokens and the name the standard library declares each of the host's rows under arrive via `config`, rendered as JSON from curios-abi (see src/configuration.rs), and the `foreign` rows the program reaches arrive with the program, as `compile` described them (see src/rows.rs).
 //
-// A `Nat` or `Int` crosses as an `i64`, which JavaScript sees as a `BigInt` in both directions: a count arrives as one, and every status, size and time handed back must be one — the status codes in `config` already are. A `Bool` and a `Byte`, the exit code among them, cross as plain numbers.
+// A `Nat` or `Int` crosses as an `i64`, which JavaScript sees as a `BigInt` in both directions: a count arrives as one, and every status, size and time handed back must be one — the status codes in `config` arrive as decimal strings, exact in JSON whatever their size, and are read as `BigInt`s before anything answers with one. A `Bool` and a `Byte`, the exit code among them, cross as plain numbers.
 //
 // A handle crosses as its token's bytes, and this harness keys a token on the hex of exactly those bytes, never on a number decoded from them: the empty token is not stdin's `00`, a padded `0100` is not stdout's `01`, and a token longer than any number stays itself.
 //
@@ -55,8 +55,8 @@ const describe = (value) => {
  * Run a compiled program. `config` carries:
  * - `compiled`: what `compile` returned — `program`, the module bytes, and `foreigns`, the program's own `foreign` rows as `{ name, params, results }`, `never: true` in place of `results` for a row that does not return;
  * - `bridge`: the bridge module's bytes, from `bridge_bytes`;
- * - `status`, `event`, `stdio`, `seed`, `deadlock`: the wire code tables, the standard streams' tokens, the first token this host may mint and the report of a program suspended on nothing, from `abi`;
- * - `rows`: from `abi` too — the name the standard library declares each of the host's rows under, beside the host method that answers it;
+ * - `status`, `event`, `stdio`, `seed`, `deadlock`: the wire code tables, the standard streams' tokens, the first token this host may mint and the report of a program suspended on nothing, from the configuration curios-browser renders;
+ * - `rows`: from that configuration too — the name the standard library declares each of the host's rows under, beside the host method that answers it;
  * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each receiving a copy of every write as a `Uint8Array`; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does — at once, or later by a promise, the call suspending while it is pending and the signal the hook was handed aborted where the call is cancelled.
  *
  * Resolves to `{ stdout, stderr, exitCode, trap }`: the accumulated output bytes, the code the program exited with (0 when `main` returns), and the trap message if execution failed instead.
@@ -99,7 +99,11 @@ export async function run(config) {
   // A handle's key: the hex of its token's exact bytes.
   const keyOf = (handle) => hex(decodeBytes(handle));
 
-  const { status, event } = config;
+  const { event } = config;
+  // The status codes arrive as decimal strings, which JSON carries exactly, and cross as `BigInt`s, a code being a `Nat`.
+  const status = Object.fromEntries(
+    Object.entries(config.status).map(([name, code]) => [name, BigInt(code)]),
+  );
   const { STDIN, STDOUT, STDERR } = config.stdio;
   const standard = new Set([STDIN, STDOUT, STDERR]);
   // The standard streams the program closed: each names nothing after, as a closed handle does on every host.

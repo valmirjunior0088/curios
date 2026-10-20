@@ -1,0 +1,25 @@
+[package]
+name = "curios-browser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Curios browser host: the harness that runs a compiled program in a JavaScript engine, the bridge it reads the program's values through, and what it is configured with"
+
+[lints]
+workspace = true
+
+[dependencies]
+curios-abi = { workspace = true }
+curios-wasm = { workspace = true }
+curios-emit = { workspace = true }
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.151"
+
+[dev-dependencies]
+curios-native = { workspace = true, features = ["test-support"] }
+# What compiles the bridge module the suite drives by hand.
+curios-cranelift = { workspace = true }
+# `fill!`, by which a fixture splices a value into text whose own braces stay single.
+curios-utilities = { workspace = true, features = ["test-support"] }

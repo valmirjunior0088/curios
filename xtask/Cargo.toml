@@ -23,7 +23,7 @@ unused_self = "warn"
 all = "deny"
 
 [dependencies]
-# Generates the glue for `curios-js`'s `wasm-bindgen`, so the two move together: `the_bindings_generator_is_the_bindings_version` holds them equal.
+# Generates the glue for the workspace's `wasm-bindgen`, so the two move together: `the_bindings_generator_is_the_bindings_version` holds them equal.
 wasm-bindgen-cli-support = { version = "0.2.126" }
 clap = { version = "4.6.1", features = ["derive"] }
 askama = { version = "0.16.1", default-features = false, features = ["derive", "std"] }

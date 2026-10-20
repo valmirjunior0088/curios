@@ -636,6 +636,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "curios-browser"
+version = "0.16.9"
+dependencies = [
+ "curios-abi",
+ "curios-cranelift",
+ "curios-emit",
+ "curios-native",
+ "curios-utilities",
+ "curios-wasm",
+ "js-sys",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "curios-cert"
 version = "0.16.9"
 dependencies = [
@@ -733,13 +749,9 @@ dependencies = [
 name = "curios-js"
 version = "0.16.9"
 dependencies = [
- "curios-abi",
- "curios-cranelift",
- "curios-emit",
- "curios-native",
+ "curios-browser",
  "curios-pipeline",
  "curios-text",
- "curios-utilities",
  "curios-wasm",
  "js-sys",
  "wasm-bindgen",

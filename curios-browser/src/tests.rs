@@ -1,7 +1,7 @@
-//! Tests for the browser bridge helpers and the harness's host table. Program-side `Bytes` is a rope (`$rope/bytes/leaf` / `$rope/bytes/node` structs); what crosses to a host is always the forced flat payload, which is what the bridge accessors read and write.
+//! Tests for the browser bridge helpers, the harness's host table and what the harness is configured with. Program-side `Bytes` is a rope (`$rope/bytes/leaf` / `$rope/bytes/node` structs); what crosses to a host is always the forced flat payload, which is what the bridge accessors read and write.
 
 use {
-    curios_abi::{ENTRY, HostOp, PANIC},
+    curios_abi::{DEADLOCK, ENTRY, HostOp, PANIC},
     curios_native::test_support::{GuestInstance, GuestValue},
     curios_utilities::fill,
     curios_wasm::{CompType, Export, SubType, TypeName},
@@ -191,14 +191,14 @@ fn words_accessors_roundtrip_a_word() {
     }
 }
 
-/// Every row a host answers has an entry in `harness.js`'s `host` object, keyed by the host's method name — every `for_each_host_op!` row, `proc_exit` among them — and the one `sys` import, `panic`, is defined beside it. The harness spells those names by hand, like any embedder, so a row added to the table without one is found here and not by the program that first calls it.
+/// Every row a host answers has an entry in `harness.mjs`'s `host` object, keyed by the host's method name — every `for_each_host_op!` row, `proc_exit` among them — and the one `sys` import, `panic`, is defined beside it. The harness spells those names by hand, like any embedder, so a row added to the table without one is found here and not by the program that first calls it.
 #[test]
 fn harness_implements_every_host_op() {
-    let source = include_str!("harness.js");
+    let source = include_str!("harness.mjs");
 
     let start = source
         .find("const host = {")
-        .expect("harness.js declares its host table");
+        .expect("harness.mjs declares its host table");
     let body = &source[start..];
     // The object closes at two-space indentation; every nested closure inside it closes deeper, so this marker is unambiguous.
     let end = body.find("\n  };").expect("the host table closes");
@@ -207,19 +207,19 @@ fn harness_implements_every_host_op() {
     for name in HostOp::ALL.iter().map(|op| op.name()) {
         assert!(
             body.contains(&format!("\n    {name}:")),
-            "harness.js's host table lacks an entry for host op `{name}`"
+            "harness.mjs's host table lacks an entry for host op `{name}`"
         );
     }
 
     assert!(
         source.contains(&fill!("sys: { ${PANIC} }", PANIC)),
-        "harness.js does not define the `sys` import `{PANIC}`"
+        "harness.mjs does not define the `sys` import `{PANIC}`"
     );
 
     // The entry export is the other wire name the harness spells by hand, and it is invoked outside `sysEnv`, so it is pinned on its own.
     assert!(
         source.contains(&format!("exports[\"{ENTRY}\"]")),
-        "harness.js does not invoke the entry export `{ENTRY}`"
+        "harness.mjs does not invoke the entry export `{ENTRY}`"
     );
 }
 
@@ -259,4 +259,33 @@ fn bulk_transfers_roundtrip_through_the_memory() {
         .memory_read("memory", 0, &mut copied)
         .expect("memory read failed");
     assert_eq!(&copied, payload);
+}
+
+/// The configuration holds what the harness reads of it: every table it takes apart, each status code as the decimal string it reads as a `BigInt`, the deadlock report, and a declared name for every host row.
+#[test]
+fn the_configuration_holds_what_the_harness_reads() {
+    let configuration =
+        serde_json::from_str::<serde_json::Value>(&crate::configuration()).expect("JSON");
+
+    for key in ["status", "event", "stdio", "seed", "deadlock", "rows"] {
+        assert!(
+            configuration.get(key).is_some(),
+            "the configuration lacks `{key}`"
+        );
+    }
+    assert!(
+        configuration["status"]
+            .as_object()
+            .expect("a table")
+            .values()
+            .all(|code| code
+                .as_str()
+                .is_some_and(|code| code.parse::<u64>().is_ok())),
+        "{}",
+        configuration["status"]
+    );
+    assert_eq!(configuration["deadlock"], DEADLOCK);
+    for op in HostOp::ALL {
+        assert_eq!(configuration["rows"][op.declared().as_str()], op.name());
+    }
 }

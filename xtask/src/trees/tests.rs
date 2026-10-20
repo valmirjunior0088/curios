@@ -5,8 +5,8 @@ use super::*;
 const TRACKED: [&str; 10] = [
     "Cargo.toml",
     "biome.json",
-    "curios-js/src/harness.js",
-    "curios-js/tests/harness.test.mjs",
+    "curios-browser/src/harness.mjs",
+    "curios-browser/src/harness.test.mjs",
     "editors/grammar/grammar.js",
     "editors/grammar/src/parser.c",
     "editors/vscode/extension.js",
@@ -27,7 +27,7 @@ fn a_tree_inside_the_workspace_is_its_own_directory() {
 fn the_workspace_is_every_tracked_path_no_other_tree_stands_under() {
     assert_eq!(
         Tree::Workspace.holding(TRACKED.into_iter()),
-        ["Cargo.toml", "biome.json", "curios-js", "programs"]
+        ["Cargo.toml", "biome.json", "curios-browser", "programs"]
     );
 }
 

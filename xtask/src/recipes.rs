@@ -195,7 +195,7 @@ impl Step {
             Step::BundleBuild => bundle_build(),
             Step::BundleTest => run(
                 Command::new("node"),
-                &["--test", "curios-js/tests/*.test.mjs"],
+                &["--test", "curios-browser/src/harness.test.mjs"],
             ),
             Step::GrammarInstall => grammar(&["clean-install"]),
             Step::GrammarFormat => biome_formatting(Tree::Grammar, request.check),
