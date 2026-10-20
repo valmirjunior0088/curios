@@ -20,8 +20,6 @@ const compiler = process.env.CURIOS;
 
 assert.ok(compiler, "CURIOS names the compiler under test");
 
-const text = (bytes) => new TextDecoder().decode(bytes);
-
 /** The `f1:` hash a manifest pins `contents` by: SHA-256 over its bytes. */
 const pinned = (contents) =>
   `f1:${createHash("sha256").update(contents).digest("hex")}`;
@@ -67,11 +65,16 @@ const compiled = (directory, rest = []) =>
     encoding: "utf8",
   });
 
-/** Compile the package at `directory` for a browser into `page`, then start the page's loader with the program's bytes and `query`. */
-const started = async (directory, page, query = "") => {
+/** Compile the package at `directory` for a browser into `page`, then start the page's loader with the program's bytes and `query`, beside the lines it wrote to the console, where a page's output goes with no document to write it into. */
+const started = async (t, directory, page, query = "") => {
   const { status, stderr } = compiled(directory, ["-o", page]);
 
   assert.equal(status, 0, stderr);
+
+  const out = [];
+  const err = [];
+  t.mock.method(console, "log", (line) => out.push(line));
+  t.mock.method(console, "error", (line) => err.push(line));
 
   const loader = await import(pathToFileURL(join(page, "index.js")).href);
   const outcome = await loader.start({
@@ -79,11 +82,7 @@ const started = async (directory, page, query = "") => {
     query,
   });
 
-  return {
-    ...outcome,
-    stdout: text(outcome.stdout),
-    stderr: text(outcome.stderr),
-  };
+  return { ...outcome, out, err };
 };
 
 const DOUBLE = "pub foreign double(Nat) -> Nat;\n";
@@ -109,11 +108,11 @@ test("a gateway's export answers its row through the loader", async (t) => {
     "app/web/dom.js": gateway,
   });
 
-  const outcome = await started(join(root, "app"), join(root, "page"));
+  const outcome = await started(t, join(root, "app"), join(root, "page"));
 
   assert.equal(outcome.trap, null);
   assert.equal(outcome.exitCode, 0);
-  assert.equal(outcome.stdout, "42");
+  assert.deepEqual(outcome.out, ["42"]);
 });
 
 test("an export that is no function is refused before the program runs, naming the row", async (t) => {
@@ -131,13 +130,14 @@ test("an export that is no function is refused before the program runs, naming t
     "app/dom.js": gateway,
   });
 
-  const outcome = await started(join(root, "app"), join(root, "page"));
+  const outcome = await started(t, join(root, "app"), join(root, "page"));
+
+  const refusal =
+    'the gateway dom.js of the foreign row "dom" of app exports no function twice, which answers /app/double';
 
   assert.equal(outcome.exitCode, null);
-  assert.equal(
-    outcome.trap,
-    'the gateway dom.js of the foreign row "dom" of app exports no function twice, which answers /app/double',
-  );
+  assert.equal(outcome.trap, refusal);
+  assert.deepEqual(outcome.err, [refusal]);
 });
 
 test("the program's arguments are its name, then each arg= of the query, percent-decoded to bytes", async (t) => {
@@ -145,20 +145,21 @@ test("the program's arguments are its name, then each arg= of the query, percent
     "app/curios.toml": 'compiler = "0.0.0"\nname = "app"\n',
     "app/exe.crs": `let main() -> /std/Io({}) =
     let args = /std/Process/args()!;
-    let _ = /std/Try/run(/std/Io/write(/std/Process/stdout, /std/Bytes/join(x[10], args)))!;
+    let _ = /std/Try/run(/std/Io/write(/std/Process/stdout, /std/Bytes/join(x[124], args)))!;
     /std/Io/pure(());
 main()
 `,
   });
 
   const outcome = await started(
+    t,
     join(root, "app"),
     join(root, "page"),
     "?arg=one&other=skipped&arg=a+b%20c&arg=%C3%A9&arg=",
   );
 
   assert.equal(outcome.trap, null);
-  assert.equal(outcome.stdout, "app\none\na+b c\né\n");
+  assert.deepEqual(outcome.out, ["app|one|a+b c|é|"]);
 });
 
 test("a dependency's files stand under its name, and a static entry's at its page path, dotted names skipped", async (t) => {
@@ -195,10 +196,10 @@ main()
   });
   const page = join(root, "page");
 
-  const outcome = await started(join(root, "app"), page);
+  const outcome = await started(t, join(root, "app"), page);
 
   assert.equal(outcome.trap, null);
-  assert.equal(outcome.stdout, "21");
+  assert.deepEqual(outcome.out, ["21"]);
   for (const path of [
     "index.html",
     "index.js",

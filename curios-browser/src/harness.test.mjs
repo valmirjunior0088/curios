@@ -398,7 +398,6 @@ test("a buffer a hook keeps is a copy, so changing it afterwards changes nothing
         answered.fill(0x21);
       },
     },
-    onStdout: (bytes) => bytes.fill(0x3f),
   });
 
   assert.equal(stdout, "abcxyz");
@@ -535,13 +534,15 @@ main()
 test("a program suspended on a timer wakes into its rest, and the event loop runs while it sleeps", async () => {
   // Scheduled once the program has printed, so only a sleep that yields to the event loop lets it run before the program ends.
   let ticked = false;
-  const onStdout = () => {
+  const heard = [];
+  const onStdout = (bytes) => {
+    heard.push(text(bytes));
     setTimeout(() => {
       ticked = true;
     }, 0);
   };
 
-  const { exitCode, stdout } = await execute(
+  const { exitCode } = await execute(
     `
 use /std/{Io, Nat, Str, print};
 use /std/time/{Instant, Duration};
@@ -556,7 +557,7 @@ main()
     { onStdout },
   );
 
-  assert.deepEqual([exitCode, stdout, ticked], [0, "slept 7", true]);
+  assert.deepEqual([exitCode, heard.join(""), ticked], [0, "slept 7", true]);
 });
 
 test("a program suspended on no handle runs its cancel, reports the deadlock and ends with code 1", async () => {
@@ -625,31 +626,40 @@ main()
   assert.deepEqual([exitCode, stdout, aborted], [0, "timed out", true]);
 });
 
-test("each write reaches its stream and its hook in the order the program made it", async () => {
-  const heard = [];
-
-  const outcome = await execute(
-    `
+const INTERLEAVED = `
 use /std/{print, print_err};
 let main() -> /std/Io({}) =
     let _ = print("one ")!;
     let _ = print_err("two ")!;
     print("three");
 main()
-`,
-    {
-      onStdout: (bytes) => heard.push(["out", text(bytes)]),
-      onStderr: (bytes) => heard.push(["err", text(bytes)]),
-    },
-  );
+`;
 
-  assert.equal(outcome.stdout, "one three");
-  assert.equal(outcome.stderr, "two ");
+test("each write reaches its stream's hook in the order the program made it", async () => {
+  const heard = [];
+
+  await execute(INTERLEAVED, {
+    onStdout: (bytes) => heard.push(["out", text(bytes)]),
+    onStderr: (bytes) => heard.push(["err", text(bytes)]),
+  });
+
   assert.deepEqual(heard, [
     ["out", "one "],
     ["err", "two "],
     ["out", "three"],
   ]);
+});
+
+test("a stream a hook takes is the hook's, and the run keeps only the streams no hook takes", async () => {
+  const heard = [];
+
+  const outcome = await execute(INTERLEAVED, {
+    onStdout: (bytes) => heard.push(text(bytes)),
+  });
+
+  assert.deepEqual(heard, ["one ", "three"]);
+  assert.equal(outcome.stdout, "");
+  assert.equal(outcome.stderr, "two ");
 });
 
 test("a row the program calls needs a hook, a row it never calls needs none, and a hook needs a row", async () => {
@@ -682,6 +692,7 @@ test("a row the program calls needs a hook, a row it never calls needs none, and
 
 test("a deadlock cancellation that suspends finishes its cleanup before reporting", async () => {
   let ticked = false;
+  const heard = [];
   const outcome = await execute(
     `
 use /std/{Io, print};
@@ -697,6 +708,8 @@ main()
 `,
     {
       onStdout: (bytes) => {
+        heard.push(text(bytes));
+
         if (text(bytes) === "closing ") {
           setTimeout(() => {
             ticked = true;
@@ -707,7 +720,7 @@ main()
   );
   assert.equal(outcome.exitCode, 1);
   assert.equal(outcome.trap, null);
-  assert.equal(outcome.stdout, "closing closed");
+  assert.equal(heard.join(""), "closing closed");
   assert.match(outcome.stderr, /^deadlock: /);
   assert.equal(ticked, true);
 });

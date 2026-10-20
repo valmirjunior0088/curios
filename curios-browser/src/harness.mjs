@@ -4,7 +4,7 @@
 //
 // A handle crosses as its token's bytes, and this harness keys a token on the hex of exactly those bytes, never on a number decoded from them: the empty token is not stdin's `00`, a padded `0100` is not stdout's `01`, and a token longer than any number stays itself.
 //
-// The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. The only handles it mints are what a program suspends on: watches, deadlines, and the replies a hook's promise answers later. A handle this host never minted names nothing: a row the host serves answers NOT_FOUND for it, as a closed one does on every host, and a row it denies answers PERMISSION_DENIED whatever it is handed.
+// The browser host is deliberately shallow: stdout/stderr stream to the hooks that take them and accumulate otherwise, stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED. The only handles it mints are what a program suspends on: watches, deadlines, and the replies a hook's promise answers later. A handle this host never minted names nothing: a row the host serves answers NOT_FOUND for it, as a closed one does on every host, and a row it denies answers PERMISSION_DENIED whatever it is handed.
 //
 // A program that can suspend exports `func/advance` beside its entry, and both answer turns: whether it suspended, what it yielded, the handles it waits on, its cancel and its rest. The run advances turn after turn, awaiting a deadline or a hook's promise between them, so the event loop runs while the program waits.
 
@@ -58,9 +58,9 @@ const describe = (value) => {
  * - `status`, `event`, `stdio`, `seed`, `deadlock`: the wire code tables, the standard streams' tokens, the first token this host may mint and the report of a program suspended on nothing, from the configuration curios-browser renders;
  * - `rows`: from that configuration too — the name the standard library declares each of the host's rows under, beside the host method that answers it;
  * - `args`: optional, the program's arguments, each a `Uint8Array`, its name first, which a page passes and the playground does not;
- * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each receiving a copy of every write as a `Uint8Array`; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does — at once, or later by a promise, the call suspending while it is pending and the signal the hook was handed aborted where the call is cancelled.
+ * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each handed every write to its stream as a `Uint8Array` it owns, which the run then keeps no copy of; `foreign` implements `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`), each held to its row as `checked` states, and answers a row before the host does — at once, or later by a promise, the call suspending while it is pending and the signal the hook was handed aborted where the call is cancelled.
  *
- * Resolves to `{ stdout, stderr, exitCode, trap }`: the accumulated output bytes, the code the program exited with (0 when `main` returns), and the trap message if execution failed instead.
+ * Resolves to `{ stdout, stderr, exitCode, trap }`: the output of each stream no hook took, accumulated, the code the program exited with (0 when `main` returns), and the trap message if execution failed instead.
  */
 export async function run(config) {
   const bridge = (await WebAssembly.instantiate(config.bridge, {})).instance
@@ -134,7 +134,18 @@ export async function run(config) {
 
   const hooks = config.hooks ?? {};
 
-  // The output streams take every write whole, and hand each hook a copy of it, so a hook that keeps and changes what it was given changes nothing the run reports. Standard input is not open for writing, as on every host.
+  // Each write goes whole to the hook that takes its stream, as bytes nothing else holds, and is kept for the run's result only where no hook takes it: a stream a hook takes is the hook's, so a long run that writes to one keeps nothing of what it wrote.
+  const emitted = (stream, bytes) => {
+    const hook = stream === "stdout" ? hooks.onStdout : hooks.onStderr;
+
+    if (hook === undefined) {
+      output[stream].push(bytes);
+    } else {
+      hook(bytes);
+    }
+  };
+
+  // The output streams take every write whole. Standard input is not open for writing, as on every host.
   const write = (handle, ref) => {
     const bytes = decodeBytes(ref);
     const key = keyOf(handle);
@@ -145,12 +156,10 @@ export async function run(config) {
 
     switch (key) {
       case STDOUT:
-        output.stdout.push(bytes);
-        hooks.onStdout?.(bytes.slice());
+        emitted("stdout", bytes);
         break;
       case STDERR:
-        output.stderr.push(bytes);
-        hooks.onStderr?.(bytes.slice());
+        emitted("stderr", bytes);
         break;
       case STDIN:
         return [status.EBADF, 0n];
@@ -799,9 +808,7 @@ export async function run(config) {
       if (on.length === 0) {
         await finished(advance, turn[3]);
 
-        const report = new TextEncoder().encode(config.deadlock);
-        output.stderr.push(report);
-        hooks.onStderr?.(report.slice());
+        emitted("stderr", new TextEncoder().encode(config.deadlock));
 
         return { ...result(), exitCode: 1 };
       }
