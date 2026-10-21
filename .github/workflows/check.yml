@@ -15,8 +15,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  NEXTEST: nextest@0.9.149
-  # The oldest Node the browser suite runs under: the first whose engine runs WebAssembly GC unflagged and whose test runner expands a pattern itself.
+  NEXTEST: 0.9.149
   NODE: 22
 
 # A job sets up a machine and runs steps of one subject, each a `cargo xtask` line. Which steps there are, and what each runs, is the table's in `xtask/src/steps.rs`; `every_step_has_a_job` there holds that these lines parse and together run every step. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; nextest's and Node's are this file's, stated once above.
@@ -34,7 +33,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: ${{ env.NEXTEST }}
+          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
@@ -59,7 +58,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: ${{ env.NEXTEST }}
+          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: runtime-macos
@@ -79,7 +78,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: ${{ env.NEXTEST }}
+          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: instrumented
@@ -105,7 +104,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: ${{ env.NEXTEST }}
+          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: compiler
@@ -251,7 +250,7 @@ jobs:
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
         with:
-          tool: ${{ env.NEXTEST }}
+          tool: nextest@${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
           key: tools
