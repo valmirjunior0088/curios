@@ -128,13 +128,14 @@ impl Step {
                 .into(),
             ],
             Step::BundleBuild => bundle_build(),
+            // The bundle under test is the one `bundle build` filed, named to the suite as the compiler is to the page's.
             Step::BundleTest => vec![
                 Run::new(
                     Tool::Node,
                     Tree::Workspace,
                     texts(["--test", "curios-browser/src/harness.test.mjs"]),
                 )
-                .finding(Product::Bundle)
+                .with("CURIOS_JS", Arg::Product(Product::Bundle))
                 .into(),
             ],
             Step::GrammarInstall => vec![installing(Tree::Grammar)],

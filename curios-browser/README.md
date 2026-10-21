@@ -36,7 +36,7 @@ The Curios browser host: `harness.mjs`, which runs a compiled program under a Ja
 
 ### The harness is tested under Node
 
-**Decision.** `cargo xtask bundle test` builds the bundle `curios-js` is built into and runs `src/harness.test.mjs`, beside the harness, with Node's built-in test runner against what was filed: fixture programs compiled by the bundle's own `compile` and run by its `run` against scripted hooks. The suite imports only Node's own modules and the bundle.
+**Decision.** `cargo xtask bundle test` builds the bundle `curios-js` is built into and runs `src/harness.test.mjs`, beside the harness, with Node's built-in test runner against what was filed, whose directory `CURIOS_JS` names: fixture programs compiled by the bundle's own `compile` and run by its `run` against scripted hooks. The suite imports only Node's own modules and the bundle.
 
 **Rationale.** The harness is JavaScript that no Rust test executes — `src/tests.rs` pins the wire names it spells and what it is configured with, not what it answers. Node runs the bundle on V8, one of the playground's engines, and its runner needs no package, so the step has no lock file.
 

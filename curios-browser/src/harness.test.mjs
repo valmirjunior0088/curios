@@ -1,13 +1,15 @@
-// The browser harness under Node's own test runner, against the bundle `cargo xtask bundle build` filed: fixture programs compiled by the bundle's `compile` and run by its `run` against scripted hooks. It holds what only a JavaScript host can get wrong — a `foreign` hook held to its row, a handle's exact token, the harness's answers to the host rows — which no Rust test reaches, since the harness runs only under a JavaScript engine. `cargo xtask bundle test` builds the bundle and runs this.
+// The browser harness under Node's own test runner, against the bundle `CURIOS_JS` names, the directory `cargo xtask bundle build` filed: fixture programs compiled by the bundle's `compile` and run by its `run` against scripted hooks. It holds what only a JavaScript host can get wrong — a `foreign` hook held to its row, a handle's exact token, the harness's answers to the host rows — which no Rust test reaches, since the harness runs only under a JavaScript engine. `cargo xtask bundle test` builds the bundle and runs this.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
-const bundle = new URL(
-  "../../curios-js/.artifacts/wasm32-unknown-unknown/",
-  import.meta.url,
-);
+const bundled = process.env.CURIOS_JS;
+
+assert.ok(bundled, "CURIOS_JS names the bundle under test");
+
+const bundle = pathToFileURL(`${bundled}/`);
 const { initSync, compile, run } = await import(
   new URL("curios_js.js", bundle)
 );
