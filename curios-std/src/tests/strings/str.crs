@@ -86,8 +86,8 @@ test logical_operations_use_certified_chars =
                         (at) => Str/At/to_offset(at)),
                     99)),
             Show/show('😀'),
-            Bool/to_str(Str/eql_ascii_ci("AbÉ", "aBÉ")),
-            Bool/to_str(Str/eql_ascii_ci("É", "é")),
+            Bool/to_str(Str/eql_ignoring_ascii_case("AbÉ", "aBÉ")),
+            Bool/to_str(Str/eql_ignoring_ascii_case("É", "é")),
             Nat/to_str(Str/len(s)),
             Str/between(s, Str/At/of_offset(s, 1), Str/At/of_offset(s, 4))]),
         "a€😀|€|1|4|😀|true|false|3|€");

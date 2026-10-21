@@ -78,7 +78,7 @@ pub let escape(s: Str) -> Str =
 
 --- Whether `name` is an element whose content the browser reads as text, references undecoded: `script` and `style`.
 let is_raw_text(name: Str) -> Bool =
-    Str/eql_ascii_ci(name, "script") || Str/eql_ascii_ci(name, "style");
+    Str/eql_ignoring_ascii_case(name, "script") || Str/eql_ignoring_ascii_case(name, "style");
 
 let attr_name(a: Attr) -> Str =
     match a | attr(name, _) => name | flag(name) => name end;
@@ -105,8 +105,8 @@ pub let text_of(h: Html) -> Str =
 --- Whether `h` is an element called `name`, compared without case.
 pub let is_named(h: Html, name: Str) -> Bool =
     match h
-    | element(tag, _, _) => Str/eql_ascii_ci(tag, name)
-    | void(tag, _) => Str/eql_ascii_ci(tag, name)
+    | element(tag, _, _) => Str/eql_ignoring_ascii_case(tag, name)
+    | void(tag, _) => Str/eql_ignoring_ascii_case(tag, name)
     | _ => false
     end;
 
@@ -143,7 +143,9 @@ satisfy Show(Html) {
 }
 
 let attribute_in(attrs: List(Attr), name: Str) -> Option(Str) =
-    Option/map(List/find(attrs, (a) => Str/eql_ascii_ci(attr_name(a), name)), attr_value);
+    Option/map(
+        List/find(attrs, (a) => Str/eql_ignoring_ascii_case(attr_name(a), name)),
+        attr_value);
 
 --- The value of the attribute `name` on an element, `""` for a flag, compared without case; `none` on any other tree or when the element lacks it.
 pub let attribute(h: Html, name: Str) -> Option(Str) =

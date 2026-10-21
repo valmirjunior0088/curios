@@ -63,8 +63,8 @@ let scheme() -> Parse(Str, Scheme) =
     let name = Parse/str/take_while(until([':']))!;
     let _ = Parse/str/literal("://")!;
     choose
-    | Str/eql_ascii_ci(name, "http") => Parse/pure(Scheme/http())
-    | Str/eql_ascii_ci(name, "https") => Parse/pure(Scheme/https())
+    | Str/eql_ignoring_ascii_case(name, "http") => Parse/pure(Scheme/http())
+    | Str/eql_ignoring_ascii_case(name, "https") => Parse/pure(Scheme/https())
     | _ => Parse/fail(Fmt/render("unknown scheme '%'")(name))
     end;
 

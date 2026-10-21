@@ -30,7 +30,7 @@ let present(headers: List(Field), name: Str) -> Bool =
 
 let is_chunked(coding: Bytes) -> Bool =
     match Str/of_bytes(coding)
-    | success(s) => Str/eql_ascii_ci(s, "chunked")
+    | success(s) => Str/eql_ignoring_ascii_case(s, "chunked")
     | failure(_) => false
     end;
 

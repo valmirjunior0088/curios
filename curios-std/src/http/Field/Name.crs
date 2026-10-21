@@ -35,8 +35,8 @@ pub struct Name: pub Type {
 
 --- Names are compared without case, as RFC 9110 §5.1 reads them: `Content-Type` and `content-type` are one name.
 satisfy Eql(Name) {
-    eql(a, b) = Str/eql_ascii_ci(a.text, b.text),
-    neq(a, b) = Bool/not(Str/eql_ascii_ci(a.text, b.text)),
+    eql(a, b) = Str/eql_ignoring_ascii_case(a.text, b.text),
+    neq(a, b) = Bool/not(Str/eql_ignoring_ascii_case(a.text, b.text)),
 }
 
 satisfy Spell(Name) {
@@ -49,4 +49,4 @@ pub let of_str(s: Str) -> Option(Name) =
 
 --- Whether `n` is the name `text` spells, compared without case.
 pub let is(n: Name, text: Str) -> Bool =
-    Str/eql_ascii_ci(n.text, text);
+    Str/eql_ignoring_ascii_case(n.text, text);

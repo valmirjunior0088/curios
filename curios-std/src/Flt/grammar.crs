@@ -135,10 +135,10 @@ pub let nan(negative: Bool, signaling: Bool) -> Parse(Str, Flt) =
 pub let special(negative: Bool) -> Parse(Str, Flt) =
     let name = Parse/str/take_while(Char/is_ascii_alpha)!;
     choose
-    | Str/eql_ascii_ci(name, "inf") || Str/eql_ascii_ci(name, "infinity") =>
+    | Str/eql_ignoring_ascii_case(name, "inf") || Str/eql_ignoring_ascii_case(name, "infinity") =>
         Parse/pure(match negative | true => -inf.0 | false => +inf.0 end)
-    | Str/eql_ascii_ci(name, "nan") => nan(negative, false)
-    | Str/eql_ascii_ci(name, "snan") => nan(negative, true)
+    | Str/eql_ignoring_ascii_case(name, "nan") => nan(negative, false)
+    | Str/eql_ignoring_ascii_case(name, "snan") => nan(negative, true)
     | _ => Parse/fail("expected a number")
     end;
 

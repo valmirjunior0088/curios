@@ -142,7 +142,7 @@ let lower_ascii_bytes(b: Bytes) -> Bytes =
     Bytes/fold(b, x[], (byte, acc) => x[..acc, lower_ascii_byte(byte)]);
 
 --- Equality with ASCII letters compared regardless of case; every other character exactly.
-pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
+pub let eql_ignoring_ascii_case(a: Str, b: Str) -> Bool =
     lower_ascii_bytes(to_bytes(a)) == lower_ascii_bytes(to_bytes(b));
 
 --- `s` written `n` times.

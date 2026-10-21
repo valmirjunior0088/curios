@@ -32,7 +32,7 @@ let expects_continue(head: Request/Head) -> Bool =
             Field/members(head.headers, "Expect"),
             (member) =>
                 match Str/of_bytes(member)
-                | success(expectation) => Str/eql_ascii_ci(expectation, "100-continue")
+                | success(expectation) => Str/eql_ignoring_ascii_case(expectation, "100-continue")
                 | failure(_) => false
                 end);
 
