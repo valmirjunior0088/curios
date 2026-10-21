@@ -76,4 +76,4 @@ pub let below(
     x: K,
     i: Member()(x, keys(m)),
 ) -> Below(least(m), x) =
-    below_root(m.root, grounded(m.sound), x, i);
+    below_root(m.root, grounded(m.rooted), x, i);

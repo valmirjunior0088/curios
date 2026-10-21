@@ -38,7 +38,7 @@ pub let pairwise(
     @V: Type,
     m: Map(K, V),
 ) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(keys(m)) =
-    of_root(m.root, grounded(m.sound));
+    of_root(m.root, grounded(m.rooted));
 
 --- The keys of a map are in strict order at adjacent elements, as a decision.
 pub let ordered(
