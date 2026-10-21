@@ -1,7 +1,7 @@
 use {
     super::{
         BigHelper, Bitwise, Context, EmissionCode, EmissionValueName, FltHelper, ImmediateLayout,
-        LoadAs, RopeData, Table, block, box_instr, br, br_if, call, either, get, rounding_code,
+        LoadAs, RopeData, Table, block, box_instrs, br, br_if, call, either, get, rounding_code,
         set, tee, when,
     },
     curios_num::Rounding,
@@ -128,10 +128,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     ///
     /// Nothing is coerced here. A local is held in a register only at the carrier its own definition produces — that is what `Offer`, in the representation analysis, states, and what the assert at the head of [`CodeEmitter::emit_intrinsic`] checks — so a definition and its local always agree, and every *disagreeing use* pays for itself at its own site instead.
     fn emit_store(&mut self, dest: &Dest<'_>, produced: &curios_cont::Repr) {
-        if self.context.table().raw_carrier(dest.value_name).is_none()
-            && let Some(instr) = box_instr(produced, self.context.table())
-        {
-            self.emit_instr(instr);
+        if self.context.table().raw_carrier(dest.value_name).is_none() {
+            self.emit_instrs(box_instrs(produced, self.context.table()));
         }
 
         self.emit_instr(curios_wasm::Instr::LocalSet {
@@ -524,8 +522,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         finish: Fast,
         slow: Vec<curios_wasm::Instr>,
     ) {
+        // A word-held result and a length-held one alike: what reaches here into a length is a word, a length's own operations lowering apart.
         match self.context.table().raw_carrier(dest.value_name) {
-            Some(curios_cont::Repr::Nat) => {
+            Some(curios_cont::Repr::Nat | curios_cont::Repr::Length) => {
                 let fast = match finish {
                     Fast::Small | Fast::Wide32 => fast,
                     Fast::Wide64 => fast
@@ -871,6 +870,42 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             Fast::Small,
             slow,
         );
+    }
+
+    /// Store the length on the stack: as it is where its local is a length, and boxed otherwise.
+    fn emit_length_settled(&mut self, dest: &Dest<'_>) {
+        match self.context.table().raw_carrier(dest.value_name) {
+            Some(curios_cont::Repr::Length) => self.emit_store(dest, &curios_cont::Repr::Length),
+            _ => {
+                self.emit_length_box();
+                self.emit_store(dest, &curios_cont::Repr::Ref);
+            }
+        }
+    }
+
+    /// A monus over words read unsigned: the difference where the first is no smaller, and zero otherwise.
+    fn emit_length_monus(
+        &mut self,
+        dest: &Dest<'_>,
+        (left, right): (&EmissionValueName, &EmissionValueName),
+    ) {
+        let (minuend, subtrahend) = (
+            self.context.load_value_instrs(left, LoadAs::Nat),
+            self.context.load_value_instrs(right, LoadAs::Nat),
+        );
+        self.emit_instrs(sequence([
+            minuend.clone(),
+            subtrahend.clone(),
+            vec![curios_wasm::Instr::I32Sub],
+            vec![curios_wasm::Instr::I32Const { value: 0 }],
+            minuend,
+            subtrahend,
+            vec![
+                curios_wasm::Instr::I32GeU,
+                curios_wasm::Instr::Select { val_types: vec![] },
+            ],
+        ]));
+        self.emit_store(dest, &curios_cont::Repr::Length);
     }
 
     /// Box the length on the stack as the `Nat` it is: an i31 below `2³⁰`, and through `big/of_i64` past it, which a sequence may reach.
@@ -1800,13 +1835,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             _ => op.result_repr(),
         };
-        // A result the analysis bounds below `2³⁰` is the one exception: it may hold it in a word although the operation produces a reference in general, and the lowering then delivers the word.
+        // A result the analysis bounds below `2³⁰` is one exception: it may hold it in a word although the operation produces a reference in general, and the lowering then delivers the word. A length is the other, below `2³²` in a word read unsigned, which a word is too.
         assert!(
             self.context
                 .table()
                 .raw_carrier(value_name)
                 .is_none_or(|carrier| carrier == result_repr
-                    || (carrier == curios_cont::Repr::Nat && op.may_bound_result())),
+                    || (carrier == curios_cont::Repr::Nat && op.may_bound_result())
+                    || (carrier == curios_cont::Repr::Length
+                        && (op.may_hold_length()
+                            || op.may_bound_result()
+                            || result_repr == curios_cont::Repr::Nat))),
             "`{value_name}` is held as {:?} where {op:?} produces {result_repr:?}",
             self.context.table().raw_carrier(value_name),
         );
@@ -1870,6 +1909,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     Fast::Wide32,
                     slow,
                 );
+            }
+            // A monus held as a length takes its operands as words read unsigned, each narrowed where it arrives as a reference: what it leaves lies within its first operand, so narrowing the second changes no answer.
+            curios_cont::Intrinsic::NatSub
+                if self.context.table().raw_carrier(value_name)
+                    == Some(curios_cont::Repr::Length) =>
+            {
+                self.emit_length_monus(dest, (&args[0], &args[1]));
             }
             // Monus: the difference of two i31 naturals lies in `(-2³⁰, 2³⁰)`, and a negative one clamps to zero.
             curios_cont::Intrinsic::NatSub => {
@@ -2010,8 +2056,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                         .refuse_instrs(curios_cont::Panic::OutOfBounds),
                     else_instructions: vec![],
                 });
-                self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Null));
-                self.emit_store(dest, &op.result_repr());
+                // What passed is a count no greater than the length, so a length holding it takes it narrowed.
+                match self.context.table().raw_carrier(value_name) {
+                    Some(curios_cont::Repr::Length) => {
+                        self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Nat));
+                        self.emit_store(dest, &curios_cont::Repr::Length);
+                    }
+                    _ => {
+                        self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Null));
+                        self.emit_store(dest, &op.result_repr());
+                    }
+                }
             }
             // The default direction is the hardware's, checked for a NaN; every other one, and a fused multiply-add in any, is a helper computing the model's rounding in integers.
             curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven) => self.emit_flt_checked(
@@ -2217,8 +2272,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             curios_cont::Intrinsic::BytesLen => {
                 self.emit_bytes_len(&args[0]);
-                self.emit_length_box();
-                self.emit_store(dest, &op.result_repr());
+                self.emit_length_settled(dest);
             }
             curios_cont::Intrinsic::BytesEql => {
                 self.emit_bytes_eql(&args[0], &args[1]);
@@ -2359,8 +2413,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let rope = self.context.table().list_rope();
                 self.emit_operand(&op, 0, &args[0]);
                 self.emit_instr(Self::rope_get(&rope, &rope.len_field));
-                self.emit_length_box();
-                self.emit_store(dest, &op.result_repr());
+                self.emit_length_settled(dest);
             }
             curios_cont::Intrinsic::ListGet => {
                 let rope = self.context.table().list_rope();

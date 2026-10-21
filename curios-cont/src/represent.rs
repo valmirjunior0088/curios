@@ -10,7 +10,7 @@
 //!
 //! **A boundary the analysis sees whole is a join like any other.** A function that neither escapes nor is the entry is called only by `Known` calls, each naming its arguments, so each of its parameters is a join whose edges are its call sites. Its results are handed back at slots `return_call` requires every member of its tail-call class to agree on ([`TailClasses`]), so each slot is a join whose edges are the class's return edges and whose uses are the resume parameters of every call into the class. Both are decided with the same lattice as a continuation parameter, and the emitter declares the function's type at what they settle to, loads a call's arguments as an edge loads its own, and coerces a result to a resume parameter held otherwise.
 //!
-//! **A word holds only what lies below `2³⁰`.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a value a word holds has to lie below it. What every value a site may hold lies below is a lattice of its own, `Bound`, solved before any demand is read: an operation's result lies below what its operands' bounds give (`Intrinsic::result_bound`), a literal below its own value, a join below what every argument reaching it lies below, and a reference by declaration below nothing unless erasure read its type as a word. A site is offered the word where its bound is `2³⁰` or less, so a remainder by a literal, a counter counted down from one, a byte taken apart and the fields a scan carries ride words with no rule naming them.
+//! **A word holds only what lies below `2³⁰`.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a value a word holds has to lie below it. What every value a site may hold lies below is a lattice of its own, `Bound`, solved before any demand is read: an operation's result lies below what its operands' bounds give (`Intrinsic::result_bound`), a literal below its own value, a join below what every argument reaching it lies below, and a reference by declaration below nothing unless erasure read its type as a word. A site is offered the word where its bound is `2³⁰` or less, so a remainder by a literal, a counter counted down from one, a byte taken apart and the fields a scan carries ride words with no rule naming them; and a word read unsigned, `Repr::Length`, where its bound is `2³²` or less, so a sequence's length, a window's fields and what a monus of one leaves ride one too. A word serves where a length is asked, and arithmetic that takes an i31 apart takes a length boxed.
 //!
 //! **A float register holds only what a float was handed.** A parameter has one type only where no type computes one. A variant's constructors share a payload slot, and scalar replacement makes that slot a parameter, `success`'s float and `failure`'s error in the one; and a value whose type is a match on another is a float on one edge and a string on the next. What its uses read under one tag or one branch says nothing of what arrives under another, and an edge coerces its argument to the parameter's carrier before anything is consulted, so a float register there casts the reference, and loses it where it does not trap. Only a type says which reference is a float, and erasure, the one walk holding it, states it on a binder whose producer names no carrier ([`Register`]): so a position is offered the float only when every argument reaching it is one already, a float literal, a filler, a definition producing a float, a reference stating a float, or another such position, which [`float_params`] decides beside the word. A stated reference feeds the register by one unbox on the edge or the call, and keeps its own storage: the statement is what lets it feed, never what decides how it is held.
 //!
@@ -29,7 +29,7 @@ use {
 
 /// How one value is held between its definition and its uses.
 ///
-/// Ordered `Boxed < Raw(_) < Conflict`, with `Conflict` meaning "no single raw carrier serves every use", which the backend reads as boxed. Only an `Offer::Open` value can reach the top: everything else admits exactly one carrier, so a second demand is either that same carrier or filtered out. Answering a disagreement by dropping back to `Boxed` would move a fact *down* the order, and `Solver::solve` terminates on nothing having changed — so the conservative answer has to be a third point above both, not a return to the bottom.
+/// Ordered `Boxed < Raw(_) < Conflict`, with `Conflict` meaning "no single raw carrier serves every use", which the backend reads as boxed; among the raw carriers `Raw(Length) < Raw(Nat)`, since a word serves where a length is asked, every word lying below `2³⁰`. Only an `Offer::Open` value can reach the top: everything else admits exactly one carrier, so a second demand is either that same carrier or filtered out. Answering a disagreement by dropping back to `Boxed` would move a fact *down* the order, and `Solver::solve` terminates on nothing having changed — so the conservative answer has to be a third point above both, not a return to the bottom.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Storage {
     /// Behind a reference — an `i31`, a `Flt` struct, or a heap shape.
@@ -59,9 +59,10 @@ impl Lattice for Storage {
         *self = match (*self, incoming) {
             (Storage::Conflict, _) | (_, Storage::Conflict) => Storage::Conflict,
             (Storage::Boxed, other) | (other, Storage::Boxed) => other,
-            (Storage::Raw(current), Storage::Raw(incoming)) => match current == incoming {
-                true => Storage::Raw(current),
-                false => Storage::Conflict,
+            (Storage::Raw(current), Storage::Raw(incoming)) => match (current, incoming) {
+                _ if current == incoming => Storage::Raw(current),
+                (Repr::Nat, Repr::Length) | (Repr::Length, Repr::Nat) => Storage::Raw(Repr::Nat),
+                _ => Storage::Conflict,
             },
         }
     }
@@ -100,8 +101,12 @@ enum Source<'a> {
 enum Offer {
     /// The definition produces exactly this carrier, so a use demanding it reads the register directly and every other use coerces at its own site.
     Fixed(Repr),
-    /// A join — a continuation parameter, a known function's parameter, a result slot — which has no producer of its own: it holds whatever its uses agree on among what reaches it, and each incoming argument is coerced to match. This is the only offer a `Conflict` can arise from. `words` and `floats` say whether the machine word and the float are among what it may hold, which the bounds and [`float_params`] decide from what reaches it.
-    Open { words: bool, floats: bool },
+    /// A join — a continuation parameter, a known function's parameter, a result slot — which has no producer of its own: it holds whatever its uses agree on among what reaches it, and each incoming argument is coerced to match. This is the only offer a `Conflict` can arise from. `words`, `lengths` and `floats` say whether the machine word, the word read unsigned and the float are among what it may hold, which the bounds and [`float_params`] decide from what reaches it.
+    Open {
+        words: bool,
+        lengths: bool,
+        floats: bool,
+    },
     /// Nothing. Either the value arrives through a position that is a reference by declaration, or its definition builds a heap shape, which a register cannot hold in the first place.
     Never,
 }
@@ -110,11 +115,18 @@ impl Offer {
     /// Whether this definition can hand `carrier` to a register.
     fn admits(&self, carrier: Repr) -> bool {
         match self {
-            Offer::Open { words, floats } => match carrier {
+            Offer::Open {
+                words,
+                lengths,
+                floats,
+            } => match carrier {
                 Repr::Nat => *words,
+                Repr::Length => *lengths,
                 Repr::Flt => *floats,
                 Repr::Number | Repr::Bytes | Repr::List | Repr::Ref => true,
             },
+            // A word is a length too.
+            Offer::Fixed(Repr::Nat) => matches!(carrier, Repr::Nat | Repr::Length),
             Offer::Fixed(fixed) => *fixed == carrier,
             Offer::Never => false,
         }
@@ -204,6 +216,7 @@ fn offers(
 ) -> BTreeMap<Site, Offer> {
     let open = Offer::Open {
         words: true,
+        lengths: true,
         floats: true,
     };
     let mut offers = BTreeMap::new();
@@ -304,14 +317,16 @@ fn offers(
         offers.insert(Site::Value(value), Offer::Never);
     }
 
-    // What the bounds put under `2³⁰` a word holds: a `Nat` an operation computes, where its lowering can settle into one, and a join every argument reaching which lies there.
+    // What the bounds put under `2³⁰` a word holds, and under `2³²` a word read unsigned: a `Nat` an operation computes, where its lowering can settle into one, and a join every argument reaching which lies there.
     let bounds = bounds(module, &offers, flows);
     for (_, node) in module.live_nodes() {
-        if let Node::LetIntrinsic { result, op, .. } = node
-            && op.may_bound_result()
-            && bounds[&Site::Value(*result)].is_word()
-        {
-            offers.insert(Site::Value(*result), Offer::Fixed(Repr::Nat));
+        if let Node::LetIntrinsic { result, op, .. } = node {
+            let bound = bounds[&Site::Value(*result)];
+            if op.may_bound_result() && bound.is_word() {
+                offers.insert(Site::Value(*result), Offer::Fixed(Repr::Nat));
+            } else if op.may_hold_length() && bound.is_length() {
+                offers.insert(Site::Value(*result), Offer::Fixed(Repr::Length));
+            }
         }
     }
     let words = offers
@@ -319,14 +334,21 @@ fn offers(
         .copied()
         .filter(|site| bounds[site].is_word())
         .collect::<BTreeSet<_>>();
+    let lengths = offers
+        .keys()
+        .copied()
+        .filter(|site| bounds[site].is_length())
+        .collect::<BTreeSet<_>>();
     let floats = float_params(module, &offers, flows);
     for (site, offer) in &mut offers {
         if let Offer::Open {
             words: word,
+            lengths: length,
             floats: float,
         } = offer
         {
             *word = words.contains(site);
+            *length = lengths.contains(site);
             *float = floats.contains(site);
         }
     }
@@ -557,7 +579,7 @@ fn fed_only_by(
 /// The raw carrier a representation demands, or `None` when it names a reference. A `Nat` or `Int` operand demands the word, which only a definition offering one can meet: everything else stays the reference the operand reads by default.
 fn raw_carrier(repr: &Repr) -> Option<Repr> {
     match repr {
-        Repr::Nat | Repr::Flt => Some(*repr),
+        Repr::Nat | Repr::Length | Repr::Flt => Some(*repr),
         Repr::Number => Some(Repr::Nat),
         Repr::Bytes | Repr::List | Repr::Ref => None,
     }
@@ -593,10 +615,18 @@ pub fn representation(module: &Module) -> Representation {
     let facts = Solver::solve(seeds, |rules| {
         for (_, node) in module.live_nodes() {
             rules.add(move |solver| match node {
-                // The roster states what each operand position reads.
-                Node::LetIntrinsic { op, args, .. } => {
+                // The roster states what each operand position reads, and a monus held as a length reads its operands as lengths, its lowering taking each as a word read unsigned.
+                Node::LetIntrinsic {
+                    op, args, result, ..
+                } => {
+                    let as_length = *op == Intrinsic::NatSub
+                        && solver.fact(&Site::Value(*result)) == Some(&Storage::Raw(Repr::Length));
                     for (index, arg) in args.iter().enumerate() {
-                        demand(arg, raw_carrier(&op.operand_repr(index)), offers, solver);
+                        let carrier = match as_length {
+                            true => Some(Repr::Length),
+                            false => raw_carrier(&op.operand_repr(index)),
+                        };
+                        demand(arg, carrier, offers, solver);
                     }
                 }
 

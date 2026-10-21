@@ -15,11 +15,10 @@ mod tests;
 
 use {
     crate::{
-        Atom, CallAnalysis, Callee, ContinuationId, Demand, Edge, FunctionId, Intrinsic, Literal,
-        Module, Node, NodeId, Origin, PARAM_SPLIT_GROWTH_LIMIT, RowId, UseTarget, ValueExpr,
-        ValueId, analyze_calls, atoms, demand_of, demands, origins, rewire_node, visit_atoms_mut,
+        Atom, CallAnalysis, Callee, ContinuationId, Demand, Edge, FunctionId, Intrinsic, Module,
+        Node, NodeId, Origin, PARAM_SPLIT_GROWTH_LIMIT, RowId, UseTarget, ValueExpr, ValueId,
+        analyze_calls, atoms, demand_of, demands, origins, rewire_node, visit_atoms_mut,
     },
-    curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -505,7 +504,7 @@ pub(crate) fn split_workers(module: &mut Module) -> bool {
 
 // -- prepared windows --------------------------------------------------------
 //
-// The rope analogue of the product split, sharing the record rather than growing a second coordination discipline. A window is `(base, offset, length)`: any rope is its own whole window as `(r, 0, len r)`, a virtual slice is offset arithmetic behind a `WindowExtent` guard that keeps the eager bounds trap at the original evaluation point, and a read reaches the base directly — the read helper already forces and memoizes an uncached node on first contact, so deferring the physical slice's force changes no observable value. Unlike products there is no cheap head rebuild, so the rewrite is region-atomic: a region is admitted only when every use of every member — the parameters and the slice results flowing between them — is a length, a read, a further slice, or a transfer into the region, and a region with any other use is declined whole, the conservative limit the value-lifetime decision states.
+// The rope analogue of the product split, sharing the record rather than growing a second coordination discipline. A window is `(base, end, length)`, the last `length` elements before `end`: any rope is its own whole window as `(r, len r, len r)`, a virtual slice is monus arithmetic behind a `WindowExtent` guard that keeps the eager bounds trap at the original evaluation point, and a read reaches the base directly at `end ∸ (length ∸ index)`. Counting down to an end rather than up from an offset is what bounds a window: every field is a length or what a monus of one leaves, so the representation analysis puts each below `2³²` and holds it in a word read unsigned, where an offset grown by a sum round a loop is bounded by nothing it can see. A read — the read helper already forces and memoizes an uncached node on first contact, so deferring the physical slice's force changes no observable value. Unlike products there is no cheap head rebuild, so the rewrite is region-atomic: a region is admitted only when every use of every member — the parameters and the slice results flowing between them — is a length, a read, a further slice, or a transfer into the region, and a region with any other use is declined whole, the conservative limit the value-lifetime decision states.
 
 /// Which sequence row a window region reads through, unified across every operation the region contains.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -756,7 +755,7 @@ pub(crate) fn split_windows(module: &mut Module) -> bool {
     split
 }
 
-/// Virtualize one whole window region: every parameter becomes `(base, offset, length)` under a recorded group, every slice becomes a guarded extent plus an offset sum, every read reaches the base directly, and every entry edge opens its rope as a whole window. The physical views and the helper calls that built them are simply never emitted — nothing here deletes them, they are unread.
+/// Virtualize one whole window region: every parameter becomes `(base, end, length)` under a recorded group, every slice becomes a guarded extent and the end it leaves, every read reaches the base directly, and every entry edge opens its rope as a whole window. The physical views and the helper calls that built them are simply never emitted — nothing here deletes them, they are unread.
 fn split_widest_window(module: &mut Module) -> bool {
     let uses = window_uses(module);
     let resumes = resume_targets(module);
@@ -797,22 +796,22 @@ fn split_widest_window(module: &mut Module) -> bool {
     splits.sort_by_key(|(continuation, position, _)| (*continuation, std::cmp::Reverse(*position)));
     for &(continuation, position, param) in &splits {
         let base = module.add_value(Some(format!("window/{}/base", continuation.index())));
-        let offset = module.add_value(Some(format!("window/{}/offset", continuation.index())));
+        let end = module.add_value(Some(format!("window/{}/end", continuation.index())));
         let length = module.add_value(Some(format!("window/{}/length", continuation.index())));
         let definition = module
             .continuation_mut(continuation)
             .expect("admitted continuation is live");
         definition
             .params
-            .splice(position..=position, [base, offset, length]);
+            .splice(position..=position, [base, end, length]);
         module.record_split(continuation, position, 3);
         fields.insert(
             param,
-            [Atom::Value(base), Atom::Value(offset), Atom::Value(length)],
+            [Atom::Value(base), Atom::Value(end), Atom::Value(length)],
         );
     }
 
-    // 2. Turn each slice into its guard and its offset sum, in dependency order: a slice of a slice waits until its source's fields exist.
+    // 2. Turn each slice into its guard and the end it leaves, in dependency order: a slice of a slice waits until its source's fields exist.
     let mut pending = region.slices.clone();
     while !pending.is_empty() {
         let before = pending.len();
@@ -829,29 +828,17 @@ fn split_widest_window(module: &mut Module) -> bool {
             let Atom::Value(source) = &args[0] else {
                 unreachable!("a region slice reads a region member");
             };
-            let Some([base, offset, length]) = fields.get(source).cloned() else {
+            let Some([base, end, length]) = fields.get(source).cloned() else {
                 return true;
             };
             let extent = module.add_value(Some(format!("window/{}/extent", slice.index())));
-            let sum = module.add_value(Some(format!("window/{}/sum", slice.index())));
-            let add = module.reserve_node();
 
-            // A *suffix* names no count, so one is computed here from the member's own `length` — the same fact the emitted rope would have read off itself, derived in this pass because the physical rope is what it is removing. The guard is the same either way: `WindowExtent` refuses a start past the end, which is exactly what the underflowing difference would ask it for.
-            match matches!(WindowFamily::of(op), Some((_, WindowRead::Rest))) {
-                false => module.set_node(
-                    slice,
-                    Node::LetIntrinsic {
-                        result: extent,
-                        op: Intrinsic::WindowExtent,
-                        args: vec![args[1].clone(), args[2].clone(), length],
-                        next: add,
-                    },
-                ),
+            // A *suffix* names no count, so one is computed here from the member's own `length` — the same fact the emitted rope would have read off itself, derived in this pass because the physical rope is what it is removing — and keeps its end. The guard is the same either way: `WindowExtent` refuses a start past the end, which is exactly what the underflowing difference would ask it for.
+            let left = match matches!(WindowFamily::of(op), Some((_, WindowRead::Rest))) {
                 true => {
                     let remaining =
                         module.add_value(Some(format!("window/{}/rest", slice.index())));
                     let guard = module.reserve_node();
-
                     module.set_node(
                         slice,
                         Node::LetIntrinsic {
@@ -867,21 +854,58 @@ fn split_widest_window(module: &mut Module) -> bool {
                             result: extent,
                             op: Intrinsic::WindowExtent,
                             args: vec![args[1].clone(), Atom::Value(remaining), length.clone()],
-                            next: add,
+                            next,
                         },
                     );
+                    end
                 }
-            }
-            module.define_node(
-                add,
-                Node::LetIntrinsic {
-                    result: sum,
-                    op: Intrinsic::NatAdd,
-                    args: vec![offset, args[1].clone()],
-                    next,
-                },
-            );
-            fields.insert(result, [base, Atom::Value(sum), Atom::Value(extent)]);
+                // A slice past the guard ends where its window did, less what lies after it: `end ∸ (length ∸ start ∸ count)`.
+                false => {
+                    let after_start =
+                        module.add_value(Some(format!("window/{}/after_start", slice.index())));
+                    let after = module.add_value(Some(format!("window/{}/after", slice.index())));
+                    let ends = module.add_value(Some(format!("window/{}/end", slice.index())));
+                    let [past_start, past, ending] = [(); 3].map(|()| module.reserve_node());
+                    module.set_node(
+                        slice,
+                        Node::LetIntrinsic {
+                            result: extent,
+                            op: Intrinsic::WindowExtent,
+                            args: vec![args[1].clone(), args[2].clone(), length.clone()],
+                            next: past_start,
+                        },
+                    );
+                    module.define_node(
+                        past_start,
+                        Node::LetIntrinsic {
+                            result: after_start,
+                            op: Intrinsic::NatSub,
+                            args: vec![length, args[1].clone()],
+                            next: past,
+                        },
+                    );
+                    module.define_node(
+                        past,
+                        Node::LetIntrinsic {
+                            result: after,
+                            op: Intrinsic::NatSub,
+                            args: vec![Atom::Value(after_start), Atom::Value(extent)],
+                            next: ending,
+                        },
+                    );
+                    module.define_node(
+                        ending,
+                        Node::LetIntrinsic {
+                            result: ends,
+                            op: Intrinsic::NatSub,
+                            args: vec![end, Atom::Value(after)],
+                            next,
+                        },
+                    );
+                    Atom::Value(ends)
+                }
+            };
+            fields.insert(result, [base, left, Atom::Value(extent)]);
             false
         });
         assert!(
@@ -890,7 +914,7 @@ fn split_widest_window(module: &mut Module) -> bool {
         );
     }
 
-    // 3. Rewrite the reads. A length is an alias of the length field; a read reaches the base at the summed offset.
+    // 3. Rewrite the reads. A length is an alias of the length field; a read reaches the base at `end ∸ (length ∸ index)`, which is `end - length + index` for every index the read's evidence admits.
     for &member in &region.members {
         for this in uses.get(&member).map_or(&[][..], Vec::as_slice) {
             match this {
@@ -912,23 +936,32 @@ fn split_widest_window(module: &mut Module) -> bool {
                     else {
                         unreachable!("the region collected only get intrinsics");
                     };
-                    let sum = module.add_value(Some(format!("window/{}/at", node.index())));
+                    let ahead = module.add_value(Some(format!("window/{}/ahead", node.index())));
+                    let at = module.add_value(Some(format!("window/{}/at", node.index())));
                     insert_above(
                         module,
                         *node,
-                        vec![Node::LetIntrinsic {
-                            result: sum,
-                            op: Intrinsic::NatAdd,
-                            args: vec![fields[&member][1].clone(), args[1].clone()],
-                            next: *node,
-                        }],
+                        vec![
+                            Node::LetIntrinsic {
+                                result: ahead,
+                                op: Intrinsic::NatSub,
+                                args: vec![fields[&member][2].clone(), args[1].clone()],
+                                next: *node,
+                            },
+                            Node::LetIntrinsic {
+                                result: at,
+                                op: Intrinsic::NatSub,
+                                args: vec![fields[&member][1].clone(), Atom::Value(ahead)],
+                                next: *node,
+                            },
+                        ],
                     );
                     module.set_node(
                         *node,
                         Node::LetIntrinsic {
                             result,
                             op: region.row.get_op(),
-                            args: vec![fields[&member][0].clone(), Atom::Value(sum)],
+                            args: vec![fields[&member][0].clone(), Atom::Value(at)],
                             next,
                         },
                     );
@@ -971,11 +1004,7 @@ fn split_widest_window(module: &mut Module) -> bool {
                             args: vec![atom.clone()],
                             next: carrier,
                         });
-                        vec![
-                            atom,
-                            Atom::Literal(Literal::Nat(Natural::zero())),
-                            Atom::Value(length),
-                        ]
+                        vec![atom, Atom::Value(length), Atom::Value(length)]
                     }
                 };
                 edge.args.splice(position..=position, replacement);

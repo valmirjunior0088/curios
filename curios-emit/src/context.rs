@@ -378,7 +378,7 @@ impl<'a, 'b> Context<'a, 'b> {
         value: &'a EmissionValueName,
     ) -> Vec<curios_wasm::Instr> {
         let producer = match self.table().raw_carrier(value) {
-            Some(curios_cont::Repr::Nat) => self
+            Some(curios_cont::Repr::Nat | curios_cont::Repr::Length) => self
                 .load_value_instrs(value, LoadAs::Nat)
                 .into_iter()
                 .chain([curios_wasm::Instr::I64ExtendI32U])
@@ -401,18 +401,20 @@ impl<'a, 'b> Context<'a, 'b> {
         load_as: LoadAs,
     ) -> Vec<curios_wasm::Instr> {
         match (carrier, &load_as) {
-            // A word is below `2³⁰`, so it is already its narrowing to any position, and to either wire once widened.
-            (curios_cont::Repr::Nat, LoadAs::Nat) | (curios_cont::Repr::Flt, LoadAs::Flt) => {
-                producer
-            }
-            (curios_cont::Repr::Nat, LoadAs::WireNat | LoadAs::WireInt) => producer
+            // A word is below `2³⁰` and a length below `2³²`, so either is already its narrowing to any position, and to either wire once widened unsigned.
+            (curios_cont::Repr::Nat | curios_cont::Repr::Length, LoadAs::Nat)
+            | (curios_cont::Repr::Flt, LoadAs::Flt) => producer,
+            (
+                curios_cont::Repr::Nat | curios_cont::Repr::Length,
+                LoadAs::WireNat | LoadAs::WireInt,
+            ) => producer
                 .into_iter()
                 .chain([curios_wasm::Instr::I64ExtendI32U])
                 .collect(),
             _ => self.load_as_instrs(
                 producer
                     .into_iter()
-                    .chain(box_instr(&carrier, self.table()))
+                    .chain(box_instrs(&carrier, self.table()))
                     .collect(),
                 load_as,
                 false,
@@ -1097,7 +1099,8 @@ impl<'a, 'b> Context<'a, 'b> {
                             // An `Flt` stays the raw `f64` where the parameter receiving it is held at its carrier, and is boxed where it is a reference: a join of the call's answer with a suspension, say.
                             None if matches!(wire_type, WireType::Flt) => {
                                 if !self.resume_param_is_raw(resume, index) {
-                                    output.extend(box_instr(&curios_cont::Repr::Flt, self.table()));
+                                    output
+                                        .extend(box_instrs(&curios_cont::Repr::Flt, self.table()));
                                 }
                             }
                             None => output.extend(self.table().box_word_instrs(wire_type)),
@@ -1168,7 +1171,9 @@ pub(crate) fn null_instrs() -> Vec<curios_wasm::Instr> {
 /// Absence in a register: the zero of the carrier, since a register has no null. A packed carrier is small-canonical, so its zero is the empty immediate.
 pub(crate) fn zero_instrs(carrier: curios_cont::Repr) -> Vec<curios_wasm::Instr> {
     match carrier {
-        curios_cont::Repr::Nat => vec![curios_wasm::Instr::I32Const { value: 0 }],
+        curios_cont::Repr::Nat | curios_cont::Repr::Length => {
+            vec![curios_wasm::Instr::I32Const { value: 0 }]
+        }
         curios_cont::Repr::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
         curios_cont::Repr::Bytes => vec![
             curios_wasm::Instr::I32Const { value: 0 },
@@ -1180,19 +1185,25 @@ pub(crate) fn zero_instrs(carrier: curios_cont::Repr) -> Vec<curios_wasm::Instr>
     }
 }
 
-/// How a value in its register carrier is boxed back into a reference: an `i31ref` for a word, which lies below `2³⁰` and so is already the i31 a `Bool`, a byte, a tag or a small `Nat` is; the `Flt` struct for `f64`; and nothing at all for a representation that already names one.
+/// How a value in its register carrier is boxed back into a reference: an `i31ref` for a word, which lies below `2³⁰` and so is already the i31 a `Bool`, a byte, a tag or a small `Nat` is; `big/of_u64` for a length, an i31 below `2³⁰` and a boxed magnitude past it; the `Flt` struct for `f64`; and nothing at all for a representation that already names one.
 ///
-/// The dual of [`LoadAs::of`], and the reason this reads a [`curios_cont::Repr`] rather than a dedicated two-variant enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
-pub(crate) fn box_instr(repr: &curios_cont::Repr, table: &Table) -> Option<curios_wasm::Instr> {
+/// The dual of [`LoadAs::of`], and the reason this reads a [`curios_cont::Repr`] rather than a dedicated enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
+pub(crate) fn box_instrs(repr: &curios_cont::Repr, table: &Table) -> Vec<curios_wasm::Instr> {
     match repr {
-        curios_cont::Repr::Nat => Some(curios_wasm::Instr::RefI31),
-        curios_cont::Repr::Flt => Some(curios_wasm::Instr::StructNew {
+        curios_cont::Repr::Nat => vec![curios_wasm::Instr::RefI31],
+        curios_cont::Repr::Length => vec![
+            curios_wasm::Instr::I64ExtendI32U,
+            curios_wasm::Instr::Call {
+                func_name: table.big_func(BigHelper::OfU64),
+            },
+        ],
+        curios_cont::Repr::Flt => vec![curios_wasm::Instr::StructNew {
             type_name: table.flt_type(),
-        }),
+        }],
         curios_cont::Repr::Number
         | curios_cont::Repr::Bytes
         | curios_cont::Repr::List
-        | curios_cont::Repr::Ref => None,
+        | curios_cont::Repr::Ref => vec![],
     }
 }
 
@@ -1204,7 +1215,8 @@ impl LoadAs {
     /// `Repr::Ref` maps to `Null` rather than `NonNull`: an uninterpreted operand is passed along exactly as stored, and asserting non-nullness of a value nothing reads would emit an instruction for no reader.
     pub(crate) fn of(repr: &curios_cont::Repr) -> Self {
         match repr {
-            curios_cont::Repr::Nat => Self::Nat,
+            // A length is read as a position is: narrowed to a word read unsigned, which is what it already is.
+            curios_cont::Repr::Nat | curios_cont::Repr::Length => Self::Nat,
             curios_cont::Repr::Flt => Self::Flt,
             curios_cont::Repr::Bytes => Self::Bytes,
             curios_cont::Repr::List => Self::List,

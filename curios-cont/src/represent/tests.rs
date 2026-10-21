@@ -366,6 +366,59 @@ fn a_counter_counted_down_from_a_literal_is_held_in_a_word() {
     assert_eq!(decided[&step], Storage::Raw(Repr::Nat));
 }
 
+/// A length counted down round a loop and read at as a position rides a word read unsigned: a length lies below `2³²`, a monus within its first operand, and the index a read takes is a length's, so the length, the parameter and the step all hold `Repr::Length`, where no word could hold what may lie past `2³⁰`.
+#[test]
+fn a_length_counted_down_and_read_at_rides_a_word_read_unsigned() {
+    let mut module = Module::new();
+    let bytes = module.add_value(Some("bytes".into()));
+    let length = module.add_value(Some("length".into()));
+    let param = module.add_value(Some("p".into()));
+    let byte = module.add_value(Some("byte".into()));
+    let step = module.add_value(Some("step".into()));
+
+    let head = module.reserve_continuation();
+    let back = module.add_node(Node::ApplyCont(Edge {
+        target: head,
+        args: vec![Atom::Value(step)],
+    }));
+    let count_down = module.add_node(Node::LetIntrinsic {
+        result: step,
+        op: Intrinsic::NatSub,
+        args: vec![Atom::Value(param), nat(1)],
+        next: back,
+    });
+    let read = module.add_node(Node::LetIntrinsic {
+        result: byte,
+        op: Intrinsic::BytesGet,
+        args: vec![Atom::Value(bytes), Atom::Value(param)],
+        next: count_down,
+    });
+    module.define_continuation(
+        head,
+        Continuation {
+            debug_name: Some("head".into()),
+            params: vec![param],
+            body: read,
+        },
+    );
+    let enter = module.add_node(Node::ApplyCont(Edge {
+        target: head,
+        args: vec![Atom::Value(length)],
+    }));
+    let measure = module.add_node(Node::LetIntrinsic {
+        result: length,
+        op: Intrinsic::BytesLen,
+        args: vec![Atom::Value(bytes)],
+        next: enter,
+    });
+    entry(&mut module, vec![bytes], measure);
+
+    let decided = representation(&module).values;
+    for value in [length, param, step] {
+        assert_eq!(decided[&value], Storage::Raw(Repr::Length));
+    }
+}
+
 /// The top of the lattice. A continuation parameter is the one value with no producer to fix its carrier, so it is the one value two uses can disagree about — and the disagreement has to settle *above* both, because the solver stops when nothing changed, not when nothing is left to change.
 #[test]
 fn disagreeing_raw_carriers_settle_at_conflict_rather_than_oscillating() {

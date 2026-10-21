@@ -378,6 +378,45 @@ fn a_rope_is_entered_through_its_final_shapes() {
     assert_eq!(run(source), b"231084");
 }
 
+/// A window walk holds its end and its length in words read unsigned. A window counts down to its end, so each field is a length or what a monus of one leaves, which the representation's bounds put below `2³²`: both ride `Repr::Length` round the loop, where an offset grown by a sum each step was bounded by nothing the analysis could see and stayed a reference.
+#[test]
+fn a_window_walk_holds_its_end_and_length_in_words_read_unsigned() {
+    let source = r#"
+        use /std/{Str, Bytes, Byte, Nat, List, Process};
+
+        let entry() -> /std/Io({}) =
+            let n = List/len(Process/args()!);
+            let text = Str/to_bytes(Str/concat(Nat/to_str(n), "abcdefgh"));
+            /std/print(Nat/to_str(Bytes/fold(text, 7, (b, acc) => (acc * 31 + Byte/to_nat(b)) % 65521)));
+        entry()
+        "#;
+
+    let module = cont_optm_module(source);
+    let decided = curios_cont::representation(&module).values;
+    let fields = module
+        .value_ids()
+        .filter_map(|value| {
+            let name = module.value(value)?.debug_name.as_deref()?;
+            (name.starts_with("window/") && (name.ends_with("/end") || name.ends_with("/length")))
+                .then_some((name, value))
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        fields.iter().any(|(name, _)| name.ends_with("/end"))
+            && fields.iter().any(|(name, _)| name.ends_with("/length")),
+        "the walk is a window: {fields:?}"
+    );
+    for (name, value) in fields {
+        assert_eq!(
+            decided[&value],
+            curios_cont::Storage::Raw(curios_cont::Repr::Length),
+            "`{name}` rides a word read unsigned"
+        );
+    }
+
+    assert_eq!(run(source), b"33712");
+}
+
 /// A family slot is declared at the carrier its recorded shape names, not at `anyref`.
 ///
 /// `Chain` is `stop() | link(Nat, Chain)`, so its slots are the tag, the family's own row, and one uniform reference for the `Nat` — an i31 or a boxed magnitude, which no single heap type names — and the emitted struct says exactly that: `i8`, `(ref null $row/…$/Chain)`, `anyref`. The tag reads back through `struct.get_u` out of a packed byte, with nothing to unbox.

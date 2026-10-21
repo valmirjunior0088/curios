@@ -120,13 +120,15 @@ pub enum Intrinsic {
 ///
 /// This is the vocabulary the backend's coercions translate — `LoadAs` into a carrier and `box_instr` back out of one: `Nat` and `Flt` name raw machine carriers a Wasm register can hold, and the rest name references. Stated here, on the IR, rather than in the emitter, because the *optimizer* has to be able to ask what an operation demands of its operands without running codegen to find out — and because an emitter that restates the demand at every use site is an emitter that can disagree with the analysis.
 ///
-/// **A `Nat` or `Int` is not a machine word.** Either is a reference — an i31 or a boxed magnitude, see [`ENVELOPE_BITS`](super::ENVELOPE_BITS) — so an operation on them reads [`Repr::Number`] and produces `Repr::Ref`; the word is what a `Bool`, a byte, a bit and a tag are, and every word lies below `2³⁰`, so it boxes to a `Nat` as the i31 it already is. The exception is a `Nat` the representation analysis bounds below `2³⁰`, from what reaches the operation that computes it (`Intrinsic::result_bound`), which a word may hold. A length is not a word, since a sequence may outgrow the i31, and is produced as the `Nat` it is. A sequence's logical length and a channel's capacity are held to `2³² - 1` before a construction narrows or allocates; a larger value refuses as [`Panic::Capacity`](super::Panic::Capacity). A `Nat` becomes a word where a position, a window count or a key is asked for, exact below `2³² - 1` and saturating there, so an index no sequence can reach fails the bounds check it meets. A shift count instead crosses as an unsigned 64-bit value saturating at `2⁶⁴ - 1`, beyond every magnitude the limb array can hold; a nonzero left shift refuses a result past that array's capacity.
+/// **A `Nat` or `Int` is not a machine word.** Either is a reference — an i31 or a boxed magnitude, see [`ENVELOPE_BITS`](super::ENVELOPE_BITS) — so an operation on them reads [`Repr::Number`] and produces `Repr::Ref`; the word is what a `Bool`, a byte, a bit and a tag are, and every word lies below `2³⁰`, so it boxes to a `Nat` as the i31 it already is. The exception is a `Nat` the representation analysis bounds below `2³⁰`, from what reaches the operation that computes it (`Intrinsic::result_bound`), which a word may hold. A length is not a word, since a sequence may outgrow the i31, and is produced as the `Nat` it is, or held in a word read unsigned, [`Repr::Length`], where the analysis bounds it below `2³²`, as it does what a monus of a length leaves. A sequence's logical length and a channel's capacity are held to `2³² - 1` before a construction narrows or allocates; a larger value refuses as [`Panic::Capacity`](super::Panic::Capacity). A `Nat` becomes a word where a position, a window count or a key is asked for, exact below `2³² - 1` and saturating there, so an index no sequence can reach fails the bounds check it meets. A shift count instead crosses as an unsigned 64-bit value saturating at `2⁶⁴ - 1`, beyond every magnitude the limb array can hold; a nonzero left shift refuses a result past that array's capacity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Repr {
-    /// A raw unsigned 32-bit machine word.
+    /// A raw machine word holding a natural below `2³⁰`: a `Bool`, a byte, a tag, or a `Nat` the representation analysis bounds there.
     Nat,
     /// A raw binary64 carrier.
     Flt,
+    /// A raw machine word read unsigned, holding a natural below `2³²`: a sequence's length and the positions and counts a length bounds. A word is one too, every word lying below `2³⁰`; arithmetic that takes an i31 apart takes this boxed, since it may lie past the i31.
+    Length,
     /// A `Nat` or `Int` operand: a reference in general, and the word it is where the representation analysis holds one there — a small literal, a bounded result, or a parameter every argument reaching it is one of those. A demand, never a carrier: no value is held at it, and a use reading it tests a reference before unboxing and takes a word as it is.
     Number,
     /// A packed-binary reference: a small-canonical immediate or a rope.
@@ -147,22 +149,22 @@ impl Intrinsic {
             (Self::BytesGet | Self::BytesSlice | Self::BytesRest | Self::BytesAppend, 0) => {
                 Repr::Bytes
             }
-            (Self::BytesGet | Self::BytesSlice | Self::BytesRest | Self::BytesAppend, _) => {
-                Repr::Nat
-            }
+            (Self::BytesGet | Self::BytesSlice | Self::BytesRest, _) => Repr::Length,
+            // An appended element is one packed byte.
+            (Self::BytesAppend, _) => Repr::Nat,
             // Both operands of a pointwise combination are ropes, which is what separates it from every other sequence row here — there is no position among them.
             (Self::BytesAnd | Self::BytesOr | Self::BytesXor, _) => Repr::Bytes,
             // A fill takes a count and a generator, and neither is a rope: the element rides the `Nat` carrier as an append's does.
             (Self::BytesReplicate, _) => Repr::Nat,
             (Self::ListGet | Self::ListSlice | Self::ListRest | Self::ListAppend, 0) => Repr::List,
-            (Self::ListGet | Self::ListSlice | Self::ListRest, _) => Repr::Nat,
+            (Self::ListGet | Self::ListSlice | Self::ListRest, _) => Repr::Length,
             // A chunk element is one packed byte, carried at the `Nat` carrier like an append's.
             (Self::BytesChunk(_), _) => Repr::Nat,
             // A list element is carried, never interpreted — unlike a `Bytes` element, which rides the `Nat` carrier.
             (Self::ListAppend, _) => Repr::Ref,
             (Self::BytesConcat(_), _) | (Self::BytesEql | Self::BytesLen, _) => Repr::Bytes,
             (Self::FltOfLeBytes, _) => Repr::Bytes,
-            (Self::WindowExtent, _) => Repr::Nat,
+            (Self::WindowExtent, _) => Repr::Length,
             // The whole point of a test is to look at the reference uncoerced, and the read that follows the immediate one hands that same reference on.
             (Self::IsImmediate | Self::ImmediateGet | Self::IsRow(_), _) => Repr::Ref,
             (Self::ListConcat(_) | Self::ListLen | Self::ListSettle | Self::ListFlat(_), _) => {
@@ -259,6 +261,14 @@ impl Intrinsic {
                 | Intrinsic::NatMin
                 | Intrinsic::NatMax
                 | Intrinsic::NatShr
+        )
+    }
+
+    /// Whether this operation's result may be held at [`Repr::Length`] where the representation analysis bounds it below `2³²`: a length, a window's checked count and a monus, whose lowerings compute in a word read unsigned.
+    pub fn may_hold_length(self) -> bool {
+        matches!(
+            self,
+            Intrinsic::BytesLen | Intrinsic::ListLen | Intrinsic::WindowExtent | Intrinsic::NatSub
         )
     }
 

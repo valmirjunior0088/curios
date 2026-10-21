@@ -41,6 +41,11 @@ impl Bound {
         self.wider(Self::WORD) == Self::WORD
     }
 
+    /// Whether a word read unsigned holds every value this admits.
+    pub(crate) fn is_length(self) -> bool {
+        self.wider(Self::LENGTH) == Self::LENGTH
+    }
+
     /// The narrower of two bounds, which a value both hold of lies below.
     pub(crate) fn narrower(self, other: Self) -> Self {
         match (self.0, other.0) {

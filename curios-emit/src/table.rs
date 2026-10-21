@@ -185,6 +185,7 @@ impl<'a> ClsrData<'a> {
 pub(crate) enum Position {
     Reference,
     Word,
+    Length,
     Float,
 }
 
@@ -194,8 +195,9 @@ impl Position {
         match carrier {
             None => Self::Reference,
             Some(curios_cont::Repr::Nat) => Self::Word,
+            Some(curios_cont::Repr::Length) => Self::Length,
             Some(curios_cont::Repr::Flt) => Self::Float,
-            Some(other) => panic!("a register holds a word or a float, never {other:?}"),
+            Some(other) => panic!("a register holds a word, a length or a float, never {other:?}"),
         }
     }
 
@@ -204,6 +206,7 @@ impl Position {
         match self {
             Self::Reference => None,
             Self::Word => Some(curios_cont::Repr::Nat),
+            Self::Length => Some(curios_cont::Repr::Length),
             Self::Float => Some(curios_cont::Repr::Flt),
         }
     }
@@ -212,7 +215,7 @@ impl Position {
     pub(crate) fn val_type(self) -> curios_wasm::ValType {
         match self {
             Self::Reference => Table::top_type(true),
-            Self::Word => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+            Self::Word | Self::Length => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
             Self::Float => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
         }
     }
@@ -221,6 +224,7 @@ impl Position {
         match self {
             Self::Reference => 'r',
             Self::Word => 'i',
+            Self::Length => 'u',
             Self::Float => 'f',
         }
     }
@@ -1357,7 +1361,9 @@ impl<'a> Table<'a> {
     /// The reference arms are unreachable — the analysis only ever answers a scalar carrier, since those are the only ones a register holds — and they answer `top_type` rather than panicking because a representation that cannot be held raw and a value that was never offered one are the same fact, and this function's job is to state it once.
     pub(crate) fn local_type(&self, value_name: &EmissionValueName) -> curios_wasm::ValType {
         match self.raw_carrier(value_name) {
-            Some(curios_cont::Repr::Nat) => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+            Some(curios_cont::Repr::Nat | curios_cont::Repr::Length) => {
+                curios_wasm::ValType::Num(curios_wasm::NumType::I32)
+            }
             Some(curios_cont::Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
             Some(
                 curios_cont::Repr::Number
