@@ -76,6 +76,11 @@ fn resume(module: &mut Module, continuation: ContinuationId, params: Vec<ValueId
     );
 }
 
+/// The `Nat` literal `value`.
+fn nat(value: u32) -> Atom {
+    Atom::Literal(Literal::Nat(Natural::from(value)))
+}
+
 /// Jump to a reserved-but-undefined continuation — the return sentinel, which demands nothing of what it carries.
 fn finish(module: &mut Module, args: Vec<Atom>) -> NodeId {
     let sentinel = module.reserve_continuation();
@@ -223,9 +228,11 @@ fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
 }
 
 /// The soundness half of the edge rule. A sum is unbounded, so it is a reference that narrowing to a word would saturate; a parameter it reaches must therefore stay a reference however its uses read it, or the edge would coerce a value past the i31 into a word and lose it.
+/// A parameter some argument of which nothing bounds is never a word: the entry's own parameter, a reference the host passes, plus one.
 #[test]
 fn a_parameter_an_unbounded_value_reaches_is_never_held_in_a_word() {
     let mut module = Module::new();
+    let host = module.add_value(Some("host".into()));
     let param = module.add_value(Some("p".into()));
     let result = module.add_value(Some("r".into()));
     let carried = module.add_value(Some("carried".into()));
@@ -235,10 +242,7 @@ fn a_parameter_an_unbounded_value_reaches_is_never_held_in_a_word() {
     let head_body = module.add_node(Node::LetIntrinsic {
         result,
         op: Intrinsic::NatAdd,
-        args: vec![
-            Atom::Value(param),
-            Atom::Literal(Literal::Nat(Natural::from(1u32))),
-        ],
+        args: vec![Atom::Value(param), nat(1)],
         next: done,
     });
     module.define_continuation(
@@ -257,17 +261,109 @@ fn a_parameter_an_unbounded_value_reaches_is_never_held_in_a_word() {
     let body = module.add_node(Node::LetIntrinsic {
         result: carried,
         op: Intrinsic::NatAdd,
-        args: vec![
-            Atom::Literal(Literal::Nat(Natural::from(1u32))),
-            Atom::Literal(Literal::Nat(Natural::from(2u32))),
-        ],
+        args: vec![Atom::Value(host), nat(1)],
+        next: jump,
+    });
+    entry(&mut module, vec![host], body);
+
+    let decided = representation(&module).values;
+    assert_eq!(decided[&param], Storage::Boxed);
+    assert_eq!(decided[&carried], Storage::Boxed);
+}
+
+/// A sum of two literals lies two bits wide, so the sum, and the parameter it is the one argument of, ride words.
+#[test]
+fn a_parameter_a_bounded_sum_reaches_is_held_in_a_word() {
+    let mut module = Module::new();
+    let param = module.add_value(Some("p".into()));
+    let result = module.add_value(Some("r".into()));
+    let carried = module.add_value(Some("carried".into()));
+
+    let head = module.reserve_continuation();
+    let done = finish(&mut module, vec![Atom::Value(result)]);
+    let head_body = module.add_node(Node::LetIntrinsic {
+        result,
+        op: Intrinsic::NatAdd,
+        args: vec![Atom::Value(param), nat(1)],
+        next: done,
+    });
+    module.define_continuation(
+        head,
+        Continuation {
+            debug_name: Some("head".into()),
+            params: vec![param],
+            body: head_body,
+        },
+    );
+
+    let jump = module.add_node(Node::ApplyCont(Edge {
+        target: head,
+        args: vec![Atom::Value(carried)],
+    }));
+    let body = module.add_node(Node::LetIntrinsic {
+        result: carried,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(1), nat(2)],
         next: jump,
     });
     entry(&mut module, vec![], body);
 
     let decided = representation(&module).values;
+    assert_eq!(decided[&param], Storage::Raw(Repr::Nat));
+    assert_eq!(decided[&carried], Storage::Raw(Repr::Nat));
+}
+
+/// A loop whose parameter `seed` enters and `op(p, 1)` comes back round as: the parameter and the step.
+fn counting_loop(module: &mut Module, seed: Atom, op: Intrinsic) -> (ValueId, ValueId) {
+    let param = module.add_value(Some("p".into()));
+    let step = module.add_value(Some("step".into()));
+    let head = module.reserve_continuation();
+    let back = module.add_node(Node::ApplyCont(Edge {
+        target: head,
+        args: vec![Atom::Value(step)],
+    }));
+    let head_body = module.add_node(Node::LetIntrinsic {
+        result: step,
+        op,
+        args: vec![Atom::Value(param), nat(1)],
+        next: back,
+    });
+    module.define_continuation(
+        head,
+        Continuation {
+            debug_name: Some("head".into()),
+            params: vec![param],
+            body: head_body,
+        },
+    );
+    let enter = module.add_node(Node::ApplyCont(Edge {
+        target: head,
+        args: vec![seed],
+    }));
+    entry(module, vec![], enter);
+    (param, step)
+}
+
+/// A counter growing round a loop climbs past every bound, so neither it nor its step is a word, however small it starts.
+#[test]
+fn a_counter_growing_round_a_loop_is_never_held_in_a_word() {
+    let mut module = Module::new();
+    let (param, step) = counting_loop(&mut module, nat(0), Intrinsic::NatAdd);
+
+    let decided = representation(&module).values;
     assert_eq!(decided[&param], Storage::Boxed);
-    assert_eq!(decided[&carried], Storage::Boxed);
+    assert_eq!(decided[&step], Storage::Boxed);
+}
+
+/// A counter counted down from a literal never passes it, since a monus lies within its first operand, so it and its step ride words.
+#[test]
+fn a_counter_counted_down_from_a_literal_is_held_in_a_word() {
+    let mut module = Module::new();
+    let (param, step) = counting_loop(&mut module, nat(17), Intrinsic::NatSub);
+
+    let decided = representation(&module).values;
+    assert_eq!(decided[&param], Storage::Raw(Repr::Nat));
+    assert_eq!(decided[&step], Storage::Raw(Repr::Nat));
 }
 
 /// The top of the lattice. A continuation parameter is the one value with no producer to fix its carrier, so it is the one value two uses can disagree about — and the disagreement has to settle *above* both, because the solver stops when nothing changed, not when nothing is left to change.

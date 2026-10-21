@@ -7,6 +7,9 @@
 mod analysis;
 pub(crate) use analysis::*;
 
+mod bound;
+pub(crate) use bound::*;
+
 mod dataflow;
 pub(crate) use dataflow::*;
 

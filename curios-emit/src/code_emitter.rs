@@ -515,7 +515,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_settled(dest, &[&left, &right], fast, finish, slow);
     }
 
-    /// Emit a `Nat` or `Int` result and store it: into a word when the representation analysis holds the destination in one — a result its literal operands bound, so the fast path's `i32` is already the value and a helper's answer is an i31 — and boxed through `finish` otherwise.
+    /// Emit a `Nat` or `Int` result and store it: into a word when the representation analysis holds the destination in one — a result it bounds below `2³⁰`, so the fast path's machine result is already the value, wrapped from 64 bits where it was computed in them, and a helper's answer is an i31 — and boxed through `finish` otherwise.
     fn emit_settled(
         &mut self,
         dest: &Dest<'_>,
@@ -526,10 +526,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     ) {
         match self.context.table().raw_carrier(dest.value_name) {
             Some(curios_cont::Repr::Nat) => {
-                assert!(
-                    matches!(finish, Fast::Small),
-                    "a word-held result is one its operands bound, which no fast path can outgrow",
-                );
+                let fast = match finish {
+                    Fast::Small | Fast::Wide32 => fast,
+                    Fast::Wide64 => fast
+                        .into_iter()
+                        .chain([curios_wasm::Instr::I32WrapI64])
+                        .collect(),
+                };
                 let slow = slow
                     .into_iter()
                     .chain([
@@ -1797,7 +1800,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             }
             _ => op.result_repr(),
         };
-        // A result its literal operands bound is the one exception: the analysis may hold it in a word although the operation produces a reference in general, and the lowering then delivers the word.
+        // A result the analysis bounds below `2³⁰` is the one exception: it may hold it in a word although the operation produces a reference in general, and the lowering then delivers the word.
         assert!(
             self.context
                 .table()

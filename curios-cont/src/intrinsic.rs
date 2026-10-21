@@ -1,7 +1,7 @@
 //! The primitive operations: each one's arity and effect, and the representation it reads every operand and produces its result at.
 
 use {
-    super::{Atom, Literal, RowId, nat_is_small},
+    super::{Atom, Bound, Literal, RowId},
     curios_num::Rounding,
 };
 
@@ -120,7 +120,7 @@ pub enum Intrinsic {
 ///
 /// This is the vocabulary the backend's coercions translate — `LoadAs` into a carrier and `box_instr` back out of one: `Nat` and `Flt` name raw machine carriers a Wasm register can hold, and the rest name references. Stated here, on the IR, rather than in the emitter, because the *optimizer* has to be able to ask what an operation demands of its operands without running codegen to find out — and because an emitter that restates the demand at every use site is an emitter that can disagree with the analysis.
 ///
-/// **A `Nat` or `Int` is not a machine word.** Either is a reference — an i31 or a boxed magnitude, see [`ENVELOPE_BITS`](super::ENVELOPE_BITS) — so an operation on them reads [`Repr::Number`] and produces `Repr::Ref`; the word is what a `Bool`, a byte, a bit and a tag are, and every word lies below `2³⁰`, so it boxes to a `Nat` as the i31 it already is. The exception is a `Nat` its literal operands bound below `2³⁰`, which [`Intrinsic::bounds_result`] names and a word may hold. A length is not a word, since a sequence may outgrow the i31, and is produced as the `Nat` it is. A sequence's logical length and a channel's capacity are held to `2³² - 1` before a construction narrows or allocates; a larger value refuses as [`Panic::Capacity`](super::Panic::Capacity). A `Nat` becomes a word where a position, a window count or a key is asked for, exact below `2³² - 1` and saturating there, so an index no sequence can reach fails the bounds check it meets. A shift count instead crosses as an unsigned 64-bit value saturating at `2⁶⁴ - 1`, beyond every magnitude the limb array can hold; a nonzero left shift refuses a result past that array's capacity.
+/// **A `Nat` or `Int` is not a machine word.** Either is a reference — an i31 or a boxed magnitude, see [`ENVELOPE_BITS`](super::ENVELOPE_BITS) — so an operation on them reads [`Repr::Number`] and produces `Repr::Ref`; the word is what a `Bool`, a byte, a bit and a tag are, and every word lies below `2³⁰`, so it boxes to a `Nat` as the i31 it already is. The exception is a `Nat` the representation analysis bounds below `2³⁰`, from what reaches the operation that computes it (`Intrinsic::result_bound`), which a word may hold. A length is not a word, since a sequence may outgrow the i31, and is produced as the `Nat` it is. A sequence's logical length and a channel's capacity are held to `2³² - 1` before a construction narrows or allocates; a larger value refuses as [`Panic::Capacity`](super::Panic::Capacity). A `Nat` becomes a word where a position, a window count or a key is asked for, exact below `2³² - 1` and saturating there, so an index no sequence can reach fails the bounds check it meets. A shift count instead crosses as an unsigned 64-bit value saturating at `2⁶⁴ - 1`, beyond every magnitude the limb array can hold; a nonzero left shift refuses a result past that array's capacity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Repr {
     /// A raw unsigned 32-bit machine word.
@@ -244,32 +244,71 @@ impl Intrinsic {
         }
     }
 
-    /// Whether this operation's result may be a `Nat` its literal operands bound below `2³⁰`: a remainder by a small divisor, a conjunction with a small mask, and a monus, quotient or right shift of a small dividend. [`Intrinsic::bounds_result`] reads the literals; this is the operation half, which the emitter checks a word-held result against.
+    /// Whether this operation's result may ride a machine word where the representation analysis bounds it below `2³⁰`: the `Nat` arithmetic whose lowering settles its fast path's `i32`, which is the value itself under that bound, against which the emitter checks a word-held result. A left shift and a power settle no fast path into a word, and an `Int` may be negative.
     pub fn may_bound_result(self) -> bool {
         matches!(
             self,
-            Intrinsic::NatRem
-                | Intrinsic::NatAnd
+            Intrinsic::NatAdd
                 | Intrinsic::NatSub
+                | Intrinsic::NatMul
                 | Intrinsic::NatDiv
+                | Intrinsic::NatRem
+                | Intrinsic::NatAnd
+                | Intrinsic::NatOr
+                | Intrinsic::NatXor
+                | Intrinsic::NatMin
+                | Intrinsic::NatMax
                 | Intrinsic::NatShr
         )
     }
 
-    /// Whether this operation over `args` produces a `Nat` below `2³⁰` whatever its other operands are, so the result may ride a machine word rather than the reference [`Intrinsic::result_repr`] names. The bound is read off a small literal: `x % k` and `x & k` lie below `k`, and `k - x`, `k / x` and `k >> x` at or below it.
-    pub fn bounds_result(&self, args: &[Atom]) -> bool {
-        let small =
-            |atom: &Atom| matches!(atom, Atom::Literal(Literal::Nat(value)) if nat_is_small(value));
+    /// What this operation's result lies below, `bound` answering each operand's: the representation analysis's transfer.
+    ///
+    /// A sum lies a bit past its wider operand and a product within both; a remainder, a conjunction and a minimum within the narrower, and a disjunction, an exclusive or and a maximum within the wider; a monus, a quotient and a right shift within their first operand, as many bits lower as a literal divisor or count takes off, and a left shift by a literal count that many higher. A length lies below `2³²`, a byte below `2⁸` and a predicate's answer below 2, and a window's checked count within both its count and the length it is checked against. Everything else is bounded by nothing here: an `Int`, which may be negative, a left shift by a count no literal fixes, a power, and what is stored and read back, whose bound is the store's to say.
+    pub(crate) fn result_bound(&self, args: &[Atom], bound: impl Fn(&Atom) -> Bound) -> Bound {
+        let operand = |index: usize| bound(&args[index]);
+        let literal = |index: usize| match &args[index] {
+            Atom::Literal(Literal::Nat(value)) => Some(value),
+            _ => None,
+        };
+        // A shift count past `u64` lowers anything to zero and raises anything past every bound.
+        let count =
+            |index: usize| literal(index).map(|value| u64::try_from(value).unwrap_or(u64::MAX));
 
-        self.may_bound_result()
-            && match (self, args) {
-                (Intrinsic::NatRem, [_, divisor]) => small(divisor),
-                (Intrinsic::NatAnd, [left, right]) => small(left) || small(right),
-                (Intrinsic::NatSub | Intrinsic::NatDiv | Intrinsic::NatShr, [value, _]) => {
-                    small(value)
-                }
-                _ => false,
+        match self {
+            Self::NatAdd => operand(0).wider(operand(1)).raised(1),
+            Self::NatMul => operand(0).times(operand(1)),
+            Self::NatRem | Self::NatAnd | Self::NatMin => operand(0).narrower(operand(1)),
+            Self::NatOr | Self::NatXor | Self::NatMax => operand(0).wider(operand(1)),
+            Self::NatSub => operand(0),
+            // A divisor of at least `2^m` takes `m` bits off; a zero one traps where it is met.
+            Self::NatDiv => {
+                operand(0).lowered(literal(1).map_or(0, |divisor| divisor.bits().saturating_sub(1)))
             }
+            Self::NatShr => operand(0).lowered(count(1).unwrap_or(0)),
+            Self::NatShl => count(1).map_or(Bound::UNBOUNDED, |count| operand(0).raised(count)),
+            Self::BytesLen | Self::ListLen => Bound::LENGTH,
+            Self::WindowExtent => operand(1).narrower(operand(2)),
+            Self::BytesGet => Bound::BYTE,
+            Self::NatEql
+            | Self::NatNeq
+            | Self::NatLt
+            | Self::NatLe
+            | Self::NatEqz
+            | Self::IntEql
+            | Self::IntNeq
+            | Self::IntLt
+            | Self::IntLe
+            | Self::IntEqz
+            | Self::FltEql
+            | Self::FltNeq
+            | Self::FltLt
+            | Self::FltLe
+            | Self::BytesEql
+            | Self::IsImmediate
+            | Self::IsRow(_) => Bound::BIT,
+            _ => Bound::UNBOUNDED,
+        }
     }
 
     /// The representation this operation produces.

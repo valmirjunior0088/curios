@@ -10,7 +10,7 @@
 //!
 //! **A boundary the analysis sees whole is a join like any other.** A function that neither escapes nor is the entry is called only by `Known` calls, each naming its arguments, so each of its parameters is a join whose edges are its call sites. Its results are handed back at slots `return_call` requires every member of its tail-call class to agree on ([`TailClasses`]), so each slot is a join whose edges are the class's return edges and whose uses are the resume parameters of every call into the class. Both are decided with the same lattice as a continuation parameter, and the emitter declares the function's type at what they settle to, loads a call's arguments as an edge loads its own, and coerces a result to a resume parameter held otherwise.
 //!
-//! **A word holds only what a word was handed.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a parameter coerced to a word loses what a bigger argument said. A parameter or a result slot is therefore offered the word only when every argument reaching it is itself one — a small literal, a filler, a word-producing definition, a reference whose type erasure read as a word, or another such position — which [`word_params`] decides before any demand is read.
+//! **A word holds only what lies below `2³⁰`.** A `Nat` is a reference whatever its size, and narrowing one to a word keeps every value below the i31 exactly but saturates the rest, so a value a word holds has to lie below it. What every value a site may hold lies below is a lattice of its own, `Bound`, solved before any demand is read: an operation's result lies below what its operands' bounds give (`Intrinsic::result_bound`), a literal below its own value, a join below what every argument reaching it lies below, and a reference by declaration below nothing unless erasure read its type as a word. A site is offered the word where its bound is `2³⁰` or less, so a remainder by a literal, a counter counted down from one, a byte taken apart and the fields a scan carries ride words with no rule naming them.
 //!
 //! **A float register holds only what a float was handed.** A parameter has one type only where no type computes one. A variant's constructors share a payload slot, and scalar replacement makes that slot a parameter, `success`'s float and `failure`'s error in the one; and a value whose type is a match on another is a float on one edge and a string on the next. What its uses read under one tag or one branch says nothing of what arrives under another, and an edge coerces its argument to the parameter's carrier before anything is consulted, so a float register there casts the reference, and loses it where it does not trap. Only a type says which reference is a float, and erasure, the one walk holding it, states it on a binder whose producer names no carrier ([`Register`]): so a position is offered the float only when every argument reaching it is one already, a float literal, a filler, a definition producing a float, a reference stating a float, or another such position, which [`float_params`] decides beside the word. A stated reference feeds the register by one unbox on the edge or the call, and keeps its own storage: the statement is what lets it feed, never what decides how it is held.
 //!
@@ -20,8 +20,8 @@
 
 use {
     super::{
-        Atom, Callee, ContinuationId, Edge, FunctionId, Lattice, Literal, Module, Node, Register,
-        Repr, Solver, TailClasses, ValueExpr, ValueId, nat_is_small,
+        Atom, Bound, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Lattice, Literal, Module,
+        Node, Register, Repr, Solver, TailClasses, ValueExpr, ValueId, nat_is_small,
     },
     curios_abi::WireType,
     std::collections::{BTreeMap, BTreeSet},
@@ -100,7 +100,7 @@ enum Source<'a> {
 enum Offer {
     /// The definition produces exactly this carrier, so a use demanding it reads the register directly and every other use coerces at its own site.
     Fixed(Repr),
-    /// A join — a continuation parameter, a known function's parameter, a result slot — which has no producer of its own: it holds whatever its uses agree on among what reaches it, and each incoming argument is coerced to match. This is the only offer a `Conflict` can arise from. `words` and `floats` say whether the machine word and the float are among what it may hold, which [`word_params`] and [`float_params`] decide from what reaches it.
+    /// A join — a continuation parameter, a known function's parameter, a result slot — which has no producer of its own: it holds whatever its uses agree on among what reaches it, and each incoming argument is coerced to match. This is the only offer a `Conflict` can arise from. `words` and `floats` say whether the machine word and the float are among what it may hold, which the bounds and [`float_params`] decide from what reaches it.
     Open { words: bool, floats: bool },
     /// Nothing. Either the value arrives through a position that is a reference by declaration, or its definition builds a heap shape, which a register cannot hold in the first place.
     Never,
@@ -226,16 +226,9 @@ fn offers(
 
     for (_, node) in module.live_nodes() {
         match node {
-            // A row read is the one operation whose result carrier is a fact of the module rather than of the operation: the slot it names says whether a register can hold it.
-            // A result its literal operands bound below the i31 is offered the word its value fits.
-            Node::LetIntrinsic {
-                result, op, args, ..
-            } => {
-                let offer = match op.bounds_result(args) {
-                    true => Offer::Fixed(Repr::Nat),
-                    false => offer_of(module.result_repr(op)),
-                };
-                offers.insert(Site::Value(*result), offer);
+            // A row read is the one operation whose result carrier is a fact of the module rather than of the operation: the slot it names says whether a register can hold it. A `Nat` the bounds below put under `2³⁰` is offered the word further down.
+            Node::LetIntrinsic { result, op, .. } => {
+                offers.insert(Site::Value(*result), offer_of(module.result_repr(op)));
             }
 
             Node::LetValue { result, value, .. } => {
@@ -311,7 +304,21 @@ fn offers(
         offers.insert(Site::Value(value), Offer::Never);
     }
 
-    let words = word_params(module, &offers, flows);
+    // What the bounds put under `2³⁰` a word holds: a `Nat` an operation computes, where its lowering can settle into one, and a join every argument reaching which lies there.
+    let bounds = bounds(module, &offers, flows);
+    for (_, node) in module.live_nodes() {
+        if let Node::LetIntrinsic { result, op, .. } = node
+            && op.may_bound_result()
+            && bounds[&Site::Value(*result)].is_word()
+        {
+            offers.insert(Site::Value(*result), Offer::Fixed(Repr::Nat));
+        }
+    }
+    let words = offers
+        .keys()
+        .copied()
+        .filter(|site| bounds[site].is_word())
+        .collect::<BTreeSet<_>>();
     let floats = float_params(module, &offers, flows);
     for (site, offer) in &mut offers {
         if let Offer::Open {
@@ -397,21 +404,94 @@ fn flows<'m>(module: &'m Module, boundaries: &Boundaries) -> Vec<(Source<'m>, Si
     flows
 }
 
-/// The open sites a machine word may hold: those every argument reaching them is a word already — a small literal, a filler, a definition producing a word, a reference stating one, or another such site.
-fn word_params(
+/// What every value a site may hold lies below ([`Bound`]): what an operation computes from what reaches it, a literal its own, a join what every argument reaching it lies below, and anything else, a reference by declaration or a value no operation of this module defines, nothing. A value whose type erasure read as a word lies below `2³⁰` whatever defines it.
+fn bounds(
     module: &Module,
     offers: &BTreeMap<Site, Offer>,
     flows: &[(Source, Site)],
-) -> BTreeSet<Site> {
-    fed_only_by(offers, flows, |arg| match arg {
-        Atom::Value(value) => {
-            offers.get(&Site::Value(*value)) == Some(&Offer::Fixed(Repr::Nat))
-                || states(module, *value, Register::Word)
+) -> BTreeMap<Site, Bound> {
+    let mut defined = BTreeSet::new();
+    for (_, node) in module.live_nodes() {
+        if let Node::LetIntrinsic { result, .. } | Node::LetValue { result, .. } = node {
+            defined.insert(Site::Value(*result));
         }
-        Atom::Literal(literal) => literal_repr(literal) == Repr::Nat,
-        Atom::Filler => true,
-        Atom::Fun(_) => false,
-    })
+    }
+
+    let facts = Solver::solve(offers.keys().copied(), |rules| {
+        for (_, node) in module.live_nodes() {
+            match node {
+                Node::LetIntrinsic {
+                    result, op, args, ..
+                } => rules.add(move |solver| {
+                    // A row read lies below what its slot holds: a word in a word's slot, and anything in a reference's.
+                    let bound = match op {
+                        Intrinsic::RowGet(..) => match module.result_repr(op) {
+                            Repr::Nat => Bound::WORD,
+                            _ => Bound::UNBOUNDED,
+                        },
+                        _ => op.result_bound(args, |atom| atom_bound(module, atom, solver)),
+                    };
+                    solver.join(Site::Value(*result), bound);
+                }),
+                Node::LetValue { result, value, .. } => {
+                    let bound = match value {
+                        ValueExpr::Literal(Literal::Nat(value)) => Bound::of(value),
+                        _ => Bound::UNBOUNDED,
+                    };
+                    rules.add(move |solver| solver.join(Site::Value(*result), bound));
+                }
+                _ => {}
+            }
+        }
+
+        for (&site, offer) in offers {
+            if !matches!(offer, Offer::Open { .. }) && !defined.contains(&site) {
+                rules.add(move |solver| solver.join(site, Bound::UNBOUNDED));
+            }
+        }
+
+        for &(source, target) in flows {
+            rules.add(move |solver| {
+                let bound = match source {
+                    Source::Atom(atom) => atom_bound(module, atom, solver),
+                    Source::Site(site) => site_bound(module, site, solver),
+                };
+                solver.join(target, bound);
+            });
+        }
+    });
+
+    facts
+        .keys()
+        .map(|&site| {
+            let bound = match site {
+                Site::Value(value) if states(module, value, Register::Word) => {
+                    facts[&site].narrower(Bound::WORD)
+                }
+                _ => facts[&site],
+            };
+            (site, bound)
+        })
+        .collect()
+}
+
+/// What `atom` lies below, read through the solver: a value's fact, a literal its own, a filler nothing past zero, since it holds no value, and a function nothing.
+fn atom_bound(module: &Module, atom: &Atom, solver: &Solver<Bound, Site>) -> Bound {
+    match atom {
+        Atom::Value(value) => site_bound(module, Site::Value(*value), solver),
+        Atom::Literal(Literal::Nat(value)) => Bound::of(value),
+        Atom::Literal(_) | Atom::Fun(_) => Bound::UNBOUNDED,
+        Atom::Filler => Bound::bottom(),
+    }
+}
+
+/// What `site` lies below, read through the solver, a value whose type erasure read as a word below `2³⁰` whatever reaches it.
+fn site_bound(module: &Module, site: Site, solver: &Solver<Bound, Site>) -> Bound {
+    let bound = solver.fact(&site).copied().unwrap_or(Bound::UNBOUNDED);
+    match site {
+        Site::Value(value) if states(module, value, Register::Word) => bound.narrower(Bound::WORD),
+        _ => bound,
+    }
 }
 
 /// The open sites a float register may hold: those every argument reaching them is a float already — a float literal, a filler, a definition producing a float, a reference stating one, or another such site.

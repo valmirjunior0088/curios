@@ -15,9 +15,10 @@ fn assert_refuses_nothing(wat: &str) {
 
 #[test]
 fn nat_add_keeps_an_i31_fast_path_and_grows_past_it() {
+    // A sum the representation analysis bounds below `2³⁰` rides a word with no overflow arm, so the operands are ones whose sum is `2³⁰`.
     let wat = wat(&intrinsic_main(
         curios_cont::Intrinsic::NatAdd,
-        vec![nat(3), nat(4)],
+        vec![nat(1 << 29), nat(1 << 29)],
     ));
     assert_contains(&wat, "i32.add");
     // A sum leaving the i31 is boxed rather than refused, and a boxed operand takes the helper.
@@ -40,9 +41,10 @@ fn nat_sub_is_monus_on_the_fast_path_and_nat_sub_past_it() {
 
 #[test]
 fn nat_mul_widens_to_i64_and_grows_past_the_i31() {
+    // As for the sum: a product its operands bound below `2³⁰` rides a word, so these multiply to `2³⁰`.
     let wat = wat(&intrinsic_main(
         curios_cont::Intrinsic::NatMul,
-        vec![nat(3), nat(4)],
+        vec![nat(1 << 15), nat(1 << 15)],
     ));
     assert_contains(&wat, "i64.mul");
     assert_contains(&wat, "call $big/of_i64");
