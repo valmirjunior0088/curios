@@ -88,7 +88,7 @@
     ]
   },
   "scripts": {
-    "bundle": "esbuild extension.js --bundle --platform=node --target=node20 --format=cjs --external:vscode --outfile=.artifacts/extension.js",
+    "bundle": "esbuild extension.js --bundle --platform=node --format=cjs --external:vscode --outfile=.artifacts/extension.js",
     "prepare": "npm run bundle",
     "vscode:prepublish": "npm run bundle -- --minify",
     "package": "vsce package --out .artifacts",
@@ -97,7 +97,7 @@
   },
   "devDependencies": {
     "@vscode/vsce": "^4.0.0",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "vscode-tmgrammar-test": "^0.1.3"
   },
   "dependencies": {
