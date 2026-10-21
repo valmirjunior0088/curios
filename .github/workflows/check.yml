@@ -167,10 +167,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
-      - name: Install Biome
-        run: npm install --global @biomejs/biome@${{ env.BIOME }}
           cache: npm
           cache-dependency-path: editors/grammar/package-lock.json
+      - name: Install Biome
+        run: npm install --global @biomejs/biome@${{ env.BIOME }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -195,10 +195,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
-      - name: Install Biome
-        run: npm install --global @biomejs/biome@${{ env.BIOME }}
           cache: npm
           cache-dependency-path: editors/vscode/package-lock.json
+      - name: Install Biome
+        run: npm install --global @biomejs/biome@${{ env.BIOME }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
