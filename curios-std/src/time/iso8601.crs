@@ -139,7 +139,7 @@ pub let date: Parse(Str, Date) =
     let y = year!;
     date_after(y);
 
---- `08:49:37.5`: the hour, the minute and the second, and the fraction where there is one.
+--- `08:49:37.5`: the hour, the minute and the second, and the fraction where there is one, as RFC 3339 writes a time too.
 pub let write_time(t: Time) -> Str =
     Str/flatten([
         padded(t.hour, 2),
@@ -149,7 +149,7 @@ pub let write_time(t: Time) -> Str =
         padded(t.second, 2),
         fraction(t.nanosecond)]);
 
---- A time of day, the reader committed to one past the `:` after its hour; a second of 60 is a leap second, and a fraction past nine digits is read to the nanosecond.
+--- A time of day, the reader committed to one past the `:` after its hour; a second of 60 is a leap second, and a fraction past nine digits is read to the nanosecond, as RFC 3339 reads a time too.
 pub let time: Parse(Str, Time) =
     let h = fixed(2, 0)!;
     let _ = expect(':', "malformed date-time")!;

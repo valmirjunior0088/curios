@@ -1,5 +1,5 @@
 use /std/{Nat, Int, Flt, Bool, Char, Str, List, Map, Option, Toml, Fmt};
-use /std/time/{rfc3339};
+use /std/time/{rfc3339, iso8601};
 use /std/Toml/scan/{is_bare_char};
 
 let bare_ok(s: Str) -> Bool =
@@ -68,12 +68,12 @@ let value_str(v: Toml) -> Str =
         Str/flatten([
             rfc3339/write_date(odt.date_time.date),
             "T",
-            rfc3339/write_time(odt.date_time.time),
+            iso8601/write_time(odt.date_time.time),
             rfc3339/write_offset(odt.offset)])
     | local_date_time(ldt) =>
-        Str/flatten([rfc3339/write_date(ldt.date), "T", rfc3339/write_time(ldt.time)])
+        Str/flatten([rfc3339/write_date(ldt.date), "T", iso8601/write_time(ldt.time)])
     | local_date(d) => rfc3339/write_date(d)
-    | local_time(t) => rfc3339/write_time(t)
+    | local_time(t) => iso8601/write_time(t)
     | arr(items) =>
         let start: List(Str) = [];
         let parts = List/fold(items, start, (item, parts) => [..parts, value_str(item)]);

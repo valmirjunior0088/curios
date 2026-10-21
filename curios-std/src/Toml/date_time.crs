@@ -1,5 +1,5 @@
 use /std/{Str, Parse, Toml};
-use /std/time/{Date, Time, DateTime, OffsetDateTime, rfc3339};
+use /std/time/{Date, Time, DateTime, OffsetDateTime, rfc3339, iso8601};
 use /std/time/rfc3339/{FourDigits};
 
 -- `built` over the evidence that `d`'s year has the four digits TOML writes. `rfc3339/date` reads no other, so the decision answers `some`, and its refusal is the one a date past them would have.
@@ -19,7 +19,7 @@ let offset_tail(date: Date, time: Time) -> Parse(Str, Toml) =
 
 let date_time_tail(date: Date) -> Parse(Str, Toml) =
     let _ = rfc3339/separator!;
-    let time = rfc3339/time!;
+    let time = iso8601/time!;
     Parse/or(
         offset_tail(date, time),
         dated(date, (ok) => Toml/local_date_time(DateTime { date = date, time = time }, @ok)));
@@ -30,4 +30,4 @@ let date_led() -> Parse(Str, Toml) =
 
 --- A date, a time, or the two together, with or without an offset, as RFC 3339 writes them.
 pub let date_time_value: Parse(Str, Toml) =
-    Parse/or(date_led(), Parse/map(rfc3339/time, (time) => Toml/local_time(time)));
+    Parse/or(date_led(), Parse/map(iso8601/time, (time) => Toml/local_time(time)));
