@@ -423,7 +423,7 @@ test a_nan_spells_its_pattern_and_toml_keeps_its_sign =
     Test/all([
         Test/equal(
             Spell/spell(Flt/quiet_nan(+5.0)),
-            "/std/Flt/of_le_bytes(x[5, 0, 0, 0, 0, 0, 248, 127], @/std/Bool/True/qed())"),
+            "Flt/of_le_bytes(x[5, 0, 0, 0, 0, 0, 248, 127])"),
         Test/equal(Spell/spell(+nan.0), "+nan.0"),
         Test/equal(Spell/spell(-nan.0), "-nan.0"),
         Test/equal(
