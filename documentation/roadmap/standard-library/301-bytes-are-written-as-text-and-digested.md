@@ -16,7 +16,7 @@
 
 ## Refinement
 
-- **The word.** A digest's every step is a 32- or 64-bit operation, past the `2^30` a `Nat` is held unboxed in. The question is [a random sequence replays from its seed](300-a-random-sequence-replays-from-its-seed.md)'s, settled there once for both.
+- **The word.** A digest's every step is a 32- or 64-bit operation, past the `2^30` a `Nat` is held unboxed in. The question is [arithmetic modulo a word](../arithmetic/306-arithmetic-modulo-a-word.md)'s, settled there for this and for [a random sequence replays from its seed](300-a-random-sequence-replays-from-its-seed.md).
 - **Where they live.** Lowercase namespaces of functions over `Bytes`, and whether the four hexadecimal readers above become callers of one.
 - **Which digests.** SHA-256 for integrity, SHA-1 only where a protocol requires it, CRC-32 for the formats that carry one; and whether a digest is computed in Curios or answered by a host row, which every host would then answer.
 - **Whole or streamed.** A digest of one `Bytes`, or one fed piece by piece from an `Io/Reader`, so that a large body is digested as it arrives.

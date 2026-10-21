@@ -8,4 +8,4 @@
 
 ## Refinement
 
-- **`Nat` and `Int` past a reference.** Compiling a single-use chain of steps as one 64-bit computation with overflow checks, falling back to the `big/` helpers only on overflow; and typing a field at a word where every value it can be handed is one. Each is measured on `programs/` before it lands, and a decision records the carrier it leaves.
+- **`Nat` and `Int` past a reference.** Compiling a single-use chain of steps as one 64-bit computation with overflow checks, falling back to the `big/` helpers only on overflow; and typing a field at a word where every value it can be handed is one. Each is measured on `programs/` before it lands, and a decision records the carrier it leaves. A step that is modular by intent, a generator's or a digest's, is [arithmetic modulo a word](../arithmetic/306-arithmetic-modulo-a-word.md)'s, which weighs this cost against a carrier of its own.
