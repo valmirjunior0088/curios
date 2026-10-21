@@ -23,6 +23,9 @@ pub(crate) use evaluate::*;
 mod fields;
 pub(crate) use fields::*;
 
+mod guards;
+pub(crate) use guards::*;
+
 mod inline;
 pub(crate) use inline::*;
 
@@ -112,6 +115,7 @@ pub fn optimize(module: &mut Module) {
             | pass!("cont::forward_calls", forward_calls(module))
             | pass!("cont::shrink", shrink(module))
             | pass!("cont::answer_row_tests", answer_row_tests(module))
+            | pass!("cont::answer_window_guards", answer_window_guards(module))
             | pass!("cont::dedupe_intrinsics", dedupe_intrinsics(module))
             | pass!("cont::fuse_append_chains", fuse_append_chains(module))
             | pass!("cont::flatten_indexed_lists", flatten_indexed_lists(module))
