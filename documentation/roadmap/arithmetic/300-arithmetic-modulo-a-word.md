@@ -1,6 +1,6 @@
 # Arithmetic modulo a word
 
-**Not refined yet.** This specification reserves how a program computes modulo `2^32` or `2^64`, which [a random sequence replays from its seed](../standard-library/300-a-random-sequence-replays-from-its-seed.md) and [bytes are written as text and digested](../standard-library/301-bytes-are-written-as-text-and-digested.md) both wait on. It is not an implementation plan: it waits on the choice under *Refinement*, which those two make once here.
+**Not refined yet.** This specification reserves how a program computes modulo `2^32` or `2^64`, which [a random sequence replays from its seed](../standard-library/301-a-random-sequence-replays-from-its-seed.md) and [bytes are written as text and digested](../standard-library/300-bytes-are-written-as-text-and-digested.md) both wait on. It is not an implementation plan: it waits on the choice under *Refinement*, which those two make once here.
 
 ## What is missing
 

@@ -18,7 +18,7 @@
 
 ## Refinement
 
-- **The word.** Every generator above steps in 32 or 64 bits, past `2^30`, so over `Nat` each step allocates: [arithmetic modulo a word](../arithmetic/306-arithmetic-modulo-a-word.md)'s question, settled there for this and for [bytes are written as text and digested](301-bytes-are-written-as-text-and-digested.md).
+- **The word.** Every generator above steps in 32 or 64 bits, past `2^30`, so over `Nat` each step allocates: [arithmetic modulo a word](../arithmetic/300-arithmetic-modulo-a-word.md)'s question, settled there for this and for [bytes are written as text and digested](300-bytes-are-written-as-text-and-digested.md).
 - **The state.** A value threaded through `State`, as `programs/rng_state.crs` threads its seed, or a splittable seed; and whether `/std/rand` offers a generator seeded from `rand_bytes`.
 - **The draws.** Bounded naturals and integers, floats, booleans, a choice from a list and a shuffle, each with its law as a proof where one is stated, a draw below its bound first among them.
 - **Property tests.** Where generators live, in `Test` or a module of their own; how a failing case shrinks; how a run reports its seed and is replayed from one, which a `curios test` option would reach (`documentation/usage.md`, and the keys of `curios-verdicts` where a seed changes a verdict); and how a generator of a type under proofs is written.
