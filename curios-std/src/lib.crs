@@ -8,7 +8,7 @@ pub use Eq/{let Eq};
 
 --- The two-valued type.
 ---
---- `Holds` beneath reflects a decision into a proposition: `True`, inhabited by `qed`, where it is `true`, and `False`, whose elimination proves anything, where it is not. A program imports the three by name — `use /std/Bool/{True, False, Holds};` — and writes `Holds(b)`, `True/qed()`, `True/proved()` and `False/refuted()`.
+--- `Holds` beneath reflects a decision into a proposition: `True`, inhabited by `qed`, where it is `true`, and `False`, whose elimination proves anything, where it is not.
 pub mod Bool;
 pub use Bool/{let Bool};
 
