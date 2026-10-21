@@ -1,8 +1,8 @@
 # A declaration carries the levels it uses
 
-**Waits for a consumer**: no `/std` signature names a method by its path at a level.
-
 A declaration's universe parameters are the levels its signature holds where conversion compares two instances of it, read by the one alignment conversion reads two terms by ([A universe level is implicit, cumulative, and settles by where it stands](../../design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md)). One reading still holds a level no two instances can be told apart by: a method named by its path, whose witness the alignment reads whole.
+
+**Not refined yet.** It waits for a consumer: no `/std` signature names a method by its path at a level.
 
 ## What is wrong
 

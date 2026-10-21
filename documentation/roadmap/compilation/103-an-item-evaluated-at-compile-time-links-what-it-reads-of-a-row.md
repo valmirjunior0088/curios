@@ -1,6 +1,8 @@
 # An item evaluated at compile time links what it reads of a row
 
-**Not refined yet.** This specification reserves linking the module a top-level value is computed in with what the value reads of each row it reaches, where today it links each row whole. It is not an implementation plan: the two designs under *Refinement* differ in what an evaluation's trace says it read, and neither is drawn.
+[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a compilation end in time proportional to what was written plus what the budget counted, and [an item imports what it reads of another's row](../../../curios-ersd/README.md#an-item-imports-what-it-reads-of-anothers-row) so that no row is copied once for each declaration that reads it. A top-level value computed where its unit is compiled links each row it reaches whole, so values each built from one constructor of a family cost the square of the family.
+
+**Not refined yet.** It waits on the choice between the two designs under *Refinement*, which differ in what an evaluation's trace says it read; neither is drawn.
 
 ## What is missing
 
