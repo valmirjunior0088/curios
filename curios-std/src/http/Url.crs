@@ -1,26 +1,12 @@
+--- A URL's scheme, `http` or `https`, and the port it implies.
+pub mod Scheme;
+pub use Scheme/{let Scheme};
+
 use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell, Fmt};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql};
 use /std/http/Field/{Value};
 use /std/http/Field/Value/{Octet};
-
---- The scheme, which decides the port when none is written and whether the connection is under TLS.
-pub induct Scheme: pub Type
---- `http`: port 80 where none is written, and in the clear.
-| http()
---- `https`: port 443 where none is written, and under TLS.
-| https()
-end
-
-pub use Scheme/*;
-
-satisfy Eql(Scheme) {
-    ..
-}
-
-satisfy Spell(Scheme) {
-    ..
-}
 
 --- Where a request goes: the scheme, the host, the port, the path, and the query as written after `?`, if any. A fragment is the client's and is dropped.
 pub struct Url: pub Type {
@@ -38,10 +24,6 @@ satisfy Eql(Url) {
 satisfy Spell(Url) {
     ..
 }
-
---- The port a scheme implies.
-pub let default_port(s: Scheme) -> Nat =
-    match s | http() => 80 | https() => 443 end;
 
 let until(stops: List(Char)) -> (Char) -> Bool =
     (c) => Bool/not(List/any(stops, (stop) => c == stop));
@@ -90,7 +72,7 @@ let port_number(s: Scheme) -> Parse(Str, Nat) =
     | false => Parse/fail("a port is a number")
     | true =>
         match Str/is_empty(digits)
-        | true => Parse/pure(default_port(s))
+        | true => Parse/pure(Scheme/default_port(s))
         | false =>
             match Nat/of_str(digits)
             | some(n) =>
@@ -106,8 +88,9 @@ let port_number(s: Scheme) -> Parse(Str, Nat) =
 let port_of(s: Scheme) -> Parse(Str, Nat) =
     let next = Parse/str/peek!;
     match next
-    | some(c) => match Char/to_nat(c) | ':' => port_number(s) | _ => Parse/pure(default_port(s)) end
-    | none() => Parse/pure(default_port(s))
+    | some(c) =>
+        match Char/to_nat(c) | ':' => port_number(s) | _ => Parse/pure(Scheme/default_port(s)) end
+    | none() => Parse/pure(Scheme/default_port(s))
     end;
 
 let path() -> Parse(Str, Str) =
@@ -160,12 +143,8 @@ pub let lit(s: Str, @ok: Valid(s)) -> Url =
     | failure(_) => (absent) => match absent end
     end(ok);
 
---- The scheme as a URL spells it.
-pub let scheme_str(s: Scheme) -> Str =
-    match s | http() => "http" | https() => "https" end;
-
 let port_str(u: Url) -> Str =
-    match u.port == default_port(u.scheme)
+    match u.port == Scheme/default_port(u.scheme)
     | true => ""
     | false => Str/concat(":", Nat/to_str(u.port))
     end;
@@ -175,7 +154,7 @@ let query_str(q: Option(Str)) -> Str =
 
 --- The URL as text.
 pub let to_str(u: Url) -> Str =
-    Str/flatten([scheme_str(u.scheme), "://", u.host, port_str(u), u.path, query_str(u.query)]);
+    Str/flatten([Scheme/to_str(u.scheme), "://", u.host, port_str(u), u.path, query_str(u.query)]);
 
 -- The sixteen hexadecimal digits, uppercase, each an octet a value may hold.
 let hex_octets: List(Octet) =

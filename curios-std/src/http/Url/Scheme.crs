@@ -1,0 +1,28 @@
+use /std/{Nat, Str, Spell};
+use /std/ops/{Eql};
+
+--- The scheme, which decides the port when none is written and whether the connection is under TLS.
+pub induct Scheme: pub Type
+--- `http`: port 80 where none is written, and in the clear.
+| http()
+--- `https`: port 443 where none is written, and under TLS.
+| https()
+end
+
+pub use Scheme/*;
+
+satisfy Eql(Scheme) {
+    ..
+}
+
+satisfy Spell(Scheme) {
+    ..
+}
+
+--- The port a scheme implies.
+pub let default_port(s: Scheme) -> Nat =
+    match s | http() => 80 | https() => 443 end;
+
+--- The scheme as a URL spells it.
+pub let to_str(s: Scheme) -> Str =
+    match s | http() => "http" | https() => "https" end;

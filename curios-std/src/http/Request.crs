@@ -44,7 +44,7 @@ pub let header(r: Request, name: Str) -> Option(Value) =
     Field/find(r.headers, name);
 
 let host_header(u: Url) -> Str =
-    match u.port == Url/default_port(u.scheme)
+    match u.port == Scheme/default_port(u.scheme)
     | true => u.host
     | false => Fmt/render("%:%")(u.host)(u.port)
     end;
@@ -178,7 +178,7 @@ let resource_of(scheme: Scheme, head: Head, host: Option(Str)) -> Result(Refusal
     | (false, true) =>
         match host
         | some(authority) =>
-            read_url(Str/flatten([Url/scheme_str(scheme), "://", authority, head.target]))
+            read_url(Str/flatten([Scheme/to_str(scheme), "://", authority, head.target]))
         | none() => Result/failure(Refusal/malformed("a request names its host"))
         end
     | (false, false) =>
