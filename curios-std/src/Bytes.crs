@@ -89,6 +89,31 @@ pub let cons_injective_tail(
 ) -> Eq()(p1, p2) =
     Eq/cong((halves: {Byte, Bytes}) => halves.1, Option/some_injective(Eq/cong(uncons, e)));
 
+--- A decided equality is an equation: `a == b` gives `Eq()(a, b)`. By recursion on both runs, since the comparison of two conses is their heads' and their tails', and of a cons and no bytes is `false`.
+pub let eq_of_eql(a: Bytes, b: Bytes, h: Holds(a == b)) -> Eq()(a, b) =
+    match a: (z) => (w: Bytes, h: Holds(z == w)) -> Eq()(z, w)
+    | x[] =>
+        (w, h) =>
+            match w: (n) => (h: Holds(x[] == n)) -> Eq()(x[], n)
+            | x[] => (_) => Eq/refl()
+            | x[_, .._] => (h) => match h end
+            end(h)
+    | x[y, ..t]; ih =>
+        (w, h) =>
+            match w: (n) => (h: Holds(x[y, ..t] == n)) -> Eq()(x[y, ..t], n)
+            | x[] => (h) => match h end
+            | x[k, ..p] =>
+                (h) =>
+                    match Byte/to_nat(y) == Byte/to_nat(k)
+                    | true =>
+                        Eq/trans(
+                            Eq/cong((c: Byte) => x[c, ..t], Byte/eq_of_eql(y, k, True/qed())),
+                            Eq/cong((q: Bytes) => x[k, ..q], ih(p, h)))
+                    | false => match h end
+                    end
+            end(h)
+    end(b, h);
+
 -- An empty encoding is no encoding of a positive number: the lengths differ, and a length of zero against a successor is refuted by the comparison that decides it.
 let no_empty(k: Byte, p: Bytes, e: Eq()(x[], x[k, ..p])) -> False =
     Eq/subst((m) => Holds(0 == m), Eq/cong(len, e), True/qed());

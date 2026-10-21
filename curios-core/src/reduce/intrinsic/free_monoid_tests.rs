@@ -287,3 +287,101 @@ fn a_map_by_a_function_whose_body_reduces_to_its_binder_is_the_list() {
         "a variable that is not the binder is a constant function"
     );
 }
+
+/// `x[h, ..t]` as lowering spells a cons: `h` appended to no bytes, then the rest.
+fn cons(head: Term, tail: Term) -> Term {
+    let empty: Term = Subterm::Intrinsic(Intrinsic::Bytes(Binary::empty())).into();
+    Term::intrinsic(Intrinsic::BytesConcat {
+        operands: vec![Term::intrinsic(Intrinsic::bytes_append(empty, head)), tail],
+    })
+}
+
+/// Equality is read past what two runs share, a literal byte or one symbolic byte alike, as `Nat`'s comparisons are read past their common floor: what is left holds exactly when the pair does.
+#[test]
+fn a_common_prefix_leaves_the_equality_of_what_follows_it() {
+    let (a, b, h) = (sym(0, "a"), sym(1, "b"), sym(2, "h"));
+    let past = Intrinsic::bytes_eql(a.clone(), b.clone());
+
+    let literal = |tail: Term| {
+        Term::intrinsic(Intrinsic::BytesConcat {
+            operands: vec![run_bytes(&[1]), tail],
+        })
+    };
+    let folded = fold(Term::intrinsic(Intrinsic::bytes_eql(
+        literal(a.clone()),
+        literal(b.clone()),
+    )));
+    assert_eq!(
+        folded,
+        Term::intrinsic(past.clone()),
+        "`x[1, ..a] == x[1, ..b]` is `a == b`"
+    );
+
+    let folded = fold(Term::intrinsic(Intrinsic::bytes_eql(
+        cons(h.clone(), a),
+        cons(h, b),
+    )));
+    assert_eq!(
+        folded,
+        Term::intrinsic(past),
+        "`x[h, ..a] == x[h, ..b]` is `a == b`"
+    );
+}
+
+/// Two runs that each open with a byte the peel cannot read are equal exactly when the bytes are and the rest are, the bytes compared as `/std/Byte`'s `==` compares them: the free monoid cancels, and a byte is one generator.
+#[test]
+fn two_runs_opening_with_a_byte_are_equal_when_the_bytes_and_the_rest_are() {
+    let (a, b, h, k) = (sym(0, "a"), sym(1, "b"), sym(2, "h"), sym(3, "k"));
+
+    let folded = fold(Term::intrinsic(Intrinsic::bytes_eql(
+        cons(h.clone(), a.clone()),
+        cons(k.clone(), b.clone()),
+    )));
+    let expected = Term::intrinsic(Intrinsic::BoolAnd(
+        Term::intrinsic(Intrinsic::nat_eql(to_nat_of(h), to_nat_of(k.clone()))),
+        Term::intrinsic(Intrinsic::bytes_eql(a.clone(), b.clone())),
+    ));
+    assert_eq!(
+        folded, expected,
+        "`x[h, ..a] == x[k, ..b]` is `h == k && a == b`"
+    );
+
+    let opened = Term::intrinsic(Intrinsic::BytesConcat {
+        operands: vec![run_bytes(&[2, 3]), a.clone()],
+    });
+    let folded = fold(Term::intrinsic(Intrinsic::bytes_eql(
+        opened,
+        cons(k.clone(), b.clone()),
+    )));
+    let expected = Term::intrinsic(Intrinsic::BoolAnd(
+        Term::intrinsic(Intrinsic::nat_eql(lit(2), to_nat_of(k))),
+        Term::intrinsic(Intrinsic::bytes_eql(
+            Term::intrinsic(Intrinsic::BytesConcat {
+                operands: vec![run_bytes(&[3]), a],
+            }),
+            b,
+        )),
+    ));
+    assert_eq!(folded, expected, "a literal run opens with its first byte");
+}
+
+/// The controls: a side that opens with no byte it shows, a bare run, leaves the pair neutral, and so does a pair the peel hands back as it was given — the bare side it wraps comes back bare, and following it would wrap it again without end.
+#[test]
+fn a_pair_no_byte_opens_stays_neutral() {
+    let (a, b, h) = (sym(0, "a"), sym(1, "b"), sym(2, "h"));
+
+    let against_literal = Intrinsic::bytes_eql(a.clone(), run_bytes(&[1]));
+    let folded = fold(Term::intrinsic(against_literal.clone()));
+    assert_eq!(
+        folded,
+        Term::intrinsic(against_literal),
+        "`a == x[1]` stays as it is"
+    );
+
+    let against_cons = Intrinsic::bytes_eql(a, cons(h, b));
+    let folded = fold(Term::intrinsic(against_cons.clone()));
+    assert!(
+        matches!(&*folded, Subterm::Intrinsic(Intrinsic::BytesEql(..))),
+        "`a == x[h, ..b]` stays a comparison while `a` shows no byte"
+    );
+}

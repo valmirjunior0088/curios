@@ -35,7 +35,7 @@ use {
     super::{ReduceError, Reducer},
     crate::{
         Aligned, Bytes, Cost, Declaration, Element, Extremum, FUSION_CAP, FreeMonoid, Func,
-        Intrinsic, LinearViews, Nat, Operands, Probe, Subterm, Telescope, Term, Words,
+        Intrinsic, Layer, LinearViews, Nat, Operands, Probe, Subterm, Telescope, Term, Words,
         int_cancel_common, int_distributes, int_footprint, int_multiply, int_negate, int_of_nat,
         int_preimage, int_sum, int_terms, normalize_concat, peel_bytes, peel_first_atom,
         peel_first_elem, same_atom,
@@ -1189,13 +1189,47 @@ pub fn reduce_intrinsic(
                 },
             };
 
-            // Structural decision via the free-monoid peel (`core::spine`): a peeled-equal pair is `true`, a definite generator or length clash is `false` (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`). Anything the peel leaves undecided stays neutral — the same conservative seam conversion reads, so the fold only ever strengthens, never weakens.
+            // Structural decision via the free-monoid peel (`core::spine`): a peeled-equal pair is `true`, a definite generator or length clash is `false` (so `eql([1] ++ x, [2] ++ x) = false` regardless of `x`), and a pair with a common prefix is the pair of what follows it, which holds exactly when the pair does — `eql(x[1, ..a], x[1, ..b]) = eql(a, b)`, as `Nat`'s comparisons are read past their common floor. The residual is followed only where it is not the pair as given: a bare side is wrapped above and handed back bare, which a re-entry would wrap again. What is left is strictly smaller where a prefix came off, and flat where a nesting was regrouped, which the peel declines the round after, so the re-entry ends.
             match peel_bytes(&spine(&left), &spine(&right)) {
                 Some(Deduction::Equal) => return Ok(Subterm::Intrinsic(Intrinsic::Bool(true))),
                 Some(Deduction::Impossible) => {
                     return Ok(Subterm::Intrinsic(Intrinsic::Bool(false)));
                 }
+                Some(Deduction::Equivalent((rest_left, rest_right)))
+                    if rest_left != left || rest_right != right =>
+                {
+                    return reducer
+                        .reduce(Term::intrinsic(Intrinsic::bytes_eql(rest_left, rest_right)))
+                        .map(Term::unwrap_or_clone);
+                }
                 Some(Deduction::Equivalent(_)) | Some(Deduction::Undecided) | None => {}
+            }
+
+            // Two runs that each open with a byte are equal exactly when the bytes are and the rest are, since the free monoid cancels and a byte is one generator: `eql(x[h, ..a], x[k, ..b]) = to_nat(h) == to_nat(k) && eql(a, b)`, the bytes compared as `/std/Byte`'s `==` compares them. A pair whose openings the peel already decided never reaches here, so this is the case of a byte it cannot read.
+            if let (
+                Layer::Cons {
+                    head: Some(this_head),
+                    tail: this_tail,
+                },
+                Layer::Cons {
+                    head: Some(that_head),
+                    tail: that_tail,
+                },
+            ) = (
+                FreeMonoid::Bytes.uncons(Term::unwrap_or_clone(left.clone())),
+                FreeMonoid::Bytes.uncons(Term::unwrap_or_clone(right.clone())),
+            ) {
+                let heads = Intrinsic::nat_eql(
+                    Term::intrinsic(Intrinsic::ByteToNat(this_head)),
+                    Term::intrinsic(Intrinsic::ByteToNat(that_head)),
+                );
+                let tails = Intrinsic::bytes_eql(this_tail, that_tail);
+                return reducer
+                    .reduce(Term::intrinsic(Intrinsic::BoolAnd(
+                        Term::intrinsic(heads),
+                        Term::intrinsic(tails),
+                    )))
+                    .map(Term::unwrap_or_clone);
             }
 
             Ok(Subterm::Intrinsic(Intrinsic::BytesEql(left, right)))

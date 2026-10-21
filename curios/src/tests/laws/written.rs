@@ -925,7 +925,7 @@ const CARRIERS: &[Carrier] = &[
     },
     Carrier {
         name: "Bytes, the free monoid",
-        binders: "bs: Bytes, cs: Bytes, ds: Bytes, k: Byte, s: Nat, l: Nat, ok: Holds(s + l <= Bytes/len(bs)), head: Holds(0 < Bytes/len(cs)), into: Holds(s < Bytes/len(cs)), fits: Holds(l <= Bytes/len(cs))",
+        binders: "bs: Bytes, cs: Bytes, ds: Bytes, h: Byte, k: Byte, s: Nat, l: Nat, ok: Holds(s + l <= Bytes/len(bs)), head: Holds(0 < Bytes/len(cs)), into: Holds(s < Bytes/len(cs)), fits: Holds(l <= Bytes/len(cs))",
         held: &[
             "Eq()(x[..x[..bs, ..cs], ..ds], x[..bs, ..cs, ..ds])",
             "Eq()(Bytes/len(x[k, ..bs]), Bytes/len(bs) + 1)",
@@ -954,6 +954,11 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(x[..bs, 1] == x[], false)",
             "Eq()(x[..bs, k] == bs, false)",
             "Eq()(x[..bs, ..cs, 1] == bs, false)",
+            // Equality is read past what two runs share, as `Nat`'s comparisons are read past their common floor; and two runs that each open with a byte are equal exactly when the bytes and the rest are, which is what lets `/std/Bytes/eq_of_eql` take an equality apart a byte at a time.
+            "Eq()(x[1, ..bs] == x[1, ..cs], bs == cs)",
+            "Eq()(x[k, ..bs] == x[k, ..cs], bs == cs)",
+            "Eq()(x[h, ..bs] == x[k, ..cs], h == k && bs == cs)",
+            "Eq()(x[2, 3, ..bs] == x[k, ..cs], 2 == Byte/to_nat(k) && x[3, ..bs] == cs)",
             // A fill of a successor count is its generator consed onto the shorter fill, which is how two fills meet without either being unrolled; its length is its count, and a positive fill is not the empty one.
             "Eq()(Bytes/replicate(l + 1, k), x[k, ..Bytes/replicate(l, k)])",
             "Eq()(Bytes/len(Bytes/replicate(l, k)), l)",
@@ -963,6 +968,9 @@ const CARRIERS: &[Carrier] = &[
             // Controls, and neither is a law: a count carrying no floor may be zero, where the fill is empty. The first is the peel's side of that line and the second the equality fold's.
             "Eq()(Bytes/replicate(l, k), x[k, ..Bytes/replicate(l - 1, k)])",
             "Eq()(Bytes/replicate(l, k) == x[], false)",
+            // Controls, and neither is a law: two runs that open with two bytes are not equal for their tails alone, and a run that shows no byte may be the cons it is compared with.
+            "Eq()(x[h, ..bs] == x[k, ..cs], bs == cs)",
+            "Eq()(bs == x[k, ..cs], false)",
             // A candidate: a fill of a successor count ends in its generator as surely as it begins with one, but the peel emits only the leading one.
             "Eq()(Bytes/replicate(l + 1, k), x[..Bytes/replicate(l, k), k])",
         ],
