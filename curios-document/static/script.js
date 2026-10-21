@@ -195,7 +195,7 @@
     } else if (event.key === "Enter") {
       event.preventDefault();
       const rows = results.querySelectorAll("a");
-      const target = rows[chosen >= 0 ? chosen : 0];
+      const target = rows[Math.max(chosen, 0)];
       if (live && target) {
         follow(target.href);
       }

@@ -14,7 +14,7 @@ mod tests;
 pub(crate) const NEXTEST_INSTALL: &str = "cargo install cargo-nextest --locked";
 
 /// The package Biome is run from, at the one version every checkout formats and lints with: a formatter's output moves between releases, so the version is exact.
-pub(crate) const BIOME: &str = "@biomejs/biome@2.5.15";
+pub(crate) const BIOME: &str = "@biomejs/biome@2.6.2";
 
 /// A tool a step needs beyond cargo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
