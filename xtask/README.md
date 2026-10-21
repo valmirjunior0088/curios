@@ -70,7 +70,7 @@ A subject is a tree or something built from one. A tree is a manifest root — t
 
 ### The check workflow is held to the table
 
-**Decision.** `.github/workflows/check.yml` is written by hand and thin: a job sets up a machine and runs `cargo xtask` lines, and `every_step_has_a_job` reads the file and holds that every line is a command this crate parses and that the lines together run every step of the table. Each tool's version is stated once, by whoever installs it: Rust's in `rust-toolchain.toml`, which rustup reads; nextest's and Node's in the workflow, for its runners; Biome's in this crate, which fetches it. This crate asks of nextest and Node only that they are there.
+**Decision.** `.github/workflows/check.yml` is written by hand and thin: a job sets up a machine and runs `cargo xtask` lines, and `every_step_has_a_job` reads the file and holds that every line is a command this crate parses and that the lines together run every step of the table. Each tool's version is stated once, by whoever installs it: Rust's in `rust-toolchain.toml`, which rustup reads; nextest's, Biome's and Node's in the workflow, for its runners. This crate asks of each only that it is there.
 
 **Rationale.** A workflow that restates the steps drifts from them silently, and one generated from the table would put runner images, caches and action versions — GitHub's vocabulary — in this crate. Held by a test, the file stays where GitHub reads it and cannot leave a step out.
 
