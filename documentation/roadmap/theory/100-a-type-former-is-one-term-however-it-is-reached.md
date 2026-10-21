@@ -24,6 +24,7 @@ is refused, `True` inferred where `Holds(every(@Point, l, small))` is expected, 
 - **A solution keeps the spelling its problem wrote** ([`curios-elab`'s README](../../../curios-elab/README.md#a-solution-is-the-rigid-side-as-written)): an implicit met against a signature's `Nat` is the name `/sys/Nat/Nat`, and one met against a type `/sys` states, or synthesized from one, the node it holds.
 - **The key's comparison is decided.** Structural equality under-approximates definitional equality and costs nothing to justify, and the kernel keys as it is handed; a key that read through a type former's name would be a key that unfolds, in both checkers.
 - **A type former's entry is held by its definition** ([`curios-core`'s README](../../../curios-core/README.md#a-nominal-declarations-entry-is-held-by-its-type-former)); [compilation specification 304](../compilation/304-a-type-former-is-spelled-by-its-entry.md) reserves stating it once there, a question of what a declaration stores and not of how a term names it.
+- **A guard bound as a hypothesis meets no key.** [A guard is a hypothesis its arm binds](../soundness/301-a-guard-is-a-hypothesis-its-arm-binds.md) would have an arm bind its guard's fact, which a statement meets by conversion, and conversion unfolds a name as no key does, so a guard and a statement spelled apart would meet. Its count is read before the spelling here is chosen: where it lands, the key this specification answers for is gone.
 
 ## Refinement
 

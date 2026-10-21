@@ -66,7 +66,7 @@ Reserved with the layer it serves, and refined with it when the trigger is met:
 
 ## What an arm's equation leaves unanswered
 
-An arm's equation answers the terms conversion holds equal to its scrutinee ([A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md)). Three positions stop short of that, each in the refusing direction, and each waits for a program that needs it.
+An arm's equation answers the terms conversion holds equal to its scrutinee ([A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md)). [A guard is a hypothesis its arm binds](../soundness/301-a-guard-is-a-hypothesis-its-arm-binds.md) would retire the equation; what each position below becomes under it is read when that specification is refined. Three positions stop short of that, each in the refusing direction, and each waits for a program that needs it.
 
 **A question inside a question.** A question a judgment's reduction puts to conversion is answered by plain reduction, which asks nothing. Under `match f(a + b) < 10` and, in its `true` arm, `match h(f(a + b) < 10) < 5`, the term `h(f(b + a) < 10) < 5` is not `true`: it is the inner guard's scrutinee only to a conversion that asks the outer guard about the respelled argument. A fold is the same: `h(f(a + b) == f(b + a)) == h(true)` does not reduce, which both checkers' `a_fold_inside_a_question_is_not_taken_again` hold. The decision rejects a third reduction until a program needs one.
 
