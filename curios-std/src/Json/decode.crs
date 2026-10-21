@@ -1,12 +1,12 @@
 use /std/{Str, Bool, Char, Flt, Nat, Int, Parse, Option, List, Result, Json};
 
-let parse_null: Parse(Str, Json) =
+let null_value: Parse(Str, Json) =
     Parse/map(Parse/str/literal("null"), (_) => Json/null());
 
-let parse_true_val: Parse(Str, Json) =
+let true_value: Parse(Str, Json) =
     Parse/map(Parse/str/literal("true"), (_) => Json/bool(true));
 
-let parse_false_val: Parse(Str, Json) =
+let false_value: Parse(Str, Json) =
     Parse/map(Parse/str/literal("false"), (_) => Json/bool(false));
 
 --- The number a run of decimal digits spells, `0` for an empty one.
@@ -52,7 +52,7 @@ let exp_part() -> Parse(Str, Int) =
     match marker | some(_) => Parse/commit(exp_fields()) | none() => Parse/pure(+0) end;
 
 --- A number as RFC 8259 §6 writes one — `-? (0 | [1-9][0-9]*) (\.[0-9]+)? ([eE][+-]?[0-9]+)?` — converted once, through `Flt/of_decimal`. One past binary64's range is refused; one that rounds to zero is zero of its sign.
-let parse_num() -> Parse(Str, Json) =
+let number() -> Parse(Str, Json) =
     let minus = Parse/optional(Parse/str/expect('-'))!;
     let whole = int_part()!;
     let fraction = frac_part()!;
@@ -94,7 +94,7 @@ let scalar(code: Nat) -> Parse(Str, Str) =
     | none() => Parse/fail("invalid Unicode scalar")
     end;
 
-let parse_unicode() -> Parse(Str, Str) =
+let unicode_escape() -> Parse(Str, Str) =
     let hi = hex4()!;
     match hi >= 0xD800 && hi <= 0xDBFF
     | false => scalar(hi)
@@ -119,19 +119,19 @@ let escape_fields() -> Parse(Str, Str) =
     | 'n' => Parse/pure("\n")
     | 'r' => Parse/pure("\r")
     | 't' => Parse/pure("\t")
-    | 'u' => parse_unicode()
+    | 'u' => unicode_escape()
     | _ => Parse/fail("unknown escape")
     end;
 
-let parse_str_escape() -> Parse(Str, Str) =
+let str_escape() -> Parse(Str, Str) =
     let _ = Parse/str/expect('\\')!;
     Parse/commit(escape_fields());
 
-let parse_str_segment: Parse(Str, Str) =
+let str_segment: Parse(Str, Str) =
     Parse/str/take_while(is_unescaped);
 
 --- A raw control character, refused where it stands: declining here would end the string's body, and the report would name the closing quote the string never reached.
-let parse_str_control() -> Parse(Str, Str) =
+let str_control() -> Parse(Str, Str) =
     let next = Parse/str/peek!;
     match next
     | some(c) =>
@@ -142,18 +142,18 @@ let parse_str_control() -> Parse(Str, Str) =
     | none() => Parse/fail("no control character")
     end;
 
-let parse_str_body: Parse(Str, List(Str)) =
-    Parse/many0(Parse/or(parse_str_escape(), Parse/or(parse_str_control(), parse_str_segment)));
+let str_body: Parse(Str, List(Str)) =
+    Parse/many0(Parse/or(str_escape(), Parse/or(str_control(), str_segment)));
 
 --- A string: the pieces of the input between its escapes, and the character each escape names, joined. Every piece is text because the input is, so nothing is checked again.
-let parse_raw_str() -> Parse(Str, Str) =
+let raw_str() -> Parse(Str, Str) =
     let _ = Parse/str/expect('"')!;
-    let pieces = parse_str_body!;
+    let pieces = str_body!;
     let _ = Parse/str/expect('"')!;
     Parse/pure(Str/flatten(pieces));
 
-let parse_str_value: Parse(Str, Json) =
-    Parse/map(parse_raw_str(), (s) => Json/str(s));
+let str_value: Parse(Str, Json) =
+    Parse/map(raw_str(), (s) => Json/str(s));
 
 let is_ws(c: Char) -> Bool =
     match Char/to_nat(c)
@@ -198,25 +198,25 @@ let value() -> Parse(Str, Json) =
     let _ = ws!;
     let next = peek_char()!;
     match Char/to_nat(next)
-    | 'n' => parse_null
-    | 't' => parse_true_val
-    | 'f' => parse_false_val
-    | '"' => parse_str_value
-    | '[' => parse_arr
-    | '{' => parse_obj
+    | 'n' => null_value
+    | 't' => true_value
+    | 'f' => false_value
+    | '"' => str_value
+    | '[' => array
+    | '{' => object
     | _ =>
         match next == '-' || Char/is_ascii_digit(next)
-        | true => parse_num()
+        | true => number()
         | false => Parse/fail("expected value")
         end
     end
-and parse_arr: Parse(Str, Json) =
+and array: Parse(Str, Json) =
     Parse/map(bracketed('[', value(), ']', "expected ',' or ']'"), (elems) => Json/arr(elems))
-and parse_obj: Parse(Str, Json) =
-    Parse/map(bracketed('{', parse_pair(), '}', "expected ',' or '}'"), (pairs) => Json/obj(pairs))
-and parse_pair() -> Parse(Str, {Str, Json}) =
+and object: Parse(Str, Json) =
+    Parse/map(bracketed('{', member(), '}', "expected ',' or '}'"), (pairs) => Json/obj(pairs))
+and member() -> Parse(Str, {Str, Json}) =
     let _ = ws!;
-    let key = parse_raw_str()!;
+    let key = raw_str()!;
     Parse/commit(member_value(key))
 and member_value(key: Str) -> Parse(Str, {Str, Json}) =
     let _ = symbol(':')!;
