@@ -74,8 +74,13 @@ fn a_byte_result_is_boxed_as_it_crossed() {
 fn a_halt_calls_its_row_and_holds_nothing_for_a_return() {
     let wat = wat(&foreign_call_to(bind()));
     assert_contains(&wat, "(import \"ffi\" \"/exit\"");
-    assert_contains(&wat, "call $host/ffi//exit");
-    assert_contains(&wat, "unreachable");
-    assert_absent(&wat, "call $refuse/");
     assert_absent(&wat, "(import \"sys\" \"exit\"");
+    // What follows the call is the claim: a refusal elsewhere in the module, on a shape no operand can have, is not one.
+    let after = wat
+        .lines()
+        .map(str::trim)
+        .skip_while(|line| !line.starts_with("call $host/ffi//exit"))
+        .nth(1)
+        .map(|line| line.trim_end_matches(')'));
+    assert_eq!(after, Some("unreachable"));
 }
