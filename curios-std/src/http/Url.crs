@@ -68,9 +68,6 @@ let scheme() -> Parse(Str, Scheme) =
     | _ => Parse/fail(Fmt/render("unknown scheme '%'")(name))
     end;
 
-let is_digit(c: Char) -> Bool =
-    Nat/in_range(Char/to_nat(c), '0', '9');
-
 -- Whether the authority ends here: at the path, the query, the fragment, or the end of the text.
 let ends_authority(next: Option(Char)) -> Bool =
     match next
@@ -87,7 +84,7 @@ let ends_authority(next: Option(Char)) -> Bool =
 -- The port after a `:`: its digits up to where the authority ends. None is the scheme's, as RFC 3986 §3.2.3 reads an empty port, and a number no port holds is refused here rather than at the connection.
 let port_number(s: Scheme) -> Parse(Str, Nat) =
     let _ = Parse/str/expect(':')!;
-    let digits = Parse/str/take_while(is_digit)!;
+    let digits = Parse/str/take_while(Char/is_ascii_digit)!;
     let next = Parse/str/peek!;
     match ends_authority(next)
     | false => Parse/fail("a port is a number")
