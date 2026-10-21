@@ -70,7 +70,7 @@ let uncons(z: Bytes) -> Option({Byte, Bytes}) =
 --- A cons is injective in its head.
 ---
 --- Read through the cons taken apart above — what lets an encoding built by consing be taken apart again. `/std/Map`'s `Key` witnesses are where that is needed, which is outside this module's subtree.
-pub let cons_inj_head(
+pub let cons_injective_head(
     @k1: Byte,
     @p1: Bytes,
     @k2: Byte,
@@ -80,7 +80,7 @@ pub let cons_inj_head(
     Eq/cong((halves: {Byte, Bytes}) => halves.0, Option/some_injective(Eq/cong(uncons, e)));
 
 --- A cons is injective in its tail.
-pub let cons_inj_tail(
+pub let cons_injective_tail(
     @k1: Byte,
     @p1: Bytes,
     @k2: Byte,
@@ -119,9 +119,9 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq
                         end
                     | dq + 1 =>
                         let heads: Eq()(of_nat((np + 1) / 256), of_nat((dq + 1) / 256)) =
-                            cons_inj_tail(e);
+                            cons_injective_tail(e);
                         let digits: Eq()((np + 1) % 256, (dq + 1) % 256) =
-                            Eq/cong(Byte/to_nat, cons_inj_head(e));
+                            Eq/cong(Byte/to_nat, cons_injective_head(e));
                         let highs: Eq()((np + 1) / 256, (dq + 1) / 256) =
                             ih((np + 1) / 256, high_below(np + 1, True/qed()))(
                                 (dq + 1) / 256,

@@ -58,11 +58,11 @@ fn a_key_witness_out_of_its_order_is_rejected() {
                 | left() =>
                     match b
                     | left() => Eq/refl()
-                    | right() => match apart(Bytes/cons_inj_head(same)) end
+                    | right() => match apart(Bytes/cons_injective_head(same)) end
                     end
                 | right() =>
                     match b
-                    | left() => match apart(Eq/sym(Bytes/cons_inj_head(same))) end
+                    | left() => match apart(Eq/sym(Bytes/cons_injective_head(same))) end
                     | right() => Eq/refl()
                     end
                 end,

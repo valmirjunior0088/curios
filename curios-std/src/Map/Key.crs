@@ -38,7 +38,7 @@ satisfy Key(Nat) {
 
 --- The one byte itself, a cons onto no bytes: injective in its head, and ordered as its head is.
 satisfy Key(Byte) {
-    injective(a, b, same) = Bytes/cons_inj_head(@a, @x[], @b, @x[], same),
+    injective(a, b, same) = Bytes/cons_injective_head(@a, @x[], @b, @x[], same),
     monotone(a, b) =
         match a < b
         | true => Eq/refl()
