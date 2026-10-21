@@ -45,7 +45,7 @@ pub(crate) struct Witness {
     /// What is being put, in a few words.
     pub(crate) what: &'static str,
     pub(crate) proof: Proof,
-    /// What refuses it once its flaw is closed, by every checker listed and by the error each names: the rule is named, or a witness broken in some other way would pass. Written by [`refused!`](crate::refused).
+    /// What refuses it once its flaw is closed, by every checker listed and by the error each names, and, for an error every conversion raises, where it stands: the rule is named, or a witness broken in some other way would pass. Written by [`refused!`](crate::refused).
     pub(crate) expect: &'static [Expected],
 }
 

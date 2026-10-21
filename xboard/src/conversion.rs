@@ -18,7 +18,7 @@ pub(super) const CONVERSION: Part = Part {
         witnesses: &[Witness {
             what: "a match on a proof fired inside an arm at the payload the arm's case states, and answered again after the arm",
             proof: Proof::Module(a_reduct_read_under_an_arms_retyping),
-            expect: refused![kernel: curios_cert::Error::Mismatch { .. }],
+            expect: refused![kernel: curios_cert::Error::Mismatch { .. } in entry],
         }],
     }],
 };

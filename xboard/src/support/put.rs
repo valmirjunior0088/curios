@@ -90,6 +90,28 @@ pub(crate) fn raised(error: &curios_elab::Error) -> &curios_elab::Error {
     error
 }
 
+/// The declaration an elaborator's error was raised in, read beneath what located it: the innermost one a wrapper names, and none where it was raised at a program's closing term.
+pub(crate) fn declared_in(error: &curios_elab::Error) -> Option<&Global> {
+    match error {
+        curios_elab::Error::InDeclaration { names, error } => declared_in(error).or(names.first()),
+        curios_elab::Error::Located { error, .. }
+        | curios_elab::Error::InUnreachableArm { error, .. }
+        | curios_elab::Error::InScope { error, .. } => declared_in(error),
+        _ => None,
+    }
+}
+
+/// Where a refusal stands, as a report says it: in the declaration it names by its path, or at the closing term.
+pub(crate) fn standing_at(name: Option<&Global>) -> String {
+    match name {
+        None => "at the closing term".to_string(),
+        Some(Global::Authored(path)) => {
+            format!("in `/{}`", path.iter().collect::<Vec<_>>().join("/"))
+        }
+        Some(Global::Witness(_)) => "in a witness".to_string(),
+    }
+}
+
 /// The variant `error` is, as its `Debug` spells it.
 fn variant(error: &impl fmt::Debug) -> String {
     let spelled = format!("{error:?}");
@@ -110,21 +132,31 @@ impl Refusal {
         }
     }
 
-    /// The checker and the errors it raised, by variant: what a report notes beside a witness, and what an expectation that names an error is written from.
+    /// The checker and the errors it raised, by variant and by where each stands: what a report notes beside a witness, and what an expectation that names an error is written from.
     pub(crate) fn named(&self) -> String {
         match self {
             Refusal::Text(_) => "text".to_string(),
             Refusal::Elaborator { error, .. } => {
                 let mut variants = error
                     .each()
-                    .map(|member| format!("`{}`", variant(raised(member))))
+                    .map(|member| {
+                        format!(
+                            "`{}` {}",
+                            variant(raised(member)),
+                            standing_at(declared_in(member))
+                        )
+                    })
                     .collect::<Vec<_>>();
                 variants.dedup();
 
                 format!("elaborator {}", variants.join(" "))
             }
             Refusal::Unfinished(_) => "kernel, as unfinished".to_string(),
-            Refusal::Kernel(verdict) => format!("kernel `{}`", variant(&verdict.error)),
+            Refusal::Kernel(verdict) => format!(
+                "kernel `{}` {}",
+                variant(&verdict.error),
+                standing_at(verdict.name.as_ref())
+            ),
         }
     }
 }

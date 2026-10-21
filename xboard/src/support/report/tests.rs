@@ -4,6 +4,8 @@ use {
     super::*,
     crate::{Date, Proof, Refusal, refused},
     curios_cert::Verdict,
+    curios_core::Global,
+    curios_utilities::Qualifier,
 };
 
 const FORGED: Witness = Witness {
@@ -132,6 +134,59 @@ fn an_elaborators_error_is_named_beneath_what_located_it() {
     );
 }
 
+// A mismatch is every conversion's refusal, so a witness names where its flaw's construction stands: the error it expects raised in another declaration holds nothing shut, and one at the closing term meets only an expectation placed there.
+#[test]
+fn a_refusal_holds_only_where_the_witness_places_it() {
+    let declared = |name: &str| Global::Authored(Qualifier::from([name]));
+    let in_declaration = |name: &str| curios_elab::Error::InDeclaration {
+        names: vec![declared(name)],
+        error: Box::new(curios_elab::Error::Poisoned),
+    };
+    let placed = Witness {
+        expect: refused![elaborator: curios_elab::Error::Poisoned in "/f"],
+        ..FORGED
+    };
+
+    assert_eq!(
+        standing(
+            Status::Fixed,
+            &[placed],
+            &[by_elaborator(in_declaration("f"))]
+        ),
+        Standing::Holds
+    );
+    let Standing::Regressed(problems) = standing(
+        Status::Fixed,
+        &[placed],
+        &[by_elaborator(in_declaration("g"))],
+    ) else {
+        panic!("a refusal in another declaration held the witness shut");
+    };
+    assert!(problems[0].contains("`Poisoned` in `/g`"), "{problems:?}");
+
+    let at_entry = Witness {
+        expect: refused![kernel: curios_cert::Error::UntypedEntry in entry],
+        ..FORGED
+    };
+    let in_g = Answer::Judged(vec![Refusal::Kernel(Verdict {
+        name: Some(declared("g")),
+        error: curios_cert::Error::UntypedEntry,
+    })]);
+
+    assert_eq!(
+        standing(
+            Status::Fixed,
+            &[at_entry],
+            &[by_kernel(curios_cert::Error::UntypedEntry)]
+        ),
+        Standing::Holds
+    );
+    assert!(matches!(
+        standing(Status::Fixed, &[at_entry], &[in_g]),
+        Standing::Regressed(_)
+    ));
+}
+
 #[test]
 fn a_refusal_no_error_names_yet_holds_by_any_error_of_its_checker() {
     let unnamed = Witness {
@@ -248,7 +303,7 @@ fn a_run_puts_every_witness_and_says_where_its_ticket_stands() {
     assert!(printed.contains("xboard: 1 ticket(s) — 1 holding"));
     assert!(printed.contains("HOLDS      2026-10-02  A proof of `True` passes for one of `False`"));
     assert!(printed.contains(
-        "program  the proof of `True` — refused by the elaborator's `curios_elab::Error::TypeMismatch { .. }` [elaborator `TypeMismatch`]"
+        "program  the proof of `True` — refused by the elaborator's `curios_elab::Error::TypeMismatch { .. }` [elaborator `TypeMismatch` at the closing term]"
     ));
     assert!(printed.contains("conversion — 1 ticket(s), the last found 2026-10-02"));
     assert!(printed.contains("not put to the kernel: 1"));

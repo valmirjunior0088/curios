@@ -10,7 +10,7 @@ fn a_program_whose_tail_proves_something_else_is_refused_and_says_by_whom() {
     assert!(!probe.admitted());
     assert_eq!(probe.said(Checker::Elaborator), "refused");
     assert!(
-        said.starts_with("REFUSED    by elaborator `TypeMismatch`\n"),
+        said.starts_with("REFUSED    by elaborator `TypeMismatch` at the closing term\n"),
         "{said}"
     );
 }
