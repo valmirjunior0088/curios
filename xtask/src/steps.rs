@@ -2,9 +2,9 @@
 //!
 //! **A step is an action on a subject, and everything said of one is said here.** [`Step::row`] is an exhaustive match, so no step exists without a row: the subject and the action a person types to reach it, the steps run first whenever it is asked for, the tools it needs beyond cargo, and what it does, worded so that what only it catches is plain. The command line and its help, a bare subject's sequence and what the check workflow must run are read off these rows, so none of them is a second statement of one.
 //!
-//! **Format and lint follow a tree; build, test and install follow what is built from one.** A tree is a manifest root — the Rust workspace, the two npm packages under `editors/`, the Zed extension's own workspace and this program's — and a tracked file belongs to the tree of its nearest one, so a file added anywhere is already some tree's. `compiler`, `launcher`, `bundle`, `docs` and `instrumented` are builds of the workspace's tree, each in the configuration it ships or is measured in.
+//! **Format and lint follow a tree; build, test and install follow what is built from one.** A tree is a manifest root — the Rust workspace, the two npm packages under `editors/`, and the Zed extension's own workspace — and a tracked file belongs to the tree of its nearest one, so a file added anywhere is already some tree's. `compiler`, `launcher`, `bundle`, `docs`, `instrumented` and `tools` are builds of the workspace's tree, each in the configuration it ships or is measured in.
 //!
-//! **Day to day, one configuration: the one that ships.** `workspace`'s lint and tests build with default features, so a change is checked as the compiler a user runs and the prelude's images are built once for both. What only a feature compiles — the instrumentation `profile` turns on — is `instrumented`'s: to lint, with every feature on, and to test where a test needs nothing of the compiler. `docs` documents every item there is.
+//! **Day to day, one configuration: the one that ships.** `workspace`'s lint and tests build with default features and leave the workspace's own tools out, so a change is checked as the compiler a user runs and the prelude's images are built once for both; `tools` lints and tests the tools apart. What only a feature compiles — the instrumentation `profile` turns on — is `instrumented`'s: to lint, with every feature on, and to test where a test needs nothing of the compiler. `docs` documents every item there is.
 //!
 //! **The suite is compiled once.** `workspace test` is the one step that builds the compiler's tests, so a test of the compiler is in that run or in no step: a second run in another configuration, for the tests a feature adds or for one package alone, compiles the whole suite again for a handful of tests. The recorder's tests are the one second run, `instrumented test`, because theirs compiles none of it: `curios-profile` depends on nothing of the compiler, so its `enabled` feature is a build of that crate alone.
 //!
@@ -29,7 +29,7 @@ pub(crate) enum Subject {
     Grammar,
     Vscode,
     Zed,
-    Xtask,
+    Tools,
 }
 
 impl Subject {
@@ -45,7 +45,7 @@ impl Subject {
             Subject::Grammar => "The tree-sitter grammar",
             Subject::Vscode => "The VS Code extension",
             Subject::Zed => "The Zed extension",
-            Subject::Xtask => "These recipes, a workspace of their own",
+            Subject::Tools => "The workspace's own tools: these recipes, the bench and the board",
         }
     }
 }
@@ -100,9 +100,8 @@ pub(crate) enum Step {
     ZedLint,
     ZedBuild,
     ZedTest,
-    XtaskFormat,
-    XtaskLint,
-    XtaskTest,
+    ToolsLint,
+    ToolsTest,
 }
 
 /// One step as the table states it.
@@ -325,26 +324,19 @@ impl Step {
                 &[],
                 "Hold the Zed extension to the tree around it: the grammar revision it pins publishes this grammar, and its lints are the workspace's",
             ),
-            Step::XtaskFormat => always(
-                Subject::Xtask,
-                Action::Format,
-                &[],
-                &[],
-                "Format these recipes; as a check, alone fails on formatting drift in them",
-            ),
-            Step::XtaskLint => always(
-                Subject::Xtask,
+            Step::ToolsLint => always(
+                Subject::Tools,
                 Action::Lint,
                 &[],
                 &[],
-                "Lint every target of these recipes",
+                "Lint every target of the workspace's own tools, which the compiler's lint leaves out so that their dependencies give the compiler no feature it ships without",
             ),
-            Step::XtaskTest => always(
-                Subject::Xtask,
+            Step::ToolsTest => always(
+                Subject::Tools,
                 Action::Test,
                 &[],
                 &[Tool::Nextest],
-                "Run these recipes' tests: the table held to the command line and the check workflow, and each recipe's own",
+                "Run the tools' tests: these recipes' table held to the command line and the check workflow, each recipe's own, the bench's and the board's",
             ),
         }
     }

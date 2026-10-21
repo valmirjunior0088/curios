@@ -27,7 +27,13 @@ fn a_tree_inside_the_workspace_is_its_own_directory() {
 fn the_workspace_is_every_tracked_path_no_other_tree_stands_under() {
     assert_eq!(
         Tree::Workspace.holding(TRACKED.into_iter()),
-        ["Cargo.toml", "biome.json", "curios-browser", "programs"]
+        [
+            "Cargo.toml",
+            "biome.json",
+            "curios-browser",
+            "programs",
+            "xtask"
+        ]
     );
 }
 

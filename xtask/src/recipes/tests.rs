@@ -38,13 +38,19 @@ fn a_bare_subject_brings_no_step_of_another_but_its_prerequisites() {
 }
 
 #[test]
-fn no_selection_is_the_whole_workspace() {
+fn no_selection_is_the_workspace_but_its_tools() {
     assert_eq!(
         testing(None, &Request::whole()).unwrap(),
         [
             "nextest",
             "run",
             "--workspace",
+            "--exclude",
+            "xtask",
+            "--exclude",
+            "xbench",
+            "--exclude",
+            "xboard",
             "--all-targets",
             "--no-fail-fast",
             "--no-tests=warn",

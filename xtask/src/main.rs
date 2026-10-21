@@ -16,7 +16,7 @@
 //!
 //! **Five commands are not steps.** `gate` runs all of them, `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes what git does not track, except the worktrees under `.claude/worktrees`. None is a step, so none has a row; each keeps the parameters it had.
 //!
-//! **A dependency of nothing, and a workspace of its own.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of it, so it stands outside the compiler's workspace, where its dependencies' features unify into no build of the compiler and its own build waits on no lock of the compiler's target directory. Why, and what holds its manifest to the workspace's, is the README's decision.
+//! **A dependency of nothing, beside the compiler.** This crate is reached only through the `xtask` alias in `.cargo/config.toml`, and no crate may depend on it: its dependency tree exists to build the workspace, not to be part of the compiler, so it is a member the compiler's checks leave out of their selection, as they leave out the bench and the board, and its dependencies' features unify into no build of the compiler. Why is the README's decision.
 
 mod places;
 use places::*;
@@ -47,9 +47,6 @@ use installer::*;
 
 mod release;
 use release::*;
-
-#[cfg(test)]
-mod tests;
 
 use {
     clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum},
@@ -189,9 +186,9 @@ enum About {
         action: Option<ZedAction>,
     },
 
-    Xtask {
+    Tools {
         #[command(subcommand)]
-        action: Option<XtaskAction>,
+        action: Option<ToolsAction>,
     },
 }
 
@@ -220,7 +217,7 @@ impl About {
             About::Grammar { action } => selected(Subject::Grammar, action),
             About::Vscode { action } => selected(Subject::Vscode, action),
             About::Zed { action } => selected(Subject::Zed, action),
-            About::Xtask { action } => selected(Subject::Xtask, action),
+            About::Tools { action } => selected(Subject::Tools, action),
         }
     }
 }

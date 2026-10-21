@@ -8,7 +8,7 @@ use {
     crate::{
         BIOME, BROWSER_TRIPLE, HOST_TRIPLE, Step, Tree, artifact, ask, bindgen_web, built, cargo,
         file_with_inputs, grammar, inputs, modified, released, root, run, spelled,
-        target_directory, vscode, xtask, zed,
+        target_directory, vscode, zed,
     },
     clap::ValueEnum,
     std::{fs, path::Path, process::Command, time::Instant},
@@ -175,13 +175,13 @@ impl Step {
 
                 cargo(&arguments.iter().map(String::as_str).collect::<Vec<_>>())
             }
-            Step::InstrumentedLint => cargo(&[
-                "clippy",
-                "--workspace",
-                "--all-targets",
-                "--all-features",
-                KEEP_GOING,
-            ]),
+            Step::InstrumentedLint => cargo(
+                &["clippy"]
+                    .into_iter()
+                    .chain(scope(None))
+                    .chain(["--all-targets", "--all-features", KEEP_GOING])
+                    .collect::<Vec<_>>(),
+            ),
             Step::InstrumentedTest => cargo(&RECORDER_TESTING),
             Step::DocsBuild => docs_build(),
             Step::CompilerBuild => {
@@ -218,15 +218,20 @@ impl Step {
             Step::ZedLint => zed(&["clippy", "--all-targets", "--target", EXTENSION_TRIPLE]),
             Step::ZedBuild => zed(&["build", "--release", "--target", EXTENSION_TRIPLE]),
             Step::ZedTest => zed(&["test"]),
-            Step::XtaskFormat => xtask(&formatting(request.check)),
-            Step::XtaskLint => xtask(&["clippy", "--all-targets"]),
-            Step::XtaskTest => xtask(&["nextest", "run", "--no-fail-fast"]),
+            Step::ToolsLint => cargo(&tools(&["clippy"], &["--all-targets", KEEP_GOING])),
+            Step::ToolsTest => cargo(&tools(
+                &["nextest", "run"],
+                &["--all-targets", "--no-fail-fast"],
+            )),
         }
     }
 }
 
 /// The package the launcher is built from, under its default features alone.
 const LAUNCHER: &str = "curios-native";
+
+/// The workspace's own tools, which ship nothing: the compiler's checks leave them out, since cargo unifies a build's features across every package it selects and theirs would give the compiler's dependencies features no shipped compiler has.
+const TOOLS: [&str; 3] = ["xtask", "xbench", "xboard"];
 
 /// What a step that compiles several of the workspace's crates hands cargo: go on past a crate that fails, so one run reports every crate's errors rather than the first's. A test run says the same of its tests with nextest's own flag.
 const KEEP_GOING: &str = "--keep-going";
@@ -253,12 +258,25 @@ fn launcher_build() -> Result<(), String> {
     )
 }
 
-/// The packages a workspace check covers: the one it was given, or every member.
+/// The packages a workspace check covers: the one it was given, or every member but [`TOOLS`], which `tools` checks apart.
 fn scope(package: Option<&str>) -> Vec<&str> {
     match package {
         Some(package) => vec!["--package", package],
-        None => vec!["--workspace"],
+        None => ["--workspace"]
+            .into_iter()
+            .chain(TOOLS.iter().flat_map(|tool| ["--exclude", tool]))
+            .collect(),
     }
+}
+
+/// `command`, over [`TOOLS`] alone, then `options`.
+fn tools<'a>(command: &[&'a str], options: &[&'a str]) -> Vec<&'a str> {
+    command
+        .iter()
+        .copied()
+        .chain(TOOLS.iter().flat_map(|tool| ["--package", tool]))
+        .chain(options.iter().copied())
+        .collect()
 }
 
 /// The `cargo fmt` command line: every package of the workspace it runs in, written unless `check`.

@@ -210,19 +210,14 @@ impl Asks for ZedAction {
 }
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum XtaskAction {
-    Format {
-        #[arg(long, help = "Write nothing; fail where a file would change")]
-        check: bool,
-    },
+pub(crate) enum ToolsAction {
     Lint,
     Test,
 }
 
-impl Asks for XtaskAction {
+impl Asks for ToolsAction {
     fn asked(self) -> (Action, Request) {
         match self {
-            Self::Format { check } => (Action::Format, Request::formatting(check)),
             Self::Lint => (Action::Lint, Request::whole()),
             Self::Test => (Action::Test, Request::whole()),
         }

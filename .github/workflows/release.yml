@@ -40,9 +40,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-          workspaces: |
-            .
-            xtask
+          workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -71,9 +69,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
-          workspaces: |
-            .
-            xtask
+          workspaces: .
 
       - name: Build curios-js
         run: cargo xtask bundle build
@@ -102,9 +98,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: docs
-          workspaces: |
-            .
-            xtask
+          workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts

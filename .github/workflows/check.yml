@@ -37,9 +37,7 @@ jobs:
           tool: ${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            .
-            xtask
+          workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -65,9 +63,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: runtime-macos
-          workspaces: |
-            .
-            xtask
+          workspaces: .
       - name: Lint the runtime
         run: cargo xtask workspace lint curios-native
       - name: Test the runtime
@@ -87,9 +83,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: instrumented
-          workspaces: |
-            .
-            xtask
+          workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -115,9 +109,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: compiler
-          workspaces: |
-            .
-            xtask
+          workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -137,9 +129,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: docs
-          workspaces: |
-            .
-            xtask
+          workspaces: .
           cache-directories: |
             curios/.artifacts
             curios-binaryen/.artifacts
@@ -160,9 +150,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
-          workspaces: |
-            .
-            xtask
+          workspaces: .
       - name: Build
         run: cargo xtask bundle build
       - name: Test
@@ -184,7 +172,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: xtask
-          workspaces: xtask
+          workspaces: .
       - name: Install
         run: cargo xtask grammar install
       - name: Check formatting
@@ -210,7 +198,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: xtask
-          workspaces: xtask
+          workspaces: .
       - name: Install
         run: cargo xtask vscode install
       - name: Check formatting
@@ -239,7 +227,7 @@ jobs:
         with:
           key: wasm32-wasip2
           workspaces: |
-            xtask
+            .
             editors/zed
       - name: Check formatting
         run: cargo xtask zed format --check
@@ -253,8 +241,8 @@ jobs:
       - name: Check the extension against the tree
         run: cargo xtask zed test
 
-  xtask:
-    name: Recipes
+  tools:
+    name: Tools
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -266,11 +254,9 @@ jobs:
           tool: ${{ env.NEXTEST }}
       - uses: Swatinem/rust-cache@v2
         with:
-          key: xtask
-          workspaces: xtask
-      - name: Check formatting
-        run: cargo xtask xtask format --check
+          key: tools
+          workspaces: .
       - name: Lint
-        run: cargo xtask xtask lint
+        run: cargo xtask tools lint
       - name: Test
-        run: cargo xtask xtask test
+        run: cargo xtask tools test

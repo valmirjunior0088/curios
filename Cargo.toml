@@ -37,8 +37,9 @@ members = [
     "curios-cranelift",
     "xboard",
     "xbench",
+    "xtask",
 ]
-exclude = ["editors/zed", "xtask"]
+exclude = ["editors/zed"]
 
 [workspace.package]
 version = "0.16.11"
@@ -94,8 +95,9 @@ curios-cranelift = { path = "curios-cranelift" }
 curios = { path = "curios" }
 # One row for the engine's two crates: `curios-native` takes the runtime, `curios-cranelift` the backend, and a `.cwasm` the second writes is read back by the first, which Wasmtime refuses across versions.
 wasmtime = { version = "47.0.3", default-features = false }
-# One row each for the browser's two crates, `curios-js` exporting the compiler and `curios-browser` the run of what it compiles, which bind to one JavaScript side; `xtask`'s `wasm-bindgen-cli-support` generates that side's glue, and `the_bindings_generator_is_the_bindings_version` holds it to the `wasm-bindgen` row.
+# One row each for the browser's two crates, `curios-js` exporting the compiler and `curios-browser` the run of what it compiles, which bind to one JavaScript side, and for the generator `xtask` writes that side's glue with. The two refuse each other across versions, and cargo holds them to one: each pins `wasm-bindgen-shared` exactly, which declares a `links` key, so the lock can hold only one version of it.
 wasm-bindgen = { version = "0.2.126" }
+wasm-bindgen-cli-support = { version = "0.2.126" }
 js-sys = { version = "0.3.103" }
 
 [profile.dev]
