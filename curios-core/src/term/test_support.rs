@@ -78,6 +78,8 @@ pub(super) struct Registry {
     pub(super) definitions: BTreeMap<Global, (Vec<Variance>, usize)>,
     /// Each record-valued definition's field vectors, with its arity.
     pub(super) fields: BTreeMap<Global, (Vec<Vec<Variance>>, usize)>,
+    /// Each definition whose value is a field of one of its binders, with its arity.
+    pub(super) parameter_fields: BTreeMap<Global, (ParameterField, usize)>,
 }
 
 impl Families for Registry {
@@ -99,6 +101,10 @@ impl Families for Registry {
         let (fields, arity) = self.fields.get(name)?;
 
         Some((fields.get(slot)?.as_slice(), *arity))
+    }
+
+    fn parameter_field(&self, name: &Global) -> Option<(ParameterField, usize)> {
+        self.parameter_fields.get(name).copied()
     }
 }
 

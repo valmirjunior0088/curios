@@ -108,6 +108,36 @@ fn a_field_read_through_a_definition_holds_what_its_value_holds() {
     }
 }
 
+// **A definition whose value is a field of one of its binders holds what that field holds.** `get` is `c.t` beneath its binder, so `get(small)` is `small`'s field once `get` unfolds and holds no level, as `small.t` holds none above; a method named by its path, `Sized/Carrier(@Nat)`, is such a definition over its witness, and holds of it what the operator projecting the method holds. Read by the argument's own vector instead, each kept the level `small` and the witness are polymorphic in, which the definitions keep since their own types hold it.
+#[test]
+fn a_definition_that_forwards_a_field_holds_what_the_field_holds() {
+    let source = r#"
+        use /std/{Nat};
+        struct Config: Type { t: Type }
+        let small: Config = Config { t = Nat };
+        let get(c: Config) -> Type = c.t;
+        let through_get(x: get(small)) -> Nat = 0;
+        concept Sized(T: Type): Type { Carrier: Type }
+        satisfy Sized(Nat) { Carrier = Nat }
+        let named(x: Sized/Carrier(@Nat)) -> Nat = 0;
+        /std/print("read")
+        "#;
+
+    let parameters = universe_parameters(source);
+    for (name, count) in [
+        ("/small", 1),
+        ("the witness in the entry module", 1),
+        ("/through_get", 0),
+        ("/named", 0),
+    ] {
+        assert_eq!(
+            parameters.get(name),
+            Some(&count),
+            "a signature kept a level its forwarded field does not hold, or a definition lost its own: {parameters:?}",
+        );
+    }
+}
+
 // **A concept's method level is its family's domain.** `ret`'s `@A: Type` is bounded only by the domain of `M`, and cumulativity already lets a caller pass anything smaller, so it is that domain: `Mon` takes its family's domain and codomain and no parameter per method. Generalized apart, a method level is one an implementation may answer at below its family's domain, which would leave `Result`'s `Monad` witness taking `Type 0` payloads only. `Two` is the control: its `pick` is bounded by two families' domains, which name no one level to be, so it keeps a level of its own.
 #[test]
 fn a_method_level_bounded_by_one_domain_is_that_domain() {

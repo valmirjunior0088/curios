@@ -103,6 +103,7 @@ fn item(name: &str) -> Item {
         proof: false,
         variances: Vec::new(),
         field_variances: Vec::new(),
+        parameter_field: None,
         type_: Term::type_ground(),
         body: Term::type_ground(),
     })

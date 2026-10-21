@@ -64,6 +64,7 @@ fn project_definition(definition: &Definition) -> Definition {
         proof: definition.proof,
         variances: Vec::new(),
         field_variances: Vec::new(),
+        parameter_field: None,
         type_: project_erased_universes(&definition.type_),
         body: project_erased_universes(&definition.body),
     }
@@ -230,6 +231,7 @@ impl<'a> Unit<'a> {
             // Out of its universes a definition has no level to be irrelevant in.
             variances: &[],
             field_variances: &[],
+            parameter_field: None,
             island: definition.island,
         })
     }

@@ -1611,7 +1611,7 @@ impl Term {
     ///
     /// A ground `Type 0` is a level position like any other, so `(Type 0, Type u)` against `(Type u, Type 0)` differs in two pairs rather than aligning `u` with itself. A pair is reported once however many paths reach it, which is all its readers need: each asks whether every pair can be identified, never how many times one occurs.
     ///
-    /// **A level a family is irrelevant in is not a difference.** `families` is the caller's reading of the nominal families and of the definitions, and under it the pair at each position a vector calls irrelevant is set apart ([`LevelDifferences::irrelevant`]), at a nominal node, at a family's name or a definition applied in full, at a projection of such a definition, by the vector of the field it reads ([`Families::field`]), and at an `induct`'s former applied in full by its group's projection: two instances apart in such a level alone are one term, so there is nothing to identify. Under `()` nothing is set apart and no former is read as its node.
+    /// **A level a family is irrelevant in is not a difference.** `families` is the caller's reading of the nominal families and of the definitions, and under it the pair at each position a vector calls irrelevant is set apart ([`LevelDifferences::irrelevant`]), at a nominal node, at a family's name or a definition applied in full, at a projection of such a definition, by the vector of the field it reads ([`Families::field`]), at a definition applied in full whose value is a field of one of its binders, as that field of the argument the binder takes ([`Families::parameter_field`]), and at an `induct`'s former applied in full by its group's projection: two instances apart in such a level alone are one term, so there is nothing to identify. Under `()` nothing is set apart and no former is read as its node.
     ///
     /// **A function short of its application is neither.** Two instances of a former or of a definition that are not applied in full, apart in a level their vector calls irrelevant, two projections of one former that are not, and two lambdas apart in a binder's annotation, convert where they meet at their function type, eta applying both to the same binders before either is read, and are compared level by level at any other, which the walk cannot tell. Their pairs are set apart as curried ([`LevelDifferences::curried`]) for a caller that goes on to the type; a reading that asks for none of this ([`Families::sets_curried_apart`]) has them compared. A lambda is what a definition's bare instance unfolds to, so the two are read alike whichever of them a reduction left standing.
     ///
@@ -1703,6 +1703,32 @@ impl Term {
             // Two projections of a former short of its full application: read level by level they differ in their binders' annotations too, which eta never compares, so the whole pair is the caller's.
             if families.sets_curried_apart() && this.curried_former() && that.curried_former() {
                 work.push((depth, true, this, that));
+                continue;
+            }
+
+            // A definition whose value is a field of one of its binders, applied in full, is that field of the argument the binder takes: a method named by its path is read as the operator that projects it is. Two instances of one such definition pair their levels by its vector first, as any definition applied in full does.
+            let (this_forwarded, that_forwarded) = (
+                Forwarded::of(&this, families),
+                Forwarded::of(&that, families),
+            );
+            if this_forwarded.is_some() || that_forwarded.is_some() {
+                if let (Some(this_forwarded), Some(that_forwarded)) =
+                    (&this_forwarded, &that_forwarded)
+                    && this_forwarded.name == that_forwarded.name
+                {
+                    let name = this_forwarded.name;
+                    pair_instances(
+                        &mut differences,
+                        depth,
+                        this_forwarded.universes,
+                        that_forwarded.universes,
+                        pairs_sorts,
+                        |position| families.variance(name, position),
+                    )?;
+                }
+                let this_field = this_forwarded.map_or_else(|| this.clone(), |f| f.field);
+                let that_field = that_forwarded.map_or_else(|| that.clone(), |f| f.field);
+                work.push((depth, false, this_field, that_field));
                 continue;
             }
 
@@ -1964,6 +1990,33 @@ fn named(head: &Term) -> Option<(&Global, &Universes)> {
     };
 
     Some((var.as_free()?.as_global()?, universes))
+}
+
+/// A definition applied in full whose value is a field of one of its binders ([`Families::parameter_field`]): the definition, its instance, and the field of the argument the binder takes, which is what the application unfolds to.
+struct Forwarded<'a> {
+    name: &'a Global,
+    universes: &'a Universes,
+    field: Term,
+}
+
+impl<'a> Forwarded<'a> {
+    fn of(term: &'a Term, families: &impl Families) -> Option<Self> {
+        let Subterm::Apply(apply) = term.look() else {
+            return None;
+        };
+        let (name, universes) = named(&apply.head)?;
+        let (field, arity) = families.parameter_field(name)?;
+        let arguments: Vec<&Term> = apply.params().collect();
+        if arguments.len() != arity {
+            return None;
+        }
+
+        Some(Self {
+            name,
+            universes,
+            field: Term::proj((*arguments.get(field.parameter)?).clone(), field.slot),
+        })
+    }
 }
 
 /// Two instances of one head paired level by level, as `variance` reads each position, and their sorts where the reading pairs them: `None` where they are apart in more than levels, with nothing recorded.

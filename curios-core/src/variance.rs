@@ -2,7 +2,7 @@
 //!
 //! Representation, not analysis, for the reason `polarity` gives: the vector this describes is stored on `InductDecl`/`StructDecl` and on `Definition` and rides the prelude archive, so the type belongs with the entries that carry it, while what *computes* it stays in `curios-analysis`'s `variance`.
 
-use super::{Global, InductDecl, StructDecl};
+use super::{Global, InductDecl, ParameterField, StructDecl};
 
 /// What a walk aligning two terms' levels is told of the nominal families and of the definitions, by a caller that compares instances by variance. `()` tells it nothing, and every level is then aligned.
 ///
@@ -19,6 +19,11 @@ pub trait Families {
 
     /// The vector of field `slot` of a definition whose value is a struct or tuple literal, with how many arguments one spine applies the definition in full by: `None` where this registry holds none for it, which is how a caller that reads no definition answers ([`Definition::field_variances`](crate::Definition::field_variances)).
     fn field(&self, _: &Global, _: usize) -> Option<(&[Variance], usize)> {
+        None
+    }
+
+    /// The field of one of its binders a definition's value is, with how many arguments one spine applies the definition in full by: `None` where this registry holds none for it, which is how a caller that reads no definition answers ([`Definition::parameter_field`](crate::Definition::parameter_field)).
+    fn parameter_field(&self, _: &Global) -> Option<(ParameterField, usize)> {
         None
     }
 

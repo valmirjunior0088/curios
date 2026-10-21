@@ -13,8 +13,8 @@ use {
     crate::{Parts, Question},
     curios_core::{
         Bound, ConceptDecl, Definition, DefinitionKind, InductDecl, Item, MetaRenaming, Module,
-        Nominal, Place, Places, RecItem, Sharing, StructDecl, Telescope, Term, UniverseContext,
-        Variance,
+        Nominal, ParameterField, Place, Places, RecItem, Sharing, StructDecl, Telescope, Term,
+        UniverseContext, Variance,
     },
     curios_utilities::digest,
 };
@@ -60,9 +60,10 @@ impl Same {
                 && (made.proof || spelled_alike(&made.body, &held.body)),
             kind,
             totality,
-            // A field's vector is read as a question about the definition's vectors, so both are this one part.
+            // A field's vector, and the field of a binder the value is, are read as a question about the definition's vectors, so all three are this one part.
             variances: made.variances == held.variances
-                && made.field_variances == held.field_variances,
+                && made.field_variances == held.field_variances
+                && made.parameter_field == held.parameter_field,
             ..Self::default()
         }
     }
@@ -237,12 +238,13 @@ pub(crate) fn item_part_digest(
         }
         Question::Totality(_) => sealed(curios_archive::to_bytes(&totality)).map(Some),
         Question::Variances(_) => {
-            // A group's member files no vector, its own or its fields'.
-            let variances: (Vec<Variance>, Vec<Vec<Variance>>) =
-                plain.map_or_else(Default::default, |definition| {
+            // A group's member files no vector, its own or its fields', and no binder's field.
+            let variances: (Vec<Variance>, Vec<Vec<Variance>>, Option<ParameterField>) = plain
+                .map_or_else(Default::default, |definition| {
                     (
                         definition.variances.clone(),
                         definition.field_variances.clone(),
+                        definition.parameter_field,
                     )
                 });
 

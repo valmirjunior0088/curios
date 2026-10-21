@@ -78,10 +78,11 @@ use {
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Declarations, Definition,
         DefinitionKind, Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
         InductDecl, InductInstance, Item, Level, Metavar, MetavarId, MetavarOrigin, MetavarSpine,
-        Minted, Mints, NumLit, Quality, RecGroup, ReduceError, StructDecl, StructInstance, Subterm,
-        Term, Totality, Trace, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseError, UniverseMetaId, UniverseRole, Universes, Variance, WitnessKey,
-        WitnessOrigin, instantiate_universes_scoped, project_erased_universes,
+        Minted, Mints, NumLit, ParameterField, Quality, RecGroup, ReduceError, StructDecl,
+        StructInstance, Subterm, Term, Totality, Trace, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
+        Universes, Variance, WitnessKey, WitnessOrigin, instantiate_universes_scoped,
+        project_erased_universes,
     },
     curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
@@ -690,6 +691,11 @@ impl<'s> Context<'s> {
             &definition.field_variances,
             arity,
         );
+        self.typing.program.record_parameter_field(
+            &definition.name,
+            definition.parameter_field,
+            arity,
+        );
     }
 
     pub(crate) fn definition_variances(&self, name: &Global) -> Option<(&[Variance], usize)> {
@@ -705,6 +711,12 @@ impl<'s> Context<'s> {
     ) -> Option<(&[Variance], usize)> {
         self.asks(&Free::Global(*name), Question::Variances);
         self.typing.program.field_variances(name, slot)
+    }
+
+    /// The field of one of its binders a definition's value is, with its arity: a read of the definition's vectors, as [`Self::definition_variances`] is.
+    pub(crate) fn parameter_field(&self, name: &Global) -> Option<(ParameterField, usize)> {
+        self.asks(&Free::Global(*name), Question::Variances);
+        self.typing.program.parameter_field(name)
     }
 
     /// Take the terms recorded since `mark`: a published declaration's, or the entry's, which (V) reads last.

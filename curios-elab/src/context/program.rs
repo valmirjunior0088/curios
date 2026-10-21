@@ -6,8 +6,8 @@ use {
     super::InScope,
     crate::{Error, Witness},
     curios_core::{
-        ConceptDecl, Global, HeadKey, InductDecl, StructDecl, Term, Totality, UniverseContext,
-        Variance, WitnessKey,
+        ConceptDecl, Global, HeadKey, InductDecl, ParameterField, StructDecl, Term, Totality,
+        UniverseContext, Variance, WitnessKey,
     },
     curios_utilities::{Mount, Qualifier},
     std::collections::BTreeMap,
@@ -32,6 +32,8 @@ pub(crate) struct Program<'s> {
     variances: BTreeMap<Global, (Vec<Variance>, usize)>,
     /// Each finished record-valued definition's field vectors with its arity, kept for a definition one of whose fields is irrelevant in some level: a projection of any other is read by the definition's own vector, which is what a name with no entry answers.
     field_variances: BTreeMap<Global, (Vec<Vec<Variance>>, usize)>,
+    /// Each finished definition whose value is a field of one of its binders, with which and its arity ([`curios_core::Definition::parameter_field`]).
+    parameter_fields: BTreeMap<Global, (ParameterField, usize)>,
     /// Every prefix this compilation mounts — the scope's, then the unit's own. Accumulated as each module is seeded, from the `mounts` that module carries, so the elaborator answers a privilege question out of what was actually mounted rather than out of a stamp copied onto each declaration.
     mounts: Vec<Mount>,
 }
@@ -344,6 +346,27 @@ impl<'s> Program<'s> {
         match self.field_variances.get(name) {
             Some((fields, arity)) => Some((fields.get(slot)?.as_slice(), *arity)),
             None => self.scope?.definition(name)?.field_irrelevance(slot),
+        }
+    }
+
+    /// File which of a finished definition's binders its value is a field of, replacing what an earlier elaboration of the name left.
+    pub(crate) fn record_parameter_field(
+        &mut self,
+        name: &Global,
+        field: Option<ParameterField>,
+        arity: usize,
+    ) {
+        match field {
+            Some(field) => self.parameter_fields.insert(*name, (field, arity)),
+            None => self.parameter_fields.remove(name),
+        };
+    }
+
+    /// The field of one of its binders a definition's value is, with its arity.
+    pub(crate) fn parameter_field(&self, name: &Global) -> Option<(ParameterField, usize)> {
+        match self.parameter_fields.get(name) {
+            Some(filed) => Some(*filed),
+            None => self.scope?.definition(name)?.parameter_field(),
         }
     }
 

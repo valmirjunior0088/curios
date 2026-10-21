@@ -217,6 +217,62 @@ fn a_field_of_a_definition_applied_in_full_is_read_by_its_vector() {
     );
 }
 
+// A definition whose value is a field of one of its binders, applied in full, is that field of the argument the binder takes: its own levels pair by its vector, and the argument is read as that field is, a level the argument's value names only elsewhere set apart. The operator's spelling, the field projected off the argument, is read alike. Read with no such fact, the argument is read by its own vector and every level of it compared.
+#[test]
+fn a_definition_that_forwards_a_field_is_read_as_that_field() {
+    let definitions = BTreeMap::from([
+        (nominal("carrier"), (vec![STAR], 2)),
+        (nominal("witness"), (vec![EQUAL, EQUAL], 1)),
+    ]);
+    let fields = BTreeMap::from([(nominal("witness"), (vec![vec![STAR, EQUAL]], 1))]);
+    let forwarding = Registry {
+        definitions: definitions.clone(),
+        fields: fields.clone(),
+        parameter_fields: BTreeMap::from([(
+            nominal("carrier"),
+            (
+                ParameterField {
+                    parameter: 1,
+                    slot: 0,
+                },
+                2,
+            ),
+        )]),
+        ..Registry::default()
+    };
+    let unmarked = Registry {
+        definitions,
+        fields,
+        ..Registry::default()
+    };
+    let witness = |levels: [u32; 2], inner: u32| {
+        Term::apply(named("witness", &levels), [Term::type_at(at(inner))])
+    };
+    let carrier = |own: u32, levels: [u32; 2], inner: u32| {
+        Term::apply(
+            named("carrier", &[own]),
+            [Term::type_ground(), witness(levels, inner)],
+        )
+    };
+
+    assert_eq!(
+        carrier(0, [0, 0], 3).level_differences(&carrier(5, [1, 2], 4), |_| false, &forwarding),
+        found(vec![pair(0, 2), pair(3, 4)], vec![pair(0, 5), pair(0, 1)])
+    );
+    assert_eq!(
+        carrier(0, [0, 0], 3).level_differences(
+            &Term::proj(witness([1, 2], 4), 0),
+            |_| false,
+            &forwarding
+        ),
+        found(vec![pair(0, 2), pair(3, 4)], vec![pair(0, 1)])
+    );
+    assert_eq!(
+        carrier(0, [0, 0], 3).level_differences(&carrier(5, [1, 2], 4), |_| false, &unmarked),
+        found(vec![pair(0, 1), pair(0, 2), pair(3, 4)], vec![pair(0, 5)])
+    );
+}
+
 // A definition short of its one spine is a function, as a family's bare name is: the level its value does not hold is left to the type, and the one it holds is compared.
 #[test]
 fn a_definition_passed_bare_is_left_to_its_type() {

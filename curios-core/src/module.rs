@@ -754,12 +754,25 @@ pub struct Definition {
     ///
     /// The elaborator's level alignment is its one reader, as it is of `variances`. The kernel forces a projection of a definition to its field before it compares heads, so a vector claiming an irrelevance the field denies costs a kernel refusal and admits nothing.
     pub field_variances: Vec<Vec<Variance>>,
+    /// Where this definition's value, beneath its own binders, is a field of one of them: which binder and which slot. Applied in full, the definition is that field of the argument the binder takes, so its levels are compared where that field's are, as a projection's are by [`Self::field_variances`], and not wherever the argument's own value mentions them: a method named by its path holds of a witness what the operator that projects it holds, and so does any definition written the same way. Written back by `curios-elab` beside `field_variances`, and `None` for any other definition.
+    ///
+    /// The elaborator's level alignment is its one reader, as it is of `variances`. The kernel unfolds a definition where two instances of it are apart, so a claim the body denies costs a kernel refusal and admits nothing.
+    pub parameter_field: Option<ParameterField>,
     /// Whether this definition is a proof a declaration wrote: one introduced as [`DefinitionKind::Authored`] whose type is a proposition, or a function into one. Its body is then read by its own check and by nothing after it: a judgment that asks what the name unfolds to is answered with nothing, in both checkers, so the name stands for a constant of its type. No judgment reads a proof's value, which is what a binder's mark rests on too ([`Scope::binds_proof`](super::Scope::binds_proof)), so a body withheld refuses nothing a body unfolded would admit, and what a later declaration reads of this one is its type.
     ///
     /// Written by `curios-elab` as the definition's item is published, with its binders' marks, and `false` until then. A constructor of a proposition and a law's projection are the compiler's own terms and stay what they unfold to. The certifier holds the mark one way, as it holds a binder's: a definition marked at a type it reads as no proposition is refused, and one left unmarked unfolds and is refused nowhere.
     pub proof: bool,
     pub type_: Term,
     pub body: Term,
+}
+
+/// The field of one of its own binders a definition's value is ([`Definition::parameter_field`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct ParameterField {
+    /// The binder of the definition's outer telescope, counted from the first.
+    pub parameter: usize,
+    pub slot: usize,
 }
 
 /// Export metadata for one member of a flat top-level recursive group. The member's type and body live only in [`RecItem::group`], scoped over every export in the group.
@@ -862,6 +875,7 @@ impl RecItem {
                 proof: definition.proof,
                 variances: Vec::new(),
                 field_variances: Vec::new(),
+                parameter_field: None,
                 type_: member.type_.open(&name_refs),
                 body: member.body.open(&name_refs),
             })
@@ -953,6 +967,7 @@ impl Definition {
             totality: Totality::default(),
             variances: Vec::new(),
             field_variances: Vec::new(),
+            parameter_field: None,
             proof: false,
             type_,
             body,
@@ -1018,6 +1033,7 @@ impl Item {
                 proof: definition.proof,
                 variances: definition.variances.clone(),
                 field_variances: definition.field_variances.clone(),
+                parameter_field: definition.parameter_field,
                 type_: sharing.share(&definition.type_),
                 body: sharing.share(&definition.body),
             }),

@@ -8,8 +8,8 @@
 
 use {
     curios_core::{
-        ConceptDecl, DefinitionKind, FuncType, Global, InductDecl, RecGroup, StructDecl, Subterm,
-        Term, Totality, UniverseContext, Variance, WitnessKey,
+        ConceptDecl, DefinitionKind, FuncType, Global, InductDecl, ParameterField, RecGroup,
+        StructDecl, Subterm, Term, Totality, UniverseContext, Variance, WitnessKey,
     },
     curios_utilities::Qualifier,
     std::fmt::Debug,
@@ -28,6 +28,8 @@ pub(crate) struct Defined<'a> {
     pub(crate) variances: &'a [Variance],
     /// The vector of each field of its value its publication filed, empty where it filed none ([`curios_core::Definition::field_variances`]).
     pub(crate) field_variances: &'a [Vec<Variance>],
+    /// The field of one of its binders its value is, where it is one ([`curios_core::Definition::parameter_field`]).
+    pub(crate) parameter_field: Option<ParameterField>,
     /// The module declaring it.
     pub(crate) island: Qualifier,
 }
@@ -52,6 +54,11 @@ impl<'a> Defined<'a> {
         }
 
         Some((self.field_variances.get(slot)?.as_slice(), self.arity()))
+    }
+
+    /// The field of one of its binders its value is, with its arity: what a context files for a definition of its own unit (`Context::record_definition_variances`), read here off the definition.
+    pub(crate) fn parameter_field(&self) -> Option<(ParameterField, usize)> {
+        Some((self.parameter_field?, self.arity()))
     }
 
     /// How many arguments one spine applies it in full by: its type's outer telescope.

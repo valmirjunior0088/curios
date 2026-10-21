@@ -2,15 +2,16 @@
 //!
 //! The analysis itself lives in `curios-analysis/src/variance.rs` (see that module for the rule and its rationale) and is run by both checkers. It runs here twice for each declaration, for one reason each. When a family's group finalizes, because a later item of the same declaration may compare two of its instances: that vector is kept on the context's registry entry, and it is the one the unit carries. And as the declaration is published, where its telescopes are final and meta-free: that run writes nothing and holds the carried vector to what the declaration says.
 //!
-//! The same walk reads a definition, once, where its levels have closed ([`definition_variances`]): which of them its value holds. A definition whose value is a struct or tuple literal is read a field at a time as well ([`field_variances`]), since a projection of it is that field's value. Those vectors are the elaborator's alone, since the kernel decides two instances of a definition by unfolding them, so nothing holds them to a second reading.
+//! The same walk reads a definition, once, where its levels have closed ([`definition_variances`]): which of them its value holds. A definition whose value is a struct or tuple literal is read a field at a time as well ([`field_variances`]), since a projection of it is that field's value, and one whose value is a field of one of its binders is marked so ([`parameter_field`]), since applied in full it is that field of its argument. Those vectors are the elaborator's alone, since the kernel decides two instances of a definition by unfolding them, so nothing holds them to a second reading.
 
 use {
     super::{Context, Error, Published, zonk_solved_term_metas},
     curios_analysis::{Declarations, VarianceVectors, held_by, held_levels, variance_vectors},
     curios_core::{
-        Bound, Families, Func, FuncType, Global, InductDecl, InductParam, Level, LevelHead, Struct,
-        StructDecl, Subterm, Term, Tuple, UniverseContext, UniverseMetaId, UniverseParam, Variance,
-        rewrite_universe_levels_scoped_shared, universe_params,
+        Bound, Families, Func, FuncType, Global, InductDecl, InductParam, Level, LevelHead,
+        ParameterField, Proj, Struct, StructDecl, Subterm, Term, Tuple, UniverseContext,
+        UniverseMetaId, UniverseParam, Variance, rewrite_universe_levels_scoped_shared,
+        universe_params,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -34,6 +35,10 @@ impl Families for Context<'_> {
 
     fn field(&self, name: &Global, slot: usize) -> Option<(&[Variance], usize)> {
         self.field_variances(name, slot)
+    }
+
+    fn parameter_field(&self, name: &Global) -> Option<(ParameterField, usize)> {
+        Context::parameter_field(self, name)
     }
 }
 
@@ -262,6 +267,35 @@ pub(crate) fn field_variances(
                 .collect()
         })
         .collect()
+}
+
+/// Which of a definition's binders its value is a field of, read where its levels have closed: the value beneath the definition's own binders a projection, by slot, of one of them, and `None` for any other definition ([`curios_core::Definition::parameter_field`]).
+pub(crate) fn parameter_field(type_: &Term, body: &Term) -> Option<ParameterField> {
+    let Subterm::FuncType(FuncType {
+        telescope: outer, ..
+    }) = &**type_
+    else {
+        return None;
+    };
+    let Subterm::Func(Func { telescope, .. }) = &**body else {
+        return None;
+    };
+    if telescope.len() != outer.len() {
+        return None;
+    }
+    let Subterm::Proj(Proj { head, field }) = &**telescope.terminal() else {
+        return None;
+    };
+    let Subterm::Var(var) = &**head else {
+        return None;
+    };
+    // Beneath the telescope's binders the nearest is index 0, so a binder's index counts back from the last.
+    let parameter = telescope.len().checked_sub(var.as_bound()? + 1)?;
+
+    Some(ParameterField {
+        parameter,
+        slot: field.slot()?,
+    })
 }
 
 /// The levels `type_`, a declaration's signature while its levels are still open, holds where conversion compares them: in each of its domains and in a terminal that is no sort, at a position no family or definition is irrelevant in. They are what [`UniverseSolver::finalize`](crate::UniverseSolver::finalize) holds as the declaration's parameters.

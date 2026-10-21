@@ -171,6 +171,7 @@ impl FlatLet {
             proof: false,
             variances: Vec::new(),
             field_variances: Vec::new(),
+            parameter_field: None,
             type_: self.type_,
             body: self.body,
         }

@@ -35,6 +35,7 @@ fn lowered_module(body: Term) -> Module {
                 proof: false,
                 variances: Vec::new(),
                 field_variances: Vec::new(),
+                parameter_field: None,
                 type_: nat(),
                 body,
             })]

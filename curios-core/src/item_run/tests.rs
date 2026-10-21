@@ -18,6 +18,7 @@ fn item(name: &str, body: Term) -> Item {
         proof: false,
         variances: Vec::new(),
         field_variances: Vec::new(),
+        parameter_field: None,
         type_: Term::type_ground(),
         body,
     })
