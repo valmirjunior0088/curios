@@ -137,7 +137,7 @@ pub let of_str(s: Str) -> Option(Nat) =
             Option/some(0),
             (cp, acc) =>
                 let n = acc!;
-                match Char/is_digit(cp)
+                match Char/is_ascii_digit(cp)
                 | true => Option/some(n * 10 + (Char/to_nat(cp) - '0'))
                 | false => Option/none()
                 end)

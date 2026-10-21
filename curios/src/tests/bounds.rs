@@ -230,7 +230,7 @@ const ROWS: &[Row] = &[
     ),
     // A conjunction in a hypothesis, through a function unfolding to one and through `&&`.
     claim(
-        "c: Char, h: Holds(Char/is_upper(c))",
+        "c: Char, h: Holds(Char/is_ascii_upper(c))",
         "Holds(c.code < 0x5B)",
     ),
     claim("x: Nat, h: Holds(x >= 3 && x <= 9)", "Holds(x <= 9)"),
@@ -243,7 +243,7 @@ const ROWS: &[Row] = &[
     body(
         "c: Char",
         "{}",
-        "match Char/is_upper(c) | true => let _: Holds(c.code + 0x20 < 0xD800) = True/proved(); () | false => () end",
+        "match Char/is_ascii_upper(c) | true => let _: Holds(c.code + 0x20 < 0xD800) = True/proved(); () | false => () end",
     ),
     // A range check's guard over a call and over a local definition: its bounds are proved over the operands the arm's key spells, which both checkers hold, where their reducts — the intrinsic a call unfolds to, the value a definition stands for — are a spelling one of them misses.
     body(

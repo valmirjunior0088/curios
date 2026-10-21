@@ -68,7 +68,7 @@ test a_bytes_literal_is_read_byte_by_byte =
             "expected \"ab\" at byte 0")]);
 
 let digit: Parse(Str, Char) =
-    Parse/label(Parse/str/char_if(Char/is_digit), "expected a digit");
+    Parse/label(Parse/str/char_if(Char/is_ascii_digit), "expected a digit");
 
 let comma: Parse(Str, {}) =
     Parse/str/literal(",");

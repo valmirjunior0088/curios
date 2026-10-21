@@ -4,7 +4,7 @@ use /std/time/{Date, Time, DateTime, Month, Offset, OffsetDateTime, Duration};
 -- One decimal digit.
 let digit: Parse(Str, Nat) =
     Parse/label(
-        Parse/map(Parse/str/char_if(Char/is_digit), (c) => Char/to_nat(c) - '0'),
+        Parse/map(Parse/str/char_if(Char/is_ascii_digit), (c) => Char/to_nat(c) - '0'),
         "expected digit");
 
 -- Exactly `count` digits, read onto `acc`.
@@ -21,7 +21,7 @@ let more_digits(acc: Nat, taken: Nat) -> Parse(Str, {value: Nat, taken: Nat}) =
     let next = Parse/str/peek!;
     match next
     | some(c) =>
-        match Char/is_digit(c)
+        match Char/is_ascii_digit(c)
         | true =>
             let _ = Parse/str/char!;
             more_digits(acc * 10 + (Char/to_nat(c) - '0'), taken + 1)
@@ -61,7 +61,7 @@ let fraction_digits(taken: Nat, acc: Nat) -> Parse(Str, Nat) =
     let next = Parse/str/peek!;
     match next
     | some(c) =>
-        match Char/is_digit(c)
+        match Char/is_ascii_digit(c)
         | true =>
             let _ = Parse/str/char!;
             match taken < 9
@@ -271,7 +271,7 @@ let total(hours: Nat, minutes: Nat, seconds: Nat, nanos: Nat) -> Parse(Str, Int)
 -- A duration's parts after its `PT`: hours, minutes and seconds, each optional and in that order, `last` the one read last, one at least.
 let duration_parts(hours: Nat, minutes: Nat, last: Nat) -> Parse(Str, Int) =
     let next = Parse/str/peek!;
-    let digits = match next | some(c) => Char/is_digit(c) | none() => false end;
+    let digits = match next | some(c) => Char/is_ascii_digit(c) | none() => false end;
     match digits
     | true =>
         let read = more_digits(0, 0)!;

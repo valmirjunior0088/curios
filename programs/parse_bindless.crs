@@ -13,7 +13,7 @@ let decode(s: Str) -> Option(Nat) =
             (cp, acc) =>
                 match acc: (_) => Option(Nat)
                 | some(n) =>
-                    match Char/is_digit(cp): (_) => Option(Nat)
+                    match Char/is_ascii_digit(cp): (_) => Option(Nat)
                     | true => Option/some(n * 10 + (Char/to_nat(cp) - 0x30))
                     | false => Option/none()
                     end

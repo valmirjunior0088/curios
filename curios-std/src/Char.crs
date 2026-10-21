@@ -75,7 +75,7 @@ pub let ge(a: Char, b: Char) -> Bool =
     a.code >= b.code;
 
 --- Space, tab, newline, vertical tab, form feed or carriage return.
-pub let is_whitespace(c: Char) -> Bool =
+pub let is_ascii_whitespace(c: Char) -> Bool =
     c.code == ' ' || Nat/in_range(c.code, '\t', '\r');
 
 --- Whether `c` is `Extended_Pictographic`, which rule GB11 of UAX #29 reads to keep an emoji sequence in one cluster.
@@ -87,28 +87,28 @@ pub let is_emoji_presentation(c: Char) -> Bool =
     unicode/held(/sys/unicode/emoji_presentation, c);
 
 --- `0` through `9`.
-pub let is_digit(c: Char) -> Bool =
+pub let is_ascii_digit(c: Char) -> Bool =
     Nat/in_range(c.code, '0', '9');
 
 --- `a` through `z`.
-pub let is_lower(c: Char) -> Bool =
+pub let is_ascii_lower(c: Char) -> Bool =
     Nat/in_range(c.code, 'a', 'z');
 
 --- `A` through `Z`.
-pub let is_upper(c: Char) -> Bool =
+pub let is_ascii_upper(c: Char) -> Bool =
     Nat/in_range(c.code, 'A', 'Z');
 
 --- An ASCII letter.
-pub let is_alpha(c: Char) -> Bool =
-    is_lower(c) || is_upper(c);
+pub let is_ascii_alpha(c: Char) -> Bool =
+    is_ascii_lower(c) || is_ascii_upper(c);
 
 --- An ASCII letter or digit.
-pub let is_alphanumeric(c: Char) -> Bool =
-    is_alpha(c) || is_digit(c);
+pub let is_ascii_alphanumeric(c: Char) -> Bool =
+    is_ascii_alpha(c) || is_ascii_digit(c);
 
 --- An ASCII uppercase letter lowered; anything else unchanged.
 pub let to_ascii_lower(c: Char) -> Char =
-    match is_upper(c)
+    match is_ascii_upper(c)
     | true =>
         Char { code = c.code + 0x20, @valid = Valid/below_surrogates(c.code + 0x20, True/proved()) }
     | false => c
@@ -116,7 +116,7 @@ pub let to_ascii_lower(c: Char) -> Char =
 
 --- An ASCII lowercase letter raised; anything else unchanged.
 pub let to_ascii_upper(c: Char) -> Char =
-    match is_lower(c)
+    match is_ascii_lower(c)
     | true =>
         Char { code = c.code - 0x20, @valid = Valid/below_surrogates(c.code - 0x20, True/proved()) }
     | false => c
@@ -132,7 +132,7 @@ pub let hex_digit(nibble: Nat) -> Char =
 --- The value of a hexadecimal digit in either case, or `none`.
 pub let of_hex_digit(c: Char) -> Option(Nat) =
     choose
-    | is_digit(c) => Option/some(c.code - '0')
+    | is_ascii_digit(c) => Option/some(c.code - '0')
     | Nat/in_range(c.code, 'a', 'f') => Option/some(c.code - 'a' + 10)
     | Nat/in_range(c.code, 'A', 'F') => Option/some(c.code - 'A' + 10)
     | _ => Option/none()

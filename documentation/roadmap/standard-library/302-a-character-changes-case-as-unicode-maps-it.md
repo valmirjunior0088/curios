@@ -5,7 +5,7 @@
 ## What is missing
 
 - **Case is ASCII's alone.** `Char/to_ascii_lower` and `Char/to_ascii_upper` (`curios-std/src/Char.crs`) change `A`–`Z` and `a`–`z` and leave every other character, and nothing in `Char` or `Str` maps, folds or compares the case of any other: `é` has no uppercase in `/std`, and `Straße` and `STRASSE` are no caseless match.
-- **The case predicates read ASCII ranges under unqualified names.** `Char/is_lower`, `is_upper`, `is_alpha` and `is_alphanumeric` test `a`–`z`, `A`–`Z` and the digits, so `is_lower('é')` is `false`, while the mappings beside them say `ascii` in their names.
+- **The case predicates are ASCII's alone.** `Char/is_ascii_lower`, `is_ascii_upper`, `is_ascii_alpha` and `is_ascii_alphanumeric` test `a`–`z`, `A`–`Z` and the digits, and no predicate reads what the database states of case.
 - **The database the toolchain pins holds no mapping.** `curios-unicode` reads five files of Unicode 18.0.0 — `EastAsianWidth.txt`, `emoji/emoji-data.txt`, `auxiliary/GraphemeBreakProperty.txt`, `DerivedCoreProperties.txt` and `auxiliary/GraphemeBreakTest.txt` — and keeps of `DerivedCoreProperties.txt` only `InCB` and `Default_Ignorable_Code_Point`, though the same file states `Lowercase`, `Uppercase` and `Alphabetic`. The mappings are in files it does not read: `UnicodeData.txt` (the simple ones), `SpecialCasing.txt` (the full and the conditional ones) and `CaseFolding.txt`.
 
 ## What is known
@@ -18,8 +18,8 @@
 
 - **Which mappings.** Simple mappings on `Char`, full ones on `Str`, folding for caseless comparison; whether title case is among them; and whether the final sigma's context is honoured, which reads the characters around the one mapped.
 - **Language.** Whether the Turkish and Lithuanian mappings are offered at all, with no locale in `/std` to choose them.
-- **The predicates.** Whether `is_lower`, `is_upper` and `is_alpha` come to read the database's properties, which changes what they answer for every caller, or keep ASCII under names that say so beside new ones that read it.
+- **The predicates.** `is_lower`, `is_upper` and `is_alpha` are free for the database's `Lowercase`, `Uppercase` and `Alphabetic`, the ASCII ones keeping `ascii` in their names; which of the database's other properties join them.
 - **The tables.** How `/sys/unicode` carries a mapping, and what the tables add to the archived prelude and to every program that maps case.
 - **Normalization.** Whether caseless matching stays the folds' equality, or reaches canonical caseless matching, which needs normalization and is a capability of its own.
 
-It retires when `Char` and `Str` map and fold case as the pinned database states, and each case predicate of `/std` reads what its name says.
+It retires when `Char` and `Str` map and fold case as the pinned database states, and `Char` answers the case properties under their plain names.

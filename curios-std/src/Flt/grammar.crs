@@ -72,7 +72,7 @@ pub let sign() -> Parse(Str, Bool) =
 
 --- A run of decimal digits, possibly empty.
 pub let decimal_run: Parse(Str, Str) =
-    Parse/str/take_while(Char/is_digit);
+    Parse/str/take_while(Char/is_ascii_digit);
 
 --- A run of hex digits in either case, possibly empty.
 pub let hex_run: Parse(Str, Str) =
@@ -133,7 +133,7 @@ pub let nan(negative: Bool, signaling: Bool) -> Parse(Str, Flt) =
 
 --- The infinity or NaN a special name spells, of `negative`'s sign: `inf` or `infinity`, and `nan` or `snan` with an optional payload, in any case. The decimal and hex readers share it, since both write these values the same way.
 pub let special(negative: Bool) -> Parse(Str, Flt) =
-    let name = Parse/str/take_while(Char/is_alpha)!;
+    let name = Parse/str/take_while(Char/is_ascii_alpha)!;
     choose
     | Str/eql_ascii_ci(name, "inf") || Str/eql_ascii_ci(name, "infinity") =>
         Parse/pure(match negative | true => -inf.0 | false => +inf.0 end)

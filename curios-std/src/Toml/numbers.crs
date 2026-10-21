@@ -57,7 +57,7 @@ let leading_zero: Parse(Str, Bool) =
             Parse/map(
                 Parse/and(
                     Parse/str/expect('0'),
-                    Parse/str/char_if((c) => Char/is_digit(c) || c == '_')),
+                    Parse/str/char_if((c) => Char/is_ascii_digit(c) || c == '_')),
                 (_) => true),
             Parse/pure(false)));
 
@@ -85,7 +85,7 @@ let prefixed() -> Parse(Str, Nat) =
 
 --- Refuse a leading zero past the digits it opens. Its callers commit to the refusal: a date or a time was offered the same digits first and declined, so what is left is a number written with a leading zero, and the reason is not one a later alternative may displace.
 let refuse_leading_zero(@A: Type) -> Parse(Str, A) =
-    let _ = Parse/str/take_while((c) => Char/is_digit(c) || c == '_')!;
+    let _ = Parse/str/take_while((c) => Char/is_ascii_digit(c) || c == '_')!;
     Parse/fail("leading zero");
 
 let decimal() -> Parse(Str, Nat) =

@@ -406,7 +406,7 @@ pub(super) const SHARED_PAYLOAD: &str = r#"
 pub(super) const PARSED_FLOAT: &str = r#"
     use /std/{Str, Flt, Parse, Nat, Char, List, Process};
     let digits() -> Parse(Str, Flt) =
-        let run = Parse/str/take_while(Char/is_digit)!;
+        let run = Parse/str/take_while(Char/is_ascii_digit)!;
         Parse/pure(Nat/to_flt(Str/len(run)));
     let whole() -> Parse(Str, Flt) =
         let value = digits()!;

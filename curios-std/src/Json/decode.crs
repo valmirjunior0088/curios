@@ -15,7 +15,7 @@ let digits_value(run: Str) -> Nat =
 
 --- A nonempty run of decimal digits, owed once the character before it has been read.
 let digits1() -> Parse(Str, Str) =
-    let run = Parse/str/take_while(Char/is_digit)!;
+    let run = Parse/str/take_while(Char/is_ascii_digit)!;
     match Str/is_empty(run) | true => Parse/fail("expected digit") | false => Parse/pure(run) end;
 
 --- The integer part: `0` alone, or a run of digits that does not open with it. A zero ends the part where it stands, so `01` is a zero with a `1` after it, which no document continues with.
@@ -25,7 +25,7 @@ let int_part() -> Parse(Str, Str) =
     | some(c) =>
         choose
         | c == '0' => Parse/map(Parse/str/char, (_) => "0")
-        | Char/is_digit(c) => Parse/str/take_while(Char/is_digit)
+        | Char/is_ascii_digit(c) => Parse/str/take_while(Char/is_ascii_digit)
         | _ => Parse/fail("expected number")
         end
     | none() => Parse/fail("expected number")
@@ -205,7 +205,7 @@ let value() -> Parse(Str, Json) =
     | '[' => parse_arr
     | '{' => parse_obj
     | _ =>
-        match next == '-' || Char/is_digit(next)
+        match next == '-' || Char/is_ascii_digit(next)
         | true => parse_num()
         | false => Parse/fail("expected value")
         end

@@ -325,14 +325,14 @@ pub let trim(s: Str) -> Str =
 
 --- Without leading whitespace.
 pub let trim_start(s: Str) -> Str =
-    match find_index(s, (c) => Bool/not(Char/is_whitespace(c)))
+    match find_index(s, (c) => Bool/not(Char/is_ascii_whitespace(c)))
     | some(at) => after(s, at)
     | none() => ""
     end;
 
 --- Without trailing whitespace.
 pub let trim_end(s: Str) -> Str =
-    before(s, back_over(s, At/finish(s), Char/is_whitespace));
+    before(s, back_over(s, At/finish(s), Char/is_ascii_whitespace));
 
 --- `s` without `prefix` at its front, or `none` when it does not begin with it.
 pub let strip_prefix(s: Str, prefix: Str) -> Option(Str) =

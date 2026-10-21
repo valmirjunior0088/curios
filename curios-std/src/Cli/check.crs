@@ -4,7 +4,7 @@ use /std/Cli/{Command, Field, Positional, Positionals, Problem, Spelled, text_of
 -- A character a name may hold: printable, and no space.
 let printable(c: Char) -> Bool =
     let n = Char/to_nat(c);
-    Bool/not(Char/is_whitespace(c)) && 0x20 < n && (n < 0x7F || 0x9F < n);
+    Bool/not(Char/is_ascii_whitespace(c)) && 0x20 < n && (n < 0x7F || 0x9F < n);
 
 -- A name a line can write after `--`, as a command's word: something, not led by `-`, and no `=`, which would end it early.
 let writable(name: Str) -> Bool =
@@ -21,7 +21,7 @@ let variable(name: Str) -> Bool =
 
 -- A short name a cluster can hold, and no digit, so a negative number reads as a value.
 let clusterable(c: Char) -> Bool =
-    printable(c) && c != '-' && c != '=' && Bool/not(Char/is_digit(c));
+    printable(c) && c != '-' && c != '=' && Bool/not(Char/is_ascii_digit(c));
 
 -- The names an option answers to.
 let spellings(f: Field) -> List(Spelled) =

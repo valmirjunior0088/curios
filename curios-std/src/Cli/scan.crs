@@ -146,7 +146,7 @@ let cluster(
 -- A token read as a value rather than a cluster: a dash and a digit, as a negative number is, which no short name can be.
 let numeric(token: Str) -> Bool =
     match Str/strip_prefix(token, "-")
-    | some(body) => match Str/to_list(body) | [d, .._] => Char/is_digit(d) | [] => false end
+    | some(body) => match Str/to_list(body) | [d, .._] => Char/is_ascii_digit(d) | [] => false end
     | none() => false
     end;
 
