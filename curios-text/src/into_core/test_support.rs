@@ -110,7 +110,7 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             ord: registry_field(&["std", "Ord", "Ord"], "ord"),
             lexicographic: registry_name(&["std", "Ord", "lexicographic"]),
             by_tag: registry_name(&["std", "Ord", "by_tag"]),
-            tied: registry_name(&["std", "Ord", "tied"]),
+            eq: registry_name(&["std", "Ord", "Ordering", "Ordering", "eq"]),
         },
         hash: HashDerivation {
             hash: registry_field(&["std", "Digest", "Digest"], "digest"),

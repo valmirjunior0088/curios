@@ -669,7 +669,7 @@ pub struct EqlDerivation {
     pub eql: ConceptField,
 }
 
-/// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair, and the two `/std/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `tied` filling the arm that cannot be reached because the tags already agreed.
+/// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair, and the two `/std/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `Ordering/eq` filling the arm that cannot be reached because the tags already agreed.
 ///
 /// No string machinery, and deliberately: `lexicographic` takes the payload answers alone, where `Spell`'s renderers take a constructor path. An `Ordering` has no text to re-parse and no report to read, so the path would be a literal nothing consumes — and carrying one would put every `/std/Str` name back into this row's vocabulary for a value that is never rendered.
 #[derive(Debug, Clone, Copy)]
@@ -677,7 +677,7 @@ pub struct OrdDerivation {
     pub ord: ConceptField,
     pub lexicographic: SyntaxName,
     pub by_tag: SyntaxName,
-    pub tied: SyntaxName,
+    pub eq: SyntaxName,
 }
 
 /// The names a derived `Hash` witness body is written with: its own method, applied to each payload, and the one `/std/Hash` combinator the body folds their encodings through — `tagged`, which writes the constructor's ordinal and frames every part.
@@ -737,10 +737,10 @@ impl Derivation {
                 ord: _,
                 lexicographic,
                 by_tag,
-                tied,
+                eq,
             }) => [method]
                 .into_iter()
-                .chain([lexicographic, by_tag, tied].map(SyntaxName::qualifier))
+                .chain([lexicographic, by_tag, eq].map(SyntaxName::qualifier))
                 .collect(),
             Derivation::Hash(HashDerivation { hash: _, tagged }) => {
                 vec![method, tagged.qualifier()]
@@ -761,8 +761,8 @@ impl Derivation {
                 ord,
                 lexicographic,
                 by_tag,
-                tied,
-            }) => vec![ord.concept, lexicographic, by_tag, tied],
+                eq,
+            }) => vec![ord.concept, lexicographic, by_tag, eq],
             Derivation::Hash(HashDerivation { hash, tagged }) => vec![hash.concept, tagged],
         }
         .into_iter()

@@ -109,7 +109,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
             ord: field(&["std", "Ord", "Ord"], "ord"),
             lexicographic: name(&["std", "Ord", "lexicographic"]),
             by_tag: name(&["std", "Ord", "by_tag"]),
-            tied: name(&["std", "Ord", "tied"]),
+            eq: name(&["std", "Ord", "Ordering", "Ordering", "eq"]),
         },
         hash: HashDerivation {
             hash: field(&["std", "Digest", "Digest"], "digest"),

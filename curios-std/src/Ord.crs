@@ -24,10 +24,6 @@ pub let lexicographic(pieces: List(Ordering)) -> Ordering =
 pub let by_tag(left: Nat, right: Nat, same: Ordering) -> Ordering =
     match Nat/ord(left, right) | lt() => Ordering/lt() | eq() => same | gt() => Ordering/gt() end;
 
---- Nothing left to distinguish.
-pub let tied: Ordering =
-    Ordering/eq();
-
 --- The law that `ord` answers the flipped answer with its operands swapped: `gt` one way exactly where `lt` the other, and `eq` both ways or neither.
 ---
 --- A comparator's proof of it stands in a module beside the comparator, `Nat/ord/flips`, and a theorem that needs it takes it as a hypothesis: `Ord` itself carries no law.

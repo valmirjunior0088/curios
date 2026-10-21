@@ -12,7 +12,7 @@
 //!
 //! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs and implicit payloads do not take part. `neq` negates the same comparison, built a second time over binders of its own.
 //!
-//! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `tied` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it.
+//! **The `Ord` body.** The constructors decide before the payloads do, which that shape cannot express: its inner default is one *constant* for every mismatched tag, and a mismatched pair orders by which constructor is which. So `ord` matches each argument once for its constructor's declaration position and hands both ordinals, with the lockstep comparison, to `/std/Ord`'s `by_tag` — which answers the tag order unless they agree and the comparison otherwise. The lockstep half is then `compare`'s shape exactly, `Ordering/eq` filling a default the tag decision has already made unreachable, and the payload answers fold through `lexicographic` first-difference-wins. A proof contributes no piece, which under that fold is answering `eq`. Linear in the constructor count; an arm per pair would be quadratic. The concept's superclass slot is left unfilled, so the key's `Eql` witness is resolved as it would be for a written literal that omitted it.
 
 use {
     super::{Context, Error, Mode, Opened, Sort, Underivable, elaborate, reduce_with},
@@ -922,7 +922,10 @@ fn order(
                         plicities.iter().copied().zip(rights).collect::<Vec<_>>(),
                         compared,
                     )],
-                    Some(Term::free_var(&Free::global(row.tied.qualifier()))),
+                    Some(Term::apply(
+                        Term::free_var(&Free::global(row.eq.qualifier())),
+                        Vec::<Term>::new(),
+                    )),
                 ));
                 arms.push((
                     tag.clone(),
