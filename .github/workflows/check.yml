@@ -16,9 +16,10 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   NEXTEST: 0.9.149
+  BIOME: 2.6.2
   NODE: 22
 
-# A job sets up a machine and runs steps of one subject, each a `cargo xtask` line. Which steps there are, and what each runs, is the table's in `xtask/src/steps.rs`; `every_step_has_a_job` there holds that these lines parse and together run every step. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; nextest's and Node's are this file's, stated once above.
+# A job sets up a machine and runs steps of one subject, each a `cargo xtask` line. Which steps there are, and what each runs, is the table's in `xtask/src/steps.rs`; `every_step_has_a_job` there holds that these lines parse and together run every step. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; nextest's, Biome's and Node's are this file's, stated once above.
 jobs:
   workspace:
     name: Workspace
@@ -29,6 +30,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
+      - name: Install Biome
+        run: npm install --global @biomejs/biome@${{ env.BIOME }}
       - name: Install the pinned toolchain
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
@@ -164,6 +167,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
+      - name: Install Biome
+        run: npm install --global @biomejs/biome@${{ env.BIOME }}
           cache: npm
           cache-dependency-path: editors/grammar/package-lock.json
       - name: Install the pinned toolchain
@@ -190,6 +195,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE }}
+      - name: Install Biome
+        run: npm install --global @biomejs/biome@${{ env.BIOME }}
           cache: npm
           cache-dependency-path: editors/vscode/package-lock.json
       - name: Install the pinned toolchain

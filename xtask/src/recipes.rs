@@ -6,7 +6,7 @@
 
 use {
     crate::{
-        BIOME, BROWSER_TRIPLE, HOST_TRIPLE, Step, Tree, artifact, ask, bindgen_web, built, cargo,
+        BROWSER_TRIPLE, HOST_TRIPLE, Step, Tree, artifact, ask, bindgen_web, built, cargo,
         file_with_inputs, grammar, inputs, modified, released, root, run, spelled,
         target_directory, vscode, zed,
     },
@@ -323,14 +323,13 @@ fn workspace_edition() -> Result<String, String> {
         .ok_or_else(|| "Cargo.toml has no [workspace.package] edition".to_string())
 }
 
-/// Biome over the JavaScript, JSON and CSS `tree` holds, as `arguments` say. It is run through `npx` at the one version [`BIOME`] names, from the repository's root, where `biome.json` says which files it reads; the tree's paths are what keeps it to the tree.
+/// Biome over the JavaScript, JSON and CSS `tree` holds, as `arguments` say, run from the repository's root, where `biome.json` says which files it reads; the tree's paths are what keeps it to the tree.
 fn biome(tree: Tree, arguments: &[&str]) -> Result<(), String> {
     let paths = tree.paths()?;
-    let mut line = vec!["--yes", BIOME];
-    line.extend(arguments);
+    let mut line = arguments.to_vec();
     line.extend(paths.iter().map(String::as_str));
 
-    run(Command::new("npx"), &line)
+    run(Command::new("biome"), &line)
 }
 
 /// Biome's formatter over `tree`, written unless `check`.

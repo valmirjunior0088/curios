@@ -146,7 +146,7 @@ impl Step {
                 Subject::Workspace,
                 Action::Format,
                 &[],
-                &[Tool::Npm],
+                &[Tool::Biome],
                 "Format the JavaScript, JSON and CSS the workspace holds; as a check, alone fails on formatting drift in them",
             ),
             Step::WorkspaceLint => always(
@@ -160,7 +160,7 @@ impl Step {
                 Subject::Workspace,
                 Action::Lint,
                 &[],
-                &[Tool::Npm],
+                &[Tool::Biome],
                 "Lint the JavaScript, JSON and CSS the workspace holds: the browser harness, the documentation pages' script and stylesheet",
             ),
             Step::WorkspaceTest => always(
@@ -237,14 +237,14 @@ impl Step {
                 Subject::Grammar,
                 Action::Format,
                 &[],
-                &[Tool::Npm],
+                &[Tool::Biome],
                 "Format the grammar's JavaScript and JSON; as a check, alone fails on formatting drift in them",
             ),
             Step::GrammarLint => always(
                 Subject::Grammar,
                 Action::Lint,
                 &[],
-                &[Tool::Npm],
+                &[Tool::Biome],
                 "Lint the grammar's JavaScript and JSON",
             ),
             Step::GrammarBuild => always(
@@ -272,14 +272,14 @@ impl Step {
                 Subject::Vscode,
                 Action::Format,
                 &[],
-                &[Tool::Npm],
+                &[Tool::Biome],
                 "Format the VS Code extension's JavaScript and JSON; as a check, alone fails on formatting drift in them",
             ),
             Step::VscodeLint => always(
                 Subject::Vscode,
                 Action::Lint,
                 &[],
-                &[Tool::Npm],
+                &[Tool::Biome],
                 "Lint the VS Code extension's JavaScript and JSON",
             ),
             Step::VscodeTest => always(

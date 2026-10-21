@@ -1,6 +1,6 @@
 //! What a step needs of a tool cargo does not bring: how each is asked whether it is there, and what installs it.
 //!
-//! A step asks only that its tool is there. Which version of it a machine holds is the machine's: the check workflow pins nextest's and Node's for its runners, and a contributor installs what they have. Biome is the exception, since this crate is what fetches it.
+//! A step asks only that its tool is there. Which version of it a machine holds is the machine's: the check workflow pins nextest's, Biome's and Node's for its runners, and a contributor installs what they have.
 
 use {
     crate::{ask, ask_cargo},
@@ -13,13 +13,14 @@ mod tests;
 /// What installs nextest where it is absent. Cargo's own install rather than a prebuilt download, because it is one spelling on every platform and needs nothing a clone does not already have.
 pub(crate) const NEXTEST_INSTALL: &str = "cargo install cargo-nextest --locked";
 
-/// The package Biome is run from, at the one version every checkout formats and lints with: a formatter's output moves between releases, so the version is exact.
-pub(crate) const BIOME: &str = "@biomejs/biome@2.6.2";
+/// What installs Biome where it is absent: its npm package, the one spelling on every platform a clone with npm has.
+pub(crate) const BIOME_INSTALL: &str = "npm install --global @biomejs/biome";
 
 /// A tool a step needs beyond cargo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tool {
     Nextest,
+    Biome,
     Node,
     Npm,
 }
@@ -32,6 +33,9 @@ impl Tool {
                 true => Ok(()),
                 false => Err(nextest_refusal()),
             },
+            Tool::Biome => ask(Command::new("biome"), &["--version"])
+                .map(drop)
+                .map_err(|_| biome_refusal()),
             Tool::Node => ask(Command::new("node"), &["--version"])
                 .map(drop)
                 .map_err(|error| format!("Node is needed, and {error}")),
@@ -47,6 +51,11 @@ fn lists_nextest(listing: &str) -> bool {
     listing
         .lines()
         .any(|line| line.split_whitespace().next() == Some("nextest"))
+}
+
+/// That a JavaScript, JSON or CSS check cannot run without Biome, and the command that installs it, on a line of its own as [`nextest_refusal`]'s is.
+fn biome_refusal() -> String {
+    format!("Biome is needed, and it is not installed. Install it with:\n\n    {BIOME_INSTALL}")
 }
 
 /// That the suite cannot run without nextest, and the command that installs it — on a line of its own, indented, because it is there to be selected and pasted rather than read, as the installer's advice is.

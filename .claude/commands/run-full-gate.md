@@ -9,7 +9,7 @@ The hand-off gate for code. Why the gate holds these steps and no others is `doc
 
 One command, `cargo xtask gate`: every step of the table, one after another in the table's order, each after the steps it reads, formatting as a check. Each step ends on a line saying whether it passed or failed and in how long; a step whose prerequisite did not pass is not run, and says which; the steps that read nothing of a failure go on, and the last line names what failed and what was not run.
 
-It needs, beyond cargo, `cargo-nextest`, Node and `npm` (which also fetches Biome), and the `wasm32-unknown-unknown` and `wasm32-wasip2` targets `rust-toolchain.toml` installs. A step that lacks a tool refuses before it builds, naming what installs it.
+It needs, beyond cargo, `cargo-nextest`, Biome, Node and `npm`, and the `wasm32-unknown-unknown` and `wasm32-wasip2` targets `rust-toolchain.toml` installs. A step that lacks a tool refuses before it builds, naming what installs it.
 
 ## How it runs
 
