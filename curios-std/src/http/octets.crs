@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Nat, Bool, List, Option};
+use /std/{Bytes, Byte, Nat, Bool, Option};
 use /std/Bool/{Holds};
 
 --- Whether `b` is optional whitespace, a space or a tab (RFC 9110 §5.6.3): the whitespace a field line's value and a list's members are trimmed of, and no other.
@@ -13,19 +13,6 @@ pub let is_digit(b: Byte) -> Bool =
 --- Whether the byte of `b` at `i` is `byte`; `false` past its end.
 pub let at(b: Bytes, i: Nat, byte: Byte) -> Bool =
     match Bytes/try_get(b, i) | some(found) => found == byte | none() => false end;
-
---- Where the first `byte` of `b` stands, with the proof that it lies within `b`, or `none`.
-pub let index_of(b: Bytes, byte: Byte) -> Option({at: Nat, within: Holds(at < Bytes/len(b))}) =
-    let go(i: Nat) -> Option({at: Nat, within: Holds(at < Bytes/len(b))}) =
-        match Bool/holds(i < Bytes/len(b))
-        | none() => Option/none()
-        | some(within) =>
-            match Bytes/get(b, i, @within) == byte
-            | true => Option/some((at = i, within = within))
-            | false => go(i + 1)
-            end
-        end;
-    go(0);
 
 -- `b` from `start` up to `stop`, without the optional whitespace that ends it.
 let trim_end(
@@ -58,25 +45,6 @@ let trim_from(b: Bytes, start: Nat, @reached: Holds(start <= Bytes/len(b))) -> B
 --- `b` without the optional whitespace at either end.
 pub let trim(b: Bytes) -> Bytes =
     trim_from(b, 0);
-
---- The pieces of `b` between each `sep`, in order: one more than the separators it holds.
-pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
-    let go(
-        from: Nat,
-        at: Nat,
-        found: List(Bytes),
-        @ordered: Holds(from <= at),
-        @reached: Holds(at <= Bytes/len(b)),
-    ) -> List(Bytes) =
-        match Bool/holds(at < Bytes/len(b))
-        | none() => List/reverse([Bytes/slice(b, from, at - from), ..found])
-        | some(inside) =>
-            match Bytes/get(b, at, @inside) == sep
-            | true => go(at + 1, at + 1, [Bytes/slice(b, from, at - from), ..found])
-            | false => go(from, at + 1, found)
-            end
-        end;
-    go(0, 0, []);
 
 --- The number `b` spells in decimal digits, one or more and nothing else, or `none`.
 pub let number(b: Bytes) -> Option(Nat) =

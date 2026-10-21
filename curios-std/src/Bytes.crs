@@ -206,22 +206,27 @@ pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
     let go(z: Bytes, acc: A) -> A = match z | x[] => acc | x[h, ..t] => go(t, f(h, acc)) end;
     go(b, init);
 
---- The index of the first byte `pred` accepts, or `none`.
-pub let find_index(b: Bytes, pred: (Byte) -> Bool) -> Option(Nat) =
-    let (_, found): {Nat, Option(Nat)} =
-        fold(
-            b,
-            (0, Option/none()),
-            (byte, (i, found)) =>
-                match found
-                | some(_) => (i, found)
-                | none() =>
-                    (i + 1, match pred(byte) | true => Option/some(i) | false => Option/none() end)
-                end);
-    found;
+--- Where the first byte `pred` accepts is, with the proof that it lies within `b`, or `none`.
+pub let find_index(
+    b: Bytes,
+    pred: (Byte) -> Bool,
+) -> Option({at: Nat, within: Holds(at < len(b))}) =
+    Nat/descend(
+        (i: Nat) => len(b) - i,
+        (_) => Option({at: Nat, within: Holds(at < len(b))}),
+        (i, ih) =>
+            match Bool/holds(i < len(b))
+            | none() => Option/none()
+            | some(inside) =>
+                match pred(get(b, i, @inside))
+                | true => Option/some((at = i, within = inside))
+                | false => ih(i + 1, True/proved())
+                end
+            end,
+        0);
 
---- The index of the first byte equal to `x`, or `none`.
-pub let index_of(b: Bytes, x: Byte) -> Option(Nat) =
+--- Where the first `x` is, with the proof that it lies within `b`, or `none`.
+pub let index_of(b: Bytes, x: Byte) -> Option({at: Nat, within: Holds(at < len(b))}) =
     find_index(b, (y) => y == x);
 
 --- Whether `x` occurs in `b`.
@@ -239,6 +244,29 @@ pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
         x[],
         (i, ok) => List/get(@Bytes, parts, i, @ok),
         (l, r) => x[..l, ..sep, ..r]);
+
+-- What `split` has left to cut, and the pieces cut so far, the last first.
+struct Cutting: Type {
+    rest: Bytes,
+    found: List(Bytes),
+}
+
+--- The pieces of `b` between each `sep`, in order: one more than the separators it holds.
+pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
+    Nat/descend(
+        (c: Cutting) => len(c.rest),
+        (_) => List(Bytes),
+        (c, ih) =>
+            match index_of(c.rest, sep)
+            | none() => List/reverse([c.rest, ..c.found])
+            | some(cut) =>
+                ih(
+                    Cutting {
+                        rest = drop(c.rest, cut.at + 1),
+                        found = [slice(c.rest, 0, cut.at), ..c.found] },
+                    True/proved())
+            end,
+        Cutting { rest = b, found = [] });
 
 satisfy Eql(Bytes) {
     eql = eql,

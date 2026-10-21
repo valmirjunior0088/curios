@@ -59,7 +59,7 @@ pub let request_line(
 ) -> Result(Refusal, {method: Bytes, target: Bytes, version: Bytes}) =
     let unspelled: Result(Refusal, {method: Bytes, target: Bytes, version: Bytes}) =
         Result/failure(Refusal/malformed("a request line is a method, a target and a version"));
-    match octets/split(line, ' ')
+    match Bytes/split(line, ' ')
     | [] => unspelled
     | [method, ..after_method] =>
         match after_method
@@ -113,7 +113,7 @@ pub let status_line(line: Bytes) -> Result(Refusal, {Version, Status}) =
 
 -- One field line: a name, a colon, and a value trimmed of the optional whitespace around it. No whitespace stands before the colon, since the name it would end is no token.
 let field(line: Bytes) -> Result(Refusal, Field) =
-    match octets/index_of(line, ':')
+    match Bytes/index_of(line, ':')
     | none() => Result/failure(Refusal/malformed("a field line is a name, a colon and a value"))
     | some(colon) =>
         match Option/bind(
