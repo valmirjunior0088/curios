@@ -372,6 +372,11 @@ impl From<Integer> for Rational {
 }
 
 impl Rational {
+    /// This value where it is an integer.
+    pub(super) fn integer(&self) -> Option<&Integer> {
+        (self.denominator == Integer::from(1)).then_some(&self.numerator)
+    }
+
     /// `numerator / denominator`, reduced; the denominator nonzero.
     pub(super) fn of(numerator: impl Into<Integer>, denominator: impl Into<Integer>) -> Self {
         let (numerator, denominator) = (numerator.into(), denominator.into());

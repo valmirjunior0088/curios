@@ -167,9 +167,16 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
     };
     let mut lines = String::new();
     if !refusal.considered.is_empty() {
+        // A counterexample no program takes says what the search found, and nothing of the facts themselves.
         let heading = match refusal.conclusion {
+            Conclusion::Counterexample(_) if refusal.absurd && refusal.refuted => {
+                "the search finds no contradiction among the facts in scope:"
+            }
             Conclusion::Counterexample(_) | Conclusion::Unsearched if refusal.absurd => {
                 "the facts in scope do not refute each other:"
+            }
+            Conclusion::Counterexample(_) if refusal.refuted => {
+                "the search finds no proof from the facts in scope:"
             }
             Conclusion::Exhausted(_) => "the facts in scope the search ran over:",
             Conclusion::Unwritten | Conclusion::Rejected => "it follows from the facts in scope:",
@@ -192,9 +199,15 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
                 .map(|(atom, value)| format!("{} = {value}", atom.spelled(spelling)))
                 .collect::<Vec<_>>()
                 .join(", ");
-            lines += &match refusal.absurd {
-                true => format!("\n  they all hold at {values}"),
-                false => format!("\n  it fails at {values}"),
+            lines += &match (refusal.absurd, refusal.refuted) {
+                (true, false) => format!("\n  they all hold at {values}"),
+                (false, false) => format!("\n  it fails at {values}"),
+                (true, true) => format!(
+                    "\n  the search finds them all holding at {values}, each atom read as a number of its own"
+                ),
+                (false, true) => format!(
+                    "\n  the search finds it failing at {values}, each atom read as a number of its own"
+                ),
             };
         }
         Conclusion::Exhausted(cap) => {

@@ -937,14 +937,20 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     );
     assert!(weak.contains("it fails at"), "{weak}");
 
-    // A contradiction only the integers see: the counterexample is a fraction.
+    // A contradiction only the integers see: the counterexample is a fraction, which no natural is, so the report says what the search found and nothing of the facts.
     let rational = refusal(
         "x: Nat, p: Holds(x * 2 <= 3), q: Holds(3 <= x * 2)",
         "Holds(x <= 0)",
     );
-    assert!(rational.contains("3/2"), "{rational}");
+    assert!(
+        rational.contains("the search finds no proof from the facts in scope:")
+            && rational.contains(
+                "the search finds it failing at x = 3/2, each atom read as a number of its own"
+            ),
+        "{rational}"
+    );
 
-    // A contradiction goal the facts do not refute: they all hold at the assignment, which is a fraction here.
+    // A contradiction goal the search does not refute, at a fraction: the search's assignment, as the search's.
     let absurd = {
         let program = format!(
             "{HEADER}\nlet row(x: Nat, p: Holds(x * 2 <= 3), q: Holds(3 <= x * 2)) -> Nat = match False/refuted() end;\nIo/pure(())"
@@ -952,9 +958,25 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
         typecheck(&program).expect_err("the control is refused")
     };
     assert!(
-        absurd.contains("the facts in scope do not refute each other")
-            && absurd.contains("they all hold at x = 3/2"),
+        absurd.contains("the search finds no contradiction among the facts in scope:")
+            && absurd.contains(
+                "the search finds them all holding at x = 3/2, each atom read as a number of its own"
+            ),
         "{absurd}"
+    );
+
+    // An integer assignment no program takes: `Nat/pow(2, n)` reduces to 2 at `n = 1`, not to the 1 the search reads it as.
+    let power = {
+        let program = format!(
+            "{HEADER}\nlet row(n: Nat, p: Holds(Nat/pow(2, n) <= n)) -> Nat = match False/refuted() end;\nIo/pure(())"
+        );
+        typecheck(&program).expect_err("the control is refused")
+    };
+    assert!(
+        power.contains(
+            "the search finds them all holding at Nat/pow(2, n) = 1, n = 1, each atom read as a number of its own"
+        ),
+        "{power}"
     );
 
     // A guard written through `Cmp` is recorded as written and as the dispatch resolves, and is one fact.

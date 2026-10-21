@@ -4,8 +4,10 @@
 
 use {
     super::{Facts, Origin, Rational, respelled},
+    crate::{Context, reduce_with},
     curios_algebra::Monomial,
-    curios_core::{LinearViews, Term},
+    curios_core::{Free, Intrinsic, LinearViews, Nat, Subterm, Term},
+    curios_num::{Integer, Natural},
 };
 
 /// Why the procedure proved nothing.
@@ -19,6 +21,8 @@ pub struct Refusal {
     pub conclusion: Conclusion,
     /// Whether the bound was an empty proposition, which only a contradiction among the facts proves: a counterexample then shows them all holding, not a goal failing.
     pub absurd: bool,
+    /// Whether the counterexample is one no program takes ([`refuted`]): a report then states it, with the heading above it, as what the search found, each atom read as a number of its own.
+    pub refuted: bool,
 }
 
 /// The search's conclusion, as the report states it.
@@ -135,6 +139,7 @@ impl Refusal {
             unread: facts.unread.clone(),
             conclusion: outcome,
             absurd,
+            refuted: false,
         }
     }
 }
@@ -161,4 +166,71 @@ fn counterexample(
         .into_iter()
         .map(|(atom, value)| (facts.respell(views.term(&atom)), value.to_string()))
         .collect()
+}
+
+/// Whether no program takes `outcome`'s values, where it is a counterexample: a value that is no integer, or an atom that, with each variable's value put in, reduces to a literal other than its own value. An assignment this cannot refute is read as the search read it: an atom that names a local given no value, or that reduces to no literal, is not checked.
+///
+/// Asked once the search is over and only for a report, as what a report names an atom by is ([`Facts::beneath`]); a reduction that fails refutes nothing.
+pub(super) fn refuted(context: &mut Context, views: &LinearViews, outcome: &SearchOutcome) -> bool {
+    let SearchOutcome::Counterexample(assignment) = outcome else {
+        return false;
+    };
+    let mut values = Vec::new();
+    for (monomial, value) in assignment {
+        let Some(value) = value.integer() else {
+            return true;
+        };
+        if let [atom] = monomial.atoms() {
+            values.push((views.term(atom).clone(), value.clone()));
+        }
+    }
+
+    // Each variable at its value, as a literal of the carrier its binder is typed at.
+    let mut solutions: Vec<(Free, Term)> = Vec::new();
+    for (term, value) in &values {
+        if let Subterm::Var(var) = &**term
+            && let Some(free) = var.as_free()
+            && free.local_index().is_some()
+            && let Some(literal) = literal(context, free, value)
+        {
+            solutions.push((*free, literal));
+        }
+    }
+
+    values.iter().any(|(term, value)| {
+        if matches!(&**term, Subterm::Var(_)) {
+            return false;
+        }
+        let closed = term.substitute(&solutions);
+        if closed.has_local_free() {
+            return false;
+        }
+        reduce_with(context, &closed)
+            .ok()
+            .and_then(|reduced| integer(&reduced))
+            .is_some_and(|reduced| reduced != *value)
+    })
+}
+
+/// `value` as a literal of the carrier `free` is assumed at, a `Nat` or an `Int`, and none at any other or at a value the carrier does not hold.
+fn literal(context: &mut Context, free: &Free, value: &Integer) -> Option<Term> {
+    let type_ = context.assumption(free)?.clone();
+    match &*reduce_with(context, &type_).ok()? {
+        Subterm::Intrinsic(Intrinsic::NatType) => Some(Term::intrinsic(Intrinsic::Nat(Nat::new(
+            Natural::try_from(value).ok()?,
+        )))),
+        Subterm::Intrinsic(Intrinsic::IntType) => {
+            Some(Term::intrinsic(Intrinsic::Int(value.clone())))
+        }
+        _ => None,
+    }
+}
+
+/// The integer a `Nat` or `Int` literal is.
+fn integer(term: &Term) -> Option<Integer> {
+    match &**term {
+        Subterm::Intrinsic(Intrinsic::Nat(nat)) => nat.to_natural().map(Integer::from),
+        Subterm::Intrinsic(Intrinsic::Int(value)) => Some(value.clone()),
+        _ => None,
+    }
 }

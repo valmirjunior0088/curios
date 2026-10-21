@@ -249,7 +249,11 @@ fn linear(
     curios_profile::sample!("entailment::derived", DERIVED_ROWS - budget);
     // A counterexample's atoms named as the operands as stated name them, and then as the operands written beneath those do, which are asked only now the search is over; a reading of them that runs out leaves the report as the search made it.
     let refused = |context: &mut Context, views: &LinearViews, outcome: SearchOutcome| {
-        let refusal = Refusal::of(&facts, views, outcome, absurd);
+        let refuted = refuted(context, views, &outcome);
+        let refusal = Refusal {
+            refuted,
+            ..Refusal::of(&facts, views, outcome, absurd)
+        };
         let beneath = facts.beneath(context).unwrap_or_default();
         Ok::<_, Error>(Entailed::Refused(refusal.respelled(&beneath)))
     };
