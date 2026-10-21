@@ -4,7 +4,7 @@
 //!
 //! **A subject comes first, because a person works on one thing.** `cargo xtask vscode` runs everything about the VS Code extension, one step after another, and `cargo xtask vscode test` one action of it. An action a subject does not have is the parser's own error. `cargo xtask gate` runs every step of the table, which is the hand-off gate `/run-full-gate` runs, and a step that failed in it is run again by its subject and action.
 //!
-//! **A step is cargo with flags, and whatever cargo does not do.** Every step spawns `cargo` — or npm, in an editor tree — as a separate process, and then copies a file or generates the browser bindings, where there is such a thing to do. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
+//! **A step is a plan, and the runner performs it.** A step's recipe returns the [`Task`]s it needs done — cargo with flags, another tool in a tree, a file filed or written, the browser bindings generated — and does none of them: the [`runner`] alone performs them, each echoed as it runs. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
 //!
 //! **A step takes no arguments it passes on.** An action may take a parameter it places itself — a package to narrow a check to, a name to narrow a test run by, a release's version — but never a tail it hands to the tool unread.
 //!
@@ -33,6 +33,12 @@ use filing::*;
 mod trees;
 use trees::*;
 
+mod tasks;
+use tasks::*;
+
+mod checkout;
+use checkout::*;
+
 mod steps;
 use steps::*;
 
@@ -41,6 +47,9 @@ use subjects::*;
 
 mod recipes;
 use recipes::*;
+
+mod runner;
+use runner::*;
 
 mod installer;
 use installer::*;

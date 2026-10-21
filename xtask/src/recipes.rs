@@ -1,17 +1,15 @@
-//! What each step runs, how the steps asked for are run, and the four commands that are not steps.
+//! What each step asks the runner to do, and the commands that are not steps.
 //!
-//! [`Step::run`] is an exhaustive match, so a step with a row and nothing to run does not compile. What selects a step is [`main`](crate)'s command line, read off the table in [`steps`](crate::steps), and [`perform`] runs what it selected: one after another in the table's order, on the terminal's own streams, each to its end whatever the one before it did, so one run reports every failure rather than the first.
+//! [`Step::plan`] is an exhaustive match, so a step with a row and no plan does not compile. A plan is data — the [`Task`]s the step needs done, read off the request and the checkout as it stands — and the [`runner`](crate::runner) performs it: what selects a step is [`main`](crate)'s command line, read off the table in [`steps`](crate::steps).
 //!
-//! The vocabulary a step is written in sits beside it: [`places`](crate::places) for where a thing lives, [`commands`](crate::commands) for how a tool is invoked, [`filing`](crate::filing) for how a build product is filed, [`tools`](crate::tools) for what a step needs of a tool cargo does not bring. A command leaves this file when it acquires decisions of its own, as [`installer`](mod@crate::installer) has.
+//! The vocabulary a plan is written in sits beside it: [`tasks`](crate::tasks) for what a plan holds, [`places`](crate::places) for where a thing lives, [`tools`](crate::tools) for the programs a step runs, [`trees`](crate::trees) for which paths a tree holds. A command leaves this file when it acquires decisions of its own, as [`installer`](mod@crate::installer) has.
 
 use {
     crate::{
-        BROWSER_TRIPLE, HOST_TRIPLE, Step, Tool, Tree, artifact, ask, bindgen_web, built, cargo,
-        file_with_inputs, grammar, inputs, launch, modified, released, root, run, spelled,
-        target_directory, vscode, zed,
+        Arg, BROWSER_TRIPLE, Checkout, HOST_TRIPLE, Run, Selection, Step, Task, Tool, Tree,
+        artifact, built, cargo, inputs, perform, released, root, run, target_directory, texts,
     },
-    clap::ValueEnum,
-    std::{fs, path::Path, process::Command, time::Instant},
+    std::{fs, path::Path, process::Command},
 };
 
 #[cfg(test)]
@@ -69,170 +67,115 @@ impl Request {
     }
 }
 
-/// `asked` with every step they are run with first, in the table's order and each once.
-pub(crate) fn closed(asked: &[Step]) -> Vec<Step> {
-    let mut wanted = asked.to_vec();
-    let mut next = 0;
-    while next < wanted.len() {
-        for ensured in wanted[next].row().ensures {
-            if !wanted.contains(ensured) {
-                wanted.push(*ensured);
-            }
-        }
-        next += 1;
-    }
-
-    Step::value_variants()
-        .iter()
-        .copied()
-        .filter(|step| wanted.contains(step))
-        .collect()
-}
-
-/// The first step `step` ensures that failed or was not run, where there is one: what `step` reads is then not there.
-fn blocked(step: Step, failed: &[Step], unrun: &[Step]) -> Option<Step> {
-    step.row()
-        .ensures
-        .iter()
-        .copied()
-        .find(|ensured| failed.contains(ensured) || unrun.contains(ensured))
-}
-
-/// Run `asked` and what they are run with first, as `request` narrows them, each to its end whatever the one before it did, and say of each how it ended and in how long. A step lacking a tool it launches is refused with what installs it, and a step whose prerequisite did not pass is not run, since what it reads is not there: the steps that read nothing of the failure go on, and the end names both lists.
-pub(crate) fn perform(asked: &[Step], request: &Request) -> Result<(), String> {
-    let mut failed = Vec::new();
-    let mut unrun = Vec::new();
-
-    for step in closed(asked) {
-        if let Some(missing) = blocked(step, &failed, &unrun) {
-            eprintln!(
-                "{} not run: {} did not pass",
-                spelled(step),
-                spelled(missing)
-            );
-            unrun.push(step);
-            continue;
-        }
-
-        let started = Instant::now();
-        let outcome = step.run(request);
-        let took = started.elapsed().as_secs_f64();
-
-        match outcome {
-            Ok(()) => eprintln!("{} passed in {took:.1}s", spelled(step)),
-            Err(message) => {
-                eprintln!("{message}");
-                eprintln!("{} failed in {took:.1}s", spelled(step));
-                failed.push(step);
-            }
-        }
-    }
-
-    let named = |steps: &[Step]| {
-        steps
-            .iter()
-            .map(|step| spelled(*step))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-
-    match (failed.is_empty(), unrun.is_empty()) {
-        (true, true) => Ok(()),
-        (false, true) => Err(format!("failed: {}", named(&failed))),
-        (_, false) => Err(format!(
-            "failed: {}; not run: {}",
-            named(&failed),
-            named(&unrun)
-        )),
-    }
-}
-
 impl Step {
-    /// Run the step as `request` narrows it.
-    pub(crate) fn run(self, request: &Request) -> Result<(), String> {
+    /// What the step asks the runner to do, as `request` narrows it, read off `checkout` as it stands.
+    pub(crate) fn plan(self, request: &Request, checkout: &Checkout) -> Result<Vec<Task>, String> {
         let package = request.package.as_deref();
 
-        match self {
+        let plan = match self {
             Step::LauncherBuild => launcher_build(),
             Step::WorkspaceFormat => {
-                cargo(&formatting(request.check))?;
+                let mut plan = vec![Task::cargo(
+                    Tree::Workspace,
+                    &formatting(request.check),
+                    None,
+                    &[],
+                )];
+                plan.extend(loose_formatting(request.check, checkout)?);
 
-                loose_formatting(request.check)
+                plan
             }
-            Step::WorkspaceFormatWeb => biome_formatting(Tree::Workspace, request.check),
-            Step::WorkspaceLint => cargo(&linting(package)),
+            Step::WorkspaceFormatWeb => {
+                vec![biome_formatting(Tree::Workspace, request.check, checkout)?]
+            }
+            Step::WorkspaceLint => vec![linting(package)],
             // A package narrows the lint to its Rust, so what the workspace holds beside Rust is not its to answer for.
             Step::WorkspaceLintWeb => match package {
-                Some(_) => Ok(()),
-                None => biome_linting(Tree::Workspace),
+                Some(_) => Vec::new(),
+                None => vec![biome_linting(Tree::Workspace, checkout)?],
             },
-            Step::WorkspaceTest => {
-                let arguments = testing(package, request)?;
-
-                launch(
-                    Tool::Nextest,
-                    &[],
-                    &arguments.iter().map(String::as_str).collect::<Vec<_>>(),
-                )
-            }
-            Step::InstrumentedLint => cargo(
-                &["clippy"]
-                    .into_iter()
-                    .chain(scope(None))
-                    .chain(["--all-targets", "--all-features", KEEP_GOING])
-                    .collect::<Vec<_>>(),
-            ),
-            Step::InstrumentedTest => launch(Tool::Nextest, &[], &RECORDER_TESTING),
-            Step::DocsBuild => docs_build(),
-            Step::CompilerBuild => {
-                cargo(&["build", "--release", "--package", "curios", KEEP_GOING])
-            }
-            // The compiler under test is the one `compiler build` filed, named to the suite rather than found on PATH, where an installed one would answer instead.
-            Step::CompilerTest => launch(
-                Tool::Node,
-                &[("CURIOS", released("curios").as_os_str())],
-                &["--test", "curios-browser/src/page.test.mjs"],
-            ),
+            Step::WorkspaceTest => vec![testing(package, request)?],
             // Whoever narrows the run asks about a package's tests or some test's, which the cache of another crate's build script is not.
             Step::WorkspaceBinaryenCache => match (package, request.unselected()) {
                 (None, true) => binaryen_cache(),
-                _ => Ok(()),
+                _ => Vec::new(),
             },
+            Step::InstrumentedLint => vec![Task::cargo(
+                Tree::Workspace,
+                &["clippy"],
+                Some(Selection::Shipped),
+                &["--all-targets", "--all-features", KEEP_GOING],
+            )],
+            Step::InstrumentedTest => vec![recorder_testing()],
+            Step::DocsBuild => docs_build(),
+            Step::CompilerBuild => vec![Task::cargo(
+                Tree::Workspace,
+                &["build", "--release"],
+                Some(Selection::package("curios")),
+                &[KEEP_GOING],
+            )],
+            // The compiler under test is the one `compiler build` filed, named to the suite rather than found on PATH, where an installed one would answer instead.
+            Step::CompilerTest => vec![Task::Run(
+                Run::new(
+                    Tool::Node,
+                    Tree::Workspace,
+                    texts(["--test", "curios-browser/src/page.test.mjs"]),
+                )
+                .with("CURIOS", Arg::Path(released("curios"))),
+            )],
             Step::BundleBuild => bundle_build(),
-            Step::BundleTest => launch(
+            Step::BundleTest => vec![Task::Run(Run::new(
                 Tool::Node,
+                Tree::Workspace,
+                texts(["--test", "curios-browser/src/harness.test.mjs"]),
+            ))],
+            Step::GrammarInstall => vec![Task::npm(Tree::Grammar, &["clean-install"])],
+            Step::GrammarFormat => vec![biome_formatting(Tree::Grammar, request.check, checkout)?],
+            Step::GrammarLint => vec![biome_linting(Tree::Grammar, checkout)?],
+            Step::GrammarBuild => vec![Task::npm(Tree::Grammar, &["run", "generate"])],
+            Step::GrammarTest => vec![Task::npm(Tree::Grammar, &["test"])],
+            Step::VscodeInstall => vec![Task::npm(Tree::Vscode, &["clean-install"])],
+            Step::VscodeFormat => vec![biome_formatting(Tree::Vscode, request.check, checkout)?],
+            Step::VscodeLint => vec![biome_linting(Tree::Vscode, checkout)?],
+            Step::VscodeTest => vec![Task::npm(Tree::Vscode, &["test"])],
+            Step::VscodeBuild => vec![Task::npm(Tree::Vscode, &["run", "package"])],
+            Step::ZedFormat => vec![Task::cargo(
+                Tree::Zed,
+                &formatting(request.check),
+                None,
                 &[],
-                &["--test", "curios-browser/src/harness.test.mjs"],
-            ),
-            Step::GrammarInstall => grammar(&["clean-install"]),
-            Step::GrammarFormat => biome_formatting(Tree::Grammar, request.check),
-            Step::GrammarLint => biome_linting(Tree::Grammar),
-            Step::GrammarBuild => grammar(&["run", "generate"]),
-            Step::GrammarTest => grammar(&["test"]),
-            Step::VscodeInstall => vscode(&["clean-install"]),
-            Step::VscodeFormat => biome_formatting(Tree::Vscode, request.check),
-            Step::VscodeLint => biome_linting(Tree::Vscode),
-            Step::VscodeTest => vscode(&["test"]),
-            Step::VscodeBuild => vscode(&["run", "package"]),
-            Step::ZedFormat => zed(&formatting(request.check)),
-            Step::ZedLint => zed(&["clippy", "--all-targets", "--target", EXTENSION_TRIPLE]),
-            Step::ZedBuild => zed(&["build", "--release", "--target", EXTENSION_TRIPLE]),
-            Step::ZedTest => zed(&["test"]),
-            Step::ToolsLint => cargo(&tools(&["clippy"], &["--all-targets", KEEP_GOING])),
-            Step::ToolsTest => launch(
-                Tool::Nextest,
+            )],
+            Step::ZedLint => vec![Task::cargo(
+                Tree::Zed,
+                &["clippy", "--all-targets", "--target", EXTENSION_TRIPLE],
+                None,
                 &[],
-                &tools(&["run"], &["--all-targets", "--no-fail-fast"]),
-            ),
-        }
+            )],
+            Step::ZedBuild => vec![Task::cargo(
+                Tree::Zed,
+                &["build", "--release", "--target", EXTENSION_TRIPLE],
+                None,
+                &[],
+            )],
+            Step::ZedTest => vec![Task::cargo(Tree::Zed, &["test"], None, &[])],
+            Step::ToolsLint => vec![Task::cargo(
+                Tree::Workspace,
+                &["clippy"],
+                Some(Selection::tools()),
+                &["--all-targets", KEEP_GOING],
+            )],
+            Step::ToolsTest => vec![Task::nextest(
+                Selection::tools(),
+                &["--all-targets", "--no-fail-fast"],
+            )],
+        };
+
+        Ok(plan)
     }
 }
 
 /// The package the launcher is built from, under its default features alone.
 const LAUNCHER: &str = "curios-native";
-
-/// The workspace's own tools, which ship nothing: the compiler's checks leave them out, since cargo unifies a build's features across every package it selects and theirs would give the compiler's dependencies features no shipped compiler has.
-const TOOLS: [&str; 3] = ["xtask", "xbench", "xboard"];
 
 /// What a step that compiles several of the workspace's crates hands cargo: go on past a crate that fails, so one run reports every crate's errors rather than the first's. A test run says the same of its tests with nextest's own flag.
 const KEEP_GOING: &str = "--keep-going";
@@ -241,43 +184,28 @@ const KEEP_GOING: &str = "--keep-going";
 const EXTENSION_TRIPLE: &str = "wasm32-wasip2";
 
 /// The launcher, built in a cargo invocation of its own so workspace feature unification cannot reach it, and filed where `curios/build.rs` embeds it.
-fn launcher_build() -> Result<(), String> {
-    cargo(&[
-        "build",
-        "--release",
-        "--package",
-        LAUNCHER,
-        "--target",
-        HOST_TRIPLE,
-        KEEP_GOING,
-    ])?;
-
-    file_with_inputs(
-        &built(HOST_TRIPLE, LAUNCHER),
-        &artifact("curios", HOST_TRIPLE),
-        &inputs("curios", HOST_TRIPLE),
-    )
+fn launcher_build() -> Vec<Task> {
+    vec![
+        Task::cargo(
+            Tree::Workspace,
+            &["build", "--release"],
+            Some(Selection::package(LAUNCHER)),
+            &["--target", HOST_TRIPLE, KEEP_GOING],
+        ),
+        Task::File {
+            built: built(HOST_TRIPLE, LAUNCHER),
+            filed: artifact("curios", HOST_TRIPLE),
+            listed: inputs("curios", HOST_TRIPLE),
+        },
+    ]
 }
 
-/// The packages a workspace check covers: the one it was given, or every member but [`TOOLS`], which `tools` checks apart.
-fn scope(package: Option<&str>) -> Vec<&str> {
+/// The packages a workspace check covers: the one it was given, or every member but the tools, which `tools` checks apart.
+fn scope(package: Option<&str>) -> Selection {
     match package {
-        Some(package) => vec!["--package", package],
-        None => ["--workspace"]
-            .into_iter()
-            .chain(TOOLS.iter().flat_map(|tool| ["--exclude", tool]))
-            .collect(),
+        Some(package) => Selection::package(package),
+        None => Selection::Shipped,
     }
-}
-
-/// `command`, over [`TOOLS`] alone, then `options`.
-fn tools<'a>(command: &[&'a str], options: &[&'a str]) -> Vec<&'a str> {
-    command
-        .iter()
-        .copied()
-        .chain(TOOLS.iter().flat_map(|tool| ["--package", tool]))
-        .chain(options.iter().copied())
-        .collect()
 }
 
 /// The `cargo fmt` command line: every package of the workspace it runs in, written unless `check`.
@@ -288,14 +216,16 @@ fn formatting(check: bool) -> Vec<&'static str> {
     }
 }
 
-/// The workspace's Rust that belongs to no package, which `cargo fmt` therefore never visits: the measurement corpus's Rust twins. Formatted as the workspace's packages are, under its edition.
-fn loose_formatting(check: bool) -> Result<(), String> {
-    let mut git = Command::new("git");
-    git.args(["ls-files", "--", "programs/*.rs"]);
-    let listing = ask(git, &[])?;
-    let loose = listing.lines().collect::<Vec<_>>();
+/// The workspace's Rust that belongs to no package, which `cargo fmt` therefore never visits: the measurement corpus's Rust twins, every tracked `.rs` file under `programs/`. Formatted as the workspace's packages are, under its edition.
+fn loose_formatting(check: bool, checkout: &Checkout) -> Result<Option<Task>, String> {
+    let loose = checkout
+        .tracked()?
+        .iter()
+        .filter(|path| path.starts_with("programs/") && path.ends_with(".rs"))
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     if loose.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
 
     let edition = workspace_edition()?;
@@ -305,7 +235,11 @@ fn loose_formatting(check: bool) -> Result<(), String> {
     }
     arguments.extend(loose);
 
-    run(Command::new("rustfmt"), &arguments)
+    Ok(Some(Task::Run(Run::new(
+        Tool::Rustfmt,
+        Tree::Workspace,
+        texts(arguments),
+    ))))
 }
 
 /// The edition every package of the workspace inherits, read from the manifest that states it.
@@ -325,54 +259,53 @@ fn workspace_edition() -> Result<String, String> {
 }
 
 /// Biome over the JavaScript, JSON and CSS `tree` holds, as `arguments` say, run from the repository's root, where `biome.json` says which files it reads; the tree's paths are what keeps it to the tree.
-fn biome(tree: Tree, arguments: &[&str]) -> Result<(), String> {
-    let paths = tree.paths()?;
-    let mut line = arguments.to_vec();
-    line.extend(paths.iter().map(String::as_str));
+fn biome(tree: Tree, arguments: &[&str], checkout: &Checkout) -> Result<Task, String> {
+    let paths = tree.paths(checkout.tracked()?.iter().map(String::as_str));
+    let mut line = texts(arguments.iter().copied());
+    line.extend(texts(paths.iter().map(String::as_str)));
 
-    launch(Tool::Biome, &[], &line)
+    Ok(Task::Run(Run::new(Tool::Biome, Tree::Workspace, line)))
 }
 
 /// Biome's formatter over `tree`, written unless `check`.
-fn biome_formatting(tree: Tree, check: bool) -> Result<(), String> {
+fn biome_formatting(tree: Tree, check: bool, checkout: &Checkout) -> Result<Task, String> {
     match check {
-        true => biome(tree, &["format"]),
-        false => biome(tree, &["format", "--write"]),
+        true => biome(tree, &["format"], checkout),
+        false => biome(tree, &["format", "--write"], checkout),
     }
 }
 
 /// Biome's linter over `tree`, a warning failing as an error does: the workspace's Rust is held the same way by its lint table.
-fn biome_linting(tree: Tree) -> Result<(), String> {
-    biome(tree, &["lint", "--error-on-warnings"])
+fn biome_linting(tree: Tree, checkout: &Checkout) -> Result<Task, String> {
+    biome(tree, &["lint", "--error-on-warnings"], checkout)
 }
 
-/// The `cargo clippy` command line for one selection: every target, as the workspace ships, past a crate that fails. Warnings are denied by the workspace's lint table, so no flag says so here.
-fn linting(package: Option<&str>) -> Vec<&str> {
-    ["clippy"]
-        .into_iter()
-        .chain(scope(package))
-        .chain(["--all-targets", KEEP_GOING])
-        .collect()
+/// The `cargo clippy` run for one selection: every target, as the workspace ships, past a crate that fails. Warnings are denied by the workspace's lint table, so no flag says so here.
+fn linting(package: Option<&str>) -> Task {
+    Task::cargo(
+        Tree::Workspace,
+        &["clippy"],
+        Some(scope(package)),
+        &["--all-targets", KEEP_GOING],
+    )
 }
 
-/// What `cargo nextest` is given for one selection, a `run` of the whole workspace when nothing narrows it: every target as the workspace ships, every failure reported rather than the first.
+/// The nextest run for one selection, the whole workspace when nothing narrows it: every target as the workspace ships, every failure reported rather than the first.
 ///
 /// **Nextest rather than `cargo test`, for a process to a test.** Binaryen's settings are the process's and its optimizer serializes behind a lock, so tests that share a process queue for it, and a test that aborts — Binaryen answering a module it cannot parse with a C++ `assert` — takes every other result of its binary with it. Under nextest each test is a process of its own: the suite runs on every core, and an abort fails by name.
 ///
 /// **A name picks tests out of one build and never changes it.** A filter becomes nextest's matcher of a test's path and a binary its matcher of a binary's name, so the bundle suite, whose tests carry no word of their binary's name, is `--binary bundle`; all of them are one union, one run however many are named, and a binary no build has is nextest's own refusal. A package is the other narrowing and a build of its own, which a job on one machine asks for and a question about a few tests should not. A selection that matches nothing warns rather than fails, because a package with no test of its own is rightly empty, and nextest's own default would fail the run that named it.
-fn testing(package: Option<&str>, request: &Request) -> Result<Vec<String>, String> {
-    let mut arguments = ["run"]
-        .into_iter()
-        .chain(scope(package))
-        .chain(["--all-targets", "--no-fail-fast", "--no-tests=warn"])
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-
-    if !request.unselected() {
-        arguments.extend(["-E".to_string(), selecting(request)?]);
+fn testing(package: Option<&str>, request: &Request) -> Result<Task, String> {
+    let selected = match request.unselected() {
+        true => None,
+        false => Some(selecting(request)?),
+    };
+    let mut options = vec!["--all-targets", "--no-fail-fast", "--no-tests=warn"];
+    if let Some(selected) = &selected {
+        options.extend(["-E", selected.as_str()]);
     }
 
-    Ok(arguments)
+    Ok(Task::nextest(scope(package), &options))
 }
 
 /// The filterset that runs a test one of `request`'s filters is part of the path of, or one of its binaries is the name of. A name holding a character the filterset's grammar reads — a parenthesis or a comma — is refused, since no test's path or binary's name holds one.
@@ -404,77 +337,74 @@ const RECORDER: &str = "curios-profile";
 /// The feature of [`RECORDER`] that compiles the recorder, and so its tests.
 const RECORDING: &str = "enabled";
 
-/// What `cargo nextest` is given for the recorder's tests, a `run` of [`RECORDER`] alone under [`RECORDING`], the one configuration that compiles them and one no shipped build of the workspace is.
-const RECORDER_TESTING: [&str; 6] = [
-    "run",
-    "--package",
-    RECORDER,
-    "--features",
-    RECORDING,
-    "--no-fail-fast",
-];
-
-/// The browser bundle: `curios-js` built for the bare Wasm target, and its bindings generated beside it.
-fn bundle_build() -> Result<(), String> {
-    cargo(&[
-        "build",
-        "--release",
-        "--package",
-        "curios-js",
-        "--target",
-        BROWSER_TRIPLE,
-        KEEP_GOING,
-    ])?;
-
-    bindgen_web(
-        &built(BROWSER_TRIPLE, "curios_js.wasm"),
-        &artifact("curios-js", BROWSER_TRIPLE),
+/// The nextest run of the recorder's tests: [`RECORDER`] alone under [`RECORDING`], the one configuration that compiles them and one no shipped build of the workspace is.
+fn recorder_testing() -> Task {
+    Task::nextest(
+        Selection::package(RECORDER),
+        &["--features", RECORDING, "--no-fail-fast"],
     )
 }
 
-/// The one spelling of the rustdoc build: a contributor's, the check workflow's and the release's, so a broken intra-doc link fails all three the same way. It documents every feature, so an item only a feature compiles has its links read too, and keeps going past a crate that fails, so one run reports every crate's broken links rather than stopping at the first. Private items are documented because these crates state their invariants on `pub(crate)` items, and the root redirect is what makes the tree a site: `target/doc/` has no landing page of its own.
-fn docs_build() -> Result<(), String> {
-    cargo(&[
-        "doc",
-        "--workspace",
-        "--no-deps",
-        "--document-private-items",
-        "--all-features",
-        KEEP_GOING,
-    ])?;
+/// The browser bundle: `curios-js` built for the bare Wasm target, and its bindings generated beside it.
+fn bundle_build() -> Vec<Task> {
+    vec![
+        Task::cargo(
+            Tree::Workspace,
+            &["build", "--release"],
+            Some(Selection::package("curios-js")),
+            &["--target", BROWSER_TRIPLE, KEEP_GOING],
+        ),
+        Task::Bindgen {
+            module: built(BROWSER_TRIPLE, "curios_js.wasm"),
+            bundle: artifact("curios-js", BROWSER_TRIPLE),
+        },
+    ]
+}
 
-    let landing = target_directory().join("doc").join("index.html");
-    fs::write(
-        &landing,
-        "<!DOCTYPE html><meta http-equiv=\"refresh\" content=\"0; url=curios/index.html\">\n",
-    )
-    .map_err(|error| format!("{}: {error}", landing.display()))
+/// The one spelling of the rustdoc build: a contributor's, the check workflow's and the release's, so a broken intra-doc link fails all three the same way. It documents every feature, so an item only a feature compiles has its links read too, and keeps going past a crate that fails, so one run reports every crate's broken links rather than stopping at the first. Private items are documented because these crates state their invariants on `pub(crate)` items, and the root redirect is what makes the tree a site: `target/doc/` has no landing page of its own.
+fn docs_build() -> Vec<Task> {
+    vec![
+        Task::cargo(
+            Tree::Workspace,
+            &["doc"],
+            Some(Selection::Every),
+            &[
+                "--no-deps",
+                "--document-private-items",
+                "--all-features",
+                KEEP_GOING,
+            ],
+        ),
+        Task::Write {
+            path: target_directory().join("doc").join("index.html"),
+            text: "<!DOCTYPE html><meta http-equiv=\"refresh\" content=\"0; url=curios/index.html\">\n",
+        },
+    ]
 }
 
 /// Hold that a second cargo mode reuses Binaryen's build.
 ///
 /// Nothing is removed first: the cache's key holds a hash of the build script, so the first build after an edit to it is the one from source, whichever step makes it, and this writes only what any build writes. Linting the package is another cargo mode with a build-script fingerprint of its own: it must find the cache and run no CMake, which the cache's marker says by keeping its modification time.
-fn binaryen_cache() -> Result<(), String> {
-    let cache = root()
-        .join("curios-binaryen")
-        .join(".artifacts")
-        .join(HOST_TRIPLE);
+fn binaryen_cache() -> Vec<Task> {
+    let package = "curios-binaryen";
 
-    cargo(&["build", "--package", "curios-binaryen"])?;
-
-    let marker = cache.join(BINARYEN_MARKER);
-    let built =
-        modified(&marker).ok_or_else(|| format!("the build left no {}", marker.display()))?;
-
-    cargo(&linting(Some("curios-binaryen")))?;
-
-    match modified(&marker) == Some(built) {
-        true => Ok(()),
-        false => Err(format!(
-            "linting curios-binaryen rebuilt Binaryen: {} was written again",
-            marker.display()
-        )),
-    }
+    vec![
+        Task::cargo(
+            Tree::Workspace,
+            &["build"],
+            Some(Selection::package(package)),
+            &[],
+        ),
+        Task::Keeps {
+            path: root()
+                .join(package)
+                .join(".artifacts")
+                .join(HOST_TRIPLE)
+                .join(BINARYEN_MARKER),
+            during: Box::new(linting(Some(package))),
+            rewritten: "linting curios-binaryen rebuilt Binaryen",
+        },
+    ]
 }
 
 /// The file `curios-binaryen/build.rs` writes last into a cache entry, which is how it knows an entry is whole.
@@ -506,7 +436,7 @@ impl BuildProfile {
 ///
 /// **Debug unless asked otherwise.** `curios` has no feature but `profile`, so the debug build is the one `--all-features` already made while iterating, and a question asked of a change costs the change; `--profile release` is for a figure a specification quotes, which is the shipped compiler's.
 pub(crate) fn profile(source: &Path, build: BuildProfile) -> Result<(), String> {
-    launcher_build()?;
+    perform(&[Step::LauncherBuild], &Request::whole())?;
 
     // The one place the stream's location is spelled. The compiler takes it as an argument and keeps no default, so what is written and what is read back cannot drift — and it is derived here the way every other path in this crate is.
     let stream = root().join("curios/.artifacts/profile.tsv");

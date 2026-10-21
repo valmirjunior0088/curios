@@ -1,8 +1,8 @@
 //! The four trees, and which of the repository's paths each holds.
 //!
-//! **A tree is a manifest root, and a tracked file belongs to the nearest one above it.** The Rust workspace's root is the repository's, and three more stand inside it: the two npm packages and the Zed extension's own workspace under `editors/`. So the workspace's tree is everything outside those three, and each of theirs is its own directory. Nothing lists the files: [`Tree::paths`] reads what git tracks, so a file added anywhere is already some tree's, and exactly one's.
+//! **A tree is a manifest root, and a tracked file belongs to the nearest one above it.** The Rust workspace's root is the repository's, and three more stand inside it: the two npm packages and the Zed extension's own workspace under `editors/`. So the workspace's tree is everything outside those three, and each of theirs is its own directory. Nothing lists the files: [`Tree::paths`] reads what git tracks, which the run's [`Checkout`](crate::Checkout) asks once, so a file added anywhere is already some tree's, and exactly one's.
 
-use {crate::ask, std::process::Command};
+use {crate::root, std::path::PathBuf};
 
 #[cfg(test)]
 mod tests;
@@ -30,16 +30,13 @@ impl Tree {
         }
     }
 
-    /// The fewest paths that hold every tracked file of the tree and no other's: a tool handed them walks the tree and nothing else.
-    pub(crate) fn paths(self) -> Result<Vec<String>, String> {
-        let mut git = Command::new("git");
-        git.arg("ls-files");
-
-        Ok(self.holding(ask(git, &[])?.lines()))
+    /// The tree's root directory, where a tool run in it starts.
+    pub(crate) fn directory(self) -> PathBuf {
+        root().join(self.root())
     }
 
-    /// [`Tree::paths`] over `tracked`, the paths git names.
-    fn holding<'a>(self, tracked: impl Iterator<Item = &'a str>) -> Vec<String> {
+    /// The fewest paths that hold every one of `tracked`, the paths git names, that is the tree's, and no other tree's: a tool handed them walks the tree and nothing else.
+    pub(crate) fn paths<'a>(self, tracked: impl IntoIterator<Item = &'a str>) -> Vec<String> {
         if self != Tree::Workspace {
             return vec![self.root().to_string()];
         }

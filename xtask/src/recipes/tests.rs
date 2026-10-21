@@ -1,46 +1,19 @@
-//! What a workspace step hands cargo for a selection, and what a run takes on before it starts anything.
+//! What a step's plan hands its tools for a selection.
 
-use {super::*, crate::Subject};
+use super::*;
 
-#[test]
-fn a_step_brings_what_it_is_run_with_first() {
-    assert_eq!(
-        closed(&[Step::WorkspaceTest]),
-        [Step::LauncherBuild, Step::WorkspaceTest]
-    );
-    assert_eq!(
-        closed(&[Step::BundleTest]),
-        [Step::BundleBuild, Step::BundleTest]
-    );
-}
-
-/// A step whose prerequisite failed is not run, and neither is one behind it: what each reads is not there.
-#[test]
-fn a_step_behind_one_that_did_not_pass_is_not_run() {
-    assert_eq!(
-        blocked(Step::ZedTest, &[Step::GrammarBuild], &[]),
-        Some(Step::GrammarBuild)
-    );
-    assert_eq!(
-        blocked(Step::BundleTest, &[], &[Step::BundleBuild]),
-        Some(Step::BundleBuild)
-    );
-    assert_eq!(blocked(Step::ZedTest, &[Step::BundleBuild], &[]), None);
-}
-
-/// A bare subject is its steps in the table's order, behind what they are run with first and nothing else.
-#[test]
-fn a_bare_subject_brings_no_step_of_another_but_its_prerequisites() {
-    assert_eq!(
-        closed(&Step::about(Subject::Compiler)),
-        [Step::LauncherBuild, Step::CompilerBuild, Step::CompilerTest]
-    );
+/// The words a plan's run spells after its program.
+fn spelled(task: &Task) -> Vec<String> {
+    match task {
+        Task::Run(run) => run.spelled(),
+        other => panic!("not a run: {other:?}"),
+    }
 }
 
 #[test]
 fn no_selection_is_the_workspace_but_its_tools() {
     assert_eq!(
-        testing(None, &Request::whole()).unwrap(),
+        spelled(&testing(None, &Request::whole()).unwrap()),
         [
             "run",
             "--workspace",
@@ -59,7 +32,7 @@ fn no_selection_is_the_workspace_but_its_tools() {
 
 #[test]
 fn a_package_takes_the_place_of_the_workspace() {
-    let arguments = testing(Some("curios-abi"), &Request::whole()).unwrap();
+    let arguments = spelled(&testing(Some("curios-abi"), &Request::whole()).unwrap());
 
     assert_eq!(arguments[..3], ["run", "--package", "curios-abi"]);
     assert!(
@@ -72,7 +45,7 @@ fn a_package_takes_the_place_of_the_workspace() {
 #[test]
 fn a_name_selects_tests_and_keeps_the_workspace() {
     let request = Request::narrowed(None, Vec::new(), vec!["bundle".to_string()]);
-    let arguments = testing(None, &request).unwrap();
+    let arguments = spelled(&testing(None, &request).unwrap());
 
     assert!(
         arguments.iter().any(|argument| argument == "--workspace"),
@@ -90,7 +63,9 @@ fn names_are_a_union() {
     );
 
     assert_eq!(
-        testing(None, &request).unwrap().last().map(String::as_str),
+        spelled(&testing(None, &request).unwrap())
+            .last()
+            .map(String::as_str),
         Some("test(~cli) | test(~selection) | binary(=bundle)")
     );
 }
@@ -104,18 +79,15 @@ fn a_name_holding_the_grammar_s_characters_is_refused() {
 
 #[test]
 fn a_lint_goes_on_past_a_crate_that_fails() {
-    assert!(linting(None).contains(&KEEP_GOING));
-    assert!(linting(Some("curios-core")).contains(&KEEP_GOING));
+    assert!(spelled(&linting(None)).contains(&KEEP_GOING.to_string()));
+    assert!(spelled(&linting(Some("curios-core"))).contains(&KEEP_GOING.to_string()));
 }
 
 /// The workspace is checked as it ships: no step of it turns every feature on, which is `instrumented`'s.
 #[test]
 fn a_workspace_step_names_no_feature() {
-    let tested = testing(None, &Request::whole()).unwrap();
-    let linted = linting(None)
-        .into_iter()
-        .map(str::to_string)
-        .collect::<Vec<_>>();
+    let tested = spelled(&testing(None, &Request::whole()).unwrap());
+    let linted = spelled(&linting(None));
 
     for arguments in [linted, tested] {
         assert!(
@@ -130,8 +102,10 @@ fn a_workspace_step_names_no_feature() {
 /// The recorder's tests are one package's under one feature, so their run compiles nothing of the compiler's suite.
 #[test]
 fn the_recorder_s_tests_build_one_package() {
+    let arguments = spelled(&recorder_testing());
+
     assert_eq!(
-        RECORDER_TESTING[..5],
+        arguments[..5],
         [
             "run",
             "--package",
@@ -140,11 +114,22 @@ fn the_recorder_s_tests_build_one_package() {
             "enabled"
         ]
     );
-    assert!(!RECORDER_TESTING.contains(&"--workspace"));
+    assert!(!arguments.iter().any(|argument| argument == "--workspace"));
 }
 
 #[test]
 fn formatting_writes_unless_it_checks() {
     assert_eq!(formatting(false), ["fmt", "--all"]);
     assert_eq!(formatting(true), ["fmt", "--all", "--", "--check"]);
+}
+
+/// A lint narrowed to a package plans nothing beside its Rust: the workspace's JavaScript is no package's.
+#[test]
+fn a_lint_narrowed_to_a_package_plans_no_web_lint() {
+    let request = Request::narrowed(Some("curios-native".to_string()), Vec::new(), Vec::new());
+
+    assert_eq!(
+        Step::WorkspaceLintWeb.plan(&request, &Checkout::default()),
+        Ok(Vec::new())
+    );
 }

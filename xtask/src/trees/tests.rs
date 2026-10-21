@@ -17,16 +17,13 @@ const TRACKED: [&str; 10] = [
 
 #[test]
 fn a_tree_inside_the_workspace_is_its_own_directory() {
-    assert_eq!(
-        Tree::Vscode.holding(TRACKED.into_iter()),
-        ["editors/vscode"]
-    );
+    assert_eq!(Tree::Vscode.paths(TRACKED), ["editors/vscode"]);
 }
 
 #[test]
 fn the_workspace_is_every_tracked_path_no_other_tree_stands_under() {
     assert_eq!(
-        Tree::Workspace.holding(TRACKED.into_iter()),
+        Tree::Workspace.paths(TRACKED),
         [
             "Cargo.toml",
             "biome.json",
@@ -42,8 +39,5 @@ fn the_workspace_is_every_tracked_path_no_other_tree_stands_under() {
 fn a_file_beside_another_tree_is_held_by_its_own_path() {
     let tracked = ["editors/README.md", "editors/zed/Cargo.toml"];
 
-    assert_eq!(
-        Tree::Workspace.holding(tracked.into_iter()),
-        ["editors/README.md"]
-    );
+    assert_eq!(Tree::Workspace.paths(tracked), ["editors/README.md"]);
 }
