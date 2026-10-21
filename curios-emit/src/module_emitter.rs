@@ -3,10 +3,10 @@ use {
         BigEmitter, BigHelper, Context, EmissionClosure, EmissionClosureName, EmissionData,
         EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter,
         FltEmitter, FltHelper, ImmediateLayout, RopeData, RopeEmitter, Table, TurnEmitter,
-        big_sub_type, bytes_sub_type, cell_sub_type, channel_sub_type, elems_sub_type,
-        flt_sub_type, longs_sub_type, refusal_data_name, refusal_message, rope_base_sub_type,
-        rope_enter_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_room_sub_type,
-        rope_view_sub_type, words_sub_type,
+        big_sub_type, bytes_sub_type, cell_sub_type, channel_sub_type, concrete_val,
+        elems_sub_type, flt_sub_type, longs_sub_type, null, refusal_data_name, refusal_message,
+        rope_base_sub_type, rope_enter_sub_type, rope_leaf_sub_type, rope_node_sub_type,
+        rope_room_sub_type, rope_view_sub_type, words_sub_type,
     },
     curios_abi::{ENTRY, Namespace, PANIC, WireType},
     curios_num::Binary,
@@ -356,10 +356,16 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     // A reference position is nullable in both directions, as every reference position is: a filler a split hands across a call or a return is null, and only a read asserts otherwise. A register position holds its carrier's zero for a filler instead.
                     comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
                         inputs: curios_wasm::ResultType::from(
-                            signature.params.iter().map(|position| position.val_type()),
+                            signature
+                                .params
+                                .iter()
+                                .map(|position| position.val_type(self.table)),
                         ),
                         outputs: curios_wasm::ResultType::from(
-                            signature.results.iter().map(|position| position.val_type()),
+                            signature
+                                .results
+                                .iter()
+                                .map(|position| position.val_type(self.table)),
                         ),
                     }),
                 },
@@ -494,15 +500,26 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             | EmissionData::Closure(_, _) => {
                 let global_name = self.table.find_const(name);
 
-                let mut init_expr: curios_wasm::Expr = Default::default();
-                init_expr.push(curios_wasm::Instr::I32Const { value: 0 });
-                init_expr.push(curios_wasm::Instr::RefI31);
+                // A closure's global is declared at its own environment type, so every position declared at its arity's takes it with no cast; it is null until the start function builds it, a placeholder no other type admits.
+                let (val_type, init_expr) = match self.table.static_type(name) {
+                    Some((type_name, _)) => (
+                        concrete_val(type_name.clone(), true),
+                        curios_wasm::Expr::from([null(&type_name)]),
+                    ),
+                    None => (
+                        Table::top_type(false),
+                        curios_wasm::Expr::from([
+                            curios_wasm::Instr::I32Const { value: 0 },
+                            curios_wasm::Instr::RefI31,
+                        ]),
+                    ),
+                };
 
                 self.module.add_global(
                     global_name.clone(),
                     curios_wasm::Global {
                         global_type: curios_wasm::GlobalType {
-                            val_type: Table::top_type(false),
+                            val_type,
                             mutability: curios_wasm::Mutability::Var,
                         },
                         expr: init_expr,

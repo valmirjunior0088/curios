@@ -5,7 +5,7 @@ use {
     curios_abi::ForeignFunction,
     curios_num::{Binary, Integer, Natural},
     std::{
-        collections::{BTreeMap, BTreeSet, HashSet},
+        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         sync::Arc,
     },
 };
@@ -215,6 +215,21 @@ impl EmissionBody {
         &self.escapes
     }
 
+    /// Each value a closure construction binds in this region and every region nested in it, with the closure it builds.
+    fn collect_closure_constructions<'a>(
+        &'a self,
+        out: &mut HashMap<&'a EmissionValueName, &'a EmissionClosureName>,
+    ) {
+        for (name, value) in &self.values {
+            if let EmissionValue::Pure(EmissionData::Closure(closure, _)) = value {
+                out.insert(name, closure);
+            }
+        }
+        for (_, block) in &self.blocks {
+            block.region.collect_closure_constructions(out);
+        }
+    }
+
     /// Collect the arity of every *indirect* call site in this region (and its nested blocks). A closure of that arity is invoked here even when the optimizer has specialized its definition away (a higher-order function's argument inlined, dropping the only closure of that arity while a `call_indirect` in its body survives), so a closure type for the arity is needed even though no closure of it is defined.
     fn collect_indirect_arities(&self, out: &mut BTreeSet<usize>) {
         if let EmissionTail::Call(EmissionCallTarget::Indirect { params, .. }) = &self.tail {
@@ -322,6 +337,27 @@ impl EmissionModule {
     /// The closure definitions, in insertion order.
     pub(crate) fn clsrs(&self) -> &[(EmissionClosureName, EmissionClosure)] {
         &self.clsrs
+    }
+
+    /// Every value a closure construction binds, in a body or hoisted to a const, with the closure it builds.
+    pub(crate) fn closure_constructions(
+        &self,
+    ) -> HashMap<&EmissionValueName, &EmissionClosureName> {
+        let mut constructions = HashMap::new();
+        for (_, func) in &self.funcs {
+            func.region
+                .collect_closure_constructions(&mut constructions);
+        }
+        for (_, clsr) in &self.clsrs {
+            clsr.region
+                .collect_closure_constructions(&mut constructions);
+        }
+        for (name, data) in &self.consts {
+            if let EmissionData::Closure(closure, _) = data {
+                constructions.insert(name, closure);
+            }
+        }
+        constructions
     }
 
     /// Append a closure definition under its name; `EmissionData::Closure` values cite that name to instantiate it.

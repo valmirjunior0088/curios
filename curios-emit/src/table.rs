@@ -187,6 +187,8 @@ pub(crate) enum Position {
     Word,
     Length,
     Float,
+    /// A closure of this arity, declared at the arity's environment type.
+    Closure(usize),
 }
 
 impl Position {
@@ -204,7 +206,7 @@ impl Position {
     /// The register carrier this position holds, or `None` for a reference.
     pub(crate) fn carrier(self) -> Option<curios_cont::Repr> {
         match self {
-            Self::Reference => None,
+            Self::Reference | Self::Closure(_) => None,
             Self::Word => Some(curios_cont::Repr::Nat),
             Self::Length => Some(curios_cont::Repr::Length),
             Self::Float => Some(curios_cont::Repr::Flt),
@@ -212,20 +214,33 @@ impl Position {
     }
 
     /// The wasm type a value in this position is declared at. A reference admits null, as every reference position a value crosses does.
-    pub(crate) fn val_type(self) -> curios_wasm::ValType {
+    pub(crate) fn val_type(self, table: &Table) -> curios_wasm::ValType {
         match self {
             Self::Reference => Table::top_type(true),
             Self::Word | Self::Length => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
             Self::Float => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
+            Self::Closure(arity) => concrete_val(table.find_envr_type(arity), true),
         }
     }
 
-    fn letter(self) -> char {
+    /// How a value is loaded to cross into this position.
+    pub(crate) fn load_as(self, table: &Table) -> LoadAs {
         match self {
-            Self::Reference => 'r',
-            Self::Word => 'i',
-            Self::Length => 'u',
-            Self::Float => 'f',
+            Self::Reference => LoadAs::Null,
+            Self::Word | Self::Length | Self::Float => {
+                LoadAs::of(&self.carrier().expect("a register position has a carrier"))
+            }
+            Self::Closure(arity) => LoadAs::ConcreteOrNull(table.find_envr_type(arity)),
+        }
+    }
+
+    fn spelling(self) -> String {
+        match self {
+            Self::Reference => "r".to_string(),
+            Self::Word => "i".to_string(),
+            Self::Length => "u".to_string(),
+            Self::Float => "f".to_string(),
+            Self::Closure(arity) => format!("c{arity}"),
         }
     }
 }
@@ -238,19 +253,28 @@ pub(crate) struct Signature {
 }
 
 impl Signature {
-    /// `func`'s type: a parameter is held as the representation decided its value is, which `raw` holds, and a result as the function hands it back.
-    fn of(func: &EmissionFunction, raw: &HashMap<EmissionValueName, curios_cont::Repr>) -> Self {
+    /// `func`'s type: a parameter is held as the representation decided its value is — in a register `raw` holds, or at the environment type of the closures `closures` knows it holds — and a result as the function hands it back.
+    fn of(
+        func: &EmissionFunction,
+        raw: &HashMap<EmissionValueName, curios_cont::Repr>,
+        closures: &HashMap<EmissionValueName, usize>,
+    ) -> Self {
         Self {
             params: func
                 .params
                 .iter()
-                .map(|param| Position::of(raw.get(&param.name).copied()))
+                .map(|param| match raw.get(&param.name) {
+                    Some(&carrier) => Position::of(Some(carrier)),
+                    None => closures
+                        .get(&param.name)
+                        .map_or(Position::Reference, |&arity| Position::Closure(arity)),
+                })
                 .collect(),
             results: func.results.iter().copied().map(Position::of).collect(),
         }
     }
 
-    /// The emitted name of this type. A type all of references keeps the spelling it had before any position was held in a register, `func/{parameters}` with one result and `func/{parameters}/{results}` with several; any other spells each position, `r` for a reference, `i` for a word and `f` for a float, and `0` for none.
+    /// The emitted name of this type. A type all of references keeps the spelling it had before any position was held in a register, `func/{parameters}` with one result and `func/{parameters}/{results}` with several; any other spells each position, `r` for a reference, `i` for a word, `u` for a length, `f` for a float and `c` with its arity for a closure, and `0` for none.
     ///
     /// What produces several results is `curios-cont`'s return protocol, which hands a class of functions back the leading fields of the construction they would otherwise allocate, and what produces a register position is its representation analysis; both are decided per tail-call class, because `return_call` requires a callee's results to match its caller's exactly. Closure supertypes are keyed separately, on arity alone, and stay uniform and single-result — which is why both decisions exclude any function that escapes.
     fn name(&self) -> curios_wasm::TypeName {
@@ -261,7 +285,10 @@ impl Signature {
             .all(|position| *position == Position::Reference);
         let spelled = |positions: &[Position]| match positions.is_empty() {
             true => "0".to_string(),
-            false => positions.iter().map(|position| position.letter()).collect(),
+            false => positions
+                .iter()
+                .map(|position| position.spelling())
+                .collect(),
         };
         curios_wasm::TypeName::from(match (uniform, self.results.len()) {
             (true, 1) => format!("func/{}", self.params.len()),
@@ -284,9 +311,10 @@ impl<'a> FuncData<'a> {
         func_name: &'a EmissionFunctionName,
         func: &'a EmissionFunction,
         raw: &HashMap<EmissionValueName, curios_cont::Repr>,
+        closures: &HashMap<EmissionValueName, usize>,
     ) -> Self {
         Self {
-            signature: Signature::of(func, raw),
+            signature: Signature::of(func, raw, closures),
             // The `func/` prefix is why the exported entrypoint is `func/main`: the entry is always `main`, and the export reuses the function's emitted name.
             func_name: curios_wasm::FuncName::from(format!("func/{}", func_name)),
             params: func
@@ -429,15 +457,22 @@ pub(crate) struct Table<'a> {
     funcs: HashMap<&'a EmissionFunctionName, FuncData<'a>>,
     /// The values the representation analysis decided to hold in a register, and at which carrier. A name absent here is held behind a reference, which is every synthetic name codegen mints for itself.
     raw: &'a HashMap<EmissionValueName, curios_cont::Repr>,
+    /// The values the representation analysis knows hold closures of one arity, and that arity: each declared at its arity's environment type.
+    closures: &'a HashMap<EmissionValueName, usize>,
+    /// The values a closure construction binds, in a body or hoisted, with the closure each builds: each declared at that closure's own environment type.
+    constructed: HashMap<&'a EmissionValueName, &'a EmissionClosureName>,
 }
 
 impl<'a> Table<'a> {
     pub(crate) fn new(
         module: &'a EmissionModule,
         raw: &'a HashMap<EmissionValueName, curios_cont::Repr>,
+        closures: &'a HashMap<EmissionValueName, usize>,
     ) -> Self {
         Self {
             raw,
+            closures,
+            constructed: module.closure_constructions(),
             special_field: curios_wasm::FieldName::from("!"),
             special_local: curios_wasm::LocalName::from("!"),
             special_label: curios_wasm::LabelName::from("!"),
@@ -564,7 +599,7 @@ impl<'a> Table<'a> {
             func_types: module
                 .funcs()
                 .iter()
-                .map(|(_, func)| Signature::of(func, raw))
+                .map(|(_, func)| Signature::of(func, raw, closures))
                 .map(|signature| {
                     let name = signature.name();
                     (signature, name)
@@ -628,7 +663,7 @@ impl<'a> Table<'a> {
             funcs: module
                 .funcs()
                 .iter()
-                .map(|(func_name, func)| (func_name, FuncData::new(func_name, func, raw)))
+                .map(|(func_name, func)| (func_name, FuncData::new(func_name, func, raw, closures)))
                 .collect(),
         }
     }
@@ -1371,8 +1406,38 @@ impl<'a> Table<'a> {
                 | curios_cont::Repr::List
                 | curios_cont::Repr::Ref,
             )
-            | None => Table::top_type(true),
+            | None => self
+                .static_type(value_name)
+                .map_or(Table::top_type(true), |(type_name, _)| {
+                    concrete_val(type_name, true)
+                }),
         }
+    }
+
+    /// The heap type `value_name` is declared at where it is narrower than the uniform reference, with the arity of the closures it holds: a closure construction's own environment, and the arity's environment base for a value the representation analysis knows holds closures of it.
+    pub(crate) fn static_type(
+        &self,
+        value_name: &EmissionValueName,
+    ) -> Option<(curios_wasm::TypeName, usize)> {
+        if let Some(closure) = self.constructed.get(value_name) {
+            let data = self.find_clsr(closure);
+            return Some((data.envr_type(), data.arity()));
+        }
+        self.closures
+            .get(value_name)
+            .map(|&arity| (self.find_envr_type(arity), arity))
+    }
+
+    /// Whether a value declared at `value_name`'s own type is already a `target`, so entering it as one casts nothing: its own environment type, or its arity's base.
+    pub(crate) fn is_static(
+        &self,
+        value_name: &EmissionValueName,
+        target: &curios_wasm::TypeName,
+    ) -> bool {
+        self.static_type(value_name)
+            .is_some_and(|(type_name, arity)| {
+                type_name == *target || self.find_envr_type(arity) == *target
+            })
     }
 
     pub(crate) fn find_clsr(&self, clsr_name: &EmissionClosureName) -> &ClsrData<'a> {

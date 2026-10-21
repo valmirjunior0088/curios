@@ -7,7 +7,8 @@ use {
 fn rope_names_match_the_wasm_vocabulary() {
     let module = EmissionModule::new();
     let raw = HashMap::new();
-    let table = Table::new(&module, &raw);
+    let closures = HashMap::new();
+    let table = Table::new(&module, &raw, &closures);
     let bytes = table.bytes_rope();
     let list = table.list_rope();
 

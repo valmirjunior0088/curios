@@ -190,3 +190,29 @@ fn a_convoy_in_a_hot_loop_allocates_no_closure() {
         );
     }
 }
+
+/// A closure every flow into a position hands of one arity is declared at that arity's environment type, so a loop calling it reads its code with no cast: a cast to the arity's environment, the supertype of every closure's of it and so no final type, is the engine's subtype walk on every call.
+#[test]
+fn a_closure_of_one_arity_reaches_its_call_with_nothing_to_cast() {
+    const REPEAT: &str = r#"
+        use /std/{Nat, List, Process};
+        let repeat(k: Nat, f: (Nat) -> Nat, x: Nat) -> Nat =
+            match k | 0 => x | kp + 1 => repeat(kp, f, f(x) % 65537) end;
+        let entry() -> /std/Io({}) =
+            let taint = List/len(Process/args()!);
+            /std/print(Nat/to_str(repeat(taint, (y) => y * 3 + taint, 7)));
+        entry()
+        "#;
+
+    let wat = wat(REPEAT);
+    for kernel in loops_containing(&wat, "65537") {
+        assert!(
+            kernel.contains("call_indirect $clsr/1"),
+            "the loop calls the closure it was handed"
+        );
+        assert!(
+            !kernel.contains("ref.cast (ref $envr/"),
+            "and casts nothing to reach its code"
+        );
+    }
+}

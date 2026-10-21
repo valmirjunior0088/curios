@@ -270,6 +270,9 @@ pub(crate) fn lower(
         })
         .collect();
 
+    // One counter for the whole module: a value the lowering mints is named past every CPS value and every other minted one, so an emission name identifies one value module-wide.
+    let value_entropy = Entropy::new();
+    value_entropy.seed(source.values().len() as u64);
     let mut functions = BTreeMap::new();
     for (index, function) in source.functions().iter().enumerate() {
         let Some(function) = function else { continue };
@@ -278,8 +281,15 @@ pub(crate) fn lower(
             .get(&id)
             .map(|slots| slots.iter().map(|slot| slot.raw_carrier()).collect())
             .unwrap_or_else(|| vec![None]);
-        let lowered =
-            MachineFunctionLowerer::new(source, id, function, &free_values, results).lower();
+        let lowered = MachineFunctionLowerer::new(
+            source,
+            id,
+            function,
+            &free_values,
+            results,
+            &value_entropy,
+        )
+        .lower();
         functions.insert(id, lowered);
     }
     let function_hints = source
@@ -458,7 +468,7 @@ pub(crate) struct MachineFunctionLowerer<'a> {
     materialized_closures: BTreeMap<curios_cont::FunctionId, MachineValueId>,
     work: VecDeque<(MachineBlockId, curios_cont::NodeId, Vec<MachineValueId>)>,
     block_entropy: Entropy<MachineBlockId>,
-    value_entropy: Entropy<MachineValueId>,
+    value_entropy: &'a Entropy<MachineValueId>,
 }
 
 impl<'a> MachineFunctionLowerer<'a> {
@@ -468,11 +478,10 @@ impl<'a> MachineFunctionLowerer<'a> {
         function: &'a curios_cont::Function,
         free_values: &'a BTreeMap<curios_cont::FunctionId, Vec<MachineValueId>>,
         results: Vec<Option<curios_cont::Repr>>,
+        value_entropy: &'a Entropy<MachineValueId>,
     ) -> Self {
         let block_entropy = Entropy::new();
         block_entropy.seed(1);
-        let value_entropy = Entropy::new();
-        value_entropy.seed(source.values().len() as u64);
         Self {
             source,
             id,

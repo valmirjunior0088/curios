@@ -17,11 +17,13 @@
 //! **A use can only take what the definition can give**, which is what [`Offer`] states. What arrives through a position no single party controls is a reference by declaration: an escaping function's parameters, which its closure wrapper passes at the shared `clsr/N` type, and the entry's, which the host passes; the results of a class whose results something else fixes; and what a cell, a channel, a call-shaped intrinsic or a host import hands back, a host's `Flt` aside. Coercing at the definition instead of excluding it was the alternative, and it buys nothing: the definition would coerce back to a register exactly what it had just been handed as a reference.
 //!
 //! **A captured value crosses at its own carrier.** A value free in a function's body is one value wherever it is read: lowering carries it in under its own name, lambda-lifted as a leading parameter of a directly called function or captured into a field of a closure's environment, and the emitter declares the parameter and the field at the carrier decided for the value. Its uses in every body it reaches demand of the one value, so the decision is the same wherever it stands; a closure's environment is a struct of its own, so declaring a field re-keys nothing shared.
+//!
+//! **A closure is declared at its arity's environment where every flow agrees on the arity.** The environment base of an arity is the supertype of every closure's environment of it, so it is no final type, and a cast to a type that is not final is the engine's subtype walk where a final type's is one comparison. A value every flow reaching which is a closure of one arity — a function named as a value, a read of a row slot declared at a closure of it, or another such value — is declared at that base ([`Representation::closures`]) and reaches its call with nothing to cast; one a second arity, a reference by declaration or a call's result reaches stays the uniform reference, since a call hands its results back at its signature's positions and those declare no closure.
 
 use {
     super::{
         Atom, Bound, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Lattice, Literal, Module,
-        Node, Register, Repr, Solver, TailClasses, ValueExpr, ValueId, nat_is_small,
+        Node, Register, Repr, Slot, Solver, TailClasses, ValueExpr, ValueId, nat_is_small,
     },
     curios_abi::WireType,
     std::collections::{BTreeMap, BTreeSet},
@@ -74,6 +76,8 @@ pub struct Representation {
     pub values: BTreeMap<ValueId, Storage>,
     /// The storage of each live function's results, in order: the slots of its tail-call class where something it sees decides them, and every one boxed where something else fixes them.
     pub results: BTreeMap<FunctionId, Vec<Storage>>,
+    /// The values every value reaching which is a closure of one arity, with that arity: what the emitter declares at that arity's environment type.
+    pub closures: BTreeMap<ValueId, usize>,
 }
 
 /// What one decision is about: a value, or a result slot of a tail-call class, which binds no value.
@@ -729,9 +733,103 @@ pub fn representation(module: &Module) -> Representation {
         })
         .collect();
 
-    Representation { values, results }
+    let closures = closures(module, offers, &flows);
+
+    Representation {
+        values,
+        results,
+        closures,
+    }
 }
 
+/// What a site holds of closures: nothing yet, closures of one arity, or anything else.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Closures {
+    Nothing,
+    Arity(usize),
+    Mixed,
+}
+
+impl Lattice for Closures {
+    fn bottom() -> Self {
+        Self::Nothing
+    }
+
+    fn join(&mut self, incoming: Self) {
+        *self = match (*self, incoming) {
+            (Self::Nothing, other) | (other, Self::Nothing) => other,
+            (Self::Arity(own), Self::Arity(other)) if own == other => Self::Arity(own),
+            _ => Self::Mixed,
+        };
+    }
+}
+
+/// The values every value reaching which is a closure of one arity, with that arity: a function named as a value, a read of a row slot declared at a closure of it, or another such value. A site no flow states, or a result slot, holds anything.
+fn closures(
+    module: &Module,
+    offers: &BTreeMap<Site, Offer>,
+    flows: &[(Source, Site)],
+) -> BTreeMap<ValueId, usize> {
+    let facts = Solver::solve(offers.keys().copied(), |rules| {
+        let mut defined = BTreeSet::new();
+        for (_, node) in module.live_nodes() {
+            match node {
+                Node::LetIntrinsic {
+                    result,
+                    op: Intrinsic::RowGet(row, index),
+                    ..
+                } => {
+                    defined.insert(Site::Value(*result));
+                    let fact = match module.row(*row).slots[*index] {
+                        Slot::Closure(arity) => Closures::Arity(arity),
+                        _ => Closures::Mixed,
+                    };
+                    rules.add(move |solver| solver.join(Site::Value(*result), fact));
+                }
+                Node::LetIntrinsic { result, .. } | Node::LetValue { result, .. } => {
+                    defined.insert(Site::Value(*result));
+                    rules.add(move |solver| solver.join(Site::Value(*result), Closures::Mixed));
+                }
+                _ => {}
+            }
+        }
+        for (&site, offer) in offers {
+            let opaque = match site {
+                Site::Result { .. } => true,
+                Site::Value(_) => !matches!(offer, Offer::Open { .. }) && !defined.contains(&site),
+            };
+            if opaque {
+                rules.add(move |solver| solver.join(site, Closures::Mixed));
+            }
+        }
+        for &(source, target) in flows {
+            rules.add(move |solver| {
+                let fact = match source {
+                    Source::Atom(Atom::Fun(function)) => module
+                        .function(*function)
+                        .map_or(Closures::Mixed, |definition| {
+                            Closures::Arity(definition.params.len())
+                        }),
+                    Source::Atom(Atom::Value(value)) => solver
+                        .fact(&Site::Value(*value))
+                        .copied()
+                        .unwrap_or(Closures::Mixed),
+                    Source::Atom(Atom::Filler) => Closures::Nothing,
+                    Source::Atom(Atom::Literal(_)) => Closures::Mixed,
+                    Source::Site(_) => Closures::Mixed,
+                };
+                solver.join(target, fact);
+            });
+        }
+    });
+    facts
+        .into_iter()
+        .filter_map(|(site, fact)| match (site, fact) {
+            (Site::Value(value), Closures::Arity(arity)) => Some((value, arity)),
+            _ => None,
+        })
+        .collect()
+}
 /// Demand `carrier` of `atom`, where its definition can supply it. An atom that is not a value, a position that reads a reference, and a definition that cannot reach a register all contribute nothing.
 fn demand(
     atom: &Atom,
@@ -759,4 +857,14 @@ fn demand_site(
 }
 
 #[cfg(test)]
-mod tests;
+mod boundary_tests;
+#[cfg(test)]
+mod closure_tests;
+#[cfg(test)]
+mod float_tests;
+#[cfg(test)]
+mod storage_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod word_tests;

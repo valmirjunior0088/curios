@@ -102,12 +102,13 @@ fn into_wasm_within(module: &curios_cont::Module) -> (curios_wasm::Module, Forei
     curios_profile::profile!("into_wasm");
     let representation = curios_cont::representation(module);
     let mut raw = raw_locals(&representation);
+    let closures = closure_locals(&representation);
     let machine = lower(module, &representation.results);
     let mut structured = structurize(&machine);
     raw.extend(structured.minted_registers());
     hoist_consts(&mut structured);
     let mut wasm_module = curios_wasm::Module::new("module");
-    let table = Table::new(&structured, &raw);
+    let table = Table::new(&structured, &raw, &closures);
     ModuleEmitter::new(&table, &mut wasm_module).emit_module(&structured);
     spill_wide_shapes(&mut wasm_module, Envelope::ENGINE);
     allocate_locals(&mut wasm_module);
@@ -118,6 +119,17 @@ fn into_wasm_within(module: &curios_cont::Module) -> (curios_wasm::Module, Forei
     }
 
     (wasm_module, imported)
+}
+
+/// The emission names the representation analysis knows hold closures of one arity, and that arity, translated as [`raw_locals`] translates registers.
+fn closure_locals(
+    representation: &curios_cont::Representation,
+) -> HashMap<EmissionValueName, usize> {
+    representation
+        .closures
+        .iter()
+        .map(|(&value, &arity)| (value_name(value_id(value)), arity))
+        .collect()
 }
 
 /// The emission names the representation analysis decided to hold raw, and at which carrier.

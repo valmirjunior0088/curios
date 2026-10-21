@@ -422,11 +422,14 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    /// How a value must sit on the stack to be stored into `param`'s local: in its register carrier when that local is one, and as a reference — null admitted, since the local is nullable — otherwise.
+    /// How a value must sit on the stack to be stored into `param`'s local: in its register carrier when that local is one, at the closure environment type it is declared at when it is one, and as a reference otherwise — null admitted either way, since the local is nullable.
     fn param_load(&self, param: &EmissionValueName) -> LoadAs {
         match self.table().raw_carrier(param) {
             Some(carrier) => LoadAs::of(&carrier),
-            None => LoadAs::Null,
+            None => match self.table().static_type(param) {
+                Some((type_name, _)) => LoadAs::ConcreteOrNull(type_name),
+                None => LoadAs::Null,
+            },
         }
     }
 
@@ -478,20 +481,26 @@ impl<'a, 'b> Context<'a, 'b> {
                 },
             ];
 
-            // A captured value is held in its field as it is held wherever it is read, so a field the representation holds in a register is read as that register is.
+            // A captured value is held in its field as it is held wherever it is read, so a field the representation holds in a register is read as that register is, and one declared at the type a load asks for is already one.
             match self.table().raw_carrier(value_name) {
                 Some(carrier) => self.raw_as_instrs(producer, carrier, load_as),
-                None => self.load_as_instrs(producer, load_as, true),
+                None => {
+                    let load_as = self.declared_as(value_name, load_as);
+                    self.load_as_instrs(producer, load_as, true)
+                }
             }
         } else if let Some(local_data) = self.find_local(value_name) {
             let producer = vec![curios_wasm::Instr::LocalGet {
                 local_name: local_data.local_name,
             }];
 
-            // A local is held as the representation decided, a function's parameters among them, each declared as its function's type holds it.
+            // A local is held as the representation decided, a function's parameters among them, each declared as its function's type holds it; one declared at the type a load asks for is already one.
             match self.table().raw_carrier(value_name) {
                 Some(carrier) => self.raw_as_instrs(producer, carrier, load_as),
-                None => self.load_as_instrs(producer, load_as, local_data.is_nullable),
+                None => {
+                    let load_as = self.declared_as(value_name, load_as);
+                    self.load_as_instrs(producer, load_as, local_data.is_nullable)
+                }
             }
         } else {
             // A read at the const's own register carrier takes its value, never the global's box: the global serves the reads that want a reference.
@@ -512,7 +521,23 @@ impl<'a, 'b> Context<'a, 'b> {
                 global_name: self.table().find_const(value_name),
             }];
 
-            self.load_as_instrs(producer, load_as, false)
+            // A hoisted closure's global is declared at its own environment type, null until the start function builds it.
+            let nullable = self.table().static_type(value_name).is_some();
+            let load_as = self.declared_as(value_name, load_as);
+            self.load_as_instrs(producer, load_as, nullable)
+        }
+    }
+
+    /// `load_as`, less the cast where `value_name`'s declaration — its local, its captured field or its global, each declared at [`Table::local_type`] — is already the heap type it casts to: only null is then ruled out, where the load rules it out.
+    fn declared_as(&self, value_name: &EmissionValueName, load_as: LoadAs) -> LoadAs {
+        match load_as {
+            LoadAs::Concrete(target) if self.table().is_static(value_name, &target) => {
+                LoadAs::NonNull
+            }
+            LoadAs::ConcreteOrNull(target) if self.table().is_static(value_name, &target) => {
+                LoadAs::Null
+            }
+            load_as => load_as,
         }
     }
 
@@ -732,10 +757,9 @@ impl<'a, 'b> Context<'a, 'b> {
         // Each argument is loaded the way the callee's parameter is held, as an edge loads its own: a register where the representation decided one across the call, and a reference — a filler crossing as null — where the callee is entered through a uniform position.
         for (arg, position) in params.iter().zip(&signature.params) {
             output.extend(match (arg, position.carrier()) {
-                (EmissionArg::Value(value_name), carrier) => self.load_value_instrs(
-                    value_name,
-                    carrier.map_or(LoadAs::Null, |carrier| LoadAs::of(&carrier)),
-                ),
+                (EmissionArg::Value(value_name), _) => {
+                    self.load_value_instrs(value_name, position.load_as(self.table()))
+                }
                 (EmissionArg::Filler, Some(carrier)) => zero_instrs(carrier),
                 (EmissionArg::Filler, None) => null_instrs(),
             });
@@ -793,7 +817,7 @@ impl<'a, 'b> Context<'a, 'b> {
         // Some result is held otherwise than its parameter: set every result aside at its own position, then load each as its parameter is held.
         let locals = results
             .iter()
-            .map(|position| self.push_local("result", position.val_type()))
+            .map(|position| self.push_local("result", position.val_type(self.table())))
             .collect::<Vec<_>>();
         let mut output = locals
             .iter()
