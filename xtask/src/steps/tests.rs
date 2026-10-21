@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::{Asked, Cli, closed},
+    crate::{Asked, Checkout, Cli, schedule},
     clap::{CommandFactory, Parser},
     std::collections::BTreeSet,
 };
@@ -58,39 +58,10 @@ fn every_subject_is_a_subcommand() {
     }
 }
 
-/// What a step is run with first stands before it in the table, so the table's order is one a run can follow.
-#[test]
-fn a_step_is_run_with_first_what_the_table_holds_before_it() {
-    for (place, step) in Step::value_variants().iter().enumerate() {
-        let row = step.row();
-        for before in row.ensures {
-            let earlier = Step::value_variants()
-                .iter()
-                .position(|other| other == before)
-                .expect("a step of the table");
-            assert!(
-                earlier < place,
-                "{} before {}",
-                spelled(*before),
-                spelled(*step)
-            );
-        }
-    }
-}
-
-/// What a step is run with first is something built, never a check: asking for one action never runs another subject's tests.
-#[test]
-fn a_step_ensures_only_builds() {
-    for step in Step::value_variants() {
-        for ensured in step.row().ensures {
-            assert_eq!(ensured.row().action, Action::Build, "{}", spelled(*step));
-        }
-    }
-}
-
-/// Every line of the check workflow that runs this program is a command the parser reads, and together, with what each is run with first, they run every step: a step added to the table and to no job fails here, and so does a job left spelling a step that is gone.
+/// Every line of the check workflow that runs this program is a command the parser reads, and together, each with the steps that leave what it reads, they run every step: a step added to the table and to no job fails here, and so does a job left spelling a step that is gone.
 #[test]
 fn every_step_has_a_job() {
+    let checkout = Checkout::default();
     let mut run = Vec::new();
 
     let lines = WORKFLOW
@@ -109,7 +80,13 @@ fn every_step_has_a_job() {
             panic!("no step of the table: {line}");
         };
 
-        run.extend(closed(&about.steps().0));
+        let (steps, request) = about.steps();
+        run.extend(
+            schedule(&steps, &request, &checkout)
+                .unwrap()
+                .into_iter()
+                .map(|planned| planned.step),
+        );
     }
 
     for step in Step::value_variants() {

@@ -1,6 +1,6 @@
 //! The one authored table of the repository's steps.
 //!
-//! **A step is an action on a subject, and everything said of one is said here.** [`Step::row`] is an exhaustive match, so no step exists without a row: the subject and the action a person types to reach it, the steps run first whenever it is asked for, and what it does, worded so that what only it catches is plain. The command line and its help, a bare subject's sequence and what the check workflow must run are read off these rows, so none of them is a second statement of one.
+//! **A step is an action on a subject, and everything said of one is said here.** [`Step::row`] is an exhaustive match, so no step exists without a row: the subject and the action a person types to reach it, and what it does, worded so that what only it catches is plain. What a step is run after is no row's: it is read off the step's plan ([`runner`](crate::runner)). The command line and its help, a bare subject's sequence and what the check workflow must run are read off these rows, so none of them is a second statement of one.
 //!
 //! **Format and lint follow a tree; build, test and install follow what is built from one.** A tree is a manifest root — the Rust workspace, the two npm packages under `editors/`, and the Zed extension's own workspace — and a tracked file belongs to the tree of its nearest one, so a file added anywhere is already some tree's. `compiler`, `launcher`, `bundle`, `docs`, `instrumented` and `tools` are builds of the workspace's tree, each in the configuration it ships or is measured in.
 //!
@@ -8,7 +8,7 @@
 //!
 //! **The suite is compiled once.** `workspace test` is the one step that builds the compiler's tests, so a test of the compiler is in that run or in no step: a second run in another configuration, for the tests a feature adds or for one package alone, compiles the whole suite again for a handful of tests. The recorder's tests are the one second run, `instrumented test`, because theirs compiles none of it: `curios-profile` depends on nothing of the compiler, so its `enabled` feature is a build of that crate alone.
 //!
-//! **A bare subject is its steps in the table's order, one after another.** The order of the variants is the one order there is: a step that reads what another writes stands after it, as a test stands after its install and after the build it checks, and a step that reads another subject's build ensures it, as `zed test` ensures the grammar's. `cargo xtask gate` walks every row the same way, so the one order there is also orders two subjects, and a prerequisite two of them share runs once.
+//! **A bare subject is its steps in the table's order, one after another, each after what it reads.** A step runs after the step that leaves each product its plan reads, as `zed test` runs after `grammar build`, whose parser it hashes, and that after `grammar install`, whose tools generate it. The order of the variants orders the rest, and it stands every step that leaves a product before each step that reads it, so `cargo xtask gate` walks the rows as they stand, and a step two others read from runs once.
 //!
 //! **The table says nothing of a machine.** A step runs wherever the checkout is; which machines run which subject is the check workflow's to say.
 
@@ -108,8 +108,6 @@ pub(crate) enum Step {
 pub(crate) struct Row {
     pub(crate) subject: Subject,
     pub(crate) action: Action,
-    /// The steps run first whenever this one is asked for, because it reads what they file.
-    pub(crate) ensures: &'static [Step],
     /// What the step does, worded so that what only it catches is plain: its help line.
     pub(crate) does: &'static str,
 }
@@ -117,10 +115,9 @@ pub(crate) struct Row {
 impl Step {
     /// The step's row.
     pub(crate) fn row(self) -> Row {
-        let always = |subject, action, ensures, does| Row {
+        let always = |subject, action, does| Row {
             subject,
             action,
-            ensures,
             does,
         };
 
@@ -128,181 +125,151 @@ impl Step {
             Step::LauncherBuild => always(
                 Subject::Launcher,
                 Action::Build,
-                &[],
                 "Build the slim launcher in a cargo invocation of its own and file it where the compiler embeds it: the one build of the launcher's crate as it ships",
             ),
             Step::WorkspaceFormat => always(
                 Subject::Workspace,
                 Action::Format,
-                &[],
                 "Format the workspace's Rust; as a check, alone fails on formatting drift",
             ),
             Step::WorkspaceFormatWeb => always(
                 Subject::Workspace,
                 Action::Format,
-                &[],
                 "Format the JavaScript, JSON and CSS the workspace holds; as a check, alone fails on formatting drift in them",
             ),
             Step::WorkspaceLint => always(
                 Subject::Workspace,
                 Action::Lint,
-                &[Step::LauncherBuild],
                 "Lint every target of the workspace as it ships, which elaborates, erases and certifies the whole standard library; alone refuses a loop over a hash's order",
             ),
             Step::WorkspaceLintWeb => always(
                 Subject::Workspace,
                 Action::Lint,
-                &[],
                 "Lint the JavaScript, JSON and CSS the workspace holds: the browser harness, the documentation pages' script and stylesheet",
             ),
             Step::WorkspaceTest => always(
                 Subject::Workspace,
                 Action::Test,
-                &[Step::LauncherBuild],
                 "Run the workspace's tests as it ships, the one compilation of the suite; alone reaches the back end, through the cross-stage corpus, renders the standard library's pages end to end and runs an executable the compiler wrote",
             ),
             Step::WorkspaceBinaryenCache => always(
                 Subject::Workspace,
                 Action::Test,
-                &[],
                 "Hold that a second cargo mode reuses Binaryen's build rather than making it again; the first build after an edit to its build script makes it from source, since its cache is keyed by the script's hash",
             ),
             Step::InstrumentedLint => always(
                 Subject::Instrumented,
                 Action::Lint,
-                &[Step::LauncherBuild],
                 "Lint the workspace with every feature on; alone compiles the instrumentation a feature turns on",
             ),
             Step::InstrumentedTest => always(
                 Subject::Instrumented,
                 Action::Test,
-                &[],
                 "Run the recorder's tests, which `curios-profile` compiles under its `enabled` feature alone: a build of that one crate, which depends on nothing of the compiler",
             ),
             Step::DocsBuild => always(
                 Subject::Docs,
                 Action::Build,
-                &[Step::LauncherBuild],
                 "Build the workspace's Rust documentation, over private items and every feature; alone runs rustdoc, where a broken intra-doc link fails",
             ),
             Step::CompilerBuild => always(
                 Subject::Compiler,
                 Action::Build,
-                &[Step::LauncherBuild],
                 "Build the compiler as it is released",
             ),
             Step::CompilerTest => always(
                 Subject::Compiler,
                 Action::Test,
-                &[Step::CompilerBuild],
                 "Compile fixture packages for a browser with the compiler as it is released and start each page's loader under a JavaScript engine: alone runs a page the compiler wrote, its gateways answering their rows",
             ),
             Step::BundleBuild => always(
                 Subject::Bundle,
                 Action::Build,
-                &[],
                 "Build the browser bundle for wasm32-unknown-unknown and generate its bindings",
             ),
             Step::BundleTest => always(
                 Subject::Bundle,
                 Action::Test,
-                &[Step::BundleBuild],
                 "Run a compiled program under a JavaScript engine, against the browser harness's own host",
             ),
             Step::GrammarInstall => always(
                 Subject::Grammar,
                 Action::Install,
-                &[],
                 "Install the grammar's tools from its lock file",
             ),
             Step::GrammarFormat => always(
                 Subject::Grammar,
                 Action::Format,
-                &[],
                 "Format the grammar's JavaScript and JSON; as a check, alone fails on formatting drift in them",
             ),
             Step::GrammarLint => always(
                 Subject::Grammar,
                 Action::Lint,
-                &[],
                 "Lint the grammar's JavaScript and JSON",
             ),
             Step::GrammarBuild => always(
                 Subject::Grammar,
                 Action::Build,
-                &[],
                 "Generate the parser from the grammar into `src/`, where the repository commits it",
             ),
             Step::GrammarTest => always(
                 Subject::Grammar,
                 Action::Test,
-                &[],
                 "Regenerate the parser and refuse drift from the committed one, then parse the standard library and the corpus",
             ),
             Step::VscodeInstall => always(
                 Subject::Vscode,
                 Action::Install,
-                &[],
                 "Install the VS Code extension's tools from its lock file",
             ),
             Step::VscodeFormat => always(
                 Subject::Vscode,
                 Action::Format,
-                &[],
                 "Format the VS Code extension's JavaScript and JSON; as a check, alone fails on formatting drift in them",
             ),
             Step::VscodeLint => always(
                 Subject::Vscode,
                 Action::Lint,
-                &[],
                 "Lint the VS Code extension's JavaScript and JSON",
             ),
             Step::VscodeTest => always(
                 Subject::Vscode,
                 Action::Test,
-                &[],
                 "Hold the TextMate grammar to its snapshots",
             ),
             Step::VscodeBuild => always(
                 Subject::Vscode,
                 Action::Build,
-                &[],
                 "Bundle the VS Code extension and write its package as it ships, which the snapshots never load",
             ),
             Step::ZedFormat => always(
                 Subject::Zed,
                 Action::Format,
-                &[],
                 "Format the Zed extension; as a check, alone fails on formatting drift in it",
             ),
             Step::ZedLint => always(
                 Subject::Zed,
                 Action::Lint,
-                &[],
                 "Lint every target of the Zed extension, for the target Zed loads",
             ),
             Step::ZedBuild => always(
                 Subject::Zed,
                 Action::Build,
-                &[],
                 "Link the Zed extension into the wasm32-wasip2 component Zed loads",
             ),
             Step::ZedTest => always(
                 Subject::Zed,
                 Action::Test,
-                &[Step::GrammarBuild],
                 "Hold the Zed extension to the tree around it: the grammar revision it pins publishes this grammar, and its lints are the workspace's",
             ),
             Step::ToolsLint => always(
                 Subject::Tools,
                 Action::Lint,
-                &[],
                 "Lint every target of the workspace's own tools, which the compiler's lint leaves out so that their dependencies give the compiler no feature it ships without",
             ),
             Step::ToolsTest => always(
                 Subject::Tools,
                 Action::Test,
-                &[],
                 "Run the tools' tests: these recipes' table held to the command line and the check workflow, each recipe's own, the bench's and the board's",
             ),
         }

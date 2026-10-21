@@ -8,7 +8,7 @@ use {crate::root, std::path::PathBuf};
 mod tests;
 
 /// A manifest root.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Tree {
     Workspace,
     Grammar,

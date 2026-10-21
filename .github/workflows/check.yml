@@ -19,7 +19,7 @@ env:
   BIOME: 2.6.2
   NODE: 22
 
-# A job sets up a machine and runs steps of one subject, each a `cargo xtask` line. Which steps there are, and what each runs, is the table's in `xtask/src/steps.rs`; `every_step_has_a_job` there holds that these lines parse and together run every step. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; nextest's, Biome's and Node's are this file's, stated once above.
+# A job sets up a machine and runs steps of one subject, each a `cargo xtask` line, which runs first the steps that leave what it reads. Which steps there are, and what each runs, is the table's in `xtask/src/steps.rs`; `every_step_has_a_job` there holds that these lines parse and together run every step. The toolchain is the one `rust-toolchain.toml` pins, so no job names a version of it; nextest's, Biome's and Node's are this file's, stated once above.
 jobs:
   workspace:
     name: Workspace
@@ -177,8 +177,6 @@ jobs:
         with:
           key: xtask
           workspaces: .
-      - name: Install
-        run: cargo xtask grammar install
       - name: Check formatting
         run: cargo xtask grammar format --check
       - name: Lint
@@ -205,8 +203,6 @@ jobs:
         with:
           key: xtask
           workspaces: .
-      - name: Install
-        run: cargo xtask vscode install
       - name: Check formatting
         run: cargo xtask vscode format --check
       - name: Lint
@@ -241,9 +237,6 @@ jobs:
         run: cargo xtask zed lint
       - name: Build
         run: cargo xtask zed build
-      # The extension is held to the grammar `grammar build` generates, which needs the grammar's tools.
-      - name: Install the grammar's tools
-        run: cargo xtask grammar install
       - name: Check the extension against the tree
         run: cargo xtask zed test
 

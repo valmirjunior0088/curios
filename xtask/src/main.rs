@@ -8,7 +8,7 @@
 //!
 //! **A step takes no arguments it passes on.** An action may take a parameter it places itself — a package to narrow a check to, a name to narrow a test run by, a release's version — but never a tail it hands to the tool unread.
 //!
-//! **The launcher's isolation is the spawn.** `launcher build` builds `curios-native` in its own `cargo` invocation, so workspace feature unification cannot reach it. `curios/build.rs` embeds what the step copies to `curios/.artifacts/<triple>` and refuses to build without it, and every step that builds the compiler has the launcher's build run first: it costs nothing when nothing changed, since cargo decides whether the launcher needs rebuilding and [`file_with_inputs()`](filing::file_with_inputs) skips the copy when the filed bytes are already the built ones.
+//! **The launcher's isolation is the spawn.** `launcher build` builds `curios-native` in its own `cargo` invocation, so workspace feature unification cannot reach it. `curios/build.rs` embeds what the step copies to `curios/.artifacts/<triple>` and refuses to build without it, and every step whose selection builds `curios`, as cargo's own graph answers, runs after the launcher's build, while one that builds no `curios`, as the native host's lint, runs without it: the build costs nothing when nothing changed, since cargo decides whether the launcher needs rebuilding and [`file_with_inputs()`](filing::file_with_inputs) skips the copy when the filed bytes are already the built ones.
 //!
 //! **The bindings generator is a dependency.** `bundle build` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
 //!

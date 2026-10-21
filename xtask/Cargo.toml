@@ -15,3 +15,5 @@ clap = { version = "4.6.1", features = ["derive"] }
 askama = { version = "0.16.1", default-features = false, features = ["derive", "std"] }
 # For `release` alone: format-preserving edits of the workspace and standard-library manifests, so a bump sets only their version fields and the diff it produced can be read back and checked exactly. One crate's dependency rather than the workspace table's, the arrangement `curios-native` uses for wasmtime and `curios-js` for js-sys.
 toml_edit = { version = "0.25.15" }
+# For the step graph alone: `cargo metadata`'s JSON, the output cargo versions, read for which packages a selection builds.
+serde_json = { version = "1.0.154" }

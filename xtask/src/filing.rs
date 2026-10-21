@@ -11,7 +11,7 @@ use {
     },
 };
 
-/// File `built` at `filed`, skipping the copy when the filed bytes are already the built ones, and say whether it copied. A recipe that embeds the launcher runs `runtime` first unconditionally, so filing must cost nothing when nothing changed: cargo already answers that for the build, and the skip is what keeps a repeated run from touching the file `curios/build.rs` watches.
+/// File `built` at `filed`, skipping the copy when the filed bytes are already the built ones, and say whether it copied. Every step whose build embeds the launcher runs after the launcher's build, so filing must cost nothing when nothing changed: cargo already answers that for the build, and the skip is what keeps a repeated run from touching the file `curios/build.rs` watches.
 ///
 /// The artifacts directory is the caller's to create — see [`file_with_inputs`], which writes there before this runs.
 fn file(built: &Path, filed: &Path) -> Result<bool, String> {
