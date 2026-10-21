@@ -15,7 +15,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  NEXTEST: nextest@0.9.146
+  NEXTEST: nextest@0.9.149
   # The oldest Node the browser suite runs under: the first whose engine runs WebAssembly GC unflagged and whose test runner expands a pattern itself.
   NODE: 22
 
