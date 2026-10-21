@@ -1,6 +1,8 @@
 # A reader of finished terms holds no elaboration state
 
-Working specification for deciding what erases through no engine that elaborates. Erasure reads through a reader it makes for itself, which cannot name elaboration's state; the state is still there, empty, in the context the reader keeps, and every type erasure reads is reduced by the elaborator's reducer, which puts its questions to the elaborator's conversion.
+**Not refined yet.** Its one stage waits on its open question, what erasure reduces through, whose second answer waits on [A proof is known by its mark](../soundness/300-a-proof-is-known-by-its-mark.md).
+
+This specification reserves deciding what erases through no engine that elaborates. Erasure reads through a reader it makes for itself, which cannot name elaboration's state; the state is still there, empty, in the context the reader keeps, and every type erasure reads is reduced by the elaborator's reducer, which puts its questions to the elaborator's conversion.
 
 ## What this builds on
 

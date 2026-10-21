@@ -1,6 +1,8 @@
 # Alternate floating-point exception handling
 
-Working specification for the remaining IEEE 754-2019 §8 exception-handling capabilities in `/std/Flt/Env`. These apply to existing operations and do not wait for the [elementary functions](304-flt-elementary-functions.md). The two specifications can complete and retire independently.
+**Not refined yet.** It waits for a consumer, and on the signatures, scope and composition order *Contracts to specify with the combinators* asks for before implementation.
+
+This specification reserves the remaining IEEE 754-2019 §8 exception-handling capabilities in `/std/Flt/Env`. These apply to existing operations and do not wait for the [elementary functions](304-flt-elementary-functions.md). The two specifications can complete and retire independently.
 
 ## Scope and existing behavior
 

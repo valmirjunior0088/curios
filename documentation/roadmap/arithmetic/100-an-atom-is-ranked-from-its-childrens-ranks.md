@@ -18,6 +18,6 @@ Probed at `25125304c`: `g(x_d + g(x_{d-1} + … g(x1 + x0)))` against the same s
 
 ## Refinement
 
-- **The census it waits on.** What ranking costs `/std`: a `sample!` at `ranked`, its terms' sizes and the share of `cargo xtask profile-prelude elaboration` and `certification` it takes. Under a hundredth of either half, this specification goes to the probe above as a growth row and states its cost there; past it, the design below.
+- **The census it waits on.** What ranking costs `/std`: a `sample!` at `ranked`, its terms' sizes and the share of `cargo xtask profile-prelude elaboration` and `certification` it takes. It is what the design is weighed against, and it retires nothing: a program pays the square above whatever `/std` pays.
 - **The design.** A shape composed of the children's summaries, as the paper's; the ages compared only where two shapes tie, by a walk of the two atoms in the order their identities are first met; and the same function under both checkers. The order moves where the hash does, so `/std`'s image moves with it, and the change is read against the law suites (`curios/src/tests/laws/`) and the read-back sweep.
 - **Check**: the probe above within a tenth of 2.0 per doubling from depth 256, and both checkers' rank tests.
