@@ -32,7 +32,7 @@ let inline_comma() -> Parse(Str, {}) =
     let _ = Parse/str/expect(',')!;
     ws;
 
-let array_parse() -> Parse(Str, Toml) =
+let array_value() -> Parse(Str, Toml) =
     let _ = Parse/label(Parse/str/expect('['), "expected array")!;
     array_items([])
 and array_items(acc: List(Toml)) -> Parse(Str, Toml) =
@@ -41,7 +41,7 @@ and array_items(acc: List(Toml)) -> Parse(Str, Toml) =
     match closed
     | some(_) => Parse/pure(Toml/arr(acc))
     | none() =>
-        let v = value_parse()!;
+        let v = value()!;
         let _ = trivia!;
         let acc2 = [..acc, v];
         let comma = Parse/optional(Parse/str/expect(','))!;
@@ -55,7 +55,7 @@ and array_items(acc: List(Toml)) -> Parse(Str, Toml) =
             end
         end
     end
-and inline_parse() -> Parse(Str, Toml) =
+and inline_table_value() -> Parse(Str, Toml) =
     let _ = Parse/label(Parse/str/expect('{'), "expected inline table")!;
     let _ = ws!;
     let empty = Parse/optional(Parse/str/expect('}'))!;
@@ -74,10 +74,10 @@ and inline_pair() -> Parse(Str, {List(Str), Toml}) =
     let _ = ws!;
     let _ = Parse/label(Parse/str/expect('='), "expected '=' in inline table")!;
     let _ = ws!;
-    let v = value_parse()!;
+    let v = value()!;
     let _ = ws!;
     Parse/pure((path, v))
-pub and value_parse() -> Parse(Str, Toml) =
+pub and value() -> Parse(Str, Toml) =
     let next = Parse/str/peek!;
     match next
     | none() => Parse/fail("expected value")
@@ -87,8 +87,8 @@ pub and value_parse() -> Parse(Str, Toml) =
         | '\'' => str_literal_value
         | 't' => true_value
         | 'f' => false_value
-        | '[' => array_parse()
-        | '{' => inline_parse()
+        | '[' => array_value()
+        | '{' => inline_table_value()
         | '+' => signed_number_value
         | '-' => signed_number_value
         | 'i' => special_value

@@ -3,7 +3,7 @@ use /std/Toml/{Error};
 use /std/Toml/build/{Build, apply_assign, apply_header, apply_aot, build_empty, root};
 use /std/Toml/scan/{line_end, trivia, ws};
 use /std/Toml/keys/{key_part};
-use /std/Toml/values/{value_parse};
+use /std/Toml/values/{value};
 
 induct Stmt: Type
 | assign(path: List(Str), value: Toml)
@@ -41,8 +41,8 @@ let stmt() -> Parse(Str, Stmt) =
         let path = key_path([])!;
         let _ = Parse/label(Parse/str/expect('='), "expected '=' after key")!;
         let _ = ws!;
-        let value = value_parse()!;
-        Parse/pure(Stmt/assign(path, value))
+        let parsed = value()!;
+        Parse/pure(Stmt/assign(path, parsed))
     | some(_) =>
         let doubled = Parse/optional(Parse/str/expect('['))!;
         match doubled
