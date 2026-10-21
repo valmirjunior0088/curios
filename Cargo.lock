@@ -647,7 +647,7 @@ name = "curios-browser"
 version = "0.16.11"
 dependencies = [
  "askama",
- "base64 0.22.1",
+ "base64 0.23.1",
  "curios-abi",
  "curios-cranelift",
  "curios-emit",

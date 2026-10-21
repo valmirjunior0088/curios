@@ -21,7 +21,7 @@ serde_json = "1.0.151"
 # The page's two templates, under `templates/`.
 askama = { version = "0.16.1", default-features = false, features = ["derive", "std"] }
 # What carries a digest in an integrity and the bridge's bytes in the loader.
-base64 = "0.22.1"
+base64 = "0.23.1"
 
 [dev-dependencies]
 curios-native = { workspace = true, features = ["test-support"] }
