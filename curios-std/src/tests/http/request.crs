@@ -1,11 +1,9 @@
 -- A request as a server reads it: the head, the framing its fields state, the body, and where it is addressed.
 use /std/{Str, Nat, Option, Result, Test};
-use /std/http/{Method, Url, Request, Response, Limits, Refusal};
-use /std/http/Field/{Value};
-use /std/http/Url/{Scheme};
+use /std/http/{Method, Url, Request, Response, Limits, Refusal, Field};
 
 let read(s: Str) -> Result(Refusal, Request) =
-    Request/of_bytes(Limits/server, Scheme/http(), Str/to_bytes(s));
+    Request/of_bytes(Limits/server, Url/Scheme/http(), Str/to_bytes(s));
 
 -- What a request that reads is: its method, its URL, and its body as text.
 let seen(s: Str) -> Result(Refusal, {Method, Str, Option(Str)}) =
@@ -149,19 +147,19 @@ test a_request_field_line_is_refused_or_read_as_it_is =
             Result/map(
                 Request/of_bytes(
                     Limits/server,
-                    Scheme/http(),
+                    Url/Scheme/http(),
                     x[
                         ..Str/to_bytes("GET / HTTP/1.1\r\nHost: h\r\nX-A: \t caf"),
                         0xE9,
                         ..Str/to_bytes(" \r\n\r\n")]),
                 (r) => Request/header(r, "x-a")),
-            Result/success(Value/of_bytes(x['c', 'a', 'f', 0xE9])))]);
+            Result/success(Field/Value/of_bytes(x['c', 'a', 'f', 0xE9])))]);
 
 -- A request line past its bound is answered 414, a head past its own 431, and content past its own 413, the last before any of it is read.
 test a_request_past_a_bound_is_refused_by_the_bound =
     let small = Limits { line = 32, head = 64, content = 4, chunk_line = 8 };
     let under(s: Str) -> Option(Nat) =
-        match Request/of_bytes(small, Scheme/http(), Str/to_bytes(s))
+        match Request/of_bytes(small, Url/Scheme/http(), Str/to_bytes(s))
         | success(_) => Option/none()
         | failure(why) => Option/some(Response/of_refusal(why).status.code)
         end;
@@ -196,7 +194,7 @@ test a_request_past_a_bound_is_refused_by_the_bound =
 let addressed(head: Str) -> Result(Refusal, Request/Address) =
     Result/bind(
         Request/head_of(Str/to_bytes(head)),
-        (read) => Request/address_of(Scheme/http(), read));
+        (read) => Request/address_of(Url/Scheme/http(), read));
 
 -- `OPTIONS` asks about a resource as any method does, and about the server itself where its target is `*`, which no other method's is and under which HTTP/1.1 still owes its `Host`. A request for the server is no `Request`, since it has no URL.
 test options_is_asked_of_a_resource_or_of_the_server =

@@ -1,7 +1,6 @@
 use /std/{Bytes, Str, Nat, Bool, List, Option, Result, Spell};
 use /std/ops/{Eql};
 use /std/http/{Method, Field, Status, Version, Refusal, octets};
-use /std/http/Field/{Name};
 
 --- How a message's body is delimited, read from its start line and its fields by RFC 9112 §6.3's rules in order.
 pub induct Framing: pub Type
@@ -26,7 +25,7 @@ satisfy Spell(Framing) {
 }
 
 let present(headers: List(Field), name: Str) -> Bool =
-    List/any(headers, (f: Field) => Name/is(f.name, name));
+    List/any(headers, (f: Field) => Field/Name/is(f.name, name));
 
 let is_chunked(coding: Bytes) -> Bool =
     match Str/of_bytes(coding)

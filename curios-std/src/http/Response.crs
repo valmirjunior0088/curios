@@ -2,7 +2,6 @@ use /std/{Bytes, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Spell,
 use /std/Bool/{Holds};
 use /std/ops/{Eql};
 use /std/http/{Method, Url, Field, Status, Version, Limits, Refusal, Framing, read, syntax};
-use /std/http/Field/{Name, Value};
 
 --- What came back: the status, the headers and the body. A reply holds content only where its status carries any, so one built with a body on a 1xx, 204, 205 or 304 status is refused where it is built, and every reply is one `render` can write.
 pub struct Response: pub Type {
@@ -22,9 +21,9 @@ satisfy Spell(Response) {
 }
 
 --- Whether a reply's renderer writes the field named `name` itself: the framing fields and `Connection`. A caller's own field of one of these names is not sent.
-pub let owned(name: Name) -> Bool =
-    Name/is(name, "Content-Length") || Name/is(name, "Transfer-Encoding")
-        || Name/is(name, "Connection");
+pub let owned(name: Field/Name) -> Bool =
+    Field/Name/is(name, "Content-Length") || Field/Name/is(name, "Transfer-Encoding")
+        || Field/Name/is(name, "Connection");
 
 let length_line(n: Nat) -> Bytes =
     Str/to_bytes(Fmt/render("Content-Length: %\r\n")(n));
@@ -47,7 +46,7 @@ pub let render(r: Response) -> Bytes =
     x[..render_head(r, r.body), ..r.body];
 
 --- The value of the first header named `name`, compared without case, or `none`.
-pub let header(r: Response, name: Str) -> Option(Value) =
+pub let header(r: Response, name: Str) -> Option(Field/Value) =
     Field/find(r.headers, name);
 
 --- `r` with the field `name: value` appended to its headers. A field the renderer owns — `Content-Length`, `Transfer-Encoding`, `Connection` — is kept and not sent.
@@ -55,8 +54,8 @@ pub let with_header(
     r: Response,
     name: Str,
     value: Str,
-    @_: Holds(Name/is_token(name)),
-    @_: Holds(Bytes/all(Str/to_bytes(value), Value/admits)),
+    @_: Holds(Field/Name/is_token(name)),
+    @_: Holds(Bytes/all(Str/to_bytes(value), Field/Value/admits)),
 ) -> Response =
     Response { ..r, headers = [..r.headers, Field/of(name, value)], @bodied = r.bodied };
 
@@ -81,7 +80,7 @@ pub let of(
     kind: Str,
     body: Bytes,
     @_: Holds(100 <= code && code <= 999),
-    @_: Holds(Bytes/all(Str/to_bytes(kind), Value/admits)),
+    @_: Holds(Bytes/all(Str/to_bytes(kind), Field/Value/admits)),
     @_: Holds(Status/carries_content(code) || Bytes/len(body) == 0),
 ) -> Response =
     Response { status = Status/of(code), headers = [Field/of("Content-Type", kind)], body = body };
@@ -144,7 +143,7 @@ pub let of_refusal(why: Refusal) -> Response =
 pub let redirect(url: Url) -> Response =
     Response {
         status = Status/of(303),
-        headers = [Field { name = Name { text = "Location" }, value = Url/to_value(url) }],
+        headers = [Field { name = Field/Name { text = "Location" }, value = Url/to_value(url) }],
         body = x[] };
 
 --- A `404 Not Found` with an empty body.

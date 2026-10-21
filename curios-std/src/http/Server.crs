@@ -4,8 +4,6 @@ use /std/time/{Duration, Timestamp};
 use /std/tcp/{Socket, Listener};
 use /std/http/{Method, Url, Field, Status, Request, Response, Version, Limits, Refusal, Framing,
     read, stream};
-use /std/http/Field/{Name, Value};
-use /std/http/Url/{Scheme};
 
 --- How a server reads a request and ends a connection: how much of a request it takes, how long a request may take to arrive whole, and how long it reads on from a peer that has gone quiet once it has answered.
 pub struct Server: pub Type {
@@ -52,7 +50,7 @@ struct Opened: Type {
 
 -- What a request's head alone decides, read from its lines: how its body is delimited and what it is addressed to.
 let decided(
-    scheme: Scheme,
+    scheme: Url/Scheme,
     lines: Bytes,
 ) -> Result(Refusal, {Request/Head, Framing, Request/Address}) =
     let head = Request/head_of(lines)!;
@@ -60,7 +58,7 @@ let decided(
     let address = Request/address_of(scheme, head)!;
     Result/success((head, framing, address));
 
-let opened(scheme: Scheme, lines: Bytes) -> Result(Unread, Opened) =
+let opened(scheme: Url/Scheme, lines: Bytes) -> Result(Unread, Opened) =
     match decided(scheme, lines)
     | failure(why) => Result/failure(Unread/refused(why))
     | success((head, framing, address)) =>
@@ -85,7 +83,7 @@ let invite(limits: Limits, c: Socket, r: Reader(Socket), o: Opened) -> Io(Result
 -- The request `c` sends, read through `r` as its framing delimits it: the head, then everything a head alone decides — the address, the framing, whether the peer waits to be told to continue — and only then the body.
 let request(
     limits: Limits,
-    scheme: Scheme,
+    scheme: Url/Scheme,
     c: Socket,
     r: Reader(Socket),
 ) -> Io(Result(Unread, Request)) =
@@ -161,14 +159,14 @@ let dated(reply: Response) -> Io(Response) =
     | some(_) => Io/pure(reply)
     | none() =>
         let now = Timestamp/now()!;
-        Io/pure(stamped(reply, Value/of_timestamp(now)))
+        Io/pure(stamped(reply, Field/Value/of_timestamp(now)))
     end;
 
 -- `reply` with `date` as its `Date`. A clock reading no year of four digits names is no reasonable approximation of the time, for which RFC 9110 §6.6.1 asks no `Date`.
-let stamped(reply: Response, date: Option(Value)) -> Response =
+let stamped(reply: Response, date: Option(Field/Value)) -> Response =
     match date
     | some(value) =>
-        let field = Field { name = Name { text = "Date" }, value = value };
+        let field = Field { name = Field/Name { text = "Date" }, value = value };
         Response { ..reply, headers = [field, ..reply.headers], @bodied = reply.bodied }
     | none() => reply
     end;
@@ -198,7 +196,7 @@ let allowed: Response =
         body = x[] };
 
 --- What a server does with one connection of `scheme`: read a request as its framing delimits it, hand it to `handler`, write the reply, and end the connection as HTTP asks — the sending half ended, what the peer still sends read until it closes or falls quiet, and the close left to whoever opened the connection. A request the reader refuses is answered with the status its refusal names, one that has not arrived whole within `s.timeout` 408, and a handler that fails 500; `OPTIONS *`, which asks about the server and no resource, is answered by the server with the methods it reads, and no handler sees it; a peer that sends nothing is told nothing. Every reply carries the `Date` it is sent at, unless its handler dated it. `serve` and `serve_tls` run it over a listener of their own, and a program with a listener of its own hands it each socket it accepts.
-pub let answer(s: Server, scheme: Scheme, handler: Handler) -> (Socket) -> Io({}) =
+pub let answer(s: Server, scheme: Url/Scheme, handler: Handler) -> (Socket) -> Io({}) =
     (c) =>
         let r = Reader/new(c)!;
         let arrived = Io/timeout(s.timeout, request(s.limits, scheme, c, r))!;
@@ -224,7 +222,7 @@ pub let answer(s: Server, scheme: Scheme, handler: Handler) -> (Socket) -> Io({}
 
 --- Every connection to `host` at `port` answered by `handler` as `answer` answers one, in the clear: one request per connection in a branch of its own, until an accept fails. A slow request holds up no other connection.
 pub let serve(s: Server, host: Str, port: Nat, handler: Handler) -> Try(Io, Io/Error, {}) =
-    Listener/serve(host, port, answer(s, Scheme/http(), handler));
+    Listener/serve(host, port, answer(s, Url/Scheme/http(), handler));
 
 --- `serve` under TLS: every connection is upgraded with the certificate chain `cert` and the private key `key` before a request is read from it.
 pub let serve_tls(
@@ -235,4 +233,4 @@ pub let serve_tls(
     key: Bytes,
     handler: Handler,
 ) -> Try(Io, Io/Error, {}) =
-    Listener/serve_tls(host, port, cert, key, answer(s, Scheme/https(), handler));
+    Listener/serve_tls(host, port, cert, key, answer(s, Url/Scheme/https(), handler));

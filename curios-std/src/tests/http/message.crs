@@ -2,8 +2,6 @@
 use /std/{Str, Bytes, Int, List, Option, Result, Parse, Show, Test, Html};
 use /std/time/{Timestamp};
 use /std/http/{Method, Url, Field, Status, Request, Response, Limits};
-use /std/http/Field/{Name, Value};
-use /std/http/Url/{Scheme};
 
 -- A method spells as the wire does and reads back, each of the seven, and a token that is none of them is no method.
 test a_method_spells_and_reads =
@@ -43,7 +41,7 @@ test a_request_is_written_and_reads_back =
                 "GET /x?y=1 HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\nAccept: text/plain\r\n\r\n")),
         Test/equal(
             Result/map(
-                Request/of_bytes(Limits/server, Scheme/http(), Request/render(r)),
+                Request/of_bytes(Limits/server, Url/Scheme/http(), Request/render(r)),
                 (d) =>
                     (
                         (d.method, Url/to_str(d.url)),
@@ -51,9 +49,9 @@ test a_request_is_written_and_reads_back =
             Result/success((
                 (Method/get(), "http://example.com/x?y=1"),
                 [
-                    ("Host", Value/lit("example.com")),
-                    ("Connection", Value/lit("close")),
-                    ("Accept", Value/lit("text/plain"))]))),
+                    ("Host", Field/Value/lit("example.com")),
+                    ("Connection", Field/Value/lit("close")),
+                    ("Accept", Field/Value/lit("text/plain"))]))),
         Test/equal(
             wire(Request/render(Request/post(Url/lit("http://h:81/"), Str/to_bytes("hi")))),
             Option/some(
@@ -128,16 +126,16 @@ test a_made_reply_reads_back =
             Result/success((
                 (Status/of(200), Result/success("hello")),
                 (
-                    Option/some(Value/lit("5")),
-                    Option/some(Value/lit("text/plain; charset=utf-8")))))),
+                    Option/some(Field/Value/lit("5")),
+                    Option/some(Field/Value/lit("text/plain; charset=utf-8")))))),
         Test/assert(Response/ok(r)),
         Test/equal(Response/not_found.status.code, 404),
         Test/equal(
             Response/header(Response/of_html(200, Html/text("x")), "Content-Type"),
-            Option/some(Value/lit("text/html; charset=utf-8"))),
+            Option/some(Field/Value/lit("text/html; charset=utf-8"))),
         Test/equal(
             Response/header(Response/redirect(Url/lit("http://h/next")), "Location"),
-            Option/some(Value/lit("http://h/next")))]);
+            Option/some(Field/Value/lit("http://h/next")))]);
 
 -- A body that is not UTF-8 is no JSON text, and `Response/json` refuses it where it stops being text: the four `n_number_*` cases of JSONTestSuite whose bytes are not UTF-8, each at the offset its ill-formed byte stands at, beside a body that reads.
 test a_json_body_that_is_not_text_is_refused_where_it_stops =
@@ -159,14 +157,16 @@ test a_json_body_that_is_not_text_is_refused_where_it_stops =
 -- A name is a token and a value holds no control octet but the tab: text met at run time is read as one or refused, octets past ASCII are a value's to hold, and names are one name whatever their case.
 test a_field_met_at_run_time_is_read_or_refused =
     Test/all([
-        Test/equal(Name/of_str("X-Run-Time"), Option/some(Name { text = "x-run-time" })),
-        Test/equal(Name/of_str("X (A)"), Option/none()),
-        Test/equal(Name/of_str(""), Option/none()),
-        Test/equal(Name/of_str("one\r\nX-Injected"), Option/none()),
-        Test/equal(Value/of_str("one\r\nX-Injected: two"), Option/none()),
-        Test/equal(Value/of_bytes(x['o', 0, 'k']), Option/none()),
-        Test/assert(Option/is_some(Value/of_bytes(x['c', 'a', 'f', 0xE9, '\t', ' ']))),
-        Test/assert(Option/is_some(Value/of_str(Str/repeat("x", 65536)))),
+        Test/equal(
+            Field/Name/of_str("X-Run-Time"),
+            Option/some(Field/Name { text = "x-run-time" })),
+        Test/equal(Field/Name/of_str("X (A)"), Option/none()),
+        Test/equal(Field/Name/of_str(""), Option/none()),
+        Test/equal(Field/Name/of_str("one\r\nX-Injected"), Option/none()),
+        Test/equal(Field/Value/of_str("one\r\nX-Injected: two"), Option/none()),
+        Test/equal(Field/Value/of_bytes(x['o', 0, 'k']), Option/none()),
+        Test/assert(Option/is_some(Field/Value/of_bytes(x['c', 'a', 'f', 0xE9, '\t', ' ']))),
+        Test/assert(Option/is_some(Field/Value/of_str(Str/repeat("x", 65536)))),
         Test/equal(Field/read("X-A", Str/to_bytes("one")), Option/some(Field/of("X-A", "one"))),
         Test/equal(Field/read("X A", Str/to_bytes("one")), Option/none()),
         Test/equal(Field/read("X-A", Str/to_bytes("one\ntwo")), Option/none())]);
@@ -200,13 +200,13 @@ test a_url_reaches_the_wire_percent_encoded =
                 "GET /a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9 HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")),
         Test/equal(
             Response/header(Response/redirect(built), "Location"),
-            Option/some(Value/lit("http://h/a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9"))),
-        Test/equal(Url/escaped("/x?y=1%20z"), Value/lit("/x?y=1%20z"))]);
+            Option/some(Field/Value/lit("http://h/a%20b%0D%0AX-Injected:%20two?q=caf%C3%A9"))),
+        Test/equal(Url/escaped("/x?y=1%20z"), Field/Value/lit("/x?y=1%20z"))]);
 
 -- The moment `secs` seconds after the epoch as HTTP's `Date` writes it, or why it has none.
 let spelled(secs: Int) -> Str =
-    match Value/of_timestamp(Timestamp/of_unix_secs(secs))
-    | some(value) => match Value/to_str(value) | some(s) => s | none() => "not text" end
+    match Field/Value/of_timestamp(Timestamp/of_unix_secs(secs))
+    | some(value) => match Field/Value/to_str(value) | some(s) => s | none() => "not text" end
     | none() => "no year of four digits"
     end;
 
@@ -253,5 +253,5 @@ test a_status_says_whether_it_carries_content =
             List/map(codes, Status/carries_content),
             [false, true, false, false, false, true]),
         Test/equal(List/map(codes, Status/bodiless), [true, false, true, false, true, false]),
-        Test/equal(Status/of(404).reason, Value/lit("Not Found")),
-        Test/equal(Status/of(299).reason, Value/empty)]);
+        Test/equal(Status/of(404).reason, Field/Value/lit("Not Found")),
+        Test/equal(Status/of(299).reason, Field/Value/empty)]);

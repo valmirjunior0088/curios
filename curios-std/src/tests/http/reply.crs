@@ -1,7 +1,6 @@
 -- A reply as a client reads it: the head, the framing its fields and the request's method state, and the body.
 use /std/{Str, Bytes, Nat, Option, Result, Test};
-use /std/http/{Method, Response, Limits, Refusal};
-use /std/http/Field/{Value};
+use /std/http/{Method, Response, Limits, Refusal, Field};
 
 let read(method: Method, s: Str) -> Result(Refusal, Response) =
     Response/of_bytes(Limits/client, method, Str/to_bytes(s));
@@ -119,7 +118,7 @@ test a_reply_head_is_read_as_its_grammar_spells_it =
                     Method/get(),
                     "HTTP/1.1 200 OK\r\nX-A: one\r\n two\r\n\tthree\r\nContent-Length: 2\r\n\r\nhi"),
                 (r) => (Response/header(r, "x-a"), Result/to_option(Str/of_bytes(r.body)))),
-            Result/success((Option/some(Value/lit("one two three")), Option/some("hi")))),
+            Result/success((Option/some(Field/Value/lit("one two three")), Option/some("hi")))),
         Test/equal(
             Result/map(
                 Response/of_bytes(
@@ -132,4 +131,4 @@ test a_reply_head_is_read_as_its_grammar_spells_it =
                         0xE9,
                         ..Str/to_bytes("\r\nContent-Length: 2\r\n\r\nhi")]),
                 (r) => (Bytes/len(r.status.reason.bytes), Response/header(r, "X-A"))),
-            Result/success((11, Value/of_bytes(x['c', 'a', 'f', 0xE9]))))]);
+            Result/success((11, Field/Value/of_bytes(x['c', 'a', 'f', 0xE9]))))]);

@@ -1,9 +1,8 @@
 use /std/{Str, Parse, Toml};
 use /std/time/{Date, Time, DateTime, OffsetDateTime, rfc3339, iso8601};
-use /std/time/rfc3339/{FourDigits};
 
 -- `built` over the evidence that `d`'s year has the four digits TOML writes. `rfc3339/date` reads no other, so the decision answers `some`, and its refusal is the one a date past them would have.
-let dated(d: Date, built: (ok: FourDigits(d)) -> Toml) -> Parse(Str, Toml) =
+let dated(d: Date, built: (ok: rfc3339/FourDigits(d)) -> Toml) -> Parse(Str, Toml) =
     match rfc3339/four_digits(d)
     | some(ok) => Parse/pure(built(ok))
     | none() => Parse/fail("invalid date")

@@ -1,7 +1,6 @@
 use /std/{Str, Bytes, Byte, Nat, Int, Bool, List, Option, Result, Spell};
 use /std/Bool/{True, Holds};
 use /std/time/{Timestamp, Date, DateTime, Month, Weekday, Offset, OffsetDateTime, rfc3339};
-use /std/time/rfc3339/{FourDigits};
 use /std/ops/{Eql};
 
 --- Whether `b` may stand in a field value: the tab, the space, and every octet past them but DEL, obs-text included (RFC 9110 §5.5). No other control octet may, a line's end least of all.
@@ -164,7 +163,7 @@ let of_utc(at: DateTime) -> Option(Value) =
     | none() => Option/none()
     end;
 
-let fixdate(at: DateTime, @four_digits: FourDigits(at.date)) -> Value =
+let fixdate(at: DateTime, @four_digits: rfc3339/FourDigits(at.date)) -> Value =
     let date = at.date;
     let time = at.time;
     let weekday = Date/weekday(date);

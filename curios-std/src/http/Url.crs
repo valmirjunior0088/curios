@@ -5,8 +5,7 @@ pub use Scheme/{let Scheme};
 use /std/{Bytes, Byte, Char, Str, Nat, Bool, List, Option, Result, Parse, Spell, Fmt};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql};
-use /std/http/Field/{Value};
-use /std/http/Field/Value/{Octet};
+use /std/http/{Field};
 
 --- Where a request goes: the scheme, the host, the port, the path, and the query as written after `?`, if any. A fragment is the client's and is dropped.
 pub struct Url: pub Type {
@@ -157,52 +156,55 @@ pub let to_str(u: Url) -> Str =
     Str/flatten([Scheme/to_str(u.scheme), "://", u.host, port_str(u), u.path, query_str(u.query)]);
 
 -- The sixteen hexadecimal digits, uppercase, each an octet a value may hold.
-let hex_octets: List(Octet) =
+let hex_octets: List(Field/Value/Octet) =
     [
-        Octet { byte = '0' },
-        Octet { byte = '1' },
-        Octet { byte = '2' },
-        Octet { byte = '3' },
-        Octet { byte = '4' },
-        Octet { byte = '5' },
-        Octet { byte = '6' },
-        Octet { byte = '7' },
-        Octet { byte = '8' },
-        Octet { byte = '9' },
-        Octet { byte = 'A' },
-        Octet { byte = 'B' },
-        Octet { byte = 'C' },
-        Octet { byte = 'D' },
-        Octet { byte = 'E' },
-        Octet { byte = 'F' }];
+        Field/Value/Octet { byte = '0' },
+        Field/Value/Octet { byte = '1' },
+        Field/Value/Octet { byte = '2' },
+        Field/Value/Octet { byte = '3' },
+        Field/Value/Octet { byte = '4' },
+        Field/Value/Octet { byte = '5' },
+        Field/Value/Octet { byte = '6' },
+        Field/Value/Octet { byte = '7' },
+        Field/Value/Octet { byte = '8' },
+        Field/Value/Octet { byte = '9' },
+        Field/Value/Octet { byte = 'A' },
+        Field/Value/Octet { byte = 'B' },
+        Field/Value/Octet { byte = 'C' },
+        Field/Value/Octet { byte = 'D' },
+        Field/Value/Octet { byte = 'E' },
+        Field/Value/Octet { byte = 'F' }];
 
 -- The hexadecimal digit of the nibble `n`, read off the sixteen under the bound that makes it one.
-let hex_octet(n: Nat, @nibble: Holds(n < 16)) -> Octet =
+let hex_octet(n: Nat, @nibble: Holds(n < 16)) -> Field/Value/Octet =
     List/get(hex_octets, n);
 
 -- `b` with every octet that is not visible ASCII written as its `%XX`.
-let escaped_bytes(b: Bytes) -> Value =
+let escaped_bytes(b: Bytes) -> Field/Value =
     match b
-    | x[] => Value/empty
+    | x[] => Field/Value/empty
     | x[h, .._]; rest =>
         let n = Byte/to_nat(h);
         let quoted =
-            Value/cons(
-                Octet { byte = '%' },
-                Value/cons(hex_octet(n / 16), Value/cons(hex_octet(n % 16), rest)));
-        match Value/admits(h)
+            Field/Value/cons(
+                Field/Value/Octet { byte = '%' },
+                Field/Value/cons(hex_octet(n / 16), Field/Value/cons(hex_octet(n % 16), rest)));
+        match Field/Value/admits(h)
         | false => quoted
         | true =>
-            match visible(h) | true => Value/cons(Octet { byte = h }, rest) | false => quoted end
+            match visible(h)
+            | true => Field/Value/cons(Field/Value/Octet { byte = h }, rest)
+            | false => quoted
+            end
         end
     end;
 
 --- `s` as the wire carries it, a value a field may hold: every octet that is not visible ASCII written as its `%XX`. Text `of_str` read is unchanged by it, and text that reached a `Url` by another road still cannot end a line.
-pub let escaped(s: Str) -> Value =
+pub let escaped(s: Str) -> Field/Value =
     escaped_bytes(Str/to_bytes(s));
 
 --- The URL as a field's value, as `Location` carries one.
-pub let to_value(u: Url) -> Value =
+pub let to_value(u: Url) -> Field/Value =
     escaped(to_str(u));
 
 --- The path's segments, for a server to match on: `/a/b/` is `["a", "b"]`.

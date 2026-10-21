@@ -1,7 +1,6 @@
 use /std/{Bytes, Byte, Nat, Bool, Option, Result};
 use /std/Bool/{True, Holds};
-use /std/http/{Limits, Refusal, Framing};
-use /std/http/Field/{Value};
+use /std/http/{Limits, Refusal, Framing, Field};
 use /std/Io/{Reader};
 
 let is(b: Bytes, i: Nat, byte: Nat) -> Bool =
@@ -146,7 +145,7 @@ let chunk_size(line: Bytes) -> Option(Nat) =
             | some(d) => go(i + 1, value * 16 + d, digits + 1)
             | none() =>
                 match Byte/to_nat(byte) == ';' && digits != 0
-                    && Bytes/all(Bytes/drop(line, i), Value/admits)
+                    && Bytes/all(Bytes/drop(line, i), Field/Value/admits)
                 | true => Option/some(value)
                 | false => Option/none()
                 end

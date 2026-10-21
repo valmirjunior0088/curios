@@ -2,8 +2,7 @@ use /std/{Bytes, Str, Nat, Bool, Option, Result, Try, Io};
 use /std/Io/{Reader};
 use /std/time/{Duration};
 use /std/tcp/{Socket};
-use /std/http/{Error, Method, Url, Request, Response, Limits, read, stream};
-use /std/http/Field/{Value};
+use /std/http/{Error, Method, Url, Request, Response, Limits, read, stream, Field};
 
 --- How a client performs an exchange: how long the whole of one may take, how many redirects it follows before refusing, and how much of a reply it takes.
 pub struct Client: pub Type {
@@ -109,7 +108,7 @@ let redirect_of(request: Request, response: Response) -> Option(Url) =
     | false => Option/none()
     | true =>
         Option/bind(
-            Option/bind(Response/header(response, "Location"), Value/to_str),
+            Option/bind(Response/header(response, "Location"), Field/Value/to_str),
             (location) => target_of(request.url, location))
     end;
 

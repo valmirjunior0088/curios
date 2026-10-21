@@ -1,7 +1,6 @@
 use /std/{Bytes, Byte, Str, Nat, Bool, List, Option, Result};
 use /std/Bool/{Holds};
 use /std/http/{Field, Status, Version, Refusal, read, octets};
-use /std/http/Field/{Value};
 
 --- The lines of a head's bytes, in order, their line ends left out: the start line first.
 pub let lines(head: Bytes) -> List(Bytes) =
@@ -99,7 +98,7 @@ pub let status_line(line: Bytes) -> Result(Refusal, {Version, Status}) =
             match octets/number(Bytes/slice(line, 9, 3))
             | none() => unspelled
             | some(code) =>
-                match Value/of_bytes(Bytes/drop(line, 13))
+                match Field/Value/of_bytes(Bytes/drop(line, 13))
                 | none() => unspelled
                 | some(reason) =>
                     match 100 <= code && code <= 999
@@ -133,7 +132,7 @@ let indented(line: Bytes) -> Bool =
 
 -- `f` with the fold `line` read as a space and what follows it, as RFC 9112 §5.2 has a user agent read one.
 let folded(f: Field, line: Bytes) -> Result(Refusal, Field) =
-    match Value/of_bytes(x[..f.value.bytes, ' ', ..octets/trim(line)])
+    match Field/Value/of_bytes(x[..f.value.bytes, ' ', ..octets/trim(line)])
     | some(value) => Result/success(Field { name = f.name, value = value })
     | none() => Result/failure(Refusal/malformed("a field's value holds no control octet"))
     end;

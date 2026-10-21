@@ -53,8 +53,7 @@ fn a_message_no_wire_carries_is_refused_where_it_is_written() {
 const SERVER: &str = r#"
     use /std/{Str, Bytes, Nat, Show, Try, Io};
     use /std/tcp/{Listener, Socket};
-    use /std/http/{Server, Request, Response};
-    use /std/http/Url/{Scheme};
+    use /std/http/{Server, Request, Response, Url};
     let handler(r: Request) -> Try(Io, Io/Error, Response) =
         let said =
             Response/of_text(
@@ -70,7 +69,7 @@ const SERVER: &str = r#"
         Try/scope((s) =>
             let l = Listener/listen(s, "0.0.0.0", 8080)!;
             let c = Listener/accept(s, l)!;
-            let _ = Server/answer(Server/default, Scheme/http(), handler)(c)!;
+            let _ = Server/answer(Server/default, Url/Scheme/http(), handler)(c)!;
             Io/close(c));
     let program() -> Io({}) =
         let r = Try/run(session())!;

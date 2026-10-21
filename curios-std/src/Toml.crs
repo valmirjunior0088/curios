@@ -23,8 +23,7 @@ mod encode;
 pub use encode/{let encode};
 
 use /std/{Int, Flt, Bool, Str, List, Map};
-use /std/time/{Date, Time, DateTime, OffsetDateTime};
-use /std/time/rfc3339/{FourDigits, WholeMinutes};
+use /std/time/{Date, Time, DateTime, OffsetDateTime, rfc3339};
 
 --- A TOML value.
 pub induct Toml: pub Type
@@ -39,12 +38,12 @@ pub induct Toml: pub Type
 --- A date and time with an offset from UTC. Its year has the four digits and its offset the whole minutes RFC 3339 writes, the only ones TOML reads, so that a value encodes to a document that decodes.
 | offset_date_time(
     value: OffsetDateTime,
-    @four_digits: FourDigits(value.date_time.date),
-    @whole_minutes: WholeMinutes(value.offset))
+    @four_digits: rfc3339/FourDigits(value.date_time.date),
+    @whole_minutes: rfc3339/WholeMinutes(value.offset))
 --- A date and time with no offset.
-| local_date_time(value: DateTime, @four_digits: FourDigits(value.date))
+| local_date_time(value: DateTime, @four_digits: rfc3339/FourDigits(value.date))
 --- A date alone.
-| local_date(value: Date, @four_digits: FourDigits(value))
+| local_date(value: Date, @four_digits: rfc3339/FourDigits(value))
 --- A time of day alone.
 | local_time(Time)
 --- An array, in order.
