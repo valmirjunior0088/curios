@@ -77,7 +77,7 @@ pub let escape(s: Str) -> Str =
     Str/flatten(List/map(Str/to_list(s), escape_char));
 
 --- Whether `name` is an element whose content the browser reads as text, references undecoded: `script` and `style`.
-pub let is_raw_text(name: Str) -> Bool =
+let is_raw_text(name: Str) -> Bool =
     Str/eql_ascii_ci(name, "script") || Str/eql_ascii_ci(name, "style");
 
 let attr_name(a: Attr) -> Str =
