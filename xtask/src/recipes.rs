@@ -6,7 +6,7 @@
 
 use {
     crate::{
-        BROWSER_TRIPLE, HOST_TRIPLE, Step, Tree, artifact, ask, bindgen_web, built, cargo,
+        BROWSER_TRIPLE, HOST_TRIPLE, Step, Tool, Tree, artifact, ask, bindgen_web, built, cargo,
         file_with_inputs, grammar, inputs, modified, released, root, run, spelled,
         target_directory, vscode, zed,
     },
@@ -98,7 +98,7 @@ fn blocked(step: Step, failed: &[Step], unrun: &[Step]) -> Option<Step> {
         .find(|ensured| failed.contains(ensured) || unrun.contains(ensured))
 }
 
-/// Run `asked` and what they are run with first, as `request` narrows them, each to its end whatever the one before it did, and say of each how it ended and in how long. A step lacking a tool it needs is refused with what installs it, and a step whose prerequisite did not pass is not run, since what it reads is not there: the steps that read nothing of the failure go on, and the end names both lists.
+/// Run `asked` and what they are run with first, as `request` narrows them, each to its end whatever the one before it did, and say of each how it ended and in how long. A step lacking a tool it launches is refused with what installs it, and a step whose prerequisite did not pass is not run, since what it reads is not there: the steps that read nothing of the failure go on, and the end names both lists.
 pub(crate) fn perform(asked: &[Step], request: &Request) -> Result<(), String> {
     let mut failed = Vec::new();
     let mut unrun = Vec::new();
@@ -115,11 +115,7 @@ pub(crate) fn perform(asked: &[Step], request: &Request) -> Result<(), String> {
         }
 
         let started = Instant::now();
-        let unready = step.row().needs.iter().find_map(|tool| tool.ready().err());
-        let outcome = match unready {
-            Some(refusal) => Err(refusal),
-            None => step.run(request),
-        };
+        let outcome = step.run(request);
         let took = started.elapsed().as_secs_f64();
 
         match outcome {
@@ -173,7 +169,10 @@ impl Step {
             Step::WorkspaceTest => {
                 let arguments = testing(package, request)?;
 
-                cargo(&arguments.iter().map(String::as_str).collect::<Vec<_>>())
+                run(
+                    Tool::Nextest.command()?,
+                    &arguments.iter().map(String::as_str).collect::<Vec<_>>(),
+                )
             }
             Step::InstrumentedLint => cargo(
                 &["clippy"]
@@ -182,14 +181,14 @@ impl Step {
                     .chain(["--all-targets", "--all-features", KEEP_GOING])
                     .collect::<Vec<_>>(),
             ),
-            Step::InstrumentedTest => cargo(&RECORDER_TESTING),
+            Step::InstrumentedTest => run(Tool::Nextest.command()?, &RECORDER_TESTING),
             Step::DocsBuild => docs_build(),
             Step::CompilerBuild => {
                 cargo(&["build", "--release", "--package", "curios", KEEP_GOING])
             }
             // The compiler under test is the one `compiler build` filed, named to the suite rather than found on PATH, where an installed one would answer instead.
             Step::CompilerTest => {
-                let mut node = Command::new("node");
+                let mut node = Tool::Node.command()?;
                 node.env("CURIOS", released("curios"));
 
                 run(node, &["--test", "curios-browser/src/page.test.mjs"])
@@ -201,7 +200,7 @@ impl Step {
             },
             Step::BundleBuild => bundle_build(),
             Step::BundleTest => run(
-                Command::new("node"),
+                Tool::Node.command()?,
                 &["--test", "curios-browser/src/harness.test.mjs"],
             ),
             Step::GrammarInstall => grammar(&["clean-install"]),
@@ -219,10 +218,10 @@ impl Step {
             Step::ZedBuild => zed(&["build", "--release", "--target", EXTENSION_TRIPLE]),
             Step::ZedTest => zed(&["test"]),
             Step::ToolsLint => cargo(&tools(&["clippy"], &["--all-targets", KEEP_GOING])),
-            Step::ToolsTest => cargo(&tools(
-                &["nextest", "run"],
-                &["--all-targets", "--no-fail-fast"],
-            )),
+            Step::ToolsTest => run(
+                Tool::Nextest.command()?,
+                &tools(&["run"], &["--all-targets", "--no-fail-fast"]),
+            ),
         }
     }
 }
@@ -329,7 +328,7 @@ fn biome(tree: Tree, arguments: &[&str]) -> Result<(), String> {
     let mut line = arguments.to_vec();
     line.extend(paths.iter().map(String::as_str));
 
-    run(Command::new("biome"), &line)
+    run(Tool::Biome.command()?, &line)
 }
 
 /// Biome's formatter over `tree`, written unless `check`.
@@ -354,13 +353,13 @@ fn linting(package: Option<&str>) -> Vec<&str> {
         .collect()
 }
 
-/// The `cargo nextest run` command line for one selection, which is the whole workspace when nothing narrows it: every target as the workspace ships, every failure reported rather than the first.
+/// What `cargo nextest` is given for one selection, a `run` of the whole workspace when nothing narrows it: every target as the workspace ships, every failure reported rather than the first.
 ///
 /// **Nextest rather than `cargo test`, for a process to a test.** Binaryen's settings are the process's and its optimizer serializes behind a lock, so tests that share a process queue for it, and a test that aborts — Binaryen answering a module it cannot parse with a C++ `assert` — takes every other result of its binary with it. Under nextest each test is a process of its own: the suite runs on every core, and an abort fails by name.
 ///
 /// **A name picks tests out of one build and never changes it.** A filter becomes nextest's matcher of a test's path and a binary its matcher of a binary's name, so the bundle suite, whose tests carry no word of their binary's name, is `--binary bundle`; all of them are one union, one run however many are named, and a binary no build has is nextest's own refusal. A package is the other narrowing and a build of its own, which a job on one machine asks for and a question about a few tests should not. A selection that matches nothing warns rather than fails, because a package with no test of its own is rightly empty, and nextest's own default would fail the run that named it.
 fn testing(package: Option<&str>, request: &Request) -> Result<Vec<String>, String> {
-    let mut arguments = ["nextest", "run"]
+    let mut arguments = ["run"]
         .into_iter()
         .chain(scope(package))
         .chain(["--all-targets", "--no-fail-fast", "--no-tests=warn"])
@@ -403,9 +402,8 @@ const RECORDER: &str = "curios-profile";
 /// The feature of [`RECORDER`] that compiles the recorder, and so its tests.
 const RECORDING: &str = "enabled";
 
-/// The `cargo nextest run` command line for the recorder's tests: [`RECORDER`] alone under [`RECORDING`], the one configuration that compiles them and one no shipped build of the workspace is.
-const RECORDER_TESTING: [&str; 7] = [
-    "nextest",
+/// What `cargo nextest` is given for the recorder's tests, a `run` of [`RECORDER`] alone under [`RECORDING`], the one configuration that compiles them and one no shipped build of the workspace is.
+const RECORDER_TESTING: [&str; 6] = [
     "run",
     "--package",
     RECORDER,

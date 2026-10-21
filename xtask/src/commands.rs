@@ -1,9 +1,9 @@
 //! How a tool is invoked and echoed: cargo at the workspace root or in a tree of its own, npm in the two editor packages, any other program a recipe names, and the one generator called as the library it wraps rather than spawned.
 //!
-//! **A verb names a tool and a tree.** [`cargo`] is cargo at the workspace root, [`grammar`] and [`vscode`] npm in their own packages, [`zed`] cargo in the extension's own workspace; anything else is a [`Command`] the recipe builds and hands to [`run`], which defaults to the root. Every one of them echoes its command line before it runs, so the terminal reads as a transcript of the work.
+//! **A verb names a tool and a tree.** [`cargo`] is cargo at the workspace root, [`grammar`] and [`vscode`] npm in their own packages, [`zed`] cargo in the extension's own workspace; anything else is a [`Command`] the recipe hands to [`run`], which defaults to the root: a tool beyond cargo's from [`Tool::command`], which asks first whether the tool is there. Every one of them echoes its command line before it runs, so the terminal reads as a transcript of the work.
 
 use {
-    crate::root,
+    crate::{Tool, root},
     std::{
         env,
         path::Path,
@@ -95,7 +95,7 @@ fn asked_cargo() -> Command {
 }
 
 /// The cargo that launched this tool, which is the one every recipe runs and asks: `cargo xtask` is `cargo run`, and cargo sets `CARGO` to the binary performing the build — the toolchain's own, the rustup shim already out of the picture — so a recipe cannot resolve a second time and land somewhere else. The fallback is for the other way in, running the built binary directly.
-fn toolchain_cargo() -> Command {
+pub(crate) fn toolchain_cargo() -> Command {
     Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
 }
 
@@ -120,7 +120,7 @@ pub(crate) fn ask(command: Command, arguments: &[&str]) -> Result<String, String
 pub(crate) fn grammar(arguments: &[&str]) -> Result<(), String> {
     run_in(
         &root().join("editors").join("grammar"),
-        Command::new("npm"),
+        Tool::Npm.command()?,
         arguments,
     )
 }
@@ -129,7 +129,7 @@ pub(crate) fn grammar(arguments: &[&str]) -> Result<(), String> {
 pub(crate) fn vscode(arguments: &[&str]) -> Result<(), String> {
     run_in(
         &root().join("editors").join("vscode"),
-        Command::new("npm"),
+        Tool::Npm.command()?,
         arguments,
     )
 }

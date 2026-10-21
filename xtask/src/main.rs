@@ -1,6 +1,6 @@
 //! The repository's steps, as `cargo xtask <subject> [action]`.
 //!
-//! **A step is an action on a subject, and the table of them is the one thing authored.** [`steps`] states every step once: what it is about, what it does, what it is run after, what it needs and the one thing only it catches. A subject's actions, a bare subject's sequence and what the check workflow must run are read off that table, so `/run-full-gate`, the workflow and a contributor run one spelling of each step and no two of them can drift.
+//! **A step is an action on a subject, and the table of them is the one thing authored.** [`steps`] states every step once: what it is about, what it does, what it is run after and the one thing only it catches. A subject's actions, a bare subject's sequence and what the check workflow must run are read off that table, so `/run-full-gate`, the workflow and a contributor run one spelling of each step and no two of them can drift.
 //!
 //! **A subject comes first, because a person works on one thing.** `cargo xtask vscode` runs everything about the VS Code extension, one step after another, and `cargo xtask vscode test` one action of it. An action a subject does not have is the parser's own error. `cargo xtask gate` runs every step of the table, which is the hand-off gate `/run-full-gate` runs, and a step that failed in it is run again by its subject and action.
 //!

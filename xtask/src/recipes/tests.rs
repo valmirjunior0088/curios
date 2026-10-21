@@ -42,7 +42,6 @@ fn no_selection_is_the_workspace_but_its_tools() {
     assert_eq!(
         testing(None, &Request::whole()).unwrap(),
         [
-            "nextest",
             "run",
             "--workspace",
             "--exclude",
@@ -62,10 +61,7 @@ fn no_selection_is_the_workspace_but_its_tools() {
 fn a_package_takes_the_place_of_the_workspace() {
     let arguments = testing(Some("curios-abi"), &Request::whole()).unwrap();
 
-    assert_eq!(
-        arguments[..4],
-        ["nextest", "run", "--package", "curios-abi"]
-    );
+    assert_eq!(arguments[..3], ["run", "--package", "curios-abi"]);
     assert!(
         !arguments.iter().any(|argument| argument == "--workspace"),
         "{arguments:?}"
@@ -135,9 +131,8 @@ fn a_workspace_step_names_no_feature() {
 #[test]
 fn the_recorder_s_tests_build_one_package() {
     assert_eq!(
-        RECORDER_TESTING[..6],
+        RECORDER_TESTING[..5],
         [
-            "nextest",
             "run",
             "--package",
             "curios-profile",

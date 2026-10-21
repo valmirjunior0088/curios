@@ -1,9 +1,9 @@
-//! What a step needs of a tool cargo does not bring: how each is asked whether it is there, and what installs it.
+//! How a tool cargo does not bring is launched: asked first whether it is there, and refused with what installs it where it is not.
 //!
-//! A step asks only that its tool is there. Which version of it a machine holds is the machine's: the check workflow pins nextest's, Biome's and Node's for its runners, and a contributor installs what they have.
+//! A step asks for a tool by launching it, through [`Tool::command`], so what a step needs is what it runs as it was asked: a lint narrowed to one package launches no Biome and asks for none. A step asks only that its tool is there. Which version of it a machine holds is the machine's: the check workflow pins nextest's, Biome's and Node's for its runners, and a contributor installs what they have.
 
 use {
-    crate::{ask, ask_cargo},
+    crate::{ask, ask_cargo, toolchain_cargo},
     std::process::Command,
 };
 
@@ -16,7 +16,7 @@ pub(crate) const NEXTEST_INSTALL: &str = "cargo install cargo-nextest --locked";
 /// What installs Biome where it is absent: its npm package, the one spelling on every platform a clone with npm has.
 pub(crate) const BIOME_INSTALL: &str = "npm install --global @biomejs/biome";
 
-/// A tool a step needs beyond cargo.
+/// A tool a step launches beyond cargo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tool {
     Nextest,
@@ -26,20 +26,42 @@ pub(crate) enum Tool {
 }
 
 impl Tool {
+    /// The command that launches the tool, once the tool is found to be there: the one way a step reaches a tool beyond cargo. Where it is absent, the sentence saying what is missing and, where one command does it, what installs it.
+    pub(crate) fn command(self) -> Result<Command, String> {
+        self.ready()?;
+
+        Ok(self.launcher())
+    }
+
+    /// The tool's command line before its arguments. Nextest is a subcommand of the cargo every recipe runs.
+    fn launcher(self) -> Command {
+        match self {
+            Tool::Nextest => {
+                let mut cargo = toolchain_cargo();
+                cargo.arg("nextest");
+
+                cargo
+            }
+            Tool::Biome => Command::new("biome"),
+            Tool::Node => Command::new("node"),
+            Tool::Npm => Command::new("npm"),
+        }
+    }
+
     /// `Ok` where the tool is there; otherwise the sentence saying what is missing and, where one command does it, what installs it.
-    pub(crate) fn ready(self) -> Result<(), String> {
+    fn ready(self) -> Result<(), String> {
         match self {
             Tool::Nextest => match lists_nextest(&ask_cargo(&["--list"])?) {
                 true => Ok(()),
                 false => Err(nextest_refusal()),
             },
-            Tool::Biome => ask(Command::new("biome"), &["--version"])
+            Tool::Biome => ask(self.launcher(), &["--version"])
                 .map(drop)
                 .map_err(|_| biome_refusal()),
-            Tool::Node => ask(Command::new("node"), &["--version"])
+            Tool::Node => ask(self.launcher(), &["--version"])
                 .map(drop)
                 .map_err(|error| format!("Node is needed, and {error}")),
-            Tool::Npm => ask(Command::new("npm"), &["--version"])
+            Tool::Npm => ask(self.launcher(), &["--version"])
                 .map(drop)
                 .map_err(|error| format!("npm is needed, and {error}")),
         }
