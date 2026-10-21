@@ -413,12 +413,12 @@ let token_walk: Parse(Bytes, List(Bytes)) =
 let work(mode: Str, n: Nat) -> Nat =
     choose
     | Str/eql(mode, "json") =>
-        match Parse/run(Json/decode(), Str/flatten(["[", Str/repeat("1, ", n), "1]"]))
+        match Json/decode(Str/flatten(["[", Str/repeat("1, ", n), "1]"]))
         | success(value) => match value | arr(items) => List/len(items) | _ => 0 end
         | failure(_) => 0
         end
     | Str/eql(mode, "html") =>
-        match Html/of_str(Str/repeat("<p>x</p>", n)) | success(_) => n | failure(_) => 0 end
+        match Html/decode(Str/repeat("<p>x</p>", n)) | success(_) => n | failure(_) => 0 end
     | Str/eql(mode, "tokens") =>
         match Parse/run(token_walk, Str/to_bytes(Str/repeat("abcdefgh,", n)))
         | success(runs) => List/len(runs)
@@ -452,7 +452,7 @@ let entry() -> /std/Io({}) =
 entry()
 "#;
 
-/// What a decoder's time does when its document doubles: `Json/decode` over `[1, 1, …]`, `Html/of_str` over `<p>x</p>…` and a `take_while` and `expect` token walk over `abcdefgh,…`, each at three sizes that double, timed in process over the Binaryen path. A decoder that costs what it reads doubles; one whose walk reads what is left of its input at every token quadruples.
+/// What a decoder's time does when its document doubles: `Json/decode` over `[1, 1, …]`, `Html/decode` over `<p>x</p>…` and a `take_while` and `expect` token walk over `abcdefgh,…`, each at three sizes that double, timed in process over the Binaryen path. A decoder that costs what it reads doubles; one whose walk reads what is left of its input at every token quadruples.
 ///
 /// ```sh
 /// cargo test --package curios --lib --all-features -- --ignored --nocapture decoder_doubling_slope

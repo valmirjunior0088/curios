@@ -71,7 +71,7 @@ pub let text(r: Response) -> Result(Nat, Str) =
 --- The body decoded as JSON, or the decoder's refusal. A body that is not UTF-8 is refused where it stops being text.
 pub let json(r: Response) -> Result(Parse/Error, Json) =
     match Str/of_bytes(r.body)
-    | success(text) => Parse/run(Json/decode(), text)
+    | success(text) => Json/decode(text)
     | failure(at) => Result/failure(Parse/Error/declined("a JSON body is text", at))
     end;
 
@@ -114,7 +114,7 @@ pub let of_json(
     | false => match content end
     end;
 
---- HTML, rendered as `Html/render` writes it, under a status that carries content.
+--- HTML, rendered as `Html/encode` writes it, under a status that carries content.
 pub let of_html(
     code: Nat,
     h: Html,
@@ -122,7 +122,7 @@ pub let of_html(
     @content: Holds(Status/carries_content(code)),
 ) -> Response =
     match Status/carries_content(code)
-    | true => of(code, "text/html; charset=utf-8", Str/to_bytes(Html/render(h)))
+    | true => of(code, "text/html; charset=utf-8", Str/to_bytes(Html/encode(h)))
     | false => match content end
     end;
 

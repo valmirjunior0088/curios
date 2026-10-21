@@ -202,7 +202,7 @@ pub use Serial/{let Serial};
 pub mod tcp;
 
 -- Formats: codecs that reach no host operation.
---- JSON, decoded from text and encoded through `Parse`. Numbers are binary64 `Flt` and finite: an integer past `2^53` may decode inexactly, a number past binary64's range is refused, and a float that is not finite has no JSON value.
+--- JSON, decoded from text and encoded as text. Numbers are binary64 `Flt` and finite: an integer past `2^53` may decode inexactly, a number past binary64's range is refused, and a float that is not finite has no JSON value.
 pub mod Json;
 pub use Json/{let Json};
 

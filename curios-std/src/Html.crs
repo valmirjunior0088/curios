@@ -1,5 +1,5 @@
 mod parse;
-pub use parse/{of_str, decode};
+pub use parse/{decode, unescape};
 
 use /std/{Str, Char, Bool, List, Option, Spell, Show, Fmt};
 use /std/ops/{Eql};
@@ -111,7 +111,7 @@ pub let is_named(h: Html, name: Str) -> Bool =
     end;
 
 --- The tree as markup, the doctype written first when the root is `html`. Text and attribute values are escaped, and the content of `script` and `style` is written as it is, since the browser decodes nothing there, so nothing untrusted belongs in them.
-pub let render(h: Html) -> Str =
+pub let encode(h: Html) -> Str =
     match is_named(h, "html")
     | true => Str/concat("<!doctype html>", render_tree(h))
     | false => render_tree(h)
@@ -139,7 +139,7 @@ let render_attrs(attrs: List(Attr)) -> Str =
 
 --- Shown as the markup it renders to.
 satisfy Show(Html) {
-    show = render,
+    show = encode,
 }
 
 let attribute_in(attrs: List(Attr), name: Str) -> Option(Str) =

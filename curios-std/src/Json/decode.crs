@@ -1,4 +1,4 @@
-use /std/{Str, Bool, Char, Flt, Nat, Int, Parse, Option, List, Json};
+use /std/{Str, Bool, Char, Flt, Nat, Int, Parse, Option, List, Result, Json};
 
 let parse_null: Parse(Str, Json) =
     Parse/map(Parse/str/literal("null"), (_) => Json/null());
@@ -223,9 +223,13 @@ and member_value(key: Str) -> Parse(Str, {Str, Json}) =
     let val = value()!;
     Parse/pure((key, val));
 
---- A whole document, surrounding whitespace included; anything after the value is refused.
-pub let decode() -> Parse(Str, Json) =
+-- A whole document, surrounding whitespace included; anything after the value is refused.
+let document() -> Parse(Str, Json) =
     let parsed = value()!;
     let _ = ws!;
     let _ = Parse/eof()!;
     Parse/pure(parsed);
+
+--- The value `source` writes as a whole document, or the refusal that stopped it.
+pub let decode(source: Str) -> Result(Parse/Error, Json) =
+    Parse/run(document(), source);

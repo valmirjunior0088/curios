@@ -78,7 +78,7 @@ let decode_piece(piece: Str) -> Str =
     Option/unwrap_or(decoded_reference(piece), Str/concat("&", piece));
 
 --- `s` with its character references decoded — the five markup needs, `nbsp`, and numbers in decimal or hex; one that names nothing known is kept as written.
-pub let decode(s: Str) -> Str =
+pub let unescape(s: Str) -> Str =
     match Str/split(s, "&")
     | [] => s
     | [first, ..rest] => Str/concat(first, Str/flatten(List/map(rest, decode_piece)))
@@ -107,7 +107,7 @@ let attribute() -> Parse(Str, Attr) =
     | true => Parse/fail("an attribute has a name")
     | false =>
         let value = Parse/optional(attr_value())!;
-        Parse/pure(match value | some(v) => Attr/attr(n, decode(v)) | none() => Attr/flag(n) end)
+        Parse/pure(match value | some(v) => Attr/attr(n, unescape(v)) | none() => Attr/flag(n) end)
     end;
 
 let close_tag() -> Parse(Str, {}) =
@@ -132,7 +132,7 @@ let declaration() -> Parse(Str, Html) =
 
 let text_run() -> Parse(Str, Html) =
     let chunk = until_char('<')!;
-    Parse/pure(Html/text(decode(chunk)));
+    Parse/pure(Html/text(unescape(chunk)));
 
 let lone_bracket: Parse(Str, Html) =
     Parse/map(Parse/str/char, (_) => Html/text("<"));
@@ -203,6 +203,6 @@ let content() -> Parse(Str, Html) =
         | [one, ..rest] => match rest | [] => one | _ => Html/fragment(read) end
         end);
 
---- The tree `s` spells, read as the markup `render` writes rather than as a browser reads a page: what `render` writes reads back equal. No element name is consulted, so an element is void only where it is written `<name/>`, and any other holds the trees up to the next closing tag, whichever name it bears, or to its parent's end — `<br>` written without the slash holds what follows it, and a second `<li>` or `<p>` nests in the first. A name keeps the case it was written in, a stray closing tag is skipped, a declaration is dropped, and a reference decodes as `decode` reads it, one that names nothing known kept as written. A single tree is returned as itself, several as a fragment. The grammar declines nothing today; the refusal is the parser's to report should it ever.
-pub let of_str(s: Str) -> Result(Parse/Error, Html) =
+--- The tree `s` spells, read as the markup `encode` writes rather than as a browser reads a page: what `encode` writes reads back equal. No element name is consulted, so an element is void only where it is written `<name/>`, and any other holds the trees up to the next closing tag, whichever name it bears, or to its parent's end — `<br>` written without the slash holds what follows it, and a second `<li>` or `<p>` nests in the first. A name keeps the case it was written in, a stray closing tag is skipped, a declaration is dropped, and a reference decodes as `decode` reads it, one that names nothing known kept as written. A single tree is returned as itself, several as a fragment. The grammar declines nothing today; the refusal is the parser's to report should it ever.
+pub let decode(s: Str) -> Result(Parse/Error, Html) =
     Parse/run(content(), s);
