@@ -72,7 +72,11 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ///
     /// The first chunk decides where the run goes ([`ForceWalk::place_first`]): a flattened node whose run ends at its payload's written extent hands the run its payload, the copy then writing only the pieces after it, and every other first chunk leaves the run a fresh payload. An entry *view* is not memoized (its fields are immutable): its fill is one window copy of exactly its own size, so there is nothing quadratic to fence off.
     pub(crate) fn emit_force_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
-        let walk = ForceWalk::new(rope, self.table.elems_type());
+        let walk = ForceWalk::new(
+            rope,
+            self.table.elems_type(),
+            self.table.enter(&rope.base, false),
+        );
 
         let mut instrs = walk.entry_shortcuts();
         instrs.extend(walk.init_worklist());
@@ -1277,7 +1281,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                 else_instructions: vec![],
             },
             get(&r),
-            cast(&rope.base),
+            self.table.enter(&rope.base, false),
         ];
 
         self.add_helper(

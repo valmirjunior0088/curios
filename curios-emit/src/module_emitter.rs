@@ -5,8 +5,8 @@ use {
         FltEmitter, FltHelper, ImmediateLayout, RopeData, RopeEmitter, Table, TurnEmitter,
         big_sub_type, bytes_sub_type, cell_sub_type, channel_sub_type, elems_sub_type,
         flt_sub_type, longs_sub_type, refusal_data_name, refusal_message, rope_base_sub_type,
-        rope_leaf_sub_type, rope_node_sub_type, rope_room_sub_type, rope_view_sub_type,
-        words_sub_type,
+        rope_enter_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_room_sub_type,
+        rope_view_sub_type, words_sub_type,
     },
     curios_abi::{ENTRY, Namespace, PANIC, WireType},
     curios_num::Binary,
@@ -47,6 +47,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             .add_type(rope.node.clone(), rope_node_sub_type(rope));
         self.module
             .add_type(rope.view.clone(), rope_view_sub_type(rope));
+        self.module
+            .add_type(rope.enter.clone(), rope_enter_sub_type(rope, false));
+        self.module
+            .add_type(rope.enter_or_null.clone(), rope_enter_sub_type(rope, true));
     }
 
     /// The binary rope row, over the flat `$bytes` payload — the host-boundary shape.

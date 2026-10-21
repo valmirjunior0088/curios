@@ -337,6 +337,47 @@ fn a_tuple_is_read_at_its_own_final_type() {
     }
 }
 
+/// A rope reference enters its base through its final shapes, never through a cast to the base.
+///
+/// `$rope/bytes` and `$rope/list` are the supertypes of their carrier's `leaf`, `node` and `view` and hold no object of their own, so they cannot be final, and wasmtime's `ref.cast` and `ref.test` short-circuit only on an exact match: a cast to a base is the `is_subtype` libcall for every object it ever meets, and a walk over a rope met it at every element. A reference therefore enters the base by testing the three final shapes (`Table::enter`), each one inline comparison, and the read splits test the leaf by its own type. The reason is [`a_tuple_is_read_at_its_own_final_type`]'s, for the one family of types whose base has to stay non-final; the fixture reads a text walked character by character, a list read past a concatenation, a length and an equality, all over ropes.
+#[test]
+fn a_rope_is_entered_through_its_final_shapes() {
+    let source = r#"
+        use /std/{Str, Char, Nat, List, Bytes, Process};
+
+        let entry() -> /std/Io({}) =
+            let n = List/len(Process/args()!);
+            let text = Str/concat(Nat/to_str(n + 7), Str/repeat("é→𝄞", 4));
+            let walked = Str/fold(text, 0, (c, a) => (a * 31 + Char/to_nat(c)) % 1000003);
+            let items = [..List/range(0, n + 5), ..List/range(n, n + 3)];
+            let picked = match List/try_get(items, 6) | some(v) => v | none() => 0 end;
+            let again = Str/concat(Nat/to_str(n + 7), Str/repeat("é→𝄞", 4));
+            let same = match Str/to_bytes(text) == Str/to_bytes(again) | true => 1 | false => 0 end;
+            /std/print(Nat/to_str(walked + picked + Bytes/len(Str/to_bytes(text)) + same));
+        entry()
+        "#;
+
+    let wat = wat(source);
+
+    for base in ["$rope/bytes", "$rope/list"] {
+        assert!(
+            wat.lines()
+                .any(|line| line.contains(&format!("(type {base} (sub "))),
+            "{base} is declared non-final, which is what makes a cast to it a host call"
+        );
+        let cast = wat.lines().map(str::trim).find(|line| {
+            ["ref.cast ", "ref.test ", "br_on_cast"]
+                .iter()
+                .any(|instruction| line.starts_with(instruction))
+                && (line.contains(&format!("(ref {base})"))
+                    || line.contains(&format!("(ref null {base})")))
+        });
+        assert_eq!(cast, None, "no instruction casts to or tests for {base}");
+    }
+
+    assert_eq!(run(source), b"231084");
+}
+
 /// A family slot is declared at the carrier its recorded shape names, not at `anyref`.
 ///
 /// `Chain` is `stop() | link(Nat, Chain)`, so its slots are the tag, the family's own row, and one uniform reference for the `Nat` — an i31 or a boxed magnitude, which no single heap type names — and the emitted struct says exactly that: `i8`, `(ref null $row/…$/Chain)`, `anyref`. The tag reads back through `struct.get_u` out of a packed byte, with nothing to unbox.

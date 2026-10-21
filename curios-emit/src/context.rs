@@ -265,22 +265,8 @@ impl<'a, 'b> Context<'a, 'b> {
                 true => vec![curios_wasm::Instr::RefAsNonNull],
                 false => vec![],
             },
-            LoadAs::Concrete(type_name) => {
-                vec![curios_wasm::Instr::RefCast {
-                    ref_type: curios_wasm::RefType {
-                        is_nullable: false,
-                        heap_type: curios_wasm::HeapType::Concrete(type_name),
-                    },
-                }]
-            }
-            LoadAs::ConcreteOrNull(type_name) => {
-                vec![curios_wasm::Instr::RefCast {
-                    ref_type: curios_wasm::RefType {
-                        is_nullable: true,
-                        heap_type: curios_wasm::HeapType::Concrete(type_name),
-                    },
-                }]
-            }
+            LoadAs::Concrete(type_name) => vec![self.table().enter(&type_name, false)],
+            LoadAs::ConcreteOrNull(type_name) => vec![self.table().enter(&type_name, true)],
             LoadAs::Nat => return self.narrow_instrs(producer, BigHelper::Word),
             LoadAs::WireNat => return self.narrow_instrs(producer, BigHelper::NatWire),
             LoadAs::WireInt => return self.narrow_instrs(producer, BigHelper::IntWire),
@@ -303,14 +289,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 let func_name = self.table().bytes_box_func();
                 vec![curios_wasm::Instr::Call { func_name }]
             }
-            LoadAs::List => {
-                vec![curios_wasm::Instr::RefCast {
-                    ref_type: curios_wasm::RefType {
-                        is_nullable: false,
-                        heap_type: curios_wasm::HeapType::Concrete(self.table().list_rope_type()),
-                    },
-                }]
-            }
+            LoadAs::List => vec![self.table().enter(&self.table().list_rope_type(), false)],
         };
 
         producer.into_iter().chain(read).collect()

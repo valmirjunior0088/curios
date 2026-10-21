@@ -910,6 +910,16 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         ]
     }
 
+    /// Whether the reference on the stack is a leaf, tested against the leaf's own final type.
+    fn is_leaf(rope: &RopeData) -> curios_wasm::Instr {
+        curios_wasm::Instr::RefTest {
+            ref_type: curios_wasm::RefType {
+                is_nullable: false,
+                heap_type: curios_wasm::HeapType::Concrete(rope.leaf.clone()),
+            },
+        }
+    }
+
     /// `struct.get` on a rope base — the `len`/`tag` reads that never force.
     fn rope_get(rope: &RopeData, field: &curios_wasm::FieldName) -> curios_wasm::Instr {
         curios_wasm::Instr::StructGet {
@@ -1029,12 +1039,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                         curios_wasm::Instr::LocalGet {
                             local_name: result_local.clone(),
                         },
-                        curios_wasm::Instr::RefCast {
-                            ref_type: curios_wasm::RefType {
-                                is_nullable: false,
-                                heap_type: curios_wasm::HeapType::Concrete(rope.base.clone()),
-                            },
-                        },
+                        self.context.table().enter(&rope.base, false),
                     ];
                 }
                 if let Some(norm) = norm {
@@ -1166,12 +1171,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         ]);
 
         let mut rope_arm = self.context.load_value_instrs(carrier, LoadAs::NonNull);
-        rope_arm.push(curios_wasm::Instr::RefCast {
-            ref_type: curios_wasm::RefType {
-                is_nullable: false,
-                heap_type: curios_wasm::HeapType::Concrete(rope.base.clone()),
-            },
-        });
+        rope_arm.push(self.context.table().enter(&rope.base, false));
         rope_arm.push(Self::rope_get(&rope, &rope.len_field));
 
         self.emit_instr(curios_wasm::Instr::If {
@@ -1238,12 +1238,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             curios_wasm::Instr::I32And,
         ]);
 
-        let cast_rope = curios_wasm::Instr::RefCast {
-            ref_type: curios_wasm::RefType {
-                is_nullable: false,
-                heap_type: curios_wasm::HeapType::Concrete(rope.base.clone()),
-            },
-        };
+        let enter_rope = self.context.table().enter(&rope.base, false);
         let mut leaf_arm = self.context.load_value_instrs(carrier, LoadAs::NonNull);
         leaf_arm.extend([
             curios_wasm::Instr::RefCast {
@@ -1262,22 +1257,18 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             type_name: rope.payload.clone(),
         });
         let mut read_arm = self.context.load_value_instrs(carrier, LoadAs::NonNull);
-        read_arm.push(cast_rope.clone());
+        read_arm.push(enter_rope);
         read_arm.extend(self.context.load_value_instrs(index, LoadAs::Nat));
         read_arm.push(curios_wasm::Instr::Call { func_name: read });
 
         let mut rope_arm = self.context.load_value_instrs(carrier, LoadAs::NonNull);
-        rope_arm.push(cast_rope);
-        {
-            rope_arm.push(Self::rope_get(&rope, &rope.tag_field));
-            rope_arm.push(curios_wasm::Instr::I32Eqz);
-            rope_arm.push(curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("seq_get"),
-                block_type: i32_result.clone(),
-                then_instructions: leaf_arm,
-                else_instructions: read_arm,
-            });
-        }
+        rope_arm.push(Self::is_leaf(&rope));
+        rope_arm.push(curios_wasm::Instr::If {
+            label_name: curios_wasm::LabelName::from("seq_get"),
+            block_type: i32_result.clone(),
+            then_instructions: leaf_arm,
+            else_instructions: read_arm,
+        });
 
         self.emit_instr(curios_wasm::Instr::If {
             label_name: curios_wasm::LabelName::from("bytes_get"),
@@ -1297,12 +1288,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let unpack = [Self::imm_cast(), curios_wasm::Instr::I31GetU];
         let i32_result =
             curios_wasm::BlockType::Inline(curios_wasm::ValType::Num(curios_wasm::NumType::I32));
-        let cast_rope = curios_wasm::Instr::RefCast {
-            ref_type: curios_wasm::RefType {
-                is_nullable: false,
-                heap_type: curios_wasm::HeapType::Concrete(rope.base.clone()),
-            },
-        };
+        let enter_rope = self.context.table().enter(&rope.base, false);
 
         self.emit_instrs(self.context.load_value_instrs(left, LoadAs::NonNull));
         self.emit_instr(i31());
@@ -1323,9 +1309,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
 
         let mut both_rope = self.context.load_value_instrs(left, LoadAs::NonNull);
-        both_rope.push(cast_rope.clone());
+        both_rope.push(enter_rope.clone());
         both_rope.extend(self.context.load_value_instrs(right, LoadAs::NonNull));
-        both_rope.push(cast_rope);
+        both_rope.push(enter_rope);
         both_rope.push(curios_wasm::Instr::Call { func_name: eql });
 
         let mut left_rope = self.context.load_value_instrs(right, LoadAs::NonNull);
@@ -1487,12 +1473,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             pair.extend(self.concat_pair_instrs(lhs_rope, rhs_rope, result_local, &rope));
             pair.extend([
                 get(result_local),
-                curios_wasm::Instr::RefCast {
-                    ref_type: curios_wasm::RefType {
-                        is_nullable: false,
-                        heap_type: curios_wasm::HeapType::Concrete(rope.base.clone()),
-                    },
-                },
+                self.context.table().enter(&rope.base, false),
                 call(&norm),
             ]);
 
@@ -1621,19 +1602,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         ]);
 
         // Rope base: the ordinary node, past the envelope by canonicity.
-        let cast_rope = curios_wasm::Instr::RefCast {
-            ref_type: curios_wasm::RefType {
-                is_nullable: false,
-                heap_type: curios_wasm::HeapType::Concrete(rope.base.clone()),
-            },
-        };
+        let enter_rope = self.context.table().enter(&rope.base, false);
         let mut rope_arm = vec![curios_wasm::Instr::I32Const { value: 1 }];
         let length = self
             .context
             .load_value_instrs(carrier, LoadAs::NonNull)
             .into_iter()
             .chain([
-                cast_rope.clone(),
+                enter_rope.clone(),
                 Self::rope_get(&rope, &rope.len_field),
                 curios_wasm::Instr::I64ExtendI32U,
                 curios_wasm::Instr::I64Const { value: 1 },
@@ -1642,7 +1618,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             .collect();
         rope_arm.extend(self.context.length_instrs(length));
         rope_arm.extend(self.context.load_value_instrs(carrier, LoadAs::NonNull));
-        rope_arm.push(cast_rope);
+        rope_arm.push(enter_rope);
         rope_arm.extend(elem_leaf(elem_instrs));
         rope_arm.extend(Self::node_instrs(&rope));
 
@@ -1680,11 +1656,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             Table::top_type(true)
         };
 
-        self.emit_instrs(self.context.load_value_instrs(carrier, load.clone()));
-        self.emit_instr(Self::rope_get(rope, &rope.tag_field));
-        self.emit_instr(curios_wasm::Instr::I32Eqz);
+        self.emit_instrs(self.context.load_value_instrs(carrier, LoadAs::NonNull));
+        self.emit_instr(Self::is_leaf(rope));
 
-        let mut leaf_arm = self.context.load_value_instrs(carrier, load.clone());
+        let mut leaf_arm = self.context.load_value_instrs(carrier, LoadAs::NonNull);
         leaf_arm.push(curios_wasm::Instr::RefCast {
             ref_type: curios_wasm::RefType {
                 is_nullable: false,
@@ -2435,9 +2410,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     is_nullable: false,
                     heap_type: curios_wasm::HeapType::Concrete(rope.base.clone()),
                 });
-                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::List));
-                self.emit_instr(Self::rope_get(&rope, &rope.tag_field));
-                self.emit_instr(curios_wasm::Instr::I32Eqz);
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::NonNull));
+                self.emit_instr(Self::is_leaf(&rope));
                 // A leaf answers itself; anything else answers a fresh leaf over its exact payload — an O(1) wrap where the forced payload is the run, since a run's slots are written once and never rewritten.
                 let leaf_arm = self.context.load_value_instrs(&args[0], LoadAs::List);
                 let mut build_arm = vec![curios_wasm::Instr::I32Const { value: 0 }];

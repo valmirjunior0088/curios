@@ -9,6 +9,8 @@ use super::{
 pub(super) struct ForceWalk<'r> {
     rope: &'r RopeData,
     elems: curios_wasm::TypeName,
+    /// What a reference popped off the worklist enters the base through: `Table::enter` for `rope`'s base.
+    enter: curios_wasm::Instr,
     pub(super) r: curios_wasm::LocalName,
     node: curios_wasm::LocalName,
     pub(super) out: curios_wasm::LocalName,
@@ -27,10 +29,15 @@ pub(super) struct ForceWalk<'r> {
 
 impl<'r> ForceWalk<'r> {
     /// The walk of a rope whose run occupies as many payload slots as it is long.
-    pub(super) fn new(rope: &'r RopeData, elems: curios_wasm::TypeName) -> Self {
+    pub(super) fn new(
+        rope: &'r RopeData,
+        elems: curios_wasm::TypeName,
+        enter: curios_wasm::Instr,
+    ) -> Self {
         Self {
             rope,
             elems,
+            enter,
             r: curios_wasm::LocalName::from("r"),
             node: curios_wasm::LocalName::from("node"),
             out: curios_wasm::LocalName::from("out"),
@@ -388,7 +395,7 @@ impl<'r> ForceWalk<'r> {
                     curios_wasm::Instr::ArrayGet {
                         type_name: self.elems.clone(),
                     },
-                    cast(&self.rope.base),
+                    self.enter.clone(),
                     set(&self.cur),
                     curios_wasm::Instr::Br {
                         label_name: walk_label.clone(),

@@ -16,7 +16,7 @@
 //!
 //! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are taken exact before the call, a payload exactly its run, and results are embedded into fresh leaves after it), so curios-native and the curios-js bridge only ever see flat arrays, each read by its own length.
 
-use super::{ChannelData, RopeData, concrete_val};
+use super::{ChannelData, RopeData, Table, concrete_val};
 
 /// `Flt` — a boxed `f64`: `struct (field $special (f64))`.
 pub fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm::SubType {
@@ -105,7 +105,7 @@ pub(crate) fn rope_room_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     }
 }
 
-/// A rope base (`$rope/bytes` / `$rope/list`) — the non-final struct every carrier ref is cast to: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a leaf, 1 for a node, 2 for a view; `len` is the carrier's element count, so `len` and the tag dispatch never force.
+/// A rope base (`$rope/bytes` / `$rope/list`) — the non-final struct every helper takes, which a carrier reference enters through its final shapes: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a leaf, 1 for a node, 2 for a view; `len` is the carrier's element count, so `len` and the tag dispatch never force.
 pub(crate) fn rope_base_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: false,
@@ -175,6 +175,18 @@ pub(crate) fn rope_view_sub_type(rope: &RopeData) -> curios_wasm::SubType {
             ),
             (rope.offset_field.clone(), i32_const_field()),
         ])),
+    }
+}
+
+/// `[anyref] -> [(ref $base)]`, or `(ref null $base)` where a null passes: the type of the block a carrier reference enters its rope base through.
+pub(crate) fn rope_enter_sub_type(rope: &RopeData, admits_null: bool) -> curios_wasm::SubType {
+    curios_wasm::SubType {
+        is_final: true,
+        super_types: vec![],
+        comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
+            inputs: [Table::top_type(true)].into(),
+            outputs: [concrete_val(rope.base.clone(), admits_null)].into(),
+        }),
     }
 }
 

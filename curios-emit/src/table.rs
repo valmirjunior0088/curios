@@ -39,10 +39,14 @@ impl FieldData {
     }
 }
 
-/// The name bundle for one internal rope carrier (`$rope/bytes` or `$rope/list`): the base struct the emitter casts carrier refs to, its `leaf`/`node`/`view` subtypes, the flat payload array, the room record both carriers share, and every field name — one handle to thread through the op emitters so packed `Bytes` and `List` share their lowering code.
+/// The name bundle for one internal rope carrier (`$rope/bytes` or `$rope/list`): the base struct every helper takes, its `leaf`/`node`/`view` subtypes, the block type a reference enters the base through, the flat payload array, the room record both carriers share, and every field name — one handle to thread through the op emitters so packed `Bytes` and `List` share their lowering code.
 #[derive(Debug, Clone)]
 pub(crate) struct RopeData {
     pub base: curios_wasm::TypeName,
+    /// `[anyref] -> [(ref $base)]`, the type of the block `Table::enter` builds.
+    pub enter: curios_wasm::TypeName,
+    /// `[anyref] -> [(ref null $base)]`, the type of the block `Table::enter` builds where a null passes.
+    pub enter_or_null: curios_wasm::TypeName,
     pub leaf: curios_wasm::TypeName,
     pub node: curios_wasm::TypeName,
     pub view: curios_wasm::TypeName,
@@ -360,6 +364,10 @@ pub(crate) struct Table<'a> {
     list_rope_leaf_type: curios_wasm::TypeName,
     list_rope_node_type: curios_wasm::TypeName,
     list_rope_view_type: curios_wasm::TypeName,
+    bytes_rope_enter_type: curios_wasm::TypeName,
+    list_rope_enter_type: curios_wasm::TypeName,
+    bytes_rope_enter_or_null_type: curios_wasm::TypeName,
+    list_rope_enter_or_null_type: curios_wasm::TypeName,
     rope_room_type: curios_wasm::TypeName,
     cell_type: curios_wasm::TypeName,
 
@@ -453,6 +461,10 @@ impl<'a> Table<'a> {
             list_rope_leaf_type: curios_wasm::TypeName::from("rope/list/leaf"),
             list_rope_node_type: curios_wasm::TypeName::from("rope/list/node"),
             list_rope_view_type: curios_wasm::TypeName::from("rope/list/view"),
+            bytes_rope_enter_type: curios_wasm::TypeName::from("rope/bytes/enter"),
+            list_rope_enter_type: curios_wasm::TypeName::from("rope/list/enter"),
+            bytes_rope_enter_or_null_type: curios_wasm::TypeName::from("rope/bytes/enter_or_null"),
+            list_rope_enter_or_null_type: curios_wasm::TypeName::from("rope/list/enter_or_null"),
             rope_room_type: curios_wasm::TypeName::from("rope/room"),
             cell_type: curios_wasm::TypeName::from("cell"),
             panic: OnceCell::new(),
@@ -735,6 +747,8 @@ impl<'a> Table<'a> {
     pub(crate) fn bytes_rope(&self) -> RopeData {
         RopeData {
             base: self.bytes_rope_type.clone(),
+            enter: self.bytes_rope_enter_type.clone(),
+            enter_or_null: self.bytes_rope_enter_or_null_type.clone(),
             leaf: self.bytes_rope_leaf_type.clone(),
             node: self.bytes_rope_node_type.clone(),
             view: self.bytes_rope_view_type.clone(),
@@ -757,6 +771,8 @@ impl<'a> Table<'a> {
     pub(crate) fn list_rope(&self) -> RopeData {
         RopeData {
             base: self.list_rope_type.clone(),
+            enter: self.list_rope_enter_type.clone(),
+            enter_or_null: self.list_rope_enter_or_null_type.clone(),
             leaf: self.list_rope_leaf_type.clone(),
             node: self.list_rope_node_type.clone(),
             view: self.list_rope_view_type.clone(),
@@ -825,6 +841,57 @@ impl<'a> Table<'a> {
             },
             curios_wasm::Instr::Unreachable,
         ]
+    }
+
+    /// The reference on the stack as a `target`, a null passing where `nullable`: one `ref.cast` to a final type, and for a rope base the test of each final shape the base holds. Every load at a heap type enters it here.
+    pub(crate) fn enter(
+        &self,
+        target: &curios_wasm::TypeName,
+        nullable: bool,
+    ) -> curios_wasm::Instr {
+        for rope in [self.bytes_rope(), self.list_rope()] {
+            if *target == rope.base {
+                return self.rope_entry(&rope, nullable);
+            }
+        }
+        curios_wasm::Instr::RefCast {
+            ref_type: curios_wasm::RefType {
+                is_nullable: nullable,
+                heap_type: curios_wasm::HeapType::Concrete(target.clone()),
+            },
+        }
+    }
+
+    /// The reference on the stack as `rope`'s base, by its final shape: a branch out on `leaf`, `node` or `view`, and a refusal past them. Every object is a subtype of the non-final base, so a cast to the base is the engine's `is_subtype` call each time, where a test against a final shape is one inline comparison.
+    fn rope_entry(&self, rope: &RopeData, admits_null: bool) -> curios_wasm::Instr {
+        let label_name = curios_wasm::LabelName::from("rope_enter");
+        let any = curios_wasm::RefType {
+            is_nullable: true,
+            heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Any),
+        };
+        // A null passes the first test where it is admitted, a nullable target holding it.
+        let mut instructions: Vec<_> = [&rope.leaf, &rope.node, &rope.view]
+            .into_iter()
+            .enumerate()
+            .map(|(index, shape)| curios_wasm::Instr::BrOnCast {
+                label_name: label_name.clone(),
+                source_type: any.clone(),
+                target_type: curios_wasm::RefType {
+                    is_nullable: admits_null && index == 0,
+                    heap_type: curios_wasm::HeapType::Concrete(shape.clone()),
+                },
+            })
+            .collect();
+        instructions.extend(self.refuse_instrs(curios_cont::Panic::Invariant));
+        let block_type = match admits_null {
+            true => rope.enter_or_null.clone(),
+            false => rope.enter.clone(),
+        };
+        curios_wasm::Instr::Block {
+            label_name,
+            block_type: curios_wasm::BlockType::Concrete(block_type),
+            instructions,
+        }
     }
 
     /// A logical length or capacity computed unsigned in 64 bits, checked before it enters a 32-bit field or allocation. `wide` holds the producer once, so the guard neither repeats it nor lets its sum wrap.

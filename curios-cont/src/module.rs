@@ -68,9 +68,9 @@ pub enum Slot {
     Nat,
     /// A raw binary64 payload — the one slot that deletes an allocation rather than a coercion, since the boxed `Flt` it replaces is a heap object of its own.
     Flt,
-    /// A list rope. The base type is not final, so this is the slot that deletes an `is_subtype` libcall rather than an inline check.
+    /// A list rope, read at its base with no test of its shape, where a uniform reference enters the base by testing each final shape.
     List,
-    /// A closure of the given arity. Its environment base is *not* final — it is the supertype of every per-closure environment of that arity — so, like [`Slot::List`], this is a slot that deletes an `is_subtype` libcall rather than an inline check.
+    /// A closure of the given arity. Its environment base is *not* final — it is the supertype of every per-closure environment of that arity — so this is a slot that deletes an `is_subtype` libcall rather than an inline check.
     Closure(usize),
     /// A value of the named nominal row. A row's heap type is final, so this is the slot whose read needs no cast at all once Binaryen has the static type.
     Row(RowId),
