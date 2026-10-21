@@ -34,15 +34,11 @@ Reserved with the layer it serves, and refined with it when the trigger is met:
 
 ## Boolean and bitwise normal forms
 
-**Capability wanted.** Reason beyond today's local identities and the truth table's bounded agreement — two `Bool` terms with a connective between them are put to a truth table over their atoms, a rung of `curios-analysis`'s conversion chain, which declines past `curios-algebra`'s `BOOL_ATOM_CAP` of eight atoms — including relationships among comparison atoms and further natural bitwise laws.
+**Capability wanted.** Reason beyond today's local identities and the truth table's agreement — two `Bool` terms with a connective between them are put to a truth table over their atoms, a rung of `curios-analysis`'s conversion chain — to relationships among comparison atoms and further natural bitwise laws. The table's cap on atoms, which leaves conversion short of transitivity and of closure under substitution, is [Boolean agreement is transitive and closed under substitution](101-boolean-agreement-is-transitive-and-closed-under-substitution.md)'s.
 
-The cap is also a place conversion is not transitive, by design: with `A` the conjunction of `a0 || a1 || a2 || a3 || a4` and the negation of each of its five atoms, and `C` the same over `a5` to `a9`, `A` converts with `false` and `false` with `C`, and `A` does not convert with `C`, their pair holding ten atoms. A reader can count the atoms, and the refusal says the two were not compared.
+**Previously discussed.** Algebraic normal form for natural bitwise operations.
 
-**Previously discussed.** Reduced ordered decision diagrams for Boolean reasoning, algebraic normal form for natural bitwise operations, and replacing the truth table's fixed cap with a budget the reduction budget prices.
-
-**Still to refine.** Which representations serve which operations, how arithmetic relationships enter the Boolean procedure, and which complexity limits keep work predictable. The cap is a constant of the language on purpose, so the same two formulas are decided on every target (`curios-algebra`'s `boolean` module), and a priced budget has to keep that. Agreement, impossibility and failure to decide need separate contracts; disagreement over independent opaque atoms is not automatically a realizable counterexample.
-
-**To consider, for moving the cap.** Some bound has to stand, since deciding two formulas equivalent is co-NP-complete; what can move is how far a procedure reaches before it stops. A reduced ordered decision diagram built for one comparison and never written back, or a satisfiability search over the two formulas' difference, decides what the table decides and in practice far past eight atoms. [A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md) rejects a diagram as a normal form, which respells, and notes that at the comparison it is the table under the same cap; the question here is that use under a larger bound. Whatever bounds it has to decide the same two formulas on every target, and a diagram adds one condition the table does not have: its size follows the order of its variables, and atoms are ranked by a structural hash, so a bound on a diagram's nodes would move a verdict with the order binders are declared in. Either the order is one no declaration order moves, or the bound stays on the number of atoms and the diagram is only how the comparison is run.
+**Still to refine.** Which representations serve which operations, how arithmetic relationships enter the Boolean procedure, and which complexity limits keep work predictable. Agreement, impossibility and failure to decide need separate contracts; disagreement over independent opaque atoms is not automatically a realizable counterexample.
 
 ## Polynomial unification proposals
 
@@ -66,7 +62,7 @@ The cap is also a place conversion is not transitive, by design: with `A` the co
 
 ## Rows the law grid refuses
 
-`tests::laws::written` holds rows no rule decides yet, each a candidate for a family of its own. Parity read as a clash: the gcd test decides `x * 2 + 1 == y * 2` false as a fold, and read by the `Nat` peel as `Impossible` it would let `match h end` close `Eq()(x * 2 + 1, y * 2)`, so it needs its own row and its own evidence before inversion may rely on it. Map fusion, `map(map(xs, f), g) = map(xs, (x) => g(f(x)))`. Boolean agreement past the truth table's cap, above. Two more leave an operation with no meaning the logic can read, each with a consumer waiting: [A right shift and a remainder state their bounds](300-a-right-shift-and-a-remainder-state-their-bounds.md).
+`tests::laws::written` holds rows no rule decides yet, each a candidate for a family of its own. Parity read as a clash: the gcd test decides `x * 2 + 1 == y * 2` false as a fold, and read by the `Nat` peel as `Impossible` it would let `match h end` close `Eq()(x * 2 + 1, y * 2)`, so it needs its own row and its own evidence before inversion may rely on it. Map fusion, `map(map(xs, f), g) = map(xs, (x) => g(f(x)))`. Boolean agreement past the truth table's cap is [Boolean agreement is transitive and closed under substitution](101-boolean-agreement-is-transitive-and-closed-under-substitution.md)'s. Two more leave an operation with no meaning the logic can read, each with a consumer waiting: [A right shift and a remainder state their bounds](300-a-right-shift-and-a-remainder-state-their-bounds.md).
 
 ## What an arm's equation leaves unanswered
 
