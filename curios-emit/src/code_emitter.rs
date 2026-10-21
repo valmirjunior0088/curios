@@ -1088,7 +1088,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
-    /// Lower a rope slice: one call to the shared `slice` helper — an O(1) window (`view`) over the source, with the bounds trap and the read-through invariant maintained inside the helper.
+    /// Lower a rope slice: one call to the shared `slice` helper — a window (`view`) over the source, O(1) over a flat-available base, with the bounds trap, the forcing of an uncached base and the read-through invariant maintained inside the helper.
     fn emit_rope_slice(
         &mut self,
         result_local: &curios_wasm::LocalName,
