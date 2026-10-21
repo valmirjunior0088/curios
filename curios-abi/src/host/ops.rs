@@ -141,7 +141,7 @@ macro_rules! for_each_host_op {
             DirRemove: fn dir_remove(path: Vec<u8>) -> Result<(), Failure> { module: fs }
 
             /// The process's working directory, as bytes. WASI has preopens instead, so the browser denies it.
-            ProcCwd: fn proc_cwd() -> Result<Vec<u8>, Failure> { module: fs, yields: path }
+            ProcCwd: fn proc_cwd() -> Result<Vec<u8>, Failure> { module: Process, yields: path }
 
             /// Start the program `argv[0]` with the arguments after it — `execve`'s own shape — in `cwd` (the parent's when empty) and with `env`'s `NAME=VALUE` entries laid over the inherited environment, each standard stream wired by its [`stdio_mode`](crate::stdio_mode) tag. A success is the child's handle, which becomes `READ`-ready when the child exits, which is when `proc_wait` answers, beside the parent's end of each stream the call piped: a non-blocking handle `handle_read`, `handle_write`, `handle_watch` and `handle_close` serve, and the empty token for a stream that was not piped. Closing the child leaves its streams filed. An empty `argv`, a NUL in any argument, the working directory or an environment entry, or an entry with no name before its `=` fails `EINVAL` without starting anything.
             ProcSpawn: fn proc_spawn(argv: Vec<Vec<u8>>, cwd: Vec<u8>, env: Vec<Vec<u8>>, stdin: StdioMode, stdout: StdioMode, stderr: StdioMode) -> Result<ChildHandles, Failure> { module: Process/Child }

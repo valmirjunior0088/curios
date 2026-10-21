@@ -114,6 +114,15 @@ pub let env(name: Str) -> Io(Option(Bytes)) =
         | _ => Option/none()
         end);
 
+--- The process's working directory: `ok` beside its path, or the status of the failure.
+foreign proc_cwd() -> {status: Nat, path: Bytes};
+
+--- The working directory of this process.
+pub let cwd() -> Try(Io, Io/Error, Path) =
+    let reply = proc_cwd()!;
+    let _ = Status/succeeded(reply.status)!;
+    Try/pure(Path/of_bytes(reply.path));
+
 --- End the instance with this code. The call does not return.
 foreign proc_exit(Byte) -> Never;
 

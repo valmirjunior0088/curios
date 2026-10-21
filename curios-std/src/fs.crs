@@ -128,15 +128,6 @@ pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
     let status = file_rename(Path/to_bytes(from), Path/to_bytes(to))!;
     Status/succeeded(status);
 
---- The process's working directory: `ok` beside its path, or the status of the failure.
-foreign proc_cwd() -> {status: Nat, path: Bytes};
-
---- The working directory.
-pub let cwd() -> Try(Io, Io/Error, Path) =
-    let reply = proc_cwd()!;
-    let _ = Status/succeeded(reply.status)!;
-    Try/pure(Path/of_bytes(reply.path));
-
 --- A directory at `path` and every missing parent; one that already exists is left as it is.
 pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
     let r = Try/run(create_dir(path))!;

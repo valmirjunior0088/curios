@@ -171,7 +171,7 @@ pub mod time;
 --- Randomness from the host, in `Io`.
 pub mod rand;
 
---- A program to run, the `Child` it runs as, and this process's own arguments, environment, exit and standard streams.
+--- A program to run, the `Child` it runs as, and this process's own arguments, environment, working directory, exit and standard streams.
 ---
 --- A child is spawned into a scope, which kills it when the scope ends, however it ends.
 pub mod Process;

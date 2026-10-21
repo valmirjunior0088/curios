@@ -123,7 +123,7 @@ fn a_filesystem_row_s_failure_is_the_error_it_names() {
             vec![(HostOp::DirRemove, denied(vec![]))],
         ),
         (
-            "let _ = fs/cwd()!; Try/pure(())",
+            "let _ = Process/cwd()!; Try/pure(())",
             vec![(HostOp::ProcCwd, denied(vec![bytes(b"")]))],
         ),
     ]);
@@ -355,9 +355,9 @@ fn a_bytes_payload_arrives_whole() {
     let (host, io) = MockHost::builder().build();
     let compiled = compile(
         r#"
-        use /std/{Io, Path, Try, fs, Process};
+        use /std/{Io, Path, Try, Process};
         let main() -> Io({}) =
-        let r = Try/run(fs/cwd())!;
+        let r = Try/run(Process/cwd())!;
         match r | success(p) => Io/bind(Try/run(Io/write(Process/stdout, Path/to_bytes(p))), (_) => Io/pure(())) | failure(_) => Io/pure(()) end;
         main()
         "#,
