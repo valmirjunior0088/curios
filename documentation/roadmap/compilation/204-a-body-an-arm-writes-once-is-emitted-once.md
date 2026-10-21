@@ -1,6 +1,6 @@
 # A body an arm writes once is emitted once
 
-**Not refined yet.** This specification reserves the place where two leaves of one match that run the same body come to run one copy of it. It is not an implementation plan, and no design is chosen. The copies are the compiler's own ([Patterns are compiled where their types are known](../../design/surface/patterns-are-compiled-where-their-types-are-known.md)), and it waits on the count named under *Refinement*.
+**Not refined yet.** This specification reserves the place where two leaves of one match that run the same body come to run one copy of it. It is not an implementation plan, and no design is chosen. The copies are the compiler's own ([Patterns are compiled where their types are known](../../design/surface/patterns-are-compiled-where-their-types-are-known.md)), and it waits for a consumer: no row of `/std` reaches more than one leaf (*What is known*).
 
 ## What is missing
 
@@ -21,10 +21,10 @@
 - **The inliner already decides when sharing pays.** The small body bound once is copied into both callers and the two spellings come to one size; the large one stays one function. So what is missing is the other direction alone, from two copies to one.
 - **Where no body rests on a case.** After erasure the types and the proofs are gone, and two instances of one row differ by the names they bind and nothing else: a body shared there needs no equation the kernel holds, which is why the sharing is not Core's ([Patterns are compiled where their types are known](../../design/surface/patterns-are-compiled-where-their-types-are-known.md)).
 - **Peers share at the leaf.** A decision tree's "primary drawback is potential code size explosion", and "decision trees produced by the real compiler are implemented as dags with maximal sharing" (Maranget, "Compiling Pattern Matching to Good Decision Trees", ML Workshop 2008, §1 and §4), where a leaf is an action's number and a body is written once by construction.
+- **The library writes no body twice.** Counted at `f0712f8e4`, by counters a scratch copy kept where the matrix compiler writes a row's body at a leaf (`Compiler::leaf`, `curios-elab/src/elaborate/matrix.rs`), over `cargo xtask profile-prelude elaboration`: one row of `/std` is put under a case another row wrote, and it reaches one leaf. No row reaches two, so no instance of one is weighed, and the program in the table above is the case.
 
 ## Refinement
 
 - **What two bodies are held equal by**: structure up to the binders an instance renames, and at which rung — the erased term, where a match is still a tree, or the continuation graph, where a body is a continuation with parameters.
 - **Whether the inliner's rule decides the merge**, so that a body it would copy back is never merged first.
-- **The count this waits on.** Over `/std`, whose hand-nested matches are flattened: how many rows reach more than one leaf, and what their instances weigh at `cont-optm`.
 - **Check.** The table above, the copied spelling coming to the shared one's size at both rungs for the large body, and unmoved for the small.

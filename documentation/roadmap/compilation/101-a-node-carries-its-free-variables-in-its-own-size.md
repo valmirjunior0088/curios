@@ -2,7 +2,7 @@
 
 [Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a compilation end in time proportional to what was written plus what the budget counted, and a walk pass over a subterm a fact its node carries proves it has nothing to find in. The fact a node carries of its free variables is a set copied from its children, so a term whose every level names one more local costs the square of its depth to know them.
 
-**Not refined yet.** It waits on the census and the choice of representation under *Refinement*.
+**Not refined yet.** It waits on the choice of representation under *Refinement*.
 
 ## What is wrong
 
@@ -14,10 +14,10 @@ Probed at `25125304c` with the release compiler, timed once: `n` bindings `let x
 
 - **The readers.** `free_vars_shared` and `free_vars` are read at 73 places in 35 files, across both checkers, the lowering and the shared analyses, most of them asking membership or iterating; `mentions_free` asks membership alone. A set is filled for a minority of nodes on a compilation, the rest reading the packed scalars (`ScalarCache`), whose `newest_local` already lets a capture pass over a subterm.
 - **The empty set is shared**, one canonical `Rc`, and a chain that adds nothing shares its child's: the copy is paid only where two children carry free variables.
+- **What the library fills.** Counted at `f0712f8e4`, by counters a scratch copy kept at the fill and took at each budget sample over `cargo xtask profile-prelude elaboration` and `certification`. Elaboration fills 1,203,150 sets: 255,049 of one variable, 227,666 shared from a child, 267,442 empty and 452,993 copied from two children, the copies holding 2,708,745 members, six on average and 72 at most, 244,458 of four or fewer, 183,985 of five to sixteen, 24,486 of seventeen to sixty-four and 64 of more. Certification fills 334,755, 161,155 of them copies holding 995,666 members, 76 at most, by the same sizes 87,377, 63,513, 10,233 and 32. About 94% of the copies in either half hold sixteen members or fewer.
 - **Prior art.** Lean 4 keeps no set on an expression: its `Expr.Data` packs a hash and flags, `hasFVar` among them, and a walk collects free variables where asked, remembering what it visited. GHC's free-variable annotation keeps a set per node over persistent integer maps, so a set one larger shares the one below.
 
 ## Refinement
 
-- **The census it waits on.** How large the sets `/std`'s elaboration and certification fill are, and how many are filled, by a `sample!` at the fill over `cargo xtask profile-prelude elaboration` and `certification`: what a representation costs the common case is the argument for it.
-- **The representation**, one of three: a persistent ordered set (`Sorted`, `curios-utilities/src/persistent.rs`) merged smaller into larger, whose node per member is paid by every small set; a set that is a sorted vector while small and persistent past a size; or no set at all, the scalars' flags passing over what holds no local, and a set collected by a remembered walk where a reader needs one, as Lean does.
+- **The representation**, read against what the library fills, above, since what a representation costs the common case is the argument for it; one of three: a persistent ordered set (`Sorted`, `curios-utilities/src/persistent.rs`) merged smaller into larger, whose node per member is paid by every small set; a set that is a sorted vector while small and persistent past a size; or no set at all, the scalars' flags passing over what holds no local, and a set collected by a remembered walk where a reader needs one, as Lean does.
 - **Check**: the probe above within a tenth of 2.0 per doubling, held as a growth row of `curios/src/tests/growth.rs`; `/std`'s image unchanged at one path; `profile-prelude`'s allocations and peak for both halves no worse than before, counted.
