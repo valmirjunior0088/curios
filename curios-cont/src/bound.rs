@@ -36,6 +36,11 @@ impl Bound {
         Self::below(value.bits())
     }
 
+    /// The least bound every natural below `value` lies below, which is what a remainder by `value` lies below; nothing lies below zero, as nothing a remainder by zero answers arrives, since it traps.
+    pub(crate) fn under(value: &Natural) -> Self {
+        Self::below(value.monus(&Natural::from(1u32)).bits())
+    }
+
     /// Whether a machine word holds every value this admits.
     pub(crate) fn is_word(self) -> bool {
         self.wider(Self::WORD) == Self::WORD

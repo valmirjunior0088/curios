@@ -288,7 +288,9 @@ impl Intrinsic {
         match self {
             Self::NatAdd => operand(0).wider(operand(1)).raised(1),
             Self::NatMul => operand(0).times(operand(1)),
-            Self::NatRem | Self::NatAnd | Self::NatMin => operand(0).narrower(operand(1)),
+            // A remainder lies below its divisor, which for a literal is tighter than the bound the literal itself lies below where it is a power of two.
+            Self::NatRem => operand(0).narrower(literal(1).map_or(operand(1), Bound::under)),
+            Self::NatAnd | Self::NatMin => operand(0).narrower(operand(1)),
             Self::NatOr | Self::NatXor | Self::NatMax => operand(0).wider(operand(1)),
             Self::NatSub => operand(0),
             // A divisor of at least `2^m` takes `m` bits off; a zero one traps where it is met.

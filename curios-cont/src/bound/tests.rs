@@ -60,3 +60,14 @@ fn arithmetic_on_bounds_tracks_the_powers_of_two() {
     assert_eq!(of(255).narrower(Bound::UNBOUNDED), of(255));
     assert_eq!(Bound::UNBOUNDED.times(of(1)), Bound::UNBOUNDED);
 }
+
+/// What lies below a value lies below the least power of two at or past it, so a remainder by `2³⁰` is a word where the literal itself is not.
+#[test]
+fn what_lies_below_a_value_lies_below_the_power_of_two_at_or_past_it() {
+    let under = |value: u64| Bound::under(&Natural::from(value));
+    assert_eq!(under(1 << 30), Bound::WORD);
+    assert!(under(1 << 30).is_word() && !of(1 << 30).is_word());
+    assert_eq!(under(1_000_003), of(1_000_003));
+    assert_eq!(under(1), Bound::bottom());
+    assert_eq!(under(0), Bound::bottom());
+}
