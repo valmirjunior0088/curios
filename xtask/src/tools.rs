@@ -1,11 +1,8 @@
-//! How a tool cargo does not bring is launched: asked first whether it is there, and refused with what installs it where it is not.
+//! The tools a step launches beyond cargo, and what a refusal says where one is not installed.
 //!
-//! A step asks for a tool by launching it, through [`Tool::command`], so what a step needs is what it runs as it was asked: a lint narrowed to one package launches no Biome and asks for none. A step asks only that its tool is there. Which version of it a machine holds is the machine's: the check workflow pins nextest's, Biome's and Node's for its runners, and a contributor installs what they have.
+//! **A tool is launched, never asked about.** A step runs a tool's program from the path, and the spawn is the check: where the program is not there, the step is refused with what installs it, and where it is, nothing ran beforehand to find out. So what a step needs is what it runs as it was asked — a lint narrowed to one package launches no Biome and needs none. Which version of a tool a machine holds is the machine's: the check workflow pins nextest's, Biome's and Node's for its runners, and a contributor installs what they have.
 
-use {
-    crate::{ask, ask_cargo, toolchain_cargo},
-    std::process::Command,
-};
+use std::process::Command;
 
 #[cfg(test)]
 mod tests;
@@ -26,21 +23,14 @@ pub(crate) enum Tool {
 }
 
 impl Tool {
-    /// The command that launches the tool, once the tool is found to be there: the one way a step reaches a tool beyond cargo. Where it is absent, the sentence saying what is missing and, where one command does it, what installs it.
-    pub(crate) fn command(self) -> Result<Command, String> {
-        self.ready()?;
-
-        Ok(self.launcher())
-    }
-
-    /// The tool's command line before its arguments. Nextest is a subcommand of the cargo every recipe runs.
-    fn launcher(self) -> Command {
+    /// The command that runs the tool, its program found on the path when it is spawned. Nextest is launched as its own program, `cargo-nextest nextest`, as cargo itself launches it, so an absent one fails to spawn as every other tool does; it builds with the cargo `CARGO` names, the one that launched this crate.
+    pub(crate) fn command(self) -> Command {
         match self {
             Tool::Nextest => {
-                let mut cargo = toolchain_cargo();
-                cargo.arg("nextest");
+                let mut nextest = Command::new("cargo-nextest");
+                nextest.arg("nextest");
 
-                cargo
+                nextest
             }
             Tool::Biome => Command::new("biome"),
             Tool::Node => Command::new("node"),
@@ -48,41 +38,22 @@ impl Tool {
         }
     }
 
-    /// `Ok` where the tool is there; otherwise the sentence saying what is missing and, where one command does it, what installs it.
-    fn ready(self) -> Result<(), String> {
-        match self {
-            Tool::Nextest => match lists_nextest(&ask_cargo(&["--list"])?) {
-                true => Ok(()),
-                false => Err(nextest_refusal()),
-            },
-            Tool::Biome => ask(self.launcher(), &["--version"])
-                .map(drop)
-                .map_err(|_| biome_refusal()),
-            Tool::Node => ask(self.launcher(), &["--version"])
-                .map(drop)
-                .map_err(|error| format!("Node is needed, and {error}")),
-            Tool::Npm => ask(self.launcher(), &["--version"])
-                .map(drop)
-                .map_err(|error| format!("npm is needed, and {error}")),
+    /// That a step cannot run without the tool, and, where one command installs it, that command — on a line of its own, indented, because it is there to be selected and pasted rather than read, as the installer's advice is.
+    pub(crate) fn missing(self) -> String {
+        let (name, install) = match self {
+            Tool::Nextest => ("cargo-nextest", Some(NEXTEST_INSTALL)),
+            Tool::Biome => ("Biome", Some(BIOME_INSTALL)),
+            Tool::Node => ("Node", None),
+            Tool::Npm => ("npm", None),
+        };
+
+        match install {
+            Some(install) => {
+                format!(
+                    "{name} is needed, and it is not installed. Install it with:\n\n    {install}"
+                )
+            }
+            None => format!("{name} is needed, and it is not installed."),
         }
     }
-}
-
-/// Whether `cargo --list` names nextest among the commands it can run. Each command is a line led by its name, so a command merely named after nextest is not it.
-fn lists_nextest(listing: &str) -> bool {
-    listing
-        .lines()
-        .any(|line| line.split_whitespace().next() == Some("nextest"))
-}
-
-/// That a JavaScript, JSON or CSS check cannot run without Biome, and the command that installs it, on a line of its own as [`nextest_refusal`]'s is.
-fn biome_refusal() -> String {
-    format!("Biome is needed, and it is not installed. Install it with:\n\n    {BIOME_INSTALL}")
-}
-
-/// That the suite cannot run without nextest, and the command that installs it — on a line of its own, indented, because it is there to be selected and pasted rather than read, as the installer's advice is.
-fn nextest_refusal() -> String {
-    format!(
-        "cargo-nextest is needed, and it is not installed. Install it with:\n\n    {NEXTEST_INSTALL}"
-    )
 }

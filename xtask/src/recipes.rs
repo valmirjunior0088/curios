@@ -7,7 +7,7 @@
 use {
     crate::{
         BROWSER_TRIPLE, HOST_TRIPLE, Step, Tool, Tree, artifact, ask, bindgen_web, built, cargo,
-        file_with_inputs, grammar, inputs, modified, released, root, run, spelled,
+        file_with_inputs, grammar, inputs, launch, modified, released, root, run, spelled,
         target_directory, vscode, zed,
     },
     clap::ValueEnum,
@@ -169,8 +169,9 @@ impl Step {
             Step::WorkspaceTest => {
                 let arguments = testing(package, request)?;
 
-                run(
-                    Tool::Nextest.command()?,
+                launch(
+                    Tool::Nextest,
+                    &[],
                     &arguments.iter().map(String::as_str).collect::<Vec<_>>(),
                 )
             }
@@ -181,26 +182,26 @@ impl Step {
                     .chain(["--all-targets", "--all-features", KEEP_GOING])
                     .collect::<Vec<_>>(),
             ),
-            Step::InstrumentedTest => run(Tool::Nextest.command()?, &RECORDER_TESTING),
+            Step::InstrumentedTest => launch(Tool::Nextest, &[], &RECORDER_TESTING),
             Step::DocsBuild => docs_build(),
             Step::CompilerBuild => {
                 cargo(&["build", "--release", "--package", "curios", KEEP_GOING])
             }
             // The compiler under test is the one `compiler build` filed, named to the suite rather than found on PATH, where an installed one would answer instead.
-            Step::CompilerTest => {
-                let mut node = Tool::Node.command()?;
-                node.env("CURIOS", released("curios"));
-
-                run(node, &["--test", "curios-browser/src/page.test.mjs"])
-            }
+            Step::CompilerTest => launch(
+                Tool::Node,
+                &[("CURIOS", released("curios").as_os_str())],
+                &["--test", "curios-browser/src/page.test.mjs"],
+            ),
             // Whoever narrows the run asks about a package's tests or some test's, which the cache of another crate's build script is not.
             Step::WorkspaceBinaryenCache => match (package, request.unselected()) {
                 (None, true) => binaryen_cache(),
                 _ => Ok(()),
             },
             Step::BundleBuild => bundle_build(),
-            Step::BundleTest => run(
-                Tool::Node.command()?,
+            Step::BundleTest => launch(
+                Tool::Node,
+                &[],
                 &["--test", "curios-browser/src/harness.test.mjs"],
             ),
             Step::GrammarInstall => grammar(&["clean-install"]),
@@ -218,8 +219,9 @@ impl Step {
             Step::ZedBuild => zed(&["build", "--release", "--target", EXTENSION_TRIPLE]),
             Step::ZedTest => zed(&["test"]),
             Step::ToolsLint => cargo(&tools(&["clippy"], &["--all-targets", KEEP_GOING])),
-            Step::ToolsTest => run(
-                Tool::Nextest.command()?,
+            Step::ToolsTest => launch(
+                Tool::Nextest,
+                &[],
                 &tools(&["run"], &["--all-targets", "--no-fail-fast"]),
             ),
         }
@@ -328,7 +330,7 @@ fn biome(tree: Tree, arguments: &[&str]) -> Result<(), String> {
     let mut line = arguments.to_vec();
     line.extend(paths.iter().map(String::as_str));
 
-    run(Tool::Biome.command()?, &line)
+    launch(Tool::Biome, &[], &line)
 }
 
 /// Biome's formatter over `tree`, written unless `check`.

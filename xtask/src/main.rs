@@ -12,7 +12,7 @@
 //!
 //! **The bindings generator is a dependency.** `bundle build` calls `wasm-bindgen-cli-support`, the crate the `wasm-bindgen` command line wraps; why, and what keeps its version honest, is the README's decision.
 //!
-//! **The test runner is a tool a contributor installs.** A test step runs under `cargo-nextest` and refuses before building when it is absent, naming the command that installs it; why nextest is the README's decision.
+//! **The test runner is a tool a contributor installs.** A test step launches `cargo-nextest` before anything is built, and a launch that finds no such program is refused with the command that installs it, as every tool's is; why nextest is the README's decision.
 //!
 //! **Five commands are not steps.** `gate` runs all of them, `installer` renders the release's install script, `release` cuts a release, `profile` and `profile-prelude` run a build under a recorder, and `clean` removes what git does not track, except the worktrees under `.claude/worktrees`. None is a step, so none has a row; each keeps the parameters it had.
 //!

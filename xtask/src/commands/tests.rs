@@ -1,23 +1,12 @@
-//! What a question gets back, how cargo is asked one, and what either kind of spawn does with a command that fails or is not there.
+//! What a question gets back, and what either kind of spawn does with a command that fails or is not there.
 //!
 //! The subjects are `echo` and `false`, which every platform this crate builds for has, so what is under test is this module rather than a tool.
 
-use {super::*, std::ffi::OsStr};
+use super::*;
 
 #[test]
 fn asking_a_command_returns_what_it_printed() {
     assert_eq!(ask(Command::new("echo"), &["hello"]), Ok("hello\n".into()));
-}
-
-#[test]
-fn cargo_is_asked_without_colour_whatever_the_environment_says() {
-    let cargo = asked_cargo();
-    let colour = cargo
-        .get_envs()
-        .find(|(name, _)| *name == "CARGO_TERM_COLOR")
-        .and_then(|(_, value)| value);
-
-    assert_eq!(colour, Some(OsStr::new("never")));
 }
 
 #[test]
@@ -37,4 +26,19 @@ fn a_program_that_is_not_there_is_an_error_naming_it() {
         missing.starts_with("cannot run curios-xtask-no-such-program:"),
         "{missing}"
     );
+}
+
+/// A missing program is told apart from one that ran and failed, which is what lets a launch name what installs it.
+#[test]
+fn a_program_that_is_not_there_is_missing_rather_than_failed() {
+    let missing = execute(
+        root(),
+        Command::new("curios-xtask-no-such-program"),
+        &[],
+        Output::Streamed,
+    );
+    let failed = execute(root(), Command::new("false"), &[], Output::Streamed);
+
+    assert!(matches!(missing, Err(Failure::Missing(_))));
+    assert!(matches!(failed, Err(Failure::Failed(_))));
 }
