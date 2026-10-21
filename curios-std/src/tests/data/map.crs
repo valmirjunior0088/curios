@@ -1,5 +1,6 @@
 -- `Map`, the crit-bit trie over `Key`-encoded bytes, and `Set` over it: lookups, the canonical shape, and the rewriting functions.
 use /std/{Str, Nat, Int, Bool, Byte, Bytes, List, Option, Eq, Hash, Ord, Ordering, Map, Set, Test};
+use /std/Bool/{Holds};
 
 test a_key_an_empty_map_lacks_is_tried_as_none =
     let m: Map(Str, Str) = Map/empty();
@@ -76,7 +77,7 @@ test natural_keys_enumerate_in_number_order =
 let _a_smaller_natural_encodes_before_a_larger(
     a: Nat,
     b: Nat,
-    under: Bool/Holds(a < b),
+    under: Holds(a < b),
 ) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =
     Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Hash/nat/of_lt(a, b, under));
 
@@ -119,7 +120,7 @@ test integer_keys_enumerate_in_number_order =
 let _a_smaller_integer_encodes_before_a_larger(
     a: Int,
     b: Int,
-    under: Bool/Holds(a < b),
+    under: Holds(a < b),
 ) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =
     Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Hash/int/of_lt(a, b, under));
 
@@ -135,7 +136,7 @@ let _a_maps_keys_are_in_their_order(
     use Map/Key(K),
     @V: Type,
     m: Map(K, V),
-) -> Bool/Holds(List/ordered(Map/keys(m), Ord/lt((a: K, b: K) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(Map/keys(m), Ord/lt((a: K, b: K) => Ord/ord(a, b)))) =
     Map/keys/ordered(m);
 
 -- The elements of a set are in their type's own order at every pair.

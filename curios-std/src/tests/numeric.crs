@@ -10,6 +10,7 @@ mod scale;
 mod int;
 
 use /std/{Nat, Int, Bool, Flt, List, Option, Test};
+use /std/Bool/{True, Holds};
 
 test nat_powers_divisors_logarithms_and_roots_compute =
     Test/equal(
@@ -91,6 +92,6 @@ test a_decision_of_every_number_below_a_bound_is_decided_at_each =
 -- A fact the logic reads of no operation is had of every byte by running it: the low bit of a number, which no law of `and` states, is at most one.
 let _a_fact_of_every_byte_is_decided_by_running_it(
     n: Nat,
-    under: Bool/Holds(n < 256),
-) -> Bool/Holds(Nat/and(n, 1) <= 1) =
-    Nat/all_below/at(256, (m) => Nat/and(m, 1) <= 1, n, Bool/True/qed(), under);
+    under: Holds(n < 256),
+) -> Holds(Nat/and(n, 1) <= 1) =
+    Nat/all_below/at(256, (m) => Nat/and(m, 1) <= 1, n, True/qed(), under);

@@ -1,5 +1,6 @@
 -- Packed atom splices, the folds that sum a sequence, and a packed value shown.
 use /std/{Str, Nat, Byte, Bytes, Bool, Eq, List, Option, Ordering, Ord, Show, Test};
+use /std/Bool/{Holds};
 
 -- `..` splices one generator into a packed literal, between literal runs and adjacent to another atom. `i` and `bang` are bound rather than written, so the run is genuinely spliced rather than folded at parse time.
 test atom_splice_builds_the_written_sequence =
@@ -64,7 +65,7 @@ let _a_run_below_another_is_before_it_wherever_the_two_stand(
     b: Bytes,
     s: Bytes,
     u: Bytes,
-    parted: Bool/Holds(Bytes/ord/below(a, b)),
+    parted: Holds(Bytes/ord/below(a, b)),
 ) -> Eq()(Bytes/ord(x[..p, ..a, ..s], x[..p, ..b, ..u]), Ordering/lt()) =
     Bytes/ord/below/lt(
         x[..p, ..a, ..s],
@@ -89,7 +90,7 @@ let _the_order_of_bytes_reads_past_a_shared_prefix(
 -- A run of bytes read as a number: bounded by its width, and injective at one width.
 let _a_run_denotes_a_number_below_its_width(
     b: Bytes,
-) -> Bool/Holds(Bytes/to_nat(b) < Nat/pow(256, Bytes/len(b))) =
+) -> Holds(Bytes/to_nat(b) < Nat/pow(256, Bytes/len(b))) =
     Bytes/to_nat/below(b);
 
 let _two_runs_of_one_length_and_one_number_are_one(

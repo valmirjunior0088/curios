@@ -148,9 +148,10 @@ fn the_same_pair_declared_apart_certifies() {
 fn a_codomain_is_cumulative_past_a_rung_that_waits() {
     let source = r#"
         use /std/{Bool, Nat, Eq, print};
+        use /std/Bool/{Holds};
 
-        let is(b: Bool) -> Prop = Bool/Holds(b);
-        let over_types(b: Bool) -> Prop = (A: Type) -> Bool/Holds(b);
+        let is(b: Bool) -> Prop = Holds(b);
+        let over_types(b: Bool) -> Prop = (A: Type) -> Holds(b);
         let dom(c: Bool) -> Type = match c | true => Bool | false => Nat end;
         let app(@c: Bool, @S: Type, f: (dom(c)) -> S, g: (dom(c)) -> S, w: Eq()(c, true)) -> Nat = 0;
 
@@ -170,9 +171,10 @@ fn a_codomain_is_cumulative_past_a_rung_that_waits() {
 fn a_rung_waits_on_a_family_its_sibling_solves() {
     let source = r#"
         use /std/{Bool, Nat, print};
+        use /std/Bool/{Holds};
 
-        let is(b: Bool) -> Prop = Bool/Holds(b);
-        let over_types(b: Bool) -> Prop = (A: Type) -> Bool/Holds(b);
+        let is(b: Bool) -> Prop = Holds(b);
+        let over_types(b: Bool) -> Prop = (A: Type) -> Holds(b);
         let app(@F: (Nat) -> Type, @S: Type, f: (F(0)) -> S, h: (F(0)) -> S, g: (n: Nat) -> F(n)) -> Nat = 0;
 
         let large_first: Nat = app(over_types, is, (n) => true);
@@ -262,32 +264,33 @@ fn a_declaration_keeps_no_argument_order_in_its_scheme() {
 fn a_proposition_and_a_type_under_one_implicit_are_refused_in_either_order() {
     let declarations = r#"
         use /std/{Bool, Nat, List, Option, Eq, print};
+        use /std/Bool/{Holds};
 
         struct Twin(S: Type): pub Type { a: S, b: S }
         struct Pack: pub Type { @S: Type, a: S, b: S }
         let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Nat = 0;
         let pick(@S: Type, x: S, y: S) -> Option(S) = Option/some(x);
         let id(@A: Type, a: A) -> A = a;
-        let is(b: Bool) -> Prop = Bool/Holds(b);
+        let is(b: Bool) -> Prop = Holds(b);
         let fam(b: Bool) -> Type = Nat;
         "#;
 
     for mixed in [
         ": Nat = both(is, fam)",
         ": Nat = both(fam, is)",
-        ": Prop = Eq()(Bool/Holds(true), Nat)",
-        ": Prop = Eq()(Nat, Bool/Holds(true))",
-        " = [Bool/Holds(true), Nat]",
-        " = [Nat, Bool/Holds(true)]",
-        ": Option(Type) = Option/some(Bool/Holds(true))",
-        "(b: Bool) -> Nat = let arm = match b | true => Nat | false => Bool/Holds(b) end; 0",
-        "(b: Bool) -> Nat = let arm = match b | true => Bool/Holds(b) | false => Nat end; 0",
-        " = Twin { a = Bool/Holds(true), b = Nat }",
-        " = Twin { a = Nat, b = Bool/Holds(true) }",
-        " = Pack { a = Bool/Holds(true), b = Nat }",
-        " = [id(Bool/Holds(true)), Nat]",
-        " = [Nat, id(Bool/Holds(true))]",
-        ": Option(Prop) = pick(Bool/Holds(true), Nat)",
+        ": Prop = Eq()(Holds(true), Nat)",
+        ": Prop = Eq()(Nat, Holds(true))",
+        " = [Holds(true), Nat]",
+        " = [Nat, Holds(true)]",
+        ": Option(Type) = Option/some(Holds(true))",
+        "(b: Bool) -> Nat = let arm = match b | true => Nat | false => Holds(b) end; 0",
+        "(b: Bool) -> Nat = let arm = match b | true => Holds(b) | false => Nat end; 0",
+        " = Twin { a = Holds(true), b = Nat }",
+        " = Twin { a = Nat, b = Holds(true) }",
+        " = Pack { a = Holds(true), b = Nat }",
+        " = [id(Holds(true)), Nat]",
+        " = [Nat, id(Holds(true))]",
+        ": Option(Prop) = pick(Holds(true), Nat)",
     ] {
         let report = error(&format!("{declarations}\nlet _mixed{mixed};\nprint(\"\")"));
         assert!(
@@ -302,22 +305,23 @@ fn a_proposition_and_a_type_under_one_implicit_are_refused_in_either_order() {
 fn propositions_under_one_implicit_make_it_a_sort_of_propositions() {
     let source = r#"
         use /std/{Bool, Nat, List, print};
+        use /std/Bool/{Holds};
 
         struct Twin(S: Type): pub Type { a: S, b: S }
         let pick(@S: Type, x: S, y: S) -> S = x;
         let id(@A: Type, a: A) -> A = a;
         let through(@S: Type, x: S, k: (S) -> Nat) -> Nat = k(x);
 
-        let both_props: Prop = pick(Bool/Holds(true), Bool/Holds(false));
-        let passed: Prop = id(Bool/Holds(true));
-        let inferred = pick(Bool/Holds(true), Bool/Holds(false));
+        let both_props: Prop = pick(Holds(true), Holds(false));
+        let passed: Prop = id(Holds(true));
+        let inferred = pick(Holds(true), Holds(false));
         let held: Prop = inferred;
-        let twin_of_props: Twin(Prop) = Twin { a = Bool/Holds(true), b = Bool/Holds(false) };
-        let listed: List(Prop) = [id(Bool/Holds(true)), Bool/Holds(false)];
+        let twin_of_props: Twin(Prop) = Twin { a = Holds(true), b = Holds(false) };
+        let listed: List(Prop) = [id(Holds(true)), Holds(false)];
 
         let _ = twin_of_props;
         let _ = listed;
-        let _ = through(Bool/Holds(true), (p) => 0);
+        let _ = through(Holds(true), (p) => 0);
         print("ok")
         "#;
 
@@ -329,9 +333,10 @@ fn propositions_under_one_implicit_make_it_a_sort_of_propositions() {
 fn a_sort_and_a_value_under_one_implicit_are_refused() {
     let no_sort = r#"
         use /std/{Bool, Nat, print};
+        use /std/Bool/{Holds};
 
         let same(@S: Type, x: S, y: S) -> Nat = 0;
-        let _bad: Nat = same(Bool/Holds(true), 5);
+        let _bad: Nat = same(Holds(true), 5);
         print("")
         "#;
     let report = error(no_sort);
