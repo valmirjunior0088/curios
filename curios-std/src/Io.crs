@@ -62,7 +62,7 @@ foreign clock_deadline(Int, Nat) -> Handle;
 
 -- The most seconds the wire carries: a deadline past them is one no clock reaches, and is waited on as the furthest the wire states.
 let furthest: Int =
-    +9223372036854775807;
+    Int/shl(+1, 63) - +1;
 
 --- A handle ready once the monotonic clock has reached `i`: what a description suspends on to wait until then. One already past is ready at once; one before the clock's origin crosses as the origin, which has passed too.
 let deadline(i: Instant) -> Io(Handle) =
