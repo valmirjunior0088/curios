@@ -15,16 +15,21 @@ pub(crate) enum Standing {
     Holds,
     /// Fixed, and a witness is not refused as it expects: the flaw is back, or what held it shut is gone.
     Regressed(Vec<String>),
-    /// Open, and some witness is not refused as it expects, as an open flaw's is not.
+    /// Open, and every witness shows the flaw or what closes it: each is admitted or refused as it expects, and one is admitted.
     Open,
     /// Open, and every witness is refused as it expects: something closed the flaw and the ticket does not say what.
     Shut,
+    /// Open, and a witness is refused by an error it does not expect: it no longer shows the flaw, or something closed the flaw another way, and the ticket says neither.
+    Unshown(Vec<String>),
 }
 
 impl Standing {
     /// Whether a run fails on this standing.
     pub(crate) fn fails(&self) -> bool {
-        matches!(self, Standing::Regressed(_) | Standing::Shut)
+        matches!(
+            self,
+            Standing::Regressed(_) | Standing::Shut | Standing::Unshown(_)
+        )
     }
 
     fn label(&self) -> &'static str {
@@ -33,27 +38,37 @@ impl Standing {
             Standing::Regressed(_) => "REGRESSED",
             Standing::Open => "OPEN",
             Standing::Shut => "SHUT",
+            Standing::Unshown(_) => "UNSHOWN",
         }
     }
 }
 
 /// Where a ticket stands for what its witnesses answered.
 pub(crate) fn standing(status: Status, witnesses: &[Witness], answers: &[Answer]) -> Standing {
-    let problems = witnesses
+    // Each witness not refused as it expects, with whether it was admitted.
+    let unmet = witnesses
         .iter()
         .zip(answers)
         .filter_map(|(witness, answer)| {
             witness
                 .unmet(answer)
-                .map(|problem| format!("{}: {problem}", witness.what))
+                .map(|problem| (answer.admitted(), format!("{}: {problem}", witness.what)))
         })
         .collect::<Vec<_>>();
+    let refused_otherwise = unmet
+        .iter()
+        .filter(|(admitted, _)| !admitted)
+        .map(|(_, problem)| problem.clone())
+        .collect::<Vec<_>>();
 
-    match (status, problems.is_empty()) {
-        (Status::Open, true) => Standing::Shut,
-        (Status::Open, false) => Standing::Open,
-        (Status::Fixed, true) => Standing::Holds,
-        (Status::Fixed, false) => Standing::Regressed(problems),
+    match (status, unmet.is_empty(), refused_otherwise.is_empty()) {
+        (Status::Open, true, _) => Standing::Shut,
+        (Status::Open, false, true) => Standing::Open,
+        (Status::Open, false, false) => Standing::Unshown(refused_otherwise),
+        (Status::Fixed, true, _) => Standing::Holds,
+        (Status::Fixed, false, _) => {
+            Standing::Regressed(unmet.into_iter().map(|(_, problem)| problem).collect())
+        }
     }
 }
 
@@ -107,7 +122,7 @@ impl Report {
         Report { board, rows }
     }
 
-    /// Whether any ticket regressed or was closed without saying so.
+    /// Whether any ticket regressed, was closed without saying so, or stands open on a witness refused by an error it does not expect.
     pub(crate) fn fails(&self) -> bool {
         self.rows.iter().any(|row| row.standing.fails())
     }
@@ -138,12 +153,13 @@ impl fmt::Display for Report {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             formatter,
-            "xboard: {} ticket(s) — {} holding, {} open, {} regressed, {} shut without saying so",
+            "xboard: {} ticket(s) — {} holding, {} open, {} regressed, {} shut without saying so, {} open and refused otherwise",
             self.rows.len(),
             self.count(|standing| *standing == Standing::Holds),
             self.count(|standing| *standing == Standing::Open),
             self.count(|standing| matches!(standing, Standing::Regressed(_))),
             self.count(|standing| *standing == Standing::Shut),
+            self.count(|standing| matches!(standing, Standing::Unshown(_))),
         )?;
 
         let mut rows = self.rows.iter().collect::<Vec<_>>();
@@ -161,7 +177,7 @@ impl fmt::Display for Report {
             for (witness, answer) in row.ticket.witnesses.iter().zip(&row.answers) {
                 writeln!(formatter, "             {witness} [{}]", refusers(answer))?;
             }
-            if let Standing::Regressed(problems) = &row.standing {
+            if let Standing::Regressed(problems) | Standing::Unshown(problems) = &row.standing {
                 for problem in problems {
                     writeln!(formatter, "             !        {problem}")?;
                 }

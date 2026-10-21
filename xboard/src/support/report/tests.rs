@@ -176,6 +176,32 @@ fn an_open_ticket_whose_witnesses_are_refused_was_shut_without_saying_so() {
     assert!(!Standing::Open.fails());
 }
 
+// An open ticket's witness refused by an error it does not expect shows no flaw, whatever its siblings show: one that no longer parses, or one a fix closed by another rule than the ticket names, fails the run as a shut ticket does.
+#[test]
+fn an_open_ticket_whose_witness_is_refused_otherwise_fails_the_run() {
+    let Standing::Unshown(problems) = standing(
+        Status::Open,
+        &[FORGED],
+        &[by_kernel(curios_cert::Error::UnclosedUniverses)],
+    ) else {
+        panic!("a witness refused by another error stood as a flaw it no longer shows");
+    };
+    assert!(
+        problems[0].contains("kernel `UnclosedUniverses`"),
+        "{problems:?}"
+    );
+    assert!(Standing::Unshown(problems).fails());
+
+    assert!(matches!(
+        standing(
+            Status::Open,
+            &[FORGED, FORGED],
+            &[admitted(), by_elaborator(curios_elab::Error::Poisoned)]
+        ),
+        Standing::Unshown(_)
+    ));
+}
+
 #[test]
 fn a_ticket_with_no_witness_holds() {
     assert_eq!(standing(Status::Fixed, &[], &[]), Standing::Holds);
