@@ -21,7 +21,7 @@ pub struct Refusal {
     pub conclusion: Conclusion,
     /// Whether the bound was an empty proposition, which only a contradiction among the facts proves: a counterexample then shows them all holding, not a goal failing.
     pub absurd: bool,
-    /// Whether the counterexample is one no program takes ([`refuted`]): a report then states it, with the heading above it, as what the search found, each atom read as a number of its own.
+    /// Whether the counterexample is one no program takes (`refuted`): a report then states it, with the heading above it, as what the search found, each atom read as a number of its own.
     pub refuted: bool,
 }
 
