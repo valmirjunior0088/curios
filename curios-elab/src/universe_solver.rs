@@ -2286,7 +2286,7 @@ impl UniverseSolver {
             for lower in lower_parts {
                 let choices = edge_choices(lower, &upper_parts, index)
                     .into_iter()
-                    .map(|edge| edge.map(&arc))
+                    .map(|edge| edge.map(arc))
                     .collect::<Vec<_>>();
                 clauses.push((index, choices));
             }

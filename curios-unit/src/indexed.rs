@@ -251,16 +251,16 @@ pub fn reads_filed(recorded: &Recorded<Read>) -> Result<Vec<u8>, String> {
 /// The record of what was read that `bytes` file ([`reads_filed`]): its own part, and each definition's reads a member of the one run, named by its digest. `None` for bytes that are no such thing.
 pub fn reads_restored(bytes: &Bytes) -> Option<(Bytes, Vec<Object>)> {
     let [table, digests, run]: [Bytes; 3] = parted(bytes)?.try_into().ok()?;
-    let digests = digests.as_slice();
-    if !digests.len().is_multiple_of(32) {
+    let (digests, rest) = digests.as_slice().as_chunks::<32>();
+    if !rest.is_empty() {
         return None;
     }
     let entries = digests
-        .chunks_exact(32)
+        .iter()
         .enumerate()
         .map(|(index, digest)| {
             Some(Object {
-                digest: Digest::from_bytes(digest.try_into().ok()?),
+                digest: Digest::from_bytes(*digest),
                 bytes: run.clone(),
                 member: Some(Member {
                     kind: ReadTable::KIND,

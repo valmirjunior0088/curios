@@ -169,15 +169,15 @@ pub(crate) fn found(
     named: &Bytes,
     find: &dyn Fn(&Digest) -> Option<Object>,
 ) -> Result<Vec<Object>, String> {
-    let named = named.as_slice();
-    if !named.len().is_multiple_of(32) {
+    let (digests, rest) = named.as_slice().as_chunks::<32>();
+    if !rest.is_empty() {
         return Err("not a list of digests".to_string());
     }
 
-    named
-        .chunks_exact(32)
+    digests
+        .iter()
         .map(|digest| {
-            let digest = Digest::from_bytes(digest.try_into().expect("thirty-two bytes"));
+            let digest = Digest::from_bytes(*digest);
 
             find(&digest).ok_or_else(|| format!("no object {digest:?} the unit names is held"))
         })

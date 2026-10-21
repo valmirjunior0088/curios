@@ -399,11 +399,12 @@ impl Collection {
             SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(seconds))
         };
         let (at, rest) = bytes.split_first_chunk::<8>()?;
-        if !rest.len().is_multiple_of(40) {
+        let (entries, left) = rest.as_chunks::<40>();
+        if !left.is_empty() {
             return None;
         }
-        let unnamed = rest
-            .chunks_exact(40)
+        let unnamed = entries
+            .iter()
             .map(|entry| {
                 let digest = Digest::from_bytes(entry[..32].try_into().ok()?);
                 Some((digest, time(&entry[32..])?))

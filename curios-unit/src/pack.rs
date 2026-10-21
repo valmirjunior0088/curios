@@ -95,7 +95,14 @@ pub fn pack_names(reader: &mut (impl Read + Seek)) -> Option<Vec<Digest>> {
         .ok()?;
     reader.read_exact(&mut table).ok()?;
 
-    Some(table.chunks_exact(ENTRY).map(entry_name).collect())
+    Some(
+        table
+            .as_chunks::<ENTRY>()
+            .0
+            .iter()
+            .map(|entry| entry_name(entry))
+            .collect(),
+    )
 }
 
 /// How many bytes the table of a pack closing on `end` holds: `None` where `end` is not how a pack closes.
