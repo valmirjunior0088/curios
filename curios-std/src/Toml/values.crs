@@ -7,25 +7,25 @@ use /std/Toml/keys/{key_dotted};
 use /std/Toml/numbers/{flt_number, flt_special, int_value};
 use /std/Toml/date_time/{date_time_value};
 
-let val_str_basic: Parse(Str, Toml) =
+let str_basic_value: Parse(Str, Toml) =
     Parse/map(Parse/or(str_ml_basic(), str_basic), (s) => Toml/str(s));
 
-let val_str_literal: Parse(Str, Toml) =
+let str_literal_value: Parse(Str, Toml) =
     Parse/map(Parse/or(str_ml_literal(), str_literal), (s) => Toml/str(s));
 
-let val_true: Parse(Str, Toml) =
+let true_value: Parse(Str, Toml) =
     Parse/map(Parse/str/literal("true"), (_) => Toml/bool(true));
 
-let val_false: Parse(Str, Toml) =
+let false_value: Parse(Str, Toml) =
     Parse/map(Parse/str/literal("false"), (_) => Toml/bool(false));
 
-let val_number_signed: Parse(Str, Toml) =
+let signed_number_value: Parse(Str, Toml) =
     Parse/or(flt_number(), Parse/or(int_value(), flt_special()));
 
-let val_special: Parse(Str, Toml) =
+let special_value: Parse(Str, Toml) =
     Parse/label(flt_special(), "expected value");
 
-let val_number_digit: Parse(Str, Toml) =
+let digit_led_value: Parse(Str, Toml) =
     Parse/or(date_time_value, Parse/or(flt_number(), int_value()));
 
 let inline_comma() -> Parse(Str, {}) =
@@ -83,16 +83,16 @@ pub and value_parse() -> Parse(Str, Toml) =
     | none() => Parse/fail("expected value")
     | some(c) =>
         match Char/to_nat(c)
-        | '"' => val_str_basic
-        | '\'' => val_str_literal
-        | 't' => val_true
-        | 'f' => val_false
+        | '"' => str_basic_value
+        | '\'' => str_literal_value
+        | 't' => true_value
+        | 'f' => false_value
         | '[' => array_parse()
         | '{' => inline_parse()
-        | '+' => val_number_signed
-        | '-' => val_number_signed
-        | 'i' => val_special
-        | 'n' => val_special
-        | _ => val_number_digit
+        | '+' => signed_number_value
+        | '-' => signed_number_value
+        | 'i' => special_value
+        | 'n' => special_value
+        | _ => digit_led_value
         end
     end;
