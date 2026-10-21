@@ -15,9 +15,9 @@ use {
     tar::Archive,
 };
 
-const BINARYEN_VERSION: &str = "version_130";
+const BINARYEN_VERSION: &str = "version_133";
 const BINARYEN_SOURCE_SHA256: &str =
-    "20d727e7f3011cfe604b8ebdc873edbb4831c6b148209cb15bc2bedcded036ee";
+    "2f3e3d9edc56751499571da073a8a81943ca3fcbc08a945d2c619a7a1d4eb88b";
 
 fn source_url() -> String {
     format!("https://github.com/WebAssembly/binaryen/archive/refs/tags/{BINARYEN_VERSION}.tar.gz")
