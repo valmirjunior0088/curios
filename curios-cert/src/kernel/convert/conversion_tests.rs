@@ -990,6 +990,46 @@ fn a_remembered_verdict_does_not_outlive_the_equations_it_was_reached_under() {
     assert_eq!(cached, sequence(Kernel::uncached(100_000, SYNTAX)));
 }
 
+/// A verdict read off a type's *shape* lives no longer than the case that gave the type that shape. `x` and `y` at `match c | true => W | false => Nat end`, a struct of a unit under `c = true` and `Nat` under `c = false`, are apart before an arm that assumes `c = true`, one inside it where the type has one inhabitant, and apart after it. It is the shape-reading counterpart of `a_remembered_verdict_does_not_outlive_the_equations_it_was_reached_under`, which reaches `true` by the equation making its two terms one rather than by the type's shape, so neither covers the other's path. The uncached kernel agrees on all three.
+///
+/// Mutation-checked: with the scoped verdicts left standing where an equation moves, the comparison inside the arm answers what it answered before it.
+#[test]
+fn a_one_inhabitant_verdict_does_not_outlive_the_case_that_shaped_its_type() {
+    let sequence = |mut kernel: Kernel| {
+        let w = declare_struct(
+            &mut kernel,
+            "W",
+            Telescope::build([(binder(1, "u"), Term::tuple_type_unit())], ()),
+        );
+        let c = binder(0, "c");
+        kernel.assume(&c, &Term::intrinsic(Intrinsic::BoolType));
+        let shaped = Term::bool_match(Term::free_var(&c), None, Term::type_ground(), nat_type(), w);
+        let x = binder(2, "x");
+        let y = binder(3, "y");
+        kernel.assume(&x, &shaped);
+        kernel.assume(&y, &shaped);
+        let compared = |kernel: &mut Kernel| {
+            convert(kernel, &shaped, &Term::free_var(&x), &Term::free_var(&y))
+        };
+
+        let before = compared(&mut kernel);
+        let inside = kernel.scoped(|kernel| {
+            kernel
+                .refine(Term::free_var(&c), Term::intrinsic(Intrinsic::Bool(true)))
+                .expect("the equation records");
+            compared(kernel)
+        });
+        let after = compared(&mut kernel);
+
+        [before, inside, after]
+    };
+
+    let cached = sequence(kernel());
+
+    assert_eq!(cached, [Ok(false), Ok(true), Ok(false)]);
+    assert_eq!(cached, sequence(Kernel::uncached(100_000, SYNTAX)));
+}
+
 /// Nor its binder. `p(a)` and `p(b)` are one where `p` takes a proof — its arguments compare at a proposition — and apart where it takes data, and a name assumed again at another type, once its first binder is closed, is compared at the second.
 ///
 /// Mutation-checked: answering a scoped verdict without asking whether its binders stand calls the two applications under the second `h` one.
