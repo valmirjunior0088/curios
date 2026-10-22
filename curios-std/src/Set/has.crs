@@ -69,3 +69,35 @@ pub let of_union(
     Eq/trans(
         held(Map/try_get/of_union(a.map, b.map, k)),
         either(Map/try_get(a.map, k), Map/try_get(b.map, k)));
+
+-- Two options of the unit type that agree on whether they hold a value are one option: the value each holds is `()`.
+let held_once(
+    x: Option({}),
+    y: Option({}),
+    e: Eq()(Option/is_some(x), Option/is_some(y)),
+) -> Eq()(x, y) =
+    match x: (a) => (Eq()(Option/is_some(a), Option/is_some(y))) -> Eq()(a, y)
+    | none() =>
+        match y: (b) => (Eq()(false, Option/is_some(b))) -> Eq()(Option/none(), b)
+        | none() => (_) => Eq/refl()
+        | some(_) => (apart) => match Bool/false_neq_true(apart) end
+        end
+    | some(u) =>
+        match y: (b) => (Eq()(true, Option/is_some(b))) -> Eq()(Option/some(u), b)
+        | none() => (apart) => match Bool/false_neq_true(Eq/sym(apart)) end
+        | some(_) => (_) => Eq/refl()
+        end
+    end(e);
+
+--- Two sets with the same elements are one set.
+pub let extensional(
+    @K: Type,
+    use Key(K),
+    a: Set(K),
+    b: Set(K),
+    same: (k: K) -> Eq()(has(a, k), has(b, k)),
+) -> Eq()(a, b) =
+    Eq/cong(
+        (m: Map(K, {})) => Set { map = m },
+        Map/try_get/injective(a.map, b.map, (k: K) =>
+            held_once(Map/try_get(a.map, k), Map/try_get(b.map, k), same(k))));

@@ -181,6 +181,32 @@ let _a_key_removed_after_its_insertion_leaves_the_map(
                     Map/try_get/of_insert_other(m, k, v, key, apart))
             end);
 
+-- Inserting an element twice is inserting it once, for every set: the two have the same elements, which `Set/has/extensional` takes to the sets.
+let _an_element_inserted_twice_is_inserted_once(
+    @K: Type,
+    use Map/Key(K),
+    s: Set(K),
+    k: K,
+) -> Eq()(Set/insert(Set/insert(s, k), k), Set/insert(s, k)) =
+    Set/has/extensional(
+        Set/insert(Set/insert(s, k), k),
+        Set/insert(s, k),
+        (key) =>
+            match Hash/hash(k) == Hash/hash(key)
+            | true =>
+                Eq/subst(
+                    (y: K) =>
+                        Eq()(
+                            Set/has(Set/insert(Set/insert(s, k), k), y),
+                            Set/has(Set/insert(s, k), y)),
+                    Map/Key/same(k, key, True/qed()),
+                    Eq/trans(
+                        Set/has/of_insert(Set/insert(s, k), k),
+                        Eq/sym(Set/has/of_insert(s, k))))
+            | false =>
+                Set/has/of_insert_other(Set/insert(s, k), k, key, Map/Key/apart(k, key, True/qed()))
+            end);
+
 -- Inserts at two keys commute, for every map: at either key each side has that key's value, and at any other key both have the map's.
 let _inserts_at_two_keys_commute(
     @K: Type,
