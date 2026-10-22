@@ -75,31 +75,32 @@ fn a_program_links_the_library_its_entry_reaches() {
     );
 }
 
-/// A program that constructs or matches a declaration's values holds the declaration's row and nothing of what its type former erased to: `/std/Map` is a parameterised type, whose former erases to a function no program applies.
+/// A program that constructs or matches a declaration's values holds the declaration's row and nothing of what its type former erased to: `/std/Cli/Alternative` is a parameterised type, whose former erases to a function no program applies.
 #[test]
 fn a_program_holds_a_declarations_row_without_its_type_former() {
     let module = erase_to_ersd(
         r#"
-        let held : /std/Map(/std/Nat, /std/Nat) = /std/Map/insert(/std/Map/empty(), 1, 2);
-        /std/print(/std/Nat/to_str(/std/Map/len(held)))
+        let held : /std/Cli/Alternative(/std/Nat) =
+            /std/Cli/Alternative { long = "depth", help = "how deep", value = 2 };
+        /std/print(/std/Nat/to_str(held.value))
         "#,
     );
-    let map = "/std/Map/Map";
+    let alternative = "/std/Cli/Alternative";
 
     assert!(
         module
             .products()
             .iter()
-            .any(|schema| schema.debug_name.as_deref() == Some(map)),
-        "the program holds no row of {map}"
+            .any(|schema| schema.debug_name.as_deref() == Some(alternative)),
+        "the program holds no row of {alternative}"
     );
     assert!(
         !module
             .functions()
             .iter()
             .flatten()
-            .any(|function| function.debug_name.as_deref() == Some(map)),
-        "the program links what {map}'s type former erased to"
+            .any(|function| function.debug_name.as_deref() == Some(alternative)),
+        "the program links what {alternative}'s type former erased to"
     );
 }
 
