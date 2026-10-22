@@ -16,6 +16,7 @@ mod tests;
 use {
     crate::{Env, Unfolding, beneath},
     curios_core::{Free, Term},
+    std::collections::HashSet,
 };
 
 /// The scrutinee's own solution for one case: `name := value` when the scrutinee is, through local definitions, a local variable. `None` for any other scrutinee — an expression has no binder to solve, and its equation is recorded against its spelling instead.
@@ -50,4 +51,34 @@ pub fn retyped<E: Env>(
             solved(&unfolded).then(|| (*name, unfolded.substitute(solutions)))
         })
         .collect()
+}
+
+/// Whether reading `term` reads a variable `solutions` solves: `term` names one, or names a local whose reading — its type, and its definition where it has one, as `reads` answers them — reads one in turn, followed to the end.
+///
+/// **What an equation's reduced spelling rests on.** A settlement reduces the equation's key with the equations inside it withheld, and reads, besides the definition store and the equations outside it, each local the key names: a local definition by its value, and every local at its type, where a question reduction puts to conversion is answered. A case moves exactly those readings: it re-types each local whose type names a variable it solves ([`retyped`]), and the kernel binds again each local definition whose value names one. So a spelling settled under the case's arm rests on its solution where this holds and nowhere else, and such an equation is restated in the arm rather than settled there (`curios-cert`'s `Scope::restate`, `curios-elab`'s `Context::restate_equations`).
+///
+/// `reads` answers nothing for a name no binder in scope opened: a top-level name's meaning is no case's to move.
+pub fn reads_solved(
+    term: &Term,
+    solutions: &[(Free, Term)],
+    mut reads: impl FnMut(&Free) -> Vec<Term>,
+) -> bool {
+    if solutions.is_empty() {
+        return false;
+    }
+    let mut seen = HashSet::new();
+    let mut pending = term.free_vars_shared().iter().copied().collect::<Vec<_>>();
+    while let Some(name) = pending.pop() {
+        if !seen.insert(name) {
+            continue;
+        }
+        if solutions.iter().any(|(solved, _)| *solved == name) {
+            return true;
+        }
+        for read in reads(&name) {
+            pending.extend(read.free_vars_shared().iter().copied());
+        }
+    }
+
+    false
 }

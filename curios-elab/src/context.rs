@@ -73,7 +73,7 @@ use {
         Published, Refusal, Sort, ZonkPass, hold_at_one_instance, key_spelling, metavar_spines,
         read_by_value, shallow_scrutinee, zonk, zonk_solved_term_metas,
     },
-    curios_analysis::{Classification, records_case_equation},
+    curios_analysis::{Classification, reads_solved, records_case_equation},
     curios_core::{
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Declarations, Definition,
         DefinitionKind, Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
@@ -1658,36 +1658,51 @@ impl<'s> Context<'s> {
     ///
     /// **The recorded equation steps aside, as the kernel's does**, so an equation stands once however deep the arms go: kept beside its instance it would double at every nested match on a variable it names. A term in the arm that still names the variable meets the instance because a key and a probe are spelled as the arm spells them ([`Context::spelled_as_refined`]).
     ///
+    /// **An equation whose settlement would read the refinement is restated too**, though its scrutinee does not name the variable: one naming a local whose type, or whose definition, names it, read through to the end (`curios_analysis::reads_solved`, the rule the kernel restates by). The arm re-types such a local, and a settlement reads it at its type, so a spelling settled under the arm would rest on the arm while the equation outlives it. Its instance at `value` is its own spelling, so it is registered under its own key in the arm's frame, standing in for the recorded entry there ([`ScrutineeEntry::restates`]) rather than withholding it under a key it would share.
+    ///
     /// An instance that names no local is recorded by neither checker: [`Context::withhold_closed_equations`], which a refinement runs next, withholds it as it withholds any equation the refinement closes. The value an equation assumes is left as it is, a variable in it being read through its refinement.
     fn restate_equations(&mut self, name: &Free, value: &Term) {
         if !self.typing.frames.has_scrutinee_refinements() {
             return;
         }
         let solution = [(*name, value.clone())];
+        // Each read with its solved metavariables materialized: a metavariable stands over a spine of every local in scope where it was born, and would read as naming the variable.
+        let reads = |local: &Free| -> Vec<Term> {
+            if !curios_analysis::Env::is_local(self, local) {
+                return Vec::new();
+            }
+            self.assumption(local)
+                .into_iter()
+                .chain(self.definition_body(local))
+                .map(|read| zonk_solved_term_metas(self, read))
+                .collect()
+        };
         let named = self
             .typing
             .frames
             .scrutinee_equations()
             .into_iter()
             .filter_map(|(key, entry)| {
-                // Read with its solved metavariables materialized: a metavariable stands over a spine of every local in scope where it was born, and would read as naming the variable.
                 let original = zonk_solved_term_metas(self, &entry.original);
-                original
-                    .mentions_free(name)
-                    .then_some((key, entry, original))
+                reads_solved(&original, &solution, reads).then_some((key, entry, original))
             })
             .collect::<Vec<_>>();
 
         for (key, entry, original) in named {
+            let original = original.substitute(&solution);
+            let restated_key = shallow_scrutinee(self, &original);
+            let restates = restated_key == key;
             let restated = ScrutineeEntry {
-                original: original.substitute(&solution),
+                original,
                 value: entry.value.clone(),
                 alias: entry.alias,
                 withheld: false,
+                restates,
             };
-            self.typing.frames.withhold_scrutinee(key, entry);
-            let key = shallow_scrutinee(self, &restated.original);
-            self.typing.frames.refine_scrutinee(key, restated);
+            if !restates {
+                self.typing.frames.withhold_scrutinee(key, entry);
+            }
+            self.typing.frames.refine_scrutinee(restated_key, restated);
         }
     }
 
@@ -1830,6 +1845,7 @@ impl<'s> Context<'s> {
                     value: value.clone(),
                     alias,
                     withheld: false,
+                    restates: false,
                 },
             );
         }

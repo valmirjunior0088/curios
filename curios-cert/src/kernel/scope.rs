@@ -5,9 +5,9 @@
 //! `mark` and `retract` are `pub(super)` and `Kernel::scoped` is their only caller anywhere — that is what makes the bracket the one way to open a binder scope, and the reason this component exposes no other way to shrink either stack.
 
 use {
-    crate::{could_reduce_to, records_case_equation},
+    crate::{could_reduce_to, reads_solved, records_case_equation},
     curios_core::{Free, Term},
-    std::{collections::HashMap, mem},
+    std::{collections::HashMap, iter, mem},
 };
 
 /// A checkpoint into both stacks, restored together so neither can outlive the arm that opened it.
@@ -255,6 +255,8 @@ impl Scope {
     ///
     /// **The recorded equation steps aside rather than standing beside its instance.** Nothing the arm holds names a solved variable, so the recorded spelling answers nothing there; left in force, it would be restated again by every arm inside, and an equation naming the variables of `n` nested matches would stand `2^n` times. Stepping aside, each equation stands once however deep the arms go.
     ///
+    /// **An equation whose settlement would read the solution is restated too**, though it names no solved variable: one that names a local whose type, or whose value where a `let` bound it, names one, read through to the end ([`reads_solved`]). The arm re-types the first kind of local and binds the second again (`eliminate::shadow`), and a settlement reads both, a `let` by its value and every local at its type, so a spelling settled under the arm would rest on what the arm assumes while the equation outlives the arm. Restated, the spelling is settled in the arm and goes with it, and the recorded equation is settled where the arm does not stand.
+    ///
     /// A restated equation goes through [`Scope::refine`] like any other, so one the solution leaves with no local is not recorded, for the reason no local-free equation is. It is pushed inside the arm's bracket, and [`Scope::retract`] both drops it and lets the recorded one answer again. It is answered whether or not it was recorded: the arm assumes it either way, and an arm refused under one that computes to another case is one no reduction takes.
     pub(super) fn restate(&mut self, solutions: &[(Free, Term)]) -> Vec<(Term, Term)> {
         assert!(
@@ -262,25 +264,43 @@ impl Scope {
             "an arm's solution restated while an equation's reduced spelling was being settled"
         );
 
-        let solved = |term: &Term| solutions.iter().any(|(name, _)| term.mentions_free(name));
+        // A local's type is held by value, and so is a `let`'s value, so neither names a `let` the reading would have to follow further.
+        let reads = |name: &Free| match self.innermost.get(name) {
+            Some(&at) => {
+                let local = &self.locals[at];
+                iter::once(local.type_.clone())
+                    .chain(local.value.as_ref().map(|value| value.term.clone()))
+                    .collect()
+            }
+            None => Vec::new(),
+        };
+        let solved = |term: &Term| reads_solved(term, solutions, &reads);
+        let restating = self
+            .refinements
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| {
+                entry.restated_at.is_none()
+                    && (solved(&entry.key)
+                        || solved(&entry.value)
+                        || entry.resolved.as_ref().is_some_and(solved))
+            })
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+
         let depth = self.refinements.len();
         let mut restated = Vec::new();
-        for entry in &mut self.refinements {
-            if entry.restated_at.is_none()
-                && (solved(&entry.key)
-                    || solved(&entry.value)
-                    || entry.resolved.as_ref().is_some_and(solved))
-            {
-                entry.restated_at = Some(depth);
-                restated.push((
-                    entry.key.substitute(solutions),
-                    entry
-                        .resolved
-                        .as_ref()
-                        .map(|resolved| resolved.substitute(solutions)),
-                    entry.value.substitute(solutions),
-                ));
-            }
+        for index in restating {
+            let entry = &mut self.refinements[index];
+            entry.restated_at = Some(depth);
+            restated.push((
+                entry.key.substitute(solutions),
+                entry
+                    .resolved
+                    .as_ref()
+                    .map(|resolved| resolved.substitute(solutions)),
+                entry.value.substitute(solutions),
+            ));
         }
 
         restated

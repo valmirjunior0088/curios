@@ -14,8 +14,9 @@ pub(crate) use {
         another_case, answers, answers_classed, atoms_within, case_target_indices,
         connectives_agree, connectives_agree_classed, convert_classed, convert_intrinsics,
         could_reduce_to, decide, foreign_congruence, grade, member_arities, nonzero_by,
-        pinned_instance, positivity_vectors, read_operands, records_case_equation, refold, retyped,
-        scrutinee_solution, solve_indices, spine, variance_vectors, wholly_pinned, yields_a_sort,
+        pinned_instance, positivity_vectors, read_operands, reads_solved, records_case_equation,
+        refold, retyped, scrutinee_solution, solve_indices, spine, variance_vectors, wholly_pinned,
+        yields_a_sort,
     },
     curios_core::{
         accelerable, foreign_signature, free_locals_of, instantiate_qualities,

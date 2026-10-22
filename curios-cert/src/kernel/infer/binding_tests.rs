@@ -208,6 +208,53 @@ fn an_elimination_reads_a_let_bound_scrutinee_by_value() {
     assert!(infer(&mut kernel, &term).is_ok());
 }
 
+/// A guard over a `let` of a variable answers a split on the variable inside its arm, and nothing after it: `y` stands for `c`, the arm at `true` of the split binds `y` again at `true`, and the guard's spelling settled there is the arm's alone. After the split `c` is open again, and `family(k(true))` is no type `3` has.
+#[test]
+fn a_guard_read_through_a_let_answers_a_split_inside_its_arm_and_nothing_after_it() {
+    let c = binder(0, "c");
+    let k = binder(1, "k");
+    let y = binder(2, "y");
+    let tested = |at: bool| Term::apply(Term::free_var(&k), [Term::intrinsic(Intrinsic::Bool(at))]);
+    let claimed = || family(tested(true));
+    let forged = |after: Term| {
+        // match c : Nat | false => 0 | true => let u : family(k(true)) = 3; 0 end
+        let split = Term::bool_match(
+            Term::free_var(&c),
+            None,
+            nat_type(),
+            nat(0),
+            Term::let_(&binder(3, "u"), claimed(), nat(3), nat(0)),
+        );
+        let arm = Term::let_(&binder(4, "w"), nat_type(), split, after);
+        let guard = Term::bool_match(
+            Term::free_var(&y),
+            None,
+            bool_type(),
+            tested(false),
+            tested(true),
+        );
+        Term::func(
+            [
+                (c, bool_type()),
+                (
+                    k,
+                    Term::func_type([(binder(5, "v"), bool_type())], bool_type()),
+                ),
+            ],
+            Term::let_(
+                &y,
+                bool_type(),
+                Term::free_var(&c),
+                Term::bool_match(guard, None, nat_type(), nat(0), arm),
+            ),
+        )
+    };
+
+    assert!(infer(&mut kernel(), &forged(nat(0))).is_ok());
+    let answered_after = Term::let_(&binder(6, "z"), claimed(), nat(3), nat(0));
+    assert!(infer(&mut kernel(), &forged(answered_after)).is_err());
+}
+
 /// A recorded position states what its term stands for: the obligations read a position for what it reaches, and a `let`-bound local's name reaches nothing. `h` stands for the proof `p`, and the position the tail records is `p`.
 ///
 /// Mutation-checked: with a position recorded as it is written, one names the binder the kernel minted for `h`.

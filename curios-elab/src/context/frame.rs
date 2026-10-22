@@ -116,6 +116,8 @@ pub(crate) struct ScrutineeEntry {
     pub(crate) alias: bool,
     /// Whether this entry withholds the equation its key holds in a frame outside, rather than recording one: an arm that refines a variable leaves it under every equation whose scrutinee, as the kernel spells it under the arm's solution, names no local. `Context::withhold_closed_equations` states the rule. It keeps the equation's spelling and value, which a report on the arm names.
     pub(crate) withheld: bool,
+    /// Whether this entry stands in for the equation its key holds in a frame outside: an arm restated that equation at its solution and the spelling came out as it was, so the recorded entry answers nothing, and is settled nothing, while this frame stands (`Context::restate_equations`). Its spelling is settled in this frame and goes with it.
+    pub(crate) restates: bool,
 }
 
 /// A scrutinee entry's reduced spelling once settled: the form a probe is compared at — solved metavariables materialized and universe instances erased, once, when it settles — and the unerased reduct a hit reads its instance from.

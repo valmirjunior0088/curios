@@ -819,7 +819,7 @@ impl<'s> Frames<'s> {
         forget_settled_windows(frame);
     }
 
-    /// Whether a frame inside the one at depth `frame`, below `ceiling`, withholds the equation `key` holds there.
+    /// Whether a frame inside the one at depth `frame`, below `ceiling`, withholds the equation `key` holds there, or holds an entry standing in for it.
     fn withheld_inside(&self, frame: usize, ceiling: usize, key: &Term) -> bool {
         self.refined_standing()
             .filter(|inner| frame < inner.depth && inner.depth < ceiling)
@@ -827,7 +827,7 @@ impl<'s> Frames<'s> {
                 inner
                     .refinement_scrutinees
                     .get(key)
-                    .is_some_and(|entry| entry.withheld)
+                    .is_some_and(|entry| entry.withheld || entry.restates)
             })
     }
 
