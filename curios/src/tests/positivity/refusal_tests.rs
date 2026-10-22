@@ -191,6 +191,23 @@ fn a_non_strict_occurrence_borrowed_through_a_struct_parameter_is_rejected() {
     );
 }
 
+// A concept's dictionary is a nominal record of its methods, so a method consuming the recursive type puts it left of an arrow one indirection away, exactly as a struct parameter does — and the dictionary here is *sealed*, its representation private to this module. Privacy is the elaborator's, and the gate reads the declaration whole, so a sealed representation hides a non-positive occurrence from no one: were it to, `Refute`'s `refute : (Bad) -> False` would be the negative occurrence the gate exists to forbid, reachable through a witness.
+#[test]
+fn a_negative_occurrence_borrowed_through_a_sealed_concept_is_rejected() {
+    rejected_by(
+        r#"
+        use /std/Bool/{False};
+
+        concept Refute(A : Type) : Type { refute(A) -> False }
+
+        struct Bad : pub Type { d : Refute(Bad) }
+
+        /std/print("unreachable")
+        "#,
+        "it occurs in itself negatively",
+    );
+}
+
 // A `let`-defined alias is unfolded rather than read as an opaque former, so the arrow it hides counts where it stands — once for the negative, twice for the merely positive.
 #[test]
 fn a_negative_occurrence_behind_an_alias_is_rejected() {
