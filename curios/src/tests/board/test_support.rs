@@ -462,6 +462,61 @@ pub(super) const A_PARITY_DISAGREEMENT_IS_NOT_A_CLASH: &str = r#"
         /std/print("FORGED")
         "#;
 
+pub(super) const A_TRUNCATED_DIFFERENCE_DOES_NOT_CLASH_WITH_ZERO: &str = r#"
+        use /std/{Eq, Nat};
+        use /std/Bool/{False};
+
+        let absurd(a : Nat, h : Eq()(a - 1, 0)) -> False =
+            match h end;
+
+        /std/print("FORGED")
+        "#;
+
+pub(super) const AN_INT_SUCCESSOR_DOES_NOT_CLASH_WITH_ZERO: &str = r#"
+        use /std/{Eq, Int};
+        use /std/Bool/{False};
+
+        let absurd(i : Int, h : Eq()(i + +1, +0)) -> False =
+            match h end;
+
+        /std/print("FORGED")
+        "#;
+
+pub(super) const A_WINDOW_THAT_MAY_BE_EMPTY_DOES_NOT_CLASH_WITH_THE_EMPTY_VALUE: &str = r#"
+        use /std/{Eq, Nat, Bytes};
+        use /std/Bool/{False, Holds};
+
+        let absurd(
+            b : Bytes,
+            n : Nat,
+            @ok : Holds(0 + n <= Bytes/len(b)),
+            h : Eq()(Bytes/slice(b, 0, n), x[]),
+        ) -> False =
+            match h end;
+
+        /std/print("FORGED")
+        "#;
+
+pub(super) const A_VALUE_EXTENDED_AT_ONE_END_DOES_NOT_CLASH_WITH_ONE_EXTENDED_AT_THE_OTHER: &str = r#"
+        use /std/{Eq, Bytes};
+        use /std/Bool/{False};
+
+        let absurd(b : Bytes, c : Bytes, h : Eq()(x[..b, 0x01], x[0x01, ..c])) -> False =
+            match h end;
+
+        /std/print("FORGED")
+        "#;
+
+pub(super) const A_POSITIVE_SEGMENT_STILL_CLASHES_WITH_THE_EMPTY_VALUE: &str = r#"
+        use /std/{Eq, Bytes};
+        use /std/Bool/{False};
+
+        let absurd(b : Bytes, h : Eq()(x[..b, 0x01], x[])) -> False =
+            match h end;
+
+        /std/print("ok")
+        "#;
+
 pub(super) const AN_UNMENTIONED_PAYLOAD_BINDER_IS_NOT_FORCED: &str = r#"
         use /std/{Nat};
 

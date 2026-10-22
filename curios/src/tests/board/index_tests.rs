@@ -145,6 +145,51 @@ fn a_parity_disagreement_is_not_a_clash() {
     );
 }
 
+// The cancellation's own clash, at the arm whose guard is the whole of its soundness. ℕ is cancellative, so the peel both checkers read concludes impossibility only where one side cancels away and the other keeps a positive *constant*; a truncated difference is an opaque summand, and `a - 1` is `0` at `a` zero and at `a` one. Read as a positive floor — the summand answering where the constant is asked about — the arm would be excused and `absurd(0, Eq/refl())` would be a closed inhabitant of `False`.
+#[test]
+fn a_truncated_difference_does_not_clash_with_zero() {
+    rejected_by(
+        A_TRUNCATED_DIFFERENCE_DOES_NOT_CLASH_WITH_ZERO,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// The one place the two numeric carriers' cancellations must part. ℕ's clash rests on every summand being at least zero, so a positive constant facing an emptied side is impossible — which is `a_clash_between_two_forcings_of_one_binder_excuses_the_arm`'s `absurd_successor`, and must stay accepted. An `Int` summand may be negative, so `i + +1` is `+0` at `i` minus one and ℤ's rule concludes impossibility only between two constants. ℕ's rule read at ℤ would excuse this arm and prove `False` at `absurd(-1, Eq/refl())`.
+#[test]
+fn an_int_successor_does_not_clash_with_zero() {
+    rejected_by(
+        AN_INT_SUCCESSOR_DOES_NOT_CLASH_WITH_ZERO,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// The same question at a sequence carrier, where the strip decides a residual against the empty value by whether anything left in it has a positive length. A window has none to state: `Bytes/slice(b, 0, n)` is the empty value at `n` zero, so a run or a single element clashes with `x[]` and a window does not. Counted positive, the arm would be excused and `absurd(x[], 0, Eq/refl())` would prove `False`.
+#[test]
+fn a_window_that_may_be_empty_does_not_clash_with_the_empty_value() {
+    rejected_by(
+        A_WINDOW_THAT_MAY_BE_EMPTY_DOES_NOT_CLASH_WITH_THE_EMPTY_VALUE,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// The strip where a chunk faces a run: `x[..b, 0x01]` opens with an opaque operand and `x[0x01, ..c]` with a byte, so the two share no certain prefix and the pair is handed on rather than clashed. They are one value wherever `b` and `c` are both empty, which is what makes a clash here a `False` rather than imprecision.
+#[test]
+fn a_value_extended_at_one_end_does_not_clash_with_one_extended_at_the_other() {
+    rejected_by(
+        A_VALUE_EXTENDED_AT_ONE_END_DOES_NOT_CLASH_WITH_ONE_EXTENDED_AT_THE_OTHER,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// The strip's accepting rung, as `an_unmentioned_payload_binder_is_not_forced` is the pinning rule's: a byte appended onto an opaque tail has a positive length wherever that tail stands, so it does clash with the empty value and the arm is excused. Without it a strip that read every sequence residual as undecided would satisfy the two refusals above and nothing else here would notice.
+#[test]
+fn a_positive_segment_still_clashes_with_the_empty_value() {
+    assert_eq!(
+        run(A_POSITIVE_SEGMENT_STILL_CLASHES_WITH_THE_EMPTY_VALUE),
+        b"ok"
+    );
+}
+
 // The lower end of that discrimination: drop `a` from the index target and the guard fires. Without this, a fix could "close" the hole above by rejecting every indexed proposition and nothing here would notice.
 #[test]
 fn an_unmentioned_payload_binder_is_not_forced() {
