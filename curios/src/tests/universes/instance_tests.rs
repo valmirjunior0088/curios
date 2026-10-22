@@ -291,6 +291,40 @@ fn a_case_equation_read_at_another_instance_holds_the_two_to_one() {
     }
 }
 
+// **A case equation read at another instance holds its sorts to one as well.** `picked` writes `ins(key, n, k, @Eq/refl())` and has closed, so the sort its proof's `Eq` takes is decided, and `held`'s arm records the same call written again, its sort still open while `held` is checked. The two are apart in that sort and in open levels alone, and the elaborator holds both to one where it reads the equation, so `picked` reduces under the arm as the kernel's key answers it. With the proof a parameter the two calls hold one proof, which is the control.
+#[test]
+fn a_case_equation_read_at_another_instance_holds_its_sorts_to_one() {
+    let program = |binder: &str, proof: &str, passed: &str| {
+        fill!(
+            r#"
+            use /std/{Nat, Bool, Eq};
+            use /std/Bool/{True, Holds};
+            induct Out: Type
+            | added()
+            | other()
+            end
+            let ins(@K: Type, key: K, t: Nat, k: Nat, @same: Eq()(k + 0, k)) -> Out =
+                match t | 0 => Out/added() | p + 1; _ih => ins(key, p, k, @same) end;
+            let picked(@K: Type, key: K, n: Nat, k: Nat${binder}) -> Nat =
+                match ins(key, n, k, ${proof}) | added() => 1 | other() => 2 end;
+            pub let held(@K: Type, key: K, n: Nat, k: Nat${binder}) -> Holds(
+                Nat/max(picked(key, n, k${passed}), 1) == picked(key, n, k${passed})) =
+                match ins(key, n, k, ${proof}) | added() => True/qed() | other() => True/qed() end;
+            /std/print("held")
+            "#,
+            binder,
+            proof,
+            passed
+        )
+    };
+
+    assert_eq!(run(&program("", "@Eq/refl()", "")), b"held");
+    assert_eq!(
+        run(&program(", same: Eq()(k + 0, k)", "@same", ", same")),
+        b"held"
+    );
+}
+
 /// A recursive definition over a family whose level only sizes its parameter: nothing ties the level a written call takes to another call's.
 const EVEN: &str = r#"
     use /std/{Bool, Io};

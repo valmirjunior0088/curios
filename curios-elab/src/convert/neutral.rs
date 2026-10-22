@@ -6,7 +6,7 @@
 mod tests;
 
 use {
-    crate::{Context, Structural, reduce, reduce_forced},
+    crate::{Context, EveryPosition, Structural, reduce, reduce_forced},
     curios_core::{
         Argument, Families, Field, Free, FuncType, InductType, Instance, InstanceHead, Level,
         Match, MatchResult, Proj, Quality, ReduceError, StructType, Subterm, Term, TupleType,
@@ -38,6 +38,7 @@ pub(super) fn identify_universe_levels(
         Alignment::Pending {
             compared,
             irrelevant,
+            ..
         } => (compared, irrelevant),
         Alignment::Distinct => return Ok(Identification::Distinct),
         Alignment::UnderBinder => return Ok(Identification::UnderBinder),
@@ -77,9 +78,11 @@ pub(super) fn identify_universe_levels(
     Ok(Identification::Identified)
 }
 
-/// Hold two spellings of one refinement key to one universe instance, answering whether they can be: every level the two differ in is committed equal, as [`identify_universe_levels`] commits two sides apart in levels alone. Two unequal ground levels, a pair under a universe binder, which the ambient solver has no hold on, and two sides apart in more than levels decline the key with nothing inserted.
+/// Hold two spellings of one refinement key to one universe instance, answering whether they can be: every level the two differ in is committed equal, as [`identify_universe_levels`] commits two sides apart in levels alone, and every sort is held one ([`UniverseSolver::unify_qualities`](crate::UniverseSolver::unify_qualities)). Two unequal ground levels, two sorts that each state one and state two, a pair under a universe binder, which the ambient solver has no hold on, and two sides apart in more than their universes decline the key with nothing inserted.
 ///
 /// A key erases its universes, every occurrence of a polymorphic scrutinee minting an instance of its own and the key being compared while they are open (`reduce`'s `shallow_scrutinee`). A hit then rests on the two instances being one: what it hands back is the arm's value for the scrutinee as the arm recorded it, and `Type u` embeds a level in a term, so two instances of one stuck call can be two values. Left unsaid, the two close wherever their own bounds put them, and where that is apart the elaborator has refined a term the kernel's key, which keeps its levels, does not answer. Committed, they close together, or the declaration is refused where its levels close.
+///
+/// **A sort is part of the instance.** A stuck call reached through a definition that has closed holds every sort its instance states decided, while the key the arm records, written in the declaration still being checked, holds a metavariable for each sort nothing has yet decided: a proof written `Eq/refl()` at both is `Type` in the one and open in the other. Two spellings apart in that alone are one instance once it is solved, as two apart in an open level are, so the walk pairs sorts beside levels and the commitment solves them with the levels.
 ///
 /// It reads no family's variance: the kernel's key is the scrutinee compared with every level, so a key let through on an irrelevant one would answer a term the kernel reduces before it answers. Past a key the guard is [`levels_clash_to_conversion`].
 ///
@@ -89,16 +92,18 @@ pub(crate) fn hold_at_one_instance(
     this: &Term,
     that: &Term,
 ) -> Result<bool, ReduceError> {
-    let Alignment::Pending { compared, .. } = align_universe_levels(context, this, that, &())?
+    let Alignment::Pending {
+        compared, sorts, ..
+    } = align_universe_levels(context, this, that, &EveryPosition)?
     else {
         return Ok(false);
     };
-    if compared.is_empty() {
+    if compared.is_empty() && sorts.is_empty() {
         return Ok(true);
     }
 
     // How many pairs a key's hit commits, per hit that commits any.
-    curios_profile::sample!("identify::key", compared.len());
+    curios_profile::sample!("identify::key", compared.len() + sorts.len());
     let mark = context.solution_mark();
     let held = compared.into_iter().all(|(this_level, that_level)| {
         context
@@ -109,6 +114,10 @@ pub(crate) fn hold_at_one_instance(
                 UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
             )
             .is_ok()
+    }) && sorts.into_iter().all(|(this_sort, that_sort)| {
+        context
+            .universes_mut()
+            .unify_qualities(this_sort, that_sort, None)
     });
     if !held {
         context.rollback_solutions(mark);
@@ -212,6 +221,7 @@ fn align_universe_levels(
     Ok(Alignment::Pending {
         compared,
         irrelevant,
+        sorts: differences.sorts,
     })
 }
 
@@ -225,10 +235,11 @@ enum Alignment {
         apart: Vec<(Level, Level)>,
         decided: bool,
     },
-    /// The sides differ in levels alone: the zonked pairs a commitment would have to join, and the pairs at irrelevant positions, which it may.
+    /// The sides differ in their universes alone: the zonked pairs a commitment would have to join, the pairs at irrelevant positions, which it may, and the sorts they differ in, where the reading pairs sorts.
     Pending {
         compared: Vec<(Level, Level)>,
         irrelevant: Vec<(Level, Level)>,
+        sorts: Vec<(Quality, Quality)>,
     },
 }
 

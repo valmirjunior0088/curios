@@ -59,6 +59,31 @@ impl Families for Structural<'_> {
     }
 }
 
+/// The reading of a caller that holds two spellings of one term to one instance, or carries one to the other — a refinement key's hit and the reduction table's second door: no family and no definition, so every level is compared where it stands, no former is read as its node, nothing is set apart as curried, and sorts are paired beside levels, a sort being as much a part of an instance as a level is.
+pub(crate) struct EveryPosition;
+
+impl Families for EveryPosition {
+    fn induct(&self, _: &Global) -> Option<&InductDecl> {
+        None
+    }
+
+    fn struct_(&self, _: &Global) -> Option<&StructDecl> {
+        None
+    }
+
+    fn reads_formers(&self) -> bool {
+        false
+    }
+
+    fn sets_curried_apart(&self) -> bool {
+        false
+    }
+
+    fn pairs_sorts(&self) -> bool {
+        true
+    }
+}
+
 /// Record each of `names`' variance vectors on its registry entry: the families of one group, analyzed together as that group finalizes, so a later item that compares two of their instances reads them.
 ///
 /// Every earlier family's vector answers from the registry. A solved metavariable is spliced in first; one still unsolved is read as mentioning every level, its solution being free to. A reduction the budget refuses reads the same way, and the group is refused for the budget: the vector it leaves claims less than the families' own, and on record it would refuse two instances a later item compares, with no word of the budget.

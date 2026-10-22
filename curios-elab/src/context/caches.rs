@@ -14,13 +14,12 @@
 
 use {
     super::SolutionPrefix,
-    crate::{Sort, UniverseStateToken},
+    crate::{EveryPosition, Sort, UniverseStateToken},
     curios_analysis::Classification,
     curios_core::{
-        AsideAnswers, Bound, ClosedMemo, Enter, Families, Free, Global, InductDecl, Level,
-        LevelHead, Quality, QualityMetaId, Rec, RecGroup, Sharing, StructDecl, Subterm, Term,
-        UniverseError, UniverseMetaId, Universes, lasting, rewrite_universe_qualities,
-        substitute_universe_metas_scoped,
+        AsideAnswers, Bound, ClosedMemo, Enter, Free, Global, Level, LevelHead, Quality,
+        QualityMetaId, Rec, RecGroup, Sharing, Subterm, Term, UniverseError, UniverseMetaId,
+        Universes, lasting, rewrite_universe_qualities, substitute_universe_metas_scoped,
     },
     curios_utilities::{Entropy, Keyed},
     std::{
@@ -1048,31 +1047,6 @@ impl AcrossUniverses {
                 .map(|quality| Self::quality(&self.sorts, quality))
                 .collect(),
         })
-    }
-}
-
-/// The second door's reading of the walk over the pair: no family and no definition, so every level is compared where it stands, no former is read as its node, nothing is set apart as curried, and sorts are paired beside levels, as a caller that carries one spelling to the other reads them.
-struct EveryPosition;
-
-impl Families for EveryPosition {
-    fn induct(&self, _: &Global) -> Option<&InductDecl> {
-        None
-    }
-
-    fn struct_(&self, _: &Global) -> Option<&StructDecl> {
-        None
-    }
-
-    fn reads_formers(&self) -> bool {
-        false
-    }
-
-    fn sets_curried_apart(&self) -> bool {
-        false
-    }
-
-    fn pairs_sorts(&self) -> bool {
-        true
     }
 }
 
