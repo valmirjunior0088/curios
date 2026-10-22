@@ -1,8 +1,12 @@
+--- Whether a key is an element, with the theorems of what each operation leaves there and that two sets alike at every key are one.
+pub mod has;
+pub use has/{let has};
+
 --- A set's elements, with the theorem that they are in their type's own order.
 pub mod to_list;
 pub use to_list/{let to_list};
 
-use /std/{Nat, Bool, List, Map, Show, Spell, Fmt};
+use /std/{Nat, List, Map, Show, Spell, Fmt};
 use /std/ops/{Eql};
 use /std/Map/{Key};
 
@@ -20,10 +24,6 @@ pub let empty(@K: Type, use Key(K)) -> Set(K) =
 --- How many elements.
 pub let len(@K: Type, use Key(K), s: Set(K)) -> Nat =
     Map/len(s.map);
-
---- Whether `k` is an element.
-pub let has(@K: Type, use Key(K), s: Set(K), k: K) -> Bool =
-    Map/has(s.map, k);
 
 --- `s` with `k`.
 pub let insert(@K: Type, use Key(K), s: Set(K), k: K) -> Set(K) =

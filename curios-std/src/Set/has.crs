@@ -1,0 +1,71 @@
+use /std/{Bool, Option, Eq, Map};
+use /std/Bool/{False};
+use /std/Map/{Key};
+use /std/Set/{Set, empty, insert, remove, union};
+
+--- Whether `k` is an element.
+pub let has(@K: Type, use Key(K), s: Set(K), k: K) -> Bool =
+    Map/has(s.map, k);
+
+-- Whether an option holds a value, carried across an equation between two options.
+let held(
+    @A: Type,
+    @x: Option(A),
+    @y: Option(A),
+    e: Eq()(x, y),
+) -> Eq()(Option/is_some(x), Option/is_some(y)) =
+    Eq/cong((m: Option(A)) => Option/is_some(m), e);
+
+--- The empty set has no element.
+pub let of_empty(@K: Type, use Key(K), k: K) -> Eq()(has(empty(), k), false) =
+    Eq/refl();
+
+--- `insert` makes its key an element.
+pub let of_insert(@K: Type, use Key(K), s: Set(K), k: K) -> Eq()(has(insert(s, k), k), true) =
+    held(Map/try_get/of_insert(s.map, k, ()));
+
+--- `insert` leaves every other key as it was.
+pub let of_insert_other(
+    @K: Type,
+    use Key(K),
+    s: Set(K),
+    k: K,
+    other: K,
+    apart: (Eq()(other, k)) -> False,
+) -> Eq()(has(insert(s, k), other), has(s, other)) =
+    held(Map/try_get/of_insert_other(s.map, k, (), other, apart));
+
+--- `remove` makes its key no element.
+pub let of_remove(@K: Type, use Key(K), s: Set(K), k: K) -> Eq()(has(remove(s, k), k), false) =
+    held(Map/try_get/of_remove(s.map, k));
+
+--- `remove` leaves every other key as it was.
+pub let of_remove_other(
+    @K: Type,
+    use Key(K),
+    s: Set(K),
+    k: K,
+    other: K,
+    apart: (Eq()(other, k)) -> False,
+) -> Eq()(has(remove(s, k), other), has(s, other)) =
+    held(Map/try_get/of_remove_other(s.map, k, other, apart));
+
+-- Whether the first of two options holding a value answers holds one: whether either does.
+let either(
+    @A: Type,
+    x: Option(A),
+    y: Option(A),
+) -> Eq()(Option/is_some(Option/or(y, x)), Option/is_some(x) || Option/is_some(y)) =
+    match y | some(_) => Eq/refl() | none() => Eq/refl() end;
+
+--- An element of `union` is an element of either.
+pub let of_union(
+    @K: Type,
+    use Key(K),
+    a: Set(K),
+    b: Set(K),
+    k: K,
+) -> Eq()(has(union(a, b), k), has(a, k) || has(b, k)) =
+    Eq/trans(
+        held(Map/try_get/of_union(a.map, b.map, k)),
+        either(Map/try_get(a.map, k), Map/try_get(b.map, k)));
