@@ -15,8 +15,8 @@ pub(crate) use {
         connectives_agree, connectives_agree_classed, convert_classed, convert_intrinsics,
         could_reduce_to, decide, foreign_congruence, grade, member_arities, nonzero_by,
         pinned_instance, positivity_vectors, read_operands, reads_solved, records_case_equation,
-        refold, retyped, scrutinee_solution, solve_indices, spine, variance_vectors, wholly_pinned,
-        yields_a_sort,
+        refold, retyped, scrutinee_solution, solve_indices, spine, struct_reaches_itself,
+        variance_vectors, wholly_pinned, yields_a_sort,
     },
     curios_core::{
         accelerable, foreign_signature, free_locals_of, instantiate_qualities,

@@ -182,7 +182,7 @@ const A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS: &str = r#"
     f(false, (n: Nat) => n, (n: Nat) => n == 1, 0, 1, True/qed())
     "#;
 
-/// [`A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS`] with no proposition in it: `F(c)` is the unit type at `true`, where any two inhabitants were one by the type's shape, so the comparison was decided inside that arm and the guard's spelling settled the same way. What the settlement read of the split was that a type has one inhabitant, which a proposition is one case of. The unit type has no eta now, and no rule reads a type's shape: `h(p)` and `h(q)` stay apart under every case, and the `True/qed()` inside the arm is refused at `Holds(k(0))`.
+/// [`A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_PROOFS`] with no proposition in it: `F(c)` is the unit type at `true`, where any two inhabitants are one by the type's shape, so the comparison is decided inside that arm and the guard's spelling was settled the same way. What the settlement read of the split was the type the arm re-typed `p` and `q` at, which the guard names and the split solves. The guard is now restated in that arm, and its spelling settled there goes with it: the `True/qed()` inside the arm holds, and the one after the split, where the guard is settled with `c` open and `h(p)` and `h(q)` are apart, is refused at `Holds(k(0))`.
 const A_GUARD_SETTLED_WHERE_ITS_OPERANDS_ARE_UNITS: &str = r#"
     use /std/{Nat, Bool};
     use /std/Bool/{True, False, Holds};
@@ -396,7 +396,7 @@ fn a_guard_settled_where_its_operands_are_proofs() -> (Module, Term) {
     })
 }
 
-/// [`a_guard_settled_where_its_operands_are_proofs`] with the unit type `{}` where `Two` stood, and no declaration: at `true` the operands' type has one inhabitant by its shape, and conversion held `h(p)` and `h(q)` one term there as it does at a proposition. It holds them apart now, the unit type having no eta, and the `qed` the arm binds is refused at `Holds(k(0))`.
+/// [`a_guard_settled_where_its_operands_are_proofs`] with the unit type `{}` where `Two` stood, and no declaration: at `true` the operands' type has one inhabitant by its shape, and conversion holds `h(p)` and `h(q)` one term there as it does at a proposition. The guard names `p` and `q`, whose type names `c`, so the split's arm restates it and settles it there, and the `qed` after the split is refused at `Holds(k(0))`.
 fn a_guard_settled_where_its_operands_are_units() -> (Module, Term) {
     a_guard_settled_where_its_operands_are_one(Module::default(), &Term::tuple_type_unit)
 }

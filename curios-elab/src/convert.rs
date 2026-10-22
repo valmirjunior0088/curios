@@ -1,3 +1,6 @@
+mod inhabited;
+use inhabited::*;
+
 mod intrinsic;
 use intrinsic::*;
 
@@ -1713,8 +1716,7 @@ impl Convert {
         type_: Term,
     ) -> Result<bool, ReduceError> {
         let n = tuple.fields.len();
-        // A literal with no field has no eta, as the kernel's has none: answering here would say every neutral at `{}` is `()`.
-        if n == 0 || !neutral(context, &other) {
+        if !neutral(context, &other) {
             return Ok(false);
         }
 
@@ -1770,28 +1772,6 @@ impl Convert {
             _ => None,
         };
 
-        // A literal holding no field that is data has no eta, as the kernel's has none: every comparison below would be a proof's or none at all, and any neutral would be the literal by the shape of its type.
-        let declared = match &cur {
-            Some(fields) => Some(fields.clone()),
-            None => match context.struct_decl(&struct_.name).cloned() {
-                Some(struct_decl) => Some(
-                    instantiate_bound_at(
-                        context,
-                        &struct_decl.universe_context,
-                        &struct_decl.arity,
-                        &struct_.universes,
-                    )?
-                    .open(&struct_.params.iter().collect::<Vec<_>>()),
-                ),
-                None => None,
-            },
-        };
-        if let Some(fields) = declared
-            && !holds_data(context, &self.binders, fields, &struct_.fields)?
-        {
-            return Ok(false);
-        }
-
         let projections = (0..n)
             .map(|i| Term::proj_struct(other.clone(), struct_.name, i))
             .collect::<Vec<_>>();
@@ -1817,8 +1797,8 @@ impl Convert {
                 );
                 Ok(true)
             }
-            // Each projection at the type its field has, opened at the left side's preceding projections, as the kernel's Σ eta compares them: a field at a proposition is decided by that type, where at `Type` two neutrals' projections never meet. The Σ with no field has no eta, here as in the kernel.
-            Subterm::TupleType(TupleType { telescope, .. }) if !telescope.is_empty() => {
+            // Each projection at the type its field has, opened at the left side's preceding projections, as the kernel's Σ eta compares them: a field at a proposition or at a type with no field is decided by that type, where at `Type` two neutrals' projections never meet.
+            Subterm::TupleType(TupleType { telescope, .. }) => {
                 let n = telescope.len();
                 let projections = |term: &Term| {
                     (0..n)
@@ -1828,7 +1808,7 @@ impl Convert {
                 self.enqueue_fields(projections(&this), projections(&that), Some(telescope));
                 Ok(true)
             }
-            // A nominal struct has no eta between two neutrals, here as in the kernel: projecting both poses their heads again, which only two equal heads pass.
+            // A nominal struct has no eta between two neutrals, here as in the kernel: projecting both poses their heads again, which only two equal heads pass, and what eta would decide besides is read off the type before the dispatch (`decided_by_its_type`).
             _ => Ok(false),
         }
     }
@@ -3002,6 +2982,11 @@ impl Convert {
                 continue;
             }
 
+            // A goal its type decides ahead of every structural rule, as the kernel decides it: the empty Σ, where eta leaves nothing to compare, and two neutrals at a nominal struct with one inhabitant by its shape, which has no eta by its type. Left to the dispatch, two sides of one shape — two stuck matches, two applications — would be compared structurally and refused, and conversion would not be transitive at the type. After the metavariable dispatch, as the check above is, so a flexible side is still solved.
+            if decided_by_its_type(context, &posed, &type_, &this, &that)? {
+                continue;
+            }
+
             // Where the problem's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand — a stuck elimination's scrutinee, a projection's head. What a type directs between two neutrals is then asked of the type a lookup gives both sides, as the kernel asks it.
             if matches!(&*type_, Subterm::Sort(..))
                 && by_their_own_type(context, &posed, &posed_pairs, &this, &that)?
@@ -3018,15 +3003,12 @@ impl Convert {
                 relation,
             };
 
-            // Eta by the goal's type, ahead of every structural rule, as the kernel fires it: at a function type both sides are applied to fresh binders and at a record type with a field both are projected, whatever their shapes. A lambda or a tuple literal is left to its own arm below, which is the same expansion with the literal opened in place. Left to the dispatch's last arm, two sides of one stuck shape would be compared structurally first — two stuck eliminations arm against arm, at `Type` — and held apart where each converts with the literal and the kernel, which projects them, accepts.
+            // Eta by the goal's type, ahead of every structural rule, as the kernel fires it: at a function type both sides are applied to fresh binders and at a record type both are projected, whatever their shapes. A lambda or a tuple literal is left to its own arm below, which is the same expansion with the literal opened in place. Left to the dispatch's last arm, two sides of one stuck shape would be compared structurally first — two stuck eliminations arm against arm, at `Type` — and held apart where each converts with the literal and the kernel, which projects them, accepts.
             let literal = |term: &Term| matches!(&**term, Subterm::Func(_) | Subterm::Tuple(_));
-            // The record type with no field has no eta, so a pair at it goes on to the dispatch.
-            let expands = match &*type_ {
-                Subterm::FuncType(_) => true,
-                Subterm::TupleType(TupleType { telescope, .. }) => !telescope.is_empty(),
-                _ => false,
-            };
-            if expands && !literal(&this) && !literal(&that) {
+            if matches!(&*type_, Subterm::FuncType(_) | Subterm::TupleType(_))
+                && !literal(&this)
+                && !literal(&that)
+            {
                 let expanded = self.eta_expand_neutral(context, this, that, type_)?;
                 assert!(
                     expanded,
@@ -3478,36 +3460,26 @@ fn neutral(context: &Context, term: &Term) -> bool {
     !term.shows_its_type(&context.syntax())
 }
 
-/// Whether a struct literal holds a field that is data: `declared` is its type's fields, each read at the literal's own fields before it. A field whose type still waits on a metavariable is counted as data, so a literal is refused its eta only where every field is known to be a proof.
-fn holds_data<B: Bound>(
+/// Whether a goal at `type_`, in weak-head normal form, is decided by the type: the empty Σ, where eta leaves nothing to compare, and a nominal struct that has one inhabitant by its shape, between two sides neither of which is its literal. A struct has no eta by its type — a literal opens one, against a neutral and field by field against another — so two neutrals have none to open, and what eta would decide between them is read off the type. A function and a record type with fields are left to eta, which decides the same.
+fn decided_by_its_type(
     context: &mut Context,
     binders: &Binders,
-    declared: Telescope<B>,
-    fields: &[Term],
+    type_: &Term,
+    this: &Term,
+    that: &Term,
 ) -> Result<bool, ReduceError> {
-    let mut cursor = declared.cursor();
-    for field in fields {
-        let Some((_, type_)) = cursor.entry() else {
-            return Ok(false);
-        };
-        cursor.advance(field.clone());
+    let literal = |term: &Term| matches!(&**term, Subterm::Struct(_));
 
-        let type_ = match type_.has_metavar() {
-            true => zonk_solved_term_metas(context, &type_),
-            false => type_,
-        };
-        if type_.has_metavar()
-            || !Sort::of_under(context, binders, &mut Opened::default(), &type_)?
-                .is_prop_to(context, "holds_data")
-        {
-            return Ok(true);
+    match &**type_ {
+        Subterm::TupleType(TupleType { telescope, .. }) => Ok(telescope.is_empty()),
+        Subterm::StructType(_) if !literal(this) && !literal(that) => {
+            one_inhabitant(context, binders, type_)
         }
+        _ => Ok(false),
     }
-
-    Ok(false)
 }
 
-/// What a type directs between two terms, asked of the type a lookup reads where the problem carries none: two terms a lookup types at one proposition are equal. The two looked-up types are compared, so it is the typed rule with its type looked up; `curios-cert`'s rule of the same name says why neither side is expanded — eta between two neutrals decides nothing irrelevance does not, and the goal it would pose at a looked-up type poses its two heads again, which the same lookup types.
+/// What a type directs between two terms, asked of the type a lookup reads where the problem carries none: two terms a lookup types at one type that has one inhabitant are equal. The two looked-up types are compared, so it is the typed rule with its type looked up; `curios-cert`'s rule of the same name says why neither side is expanded — eta between two neutrals decides nothing the type's shape does not, and the goal it would pose at a looked-up type poses its two heads again, which the same lookup types.
 ///
 /// Each side and each looked-up type is read through the solutions already committed, so the verdict does not follow whether an implicit was written or solved. Nothing here solves: one that still mentions an unsolved metavariable is left to the rules that do. A side is typed by [`looked_up`], under the binders the problem is posed under.
 fn by_their_own_type(
@@ -3530,10 +3502,7 @@ fn by_their_own_type(
 
     // The type first, and the sides only where it decides: nearly every pair here is two types at a sort, which this leaves at the cost of two lookups.
     let this_type = through(context, &this_type);
-    if this_type.has_metavar()
-        || !Sort::of_under(context, binders, &mut Opened::default(), &this_type)?
-            .is_prop_to(context, "by_their_own_type")
-    {
+    if this_type.has_metavar() || !one_inhabitant(context, binders, &this_type)? {
         return Ok(false);
     }
     let that_type = through(context, &that_type);
