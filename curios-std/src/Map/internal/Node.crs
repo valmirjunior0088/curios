@@ -1,5 +1,5 @@
 use /std/{Bytes, Nat, Bool, Option, List, Eq, Hash, Ord, Ordering};
-use /std/Bool/{True, Holds};
+use /std/Bool/{True, False, Holds};
 use /std/List/{Member, Pairwise};
 use /std/Map/{Key};
 use /std/Map/bits/{bit, crit, Apart, Parting, parting, turned, carried, reheaded, other_clear,
@@ -236,6 +236,292 @@ pub let lookup(@K: Type, @V: Type, t: Node(K, V), k: Bytes) -> {K, V} =
     | fork(c, z, o) => match bit(k, c) | false => lookup(z, k) | true => lookup(o, k) end
     end;
 
+--- The value of the key whose encoding is `k` under `t`: the leaf a walk by `k` ends at holds it where that leaf's key encodes to `k`.
+pub let find(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Option(V) =
+    let (k0, v0) = lookup(t, k);
+    match Hash/hash(k0) == k | true => Option/some(v0) | false => Option/none() end;
+
+--- The leaf a walk ends at holds one of the node's keys.
+pub let looked_up(
+    @K: Type,
+    @V: Type,
+    t: Node(K, V),
+    k: Bytes,
+) -> Member()(lookup(t, k).0, keys(t)) =
+    match t
+    | leaf(_, _) => Member/here()
+    | fork(c, z, o) =>
+        match bit(k, c)
+        | false => Member/left(keys(o), looked_up(z, k))
+        | true => Member/right(keys(z), looked_up(o, k))
+        end
+    end;
+
+--- A key under a sound node is the one the walk by its own encoding ends at: at every fork its encoding has the bit the side holding it has.
+pub let reached(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    sound: Sound(t),
+    x: K,
+    i: Member()(x, keys(t)),
+) -> Eq()(lookup(t, Hash/hash(x)).0, x) =
+    match t
+    | leaf(_, _) => Member/uncons(i, (e) => Eq/sym(e), (rest) => match Member/absent(rest) end)
+    | fork(c, z, o) =>
+        Member/split(
+            keys(z),
+            i,
+            (in_zero) =>
+                let agree = within(z, sound.zero, c, sound.under_zero, x, in_zero, c, True/qed());
+                match bit(Hash/hash(x), c)
+                | false => reached(z, sound.zero, x, in_zero)
+                | true =>
+                    match Eq/subst((b: Bool) => Holds(Bool/not(b)), Eq/sym(agree), sound.clear) end
+                end,
+            (in_one) =>
+                let agree = within(o, sound.one, c, sound.under_one, x, in_one, c, True/qed());
+                let set = other_set(first(z), first(o), c, sound.apart, sound.clear);
+                match bit(Hash/hash(x), c)
+                | false => match Eq/subst((b: Bool) => Holds(b), Eq/sym(agree), set) end
+                | true => reached(o, sound.one, x, in_one)
+                end)
+    end;
+
+--- A key under a sound node is found, at the value its leaf holds.
+pub let found(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    sound: Sound(t),
+    x: K,
+    i: Member()(x, keys(t)),
+) -> Eq()(find(t, Hash/hash(x)), Option/some(lookup(t, Hash/hash(x)).1)) =
+    Eq/subst(
+        (y: K) =>
+            Eq()(
+                match Hash/hash(y) == Hash/hash(x)
+                | true => Option/some(lookup(t, Hash/hash(x)).1)
+                | false => Option/none()
+                end,
+                Option/some(lookup(t, Hash/hash(x)).1)),
+        Eq/sym(reached(t, sound, x, i)),
+        Eq/refl());
+
+--- A walk that finds a value ends at a leaf whose key encodes to what it was walked by.
+pub let hit(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    k: Bytes,
+    v: V,
+    h: Eq()(find(t, k), Option/some(v)),
+) -> Eq()(Hash/hash(lookup(t, k).0), k) =
+    match Hash/hash(lookup(t, k).0) == k
+    | true => Bytes/eq_of_eql(Hash/hash(lookup(t, k).0), k, True/qed())
+    | false => match Eq/subst((m: Option(V)) => Holds(Option/is_none(m)), h, True/qed()) end
+    end;
+
+--- A walk by an encoding whose bit at `c` is not the one every key of a sound node has there, `c` a bit the node forks past, finds nothing.
+pub let missing(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    sound: Sound(t),
+    c: Nat,
+    past: Holds(deeper(t, c)),
+    k: Bytes,
+    apart: Holds(bit(k, c) != bit(first(t), c)),
+) -> Eq()(find(t, k), Option/none()) =
+    let agree = within(t, sound, c, past, lookup(t, k).0, looked_up(t, k), c, True/qed());
+    match Hash/hash(lookup(t, k).0) == k
+    | false => Eq/refl()
+    | true =>
+        let same = Bytes/eq_of_eql(Hash/hash(lookup(t, k).0), k, True/qed());
+        let moved: Holds(bit(Hash/hash(lookup(t, k).0), c) != bit(first(t), c)) =
+            Eq/subst((e: Bytes) => Holds(bit(e, c) != bit(first(t), c)), Eq/sym(same), apart);
+        match Eq/subst((b: Bool) => Holds(b != bit(first(t), c)), agree, moved) end
+    end;
+
+--- That `n` answers `x` at the encoding `k`, and at every other what `t` answers: what a node that may stand where `t` did says once the key encoding to `k` is set to `x`.
+pub let Answers(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    n: Node(K, V),
+    t: Node(K, V),
+    k: Bytes,
+    x: Option(V),
+) -> Prop =
+    (j: Bytes) -> Eq()(find(n, j), match k == j | true => x | false => find(t, j) end);
+
+--- That nothing is left of `t` once the key encoding to `k` goes: `t` answers nothing at any other encoding.
+pub let Gone(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Prop =
+    (j: Bytes) -> Eq()(
+        match k == j | true => Option/none() | false => find(t, j) end,
+        Option/none());
+
+-- Two bits of which one is set and the other clear differ.
+let set_clear(a: Bool, b: Bool, set: Holds(a), clear: Holds(Bool/not(b))) -> Holds(a != b) =
+    match a
+    | false => match set end
+    | true =>
+        match b
+        | true => match clear end
+        | false => True/qed()
+        end
+    end;
+
+-- An encoding the key encoding to `k` is equal to has the key's bits.
+let same_bit(k: Bytes, j: Bytes, c: Nat, same: Holds(k == j)) -> Eq()(bit(k, c), bit(j, c)) =
+    Eq/cong((e: Bytes) => bit(e, c), Bytes/eq_of_eql(k, j, same));
+
+--- A fork whose zero side gave way to a node that answers `x` at `k` in its place answers `x` at `k` in the fork's place, `k`'s bit at the fork being clear: an encoding with that bit set is the one side's, and is not `k`.
+pub let zero_answers(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    c: Nat,
+    z: Node(K, V),
+    o: Node(K, V),
+    n: Node(K, V),
+    k: Bytes,
+    x: Option(V),
+    clear: Holds(Bool/not(bit(k, c))),
+    answers: Answers(n, z, k, x),
+) -> Answers(Node/fork(c, n, o), Node/fork(c, z, o), k, x) =
+    (j) =>
+        match bit(j, c)
+        | false => answers(j)
+        | true =>
+            match k == j
+            | false => Eq/refl()
+            | true =>
+                match Eq/subst(
+                    (b: Bool) => Holds(Bool/not(b)),
+                    same_bit(k, j, c, True/qed()),
+                    clear)
+                end
+            end
+        end;
+
+--- A fork whose one side gave way to a node that answers `x` at `k` in its place answers `x` at `k` in the fork's place, `k`'s bit at the fork being set.
+pub let one_answers(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    c: Nat,
+    z: Node(K, V),
+    o: Node(K, V),
+    n: Node(K, V),
+    k: Bytes,
+    x: Option(V),
+    set: Holds(bit(k, c)),
+    answers: Answers(n, o, k, x),
+) -> Answers(Node/fork(c, z, n), Node/fork(c, z, o), k, x) =
+    (j) =>
+        match bit(j, c)
+        | true => answers(j)
+        | false =>
+            match k == j
+            | false => Eq/refl()
+            | true => match Eq/subst((b: Bool) => Holds(b), same_bit(k, j, c, True/qed()), set) end
+            end
+        end;
+
+--- A leaf whose key encodes to `k`, its value rewritten to `v`, answers `v` at `k` in its own place.
+pub let leaf_answers(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    k0: K,
+    v0: V,
+    v: V,
+    k: Bytes,
+    same: Eq()(Hash/hash(k0), k),
+) -> Answers(Node/leaf(k0, v), Node/leaf(k0, v0), k, Option/some(v)) =
+    (j) =>
+        Eq/subst(
+            (e: Bytes) =>
+                Eq()(
+                    match e == j | true => Option/some(v) | false => Option/none() end,
+                    match k == j
+                    | true => Option/some(v)
+                    | false => match e == j | true => Option/some(v0) | false => Option/none() end
+                    end),
+            Eq/sym(same),
+            match k == j | true => Eq/refl() | false => Eq/refl() end);
+
+--- A leaf of `key`, whose encoding is `k`, wedged in above a sound node it parts from at `c`, the node forking past `c`, answers `key`'s value at `k` in the node's place: an encoding on the leaf's side of `c` is not on the node's, and one on the node's is not `k`.
+pub let wedge_answers(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    c: Nat,
+    key: K,
+    k: Bytes,
+    v: V,
+    t: Node(K, V),
+    same: Eq()(Hash/hash(key), k),
+    sound: Sound(t),
+    apart: Apart(k, first(t), c),
+    past: Holds(deeper(t, c)),
+) -> Answers(wedge(c, bit(k, c), key, v, t), t, k, Option/some(v)) =
+    (j) =>
+        -- On the leaf's side, the node finds nothing, so what is left is the leaf's own answer, read at `k`.
+        let leafward =
+            (gone: Eq()(find(t, j), Option/none())) =>
+                Eq/subst(
+                    (m: Option(V)) =>
+                        Eq()(
+                            match Hash/hash(key) == j
+                            | true => Option/some(v)
+                            | false => Option/none()
+                            end,
+                            match k == j | true => Option/some(v) | false => m end),
+                    Eq/sym(gone),
+                    Eq/subst(
+                        (e: Bytes) =>
+                            Eq()(
+                                match Hash/hash(key) == j
+                                | true => Option/some(v)
+                                | false => Option/none()
+                                end,
+                                match e == j | true => Option/some(v) | false => Option/none() end),
+                        same,
+                        Eq/refl()));
+        match bit(k, c)
+        | false =>
+            match bit(j, c)
+            | false => leafward(missing(t, sound, c, past, j, apart.differs))
+            | true =>
+                match k == j
+                | false => Eq/refl()
+                | true =>
+                    match Eq/subst(
+                        (b: Bool) => Holds(Bool/not(b)),
+                        same_bit(k, j, c, True/qed()),
+                        True/qed())
+                    end
+                end
+            end
+        | true =>
+            match bit(j, c)
+            | true => leafward(missing(t, sound, c, past, j, apart.differs))
+            | false =>
+                match k == j
+                | false => Eq/refl()
+                | true =>
+                    match Eq/subst((b: Bool) => Holds(b), same_bit(k, j, c, True/qed()), True/qed())
+                    end
+                end
+            end
+        end;
+
 --- A leaf of `key` above `t` at the bit `c`, on the side `b`.
 pub let wedge(@K: Type, @V: Type, c: Nat, b: Bool, key: K, v: V, t: Node(K, V)) -> Node(K, V) =
     match b
@@ -365,10 +651,10 @@ pub let wedged(
         (apart) => wedged_at(c, bit(Hash/hash(key), c), key, v, t, sound, apart, past, Eq/refl()))(
         apart);
 
---- How an insertion under the node `t` of the key whose encoding is `k` ended: a node with the key's leaf added, or one with the value of a leaf it held replaced, either of which may stand where `t` did; or `t` as it was beside the bit the key first parts from its keys at, where its leaf is still to be wedged in above.
-pub induct Inserted(K: Type, use Key(K), V: Type, t: Node(K, V), k: Bytes): pub Type
-| added(n: Node(K, V), @stands: Stands(n, t))
-| replaced(n: Node(K, V), @stands: Stands(n, t))
+--- How an insertion under the node `t` of the key whose encoding is `k`, at `v`, ended: a node with the key's leaf added, or one with the value of a leaf it held replaced, either of which may stand where `t` did and answers `v` at `k` in its place; or `t` as it was beside the bit the key first parts from its keys at, where its leaf is still to be wedged in above.
+pub induct Inserted(K: Type, use Key(K), V: Type, t: Node(K, V), k: Bytes, v: V): pub Type
+| added(n: Node(K, V), @stands: Stands(n, t), @answers: Answers(n, t, k, Option/some(v)))
+| replaced(n: Node(K, V), @stands: Stands(n, t), @answers: Answers(n, t, k, Option/some(v)))
 | parted(
     n: Node(K, V),
     c: Nat,
@@ -390,20 +676,28 @@ pub let insert(
     v: V,
     @same: Eq()(Hash/hash(key), k),
     @sound: Sound(t),
-) -> Inserted(K, V, t, k) =
+) -> Inserted(K, V, t, k, v) =
     match t
-    | leaf(k0, _) =>
+    | leaf(k0, v0) =>
         let e0 = Hash/hash(k0);
         let kept: Stands(Node/leaf(k0, v), t) =
             Stands {
                 sound = True/qed(),
                 kept = (_, _) => Held { under = True/qed(), agree = (_, _) => Eq/refl() } };
         match e0 == k
-        | true => Inserted/replaced(Node/leaf(k0, v), @kept)
+        | true =>
+            Inserted/replaced(
+                Node/leaf(k0, v),
+                @kept,
+                @leaf_answers(k0, v0, v, k, Bytes/eq_of_eql(e0, k, True/qed())))
         | false =>
             let found: Parting(k, e0, crit(k, e0)) = parting(k, e0);
             match crit(k, e0)
-            | same() => Inserted/replaced(Node/leaf(k0, v), @kept)
+            | same() =>
+                Inserted/replaced(
+                    Node/leaf(k0, v),
+                    @kept,
+                    @leaf_answers(k0, v0, v, k, Eq/sym(found)))
             | at(c) => Inserted/parted(t, c, @Eq/refl(), @found, @True/qed())
             end
         end
@@ -411,7 +705,7 @@ pub let insert(
         match bit(k, tc)
         | false =>
             match insert(z, key, k, v, @same, @sound.zero)
-            | added(z2, @stands) =>
+            | added(z2, @stands, @answers) =>
                 Inserted/added(
                     Node/fork(tc, z2, o),
                     @zero_side(
@@ -421,8 +715,9 @@ pub let insert(
                         z2,
                         sound,
                         stands.sound,
-                        stands.kept(tc, sound.under_zero)))
-            | replaced(z2, @stands) =>
+                        stands.kept(tc, sound.under_zero)),
+                    @zero_answers(tc, z, o, z2, k, Option/some(v), True/qed(), answers))
+            | replaced(z2, @stands, @answers) =>
                 Inserted/replaced(
                     Node/fork(tc, z2, o),
                     @zero_side(
@@ -432,7 +727,8 @@ pub let insert(
                         z2,
                         sound,
                         stands.sound,
-                        stands.kept(tc, sound.under_zero)))
+                        stands.kept(tc, sound.under_zero)),
+                    @zero_answers(tc, z, o, z2, k, Option/some(v), True/qed(), answers))
             | parted(z2, c, @back, @apart, @past) =>
                 match tc < c
                 | true =>
@@ -461,7 +757,24 @@ pub let insert(
                                     same,
                                     apart,
                                     tc,
-                                    True/qed()))))
+                                    True/qed()))),
+                        @Eq/subst(
+                            (m: Node(K, V)) =>
+                                Answers(
+                                    Node/fork(tc, wedge(c, bit(k, c), key, v, m), o),
+                                    Node/fork(tc, z, o),
+                                    k,
+                                    Option/some(v)),
+                            Eq/sym(back),
+                            zero_answers(
+                                tc,
+                                z,
+                                o,
+                                wedge(c, bit(k, c), key, v, z),
+                                k,
+                                Option/some(v),
+                                True/qed(),
+                                wedge_answers(c, key, k, v, z, same, sound.zero, apart, past))))
                 | false =>
                     let here: Apart(k, first(t), c) = apart;
                     let under: Holds(c < tc) =
@@ -471,14 +784,16 @@ pub let insert(
             end
         | true =>
             match insert(o, key, k, v, @same, @sound.one)
-            | added(o2, @stands) =>
+            | added(o2, @stands, @answers) =>
                 Inserted/added(
                     Node/fork(tc, z, o2),
-                    @one_side(tc, z, o, o2, sound, stands.sound, stands.kept(tc, sound.under_one)))
-            | replaced(o2, @stands) =>
+                    @one_side(tc, z, o, o2, sound, stands.sound, stands.kept(tc, sound.under_one)),
+                    @one_answers(tc, z, o, o2, k, Option/some(v), True/qed(), answers))
+            | replaced(o2, @stands, @answers) =>
                 Inserted/replaced(
                     Node/fork(tc, z, o2),
-                    @one_side(tc, z, o, o2, sound, stands.sound, stands.kept(tc, sound.under_one)))
+                    @one_side(tc, z, o, o2, sound, stands.sound, stands.kept(tc, sound.under_one)),
+                    @one_answers(tc, z, o, o2, k, Option/some(v), True/qed(), answers))
             | parted(o2, c, @back, @apart, @past) =>
                 match tc < c
                 | true =>
@@ -507,7 +822,24 @@ pub let insert(
                                     same,
                                     apart,
                                     tc,
-                                    True/qed()))))
+                                    True/qed()))),
+                        @Eq/subst(
+                            (m: Node(K, V)) =>
+                                Answers(
+                                    Node/fork(tc, z, wedge(c, bit(k, c), key, v, m)),
+                                    Node/fork(tc, z, o),
+                                    k,
+                                    Option/some(v)),
+                            Eq/sym(back),
+                            one_answers(
+                                tc,
+                                z,
+                                o,
+                                wedge(c, bit(k, c), key, v, o),
+                                k,
+                                Option/some(v),
+                                True/qed(),
+                                wedge_answers(c, key, k, v, o, same, sound.one, apart, past))))
                 | false =>
                     let under: Holds(c < tc) =
                         below_set(
@@ -571,11 +903,149 @@ let zero_left(
                     under = deeper_down(z, c, d, sound.under_zero, True/proved()),
                     agree = (_, _) => Eq/refl() } };
 
---- How a removal under the node `t` ended: the key was not there, the node was its leaf and nothing is left of it, or what is left of the node, which may stand where `t` did.
-pub induct Removed(K: Type, use Key(K), V: Type, t: Node(K, V)): pub Type
-| absent()
-| gone()
-| kept(n: Node(K, V), @stands: Stands(n, t))
+-- Two bits of which one is clear and the other set differ.
+let clear_set(a: Bool, b: Bool, clear: Holds(Bool/not(a)), set: Holds(b)) -> Holds(a != b) =
+    match a
+    | true => match clear end
+    | false =>
+        match b
+        | false => match set end
+        | true => True/qed()
+        end
+    end;
+
+-- A leaf whose key encodes to `k` leaves nothing once `k` goes.
+let leaf_gone(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    k0: K,
+    v0: V,
+    k: Bytes,
+    same: Eq()(Hash/hash(k0), k),
+) -> Gone(Node/leaf(k0, v0), k) =
+    (j) =>
+        Eq/subst(
+            (e: Bytes) =>
+                Eq()(
+                    match k == j
+                    | true => Option/none()
+                    | false => match e == j | true => Option/some(v0) | false => Option/none() end
+                    end,
+                    Option/none()),
+            Eq/sym(same),
+            match k == j | true => Eq/refl() | false => Eq/refl() end);
+
+-- A leaf whose key does not encode to `k` answers nothing at `k`.
+let leaf_absent(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    k0: K,
+    v0: V,
+    k: Bytes,
+    differs: Eq()(Hash/hash(k0) == k, false),
+) -> Answers(Node/leaf(k0, v0), Node/leaf(k0, v0), k, Option/none()) =
+    (j) =>
+        match k == j
+        | false => Eq/refl()
+        | true =>
+            Eq/subst(
+                (e: Bytes) =>
+                    Eq()(
+                        match Hash/hash(k0) == e
+                        | true => Option/some(v0)
+                        | false => Option/none()
+                        end,
+                        Option/none()),
+                Bytes/eq_of_eql(k, j, True/qed()),
+                Eq/subst(
+                    (b: Bool) =>
+                        Eq()(
+                            match b | true => Option/some(v0) | false => Option/none() end,
+                            Option/none()),
+                    Eq/sym(differs),
+                    Eq/refl()))
+        end;
+
+--- The one side of a fork answers nothing at `k` in the fork's place once its zero side, which `k`'s clear bit at the fork walks into, is gone: an encoding with that bit clear finds nothing on the one side, and one with it set is not `k`.
+pub let one_left_answers(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    c: Nat,
+    z: Node(K, V),
+    o: Node(K, V),
+    k: Bytes,
+    sound: Sound(Node/fork(c, z, o)),
+    clear: Holds(Bool/not(bit(k, c))),
+    empty: Gone(z, k),
+) -> Answers(o, Node/fork(c, z, o), k, Option/none()) =
+    (j) =>
+        match bit(j, c)
+        | false =>
+            Eq/trans(
+                missing(
+                    o,
+                    sound.one,
+                    c,
+                    sound.under_one,
+                    j,
+                    clear_set(
+                        bit(j, c),
+                        bit(first(o), c),
+                        True/qed(),
+                        other_set(first(z), first(o), c, sound.apart, sound.clear))),
+                Eq/sym(empty(j)))
+        | true =>
+            match k == j
+            | false => Eq/refl()
+            | true =>
+                match Eq/subst(
+                    (b: Bool) => Holds(Bool/not(b)),
+                    same_bit(k, j, c, True/qed()),
+                    clear)
+                end
+            end
+        end;
+
+--- The zero side of a fork answers nothing at `k` in the fork's place once its one side, which `k`'s set bit at the fork walks into, is gone.
+pub let zero_left_answers(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    c: Nat,
+    z: Node(K, V),
+    o: Node(K, V),
+    k: Bytes,
+    sound: Sound(Node/fork(c, z, o)),
+    set: Holds(bit(k, c)),
+    empty: Gone(o, k),
+) -> Answers(z, Node/fork(c, z, o), k, Option/none()) =
+    (j) =>
+        match bit(j, c)
+        | true =>
+            Eq/trans(
+                missing(
+                    z,
+                    sound.zero,
+                    c,
+                    sound.under_zero,
+                    j,
+                    set_clear(bit(j, c), bit(first(z), c), True/qed(), sound.clear)),
+                Eq/sym(empty(j)))
+        | false =>
+            match k == j
+            | false => Eq/refl()
+            | true => match Eq/subst((b: Bool) => Holds(b), same_bit(k, j, c, True/qed()), set) end
+            end
+        end;
+
+--- How a removal under the node `t` of the key whose encoding is `k` ended: the key was not there, and `t` answers nothing at `k`; the node was its leaf, and nothing is left of it; or what is left of the node, which may stand where `t` did and answers nothing at `k` in its place.
+pub induct Removed(K: Type, use Key(K), V: Type, t: Node(K, V), k: Bytes): pub Type
+| absent(answers: Answers(t, t, k, Option/none()))
+| gone(empty: Gone(t, k))
+| kept(n: Node(K, V), @stands: Stands(n, t), @answers: Answers(n, t, k, Option/none()))
 end
 
 --- The sound node `t` without the key whose encoding is `k`.
@@ -586,32 +1056,51 @@ pub let remove(
     t: Node(K, V),
     k: Bytes,
     @sound: Sound(t),
-) -> Removed(K, V, t) =
+) -> Removed(K, V, t, k) =
     match t
-    | leaf(k0, _) =>
-        match Hash/hash(k0) == k | true => Removed/gone() | false => Removed/absent() end
+    | leaf(k0, v0) =>
+        match Hash/hash(k0) == k
+        | true => Removed/gone(leaf_gone(k0, v0, k, Bytes/eq_of_eql(Hash/hash(k0), k, True/qed())))
+        | false => Removed/absent(leaf_absent(k0, v0, k, Eq/refl()))
+        end
     | fork(c, z, o) =>
         match bit(k, c)
         | false =>
             match remove(z, k, @sound.zero)
-            | absent() => Removed/absent()
-            | gone() => Removed/kept(o, @one_left(c, z, o, sound))
-            | kept(z2, @stands) =>
+            | absent(answers) =>
+                Removed/absent(zero_answers(c, z, o, z, k, Option/none(), True/qed(), answers))
+            | gone(empty) =>
+                Removed/kept(
+                    o,
+                    @one_left(c, z, o, sound),
+                    @one_left_answers(c, z, o, k, sound, True/qed(), empty))
+            | kept(z2, @stands, @answers) =>
                 Removed/kept(
                     Node/fork(c, z2, o),
-                    @zero_side(c, z, o, z2, sound, stands.sound, stands.kept(c, sound.under_zero)))
+                    @zero_side(c, z, o, z2, sound, stands.sound, stands.kept(c, sound.under_zero)),
+                    @zero_answers(c, z, o, z2, k, Option/none(), True/qed(), answers))
             end
         | true =>
             match remove(o, k, @sound.one)
-            | absent() => Removed/absent()
-            | gone() => Removed/kept(z, @zero_left(c, z, o, sound))
-            | kept(o2, @stands) =>
+            | absent(answers) =>
+                Removed/absent(one_answers(c, z, o, o, k, Option/none(), True/qed(), answers))
+            | gone(empty) =>
+                Removed/kept(
+                    z,
+                    @zero_left(c, z, o, sound),
+                    @zero_left_answers(c, z, o, k, sound, True/qed(), empty))
+            | kept(o2, @stands, @answers) =>
                 Removed/kept(
                     Node/fork(c, z, o2),
-                    @one_side(c, z, o, o2, sound, stands.sound, stands.kept(c, sound.under_one)))
+                    @one_side(c, z, o, o2, sound, stands.sound, stands.kept(c, sound.under_one)),
+                    @one_answers(c, z, o, o2, k, Option/none(), True/qed(), answers))
             end
         end
     end;
+
+--- Over the entries in the order of their keys, with `f(key, value, acc)`: the zero side's before the one side's.
+pub let fold(@K: Type, @V: Type, @A: Type, t: Node(K, V), acc: A, f: (K, V, A) -> A) -> A =
+    match t | leaf(k, v) => f(k, v, acc) | fork(_, z, o) => fold(o, fold(z, acc, f), f) end;
 
 --- `f` on every value, the keys and the forks as they were.
 pub let map(@K: Type, @V: Type, @W: Type, t: Node(K, V), f: (V) -> W) -> Node(K, W) =
@@ -908,3 +1397,477 @@ pub let greatest_above(
                     True/qed()),
             (in_one) => greatest_above(o, sound.one, x, in_one))
     end;
+
+--- A node with its values rewritten finds what it found, rewritten.
+pub let mapped_find(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    @W: Type,
+    t: Node(K, V),
+    f: (V) -> W,
+    k: Bytes,
+) -> Eq()(find(map(t, f), k), Option/map(find(t, k), f)) =
+    match t
+    | leaf(k0, v0) =>
+        -- Stated over the comparison's answer: the walk reaches the comparison through a projection of the leaf, which an arm on the comparison as written would not reach.
+        let cases(
+            b: Bool,
+        ) -> Eq()(
+            match b | true => Option/some(f(v0)) | false => Option/none() end,
+            Option/map(match b | true => Option/some(v0) | false => Option/none() end, f)) =
+            match b | true => Eq/refl() | false => Eq/refl() end;
+        cases(Hash/hash(k0) == k)
+    | fork(c, z, o) =>
+        match bit(k, c) | false => mapped_find(z, f, k) | true => mapped_find(o, f, k) end
+    end;
+
+-- A key under the zero side of a sound fork has the fork's bit clear.
+let zero_key_clear(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    c: Nat,
+    z: Node(K, V),
+    o: Node(K, V),
+    sound: Sound(Node/fork(c, z, o)),
+    y: K,
+    i: Member()(y, keys(z)),
+) -> Holds(Bool/not(bit(Hash/hash(y), c))) =
+    Eq/subst(
+        (b: Bool) => Holds(Bool/not(b)),
+        Eq/sym(within(z, sound.zero, c, sound.under_zero, y, i, c, True/qed())),
+        sound.clear);
+
+-- A key under the one side of a sound fork has the fork's bit set.
+let one_key_set(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    c: Nat,
+    z: Node(K, V),
+    o: Node(K, V),
+    sound: Sound(Node/fork(c, z, o)),
+    y: K,
+    i: Member()(y, keys(o)),
+) -> Holds(bit(Hash/hash(y), c)) =
+    Eq/subst(
+        (b: Bool) => Holds(b),
+        Eq/sym(within(o, sound.one, c, sound.under_one, y, i, c, True/qed())),
+        other_set(first(z), first(o), c, sound.apart, sound.clear));
+
+-- A bit held both set and clear.
+let clash(b: Bool, set: Holds(b), clear: Holds(Bool/not(b))) -> False =
+    match b | true => clear | false => set end;
+
+-- No leaf finds alike with a sound fork at every key's encoding: the fork's least key on each side would both be the leaf's, and they differ at the fork's bit.
+let leaf_not_fork(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    k1: K,
+    v1: V,
+    c: Nat,
+    z: Node(K, V),
+    o: Node(K, V),
+    sound: Sound(Node/fork(c, z, o)),
+    same: (x: K) -> Eq()(
+        find(Node/leaf(k1, v1), Hash/hash(x)),
+        find(Node/fork(c, z, o), Hash/hash(x))),
+) -> False =
+    let t = Node/fork(c, z, o);
+    let (a, b) = (least(z).0, least(o).0);
+    let at_a: Eq()(Hash/hash(k1), Hash/hash(a)) =
+        hit(
+            Node/leaf(k1, v1),
+            Hash/hash(a),
+            lookup(t, Hash/hash(a)).1,
+            Eq/trans(same(a), found(t, sound, a, Member/left(keys(o), least_among(z)))));
+    let at_b: Eq()(Hash/hash(k1), Hash/hash(b)) =
+        hit(
+            Node/leaf(k1, v1),
+            Hash/hash(b),
+            lookup(t, Hash/hash(b)).1,
+            Eq/trans(same(b), found(t, sound, b, Member/right(keys(z), least_among(o)))));
+    clash(
+        bit(Hash/hash(a), c),
+        Eq/subst(
+            (e: Bytes) => Holds(bit(e, c)),
+            Eq/trans(Eq/sym(at_b), at_a),
+            one_key_set(c, z, o, sound, b, least_among(o))),
+        zero_key_clear(c, z, o, sound, a, least_among(z)));
+
+-- No sound node forking past a sound fork's bit finds alike with the fork at every key's encoding: the fork's least key on each side is found in the other node at a key that agrees with that node's first key through the bit, so the two agree there, and they differ at it.
+let forks_past(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    c: Nat,
+    z: Node(K, V),
+    o: Node(K, V),
+    sound: Sound(Node/fork(c, z, o)),
+    u: Node(K, V),
+    sound_u: Sound(u),
+    past: Holds(deeper(u, c)),
+    same: (x: K) -> Eq()(find(Node/fork(c, z, o), Hash/hash(x)), find(u, Hash/hash(x))),
+) -> False =
+    let t = Node/fork(c, z, o);
+    let (a, b) = (least(z).0, least(o).0);
+    -- Where the walk of `u` by a key of `t` ends, a key that encodes as it does and has `u`'s first key's bit at `c`.
+    let landed =
+        (y: K, i: Member()(y, keys(t))) =>
+            let ends: Eq()(Hash/hash(lookup(u, Hash/hash(y)).0), Hash/hash(y)) =
+                hit(
+                    u,
+                    Hash/hash(y),
+                    lookup(t, Hash/hash(y)).1,
+                    Eq/trans(Eq/sym(same(y)), found(t, sound, y, i)));
+            Eq/trans(
+                Eq/cong((e: Bytes) => bit(e, c), Eq/sym(ends)),
+                within(
+                    u,
+                    sound_u,
+                    c,
+                    past,
+                    lookup(u, Hash/hash(y)).0,
+                    looked_up(u, Hash/hash(y)),
+                    c,
+                    True/qed()));
+    let agree: Eq()(bit(Hash/hash(a), c), bit(Hash/hash(b), c)) =
+        Eq/trans(
+            landed(a, Member/left(keys(o), least_among(z))),
+            Eq/sym(landed(b, Member/right(keys(z), least_among(o)))));
+    clash(
+        bit(Hash/hash(a), c),
+        Eq/subst(
+            (x: Bool) => Holds(x),
+            Eq/sym(agree),
+            one_key_set(c, z, o, sound, b, least_among(o))),
+        zero_key_clear(c, z, o, sound, a, least_among(z)));
+
+--- Two sound nodes that find alike at every key's encoding are one node.
+---
+--- The bit a sound fork tests is the first its keys differ at, which the keys alone decide, so two such forks test one bit, and an encoding's side of it decides which side finds it: each side finds nothing at an encoding with the other side's bit. A leaf is no fork, since a fork holds keys apart at its bit.
+pub let canonical(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    u: Node(K, V),
+    sound_t: Sound(t),
+    sound_u: Sound(u),
+    same: (x: K) -> Eq()(find(t, Hash/hash(x)), find(u, Hash/hash(x))),
+) -> Eq()(t, u) =
+    match t
+    | leaf(k1, v1) =>
+        match u
+        | leaf(k2, v2) =>
+            let at = same(k1);
+            match Hash/hash(lookup(Node/leaf(k2, v2), Hash/hash(k1)).0) == Hash/hash(k1)
+            | false =>
+                match Eq/subst((m: Option(V)) => Holds(Option/is_some(m)), at, True/qed()) end
+            | true =>
+                let keys_same: Eq()(k2, k1) =
+                    Key/injective(
+                        k2,
+                        k1,
+                        Bytes/eq_of_eql(
+                            Hash/hash(lookup(Node/leaf(k2, v2), Hash/hash(k1)).0),
+                            Hash/hash(k1),
+                            True/qed()));
+                Eq/trans(
+                    Eq/cong((y: K) => Node/leaf(y, v1), Eq/sym(keys_same)),
+                    Eq/cong((w: V) => Node/leaf(k2, w), Option/some_injective(at)))
+            end
+        | fork(c, z, o) => match leaf_not_fork(k1, v1, c, z, o, sound_u, same) end
+        end
+    | fork(c1, z1, o1) =>
+        match u
+        | leaf(k2, v2) =>
+            match leaf_not_fork(k2, v2, c1, z1, o1, sound_t, (x) => Eq/sym(same(x))) end
+        | fork(c2, z2, o2) =>
+            match c1 < c2
+            | true =>
+                match forks_past(
+                    c1,
+                    z1,
+                    o1,
+                    sound_t,
+                    Node/fork(c2, z2, o2),
+                    sound_u,
+                    True/qed(),
+                    same)
+                end
+            | false =>
+                match c2 < c1
+                | true =>
+                    match forks_past(
+                        c2,
+                        z2,
+                        o2,
+                        sound_u,
+                        Node/fork(c1, z1, o1),
+                        sound_t,
+                        True/qed(),
+                        (x) => Eq/sym(same(x)))
+                    end
+                | false =>
+                    Eq/subst(
+                        (d: Nat) =>
+                            (
+                                sound_d: Sound(Node/fork(d, z2, o2)),
+                                same_d: (x: K) -> Eq()(
+                                    find(Node/fork(c1, z1, o1), Hash/hash(x)),
+                                    find(Node/fork(d, z2, o2), Hash/hash(x)))) -> Eq()(
+                                Node/fork(c1, z1, o1),
+                                Node/fork(d, z2, o2)),
+                        Nat/le/antisym(c1, c2, True/proved(), True/proved()),
+                        (sound_d, same_d) =>
+                            let zeros =
+                                canonical(z1, z2, sound_t.zero, sound_d.zero, (x) =>
+                                    match bit(Hash/hash(x), c1)
+                                    | false => same_d(x)
+                                    | true =>
+                                        Eq/trans(
+                                            missing(
+                                                z1,
+                                                sound_t.zero,
+                                                c1,
+                                                sound_t.under_zero,
+                                                Hash/hash(x),
+                                                set_clear(
+                                                    bit(Hash/hash(x), c1),
+                                                    bit(first(z1), c1),
+                                                    True/qed(),
+                                                    sound_t.clear)),
+                                            Eq/sym(
+                                                missing(
+                                                    z2,
+                                                    sound_d.zero,
+                                                    c1,
+                                                    sound_d.under_zero,
+                                                    Hash/hash(x),
+                                                    set_clear(
+                                                        bit(Hash/hash(x), c1),
+                                                        bit(first(z2), c1),
+                                                        True/qed(),
+                                                        sound_d.clear))))
+                                    end);
+                            let ones =
+                                canonical(o1, o2, sound_t.one, sound_d.one, (x) =>
+                                    match bit(Hash/hash(x), c1)
+                                    | true => same_d(x)
+                                    | false =>
+                                        Eq/trans(
+                                            missing(
+                                                o1,
+                                                sound_t.one,
+                                                c1,
+                                                sound_t.under_one,
+                                                Hash/hash(x),
+                                                clear_set(
+                                                    bit(Hash/hash(x), c1),
+                                                    bit(first(o1), c1),
+                                                    True/qed(),
+                                                    other_set(
+                                                        first(z1),
+                                                        first(o1),
+                                                        c1,
+                                                        sound_t.apart,
+                                                        sound_t.clear))),
+                                            Eq/sym(
+                                                missing(
+                                                    o2,
+                                                    sound_d.one,
+                                                    c1,
+                                                    sound_d.under_one,
+                                                    Hash/hash(x),
+                                                    clear_set(
+                                                        bit(Hash/hash(x), c1),
+                                                        bit(first(o2), c1),
+                                                        True/qed(),
+                                                        other_set(
+                                                            first(z2),
+                                                            first(o2),
+                                                            c1,
+                                                            sound_d.apart,
+                                                            sound_d.clear)))))
+                                    end);
+                            Eq/trans(
+                                Eq/cong((m: Node(K, V)) => Node/fork(c1, m, o1), zeros),
+                                Eq/cong((m: Node(K, V)) => Node/fork(c1, z2, m), ones)))(
+                        sound_u,
+                        same)
+                end
+            end
+        end
+    end;
+
+--- What a sound fork's two sides answer at an encoding asked in turn, the zero side's under the one side's, by a combination that `none` leaves as it was: what the fork answers. The side the encoding's bit walks into answers, and the other finds nothing.
+pub let either_side(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    @A: Type,
+    c: Nat,
+    z: Node(K, V),
+    o: Node(K, V),
+    sound: Sound(Node/fork(c, z, o)),
+    k: Bytes,
+    g: (Option(V), A) -> A,
+    unit: (r: A) -> Eq()(g(Option/none(), r), r),
+    rest: A,
+) -> Eq()(g(find(o, k), g(find(z, k), rest)), g(find(Node/fork(c, z, o), k), rest)) =
+    match bit(k, c)
+    | false =>
+        Eq/trans(
+            Eq/cong(
+                (y: Option(V)) => g(y, g(find(z, k), rest)),
+                missing(
+                    o,
+                    sound.one,
+                    c,
+                    sound.under_one,
+                    k,
+                    clear_set(
+                        bit(k, c),
+                        bit(first(o), c),
+                        True/qed(),
+                        other_set(first(z), first(o), c, sound.apart, sound.clear)))),
+            unit(g(find(z, k), rest)))
+    | true =>
+        Eq/cong(
+            (x: A) => g(find(o, k), x),
+            Eq/trans(
+                Eq/cong(
+                    (y: Option(V)) => g(y, rest),
+                    missing(
+                        z,
+                        sound.zero,
+                        c,
+                        sound.under_zero,
+                        k,
+                        set_clear(bit(k, c), bit(first(z), c), True/qed(), sound.clear))),
+                unit(rest)))
+    end;
+
+--- The entries under a node, the zero side's first.
+pub let entries(@K: Type, @V: Type, t: Node(K, V)) -> List({K, V}) =
+    match t | leaf(k, v) => [(k, v)] | fork(_, z, o) => [..entries(z), ..entries(o)] end;
+
+--- Appending each entry in turn leaves the node's entries behind what the walk began with.
+pub let listed(
+    @K: Type,
+    @V: Type,
+    t: Node(K, V),
+    acc: List({K, V}),
+) -> Eq()(fold(t, acc, (k: K, v: V, l: List({K, V})) => [..l, (k, v)]), [..acc, ..entries(t)]) =
+    match t
+    | leaf(_, _) => Eq/refl()
+    | fork(_, z, o) =>
+        Eq/trans(
+            Eq/cong(
+                (s: List({K, V})) => fold(o, s, (k: K, v: V, l: List({K, V})) => [..l, (k, v)]),
+                listed(z, acc)),
+            listed(o, [..acc, ..entries(z)]))
+    end;
+
+-- An entry's key is one of the node's keys.
+let keyed(
+    @K: Type,
+    @V: Type,
+    t: Node(K, V),
+    e: {K, V},
+    i: Member()(e, entries(t)),
+) -> Member()(e.0, keys(t)) =
+    match t
+    | leaf(_, _) =>
+        Member/uncons(
+            i,
+            (same) => Eq/subst((p: {K, V}) => Member()(p.0, keys(t)), Eq/sym(same), Member/here()),
+            (rest) => match Member/absent(rest) end)
+    | fork(_, z, o) =>
+        Member/split(
+            entries(z),
+            i,
+            (in_zero) => Member/left(keys(o), keyed(z, e, in_zero)),
+            (in_one) => Member/right(keys(z), keyed(o, e, in_one)))
+    end;
+
+-- The leaf a walk ends at is one of the node's entries.
+let looked_up_entry(
+    @K: Type,
+    @V: Type,
+    t: Node(K, V),
+    k: Bytes,
+) -> Member()(lookup(t, k), entries(t)) =
+    match t
+    | leaf(_, _) => Member/here()
+    | fork(c, z, o) =>
+        match bit(k, c)
+        | false => Member/left(entries(o), looked_up_entry(z, k))
+        | true => Member/right(entries(z), looked_up_entry(o, k))
+        end
+    end;
+
+--- An entry of a sound node is found at its key, with its value.
+pub let entry_found(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    sound: Sound(t),
+    e: {K, V},
+    i: Member()(e, entries(t)),
+) -> Eq()(find(t, Hash/hash(e.0)), Option/some(e.1)) =
+    match t
+    | leaf(k, v) =>
+        Member/uncons(
+            i,
+            (same) =>
+                Eq/subst(
+                    (p: {K, V}) => Eq()(find(Node/leaf(k, v), Hash/hash(p.0)), Option/some(p.1)),
+                    Eq/sym(same),
+                    Eq/refl()),
+            (rest) => match Member/absent(rest) end)
+    | fork(c, z, o) =>
+        Member/split(
+            entries(z),
+            i,
+            (in_zero) =>
+                let clear = zero_key_clear(c, z, o, sound, e.0, keyed(z, e, in_zero));
+                match bit(Hash/hash(e.0), c)
+                | false => entry_found(z, sound.zero, e, in_zero)
+                | true => match clear end
+                end,
+            (in_one) =>
+                let set = one_key_set(c, z, o, sound, e.0, keyed(o, e, in_one));
+                match bit(Hash/hash(e.0), c)
+                | false => match set end
+                | true => entry_found(o, sound.one, e, in_one)
+                end)
+    end;
+
+--- What a node finds at a key's encoding is an entry of it, at that key.
+pub let found_entry(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    t: Node(K, V),
+    x: K,
+    v: V,
+    h: Eq()(find(t, Hash/hash(x)), Option/some(v)),
+) -> Member()((x, v), entries(t)) =
+    let ends: Eq()(lookup(t, Hash/hash(x)).0, x) =
+        Key/injective(lookup(t, Hash/hash(x)).0, x, hit(t, Hash/hash(x), v, h));
+    let holds: Eq()(lookup(t, Hash/hash(x)).1, v) =
+        match Hash/hash(lookup(t, Hash/hash(x)).0) == Hash/hash(x)
+        | true => Option/some_injective(h)
+        | false => match Eq/subst((m: Option(V)) => Holds(Option/is_none(m)), h, True/qed()) end
+        end;
+    Eq/subst(
+        (p: {K, V}) => Member()(p, entries(t)),
+        Eq/trans(
+            Eq/cong((y: K) => (y, lookup(t, Hash/hash(x)).1), ends),
+            Eq/cong((w: V) => (x, w), holds)),
+        looked_up_entry(t, Hash/hash(x)));

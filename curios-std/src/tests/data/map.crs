@@ -1,6 +1,6 @@
 -- `Map`, the crit-bit trie over `Key`-encoded bytes, and `Set` over it: lookups, the canonical shape, and the rewriting functions.
 use /std/{Str, Nat, Int, Bool, Byte, Bytes, List, Option, Eq, Hash, Ord, Ordering, Map, Set, Test};
-use /std/Bool/{Holds};
+use /std/Bool/{True, False, Holds};
 
 test a_key_an_empty_map_lacks_is_tried_as_none =
     let m: Map(Str, Str) = Map/empty();
@@ -146,6 +146,92 @@ let _a_sets_elements_are_in_their_order(
     s: Set(K),
 ) -> List/Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(Set/to_list(s)) =
     Set/to_list/pairwise(s);
+
+-- A map is a function of its entries: two orders of insertion build one map, decided by reduction.
+let _two_insertion_orders_build_one_map: Eq()(
+    Map/insert(Map/insert(Map/empty(), 1, "a"), 256, "b"),
+    Map/insert(Map/insert(Map/empty(), 256, "b"), 1, "a")) =
+    Eq/refl();
+
+-- Removing a key inserted where the map had none gives the map back, for every map: the two agree at every key, which `Map/try_get/injective` takes to the maps.
+let _a_key_removed_after_its_insertion_leaves_the_map(
+    @K: Type,
+    use Map/Key(K),
+    @V: Type,
+    m: Map(K, V),
+    k: K,
+    v: V,
+    absent: Eq()(Map/try_get(m, k), Option/none()),
+) -> Eq()(Map/remove(Map/insert(m, k, v), k), m) =
+    Map/try_get/injective(
+        Map/remove(Map/insert(m, k, v), k),
+        m,
+        (key) =>
+            match Hash/hash(k) == Hash/hash(key)
+            | true =>
+                Eq/subst(
+                    (y: K) =>
+                        Eq()(Map/try_get(Map/remove(Map/insert(m, k, v), k), y), Map/try_get(m, y)),
+                    Map/Key/same(k, key, True/qed()),
+                    Eq/trans(Map/try_get/of_remove(Map/insert(m, k, v), k), Eq/sym(absent)))
+            | false =>
+                let apart = Map/Key/apart(k, key, True/qed());
+                Eq/trans(
+                    Map/try_get/of_remove_other(Map/insert(m, k, v), k, key, apart),
+                    Map/try_get/of_insert_other(m, k, v, key, apart))
+            end);
+
+-- Inserts at two keys commute, for every map: at either key each side has that key's value, and at any other key both have the map's.
+let _inserts_at_two_keys_commute(
+    @K: Type,
+    use Map/Key(K),
+    @V: Type,
+    m: Map(K, V),
+    a: K,
+    x: V,
+    b: K,
+    y: V,
+    apart: (Eq()(b, a)) -> False,
+) -> Eq()(Map/insert(Map/insert(m, a, x), b, y), Map/insert(Map/insert(m, b, y), a, x)) =
+    let left = Map/insert(Map/insert(m, a, x), b, y);
+    let right = Map/insert(Map/insert(m, b, y), a, x);
+    let aside: (Eq()(a, b)) -> False = (e) => apart(Eq/sym(e));
+    Map/try_get/injective(left, right, (key) =>
+        match Hash/hash(b) == Hash/hash(key)
+        | true =>
+            Eq/subst(
+                (z: K) => Eq()(Map/try_get(left, z), Map/try_get(right, z)),
+                Map/Key/same(b, key, True/qed()),
+                Eq/trans(
+                    Map/try_get/of_insert(Map/insert(m, a, x), b, y),
+                    Eq/sym(
+                        Eq/trans(
+                            Map/try_get/of_insert_other(Map/insert(m, b, y), a, x, b, apart),
+                            Map/try_get/of_insert(m, b, y)))))
+        | false =>
+            let not_b = Map/Key/apart(b, key, True/qed());
+            match Hash/hash(a) == Hash/hash(key)
+            | true =>
+                Eq/subst(
+                    (z: K) => Eq()(Map/try_get(left, z), Map/try_get(right, z)),
+                    Map/Key/same(a, key, True/qed()),
+                    Eq/trans(
+                        Eq/trans(
+                            Map/try_get/of_insert_other(Map/insert(m, a, x), b, y, a, aside),
+                            Map/try_get/of_insert(m, a, x)),
+                        Eq/sym(Map/try_get/of_insert(Map/insert(m, b, y), a, x))))
+            | false =>
+                let not_a = Map/Key/apart(a, key, True/qed());
+                Eq/trans(
+                    Eq/trans(
+                        Map/try_get/of_insert_other(Map/insert(m, a, x), b, y, key, not_b),
+                        Map/try_get/of_insert_other(m, a, x, key, not_a)),
+                    Eq/sym(
+                        Eq/trans(
+                            Map/try_get/of_insert_other(Map/insert(m, b, y), a, x, key, not_a),
+                            Map/try_get/of_insert_other(m, b, y, key, not_b))))
+            end
+        end);
 
 -- The keys of the least and of the greatest entry of the map of `keys`.
 let ends(@K: Type, use Map/Key(K), keys: List(K)) -> List(Option(K)) =

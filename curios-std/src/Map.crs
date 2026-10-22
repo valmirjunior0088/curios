@@ -9,6 +9,10 @@ mod bits;
 mod internal;
 use internal/{Node};
 
+--- The value at a key, with the theorems of what each operation leaves there and that two maps alike at every key are one.
+pub mod try_get;
+pub use try_get/{let try_get};
+
 --- A map's keys, with the theorem that they are in their type's own order.
 pub mod keys;
 pub use keys/{let keys};
@@ -77,16 +81,6 @@ pub let empty(@K: Type, use Key(K), @V: Type) -> Map(K, V) =
 pub let len(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Nat =
     fold(m, 0, (_, _, n) => n + 1);
 
---- The value at `key`, or `none`.
-pub let try_get(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
-    let k = Hash/hash(key);
-    match m.root
-    | none() => Option/none()
-    | some(n) =>
-        let (k0, v0) = Node/lookup(n, k);
-        match Hash/hash(k0) == k | true => Option/some(v0) | false => Option/none() end
-    end;
-
 --- Whether `key` has an entry.
 pub let has(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Bool =
     Option/is_some(try_get(m, key));
@@ -129,8 +123,7 @@ pub let insert(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Ma
                                 grounded(m.rooted),
                                 apart,
                                 past))) }
-        | added(n2, @stands) =>
-            Map { root = Option/some(n2), @rooted = rooted(n2, stands.sound) }
+        | added(n2, @stands) => Map { root = Option/some(n2), @rooted = rooted(n2, stands.sound) }
         end
     end;
 
@@ -141,10 +134,9 @@ pub let remove(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Map(K, V
     | none() => m
     | some(n) =>
         match Node/remove(n, k, @grounded(m.rooted))
-        | gone() => Map { root = Option/none(), @rooted = Rooted/none() }
-        | kept(n2, @stands) =>
-            Map { root = Option/some(n2), @rooted = rooted(n2, stands.sound) }
-        | absent() => m
+        | gone(_) => Map { root = Option/none(), @rooted = Rooted/none() }
+        | kept(n2, @stands) => Map { root = Option/some(n2), @rooted = rooted(n2, stands.sound) }
+        | absent(_) => m
         end
     end;
 
@@ -158,13 +150,7 @@ pub let fold(
     init: A,
     f: (K, V, A) -> A,
 ) -> A =
-    match m.root
-    | none() => init
-    | some(n) =>
-        let go(t: Node(K, V), acc: A) -> A =
-            match t | leaf(k, v) => f(k, v, acc) | fork(_, z, o) => go(o, go(z, acc)) end;
-        go(n, init)
-    end;
+    match m.root | none() => init | some(n) => Node/fold(n, init, f) end;
 
 --- The entries, in the order of their keys.
 pub let to_list(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> List({K, V}) =
