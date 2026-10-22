@@ -3,6 +3,8 @@
 //! A runaway is a short program whose one claim makes a checker do more the longer it is let run: a recursion that takes a step a unit, a pair of calls whose unfolding meets the pair again, a sum that gains a summand or a product a factor at every step, a type that nests a constructor at every step. None is refused for what it is written as. Each is answered by a verdict where a rule decides it, inside a budget its fixture states, and ended by its budget where none does; what a unit of that budget buys is the half of `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md`'s premise a count of units cannot show.
 //!
 //! A runaway that answers inside a stated budget is a fixture here; `runaway_measurements`, among the instrumented tests, counts what every one costs at a budget and at twice it.
+//!
+//! What a budget may never do is decide: the two fixtures at the end are a program refused at every budget, where a clash concluded from an unfinished computation would have excused an arm at an equation a lemma inhabits, and a pair of programs with one edge, where a memo crossing a declaration boundary would have let a neighbour pay for a fold. Both are stated at budgets rather than at sizes, so they read what exhaustion is allowed to conclude rather than what a unit buys.
 
 use {super::typecheck_within, curios_utilities::fill};
 
@@ -213,4 +215,97 @@ fn two_types_nested_alike_are_told_apart_inside_their_budget() {
     let report = refused(1_000_000, Runaway::Nests(500));
 
     assert!(report.contains("type mismatch"), "{report}");
+}
+
+/// A clash the budget cannot finish is not concluded, at any budget. `countdown(2000)` is `0`, so `Eq()(countdown(2000), 0)` is inhabited — and `zero` proves it by induction without running the fold, a cheap proof of an expensive equation. The arm of `match h end` may be left out only where the two forcings of `refl`'s binder definitely clash; they never do, because the two sides are one number. A budget that cannot reduce the fold leaves them undecided and one that can holds them one, so the program is refused at every budget, below for exhaustion and above for the arm.
+///
+/// What an acceptance between the two would be: the arm excused at an equation `zero(2000)` inhabits, and `_absurd(zero(2000))` a closed inhabitant of `False`. The three budgets are the three refusals the sweep finds — reduction out of steps, conversion out of steps, and the arm demanded — so an acceptance window opening anywhere between them fails here.
+const A_CLASH_OVER_AN_EQUATION_A_LEMMA_INHABITS: &str = r#"
+    use /std/{Nat, Eq, Io};
+    use /std/Bool/{False};
+
+    let countdown(n : Nat) -> Nat =
+        match n : (_) => Nat
+        | 0 => 0
+        | k + 1; ih => ih
+        end;
+
+    let zero(n : Nat) -> Eq()(countdown(n), 0) =
+        match n : (m) => Eq()(countdown(m), 0)
+        | 0 => Eq/refl()
+        | k + 1; ih => ih
+        end;
+
+    let _absurd(h : Eq()(countdown(2000), 0)) -> False =
+        match h end;
+
+    Io/pure(())
+    "#;
+
+#[test]
+fn a_clash_the_budget_cannot_finish_is_not_concluded() {
+    for budget in [1_000, 10_000, 100_000] {
+        let report = typecheck_within(budget, A_CLASH_OVER_AN_EQUATION_A_LEMMA_INHABITS)
+            .expect_err("the budget concluded a clash over two terms it holds equal");
+
+        assert!(
+            report.contains("ran out of steps") || report.contains("no arm matches"),
+            "at {budget}: {report}",
+        );
+    }
+}
+
+/// Two independent folds, reduced in one declaration.
+const TWO_FOLDS_COLD: &str = r#"
+    use /std/{Nat, Eq, Io};
+
+    let f(n : Nat) -> Nat =
+        match n : (_) => Nat
+        | 0 => 0
+        | k + 1; ih => ih
+        end;
+
+    let g(n : Nat) -> Nat =
+        match n : (_) => Nat
+        | 0 => 1
+        | k + 1; ih => ih
+        end;
+
+    let _both() -> Eq()((f(2000), g(2000)), (0, 1)) = Eq/refl();
+
+    Io/pure(())
+    "#;
+
+/// The same, under a declaration that has already reduced one of the two.
+const TWO_FOLDS_WARMED: &str = r#"
+    use /std/{Nat, Eq, Io};
+
+    let f(n : Nat) -> Nat =
+        match n : (_) => Nat
+        | 0 => 0
+        | k + 1; ih => ih
+        end;
+
+    let g(n : Nat) -> Nat =
+        match n : (_) => Nat
+        | 0 => 1
+        | k + 1; ih => ih
+        end;
+
+    let _warm() -> Eq()(f(2000), 0) = Eq/refl();
+
+    let _both() -> Eq()((f(2000), g(2000)), (0, 1)) = Eq/refl();
+
+    Io/pure(())
+    "#;
+
+/// A declaration's verdict does not follow what was compiled before it. `_both` reduces two folds no unfolding makes one — `f` answers `0` where `g` answers `1`, so neither side's reduct is the other's — and a declaration that has already reduced `f(2000)` stands before it. Every memo is cleared where the budget is restored, so the second declaration pays for `f(2000)` again and both programs have one edge.
+///
+/// The margin is what gives it teeth: one fold alone is answered in well under the lower budget here and the two only above it, so a memo crossing the boundary would buy `_both` the whole of `f(2000)` — most of what the pair costs — and carry the warmed program under the budget it is asserted to be refused inside. Reading `cold` at both budgets is what says the two bracket the edge rather than sitting on one side of it.
+#[test]
+fn a_declarations_verdict_does_not_follow_a_warm_neighbour() {
+    for source in [TWO_FOLDS_COLD, TWO_FOLDS_WARMED] {
+        typecheck_within(70_000, source).expect_err("answered inside a budget below its edge");
+        assert_eq!(typecheck_within(90_000, source), Ok(()));
+    }
 }
