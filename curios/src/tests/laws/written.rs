@@ -364,6 +364,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(x + 1 > 0, true)",
             "Eq()(x <= x + y, true)",
             "Eq()(x + y < x, false)",
+            // The zero-gap base of the fold: a value against itself cancels every atom to a constant of zero, so the non-strict verdict holds and the strict one is false. `x < x` reducing to `false` is what keeps `Holds(n < n)` from ever discharging.
+            "Eq()(x <= x, true)",
+            "Eq()(x < x, false)",
             // The family is aligned probe-side: a negation reads as its dual, and `<=` as `<` of the successor.
             "Eq()(Bool/not(Bool/not(x < y)), x < y)",
             "Eq()(x <= y, x < y + 1)",
