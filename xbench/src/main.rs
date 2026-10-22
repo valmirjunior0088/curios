@@ -17,6 +17,9 @@ use reading_01::*;
 mod reading_02;
 use reading_02::*;
 
+mod reading_03;
+use reading_03::*;
+
 use {
     clap::{Parser, Subcommand},
     std::process::ExitCode,
@@ -25,7 +28,7 @@ use {
 /// Every reading taken, oldest first: a reading's number is its index here.
 ///
 /// The bench begins with none, as the board began with no ticket. A reading is filed from what a sitting printed, never written by hand, and the ones a vanished harness took are not carried in: none was taken under a protocol this bench records, so none could be compared with a reading taken now.
-const READINGS: &[&Reading] = &[&READING_00, &READING_01, &READING_02];
+const READINGS: &[&Reading] = &[&READING_00, &READING_01, &READING_02, &READING_03];
 
 #[derive(Debug, Parser)]
 #[command(
