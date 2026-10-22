@@ -55,8 +55,7 @@ type mismatch
 ## What you get
 
 - Dependent function and tuple types, indexed inductive families, and pattern matching that works out exhaustiveness for you
-- Definitional equality that decides the carriers' algebra — `Vec(T, n + m)` and `Vec(T, m + n)` are one type, with no lemma, tactic or solver in sight
-- Preconditions where another language would trap — `/` asks for a divisor that is not zero, `List/get` for an index below the length, each discharged by a guard's own decision with no proof named
+- Crashes become type errors — `/` wants a nonzero divisor, `List/get` an index in range, and the check you would write anyway is the proof
 - A cumulative universe hierarchy, with levels inferred rather than written by hand
 - A proof-irrelevant `Prop`, so proofs weigh nothing at runtime
 - Erased arguments — type-level information that guides checking and then vanishes from the output
