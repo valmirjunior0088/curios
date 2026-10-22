@@ -1,4 +1,4 @@
-//! An effect is not a value: what may be a scrutinee, an argument, or inhabit a pure arrow.
+//! An effect is not a value: what may be a scrutinee, an argument, or inhabit a pure arrow, and what may take a description apart.
 
 use {super::test_support::*, crate::tests::run};
 
@@ -43,4 +43,43 @@ fn an_effect_cannot_inhabit_a_pure_arrow() {
 #[test]
 fn a_parameter_headed_scrutinee_refines_again() {
     assert_eq!(run(A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN), b"t");
+}
+
+// The control the four refusals below are read against, and what makes them the only thing in the way: a description of a computation yielding `False` is *constructible*. `exit` is typed `(@A : Type, Byte) -> Io(A)`, so no proposition may be its result — but a carrier with no constructors may, and `bind`'s continuation receives the `Empty` and eliminates it into `False` inside another description. The program compiles and runs, which is what the decision means by an inhabitant of `Io(False)` proving nothing.
+#[test]
+fn a_description_of_a_contradiction_still_compiles() {
+    assert_eq!(run(A_DESCRIPTION_OF_A_CONTRADICTION_STILL_COMPILES), b"ok");
+}
+
+// No match case. The carrier has no constructors, which is exactly the shape the zero-arm match eliminates — so the one rule that takes a type apart without naming a case is the first thing to try on a description, and `Io(Empty)` would hand `False` out of the fixture above. The refusal names the head's type, so it is the carrier that is refused and not the arity.
+#[test]
+fn a_description_is_no_empty_type() {
+    rejected_by(
+        A_DESCRIPTION_IS_NO_EMPTY_TYPE,
+        "a match with no arms eliminates only a type with no constructors",
+    );
+}
+
+// No projection, which is the elimination that meets no guard at all: a field read answers whatever the record holds, so a description that read as a record of its payload would release it with nothing to check.
+#[test]
+fn a_description_is_no_record() {
+    rejected_by(A_DESCRIPTION_IS_NO_RECORD, "projected from a non-tuple");
+}
+
+// An eliminator in any spelling, and the one spelling a program may declare for itself: `Monad/Lift(M, N)`'s `lift` carries an action from one monad into another, and `N` is the caller's to choose. Chosen as a nominal wrapper, the embedding is `(Io(A)) -> Box(A)`, whose only honest body needs the `A` — so the whole discipline reduces to there being no term of `(Io(A)) -> A`, and the refusal stands in the witness where the author would write one. A lambda-shaped identity monad cannot even be keyed, which is why this is stated over a struct.
+#[test]
+fn a_description_cannot_be_carried_out_of_its_monad() {
+    rejected_by(
+        A_DESCRIPTION_CANNOT_BE_CARRIED_OUT_OF_ITS_MONAD,
+        "the witness of 'Monad/Lift' for key '(Io, Box)'",
+    );
+}
+
+// The carrier is opaque to conversion as well, which is the eliminator a transport would need: held one with what it yields, `Eq/refl()` would inhabit the identification and `Eq/subst` would do the rest, with no elimination of a description written anywhere. It is asserted here rather than in the law grid because it is this rule that rests on it.
+#[test]
+fn a_description_is_not_what_it_yields() {
+    rejected_by(
+        A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS,
+        "Eq(@Type)(Io(Empty), Empty)",
+    );
 }

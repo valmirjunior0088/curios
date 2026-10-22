@@ -1828,6 +1828,82 @@ pub(super) const A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN: &str = r#"
     /std/print(refined((x) => x, true, Eq/refl()))
     "#;
 
+/// The description every fixture below takes apart, and the accepting control: `Io(False)` is built from an exit at a carrier with no constructors, so a program holding a description of a computation that yields `False` compiles and runs. What keeps it from being a proof is that nothing opens it.
+pub(super) const A_DESCRIPTION_OF_A_CONTRADICTION_STILL_COMPILES: &str = r#"
+    use /std/{Io, Process};
+    use /std/Bool/{False};
+
+    induct Empty : pub Type end
+
+    pub let forged() -> Io(False) =
+        Io/bind(Process/exit(@Empty, 1), (e : Empty) => Io/pure(match e end));
+
+    /std/print("ok")
+    "#;
+
+pub(super) const A_DESCRIPTION_IS_NO_EMPTY_TYPE: &str = r#"
+    use /std/{Process};
+    use /std/Bool/{False};
+
+    induct Empty : pub Type end
+
+    let boom() -> False =
+        match Process/exit(@Empty, 1) end;
+
+    /std/print("FORGED")
+    "#;
+
+pub(super) const A_DESCRIPTION_IS_NO_RECORD: &str = r#"
+    use /std/{Process};
+    use /std/Bool/{False};
+
+    induct Empty : pub Type end
+
+    let absurd(e : Empty) -> False =
+        match e end;
+
+    let boom() -> False =
+        absurd(Process/exit(@Empty, 1).0);
+
+    /std/print("FORGED")
+    "#;
+
+pub(super) const A_DESCRIPTION_CANNOT_BE_CARRIED_OUT_OF_ITS_MONAD: &str = r#"
+    use /std/{Io, Monad, Process};
+    use /std/Bool/{False};
+
+    induct Empty : pub Type end
+
+    struct Box(A : Type) : pub Type { held : A }
+
+    satisfy Monad(Box) {
+        pure(@_, a) = Box { a },
+        bind(@_, @_, m, f) = f(m.held),
+    }
+
+    satisfy Monad/Lift(Io, Box) {
+        lift(@_, m) = Box { m },
+    }
+
+    let carried(@A : Type, a : Io(A)) -> Box(A) =
+        Monad/lift(a);
+
+    let boom() -> False =
+        match carried(Process/exit(@Empty, 1)).held end;
+
+    /std/print("FORGED")
+    "#;
+
+pub(super) const A_DESCRIPTION_IS_NOT_WHAT_IT_YIELDS: &str = r#"
+    use /std/{Io, Eq};
+
+    induct Empty : pub Type end
+
+    let _one : Eq()(Io(Empty), Empty) = Eq/refl();
+
+    /std/print("FORGED")
+    "#;
+
 /// A partial definition behind a `Type`-sorted carrier, reached four ways. The kernel's local gate does not fire — `Box` is neither a proposition nor a sort — so these are the class the erasure obligations in `curios-cert` exist for.
 pub(super) const PARTIAL_DIRECT: &str = r#"
     use /std/{Nat};
