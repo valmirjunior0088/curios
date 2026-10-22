@@ -53,6 +53,10 @@ satisfy Program(Io({})) {
     execute(program) = program,
 }
 
+--- `body` run with a scope, as `Scope/run` runs one: its children cancelled and its resources released before the scope answers.
+pub let scope(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =
+    Scope/run(body);
+
 --- Until a cell of `cells` is filled: a suspension that cancels nothing and goes on with nothing. Only the program fills a cell, so what waits on cells alone at the top of a program is a deadlock the host reports, and so is a wait on none.
 pub let wait_filled(cells: List(Cell({}))) -> Io({}) =
     /sys/Io/suspend([], cells, pure(()), pure(()));

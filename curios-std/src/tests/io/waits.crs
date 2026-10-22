@@ -39,7 +39,7 @@ test a_scope_tells_its_release_a_body_ran_to_its_end =
     Test/perform(() =>
         let ends = Channel/new(@Io/Ended, 1)!;
         let n =
-            Io/Scope/run((scope) =>
+            Io/scope((scope) =>
                 Io/bind(Io/Scope/defer(scope, (ended) => told(ends.0, ended)), (_) => Io/pure(3)))!;
         let finished = heard(ends.1, true)!;
         Io/pure(Test/assert(n == 3 && finished)));
@@ -49,7 +49,7 @@ test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
         let ends = Channel/new(@Io/Ended, 1)!;
         let never = Cell/new()!;
         let body =
-            Io/Scope/run((scope) =>
+            Io/scope((scope) =>
                 Io/bind(
                     Io/Scope/defer(scope, (ended) => told(ends.0, ended)),
                     (_) => Io/bind(Io/wait_filled([never]), (_) => Io/pure(3))));
