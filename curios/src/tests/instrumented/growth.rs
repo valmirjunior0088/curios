@@ -204,7 +204,7 @@ const HELD: &[Growth] = &[
     Growth::ChainedMatches,
 ];
 
-/// The growths every stage of which before Binaryen is linear today, where Binaryen or Cranelift is not: what Binaryen and Cranelift pay is `documentation/roadmap/compilation/102-binaryen-and-cranelift-compile-a-function-in-its-size.md`'s, and each moves to [`HELD`] once it is taken there.
+/// The growths held through emission.
 const HELD_FRONT: &[Growth] = &[
     Growth::LetPlus,
     Growth::LetCall,
@@ -265,7 +265,7 @@ const HELD_SLOPE: f64 = 3.0;
 /// | Arrow | 1000 | 1.99 erase | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
 /// | StringLiteral | 2000 | 2.00 elaborate | 2.00 erase | 2.00 erase | 2.00 elaborate |
 ///
-/// **Fifteen growths are held linear in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements, nested lambdas and matches each on the `let` before it, the ones [`HELD`] lists. **Eleven more are held in every stage before Binaryen**, the ones [`HELD_FRONT`] lists; what Binaryen and Cranelift pay for them is `documentation/roadmap/compilation/102-binaryen-and-cranelift-compile-a-function-in-its-size.md`'s. A growth is held where the stage that steepened it has been taken up: one reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cont` do, and as matches each on the `let` before it do in `elaborate`, where a probe under an arm reduces again what the arm before it reduced (`documentation/roadmap/compilation/100-a-scoped-answer-stands-for-as-long-as-what-it-read.md`).
+/// **Fifteen growths are held in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements, nested lambdas and matches each on the `let` before it, the ones [`HELD`] lists. **Eleven more are held through emission**, the ones [`HELD_FRONT`] lists. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cont` do, and as matches each on the `let` before it do in `elaborate`, where a probe under an arm reduces again what the arm before it reduced (`documentation/roadmap/compilation/100-a-scoped-answer-stands-for-as-long-as-what-it-read.md`).
 #[test]
 #[ignore = "measurement, counted: run by hand, alone in its invocation"]
 fn growth_slopes() {

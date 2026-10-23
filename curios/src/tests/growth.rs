@@ -361,7 +361,7 @@ fn elaborates(source: &str) -> Result<(), String> {
     }
 }
 
-/// Whether `source` is emitted as a module the engine validates, with what it is refused for where it is not: what a fixture holding the emitter to the engine's limits asks, the optimizer and the code generator after it being `documentation/roadmap/compilation/102-binaryen-and-cranelift-compile-a-function-in-its-size.md`'s.
+/// Whether `source` is emitted as a module the engine validates, with what it is refused for where it is not: what a fixture holding the emitter to the engine's limits asks.
 fn emits(source: &str) -> Result<(), String> {
     let entrypoint = source
         .parse::<Entrypoint>()
