@@ -1,13 +1,5 @@
 pub use /sys/{Bool};
-pub use /sys/Bool/{xor, eql, Holds};
-
---- The trivial proposition, inhabited by `qed`: what a decided bound reduces to when it holds.
-pub mod True;
-pub use True/{let True};
-
---- The empty proposition: what a decided bound reduces to when it fails.
-pub mod False;
-pub use False/{let False};
+pub use /sys/Bool/{True, False, xor, eql, Holds};
 
 --- Conjunction, with what a proof of one holds of its halves.
 pub mod and;

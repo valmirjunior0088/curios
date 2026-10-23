@@ -1,4 +1,4 @@
-use /std/{Result, Nat, Byte, Bytes, Char, Str, Bool, Option, Parse, Fmt};
+use /std/{Result, Nat, Byte, Bytes, Char, Str, Bool, Option, Parse, Fmt, proved};
 use /std/Bool/{True, Holds};
 use /std/Parse/{Of, At, Pos, Input, Error};
 
@@ -109,9 +109,9 @@ let leading_within(
     taken: Nat,
 ) -> Holds(leading(rest, pred, taken) <= taken + Bytes/len(rest)) =
     match rest
-    | x[] => True/proved()
+    | x[] => proved()
     | x[h, ..t] =>
-        match pred(h) | true => leading_within(t, pred, taken + 1) | false => True/proved() end
+        match pred(h) | true => leading_within(t, pred, taken + 1) | false => proved() end
     end;
 
 --- The longest run of bytes `pred` accepts, possibly empty.
@@ -122,7 +122,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =
             let taken = leading(rest, pred, 0);
             let fits = leading_within(rest, pred, 0);
             Result/success((
-                At { offset = at.offset + taken, holds = True/proved() },
+                At { offset = at.offset + taken, holds = proved() },
                 Bytes/slice(input, at.offset, taken))) };
 
 --- Everything from the current position to the end of the input.

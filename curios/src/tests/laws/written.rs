@@ -1829,17 +1829,17 @@ fn a_mismatch_nothing_compared_says_so() {
 // A promoted operation computes from its operands alone and reads no arm. A `min`: under a guard on `a <= b`, and under a hypothesis of it, `Nat/min(a, b)` is the node it was, so `Eq/refl()` does not close it against `a`, and `Nat/min/of_le` over the fact does. So one `min` is one value in every arm it is read in, and commutation and association hold the same under a guard as outside it. The same at `Int`, and for a `max`.
 #[test]
 fn a_promoted_operation_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
-    let header = "use /std/{Nat, Int, Eq, Io}; use /std/Bool/{True, Holds};";
+    let header = "use /std/{Nat, Int, Eq, Io, proved}; use /std/Bool/{Holds};";
     let under = |carrier: &str, operation: &str, kept: &str, proof: &str| {
         format!(
             "{header}\npub let row(a: {carrier}, b: {carrier}) -> Nat = match a <= b | true => let _: Eq()({carrier}/{operation}(a, b), {kept}) = {proof}; 0 | false => 1 end;\nIo/pure(())"
         )
     };
     for (carrier, operation, kept, lemma) in [
-        ("Nat", "min", "a", "Nat/min/of_le(a, b, True/proved())"),
-        ("Nat", "max", "b", "Nat/max/of_le(a, b, True/proved())"),
-        ("Int", "min", "a", "Int/min/of_le(a, b, True/proved())"),
-        ("Int", "max", "b", "Int/max/of_le(a, b, True/proved())"),
+        ("Nat", "min", "a", "Nat/min/of_le(a, b, proved())"),
+        ("Nat", "max", "b", "Nat/max/of_le(a, b, proved())"),
+        ("Int", "min", "a", "Int/min/of_le(a, b, proved())"),
+        ("Int", "max", "b", "Int/max/of_le(a, b, proved())"),
     ] {
         let refused = typecheck(&under(carrier, operation, kept, "Eq/refl()"))
             .expect_err("a `min` or a `max` that read its arm");
@@ -1856,7 +1856,7 @@ fn a_promoted_operation_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
         )
     };
     assert!(typecheck(&widened("Eq/refl()")).is_err());
-    if let Err(error) = typecheck(&widened("Int/abs/of_non_neg(a, True/proved())")) {
+    if let Err(error) = typecheck(&widened("Int/abs/of_non_neg(a, proved())")) {
         panic!("Int/abs/of_non_neg does not convert it under the guard:\n{error}");
     }
     let signed = |proof: &str| {
@@ -1865,7 +1865,7 @@ fn a_promoted_operation_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
         )
     };
     assert!(typecheck(&signed("Eq/refl()")).is_err());
-    if let Err(error) = typecheck(&signed("Int/sign/of_pos(a, True/proved())")) {
+    if let Err(error) = typecheck(&signed("Int/sign/of_pos(a, proved())")) {
         panic!("Int/sign/of_pos does not convert it under the guard:\n{error}");
     }
 

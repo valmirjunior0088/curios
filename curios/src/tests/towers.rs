@@ -230,7 +230,7 @@ pub(super) fn tower(shape: Shape, lines: usize) -> String {
             );
         }
         Shape::Bounded => {
-            source.push_str("use /std/{Nat};\nuse /std/Bool/{True, Holds};\n\n");
+            source.push_str("use /std/{Nat, proved};\nuse /std/Bool/{Holds};\n\n");
             source.push_str("let tower(n: Nat) -> Nat =\n    let x0 = n;\n");
             for index in 1..=lines {
                 let before = format!("x{}", index - 1);
@@ -241,7 +241,7 @@ pub(super) fn tower(shape: Shape, lines: usize) -> String {
             }
             let _ = writeln!(
                 source,
-                "    let _within: Holds(x{lines} <= n) = True/proved();\n    x{lines};"
+                "    let _within: Holds(x{lines} <= n) = proved();\n    x{lines};"
             );
         }
     }

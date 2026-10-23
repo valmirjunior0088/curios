@@ -1,4 +1,4 @@
-use /std/{Nat, Eq};
+use /std/{Nat, Eq, proved};
 use /std/Bool/{True, Holds};
 
 --- That `d` divides `n`: some multiple of `d` is `n`.
@@ -58,8 +58,8 @@ pub let sub(@d: Nat, @a: Nat, @b: Nat, p: Divides(d, a + b), q: Divides(d, a)) -
                 Divides/intro(k - m, Eq/cong((x: Nat) => x - m * d, spread))
             | false =>
                 let grown: Holds((k + 1) * d <= m * d) =
-                    Nat/le/mul_mono_r(@k + 1, @m, d, True/proved());
-                Divides/intro(0, Nat/le/antisym(b, 0, True/proved(), True/qed()))
+                    Nat/le/mul_mono_r(@k + 1, @m, d, proved());
+                Divides/intro(0, Nat/le/antisym(b, 0, proved(), True/qed()))
             end
         end
     end;
@@ -79,7 +79,7 @@ pub let antisym(@a: Nat, @b: Nat, p: Divides(a, b), q: Divides(b, a)) -> Eq()(a,
                 | 0 =>
                     let gone: Eq()(a, 0) = f;
                     Eq/trans(gone, Eq/sym(Eq/subst((x: Nat) => Eq()(b, (kp + 1) * x), gone, e)))
-                | _ + 1 => Nat/le/antisym(a, b, True/proved(), True/proved())
+                | _ + 1 => Nat/le/antisym(a, b, proved(), proved())
                 end
             end
         end
@@ -100,7 +100,7 @@ pub let to_rem(n: Nat, d: Nat, @ok: Holds(0 < d), p: Divides(d, n)) -> Holds(n %
     | intro(k, e) =>
         Eq/subst(
             (r: Nat) => Holds(r == 0),
-            Nat/DivMod/unique(n, d, k, 0, e, True/proved()).remainder,
+            Nat/DivMod/unique(n, d, k, 0, e, proved()).remainder,
             True/qed())
     end;
 
@@ -112,7 +112,7 @@ pub let exact(n: Nat, d: Nat, @ok: Holds(0 < d), p: Divides(d, n)) -> Eq()(n, n 
     | intro(k, e) =>
         Eq/subst(
             (x: Nat) => Eq()(n, x * d),
-            Nat/DivMod/unique(n, d, k, 0, e, True/proved()).quotient,
+            Nat/DivMod/unique(n, d, k, 0, e, proved()).quotient,
             e)
     end;
 

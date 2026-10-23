@@ -75,12 +75,12 @@ fn a_family_over_a_sort_holds_a_number_and_a_proof() {
 #[test]
 fn a_predicate_into_a_sort_serves_data_and_proofs() {
     let source = r#"
-        use /std/{Nat, Eq};
+        use /std/{Nat, Eq, proved};
         use /std/Bool/{True, False, Holds};
         let carry(@A: Type, @x: A, @y: A, P: (A) -> Sort, p: Eq()(x, y), v: P(x)) -> P(y) =
             match p | refl() => v end;
         let none_below(m: Nat, k: Nat, below: Holds(m < k), within: Holds(k <= 0)) -> False =
-            False/refuted();
+            proved();
         let down(
             @S: Type,
             measure: (S) -> Nat,
@@ -91,7 +91,7 @@ fn a_predicate_into_a_sort_serves_data_and_proofs() {
             let go(k: Nat, s: S, within: Holds(measure(s) <= k)) -> P(s) =
                 match k
                 | 0 => step(s, (t, r) => match none_below(measure(t), measure(s), r, within) end)
-                | kp + 1 => step(s, (t, r) => go(kp, t, True/proved()))
+                | kp + 1 => step(s, (t, r) => go(kp, t, proved()))
                 end;
             go(measure(s), s, Nat/le/refl(measure(s)));
         let three: Eq()(3, 3) = Eq/refl();

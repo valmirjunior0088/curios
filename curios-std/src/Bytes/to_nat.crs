@@ -1,4 +1,4 @@
-use /std/{Nat, Byte, Bytes};
+use /std/{Nat, Byte, Bytes, proved};
 use /std/Bool/{True, Holds};
 
 --- The number a minimal encoding denotes, which is `of_nat`'s inverse.
@@ -16,5 +16,5 @@ pub let below(b: Bytes) -> Holds(to_nat(b) < Nat/pow(256, Bytes/len(b))) =
     | x[h, ..t]; ih =>
         let top: Holds(Byte/to_nat(h) <= 255) = True/qed();
         let _ = ih;
-        True/proved()
+        proved()
     end;

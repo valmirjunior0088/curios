@@ -436,7 +436,7 @@ fn an_implicit_born_outside_an_arm_is_solved_without_its_guard() {
 #[test]
 fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     let output = run(r#"
-        use /std/{Bytes, Nat, Eq, print};
+        use /std/{Bytes, Nat, Eq, print, proved};
         use /std/Bool/{True, Holds};
 
         let hop(@b: Bytes, some: Holds(0 < Bytes/len(b))) -> Nat =
@@ -446,7 +446,7 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
             end;
 
         let reach(b: Bytes, k: Nat, @within: Holds(k <= Bytes/len(b)), @here: Holds(k < Bytes/len(b))) -> Nat =
-            k + hop(@Bytes/drop(b, k, @within), True/proved());
+            k + hop(@Bytes/drop(b, k, @within), proved());
 
         pub let same(b: Bytes, k: Nat, @within: Holds(k <= Bytes/len(b)), @here: Holds(k < Bytes/len(b)))
             -> Eq()(reach(b, k, @within, @here), reach(b, k, @within, @here)) =
@@ -537,8 +537,8 @@ fn a_solution_holding_a_call_whose_body_holds_a_proof_the_elaborator_wrote_is_th
     typecheck_within(
         2_000_000,
         r#"
-        use /std/{Nat, Eq, Io};
-        use /std/Bool/{True, Holds};
+        use /std/{Nat, Eq, Io, proved};
+        use /std/Bool/{Holds};
 
         struct Scale(n: Nat): Type {
             count: Nat,
@@ -554,12 +554,12 @@ fn a_solution_holding_a_call_whose_body_holds_a_proof_the_elaborator_wrote_is_th
                     Scale {
                         count = 0,
                         half = n / 2,
-                        joined = Nat/le/antisym(n, 2 * (n / 2) + 1, True/proved(), True/proved()),
+                        joined = Nat/le/antisym(n, 2 * (n / 2) + 1, proved(), proved()),
                     }
                 | false =>
                     let inner = of(n / 2);
                     let even: Eq()(n, 2 * (n / 2)) =
-                        Nat/le/antisym(n, 2 * (n / 2), True/proved(), True/proved());
+                        Nat/le/antisym(n, 2 * (n / 2), proved(), proved());
                     Scale {
                         count = inner.count + 1,
                         half = inner.half,
@@ -590,8 +590,8 @@ fn a_local_recursive_function_elaborated_again_is_itself() {
     typecheck_within(
         2_000_000,
         r#"
-        use /std/{Nat, Eq, Io};
-        use /std/Bool/{True, Holds};
+        use /std/{Nat, Eq, Io, proved};
+        use /std/Bool/{Holds};
 
         struct Scale(n: Nat): Type {
             count: Nat,
@@ -609,12 +609,12 @@ fn a_local_recursive_function_elaborated_again_is_itself() {
                             count = 0,
                             half = n / 2,
                             joined =
-                                Nat/le/antisym(n, 2 * (n / 2) + 1, True/proved(), True/proved()),
+                                Nat/le/antisym(n, 2 * (n / 2) + 1, proved(), proved()),
                         }
                     | false =>
                         let inner = of(n / 2);
                         let even: Eq()(n, 2 * (n / 2)) =
-                            Nat/le/antisym(n, 2 * (n / 2), True/proved(), True/proved());
+                            Nat/le/antisym(n, 2 * (n / 2), proved(), proved());
                         Scale {
                             count = inner.count + 1,
                             half = inner.half,

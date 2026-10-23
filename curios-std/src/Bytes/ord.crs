@@ -2,7 +2,7 @@
 pub mod below;
 pub use below/{let below};
 
-use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, Ord};
+use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, Ord, proved};
 use /std/Bool/{True, Holds};
 
 --- Bytewise, a proper prefix first.
@@ -123,7 +123,7 @@ pub let transitive: Ord/Transitive(Ord/le(ord)) =
                                 let second: Holds(kn < jn) = Nat/ord/lt(kn, jn, Eq/refl());
                                 Eq/subst(
                                     (o: Ordering) => Holds(after(o, t, s)),
-                                    Eq/sym(Nat/ord/of_lt(hn, jn, True/proved())),
+                                    Eq/sym(Nat/ord/of_lt(hn, jn, proved())),
                                     True/qed())
                             | eq() =>
                                 let second: Eq()(kn, jn) = Nat/ord/eq(kn, jn, Eq/refl());

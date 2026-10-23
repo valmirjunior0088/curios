@@ -17,8 +17,7 @@ pub use IndicConjunctBreak/{let IndicConjunctBreak};
 pub mod EastAsianWidth;
 pub use EastAsianWidth/{let EastAsianWidth};
 
-use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Fmt, Ord};
-use /std/Bool/{True};
+use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Fmt, Ord, proved};
 use /std/ops/{Eql, Cmp};
 
 --- One Unicode scalar value.
@@ -110,7 +109,7 @@ pub let is_ascii_alphanumeric(c: Char) -> Bool =
 pub let to_ascii_lower(c: Char) -> Char =
     match is_ascii_upper(c)
     | true =>
-        Char { code = c.code + 0x20, @valid = Valid/below_surrogates(c.code + 0x20, True/proved()) }
+        Char { code = c.code + 0x20, @valid = Valid/below_surrogates(c.code + 0x20, proved()) }
     | false => c
     end;
 
@@ -118,7 +117,7 @@ pub let to_ascii_lower(c: Char) -> Char =
 pub let to_ascii_upper(c: Char) -> Char =
     match is_ascii_lower(c)
     | true =>
-        Char { code = c.code - 0x20, @valid = Valid/below_surrogates(c.code - 0x20, True/proved()) }
+        Char { code = c.code - 0x20, @valid = Valid/below_surrogates(c.code - 0x20, proved()) }
     | false => c
     end;
 

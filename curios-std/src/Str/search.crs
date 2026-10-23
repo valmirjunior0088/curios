@@ -1,6 +1,6 @@
-use /std/{Str, Char, Bool, Bytes, Nat, Option};
+use /std/{Str, Char, Bool, Bytes, Nat, Option, proved};
 use /std/Str/{At};
-use /std/Bool/{True, Holds};
+use /std/Bool/{Holds};
 
 --- The first character at or after `from` that `pred` accepts, and where it is, or `none`: one walk forward, which stops there.
 pub let seek(s: Str, from: At(s), pred: (Char) -> Bool) -> Option({at: At(s), char: Char}) =
@@ -37,7 +37,7 @@ pub let meets(
                     match At/try_next(s, at)
                     | some(have) =>
                         match have.char == want.char
-                        | true => again(have.past, have.progress)(want.past, True/proved())
+                        | true => again(have.past, have.progress)(want.past, proved())
                         | false => Option/none()
                         end
                     | none() => Option/none()
@@ -104,7 +104,7 @@ pub let occurrence(
                 | true =>
                     let onward = At/skip(s, at);
                     let later() -> Option(Found(s, from)) =
-                        again(onward.past, onward.progress)(True/proved());
+                        again(onward.past, onward.progress)(proved());
                     match Bytes/get(s.bytes, at.offset) == lead_byte
                     | false => later()
                     | true =>
@@ -118,7 +118,7 @@ pub let occurrence(
                                     start = at,
                                     past = met.past,
                                     ordered = reached,
-                                    progress = True/proved()))
+                                    progress = proved()))
                             | none() => later()
                             end
                         end

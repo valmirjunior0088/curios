@@ -1,5 +1,5 @@
-use /std/{Nat, Eq};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Eq, proved};
+use /std/Bool/{Holds};
 
 --- The exponent of the highest power of two not above `n`, and `0` at zero.
 pub let log2(n: Nat) -> Nat =
@@ -13,12 +13,12 @@ pub let bounds(
     @ok: Holds(0 < n),
 ) -> {low: Holds(Nat/pow(2, log2(n)) <= n), high: Holds(n < 2 * Nat/pow(2, log2(n)))} =
     match n < 2
-    | true => (low = True/proved(), high = True/proved())
+    | true => (low = proved(), high = proved())
     | false =>
         let inner = bounds(n / 2);
         let step: Eq()(log2(n / 2) + 1, log2(n)) = Eq/refl();
-        let low: Holds(2 * Nat/pow(2, log2(n / 2)) <= n) = True/proved();
-        let high: Holds(n < 4 * Nat/pow(2, log2(n / 2))) = True/proved();
+        let low: Holds(2 * Nat/pow(2, log2(n / 2)) <= n) = proved();
+        let high: Holds(n < 4 * Nat/pow(2, log2(n / 2))) = proved();
         (
             low = Eq/subst((l: Nat) => Holds(Nat/pow(2, l) <= n), step, low),
             high = Eq/subst((l: Nat) => Holds(n < 2 * Nat/pow(2, l)), step, high))

@@ -1,7 +1,7 @@
 --- The rules of UAX #29 that decide where an extended grapheme cluster ends.
 mod grapheme;
 
-use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord};
+use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord, proved};
 use /std/Char/{GraphemeBreak};
 use /std/Str/{utf8};
 use /std/Bool/{True, Holds};
@@ -79,7 +79,7 @@ pub let to_after(
                         starts(Bytes/drop(s.bytes, n, @within))),
                 back,
                 (_) => p.boundary)(
-                True/proved()) };
+                proved()) };
 
 --- How many bytes continuing a character open `rest`.
 let run(rest: Bytes) -> Nat =
@@ -136,7 +136,7 @@ pub let skip(
     @here: Holds(at.offset < Bytes/len(s.bytes)),
 ) -> {past: At(s), progress: Holds(at.offset < past.offset)} =
     let rest = Str/after(s, at);
-    let hopped = hop(@rest.bytes, True/proved());
+    let hopped = hop(@rest.bytes, proved());
     (past = of_after(s, at, At { offset = hopped.width }), progress = hopped.positive);
 
 --- The character at `at`, the position past it, and the proof that it lies past.
@@ -147,7 +147,7 @@ pub let next(
 ) -> {char: Char, past: At(s), progress: Holds(at.offset < past.offset)} =
     let rest = Str/after(s, at);
     let stepped = skip(s, at, @here);
-    (char = lead(rest.valid, True/proved()), past = stepped.past, progress = stepped.progress);
+    (char = lead(rest.valid, proved()), past = stepped.past, progress = stepped.progress);
 
 --- The character at `at`, the position past it and the proof that it lies past, or `none` at the end of `s`.
 pub let try_next(
@@ -171,8 +171,8 @@ let floor(
         match starts(Bytes/drop(s.bytes, j + 1, @within))
         | true => (at = At { offset = j + 1 }, below = Nat/le/refl(j + 1))
         | false =>
-            let back = floor(s, j, True/proved());
-            (at = back.at, below = True/proved())
+            let back = floor(s, j, proved());
+            (at = back.at, below = proved())
         end
     end;
 
@@ -185,7 +185,7 @@ pub let prev(
     match at.offset
     | 0 => match here end
     | j + 1 =>
-        let back = floor(s, j, True/proved());
+        let back = floor(s, j, proved());
         (char = next(s, back.at).char, past = back.at, progress = back.below)
     end;
 
@@ -251,7 +251,7 @@ pub let try_prev_grapheme(
                 let cluster = next_grapheme(s, p);
                 match cluster.past.offset < at.offset
                 | true => again(cluster.past, cluster.progress)
-                | false => Option/some((past = p, progress = True/proved()))
+                | false => Option/some((past = p, progress = proved()))
                 end
             end,
         start(s));
@@ -266,7 +266,7 @@ pub let forward(
     Nat/descend(
         (p: At(s)) => Bytes/len(s.bytes) - p.offset,
         P,
-        (at, again) => step(at, (p, progress) => again(p, True/proved())),
+        (at, again) => step(at, (p, progress) => again(p, proved())),
         at);
 
 --- Recursion back through the positions of `s`: `step` may recur at any position before `at`, with the proof that it lies before, which is what [`prev`] answers. [`forward`] read the other way, the offset itself the measure that descends.

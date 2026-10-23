@@ -1,13 +1,13 @@
 //! The grid of bounds proved from the facts in scope: omitted bounds the elaborator must fill with a proof both checkers recheck, and controls it must refuse.
 //!
-//! **A row is a bound and the facts it follows from.** A claim row states a proposition over its binders and asks for it twice: through `proved(@claim)`, whose bound is decided where the call is inserted, and through `proved()` pinned by the item's declared result, whose bound waits for the expectation and is decided when it is retried. A body row states a call whose own bound is omitted — `List/get(xs, i)` — or a contradiction arm, `match Bool/False/refuted() end`, and is asked once.
+//! **A row is a bound and the facts it follows from.** A claim row states a proposition over its binders and asks for it twice: through `proved(@claim)`, whose bound is decided where the call is inserted, and through `proved()` pinned by the item's declared result, whose bound waits for the expectation and is decided when it is retried. A body row states a call whose own bound is omitted — `List/get(xs, i)` — or a contradiction arm, `match proved(@False) end`, and is asked once.
 //!
 //! **Every row compiles, and every control is refused for its bound and nothing else** — a control refused for a misspelling would pass as refused, so the refusal must name what nothing discharged. A control states what the procedure's fragment leaves out. Why the procedure is what it is is `documentation/design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md`, and its contract is `curios-elab`'s `entailment` documentation.
 
 use super::{core_elab, typecheck};
 
 /// The imports every program opens with.
-const HEADER: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Char, List, Option, Str, Eq, Io}; use /std/Bool/{True, False, Holds};";
+const HEADER: &str = "use /std/{Nat, Int, Bool, Byte, Bytes, Char, List, Option, Str, Eq, Io, proved}; use /std/Bool/{True, False, Holds};";
 
 /// What a row asks the procedure for.
 enum Ask {
@@ -104,30 +104,30 @@ const ROWS: &[Row] = &[
     body(
         "i: Nat, n: Nat, p: Holds(i < n)",
         "{}",
-        "let k = n + 2; let _: Holds(i + 1 < k) = True/proved(); ()",
+        "let k = n + 2; let _: Holds(i + 1 < k) = proved(); ()",
     ),
     // A local definition bound to a call, `Str`'s `occurrence`: the facts over it are written over its name, where the call's reduct would carry the body it unfolds to, whose arms elaborate only where they were written.
     body(
         "s: Str, at: Str/At(s), @here: Holds(at.offset < Bytes/len(s.bytes)), again: (p: Str/At(s)) -> Option({start: Str/At(s), ordered: Holds(p.offset <= start.offset)})",
         "Option({start: Str/At(s), ordered: Holds(at.offset <= start.offset)})",
-        "let onward = Str/At/skip(s, at); match again(onward.past) | some(found) => Option/some((start = found.start, ordered = True/proved())) | none() => Option/none() end",
+        "let onward = Str/At/skip(s, at); match again(onward.past) | some(found) => Option/some((start = found.start, ordered = proved())) | none() => Option/none() end",
     ),
     // A local definition bound to the item's own recursive call, which reduction reads as the slot the member is known by while it is checked: the bound waits on that slot alone, and is proved over the definition's name.
     body(
         "k: Nat",
         "{at: Nat, below: Holds(at <= k)}",
-        "match k | 0 => (at = 0, below = True/qed()) | j + 1 => let back = row(j); (at = back.at, below = True/proved()) end",
+        "match k | 0 => (at = 0, below = True/qed()) | j + 1 => let back = row(j); (at = back.at, below = proved()) end",
     ),
     // A guard's false arm, and a variable refined to a successor.
     body(
         "n: Int",
         "{}",
-        "match n >= +0 | true => () | false => let _: Holds(+0 <= +0 - n) = True/proved(); () end",
+        "match n >= +0 | true => () | false => let _: Holds(+0 <= +0 - n) = proved(); () end",
     ),
     body(
         "k: Nat, n: Nat, p: Holds(k <= n)",
         "{}",
-        "match k | 0 => () | j + 1 => let _: Holds(j < n) = True/proved(); () end",
+        "match k | 0 => () | j + 1 => let _: Holds(j < n) = proved(); () end",
     ),
     // A zero check, which conversion holds to be the bound: a natural against zero is its order comparison, so an `==` guard's false arm, a `!=` guard's true one, a `Bool/not` of one and a `choose`'s default arm each answer `0 < count`, with the check on either side and over a length.
     body(
@@ -238,46 +238,46 @@ const ROWS: &[Row] = &[
     body(
         "n: Nat",
         "{}",
-        "match Nat/in_range(n, 0, 0x7F) | true => let _: Holds(n < 0x80) = True/proved(); () | false => () end",
+        "match Nat/in_range(n, 0, 0x7F) | true => let _: Holds(n < 0x80) = proved(); () | false => () end",
     ),
     body(
         "c: Char",
         "{}",
-        "match Char/is_ascii_upper(c) | true => let _: Holds(c.code + 0x20 < 0xD800) = True/proved(); () | false => () end",
+        "match Char/is_ascii_upper(c) | true => let _: Holds(c.code + 0x20 < 0xD800) = proved(); () | false => () end",
     ),
     // A range check's guard over a call and over a local definition: its bounds are proved over the operands the arm's key spells, which both checkers hold, where their reducts — the intrinsic a call unfolds to, the value a definition stands for — are a spelling one of them misses.
     body(
         "c: Byte",
         "{}",
-        "match Nat/in_range(Byte/to_nat(c), 0xF0, 0xF4) | true => let _: Holds(0xF0 <= Byte/to_nat(c)) = True/proved(); () | false => () end",
+        "match Nat/in_range(Byte/to_nat(c), 0xF0, 0xF4) | true => let _: Holds(0xF0 <= Byte/to_nat(c)) = proved(); () | false => () end",
     ),
     body(
         "m: Nat",
         "{}",
-        "let n = m + 0; match Nat/in_range(n, 0xF0, 0xF4) | true => let _: Holds(0xF0 <= m) = True/proved(); () | false => () end",
+        "let n = m + 0; match Nat/in_range(n, 0xF0, 0xF4) | true => let _: Holds(0xF0 <= m) = proved(); () | false => () end",
     ),
     // A conjunction's guard in its true arm, as each of its conjuncts: two comparisons, the bounds a point inside a box needs, and a comparison beside a range check, nested.
     body(
         "x: Nat, y: Nat, w: Nat, h: Nat",
         "{}",
-        "match x < w && y < h | true => let _: Holds(x < w) = True/proved(); let _: Holds(y + 1 <= h) = True/proved(); () | false => () end",
+        "match x < w && y < h | true => let _: Holds(x < w) = proved(); let _: Holds(y + 1 <= h) = proved(); () | false => () end",
     ),
     body(
         "a: Nat, b: Nat, n: Nat",
         "{}",
-        "match a < b && (Nat/in_range(n, 2, 9) && b <= n) | true => let _: Holds(a + 1 <= n) = True/proved(); let _: Holds(n < 10) = True/proved(); () | false => () end",
+        "match a < b && (Nat/in_range(n, 2, 9) && b <= n) | true => let _: Holds(a + 1 <= n) = proved(); let _: Holds(n < 10) = proved(); () | false => () end",
     ),
     // A guard respelled: the goal commutes the guard's sum, and the guard's own equation answers it.
     body(
         "a: Nat, b: Nat",
         "{}",
-        "match a + b < 10 | true => let _: Holds(b + a < 10) = True/proved(); () | false => () end",
+        "match a + b < 10 | true => let _: Holds(b + a < 10) = proved(); () | false => () end",
     ),
     // An `==` guard's true arm, as the equation it gives.
     body(
         "x: Nat, y: Nat, p: Holds(y < 5)",
         "{}",
-        "match x == y | true => let _: Holds(x < 5) = True/proved(); () | false => () end",
+        "match x == y | true => let _: Holds(x < 5) = proved(); () | false => () end",
     ),
     // A goal that needs the negated goal scaled: the refuting form.
     claim("a: Nat, b: Nat, p: Holds(a * 2 <= b * 2)", "Holds(a <= b)"),
@@ -287,45 +287,45 @@ const ROWS: &[Row] = &[
     body(
         "i: Nat, m: Nat, n: Nat, p: Holds(i < m), q: Holds(m <= n)",
         "Nat",
-        "let f(r: Holds(i < n)) -> Nat = 0; let x = True/proved(); f(x)",
+        "let f(r: Holds(i < n)) -> Nat = 0; let x = proved(); f(x)",
     ),
     // Contradiction arms: facts that refute each other, from hypotheses and from a guard.
     body(
         "n: Nat, p: Holds(0x80 <= n), q: Holds(n <= 0x7F)",
         "Nat",
-        "match False/refuted() end",
+        "match proved(@False) end",
     ),
     body(
         "n: Nat, q: Holds(n <= 10)",
         "Nat",
-        "match n > 20 | true => match False/refuted() end | false => 0 end",
+        "match n > 20 | true => match proved(@False) end | false => 0 end",
     ),
     body(
         "n: Int, q: Holds(n <= +10)",
         "Int",
-        "match n > +20 | true => match False/refuted() end | false => +0 end",
+        "match n > +20 | true => match proved(@False) end | false => +0 end",
     ),
     // A range check from zero over a local definition, `Str`'s shape: the check folds to its upper bound, which is still proved over the check the arm recorded.
     body(
         "c: Byte, q: Holds(Nat/in_range(Byte/to_nat(c), 0x80, 0xBF))",
         "Nat",
-        "let n = Byte/to_nat(c); match Nat/in_range(n, 0, 0x7F) | true => match False/refuted() end | false => 0 end",
+        "let n = Byte/to_nat(c); match Nat/in_range(n, 0, 0x7F) | true => match proved(@False) end | false => 0 end",
     ),
     // A hypothesis the arm's guard reduces to an empty proposition refutes the scope by itself, for a contradiction and for a bound alike.
     body(
         "n: Nat, q: Holds(Nat/in_range(n, 0x80, 0xBF))",
         "Nat",
-        "match n <= 0x7F | true => match False/refuted() end | false => 0 end",
+        "match n <= 0x7F | true => match proved(@False) end | false => 0 end",
     ),
     body(
         "n: Nat, p: Holds(0x80 <= n)",
         "{}",
-        "match n <= 0x7F | true => let _: Holds(n < 3) = True/proved(); () | false => () end",
+        "match n <= 0x7F | true => let _: Holds(n < 3) = proved(); () | false => () end",
     ),
     body(
         "n: Int, p: Holds(+0x80 <= n)",
         "Int",
-        "match n <= +0x7F | true => match False/refuted() end | false => +0 end",
+        "match n <= +0x7F | true => match proved(@False) end | false => +0 end",
     ),
     // Truncated subtraction, read by the case split its definition makes.
     claim(
@@ -341,7 +341,7 @@ const ROWS: &[Row] = &[
     body(
         "k: Nat, n: Nat",
         "Nat",
-        "match k <= n | true => let _: Holds(k + (n - k) <= n) = True/proved(); 0 | false => 0 end",
+        "match k <= n | true => let _: Holds(k + (n - k) <= n) = proved(); 0 | false => 0 end",
     ),
     // What both cases state, `a - b <= a`, is a fact with no split: ten subtractions are no 1,024 cases.
     claim(
@@ -359,13 +359,13 @@ const ROWS: &[Row] = &[
     body(
         "n: Nat",
         "Nat",
-        "match n % 16 < 10 | true => 0 | false => let _: Holds(n % 16 - 10 < 6) = True/proved(); 0 end",
+        "match n % 16 < 10 | true => 0 | false => let _: Holds(n % 16 - 10 < 6) = proved(); 0 end",
     ),
     // A remainder divided again, under `==` guards: `Str/Valid`'s shape, whose inner remainder is lifted away before the outer one.
     body(
         "code: Nat",
         "Nat",
-        "match code >= 0x800 | false => 0 | true => match code / 4096 == 0 | false => 0 | true => match (code % 4096) / 64 >= 32 | true => 0 | false => match False/refuted() end end end end",
+        "match code >= 0x800 | false => 0 | true => match code / 4096 == 0 | false => 0 | true => match (code % 4096) / 64 >= 32 | true => 0 | false => match proved(@False) end end end end",
     ),
     // Products of two facts for a variable multiplier: `Nat/DivMod`'s two proofs.
     claim(
@@ -508,13 +508,13 @@ const ROWS: &[Row] = &[
     body(
         "n: Nat, f: (Nat) -> Nat, g: (m: Nat) -> Holds(f(m) <= m)",
         "Nat",
-        "let inner: Holds(f(n / 2) <= n / 2) = g(n / 2); let doubled: Holds(2 * f(n / 2) <= n) = True/proved(); 0",
+        "let inner: Holds(f(n / 2) <= n / 2) = g(n / 2); let doubled: Holds(2 * f(n / 2) <= n) = proved(); 0",
     ),
     // One call under two spellings only conversion holds one: an argument a statement writes as a sum beside the successor an arm refined a variable to, in a proof by induction whose step is stated at `k + 1`; two orders of one sum; and a quotient over each.
     body(
         "f: (Nat) -> Nat, step: (k: Nat) -> Holds(f(k) <= f(k + 1)), n: Nat",
         "Holds(f(0) <= f(n))",
-        "match n | 0 => True/qed() | p + 1; ih => let prior = ih; let stepped = step(p); True/proved() end",
+        "match n | 0 => True/qed() | p + 1; ih => let prior = ih; let stepped = step(p); proved() end",
     ),
     claim(
         "f: (Nat) -> Nat, a: Nat, b: Nat, m: Nat, h: Holds(f(a + b) <= m)",
@@ -620,7 +620,7 @@ const ROWS: &[Row] = &[
     body(
         "i: Nat, p: Holds(i <= 2)",
         "Nat",
-        "match i == 1 | true => 0 | false => match i == 0 | true => 0 | false => let _: Holds(i == 2) = True/proved(); 0 end end",
+        "match i == 1 | true => 0 | false => match i == 0 | true => 0 | false => let _: Holds(i == 2) = proved(); 0 end end",
     ),
 ];
 
@@ -638,7 +638,7 @@ const CONTROLS: &[Row] = &[
     body(
         "x: Nat, w: Nat, y: Nat, h: Nat",
         "{}",
-        "match x < w && y < h | true => () | false => let _: Holds(w <= x) = True/proved(); () end",
+        "match x < w && y < h | true => () | false => let _: Holds(w <= x) = proved(); () end",
     ),
     // An equation no fact states, and one only symmetry would reach.
     claim("a: Nat, b: Nat", "Eq()(a, b)"),
@@ -655,7 +655,7 @@ const CONTROLS: &[Row] = &[
     body(
         "x: Nat, p: Holds(x * 2 <= 3), q: Holds(3 <= x * 2)",
         "Nat",
-        "match False/refuted() end",
+        "match proved(@False) end",
     ),
     // A product of three facts.
     claim("x: Nat, p: Holds(x * x * x <= 7)", "Holds(x <= 1)"),
@@ -689,13 +689,13 @@ const CONTROLS: &[Row] = &[
     body(
         "n: Nat, q: Holds(n <= 10)",
         "Nat",
-        "match Nat/in_range(n, 3, 20) | true => 0 | false => let _: Holds(n < 3) = True/proved(); 0 end",
+        "match Nat/in_range(n, 3, 20) | true => 0 | false => let _: Holds(n < 3) = proved(); 0 end",
     ),
     // A guard's fact at a retry the hole was born outside of: the bound is decided under the refinements its slot was born under, and the arm's are not among them.
     body(
         "i: Nat, m: Nat, n: Nat, q: Holds(m <= n)",
         "Nat",
-        "let h = True/proved(); match i < m | true => let _: Holds(i < n) = h; 0 | false => 0 end",
+        "let h = proved(); match i < m | true => let _: Holds(i < n) = h; 0 | false => 0 end",
     ),
     // A disequality a loose bound leaves open, and an equality one bound of the two leaves open.
     claim("i: Nat, n: Nat, p: Holds(i <= n)", "Holds(i != n)"),
@@ -716,8 +716,8 @@ fn programs(binders: &str, ask: &Ask) -> Vec<String> {
     };
     match *ask {
         Ask::Claim(claim) => vec![
-            item(claim, &format!("True/proved(@{claim})")),
-            item(claim, "True/proved()"),
+            item(claim, &format!("proved(@{claim})")),
+            item(claim, "proved()"),
         ],
         Ask::Body { result, body } => vec![item(result, body)],
     }
@@ -866,9 +866,9 @@ Io/pure(())";
 #[test]
 fn a_filled_row_files_the_same_proof_every_time() {
     // One program, one certificate, one proof: the search is deterministic, so the elaborated item is the same on every run. CI runs this on each platform it builds for.
-    let omitted = "use /std/{Nat, Io};
-use /std/Bool/{True, Holds};
-let byte(a: Nat, b: Nat, p: Holds(a < 16), q: Holds(b < 16)) -> Holds(a * 16 + b < 256) = True/proved(@Holds(a * 16 + b < 256));
+    let omitted = "use /std/{Nat, Io, proved};
+use /std/Bool/{Holds};
+let byte(a: Nat, b: Nat, p: Holds(a < 16), q: Holds(b < 16)) -> Holds(a * 16 + b < 256) = proved(@Holds(a * 16 + b < 256));
 Io/pure(())";
     let first = core_elab(omitted);
     assert_eq!(core_elab(omitted), first);
@@ -880,9 +880,9 @@ Io/pure(())";
 
 #[test]
 fn a_row_filled_on_a_retry_files_the_same_proof_every_time() {
-    // `True/proved()` learns its proposition from the parameter it is passed to, so the bound is filled on a retry, where the two guards it follows from are restored together into one frame. They are read back in the order they were met, whatever the run, which `curios-elab`'s `a_frames_guards_are_read_back_in_the_order_they_were_recorded` holds at the store; this holds the proof it gives.
-    let pinned = "use /std/{Nat, Io};
-use /std/Bool/{True, Holds};
+    // `proved()` learns its proposition from the parameter it is passed to, so the bound is filled on a retry, where the two guards it follows from are restored together into one frame. They are read back in the order they were met, whatever the run, which `curios-elab`'s `a_frames_guards_are_read_back_in_the_order_they_were_recorded` holds at the store; this holds the proof it gives.
+    let pinned = "use /std/{Nat, Io, proved};
+use /std/Bool/{Holds};
 let above(n: Nat, p: Holds(128 <= n)) -> Nat = n;
 let within(n: Nat, lo: Nat, hi: Nat) -> Nat =
     match Nat/in_range(n, lo, hi)
@@ -890,7 +890,7 @@ let within(n: Nat, lo: Nat, hi: Nat) -> Nat =
     | true =>
         match 128 <= lo
         | false => 0
-        | true => above(n, True/proved())
+        | true => above(n, proved())
         end
     end;
 Io/pure(())";
@@ -924,7 +924,7 @@ fn a_certificate_corrupted_by_one_multiplier_is_refused_by_both_checkers() {
 fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     let refusal = |binders: &str, claim: &str| {
         let program = format!(
-            "{HEADER}\nlet row({binders}) -> {claim} = True/proved(@{claim});\nIo/pure(())"
+            "{HEADER}\nlet row({binders}) -> {claim} = proved(@{claim});\nIo/pure(())"
         );
         typecheck(&program).expect_err("the control is refused")
     };
@@ -953,7 +953,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     // A contradiction goal the search does not refute, at a fraction: the search's assignment, as the search's.
     let absurd = {
         let program = format!(
-            "{HEADER}\nlet row(x: Nat, p: Holds(x * 2 <= 3), q: Holds(3 <= x * 2)) -> Nat = match False/refuted() end;\nIo/pure(())"
+            "{HEADER}\nlet row(x: Nat, p: Holds(x * 2 <= 3), q: Holds(3 <= x * 2)) -> Nat = match proved(@False) end;\nIo/pure(())"
         );
         typecheck(&program).expect_err("the control is refused")
     };
@@ -968,7 +968,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     // An integer assignment no program takes: `Nat/pow(2, n)` reduces to 2 at `n = 1`, not to the 1 the search reads it as.
     let power = {
         let program = format!(
-            "{HEADER}\nlet row(n: Nat, p: Holds(Nat/pow(2, n) <= n)) -> Nat = match False/refuted() end;\nIo/pure(())"
+            "{HEADER}\nlet row(n: Nat, p: Holds(Nat/pow(2, n) <= n)) -> Nat = match proved(@False) end;\nIo/pure(())"
         );
         typecheck(&program).expect_err("the control is refused")
     };
@@ -982,7 +982,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     // A guard written through `Cmp` is recorded as written and as the dispatch resolves, and is one fact.
     let guarded = {
         let program = format!(
-            "{HEADER}\nlet row(n: Nat) -> Nat = match n <= 0x7F | true => match False/refuted() end | false => 0 end;\nIo/pure(())"
+            "{HEADER}\nlet row(n: Nat) -> Nat = match n <= 0x7F | true => match proved(@False) end | false => 0 end;\nIo/pure(())"
         );
         typecheck(&program).expect_err("the control is refused")
     };
@@ -993,12 +993,12 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     assert!(!silent.contains("facts in scope"), "{silent}");
 }
 
-/// A counterexample names an atom as the bound states it, as the facts beside it are named: a call by its name, where the view read the body it unfolds to. Through a parameter's bound the statement is the signature's, and through the proposition `True/proved()` leaves implicit it is the solution of a metavariable, which is read for the report alone.
+/// A counterexample names an atom as the bound states it, as the facts beside it are named: a call by its name, where the view read the body it unfolds to. Through a parameter's bound the statement is the signature's, and through the proposition `proved()` leaves implicit it is the solution of a metavariable, which is read for the report alone.
 #[test]
 fn a_counterexample_spells_an_atom_as_the_bound_states_it() {
     for body in [
         "let needs(n: Nat, @_: Holds(0 < Nat/log2(n))) -> Nat = n;\nlet row(n: Nat) -> Nat = needs(n);",
-        "let row(n: Nat) -> Holds(0 < Nat/log2(n)) = True/proved();",
+        "let row(n: Nat) -> Holds(0 < Nat/log2(n)) = proved();",
     ] {
         let refused = typecheck(&format!("{HEADER}\n{body}\nIo/pure(())"))
             .expect_err("the control is refused");
@@ -1013,7 +1013,7 @@ fn a_counterexample_spells_an_atom_as_the_bound_states_it() {
 #[test]
 fn a_fact_a_local_definition_states_is_named_with_its_operators() {
     let refused = typecheck(&format!(
-        "{HEADER}\nlet row(a: Int, b: Int, c: Int, h: Eq()(a, b * c + c)) -> Holds(a < b) = let stated: Eq()(b * c + c, a) = Eq/sym(h); True/proved();\nIo/pure(())"
+        "{HEADER}\nlet row(a: Int, b: Int, c: Int, h: Eq()(a, b * c + c)) -> Holds(a < b) = let stated: Eq()(b * c + c, a) = Eq/sym(h); proved();\nIo/pure(())"
     ))
     .expect_err("the control is refused");
     assert!(refused.contains("stated: b * c + c <= a"), "{refused}");
@@ -1025,10 +1025,10 @@ fn a_counterexample_spells_an_operand_of_an_operation_as_written() {
     let width =
         "let width(s: Str) -> Nat = List/fold(Str/to_list(s), 0, (_: Char, n: Nat) => n + 1);";
     for bound in [
-        "let row(s: Str, t: Str, w: Nat) -> Holds(width(s) - width(t) < w) = True/proved();",
-        "let row(s: Str, t: Str, w: Nat) -> {} = let x = width(s) - width(t); let _: Holds(x < w) = True/proved(); ();",
-        "let row(s: Str, t: Str, w: Nat) -> Holds(Nat/min(width(s), width(t)) < w) = True/proved();",
-        "let row(s: Str, w: Nat) -> Holds(width(s) / 2 < w) = True/proved();",
+        "let row(s: Str, t: Str, w: Nat) -> Holds(width(s) - width(t) < w) = proved();",
+        "let row(s: Str, t: Str, w: Nat) -> {} = let x = width(s) - width(t); let _: Holds(x < w) = proved(); ();",
+        "let row(s: Str, t: Str, w: Nat) -> Holds(Nat/min(width(s), width(t)) < w) = proved();",
+        "let row(s: Str, w: Nat) -> Holds(width(s) / 2 < w) = proved();",
     ] {
         let refused = typecheck(&format!("{HEADER}\n{width}\n{bound}\nIo/pure(())"))
             .expect_err("the control is refused");

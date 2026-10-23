@@ -1,4 +1,4 @@
-use /std/{Nat, Eq, Option};
+use /std/{Nat, Eq, Option, proved};
 use /std/Nat/{Divides, Gcd};
 use /std/Bool/{True, Holds};
 
@@ -57,7 +57,7 @@ pub let quotients(
             (t: Nat) => Eq()(Nat/gcd(t, b), Nat/gcd(x, y) * g),
             Eq/sym(left),
             Eq/subst((t: Nat) => Eq()(Nat/gcd(x * g, t), Nat/gcd(x, y) * g), Eq/sym(right), whole));
-    Nat/le/antisym(Nat/gcd(x, y), 1, True/proved(), True/proved());
+    Nat/le/antisym(Nat/gcd(x, y), 1, proved(), proved());
 
 --- Euclid's lemma: a number coprime to `b` that divides `b * k` divides `k`.
 ---

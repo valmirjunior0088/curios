@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Eq};
+use /std/{Nat, Int, Eq, proved};
 use /std/Bool/{True, Holds};
 
 --- `n` divided by `d`, floored: the quotient and the remainder, with Euclid's identity and the remainder's bound beside them.
@@ -26,7 +26,7 @@ pub let of(n: Int, d: Nat, @ok: Holds(0 < d)) -> DivMod(n, d) =
                 Int/eq_of_eql(
                     Nat/to_int(m),
                     Nat/to_int(m / d) * Nat/to_int(d) + Nat/to_int(m % d),
-                    True/proved()),
+                    proved()),
             bounded = True/qed() }
     | neg(m) =>
         DivMod {
@@ -36,8 +36,8 @@ pub let of(n: Int, d: Nat, @ok: Holds(0 < d)) -> DivMod(n, d) =
                 Int/eq_of_eql(
                     -1 - Nat/to_int(m),
                     (-1 - Nat/to_int(m / d)) * Nat/to_int(d) + Nat/to_int(d - 1 - m % d),
-                    True/proved()),
-            bounded = True/proved() }
+                    proved()),
+            bounded = proved() }
     end;
 
 --- A quotient and a remainder are the ones `of` computes: a `q` and an `r` with `n = q * d + r` and `r < d` are its.
@@ -55,8 +55,8 @@ pub let unique(
     let split = of(n, d);
     let same: Holds(
         q * Nat/to_int(d) + Nat/to_int(r)
-            == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)) = True/proved();
-    let quotient: Eq()(q, split.quotient) = Int/eq_of_eql(q, split.quotient, True/proved());
+            == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)) = proved();
+    let quotient: Eq()(q, split.quotient) = Int/eq_of_eql(q, split.quotient, proved());
     let rest: Holds(
         split.quotient * Nat/to_int(d) + Nat/to_int(r)
             == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)) =
@@ -67,4 +67,4 @@ pub let unique(
                         == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)),
             quotient,
             same);
-    (quotient = quotient, remainder = Nat/eq_of_eql(r, split.remainder, True/proved()));
+    (quotient = quotient, remainder = Nat/eq_of_eql(r, split.remainder, proved()));

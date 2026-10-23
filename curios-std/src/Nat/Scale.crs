@@ -1,4 +1,4 @@
-use /std/{Nat, Eq};
+use /std/{Nat, Eq, proved};
 use /std/Bool/{True, Holds};
 
 --- A positive `n` as an odd number at a binary scale: `n` is `2 * half + 1` shifted left by `count`.
@@ -24,11 +24,11 @@ pub let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =
             Scale {
                 count = 0,
                 half = n / 2,
-                joined = Nat/le/antisym(n, 2 * (n / 2) + 1, True/proved(), True/proved()) }
+                joined = Nat/le/antisym(n, 2 * (n / 2) + 1, proved(), proved()) }
         | false =>
             let inner = of(n / 2);
             let even: Eq()(n, 2 * (n / 2)) =
-                Nat/le/antisym(n, 2 * (n / 2), True/proved(), True/proved());
+                Nat/le/antisym(n, 2 * (n / 2), proved(), proved());
             Scale {
                 count = inner.count + 1,
                 half = inner.half,
@@ -50,7 +50,7 @@ pub let unique(
     match k
     | 0 =>
         match j
-        | 0 => (count = Eq/refl(), half = Nat/le/antisym(m, n, True/proved(), True/proved()))
+        | 0 => (count = Eq/refl(), half = Nat/le/antisym(m, n, proved(), proved()))
         | _ + 1 => match Eq/subst((t: Nat) => Holds(2 * m + 1 == t), e, True/qed()) end
         end
     | kp + 1 =>
@@ -61,8 +61,8 @@ pub let unique(
                 Nat/le/antisym(
                     Nat/shl(2 * m + 1, kp),
                     Nat/shl(2 * n + 1, jp),
-                    True/proved(),
-                    True/proved());
+                    proved(),
+                    proved());
             let inner = unique(kp, m, jp, n, halved);
             (count = Eq/cong((x: Nat) => x + 1, inner.count), half = inner.half)
         end

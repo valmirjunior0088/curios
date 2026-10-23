@@ -1,7 +1,7 @@
 -- The binary scale: a number's factors of two and its odd part, the powers' lemmas, a length in bits, and a shift split at its count, across the i31 and past 64 bits.
-use /std/{Nat, Eq};
+use /std/{Nat, Eq, proved};
 use /std/Nat/{Scale};
-use /std/Bool/{True, Holds};
+use /std/Bool/{Holds};
 
 let _forty_holds_three_factors_of_two: Eq()(Nat/trailing_zeros(40), 3) =
     Eq/refl();
@@ -88,4 +88,4 @@ let _two_magnitudes_at_two_counts_compare_aligned(
 ) -> Holds(Nat/shl(a, i - j) <= b) =
     let aligned: Holds(Nat/shl(Nat/shl(a, i - j), j) <= Nat/shl(b, j)) =
         Eq/subst((x: Nat) => Holds(x <= Nat/shl(b, j)), Nat/shl/split(a, i, j, fits), h);
-    True/proved();
+    proved();

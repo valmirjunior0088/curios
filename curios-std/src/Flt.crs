@@ -44,7 +44,7 @@ mod grammar;
 use grammar/{of_decimal_in, of_str_in, of_hex_str_in};
 
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Fmt, Ord,
-    Vec, Eq};
+    Vec, Eq, proved};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
@@ -396,19 +396,19 @@ pub let total_key_injective(a: Flt, b: Flt, e: Eq()(total_key(a), total_key(b)))
                 Nat/le/antisym(
                     Bytes/to_nat(to_le_bytes(a)),
                     Bytes/to_nat(to_le_bytes(b)),
-                    True/proved(),
-                    True/proved())
-            | false => match False/refuted() end
+                    proved(),
+                    proved())
+            | false => match proved(@False) end
             end
         | false =>
             match Bytes/to_nat(to_le_bytes(b)) >= 9223372036854775808
-            | true => match False/refuted() end
+            | true => match proved(@False) end
             | false =>
                 Nat/le/antisym(
                     Bytes/to_nat(to_le_bytes(a)),
                     Bytes/to_nat(to_le_bytes(b)),
-                    True/proved(),
-                    True/proved())
+                    proved(),
+                    proved())
             end
         end;
     eq_of_le_bytes(a, b, Bytes/to_nat_injective(to_le_bytes(a), to_le_bytes(b), Eq/refl(), bits));

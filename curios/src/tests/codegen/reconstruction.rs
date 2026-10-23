@@ -12,7 +12,7 @@ use {
 };
 
 const HEADER: &str =
-    "use /std/{Nat, Io, Cell, Option, List, Process}; use /std/Bool/{True, Holds};";
+    "use /std/{Nat, Io, Cell, Option, List, Process, proved}; use /std/Bool/{Holds};";
 const EXACT: &str = r#"
 let walk(n: Nat, seed: Nat) -> {Nat, Nat} =
     match n
@@ -23,18 +23,18 @@ let walk(n: Nat, seed: Nat) -> {Nat, Nat} =
 const PROOF: &str = r#"
 let walk(n: Nat, seed: Nat) -> {at: Nat, low: Holds(0 <= at)} =
     match n
-    | 0 => (at = seed, low = True/proved())
-    | k + 1 => let r = walk(k, (seed + 1) % 16777213); (at = r.at, low = True/proved())
+    | 0 => (at = seed, low = proved())
+    | k + 1 => let r = walk(k, (seed + 1) % 16777213); (at = r.at, low = proved())
     end;
 "#;
 const OPTIONAL: &str = r#"
 let walk(n: Nat, seed: Nat) -> Option({at: Nat, seen: Nat, low: Holds(0 <= at)}) =
     match n
-    | 0 => Option/some((at = seed, seen = seed + 13, low = True/proved()))
+    | 0 => Option/some((at = seed, seen = seed + 13, low = proved()))
     | k + 1 => match k
         | 0 => Option/none()
         | j + 1 => match walk(j, (seed + 2) % 16777213)
-            | some(hit) => Option/some((at = hit.at, seen = hit.seen, low = True/proved()))
+            | some(hit) => Option/some((at = hit.at, seen = hit.seen, low = proved()))
             | none() => Option/none()
             end
         end

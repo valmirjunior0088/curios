@@ -1,7 +1,7 @@
 pub use /sys/Int/{shl};
 
-use /std/{Nat, Int, Eq};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Int, Eq, proved};
+use /std/Bool/{Holds};
 
 --- A shift by `i` is a shift by `i - j` and then by `j`, where `j <= i`: [`Nat/shl/split`] at a signed value.
 pub let split(
@@ -25,9 +25,9 @@ pub let unique(
     e: Eq()(shl(m, k), shl(n, j)),
 ) -> {count: Eq()(k, j), value: Eq()(m, n)} =
     let left: Eq()(Int/abs(m), 2 * (Int/abs(m) / 2) + 1) =
-        Nat/le/antisym(Int/abs(m), 2 * (Int/abs(m) / 2) + 1, True/proved(), True/proved());
+        Nat/le/antisym(Int/abs(m), 2 * (Int/abs(m) / 2) + 1, proved(), proved());
     let right: Eq()(Int/abs(n), 2 * (Int/abs(n) / 2) + 1) =
-        Nat/le/antisym(Int/abs(n), 2 * (Int/abs(n) / 2) + 1, True/proved(), True/proved());
+        Nat/le/antisym(Int/abs(n), 2 * (Int/abs(n) / 2) + 1, proved(), proved());
     let magnitudes: Eq()(Nat/shl(Int/abs(m), k), Nat/shl(Int/abs(n), j)) = Eq/cong(Int/abs, e);
     let shaped: Eq()(Nat/shl(2 * (Int/abs(m) / 2) + 1, k), Nat/shl(2 * (Int/abs(n) / 2) + 1, j)) =
         Eq/subst(

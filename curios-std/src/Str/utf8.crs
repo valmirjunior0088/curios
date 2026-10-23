@@ -1,4 +1,4 @@
-use /std/{Byte, Bytes, Bool, Char, Eq, Nat};
+use /std/{Byte, Bytes, Bool, Char, Eq, Nat, proved};
 use /std/Bool/{True, False, Holds};
 use /std/Str/{Class, Scan};
 
@@ -89,7 +89,7 @@ let scalars_within(
     | true =>
         match max2 < 0xD800
         | true => True/qed()
-        | false => match False/refuted() end
+        | false => match proved(@False) end
         end
     | false =>
         match min >= 0xE000
@@ -102,11 +102,11 @@ let scalars_within(
                 | true => True/qed()
                 | false =>
                     match min2 >= 0xE000
-                    | false => match False/refuted() end
+                    | false => match proved(@False) end
                     | true =>
                         match max2 <= 0x10FFFF
                         | true => True/qed()
-                        | false => match False/refuted() end
+                        | false => match proved(@False) end
                         end
                     end
                 end
@@ -129,8 +129,8 @@ pub let concluded(
         partial * 0x40 + (c - 0x80),
         partial * 0x40 + (c - 0x80),
         p,
-        True/proved(),
-        True/proved());
+        proved(),
+        proved());
 
 --- A byte read in range, with more still owed, leaves a character that can still only end at a scalar value: its range narrows to the one below that byte.
 pub let advanced(
@@ -157,8 +157,8 @@ pub let advanced(
                     (partial * 0x40 + (c - 0x80)) * 0x40,
                     (partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F,
                     p,
-                    True/proved(),
-                    True/proved())
+                    proved(),
+                    proved())
             | r3 + 1 =>
                 match r3
                 | 0 =>
@@ -168,8 +168,8 @@ pub let advanced(
                         (partial * 0x40 + (c - 0x80)) * 0x40 * 0x40,
                         ((partial * 0x40 + (c - 0x80)) * 0x40 + 0x3F) * 0x40 + 0x3F,
                         p,
-                        True/proved(),
-                        True/proved())
+                        proved(),
+                        proved())
                 | _ + 1 => match p end
                 end
             end
@@ -206,7 +206,7 @@ let begins_below(
             | false =>
                 Eq/subst(
                     (k: Nat) => Holds(begins_scalars(Nat/to_byte(k % 256))),
-                    Nat/le/antisym(mp, n, True/proved(), inside),
+                    Nat/le/antisym(mp, n, proved(), inside),
                     True/qed())
             end
         end

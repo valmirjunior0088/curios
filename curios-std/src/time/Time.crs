@@ -1,5 +1,5 @@
-use /std/{Nat, Bool, Option, Ord, Hash, Spell, Str, Show};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Bool, Option, Ord, Hash, Spell, Str, Show, proved};
+use /std/Bool/{Holds};
 use /std/ops/{Eql};
 use /std/time/{iso8601};
 
@@ -74,9 +74,9 @@ pub let of_seconds(
                 Bool/and/both(
                     hour <= 23 && minute <= 59,
                     second <= 60,
-                    Bool/and/both(hour <= 23, minute <= 59, True/proved(), True/proved()),
-                    True/proved()),
-                True/proved()) };
+                    Bool/and/both(hour <= 23, minute <= 59, proved(), proved()),
+                    proved()),
+                proved()) };
 
 --- The time of day as ISO 8601's extended format writes it: `08:49:37`, and the fraction where there is one, trimmed of trailing zeros.
 pub let to_str(t: Time) -> Str =

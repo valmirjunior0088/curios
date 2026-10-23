@@ -1,4 +1,4 @@
-use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering};
+use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, proved};
 use /std/Bool/{True, False, Holds};
 
 --- The bit of `k` in its byte `g` at place `o` of nine: place zero says the byte is there, and the eight after it are the byte's own from its top. A byte the run does not have has every place clear, so a run that ends is below every run that goes on.
@@ -189,8 +189,8 @@ let sought(
             match Nat/shr(x, j) != Nat/shr(y, j)
             | true =>
                 Sought {
-                    within = True/proved(),
-                    above = (m, over, within) => above(m, True/proved(), within),
+                    within = proved(),
+                    above = (m, over, within) => above(m, proved(), within),
                     differs =
                         match low(x, j) != low(y, j)
                         | true => True/qed()
@@ -199,30 +199,30 @@ let sought(
                             let same_next: Holds(Nat/shr(x, j + 1) == Nat/shr(y, j + 1)) =
                                 Eq/subst(
                                     (v: Nat) => Holds(Nat/shr(x, j + 1) == v),
-                                    above(j + 1, True/qed(), True/proved()),
+                                    above(j + 1, True/qed(), proved()),
                                     True/qed());
-                            let left = split(x, j, small_x, True/proved());
-                            let right = split(y, j, small_y, True/proved());
+                            let left = split(x, j, small_x, proved());
+                            let right = split(y, j, small_y, proved());
                             match Eq/subst(
                                 (v: Nat) => Holds(Nat/shr(x, j) != v),
                                 Nat/le/antisym(
                                     Nat/shr(y, j),
                                     Nat/shr(x, j),
-                                    True/proved(),
-                                    True/proved()),
+                                    proved(),
+                                    proved()),
                                 True/qed())
                             end
                         end }
             | false =>
                 ih(
-                    True/proved(),
+                    proved(),
                     (m, over, within) =>
                         match j < m
                         | true => above(m, True/qed(), within)
                         | false =>
                             Eq/subst(
                                 (v: Nat) => Eq()(Nat/shr(x, v), Nat/shr(y, v)),
-                                Nat/le/antisym(j, m, over, True/proved()),
+                                Nat/le/antisym(j, m, over, proved()),
                                 Nat/eq_of_eql(Nat/shr(x, j), Nat/shr(y, j), True/qed()))
                         end)
             end
@@ -242,13 +242,13 @@ let onward(
 
 -- A bit below nine is its place in the first byte.
 let inward(k: Bytes, j: Nat, under: Holds(j < 9)) -> Eq()(bit(k, j), at_place(k, 0, j)) =
-    let first: Holds(j / 9 < 1) = Nat/DivMod/div_lt_of_lt_mul(1, j, 9, True/proved());
+    let first: Holds(j / 9 < 1) = Nat/DivMod/div_lt_of_lt_mul(1, j, 9, proved());
     Eq/subst(
         (v: Nat) => Eq()(at_place(k, j / 9, v), at_place(k, 0, j)),
-        Nat/le/antisym(j, j % 9, True/proved(), True/proved()),
+        Nat/le/antisym(j, j % 9, proved(), proved()),
         Eq/subst(
             (v: Nat) => Eq()(at_place(k, v, j), at_place(k, 0, j)),
-            Nat/le/antisym(0, j / 9, True/qed(), True/proved()),
+            Nat/le/antisym(0, j / 9, True/qed(), proved()),
             Eq/refl()));
 
 --- Two runs apart at the bit `c`: the first bit they differ at.
@@ -294,10 +294,10 @@ let lifted(
                 | true => led(h, t, r, j, True/qed())
                 | false =>
                     Eq/trans(
-                        onward(h, t, j, True/proved()),
+                        onward(h, t, j, proved()),
                         Eq/trans(
-                            apart.below(j - 9, True/proved()),
-                            Eq/sym(onward(h, r, j, True/proved()))))
+                            apart.below(j - 9, proved()),
+                            Eq/sym(onward(h, r, j, proved()))))
                 end,
         differs = apart.differs };
 
@@ -321,7 +321,7 @@ let lows(
 ) -> Eq()(low(x, m), low(y, m)) =
     let left = split(x, m, small_x, place);
     let right = split(y, m, small_y, place);
-    Nat/le/antisym(low(x, m), low(y, m), True/proved(), True/proved());
+    Nat/le/antisym(low(x, m), low(y, m), proved(), proved());
 
 -- Two low bits that differ answer the bit test differently.
 let tested(
@@ -343,7 +343,7 @@ let tested(
             let up_y = positive(low(y, m), True/qed());
             match Eq/subst(
                 (v: Nat) => Holds(low(x, m) != v),
-                Nat/le/antisym(low(y, m), low(x, m), True/proved(), True/proved()),
+                Nat/le/antisym(low(y, m), low(x, m), proved(), proved()),
                 differs)
             end
         | false => True/qed()
@@ -378,7 +378,7 @@ let within(
         below =
             (j, under) =>
                 Eq/trans(
-                    inward(a, j, True/proved()),
+                    inward(a, j, proved()),
                     Eq/trans(
                         match j: (n) =>
                             (under: Holds(n < 7 - s + 1)) -> Eq()(
@@ -393,24 +393,24 @@ let within(
                                         hn,
                                         kn,
                                         7 - i,
-                                        True/proved(),
-                                        True/proved(),
-                                        True/proved(),
-                                        found.above(7 - i, True/proved(), True/proved()),
-                                        found.above(7 - i + 1, True/proved(), True/proved())))
+                                        proved(),
+                                        proved(),
+                                        proved(),
+                                        found.above(7 - i, proved(), proved()),
+                                        found.above(7 - i + 1, proved(), proved())))
                         end(under),
-                        Eq/sym(inward(b, j, True/proved())))),
+                        Eq/sym(inward(b, j, proved())))),
         differs =
             Eq/subst(
                 (v: Bool) => Holds(v != bit(b, 7 - s + 1)),
-                Eq/sym(inward(a, 7 - s + 1, True/proved())),
+                Eq/sym(inward(a, 7 - s + 1, proved())),
                 Eq/subst(
                     (v: Bool) => Holds(at_place(a, 0, 7 - s + 1) != v),
-                    Eq/sym(inward(b, 7 - s + 1, True/proved())),
+                    Eq/sym(inward(b, 7 - s + 1, proved())),
                     Eq/subst(
                         (v: Nat) => Holds(low(hn, v) != 0 != (low(kn, v) != 0)),
-                        Nat/le/antisym(s, 7 - (7 - s), True/proved(), True/proved()),
-                        tested(hn, kn, s, True/proved(), True/proved(), bound, found.differs)))) };
+                        Nat/le/antisym(s, 7 - (7 - s), proved(), proved()),
+                        tested(hn, kn, s, proved(), proved(), bound, found.differs)))) };
 
 -- A run that ends where another has a byte is apart from it at that byte's first bit.
 let ended(k: Byte, r: Bytes) -> Apart(x[], x[k, ..r], 0) =
@@ -426,12 +426,12 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
         (b, _) =>
             match b
             | x[] => Eq/refl()
-            | x[k, ..r] => Shifted { over = True/proved(), apart = ended(k, r) }
+            | x[k, ..r] => Shifted { over = proved(), apart = ended(k, r) }
             end
     | x[h, ..t]; ih =>
         (b, g) =>
             match b
-            | x[] => Shifted { over = True/proved(), apart = outlasted(h, t) }
+            | x[] => Shifted { over = proved(), apart = outlasted(h, t) }
             | x[k, ..r] =>
                 match h == k
                 | true =>
@@ -448,15 +448,15 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                         | at(c) =>
                             (inner) =>
                                 Shifted {
-                                    over = True/proved(),
+                                    over = proved(),
                                     apart =
                                         Eq/subst(
                                             (p: Nat) => Apart(x[h, ..t], x[h, ..r], p),
                                             Nat/le/antisym(
                                                 c - 9 * (g + 1) + 9,
                                                 c - 9 * g,
-                                                True/proved(),
-                                                True/proved()),
+                                                proved(),
+                                                proved()),
                                             lifted(h, t, r, c - 9 * (g + 1), inner.apart)) }
                         end(ih(r, g + 1)))
                 | false =>
@@ -466,23 +466,23 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                             hn,
                             kn,
                             8,
-                            True/proved(),
-                            True/proved(),
+                            proved(),
+                            proved(),
                             True/qed(),
                             (m, over, within) =>
                                 Eq/subst(
                                     (v: Nat) => Eq()(Nat/shr(hn, v), Nat/shr(kn, v)),
                                     Nat/le/antisym(8, m, over, within),
                                     Eq/trans(
-                                        Nat/eq_of_eql(Nat/shr(hn, 8), 0, spent(hn, True/proved())),
+                                        Nat/eq_of_eql(Nat/shr(hn, 8), 0, spent(hn, proved())),
                                         Eq/sym(
                                             Nat/eq_of_eql(
                                                 Nat/shr(kn, 8),
                                                 0,
-                                                spent(kn, True/proved()))))),
+                                                spent(kn, proved()))))),
                             True/qed());
                     Shifted {
-                        over = True/proved(),
+                        over = proved(),
                         apart =
                             Eq/subst(
                                 (p: Nat) => Apart(x[h, ..t], x[k, ..r], p),
@@ -491,8 +491,8 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                                     Nat/le/antisym(
                                         place(hn, kn),
                                         9 * g + place(hn, kn) - 9 * g,
-                                        True/proved(),
-                                        True/proved())),
+                                        proved(),
+                                        proved())),
                                 within(h, k, t, r, seek(hn, kn, 8), found)) }
                 end
             end
@@ -510,7 +510,7 @@ pub let parting(a: Bytes, b: Bytes) -> Parting(a, b, crit(a, b)) =
         (inner) =>
             Eq/subst(
                 (p: Nat) => Apart(a, b, p),
-                Nat/le/antisym(c - 9 * 0, c, True/proved(), True/proved()),
+                Nat/le/antisym(c - 9 * 0, c, proved(), proved()),
                 inner.apart)
     end(spec(a, b, 0));
 
@@ -530,7 +530,7 @@ pub let carried(
     earlier: Holds(c < e),
 ) -> Apart(a, d, c) =
     Apart {
-        below = (j, under) => Eq/trans(first.below(j, under), second.below(j, True/proved())),
+        below = (j, under) => Eq/trans(first.below(j, under), second.below(j, proved())),
         differs =
             Eq/subst((v: Bool) => Holds(bit(a, c) != v), second.below(c, earlier), first.differs) };
 
@@ -544,7 +544,7 @@ pub let reheaded(
     agree: (j: Nat, within: Holds(j <= c)) -> Eq()(bit(n, j), bit(a, j)),
 ) -> Apart(n, b, c) =
     Apart {
-        below = (j, under) => Eq/trans(agree(j, True/proved()), apart.below(j, under)),
+        below = (j, under) => Eq/trans(agree(j, proved()), apart.below(j, under)),
         differs =
             Eq/subst(
                 (v: Bool) => Holds(v != bit(b, c)),
@@ -646,7 +646,7 @@ pub let below_clear(
             bit(b, d),
             Eq/subst(
                 (m: Nat) => Holds(bit(a, m) != bit(b, m)),
-                Nat/le/antisym(c, d, True/proved(), True/proved()),
+                Nat/le/antisym(c, d, proved(), proved()),
                 apart.differs),
             clear_a,
             clear_b)
@@ -672,7 +672,7 @@ pub let below_set(
             bit(b, d),
             Eq/subst(
                 (m: Nat) => Holds(bit(a, m) != bit(b, m)),
-                Nat/le/antisym(c, d, True/proved(), True/proved()),
+                Nat/le/antisym(c, d, proved(), proved()),
                 apart.differs),
             set_a,
             set_b)
@@ -714,18 +714,18 @@ let shifts(
                     (v: Nat) => Holds(Nat/shr(x, m + 1) == v),
                     ih(
                         m + 1,
-                        True/proved(),
-                        True/proved(),
-                        (at, over, under) => lows(at, True/proved(), under)),
+                        proved(),
+                        proved(),
+                        (at, over, under) => lows(at, proved(), under)),
                     True/qed());
             let same_low: Holds(low(x, m) == low(y, m)) =
                 Eq/subst(
                     (v: Nat) => Holds(low(x, m) == v),
-                    lows(m, True/proved(), True/proved()),
+                    lows(m, proved(), proved()),
                     True/qed());
-            let left = split(x, m, small_x, True/proved());
-            let right = split(y, m, small_y, True/proved());
-            Nat/le/antisym(Nat/shr(x, m), Nat/shr(y, m), True/proved(), True/proved())
+            let left = split(x, m, small_x, proved());
+            let right = split(y, m, small_y, proved());
+            Nat/le/antisym(Nat/shr(x, m), Nat/shr(y, m), proved(), proved())
     end(m, le, ge, lows);
 
 -- A byte below another at a shift is below it.
@@ -743,10 +743,10 @@ let lesser(
     | 0 => (_, under) => under
     | i + 1; ih =>
         (bound, under) =>
-            let left = split(x, i, small_x, True/proved());
-            let right = split(y, i, small_y, True/proved());
-            let one = single(x, i, small_x, True/proved());
-            ih(True/proved(), True/proved())
+            let left = split(x, i, small_x, proved());
+            let right = split(y, i, small_y, proved());
+            let one = single(x, i, small_x, proved());
+            ih(proved(), proved())
     end(bound, under);
 
 -- Two low bits the bit test answers alike are one.
@@ -767,7 +767,7 @@ let untested(
         | true =>
             let up_x = positive(low(x, m), True/qed());
             let up_y = positive(low(y, m), True/qed());
-            Nat/le/antisym(low(x, m), low(y, m), True/proved(), True/proved())
+            Nat/le/antisym(low(x, m), low(y, m), proved(), proved())
         | false => match Bool/false_neq_true(Eq/sym(same)) end
         end
     | false =>
@@ -795,15 +795,15 @@ let agreed(
         hn,
         kn,
         m,
-        True/proved(),
-        True/proved(),
+        proved(),
+        proved(),
         place,
         Eq/subst(
             (v: Nat) => Eq()(low(hn, v) != 0, low(kn, v) != 0),
-            Nat/le/antisym(7 - (7 - m), m, True/proved(), True/proved()),
+            Nat/le/antisym(7 - (7 - m), m, proved(), proved()),
             Eq/trans(
-                Eq/sym(inward(x[h, ..t], 7 - m + 1, True/proved())),
-                Eq/trans(same, inward(x[k, ..r], 7 - m + 1, True/proved())))));
+                Eq/sym(inward(x[h, ..t], 7 - m + 1, proved())),
+                Eq/trans(same, inward(x[k, ..r], 7 - m + 1, proved())))));
 
 -- Two runs apart nine bits on or more past one first byte are apart past it.
 let lowered(
@@ -815,7 +815,7 @@ let lowered(
     over: Holds(9 <= c),
 ) -> Apart(t, r, c - 9) =
     Apart {
-        below = (j, under) => apart.below(j + 9, True/proved()),
+        below = (j, under) => apart.below(j + 9, proved()),
         differs =
             Eq/subst(
                 (v: Nat) => Holds(bit(x[h, ..t], v) != bit(x[h, ..r], v)),
@@ -866,8 +866,8 @@ pub let before(
                                 kn,
                                 8,
                                 0,
-                                True/proved(),
-                                True/proved(),
+                                proved(),
+                                proved(),
                                 True/qed(),
                                 True/qed(),
                                 (m, _, under) =>
@@ -878,7 +878,7 @@ pub let before(
                                         r,
                                         m,
                                         under,
-                                        apart.below(7 - m + 1, True/proved()))));
+                                        apart.below(7 - m + 1, proved()))));
                     Eq/subst(
                         (y: Byte) =>
                             (apart: Apart(x[h, ..t], x[y, ..r], c)) -> Eq()(
@@ -889,10 +889,10 @@ pub let before(
                             ih(
                                 r,
                                 c - 9,
-                                lowered(h, t, r, c, apart, True/proved()),
+                                lowered(h, t, r, c, apart, proved()),
                                 Eq/subst(
                                     (v: Bool) => Holds(Bool/not(v)),
-                                    onward(h, t, c, True/proved()),
+                                    onward(h, t, c, proved()),
                                     clear)))(
                         apart)
                 | true =>
@@ -912,10 +912,10 @@ pub let before(
                                     kn,
                                     i,
                                     7 - i + 1,
-                                    True/proved(),
-                                    True/proved(),
-                                    True/proved(),
-                                    True/proved(),
+                                    proved(),
+                                    proved(),
+                                    proved(),
+                                    proved(),
                                     (m, over, within) =>
                                         agreed(
                                             h,
@@ -924,7 +924,7 @@ pub let before(
                                             r,
                                             m,
                                             within,
-                                            apart.below(7 - m + 1, True/proved())));
+                                            apart.below(7 - m + 1, proved())));
                             let off: Holds(Bool/not(low(hn, 7 - i) != 0)) =
                                 Eq/subst(
                                     (v: Bool) => Holds(Bool/not(v)),
@@ -946,17 +946,17 @@ pub let before(
                                 | true =>
                                     let zero: Holds(low(hn, 7 - i) == 0) = True/qed();
                                     let up = positive(low(kn, 7 - i), True/qed());
-                                    let left = split(hn, 7 - i, True/proved(), True/proved());
-                                    let right = split(kn, 7 - i, True/proved(), True/proved());
+                                    let left = split(hn, 7 - i, proved(), proved());
+                                    let right = split(kn, 7 - i, proved(), proved());
                                     let lower: Holds(hn < kn) =
                                         lesser(
                                             hn,
                                             kn,
                                             7 - i,
-                                            True/proved(),
-                                            True/proved(),
-                                            True/proved(),
-                                            True/proved());
+                                            proved(),
+                                            proved(),
+                                            proved(),
+                                            proved());
                                     Eq/subst(
                                         (o: Ordering) =>
                                             Eq()(

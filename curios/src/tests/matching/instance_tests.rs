@@ -35,7 +35,7 @@ fn a_result_is_typed_at_an_index_that_rules_an_arm_of_it_out() {
 
 /// `g`, whose bound a guard's arm proves by standing under it.
 const BOUNDED: &str = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat, Bool, proved};
         use /std/Bool/{True, Holds};
         let g(c: Bool, @ok: Holds(c)) -> Nat = 1;
         "#;
@@ -81,20 +81,20 @@ fn an_arms_goal_is_typed_wherever_it_is_written() {
         r#"{BOUNDED}
         let f(c: Bool, k: Nat) -> Holds((match Bool/not(c) | true => g(Bool/not(c), @True/qed()) | false => 0 end) <= 1) =
             match c
-            | false => True/proved()
+            | false => proved()
             | true => match k | 0 => True/qed() | _ + 1 => True/qed() end
             end;
         /std/print("held")
         "#
     );
     let comparison = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat, Bool, proved};
         use /std/Bool/{True, Holds};
         let positive(n: Nat, @ok: Holds(0 < n)) -> Nat = 1;
         let f(n: Nat, k: Nat) -> Holds((match 0 < n | true => positive(n, @True/qed()) | false => 0 end) <= 1) =
             match n
             | 0 => match k | 0 => True/qed() | _ + 1 => True/qed() end
-            | _ + 1 => True/proved()
+            | _ + 1 => proved()
             end;
         /std/print("held")
         "#;

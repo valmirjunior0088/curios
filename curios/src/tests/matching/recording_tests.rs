@@ -300,14 +300,14 @@ fn a_second_match_on_a_variable_an_arm_fixed_refines_nothing() {
 fn a_contradiction_claimed_in_a_dead_arm_is_refused_as_one_that_does_not_follow() {
     let error = error(
         r#"
-        use /std/{Nat, print};
+        use /std/{Nat, print, proved};
         use /std/Bool/{False};
 
         let dead(n: Nat) -> Nat =
             match n < 3
             | true =>
                 match n
-                | 5 => match False/refuted() end
+                | 5 => match proved(@False) end
                 | _ => 1
                 end
             | false => 2

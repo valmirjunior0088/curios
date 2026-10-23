@@ -9,7 +9,7 @@ pub use to_nat/{let to_nat};
 pub mod ord;
 pub use ord/{let ord};
 
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Ordering, Ord};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Ordering, Ord, proved};
 use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp};
 
@@ -61,7 +61,7 @@ pub let to_nat_injective(
 
 -- The recursion `of_nat` performs terminates, which is what lets injectivity recurse the same way.
 let high_below(n: Nat, positive: Holds(0 < n)) -> Holds(n / 256 < n) =
-    True/proved();
+    proved();
 
 -- A cons taken apart, or `none` for no bytes: one function of the whole value, which congruence needs, and no half invented for the run that has none.
 let uncons(z: Bytes) -> Option({Byte, Bytes}) =
@@ -245,7 +245,7 @@ pub let find_index(
             | some(inside) =>
                 match pred(get(b, i, @inside))
                 | true => Option/some((at = i, within = inside))
-                | false => ih(i + 1, True/proved())
+                | false => ih(i + 1, proved())
                 end
             end,
         0);
@@ -289,7 +289,7 @@ pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
                     Cutting {
                         rest = drop(c.rest, cut.at + 1),
                         found = [slice(c.rest, 0, cut.at), ..c.found] },
-                    True/proved())
+                    proved())
             end,
         Cutting { rest = b, found = [] });
 

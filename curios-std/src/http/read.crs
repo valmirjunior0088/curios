@@ -1,5 +1,5 @@
-use /std/{Bytes, Byte, Nat, Bool, Option, Result};
-use /std/Bool/{True, Holds};
+use /std/{Bytes, Byte, Nat, Bool, Option, Result, proved};
+use /std/Bool/{Holds};
 use /std/http/{Limits, Refusal, Framing, Field};
 use /std/Io/{Reader};
 
@@ -21,7 +21,7 @@ let line_end_from(
     | none() => Option/none()
     | some(room) =>
         match is(b, i, '\r') && is(b, i + 1, '\n')
-        | true => Option/some((at = i, onward = onward, within = True/proved()))
+        | true => Option/some((at = i, onward = onward, within = proved()))
         | false => line_end_from(b, from, i + 1)
         end
     end;

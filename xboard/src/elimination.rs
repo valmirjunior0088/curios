@@ -98,9 +98,9 @@ const AN_IDENTITY_ARM_READS_ITS_SCRUTINEE_AT_ZERO: &str = r#"
 
 /// The cons arm is typed with `n` solved to `k + 1`, so `h` says `k + 1` is `2` there while the hypothesis says `k` is `0`, and the two refute each other. Below the outermost step `n` is not `k + 1`, and the hypothesis is the fold at a tail the arm was never typed for.
 const A_CONS_ARM_READS_ITS_SCRUTINEE_AT_A_SUCCESSOR: &str = r#"
-    use /std/{Nat};
+    use /std/{Nat, proved};
     use /std/Bool/{True, Holds};
-    let step(k: Nat, a: Holds(k + 1 == 2), b: Holds(k == 0)) -> Holds(k + 1 == 0) = True/proved();
+    let step(k: Nat, a: Holds(k + 1 == 2), b: Holds(k == 0)) -> Holds(k + 1 == 0) = proved();
     let f(n: Nat, h: Holds(n == 2)) -> Holds(n == 0) =
         match n: (m) => Holds(m == 0)
         | 0 => True/qed()

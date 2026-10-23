@@ -4,7 +4,7 @@
 
 Where a motive is elided in a checked position, the result is stated once, at the ambient goal (`MatchResult::Ambient`), and each arm inhabits it under its case's substitution; over an expression scrutinee the goal's occurrences of that expression stand for the case, as with-abstraction reads them. A fold whose arm reads its induction hypothesis, a written motive and an elimination in inference position keep the family.
 
-The zero-arm match is the one way to eliminate an empty type: `match contradiction end` in checking position, `match contradiction : (_) => A end` where the result must be spelled, and `/std` exports no `absurd`. Where the facts in scope refute each other and no written term says so, `/std/Bool/False/refuted()` produces the contradiction, its bound proved by the elaborator ([A bound that follows from the facts in scope is proved by the elaborator](../arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)), and the match eliminates it.
+The zero-arm match is the one way to eliminate an empty type: `match contradiction end` in checking position, `match contradiction : (_) => A end` where the result must be spelled, and `/std` exports no `absurd`. Where the facts in scope refute each other and no written term says so, `/std/proved(@False)` produces the contradiction, its bound proved by the elaborator ([A bound that follows from the facts in scope is proved by the elaborator](../arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)), and the match eliminates it.
 
 **Rationale.**
 

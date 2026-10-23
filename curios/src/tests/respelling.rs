@@ -12,7 +12,7 @@ use {
     curios_utilities::fill,
 };
 
-const IMPORTS: &str = "use /std/{Nat, Int, Bool, List, Eq, Io}; use /std/Bool/{Holds, True};";
+const IMPORTS: &str = "use /std/{Nat, Int, Bool, List, Eq, Io, proved}; use /std/Bool/{Holds, True};";
 
 /// Two recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles.
 const DEFINITIONS: &str =
@@ -129,7 +129,7 @@ enum Arm {
     Top,
     /// `Holds` of the respelling, in the guard's `true` arm, by `True/qed()`.
     Qed,
-    /// The same, by `True/proved()`.
+    /// The same, by `proved()`.
     Proved,
     /// A `match` on the respelling in a term, in the guard's `true` arm.
     Term,
@@ -245,7 +245,7 @@ impl Guard {
                         "Eq/refl()".to_owned(),
                     ),
                     Arm::Qed => in_true(format!("let _: Holds({respelled}) = True/qed();")),
-                    Arm::Proved => in_true(format!("let _: Holds({respelled}) = True/proved();")),
+                    Arm::Proved => in_true(format!("let _: Holds({respelled}) = proved();")),
                     Arm::Term => in_true(format!(
                         "let _: Eq()(match {respelled} | true => 0 | false => 1 end, 0) = Eq/refl();"
                     )),
@@ -449,7 +449,7 @@ enum Under {
     Outside,
     /// The fact as written, by `True/qed()`.
     Qed,
-    /// The fact as written, by `True/proved()`.
+    /// The fact as written, by `proved()`.
     Proved,
     /// The fact with the case's value written, by `True/qed()`.
     AtCase,
@@ -510,7 +510,7 @@ impl Substitution {
                         "match {variable} | {case} => (match {guard} | true => let _: Holds({guard}) = True/qed(); () | false => () end) | {other} => () end"
                     ),
                     Under::Qed => inside(guard, "True/qed()"),
-                    Under::Proved => inside(guard, "True/proved()"),
+                    Under::Proved => inside(guard, "proved()"),
                     Under::AtCase => inside(at_case, "True/qed()"),
                 };
                 Cell {

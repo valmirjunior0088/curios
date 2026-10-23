@@ -25,7 +25,8 @@ pub use len/{let len};
 pub mod ord;
 pub use ord/{let ord};
 
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord,
+    proved};
 use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp};
 
@@ -307,7 +308,7 @@ pub let span(
                 match At/try_next(s, at)
                 | some(n) =>
                     match pred(n.char)
-                    | true => again(n.past, n.progress)(True/proved())
+                    | true => again(n.past, n.progress)(proved())
                     | false => (past = at, reach = reached)
                     end
                 | none() => (past = at, reach = reached)
@@ -371,7 +372,7 @@ pub let split(s: Str, sep: Str) -> List(Str) =
                 (pieces) =>
                     match occurrence(s, at, sep, first)
                     | some(found) =>
-                        again(found.past, True/proved())(
+                        again(found.past, proved())(
                             [..pieces, between(s, at, found.start, @found.ordered)])
                     | none() => [..pieces, after(s, at)]
                     end,
@@ -390,7 +391,7 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
                 (written) =>
                     match occurrence(s, at, from, first)
                     | some(found) =>
-                        again(found.past, True/proved())(
+                        again(found.past, proved())(
                             concat(
                                 concat(written, between(s, at, found.start, @found.ordered)),
                                 to))
@@ -410,7 +411,7 @@ pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
                 | none() => concat(written, between(s, run, at, @ordered))
                 | some(n) =>
                     match with(n.char)
-                    | none() => again(n.past, n.progress)(written, run, True/proved())
+                    | none() => again(n.past, n.progress)(written, run, proved())
                     | some(replacement) =>
                         again(n.past, n.progress)(
                             concat(concat(written, between(s, run, at, @ordered)), replacement),
@@ -434,7 +435,7 @@ pub let lines(s: Str) -> List(Str) =
             (read) =>
                 match occurrence(s, at, "\n", newline)
                 | some(found) =>
-                    again(found.past, True/proved())(
+                    again(found.past, proved())(
                         [..read, strip(between(s, at, found.start, @found.ordered))])
                 | none() =>
                     let rest = after(s, at);

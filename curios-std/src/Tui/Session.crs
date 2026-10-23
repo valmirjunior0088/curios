@@ -1,5 +1,4 @@
-use /std/{Nat, Bytes, Bool, List, Option, Result, Eq, Io, Try, Tty, Channel};
-use /std/Bool/{True};
+use /std/{Nat, Bytes, Bool, List, Option, Result, Eq, Io, Try, Tty, Channel, proved};
 use /std/Io/{Reader};
 use /std/time/{Duration};
 use /std/Tui/{Frame, View, Input, Reply, Mode, render, ansi};
@@ -183,12 +182,12 @@ pub let draw(@w: Nat, @h: Nat, s: Session, v: View(w, h)) -> Try(Io, Io/Error, {
                 let as_wide =
                     Eq/subst(
                         (n: Nat) => Frame(n, p.h),
-                        Nat/eq_of_eql(p.w, w, True/proved()),
+                        Nat/eq_of_eql(p.w, w, proved()),
                         p.frame);
                 Option/some(
                     Eq/subst(
                         (n: Nat) => Frame(w, n),
-                        Nat/eq_of_eql(p.h, h, True/proved()),
+                        Nat/eq_of_eql(p.h, h, proved()),
                         as_wide))
             | false => Option/none()
             end

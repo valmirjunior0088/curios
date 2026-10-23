@@ -557,7 +557,7 @@ Embeddings never chain. Declaring `Monad/Lift(Io, Job)` and `Monad/Lift(Job, Sch
 
 ### Match shell and motives
 
-A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the match is refused with the value no arm matches, written as a pattern. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled. Where the facts in scope refute each other and no written term says so, `False/refuted()` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
+A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the match is refused with the value no arm matches, written as a pattern. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled. Where the facts in scope refute each other and no written term says so, `proved(@False)` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
 
 The motive states the result type as a family. It is an ordinary term, checked against the eliminator's motive type — a function of the scrutinee's indices, in declaration order, and then the scrutinee:
 
@@ -1317,13 +1317,14 @@ let get(xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/len(x
     List/get(xs, i);
 ```
 
-Two `/std` functions reach the same proof where no bound asks for it. `True/proved()` states a fact a term needs, its proposition written or pinned by the expectation. `False/refuted()` produces the contradiction a zero-arm match eliminates, in an arm the facts rule out:
+One `/std` function reaches the same proof where no bound asks for it: `proved`, imported loose from `/std` as `print` is. It states a fact a term needs, its proposition written or pinned by the expectation, and at `False` it produces the contradiction a zero-arm match eliminates, in an arm the facts rule out:
 
 ```crs
+use /std/{proved};
 use /std/Bool/{False};
 
 let clamp(n: Nat, q: Holds(n <= 10)) -> Nat =
-    match n > 20 | true => match False/refuted() end | false => n end;
+    match n > 20 | true => match proved(@False) end | false => n end;
 ```
 
 A bound the facts do not imply is refused. The report names the facts considered and the ones it could not read, and gives an assignment of the atoms under which the facts hold and the bound fails. A written goal `?` over a bound reports the same.

@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Str, Char, List, Option, Spell};
+use /std/{Nat, Bool, Str, Char, List, Option, Spell, proved};
 use /std/ops/{Eql};
 use /std/Bool/{True, Holds};
 use /std/Char/{GraphemeBreak, EastAsianWidth};
@@ -70,13 +70,13 @@ pub let of_char(c: Char, @drawn: Holds(printable(c))) -> Glyph =
 
 -- The glyph of the character `code` of the Control Pictures block, which is printable: every code of the block lies past the C1 controls and below the surrogates. The block is drawn one column wide.
 let pictured(code: Nat, @block: Holds(0x2400 <= code && code < 0x2440)) -> Glyph =
-    let shown = Char { code = code, @valid = Char/Valid/below_surrogates(code, True/proved()) };
+    let shown = Char { code = code, @valid = Char/Valid/below_surrogates(code, proved()) };
     let drawn: Holds(printable(shown)) =
         Bool/and/both(
             0x20 <= code,
             code < 0x7F || 0x9F < code,
-            True/proved(),
-            Bool/or/of_second(code < 0x7F, 0x9F < code, True/proved()));
+            proved(),
+            Bool/or/of_second(code < 0x7F, 0x9F < code, proved()));
     Glyph {
         chars = [shown],
         wide = false,

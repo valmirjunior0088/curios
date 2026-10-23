@@ -1,4 +1,4 @@
-use /std/{Nat, Bytes, Eq, Ordering};
+use /std/{Nat, Bytes, Eq, Ordering, proved};
 use /std/Bool/{True, False, Holds};
 
 -- How many bytes follow a number's first.
@@ -13,7 +13,7 @@ let top_below(n: Nat) -> Holds(top(n) < 16) =
     Nat/descend(
         (m: Nat) => m,
         (m) => Holds(top(m) < 16),
-        (m, ih) => match m < 16 | true => True/proved() | false => ih(m / 256, True/proved()) end,
+        (m, ih) => match m < 16 | true => proved() | false => ih(m / 256, proved()) end,
         n);
 
 -- The first byte of a number of rank `l` and top `t`, behind a `0xFF` for every seven of its rank past six.
@@ -56,7 +56,7 @@ let from_count(
                 | false =>
                     Eq/cong(
                         (z: Bytes) => x[..z, Nat/to_byte(m % 256)],
-                        ih(m / 256, True/proved())(l + 1))
+                        ih(m / 256, proved())(l + 1))
                 end,
         n)(
         l);
@@ -69,14 +69,14 @@ let rank_mono(a: Nat, b: Nat, le: Holds(a <= b)) -> Holds(rank(a) <= rank(b)) =
         (m, ih) =>
             (b, le) =>
                 match m < 16
-                | true => True/proved()
+                | true => proved()
                 | false =>
                     match b < 16
-                    | true => match False/refuted() end
+                    | true => match proved(@False) end
                     | false =>
                         let inner: Holds(rank(m / 256) <= rank(b / 256)) =
-                            ih(m / 256, True/proved())(b / 256, True/proved());
-                        True/proved()
+                            ih(m / 256, proved())(b / 256, proved());
+                        proved()
                     end
                 end,
         a)(
@@ -100,13 +100,13 @@ let top_mono(
                 match m < 16
                 | true =>
                     match b < 16
-                    | true => True/proved()
+                    | true => proved()
                     | false => match ranks end
                     end
                 | false =>
                     match b < 16
-                    | true => match False/refuted() end
-                    | false => ih(m / 256, True/proved())(b / 256, True/proved(), True/proved())
+                    | true => match proved(@False) end
+                    | false => ih(m / 256, proved())(b / 256, proved(), proved())
                     end
                 end,
         a)(
@@ -142,19 +142,19 @@ let first_ranks(
                             Nat/to_byte(0x80 + 16 * lb + tb),
                             s,
                             u,
-                            True/proved())
+                            proved())
                     | false =>
                         Bytes/ord/below/of_heads(
                             Nat/to_byte(0x80 + 16 * l + ta),
                             0xFF,
                             s,
                             x[..first(lb - 7, tb), ..u],
-                            True/proved())
+                            proved())
                     end
                 | false =>
                     match lb < 7
-                    | true => match False/refuted() end
-                    | false => ih(l - 7, True/proved())(lb - 7, True/proved())
+                    | true => match proved(@False) end
+                    | false => ih(l - 7, proved())(lb - 7, proved())
                     end
                 end,
         la)(
@@ -190,14 +190,14 @@ let first_tops(
                             Nat/to_byte(0x80 + 16 * lb + tb),
                             s,
                             u,
-                            True/proved())
-                    | false => match False/refuted() end
+                            proved())
+                    | false => match proved(@False) end
                     end
                 | false =>
                     match lb < 7
-                    | true => match False/refuted() end
+                    | true => match proved(@False) end
                     | false =>
-                        ih(l - 7, True/proved())(
+                        ih(l - 7, proved())(
                             lb - 7,
                             Eq/subst(
                                 (v: Nat) => Holds(l - 7 == v - 7),
@@ -249,16 +249,16 @@ let first_same(
                                     Nat/le/antisym(
                                         0x80 + 16 * l + ta,
                                         0x80 + 16 * lb + tb,
-                                        True/proved(),
-                                        True/proved()))),
+                                        proved(),
+                                        proved()))),
                             parted)
-                    | false => match False/refuted() end
+                    | false => match proved(@False) end
                     end
                 | false =>
                     match lb < 7
-                    | true => match False/refuted() end
+                    | true => match proved(@False) end
                     | false =>
-                        ih(l - 7, True/proved())(
+                        ih(l - 7, proved())(
                             lb - 7,
                             Eq/subst(
                                 (v: Nat) => Holds(l - 7 == v - 7),
@@ -291,12 +291,12 @@ let tails(
                 match m < 16
                 | true =>
                     match b < 16
-                    | true => match False/refuted() end
+                    | true => match proved(@False) end
                     | false => match ranks end
                     end
                 | false =>
                     match b < 16
-                    | true => match False/refuted() end
+                    | true => match proved(@False) end
                     | false =>
                         match m / 256 < b / 256
                         | true =>
@@ -305,10 +305,10 @@ let tails(
                                 rest(b / 256),
                                 x[Nat/to_byte(m % 256)],
                                 x[Nat/to_byte(b % 256)],
-                                ih(m / 256, True/proved())(
+                                ih(m / 256, proved())(
                                     b / 256,
                                     True/qed(),
-                                    True/proved(),
+                                    proved(),
                                     tops))
                         | false =>
                             Eq/subst(
@@ -317,7 +317,7 @@ let tails(
                                         Bytes/ord/below(
                                             x[..rest(m / 256), Nat/to_byte(m % 256)],
                                             x[..rest(q), Nat/to_byte(b % 256)])),
-                                Nat/le/antisym(m / 256, b / 256, True/proved(), True/proved()),
+                                Nat/le/antisym(m / 256, b / 256, proved(), proved()),
                                 Bytes/ord/below/past(
                                     rest(m / 256),
                                     x[Nat/to_byte(m % 256)],
@@ -327,7 +327,7 @@ let tails(
                                         Nat/to_byte(b % 256),
                                         x[],
                                         x[],
-                                        True/proved())))
+                                        proved())))
                         end
                     end
                 end,
@@ -363,7 +363,7 @@ let split(
 pub let of_lt(a: Nat, b: Nat, under: Holds(a < b)) -> Holds(Bytes/ord/below(code(a), code(b))) =
     let top_a: Holds(top(a) < 16) = top_below(a);
     let top_b: Holds(top(b) < 16) = top_below(b);
-    let ranks: Holds(rank(a) <= rank(b)) = rank_mono(a, b, True/proved());
+    let ranks: Holds(rank(a) <= rank(b)) = rank_mono(a, b, proved());
     split(
         a,
         b,
@@ -371,8 +371,8 @@ pub let of_lt(a: Nat, b: Nat, under: Holds(a < b)) -> Holds(Bytes/ord/below(code
         | true => first_ranks(rank(a), top(a), rank(b), top(b), rest(a), rest(b), True/qed())
         | false =>
             let same_rank: Holds(rank(a) == rank(b)) =
-                level(rank(a), rank(b), ranks, True/proved());
-            let tops: Holds(top(a) <= top(b)) = top_mono(a, b, True/proved(), same_rank);
+                level(rank(a), rank(b), ranks, proved());
+            let tops: Holds(top(a) <= top(b)) = top_mono(a, b, proved(), same_rank);
             match top(a) < top(b)
             | true =>
                 first_tops(
@@ -382,10 +382,10 @@ pub let of_lt(a: Nat, b: Nat, under: Holds(a < b)) -> Holds(Bytes/ord/below(code
                     top(b),
                     rest(a),
                     rest(b),
-                    True/proved(),
+                    proved(),
                     True/qed())
             | false =>
-                let same_top: Holds(top(a) == top(b)) = level(top(a), top(b), tops, True/proved());
+                let same_top: Holds(top(a) == top(b)) = level(top(a), top(b), tops, proved());
                 first_same(
                     rank(a),
                     top(a),
@@ -393,9 +393,9 @@ pub let of_lt(a: Nat, b: Nat, under: Holds(a < b)) -> Holds(Bytes/ord/below(code
                     top(b),
                     rest(a),
                     rest(b),
-                    True/proved(),
-                    True/proved(),
-                    tails(a, b, under, True/proved(), True/proved()))
+                    proved(),
+                    proved(),
+                    tails(a, b, under, proved(), proved()))
             end
         end);
 
@@ -417,7 +417,7 @@ pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(code(a), code(
         | false =>
             Eq/subst(
                 (y: Nat) => Eq()(Nat/ord(a, y), Bytes/ord(code(a), code(y))),
-                Nat/le/antisym(a, b, True/proved(), True/proved()),
+                Nat/le/antisym(a, b, proved(), proved()),
                 Eq/sym(Bytes/ord/refl(code(a))))
         end
     end;
@@ -447,7 +447,7 @@ pub let leads(n: Nat) -> Holds(Bytes/ord/below(x[0x7F], code(n))) =
                 Nat/to_byte(0x80 + 16 * rank(n) + top(n)),
                 x[],
                 rest(n),
-                True/proved())
+                proved())
         | false =>
             Bytes/ord/below/of_heads(
                 0x7F,

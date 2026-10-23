@@ -1,4 +1,4 @@
-use /std/{Bytes, Nat, Bool, Option, List, Eq, Hash, Ord, Ordering};
+use /std/{Bytes, Nat, Bool, Option, List, Eq, Hash, Ord, Ordering, proved};
 use /std/Bool/{True, False, Holds};
 use /std/List/{Member, Pairwise};
 use /std/Map/{Key};
@@ -39,7 +39,7 @@ pub let deeper_down(
     past: Holds(deeper(t, c)),
     le: Holds(d <= c),
 ) -> Holds(deeper(t, d)) =
-    match t | leaf(_, _) => True/qed() | fork(_, _, _) => True/proved() end;
+    match t | leaf(_, _) => True/qed() | fork(_, _, _) => proved() end;
 
 --- What a fork states of its two sides: each sound and forking past its bit, and their first keys apart at that bit, which the zero side's has clear.
 ---
@@ -192,7 +192,7 @@ let zero_side(
                         (v: Bool) => Holds(Bool/not(v)),
                         Eq/sym(held.agree(c, True/qed())),
                         sound.clear) },
-        kept = (_, past) => Held { under = past, agree = (j, _) => held.agree(j, True/proved()) } };
+        kept = (_, past) => Held { under = past, agree = (j, _) => held.agree(j, proved()) } };
 
 -- A fork whose one side gave way to a sound node that keeps its place under the fork may stand where the fork did.
 let one_side(
@@ -586,7 +586,7 @@ let wedge_held(
 ) -> Held(first(wedge(c, b, key, v, t)), first(t), d, deeper(wedge(c, b, key, v, t), d)) =
     Held {
         under = wedge_deeper(c, b, key, v, t, d, under),
-        agree = (j, _) => wedge_agree(c, b, key, k, v, t, same, apart, j, True/proved()) };
+        agree = (j, _) => wedge_agree(c, b, key, k, v, t, same, apart, j, proved()) };
 
 -- A leaf wedged in above a sound node on the side `b`, its key's bit at `c`, where the key parts from the node's first at `c` and the node forks past it, is sound.
 let wedged_at(
@@ -882,8 +882,8 @@ let one_left(
         kept =
             (d, _) =>
                 Held {
-                    under = deeper_down(o, c, d, sound.under_one, True/proved()),
-                    agree = (j, _) => Eq/sym(sound.apart.below(j, True/proved())) } };
+                    under = deeper_down(o, c, d, sound.under_one, proved()),
+                    agree = (j, _) => Eq/sym(sound.apart.below(j, proved())) } };
 
 -- The zero side of a fork may stand where the fork did, its one side gone.
 let zero_left(
@@ -900,7 +900,7 @@ let zero_left(
         kept =
             (d, _) =>
                 Held {
-                    under = deeper_down(z, c, d, sound.under_zero, True/proved()),
+                    under = deeper_down(z, c, d, sound.under_zero, proved()),
                     agree = (_, _) => Eq/refl() } };
 
 -- Two bits of which one is clear and the other set differ.
@@ -1217,7 +1217,7 @@ let within(
                     z,
                     sound.zero,
                     c,
-                    deeper_down(z, d, c, sound.under_zero, True/proved()),
+                    deeper_down(z, d, c, sound.under_zero, proved()),
                     x,
                     in_zero,
                     j,
@@ -1228,12 +1228,12 @@ let within(
                         o,
                         sound.one,
                         c,
-                        deeper_down(o, d, c, sound.under_one, True/proved()),
+                        deeper_down(o, d, c, sound.under_one, proved()),
                         x,
                         in_one,
                         j,
                         le),
-                    Eq/sym(sound.apart.below(j, True/proved()))))
+                    Eq/sym(sound.apart.below(j, proved()))))
     end;
 
 --- A key under the zero side of a sound fork is before every key under its one side, as `Bytes/ord` reads their encodings: the two are apart at the fork's bit, which the first has clear.
@@ -1621,7 +1621,7 @@ pub let canonical(
                                     find(Node/fork(d, z2, o2), Hash/hash(x)))) -> Eq()(
                                 Node/fork(c1, z1, o1),
                                 Node/fork(d, z2, o2)),
-                        Nat/le/antisym(c1, c2, True/proved(), True/proved()),
+                        Nat/le/antisym(c1, c2, proved(), proved()),
                         (sound_d, same_d) =>
                             let zeros =
                                 canonical(z1, z2, sound_t.zero, sound_d.zero, (x) =>

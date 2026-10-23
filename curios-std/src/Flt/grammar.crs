@@ -1,5 +1,5 @@
-use /std/{Nat, Int, Str, Char, Bool, Option, Result, Parse, Flt};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Int, Str, Char, Bool, Option, Result, Parse, Flt, proved};
+use /std/Bool/{Holds};
 use /std/Flt/{Rounding, exact, neg};
 use /std/Flt/internal/{Dyadic};
 use /std/Flt/digits/{pow2, div_mod};
@@ -29,9 +29,9 @@ pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) 
         let spelled: Ratio =
             match e >= +0: (_) => Ratio
             | true =>
-                (numerator = d * Nat/pow(10, Int/abs(e)), denominator = 1, positive = True/proved())
+                (numerator = d * Nat/pow(10, Int/abs(e)), denominator = 1, positive = proved())
             | false =>
-                (numerator = d, denominator = Nat/pow(10, Int/abs(e)), positive = True/proved())
+                (numerator = d, denominator = Nat/pow(10, Int/abs(e)), positive = proved())
             end;
         let whole: Holds(0 < spelled.denominator) = spelled.positive;
         let sh =
@@ -48,7 +48,7 @@ pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) 
                 (
                     numerator = spelled.numerator,
                     denominator = Nat/shl(spelled.denominator, Int/abs(sh)),
-                    positive = True/proved())
+                    positive = proved())
             end;
         let top = Nat/shl(aligned.denominator, 54);
         let (n2, sh2) =

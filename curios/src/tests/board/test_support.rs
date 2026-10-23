@@ -2183,11 +2183,11 @@ pub(super) const THE_IDENTITY_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str
         "#;
 
 pub(super) const THE_CONS_ARM_OF_A_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#"
-        use /std/{Nat};
+        use /std/{Nat, proved};
         use /std/Bool/{True, False, Holds};
 
         let step(k : Nat, a : Holds(k + 1 == 2), b : Holds(k == 0)) -> Holds(k + 1 == 0) =
-            True/proved();
+            proved();
 
         let f(n : Nat, h : Holds(n == 2)) -> Holds(n == 0) =
             match n : (m) => Holds(m == 0)
@@ -2231,13 +2231,13 @@ pub(super) const AN_ARM_OF_A_LIST_FOLD_READS_ITS_SCRUTINEE_AT_NO_CASE: &str = r#
         "#;
 
 pub(super) const A_HYPOTHESIS_ABOUT_A_FOLDS_SCRUTINEE_RIDES_IN_ITS_MOTIVE: &str = r#"
-        use /std/{Nat};
+        use /std/{Nat, proved};
         use /std/Bool/{True, Holds};
 
         let counted(n : Nat, bound : Nat, h : Holds(n <= bound)) -> Nat =
             match n : (m) => (h : Holds(m <= bound)) -> Nat
             | 0 => (_) => 0
-            | k + 1; ih => (h) => ih(True/proved()) + 1
+            | k + 1; ih => (h) => ih(proved()) + 1
             end(h);
 
         /std/print(Nat/to_str(counted(3, 5, True/qed())))

@@ -272,23 +272,23 @@ fn a_fold_that_reads_its_hypothesis_still_closes_a_family() {
 #[test]
 fn an_arms_goal_that_eliminates_its_scrutinee_is_a_result_a_match_may_store() {
     let variable = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat, Bool, proved};
         use /std/Bool/{True, Holds};
         let g(c : Bool, @ok : Holds(c)) -> Nat = 1;
         let f(c : Bool, k : Nat) -> Holds((match c | true => g(c, @True/qed()) | false => 0 end) <= 1) =
             match c
-            | true => True/proved()
+            | true => proved()
             | false => match k | 0 => True/qed() | _ + 1 => True/qed() end
             end;
         /std/print("held")
         "#;
     let call = r#"
-        use /std/{Nat, Bool};
+        use /std/{Nat, Bool, proved};
         use /std/Bool/{True, Holds};
         let g(c : Bool, @ok : Holds(c)) -> Nat = 1;
         let f(p : (Nat) -> Bool, n : Nat, k : Nat) -> Holds((match p(n) | true => g(p(n), @True/qed()) | false => 0 end) <= 1) =
             match p(n)
-            | true => True/proved()
+            | true => proved()
             | false => match k | 0 => True/qed() | _ + 1 => True/qed() end
             end;
         /std/print("held")

@@ -407,10 +407,9 @@ fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
 fn a_refused_bound_reduction_does_not_move_is_said_once() {
     let error = typecheck(
         r#"
-        use /std/{Nat};
-        use /std/Bool/{True};
+        use /std/{Nat, proved};
         induct Even: (Nat) -> Prop | zero(): (0) end
-        let other(n: Nat, m: Nat, p: Even(m)) -> Even(n) = True/proved();
+        let other(n: Nat, m: Nat, p: Even(m)) -> Even(n) = proved();
         /std/print("unreachable")
         "#,
     )

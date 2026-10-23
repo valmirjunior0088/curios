@@ -12,7 +12,7 @@
 //! - Over `Nat`, through the operations whose definitions are linear facts: a quotient or remainder through the quotient's bounds, a truncated subtraction through the case split `omega` makes, a `min` or a `max` through the split on its operands' order and an `Int`'s `abs` or `sign` through the splits on its operand's sign, each opened only where the search needs it ([`plan`]) — a subtraction, a `min` and a `max` being asked first through what both of their cases state, so a sum of them that turns on no case opens none — and a power of a base conversion holds at least one, as the `pow(2, m)` a shift by a symbolic count multiplies by is, through its being at least one.
 //! - Where linear arithmetic finds an assignment, through the products of pairs of facts and the negated goal, as `nlinarith` does ([`products`]): what a multiplier that is no literal needs, `Nat/div_mod`'s among them. A case a split opens multiplies its own facts by them and by one another ([`case_products`]), so the fact a case adds — each order the disequality an equality goal is refuted through makes — enters a product as an order's negated goal does.
 //! - Where the products leave one too, through the disequalities the scope states, each as the order comparison conversion holds it to be ([`disequalities`]): `total / (n + m)` under `Holds(n != 0)`. Asked last, so a bound the facts prove is proved as it was before a disequality was read at all.
-//! - An empty proposition the facts refute: how `False/refuted` reaches the procedure, and `True/proved` wherever its proposition is one.
+//! - An empty proposition the facts refute: a bound at `False`, which is what a contradiction arm's `proved(@False)` asks for.
 //!
 //! **What failure is.** The bound's refusal, as the fill leaves it, naming the facts the procedure considered, those it could not read, and — where the search produced one — an assignment of the atoms that satisfies the facts and falsifies the goal ([`Refusal`]).
 //!
@@ -132,7 +132,7 @@ pub(crate) fn entail(
     }
     Ok(match entailed {
         Entailed::Refused(refusal) => {
-            // A bound that is a metavariable elaboration has solved, as the statement `True/proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and a counterexample would name an atom by the body it unfolds to. What the solution states is read here, for the report alone: the proof is written over what the search read, and one written over the solution does not check. A reading that runs out leaves the report as the search made it.
+            // A bound that is a metavariable elaboration has solved, as the statement `proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and a counterexample would name an atom by the body it unfolds to. What the solution states is read here, for the report alone: the proof is written over what the search read, and one written over the solution does not check. A reading that runs out leaves the report as the search made it.
             let refusal = match stated {
                 Some(_) => refusal,
                 None => {

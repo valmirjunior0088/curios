@@ -1,4 +1,4 @@
-use /std/{Int, Bool, Eq, Ordering, Ord};
+use /std/{Int, Bool, Eq, Ordering, Ord, proved};
 use /std/Bool/{True, False, Holds};
 
 --- The order of the two.
@@ -10,7 +10,7 @@ let below(a: Int, b: Int, le: Holds(b <= a), ne: Holds(Bool/not(a == b))) -> Hol
     match b < a
     | true => True/qed()
     | false =>
-        let same: Eq()(a, b) = Int/le/antisym(a, b, True/proved(), le);
+        let same: Eq()(a, b) = Int/le/antisym(a, b, proved(), le);
         match Eq/subst((x: Int) => Holds(Bool/not(a == x)), Eq/sym(same), ne) end
     end;
 
@@ -22,7 +22,7 @@ pub let refl(a: Int) -> Eq()(ord(a, a), Ordering/eq()) =
 pub let of_lt(a: Int, b: Int, p: Holds(a < b)) -> Eq()(ord(a, b), Ordering/lt()) =
     match a < b
     | true => Eq/refl()
-    | false => match False/refuted() end
+    | false => match proved(@False) end
     end;
 
 --- An equation gives `ord(a, b)` as `eq`.
@@ -32,10 +32,10 @@ pub let of_eq(a: Int, b: Int, e: Eq()(a, b)) -> Eq()(ord(a, b), Ordering/eq()) =
 --- `b < a` gives `ord(a, b)` as `gt`.
 pub let of_gt(a: Int, b: Int, p: Holds(b < a)) -> Eq()(ord(a, b), Ordering/gt()) =
     match a < b
-    | true => match False/refuted() end
+    | true => match proved(@False) end
     | false =>
         match a == b
-        | true => match False/refuted() end
+        | true => match proved(@False) end
         | false => Eq/refl()
         end
     end;
@@ -69,14 +69,14 @@ pub let gt(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/gt())) -> Holds(b < a) =
     | false =>
         match a == b
         | true => match Ordering/gt_neq_eq(Eq/sym(h)) end
-        | false => below(a, b, True/proved(), True/qed())
+        | false => below(a, b, proved(), True/qed())
         end
     end;
 
 --- `ord(a, b)` is not `gt` only where `a <= b`.
 pub let le(a: Int, b: Int, h: Holds(Ordering/is_le(ord(a, b)))) -> Holds(a <= b) =
     match a < b
-    | true => True/proved()
+    | true => proved()
     | false =>
         match a == b
         | true => Int/le/of_eq(Int/eq_of_eql(a, b, True/qed()))
@@ -92,8 +92,8 @@ pub let of_le(a: Int, b: Int, p: Holds(a <= b)) -> Holds(Ordering/is_le(ord(a, b
         match a == b
         | true => True/qed()
         | false =>
-            let strict: Holds(b < a) = below(a, b, True/proved(), True/qed());
-            match False/refuted() end
+            let strict: Holds(b < a) = below(a, b, proved(), True/qed());
+            match proved(@False) end
         end
     end;
 
@@ -105,7 +105,7 @@ pub let flips: Ord/Flips(ord) =
         | false =>
             match a == b
             | true => of_eq(b, a, Eq/sym(Int/eq_of_eql(a, b, True/qed())))
-            | false => of_lt(b, a, below(a, b, True/proved(), True/qed()))
+            | false => of_lt(b, a, below(a, b, proved(), True/qed()))
             end
         end;
 

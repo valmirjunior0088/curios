@@ -1,4 +1,4 @@
-use /std/{Nat, Byte, Bytes, Bool, Char};
+use /std/{Nat, Byte, Bytes, Bool, Char, proved};
 use /std/Bool/{True, Holds};
 
 -- A run is read as the seven bytes `curios-unicode` packs it in: its first scalar in three, its last in three, least significant first, then its class's code.
@@ -30,13 +30,13 @@ pub let class(table: Bytes, missing: Nat, c: Char) -> Nat =
             | true =>
                 let mid = (span.lo + span.hi) / 2;
                 let at = 7 * mid;
-                let inside: Holds(mid < span.hi) = True/proved();
-                let room: Holds(at + 7 <= Bytes/len(table)) = True/proved();
+                let inside: Holds(mid < span.hi) = proved();
+                let room: Holds(at + 7 <= Bytes/len(table)) = proved();
                 choose
                 | scalar < number(table, at) =>
-                    again(Span(runs) { lo = span.lo, hi = mid }, True/proved())
+                    again(Span(runs) { lo = span.lo, hi = mid }, proved())
                 | number(table, at + 3) < scalar =>
-                    again(Span(runs) { lo = mid + 1, hi = span.hi }, True/proved())
+                    again(Span(runs) { lo = mid + 1, hi = span.hi }, proved())
                 | _ => Byte/to_nat(Bytes/get(table, at + 6))
                 end
             end,

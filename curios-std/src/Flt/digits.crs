@@ -1,5 +1,5 @@
-use /std/{Nat, Int, Str, Bool, List, Fmt, Flt};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Int, Str, Bool, List, Fmt, Flt, proved};
+use /std/Bool/{Holds};
 use /std/Flt/{Rounding, exact, to_str};
 use /std/Flt/internal/{Dyadic};
 
@@ -23,7 +23,7 @@ pub let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Holds(0 < s)) -> Scaled =
         (gap, ih) =>
             (s, k, @positive, @within) =>
                 match rpm > s
-                | true => ih(rpm - s * 10, True/proved())(s * 10, k + 1)
+                | true => ih(rpm - s * 10, proved())(s * 10, k + 1)
                 | false => (s = s, k = k, positive = positive)
                 end,
         rpm - s)(
@@ -58,7 +58,7 @@ pub let scale_down(
         (gap, ih) =>
             (r, mp, mm, k, @above, @below, @within) =>
                 match (r + mp) * 10 <= s
-                | true => ih(s - (r * 10 + mp * 10), True/proved())(r * 10, mp * 10, mm * 10, k - 1)
+                | true => ih(s - (r * 10 + mp * 10), proved())(r * 10, mp * 10, mm * 10, k - 1)
                 | false => (r = r, mp = mp, mm = mm, k = k, below = below)
                 end,
         s - (r + mp))(
@@ -107,7 +107,7 @@ pub let generate(
                     let low = even && rem == mm10;
                     match low || high
                     | true => [closing(d, rem, s, low, high)]
-                    | false => [d, ..ih(s - mm10, True/proved())(rem, mp10, mm10)]
+                    | false => [d, ..ih(s - mm10, proved())(rem, mp10, mm10)]
                     end
                 end,
         s - mm)(
@@ -161,18 +161,18 @@ pub let setup(f_mant: Nat, exp_field: Nat) -> Start =
                 s = 4,
                 mp = pow2(ep + 1),
                 mm = pow2(ep),
-                scale = True/proved(),
-                above = True/proved(),
-                below = True/proved())
+                scale = proved(),
+                above = proved(),
+                below = proved())
         | false =>
             (
                 r = Nat/shl(f_mant, ep + 1),
                 s = 2,
                 mp = pow2(ep),
                 mm = pow2(ep),
-                scale = True/proved(),
-                above = True/proved(),
-                below = True/proved())
+                scale = proved(),
+                above = proved(),
+                below = proved())
         end
     | false =>
         let abs_e = 1075 - Nat/max(exp_field, 1);
@@ -183,18 +183,18 @@ pub let setup(f_mant: Nat, exp_field: Nat) -> Start =
                 s = pow2(abs_e + 1),
                 mp = 1,
                 mm = 1,
-                scale = True/proved(),
-                above = True/proved(),
-                below = True/proved())
+                scale = proved(),
+                above = proved(),
+                below = proved())
         | false =>
             (
                 r = f_mant * 4,
                 s = pow2(abs_e + 2),
                 mp = 2,
                 mm = 1,
-                scale = True/proved(),
-                above = True/proved(),
-                below = True/proved())
+                scale = proved(),
+                above = proved(),
+                below = proved())
         end
     end;
 

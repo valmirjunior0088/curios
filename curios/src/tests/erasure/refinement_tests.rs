@@ -22,13 +22,13 @@ fn a_nat_case_split_is_erased_under_its_successor() {
 #[test]
 fn a_nat_fold_over_an_expression_carries_its_bound_in_its_motive() {
     let source = r#"
-        use /std/{Nat};
+        use /std/{Nat, proved};
         use /std/Bool/{True, Holds};
         let count(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => count(k) + 1 end;
         let f(x: Nat, ih: (y: Nat, r: Holds(y < count(x))) -> (Nat) -> Nat, m: Nat) -> Nat =
             match count(x): (c) => (below: Holds(c <= count(x))) -> Nat
             | 0 => (_) => m
-            | xp + 1; h => (below) => h(True/proved()) + ih(xp, True/proved())(m)
+            | xp + 1; h => (below) => h(proved()) + ih(xp, proved())(m)
             end(True/qed());
         /std/print(Nat/to_str(f(3, (y, _) => (m) => y + m, 10)))
         "#;
@@ -82,12 +82,12 @@ fn a_bytes_case_split_is_erased_under_its_cons() {
 #[test]
 fn a_list_fold_over_an_expression_carries_its_bound_in_its_motive() {
     let source = r#"
-        use /std/{Nat, List};
+        use /std/{Nat, List, proved};
         use /std/Bool/{True, Holds};
         let f(l: List(Nat), g: (t: List(Nat), r: Holds(List/len(t) < List/len(List/reverse(l)))) -> (Nat) -> Nat) -> Nat =
             match List/reverse(l): (s) => (below: Holds(List/len(s) <= List/len(List/reverse(l)))) -> Nat
             | [] => (_) => 0
-            | [_, ..t]; h => (below) => h(True/proved()) + g(t, True/proved())(1)
+            | [_, ..t]; h => (below) => h(proved()) + g(t, proved())(1)
             end(True/qed());
         /std/print(Nat/to_str(f([1, 2, 3], (t, _) => (m) => List/len(t) + m)))
         "#;

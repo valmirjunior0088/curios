@@ -1,6 +1,6 @@
 pub use /sys/Nat/{pow};
 
-use /std/{Nat, Eq};
+use /std/{Nat, Eq, proved};
 use /std/Bool/{True, Holds};
 
 --- A power of a power is the power to the product of the exponents.
@@ -21,5 +21,5 @@ pub let positive(x: Nat, k: Nat, p: Holds(0 < x)) -> Holds(0 < pow(x, k)) =
     | 0 => True/qed()
     | kp + 1 =>
         let inner: Holds(0 < pow(x, kp)) = positive(x, kp, p);
-        True/proved()
+        proved()
     end;

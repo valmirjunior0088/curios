@@ -504,10 +504,10 @@ fn a_broken_item_withholds_its_dependents_and_reports_as_the_whole_compile_does(
 }
 
 /// A hypothesis only a proof the elaborator writes reads, in `below`, beside one nothing reads, in `idle`.
-const CREDITED: &str = "use /std/{Nat};
-use /std/Bool/{True, Holds};
+const CREDITED: &str = "use /std/{Nat, proved};
+use /std/Bool/{Holds};
 
-pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = True/proved();
+pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = proved();
 
 pub let idle(i: Nat, q: Holds(i < 3)) -> Nat = i;
 
@@ -534,14 +534,14 @@ fn a_binder_a_reused_items_proof_reads_stays_credited_as_in_a_whole_compile() {
 }
 
 /// A hypothesis a proof reads in `below`, and one in `above` under it, whose statement reaches `limit`.
-const CREDITED_TWICE: &str = "use /std/{Nat};
-use /std/Bool/{True, Holds};
+const CREDITED_TWICE: &str = "use /std/{Nat, proved};
+use /std/Bool/{Holds};
 
 pub let limit: Nat = 7;
 
-pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = True/proved();
+pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = proved();
 
-pub let above(i: Nat, q: Holds(limit < i)) -> Holds(limit <= i) = True/proved();
+pub let above(i: Nat, q: Holds(limit < i)) -> Holds(limit <= i) = proved();
 ";
 
 /// A unit's credited binders are stored alike whichever pass credited them.

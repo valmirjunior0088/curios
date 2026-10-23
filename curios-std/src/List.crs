@@ -29,8 +29,8 @@ pub use sort_by/{let sort_by};
 pub mod sort;
 pub use sort/{let sort};
 
-use /std/{Nat, Bool, Option, Str, Show, Spell, Fmt, Monad, Ordering, Ord};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Bool, Option, Str, Show, Spell, Fmt, Monad, Ordering, Ord, proved};
+use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp};
 
 --- The element at `i`, or `none` past the end.
@@ -196,9 +196,9 @@ pub let balanced(
             | true =>
                 combine(
                     go(lo, half),
-                    combine(single(lo + half, True/proved()), go(lo + half + 1, half)))
+                    combine(single(lo + half, proved()), go(lo + half + 1, half)))
             end
-        | 0 < count => single(lo, True/proved())
+        | 0 < count => single(lo, proved())
         | _ => empty
         end;
     go(0, n);

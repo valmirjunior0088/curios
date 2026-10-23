@@ -1,4 +1,4 @@
-use /std/{Nat, Eq};
+use /std/{Nat, Eq, proved};
 use /std/Bool/{True, Holds};
 
 --- `n` divided by `d`: the quotient and remainder, with Euclid's identity and the remainder's bound beside them.
@@ -29,7 +29,7 @@ pub let le_div_of_mul_le(
     @ok: Holds(0 < d),
     p: Holds(m * d <= n),
 ) -> Holds(m <= n / d) =
-    True/proved();
+    proved();
 
 --- `n < m * d` gives `n / d < m`: a quotient of at least `m` would scale past `n`, since the quotient's multiple of `d` is at most `n` — a product the elaborator proves from the facts in scope.
 pub let div_lt_of_lt_mul(
@@ -39,7 +39,7 @@ pub let div_lt_of_lt_mul(
     @ok: Holds(0 < d),
     p: Holds(n < m * d),
 ) -> Holds(n / d < m) =
-    True/proved();
+    proved();
 
 --- A quotient and a remainder are the ones `/` and `%` compute: a `q` and an `r` with `n = q * d + r` and `r < d` are `n / d` and `n % d`.
 ---
@@ -53,7 +53,7 @@ pub let unique(
     joined: Eq()(n, q * d + r),
     bounded: Holds(r < d),
 ) -> {quotient: Eq()(q, n / d), remainder: Eq()(r, n % d)} =
-    let quotient: Eq()(q, n / d) = Nat/le/antisym(q, n / d, True/proved(), True/proved());
+    let quotient: Eq()(q, n / d) = Nat/le/antisym(q, n / d, proved(), proved());
     let euclid: Eq()(n, n / d * d + n % d) = Eq/refl();
     let rejoined: Eq()(n, q * d + n % d) =
         Eq/subst((x: Nat) => Eq()(n, x * d + n % d), Eq/sym(quotient), euclid);

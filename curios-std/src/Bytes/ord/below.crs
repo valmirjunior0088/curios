@@ -1,4 +1,4 @@
-use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering};
+use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, proved};
 use /std/Bool/{True, Holds};
 
 --- Whether `a` and `b` part at a byte where `a`'s is the smaller, neither running out before it.
@@ -29,7 +29,7 @@ pub let of_heads(
 ) -> Holds(below(x[h, ..t], x[k, ..r])) =
     Eq/subst(
         (o: Ordering) => Holds(match o | eq() => below(t, r) | lt() => true | gt() => false end),
-        Eq/sym(Nat/ord/of_lt(Byte/to_nat(h), Byte/to_nat(k), True/proved())),
+        Eq/sym(Nat/ord/of_lt(Byte/to_nat(h), Byte/to_nat(k), proved())),
         True/qed());
 
 --- A run below another at a byte is `lt` to it.

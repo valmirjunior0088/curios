@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Eq};
+use /std/{Nat, Bool, Eq, proved};
 use /std/Bool/{True, Holds};
 
 --- Whether `p` accepts every number below `k`.
@@ -24,7 +24,7 @@ pub let at(
             | false =>
                 Eq/subst(
                     (m: Nat) => Holds(p(m)),
-                    Nat/le/antisym(j, n, True/proved(), True/proved()),
+                    Nat/le/antisym(j, n, proved(), proved()),
                     Bool/and/first(p(j), all_below(j, p), all))
             end
     end(all, under);

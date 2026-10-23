@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Byte, Bytes, Eq, Ordering};
+use /std/{Nat, Int, Byte, Bytes, Eq, Ordering, proved};
 use /std/Bool/{True, False, Holds};
 use /std/Hash/{nat};
 
@@ -31,7 +31,7 @@ let reversed(
                         Byte/not(h),
                         flipped(r),
                         flipped(t),
-                        True/proved())
+                        proved())
                 | eq() =>
                     let same: Eq()(hn, kn) = Nat/ord/eq(hn, kn, Eq/refl());
                     Eq/subst(
@@ -72,7 +72,7 @@ let halves(
                 match Nat/ord(127, kn)
                 | lt() =>
                     let over_k: Holds(127 < kn) = Nat/ord/lt(127, kn, Eq/refl());
-                    Bytes/ord/below/of_heads(Byte/not(h), k, flipped(t), r, True/proved())
+                    Bytes/ord/below/of_heads(Byte/not(h), k, flipped(t), r, proved())
                 | eq() => match upper_b end
                 | gt() => match upper_b end
                 end
@@ -93,8 +93,8 @@ pub let of_lt(a: Int, b: Int, under: Holds(a < b)) -> Holds(Bytes/ord/below(code
     match a >= +0
     | true =>
         match b >= +0
-        | true => nat/of_lt(Int/abs(a), Int/abs(b), True/proved())
-        | false => match False/refuted() end
+        | true => nat/of_lt(Int/abs(a), Int/abs(b), proved())
+        | false => match proved(@False) end
         end
     | false =>
         match b >= +0
@@ -108,7 +108,7 @@ pub let of_lt(a: Int, b: Int, under: Holds(a < b)) -> Holds(Bytes/ord/below(code
             reversed(
                 nat/code(Int/abs(b) - 1),
                 nat/code(Int/abs(a) - 1),
-                nat/of_lt(Int/abs(b) - 1, Int/abs(a) - 1, True/proved()))
+                nat/of_lt(Int/abs(b) - 1, Int/abs(a) - 1, proved()))
         end
     end;
 
@@ -130,7 +130,7 @@ pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(code(a), code(
         | false =>
             Eq/subst(
                 (y: Int) => Eq()(Int/ord(a, y), Bytes/ord(code(a), code(y))),
-                Int/le/antisym(a, b, True/proved(), True/proved()),
+                Int/le/antisym(a, b, proved(), proved()),
                 Eq/sym(Bytes/ord/refl(code(a))))
         end
     end;
