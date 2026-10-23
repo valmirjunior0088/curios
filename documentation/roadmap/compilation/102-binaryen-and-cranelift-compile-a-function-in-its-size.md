@@ -6,16 +6,13 @@
 
 ### Binaryen pays superlinearly for a long function
 
-A Binaryen `version_130` replay of the module `curios` hands `BinaryenModuleReadWithFeatures`, at `curios-binaryen`'s settings, taken at `28bcb9aba` and timed, one reading each:
-
-- **`precompute-propagate`.** After `simplify-locals` has sunk a dependent chain of n `+` into one expression, it takes 10.0 s at 150 and 62.9 s at 300, while either pass alone takes milliseconds. The whole default pipeline with that one pass skipped (`BinaryenAddPassToSkip`) takes 2.25 s and 4.74 s, on a module whose baseline is 0.34 s.
-- **`simplify-locals-nostructure`.** On a 2 000-element list built from a run-time value, it takes 6.8 s of a 10 s pipeline the skip above does not shorten.
+A replay at `28bcb9aba` with Binaryen `version_130` attributes a dependent addition chain to `precompute-propagate` after `simplify-locals`, and an open list literal to `simplify-locals-nostructure`. This is an attribution to investigate, not a finding against the version `curios-binaryen/build.rs` now pins: the pass attribution must be repeated with that version, the current emitter and the current settings before any pass is skipped.
 
 [Precompute-propagate's introduction](https://github.com/WebAssembly/binaryen/pull/1179) already kept it to higher levels for its compile time. The [LLVM WebAssembly backend](https://android.googlesource.com/platform/external/opencl/llvm-project/+/cd46354dbd10) counts excess locals among what makes it "easy to hit engine limitations of 50K locals" and code "slower to compile to native code".
 
 ### The counted slopes reach both
 
-`growth_slopes`' reading over the compiler of `be93acf08` holds eleven growths linear in every stage before Binaryen and not after it. Past three: a match's arms (11.95 instructions in `binaryen`, which read 5.12 and 7.75 on other runs of one compiler, and 3.21 bytes in `cranelift`), a list built from a run-time value (3.82 in `binaryen`), nested list literals (3.72), a chain of operators nested to the right (3.56 instructions and 3.60 bytes in `cranelift`), nested matches (3.45 in `binaryen`), and n functions each calling the last and a left-leaning chain of operators (3.03 and 3.05 in `binaryen`). A `let` chain over `+` and over `Nat/add`, a telescope's parameters summed and a structure's fields read under three at the grid's sizes, and are held before Binaryen alone until their stages are taken up here.
+`growth_slopes` (`curios/src/tests/instrumented/growth.rs`) owns the counted reading and the growths held before Binaryen alone (`HELD_FRONT`). These include open and nested lists, chains of operators, match arms and nested matches, and chains of functions. The current reading is taken before attributing any of them to a pass. Its pooled instruction counts can vary between runs, so a pass attribution is held by repeated readings and by the allocations, bytes and pass-local work beside them.
 
 ## Goal
 
@@ -28,12 +25,12 @@ Doubling a program along any axis an author can grow it at most doubles what Bin
 
 ## Stages
 
-1. **Binaryen.** The long-function shapes retaken over the emitter's locals by liveness; each pass the growth suite still refuses skipped, stated in `curios-binaryen`'s README, and its reduced module and report prepared. Check: their rows held in `growth_slopes`; `wasm-optm` sizes over `programs/` before and after.
+1. **Binaryen.** Record the pinned version and settings, retake the long-function shapes over the current emitter, and attribute the remaining growth to individual passes before changing the default pipeline. Skip only a pass the current attribution still refuses, state the reason in `curios-binaryen`'s README, and prepare its reduced module and upstream report. Check: the affected rows held in `growth_slopes`, pass-local work over at least five doubling sizes beginning at the affected row's base, and `wasm-optm` sizes over `programs/` before and after. A pass no longer responsible is left enabled.
 2. **Cranelift.** What it pays for a long function attributed, and taken where `curios-cranelift` configures it or the emitted function shapes it. Check: their rows held.
 
 ## Protocol
 
-The counted slopes are `growth_slopes`' (`curios/src/tests/instrumented/growth.rs`), whose `binaryen` and `cranelift` columns are these stages. A Binaryen reading replays the bytes `curios` hands `BinaryenModuleReadWithFeatures`, dumped by a debugger at that call, through `BinaryenModuleOptimize` or `BinaryenModuleRunPasses`, linked against the cached `libbinaryen.a`, with `BinaryenAddPassToSkip` for a skip.
+The counted slopes are `growth_slopes`' (`curios/src/tests/instrumented/growth.rs`), whose `binaryen` and `cranelift` columns are these stages. Its `HELD_SLOPE` is a regression threshold, not a proof of linearity; each fix additionally states the bound of the responsible pass or emitted shape and counts the work exposing its cause across the extended grid. Timed pass comparisons use release builds, warm-ups and interleaved baseline and candidate runs, reporting medians and spans with the commit, dependency version and settings. A Binaryen reading replays the bytes `curios` hands `BinaryenModuleReadWithFeatures`, dumped by a debugger at that call, through `BinaryenModuleOptimize` or `BinaryenModuleRunPasses`, linked against the cached `libbinaryen.a`, with `BinaryenAddPassToSkip` for a skip.
 
 ## Rejected
 

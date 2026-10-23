@@ -64,36 +64,42 @@ fn assert_stream(io: &MockIo) {
 ///
 /// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `curios/.artifacts/host_boundary/`. Each stream has a folded `.tsv` beside it. The `host_boundary_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `host_boundary_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The `profile` feature installs `curios-profile`'s counting allocator, so each boundary row of a stream carries what the whole test process held and had taken there, and not what its span allocated alone.
 ///
-/// These are wall-clock timings under built-in tracing, with its overhead included. The process is not CPU-pinned and frequency scaling remains enabled. One warmup does not eliminate machine noise; retain the individual samples, use the same workload and profiling configuration for the comparison, and investigate changes before drawing conclusions.
+/// These are wall-clock timings under built-in tracing, with its overhead included. The process is not CPU-pinned; its CPU governor and boost settings are recorded with the reading. One warmup does not eliminate machine noise; retain the individual samples, use the same workload and profiling configuration for the comparison, and investigate changes before drawing conclusions.
 ///
 /// ## Last reading
 ///
-/// Timed, taken on top of `9c543476a` at a load average under two. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration.
+/// Timed, taken on top of `9a18c2491` on 2026-10-23. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.99.1` (`58cf8f9c3`). Cargo release profile, all features, one test thread, no CPU pinning, CPU governor `performance`, boost enabled. Default runtime engine configuration. The one-minute load average is 1.66 before the instrument and 1.58 after it; every Rust build finishes before timing.
 ///
-/// All times below are milliseconds. Sample 0 is the warmup and is excluded from the medians.
+/// All times are milliseconds. Sample 0 is the warmup and is excluded from the medians and observed spans.
 ///
-/// | Workload | Sample | Compile | Run | Output bytes |
+/// | Workload | Sample | Compile (ms) | Run (ms) | Output bytes |
 /// | --- | ---: | ---: | ---: | ---: |
-/// | `monad_io` | 0 (warmup) | 433.511 | 0.659 | 6 |
-/// | `monad_io` | 1 | 391.229 | 0.548 | 6 |
-/// | `monad_io` | 2 | 389.119 | 0.564 | 6 |
-/// | `monad_io` | 3 | 386.395 | 0.555 | 6 |
-/// | `monad_io` | 4 | 388.243 | 0.550 | 6 |
-/// | `monad_io` | 5 | 385.831 | 0.547 | 6 |
-/// | `stream_copy` | 0 (warmup) | 122.103 | 17.554 | 512000 |
-/// | `stream_copy` | 1 | 115.918 | 16.753 | 512000 |
-/// | `stream_copy` | 2 | 115.694 | 16.877 | 512000 |
-/// | `stream_copy` | 3 | 117.196 | 16.972 | 512000 |
-/// | `stream_copy` | 4 | 115.756 | 16.784 | 512000 |
-/// | `stream_copy` | 5 | 117.487 | 16.672 | 512000 |
-/// | `tui` | 0 (warmup) | 6864.496 | 87.826 | 8747 |
-/// | `tui` | 1 | 7048.908 | 87.120 | 8747 |
-/// | `tui` | 2 | 6979.211 | 80.364 | 8747 |
-/// | `tui` | 3 | 7024.093 | 88.955 | 8747 |
-/// | `tui` | 4 | 7029.803 | 86.492 | 8747 |
-/// | `tui` | 5 | 6967.768 | 97.133 | 8747 |
+/// | `monad_io` | 0 (warmup) | 457.769 | 0.724 | 6 |
+/// | `monad_io` | 1 | 405.472 | 0.626 | 6 |
+/// | `monad_io` | 2 | 408.198 | 0.635 | 6 |
+/// | `monad_io` | 3 | 410.798 | 0.613 | 6 |
+/// | `monad_io` | 4 | 409.711 | 0.552 | 6 |
+/// | `monad_io` | 5 | 407.037 | 0.631 | 6 |
+/// | `stream_copy` | 0 (warmup) | 132.299 | 16.838 | 512000 |
+/// | `stream_copy` | 1 | 123.333 | 16.203 | 512000 |
+/// | `stream_copy` | 2 | 122.618 | 16.829 | 512000 |
+/// | `stream_copy` | 3 | 124.316 | 16.858 | 512000 |
+/// | `stream_copy` | 4 | 127.507 | 16.310 | 512000 |
+/// | `stream_copy` | 5 | 125.570 | 16.541 | 512000 |
+/// | `tui` | 0 (warmup) | 7338.942 | 60.602 | 8747 |
+/// | `tui` | 1 | 7497.237 | 60.432 | 8747 |
+/// | `tui` | 2 | 7585.840 | 60.534 | 8747 |
+/// | `tui` | 3 | 7520.488 | 60.042 | 8747 |
+/// | `tui` | 4 | 7515.068 | 61.248 | 8747 |
+/// | `tui` | 5 | 7512.041 | 62.259 | 8747 |
 ///
-/// Measured medians: `monad_io` compile **388.243 ms**, run **0.550 ms**; `stream_copy` compile **115.918 ms**, run **16.784 ms**; `tui` compile **7024.093 ms**, run **87.120 ms**. All eighteen samples passed their behavior and closed-span assertions; each workload produced the same output length in every sample.
+/// | Workload | Compile median [span], ms | Run median [span], ms |
+/// | --- | ---: | ---: |
+/// | `monad_io` | 408.198 [405.472–410.798] | 0.626 [0.552–0.635] |
+/// | `stream_copy` | 124.316 [122.618–127.507] | 16.541 [16.203–16.858] |
+/// | `tui` | 7515.068 [7497.237–7585.840] | 60.534 [60.042–62.259] |
+///
+/// All 18 captures pass the behavior and closed-span assertions; each workload produces the same output length in every sample. The Tui assertions include terminal restoration and all three screen clears.
 #[test]
 #[ignore = "measurement, timed: captures compilation and execution costs"]
 fn host_boundary_measurements() {

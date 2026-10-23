@@ -6,12 +6,12 @@
 
 The areas follow this directory's subjects, one directory per area under `roadmap/`. Work belonging to the workspace as a whole is filed loose at its root. A file's name opens with the order its work is taken in:
 
-- `000-findings.md` comes first: the fixes that can be taken now in two commits at most, and the points still to be investigated before they become one or a specification.
+- `000-findings.md` holds the fixes that can be taken now in two commits at most, and the points still to be investigated before they become one or a specification. Ready fixes come first; an uncertain entry is an investigation, with its own question and stopping condition, and does not hold ready work behind it.
 - A specification numbered from `100` describes code that breaks a rule a document states, and opens by linking that rule. A design decision states the intended rule; a gap is a specification here, never a caveat there.
 - A specification numbered from `200` describes a removable cost for which no document states a rule.
 - A specification numbered from `300` describes a missing capability for which no document states a rule.
 
-Within each hundred a lower number is taken first. A number is a place in that order, never a permanent identifier: a retired specification leaves its number free, and one filed ahead of others takes a free number at its place or moves the later specifications up with every path that cites them. A filename spells its subject out, and references cite the file directly. Directory listings provide discovery without a maintained index.
+Order applies to work whose prerequisites are met. Each specification states whether its next step is a ready fix or delivery, a bounded investigation or decision, or blocked on a named capability or consumer. An investigation states the question it answers and the result that ends it; a blocked step names what releases it. Within each hundred a lower number is taken first among eligible steps. Across areas, a demonstrated conversion inconsistency or other violation that refuses an intended program comes before a removable cost; focused compiler feedback and dependency-record validation come before architectural expansion, and an attributed cost with a consumer comes before a capability with none. A prerequisite decision may be taken ahead of the work it releases, without committing to the whole project that owns that decision. A number is a place in that order, never a permanent identifier: a retired specification leaves its number free, and one filed ahead of others takes a free number at its place or moves the later specifications up with every path that cites them. A filename spells its subject out, and references cite the file directly. Directory listings provide discovery without a maintained index.
 
 ## Findings and specifications
 
@@ -21,7 +21,7 @@ An entry marked uncertain holds a point seen but not yet shown, to be investigat
 
 A proof of `False` is no entry: whoever meets one files its ticket open at once, in a commit of its own, and fixes it in the change at hand only where that change refuses it. A fix of it past the line an entry's is held to is a specification of `soundness/` numbered from `100`, linking the ticket, and retired when the ticket turns fixed.
 
-A specification states what is missing or wrong today and where, its context from the code, its goal, decisions already settled and questions still open, stages each with its own check, its verification and its retirement. One not yet refined is marked **Not refined yet** and states what is known and what it waits on. A specification that waits for a consumer says so. A measurement it depends on states a protocol precise enough to rebuild its scripts; the scripts are not checked in.
+A specification states what is missing or wrong today and where, its context from the code, its goal, decisions already settled and questions still open, stages each with its own check, its verification and its retirement. One not yet refined is marked **Not refined yet** and states what is known and what it waits on. A specification that waits for a consumer says so. Independent deliveries state separate prerequisites and completion checks: a consumer releases the delivery it needs, and no unrelated stage holds it back. A measurement it depends on states a protocol precise enough to rebuild its scripts; the scripts are not checked in. A scaling fix states its algorithmic bound and counts the work its cause adds over a geometric size grid; a broad regression threshold alone establishes no asymptotic bound. A representation change states which stored bytes may change and which verdicts and executable artifacts must remain equal.
 
 ## Landing and retirement
 

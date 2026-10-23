@@ -27,6 +27,8 @@ Probed at `1e23ec62c` with the release compiler, the checkers refuse alike: a lo
 
 ## Refinement
 
+The next step is the bounded choice of a comparison procedure and its deterministic price, checked against the transitivity and substitution examples above. This violation of conversion's contract precedes atom-ranking performance work. It waits on neither the broader Boolean and bitwise normal-form capability nor the relational layer; neither is part of its completion check.
+
 - **The design.** Which procedure decides a pair past eight atoms, what it is priced by and whether the table stays the procedure below some size; the price stated as a function of the two formulas and charged before the work, as `evaluation_size` is.
 - **The decisions it moves.** [A law is decided where it neither respells nor invents](../../design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md)'s agreement "up to eight atoms" and the `boolean` module's "The cap is the theory's" restated for what replaces the cap, and the `not compared` line restated or retired with it.
 - **Check**: both examples above close by `Eq/refl()` in both checkers; the audit gains substitution rows that carry a law's atoms past eight and chains whose pair passes eight; and `tests::runaways` states what a comparison over many atoms spends.

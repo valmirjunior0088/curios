@@ -4,7 +4,7 @@
 
 ## What is missing
 
-Two `Bool` terms with a connective between them are put to a truth table over their atoms, a rung of `curios-analysis`'s conversion chain, and beside it conversion holds local identities alone: no relationship among comparison atoms and no bitwise law past those identities is decided. The table's cap on atoms, which leaves conversion short of transitivity and of closure under substitution, is [Boolean agreement is transitive and closed under substitution](101-boolean-agreement-is-transitive-and-closed-under-substitution.md)'s.
+Two `Bool` terms with a connective between them are put to a truth table over their atoms, a rung of `curios-analysis`'s conversion chain, and beside it conversion holds local identities alone: no relationship among comparison atoms and no bitwise law past those identities is decided. The table's cap on atoms, which leaves conversion short of transitivity and of closure under substitution, is [Boolean agreement is transitive and closed under substitution](100-boolean-agreement-is-transitive-and-closed-under-substitution.md)'s.
 
 ## What is known
 

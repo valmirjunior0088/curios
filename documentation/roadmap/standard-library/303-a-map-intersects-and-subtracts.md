@@ -13,5 +13,7 @@
 
 ## Refinement
 
+The first delivery is the existing filter-based definition with its `try_get` and `has` laws for the operations a named consumer needs. It waits on no structural trie merge: [A union walks two tries once](201-a-union-walks-two-tries-once.md) is a later cost improvement with a measured consumer of its own, and must preserve those public laws.
+
 - **The names and their value types**: which map's values an intersection keeps, or a combining function's, as `union` keeps the second's.
 - **Check**: the laws proved beside `Map/try_get` and `Set/has`, and a test in `curios-std`'s tests of each.

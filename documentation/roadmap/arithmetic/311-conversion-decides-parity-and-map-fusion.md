@@ -9,6 +9,6 @@
 
 ## What is known
 
-- **The grid refuses more rows, owned elsewhere.** Boolean agreement past the truth table's cap is [Boolean agreement is transitive and closed under substitution](101-boolean-agreement-is-transitive-and-closed-under-substitution.md)'s. Two more leave an operation with no meaning the logic can read, each with a consumer waiting: [A right shift and a remainder state their bounds](302-a-right-shift-and-a-remainder-state-their-bounds.md).
+- **The grid refuses more rows, owned elsewhere.** Boolean agreement past the truth table's cap is [Boolean agreement is transitive and closed under substitution](100-boolean-agreement-is-transitive-and-closed-under-substitution.md)'s. Two more leave an operation with no meaning the logic can read, each with a consumer waiting: [A right shift and a remainder state their bounds](300-a-right-shift-and-a-remainder-state-their-bounds.md).
 
 It retires when `tests::laws::written` holds neither row as refused, parity with the evidence inversion relies on.

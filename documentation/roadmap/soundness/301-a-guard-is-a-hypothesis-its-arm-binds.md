@@ -30,6 +30,8 @@ An arm's equation answers the terms conversion holds equal to its scrutinee ([A 
 
 ## Refinement
 
+The next step is a bounded feasibility decision that releases [the explicit/inferred type-former defect](../theory/100-a-type-former-is-one-term-however-it-is-reached.md), before committing to replacement of every case equation. In a scratch copy, give a Boolean arm a named hypothesis and try the written/inferred guard combinations and `/std/Tui/Glyph/of_cluster`. Read representative leaf uses, uses that need transport and the answers outside proofs separately; the 775 answers away from a proof leaf are not counted as leaf replacements. The decision ends with a checked shape and stages for a focused delivery, or a statement of the unresolved obligation and release of the independent spelling fix. Neither outcome claims that all case equations can be removed.
+
 - **What an arm binds**, and at which cases: `Holds` of a `Bool` guard and of its negation, or an equation between the scrutinee and the case's value at every carrier.
 - **How a proof names a guard's fact.** The leaves above name the hypothesis, and each of the 775 other answers inside a proof is a transport the elaborator writes or a convoy the reader does; which of the two, and whether a leaf's answer is always its own arm's guard, is read off the proofs that hold them.
 - **What the answers outside a proof become.** Each is read and placed: a fact after all, or a type computed from a guard.

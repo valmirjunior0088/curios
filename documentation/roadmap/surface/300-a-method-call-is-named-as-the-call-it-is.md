@@ -14,5 +14,7 @@
 
 ## Refinement
 
+This focused diagnostic can be delivered beside the editor's binder and term-type answers, before architectural expansion, once its resolver boundary is settled. It waits on no acceptance of method-call syntax and on no broader editor completion.
+
 - **Where the call is found.** Either the refusal carries the head, its type and the label, and the report, which spells through the units' lexicons and their spellings (`curios_text::PreparedText::spellings`), asks the resolver whether the type's module offers the label; or lowering records, for each carrier and each nominal type, the module whose functions a method over its values names. Which module that is for a carrier, `/std/List` where the type is `/sys/List/List`, is stated once where either reads it.
 - **Check**: `xs.len()` names `List/len(xs)`, `s.len()` names `Str/len(s)`, and `xs.size()` reports as it does.

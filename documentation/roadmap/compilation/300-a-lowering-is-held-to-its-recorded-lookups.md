@@ -8,6 +8,8 @@
 
 ## Refinement
 
+The restricted scope and census precede scheduling work from the dependency record in [item tasks](302-item-tasks.md), and any delivery here that adds a lookup. Their completion waits on no binder note: once the census holds the record complete, the diagnostic is a separate delivery with its own fixture.
+
 - **A scope that answers a record and nothing else.** `into_core_unit_over` (`curios-text/src/into_core.rs`) lowers a unit over a baseline, keeping a declaration whose every recorded name resolves as it did; nothing lowers one declaration with only its record's names in scope. Whether that scope is the lowering's own, behind its `test_support`, or a way of building a unit's source from a record, is not settled.
 - **What is compared.** `std_replay_census` (`curios-pipeline/src/standard/tests.rs`) compares a declaration elaborated alone with what the archive holds for it and with what it asked; the counterpart compares a lowered item and its record. What of a lowered item is its own, a name minted anew for a kept witness among it, is not read yet.
 - **Stages, once those are read**: the restricted scope; the census as an ignored measurement beside `std_replay_census`, its reading recorded with its commit; then the binder note.
@@ -20,3 +22,7 @@
 - **What the note reads is held nowhere a report reaches.** A written binder's place: the lowering has each one's span while it lowers (`Candidate`, `curios-text/src/into_core/lowerer.rs`) and keeps it only in the lint of one nothing mentions, a scope holding its binder's ordinal among its declaration's (`Scope::written`, `curios-core/src/scope.rs`) and no extent. And that the local hides a module binding: `Lowerer::resolve_name` answers from the binders in scope and asks the module's scope nothing where one of them matches.
 - **So the lowering asks.** Where a binder in scope wins a name it asks the module's scope as well, and files for a binder that hides a binding what it hides and where it stands, which the mismatch reads by the binder's ordinal. The lookup is one the lowering's record then holds, so a name a module gains lowers again the declarations that bind it, which is why it waits on the census.
 - **Check**: a fixture over the program above, its note placed at `@Nat`.
+
+## Completion and retirement
+
+The restricted-scope census holds lowered items and their lookup records to a fresh lowering and records its protocol and reading beside the measurement. It releases scheduling and the independent binder-note delivery once complete. The binder note is held by its own diagnostic fixture. As each lands, remove that pending stage here and state its contract in the owning crate; once no stage or dependent reference remains, delete this specification.

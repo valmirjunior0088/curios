@@ -1,6 +1,6 @@
 # A random sequence replays from its seed
 
-**Not refined yet.** This specification reserves a generator of random values that a seed determines, its draws, and the property tests built on it. It is not an implementation plan. No module of `/std` consumes it yet: its first consumers are the measurement corpus, which rolls its own, and a claim a test means to try on values its author did not write out.
+**Not refined yet.** This specification reserves a generator of random values that a seed determines, its draws, and the property tests built on it. It is not an implementation plan. The generator and property-testing integration are independent deliveries: a consumer of replayable draws releases the first, and shrinking or a test-runner option waits on a consumer of the second. No module of `/std` consumes it yet: its first consumers are the measurement corpus, which rolls its own, and a claim a test means to try on values its author did not write out.
 
 ## What is missing
 
@@ -18,10 +18,17 @@
 
 ## Refinement
 
-- **The word.** Every generator above steps in 32 or 64 bits, past `2^30`, so over `Nat` each step allocates: [arithmetic modulo a word](../arithmetic/300-arithmetic-modulo-a-word.md)'s question, settled there for this and for [bytes are written as text and digested](300-bytes-are-written-as-text-and-digested.md).
+- **The word.** The proposed SplitMix or PCG step uses 32- or 64-bit arithmetic, with intermediates past `2^30`: [arithmetic modulo a word](../arithmetic/301-arithmetic-modulo-a-word.md)'s question, settled there for this and for [bytes are written as text and digested](300-bytes-are-written-as-text-and-digested.md).
 - **The state.** A value threaded through `State`, as `programs/rng_state.crs` threads its seed, or a splittable seed; and whether `/std/rand` offers a generator seeded from `rand_bytes`.
 - **The draws.** Bounded naturals and integers, floats, booleans, a choice from a list and a shuffle, each with its law as a proof where one is stated, a draw below its bound first among them.
 - **Property tests.** Where generators live, in `Test` or a module of their own; how a failing case shrinks; how a run reports its seed and is replayed from one, which a `curios test` option would reach (`documentation/usage.md`, and the keys of `curios-verdicts` where a seed changes a verdict); and how a generator of a type under proofs is written.
 - **What moves to it.** Whether the corpus programs keep their Lehmer step, which is what they measure, or draw from the library.
 
-It retires when a seed determines every draw of a generator `/std` offers, a test can try a claim on generated values and replay a failure from its seed, and the word it steps in is decided.
+## Independent deliveries
+
+1. **A replayable generator and its required draws.** Settle the algorithm, word and state contracts for a named consumer, with explicit seed input and state or split-stream output. Provide only the draws the consumer needs, including an unbiased bounded draw where requested. Check published algorithm vectors, deterministic replay of a seed and draw sequence, bounds and edge cases, and agreement of folded and executed draws. This delivery needs no shrinking framework, `curios test` option or change to cached test verdicts; its caller can record and pass its seed explicitly. The measurement corpus changes generator only by the separate decision above.
+2. **Property-testing integration.** A named testing consumer releases the choice of generators, shrinking, failure reports, replay options and the verdict inputs those options change. Check that a failing case is replayed from the reported seed and choices, that shrinking preserves failure and produces valid values, and that changing a verdict input invalidates a kept result. This stage consumes the generator's public contracts and does not hold its delivery back.
+
+## Completion and retirement
+
+A delivered generator records its algorithm, seed and draw contracts and tests beside `/std/rand`, and leaves property-testing work and any unrequested draws pending here under their own consumer gates. The specification retires when no reserved work remains, a seed determines every offered draw, tests can replay their failures under the chosen integration, and dependent references name the implemented contracts.

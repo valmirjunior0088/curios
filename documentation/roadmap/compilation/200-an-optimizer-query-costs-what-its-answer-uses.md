@@ -16,6 +16,8 @@
 
 ## Refinement
 
+The two costs have independent consumer gates and completion checks. The next delivery is the escape-only query for `origins`, `row_facts` and `return_protocols`, measured against the existing full analysis. Other narrower builders follow only where their own attributed savings justify them. This serial improvement precedes the representation and executor work of [item tasks](302-item-tasks.md); it waits on neither that work nor the bounded-copy investigation. The measured 14% is an upper bound on the three readers' share before replacement cost, not a promised end-to-end saving or the whole analysis's 46%.
+
 ### The call analysis
 
 - **The builders**: phase-local builders for the facts each reader needs, beginning with an escape-only query over the same owning function bodies, with no general analysis cache retained.
@@ -26,3 +28,7 @@
 - **The consumer.** It opens when attribution names a program whose compilation pays for this.
 - **The direction.** Group bodies enumerated incrementally in the shared planner, keeping complete successful extents, deduplication and fresh-plan execution; no second fuel limit, and no change to which copies fit.
 - **Check**: counted group-member enumeration and pending work over doubling groups, identical exact-limit plans and nested captures, and unchanged consumer artifacts and scheduling.
+
+## Completion and retirement
+
+A completed query states its contract in the owning builder and tests, and its remaining consumers alone stay here. Completing the call-analysis work does not release the bounded-copy work: that part remains blocked on its own consumer. Once neither part has pending work and dependent references name the implemented contracts, delete this specification.

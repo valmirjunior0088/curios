@@ -2,7 +2,7 @@
 
 Working specification for what an editor may still ask of a place in a file. A written name answers where it is declared, what its declaration states of it and what its file declares, at the command line and in an editor ([A place in a file is answered from the declaration that writes it](../../design/tools/a-place-in-a-file-is-answered-from-the-declaration-that-writes-it.md)). What is left is what no lowered term holds at its own place: a segment of a path, a name on a `use` line, a name a node holds rather than a term, a binder, and the type of a term.
 
-It is independent of every other spec, and waits on nothing.
+It has no prerequisite in another specification. The next step is a bounded design and measurement of the settled list and binder records for the first delivery below: what is retained, its context, its cost and what survives a refused declaration. Local-variable navigation and term-type hover precede broader name coverage and path completion.
 
 ## What this builds on
 
@@ -46,8 +46,9 @@ Settled 2026-10-13.
 
 ## Stages
 
-1. **The members of the module a path names, and a `use` line's names.** A segment of a path answered as its module; a `use` line given a text of its own, so its names are placed as a declaration's are; and the names a module exposes offered where a path is being typed, read from what the unit's text stage holds of each module. Not refined: what a path being typed parses to, an item the parser cannot read costing that item, and what a module is answered with where no file is its own.
-2. **The type of the term at a position, a binder, and a name no term holds**, from the settled list kept and the record beside it. Not refined: the four points the first decision lists, and what each of the six names in the second is recorded as.
+1. **A binder and the settled type of a term.** Keep the settled list with its declaration and record binder declarations and references by place, so a local variable answers where it is bound and a term answers its settled type in the context that checked it. Settle the first decision's coverage, memory, failed-item and expected-type questions before retaining the records; a settled type is not presented as an expected type. Measure record count, retained bytes and request cost over library files and an edited program, including a refused declaration. Check: the same query through `wonder` and the server, a local at its declaration and use, and a term under binders and arms; edit one declaration and ask about another, and ensure a changed or unchecked term receives no stale type. This delivery waits on neither path completion nor the six names of the next stage.
+2. **A name no term holds at its own place.** Record the bare head of a structure literal and pattern, a pattern's constructor, a field's label, a projection's label and a method reached through a witness where each is resolved, beside the settled list. Not refined: the shape each of the six names is recorded as. Check: each position loses its unanswered mark in `mention/tests.rs` and agrees through both transports.
+3. **The members of the module a path names, and a `use` line's names.** A segment of a path answered as its module; a `use` line given a text of its own, so its names are placed as a declaration's are; and the names a module exposes offered where a path is being typed, read from what the unit's text stage holds of each module. Not refined: what a path being typed parses to, an item the parser cannot read costing that item, and what a module is answered with where no file is its own. Check: a path segment, an import and completion of an unfinished path in the CLI query and a scripted server session.
 
 ## Verification
 
@@ -61,4 +62,4 @@ Settled 2026-10-13.
 
 ## Completion and retirement
 
-Each landed stage is restated here as what is left; `documentation/usage.md` lists the queries, `curios-wonder`'s rustdoc their contracts, and [the decision](../../design/tools/a-place-in-a-file-is-answered-from-the-declaration-that-writes-it.md) takes each stage's design with what it rejects. Once both have landed and no reference to this specification remains, this file is deleted.
+Each landed stage is restated here as what is left; `documentation/usage.md` lists the queries, `curios-wonder`'s rustdoc their contracts, and [the decision](../../design/tools/a-place-in-a-file-is-answered-from-the-declaration-that-writes-it.md) takes each stage's design with what it rejects. Once all three have landed and no reference to this specification remains, this file is deleted. A landed stage leaves only the remaining stages here; the first delivery does not wait for the others to expose its queries.

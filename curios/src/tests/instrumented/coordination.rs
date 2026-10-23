@@ -30,30 +30,35 @@ use {
 ///
 /// `curios_profile::trace` listens during compilation and execution, writing one stream per sample into a timestamped directory under `curios/.artifacts/coordination/`. Each stream has a folded `.tsv` beside it. The `coordination_compile` span includes parsing, all compiler stages, Binaryen and Cranelift precompilation. The `coordination_run` span includes deserialization, instantiation and execution. Host setup, output assertions and folding are outside those spans. All span boundaries must close. The `profile` feature installs `curios-profile`'s counting allocator, so each boundary row of a stream carries what the whole test process held and had taken there, and not what its span allocated alone.
 ///
-/// These are wall-clock timings under built-in tracing, with its overhead included. The process is not CPU-pinned and frequency scaling remains enabled. One warmup does not eliminate machine noise; retain the individual samples, use the same workload and profiling configuration for the comparison, and investigate changes before drawing conclusions. The Tui workload has synthetic time and no physical terminal latency.
+/// These are wall-clock timings under built-in tracing, with its overhead included. The process is not CPU-pinned; its CPU governor and boost settings are recorded with the reading. One warmup does not eliminate machine noise; retain the individual samples, use the same workload and profiling configuration for the comparison, and investigate changes before drawing conclusions. The Tui workload has synthetic time and no physical terminal latency.
 ///
 /// ## What it last printed
 ///
-/// Timed, taken on top of `9c543476a` at a load average under two. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.95.0`. Cargo release profile, all features, one test thread, default runtime engine configuration. Times are milliseconds; sample 0 is the warmup and is excluded from the medians.
+/// Timed, taken on top of `9a18c2491` on 2026-10-23. Host: AMD Ryzen 7 5800X3D (8 cores, 16 logical CPUs), `x86_64-unknown-linux-gnu`, Linux `7.2.9-ogc3.1.fc44.x86_64`; Rust `1.99.1` (`58cf8f9c3`). Cargo release profile, all features, one test thread, no CPU pinning, CPU governor `performance`, boost enabled. Default runtime engine configuration. The one-minute load average is 1.00 before the instrument and 2.60 after it; every Rust build finishes before timing.
+///
+/// All times are milliseconds. Sample 0 is the warmup and is excluded from the medians and observed spans.
 ///
 /// | Workload | Sample | Compile (ms) | Run (ms) | Output bytes |
 /// | --- | ---: | ---: | ---: | ---: |
-/// | `monad_suspend` | 0 (warmup) | 736.712 | 19.431 | 6 |
-/// | `monad_suspend` | 1 | 627.725 | 18.892 | 6 |
-/// | `monad_suspend` | 2 | 630.897 | 18.454 | 6 |
-/// | `monad_suspend` | 3 | 626.117 | 18.409 | 6 |
-/// | `monad_suspend` | 4 | 626.660 | 18.231 | 6 |
-/// | `monad_suspend` | 5 | 634.514 | 17.789 | 6 |
-/// | `tui` | 0 (warmup) | 6888.458 | 85.949 | 8747 |
-/// | `tui` | 1 | 7071.752 | 86.232 | 8747 |
-/// | `tui` | 2 | 7071.995 | 88.813 | 8747 |
-/// | `tui` | 3 | 7057.008 | 86.677 | 8747 |
-/// | `tui` | 4 | 6976.908 | 80.627 | 8747 |
-/// | `tui` | 5 | 7093.195 | 98.006 | 8747 |
+/// | `monad_suspend` | 0 (warmup) | 702.711 | 17.636 | 6 |
+/// | `monad_suspend` | 1 | 663.383 | 17.558 | 6 |
+/// | `monad_suspend` | 2 | 663.427 | 17.540 | 6 |
+/// | `monad_suspend` | 3 | 657.640 | 17.181 | 6 |
+/// | `monad_suspend` | 4 | 649.868 | 17.288 | 6 |
+/// | `monad_suspend` | 5 | 652.808 | 17.589 | 6 |
+/// | `tui` | 0 (warmup) | 7337.520 | 59.785 | 8747 |
+/// | `tui` | 1 | 7546.438 | 63.552 | 8747 |
+/// | `tui` | 2 | 7543.518 | 60.639 | 8747 |
+/// | `tui` | 3 | 7531.747 | 60.206 | 8747 |
+/// | `tui` | 4 | 7455.739 | 61.362 | 8747 |
+/// | `tui` | 5 | 7541.695 | 60.992 | 8747 |
 ///
-/// Compilation medians are **627.725 ms** for `monad_suspend` and **7071.752 ms** for `tui`; execution medians are **18.409 ms** and **86.677 ms**.
+/// | Workload | Compile median [span], ms | Run median [span], ms |
+/// | --- | ---: | ---: |
+/// | `monad_suspend` | 657.640 [649.868–663.427] | 17.540 [17.181–17.589] |
+/// | `tui` | 7541.695 [7455.739–7546.438] | 60.992 [60.206–63.552] |
 ///
-/// All twelve captures passed the behavior and closed-span assertions, terminal restoration and all three screen clears included.
+/// All 12 captures pass the behavior and closed-span assertions; each workload produces the same output length in every sample. The Tui assertions include terminal restoration and all three screen clears.
 #[test]
 #[ignore = "measurement, timed: captures compilation and execution costs"]
 fn coordination_measurements() {
