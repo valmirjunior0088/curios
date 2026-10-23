@@ -1110,9 +1110,11 @@ impl<'a> Context<'a> {
         let segments = name.qualifier().segments();
 
         let resolved = if name.is_abs() {
-            let resolved = self.walk_children(Qualifier::empty(), &segments[..upto])?;
-            self.guarded(&resolved, name, upto)?;
-            resolved
+            // The root the path names is its head; a re-export the walk passes through past it is the facade's to give.
+            let first = upto.min(1);
+            let root = self.walk_children(Qualifier::empty(), &segments[..first])?;
+            self.guarded(&root, name, first)?;
+            self.walk_children(root, &segments[first..upto])?
         } else {
             let head = name.head();
             self.consult(|| Consulted::Scope {

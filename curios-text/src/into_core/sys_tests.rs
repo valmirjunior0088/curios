@@ -24,6 +24,12 @@ fn rejects_sys_reference_in_term_from_user_code() {
     );
 }
 
+// An absolute path is guarded at the root it names, and a walk on through the standard library's facade reaches what the facade shows: `/std/Bool/True` is `/sys`'s, re-exported, and its constructor is walked into through the facade rather than past it.
+#[test]
+fn an_absolute_path_reaches_a_constructor_the_facade_shows() {
+    lower_with_prelude("/std/Bool/True/qed()").unwrap();
+}
+
 // A relative spelling reaches the same root by another route, so it is refused with the absolute one: the head `sys` is an ambient module of this scope rather than a name an import brought in, and the leading `/` is not the boundary.
 #[test]
 fn rejects_relative_sys_reference_in_term() {
