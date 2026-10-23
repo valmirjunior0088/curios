@@ -24,7 +24,7 @@ The scope bounds where a hunt starts, never where a cause is followed.
 
 ## What a hunt can judge
 
-A write **follows** where everything it claims can be shown again by what the tree runs or states: an entry added, restated, merged or dropped on a probe, a test or a rule and its code, and a ticket `cargo xboard report` shows open. `/fix-findings` shows an entry's defect again before any fix and drops one the code does not bear out, so a wrong entry costs one investigation and nothing is held to it. Such a write is made as its cause closes, and invoking this command is standing authorization for it and for its commit.
+A write **follows** where everything it claims can be shown again by what the tree runs or states: an entry added, restated, merged or dropped on a probe, a test or a rule and its code, and a ticket `cargo xboard report` shows open. Whoever fixes an entry shows its defect again first and drops one the code does not bear out (`.claude/rules/findings.md`), so a wrong entry costs one investigation and nothing is held to it. Such a write is made as its cause closes, and invoking this command is standing authorization for it and for its commit.
 
 A write **sets** where it states what work is held to, and it waits for the user:
 
