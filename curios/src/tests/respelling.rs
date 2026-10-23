@@ -12,7 +12,8 @@ use {
     curios_utilities::fill,
 };
 
-const IMPORTS: &str = "use /std/{Nat, Int, Bool, List, Eq, Io, proved}; use /std/Bool/{Holds, True};";
+const IMPORTS: &str =
+    "use /std/{Nat, Int, Bool, List, Eq, Io, proved}; use /std/Bool/{Holds, True};";
 
 /// Two recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles.
 const DEFINITIONS: &str =

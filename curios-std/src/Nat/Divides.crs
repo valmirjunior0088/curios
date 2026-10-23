@@ -57,8 +57,7 @@ pub let sub(@d: Nat, @a: Nat, @b: Nat, p: Divides(d, a + b), q: Divides(d, a)) -
                     Eq/subst((x: Nat) => Eq()(m * d + b, x * d), Eq/sym(split), sum);
                 Divides/intro(k - m, Eq/cong((x: Nat) => x - m * d, spread))
             | false =>
-                let grown: Holds((k + 1) * d <= m * d) =
-                    Nat/le/mul_mono_r(@k + 1, @m, d, proved());
+                let grown: Holds((k + 1) * d <= m * d) = Nat/le/mul_mono_r(@k + 1, @m, d, proved());
                 Divides/intro(0, Nat/le/antisym(b, 0, proved(), True/qed()))
             end
         end
@@ -110,10 +109,7 @@ pub let to_rem(n: Nat, d: Nat, @ok: Holds(0 < d), p: Divides(d, n)) -> Holds(n %
 pub let exact(n: Nat, d: Nat, @ok: Holds(0 < d), p: Divides(d, n)) -> Eq()(n, n / d * d) =
     match p
     | intro(k, e) =>
-        Eq/subst(
-            (x: Nat) => Eq()(n, x * d),
-            Nat/DivMod/unique(n, d, k, 0, e, proved()).quotient,
-            e)
+        Eq/subst((x: Nat) => Eq()(n, x * d), Nat/DivMod/unique(n, d, k, 0, e, proved()).quotient, e)
     end;
 
 --- A common divisor of a dividend and its divisor divides the remainder.

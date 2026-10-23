@@ -205,11 +205,7 @@ let sought(
                             let right = split(y, j, small_y, proved());
                             match Eq/subst(
                                 (v: Nat) => Holds(Nat/shr(x, j) != v),
-                                Nat/le/antisym(
-                                    Nat/shr(y, j),
-                                    Nat/shr(x, j),
-                                    proved(),
-                                    proved()),
+                                Nat/le/antisym(Nat/shr(y, j), Nat/shr(x, j), proved(), proved()),
                                 True/qed())
                             end
                         end }
@@ -295,9 +291,7 @@ let lifted(
                 | false =>
                     Eq/trans(
                         onward(h, t, j, proved()),
-                        Eq/trans(
-                            apart.below(j - 9, proved()),
-                            Eq/sym(onward(h, r, j, proved()))))
+                        Eq/trans(apart.below(j - 9, proved()), Eq/sym(onward(h, r, j, proved()))))
                 end,
         differs = apart.differs };
 
@@ -712,11 +706,7 @@ let shifts(
             let same_next: Holds(Nat/shr(x, m + 1) == Nat/shr(y, m + 1)) =
                 Eq/subst(
                     (v: Nat) => Holds(Nat/shr(x, m + 1) == v),
-                    ih(
-                        m + 1,
-                        proved(),
-                        proved(),
-                        (at, over, under) => lows(at, proved(), under)),
+                    ih(m + 1, proved(), proved(), (at, over, under) => lows(at, proved(), under)),
                     True/qed());
             let same_low: Holds(low(x, m) == low(y, m)) =
                 Eq/subst(

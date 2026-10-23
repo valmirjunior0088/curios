@@ -180,15 +180,9 @@ pub let draw(@w: Nat, @h: Nat, s: Session, v: View(w, h)) -> Try(Io, Io/Error, {
             match p.w == w && p.h == h
             | true =>
                 let as_wide =
-                    Eq/subst(
-                        (n: Nat) => Frame(n, p.h),
-                        Nat/eq_of_eql(p.w, w, proved()),
-                        p.frame);
+                    Eq/subst((n: Nat) => Frame(n, p.h), Nat/eq_of_eql(p.w, w, proved()), p.frame);
                 Option/some(
-                    Eq/subst(
-                        (n: Nat) => Frame(w, n),
-                        Nat/eq_of_eql(p.h, h, proved()),
-                        as_wide))
+                    Eq/subst((n: Nat) => Frame(w, n), Nat/eq_of_eql(p.h, h, proved()), as_wide))
             | false => Option/none()
             end
         end;

@@ -30,8 +30,7 @@ pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) 
             match e >= +0: (_) => Ratio
             | true =>
                 (numerator = d * Nat/pow(10, Int/abs(e)), denominator = 1, positive = proved())
-            | false =>
-                (numerator = d, denominator = Nat/pow(10, Int/abs(e)), positive = proved())
+            | false => (numerator = d, denominator = Nat/pow(10, Int/abs(e)), positive = proved())
             end;
         let whole: Holds(0 < spelled.denominator) = spelled.positive;
         let sh =

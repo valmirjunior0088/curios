@@ -27,8 +27,7 @@ pub let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =
                 joined = Nat/le/antisym(n, 2 * (n / 2) + 1, proved(), proved()) }
         | false =>
             let inner = of(n / 2);
-            let even: Eq()(n, 2 * (n / 2)) =
-                Nat/le/antisym(n, 2 * (n / 2), proved(), proved());
+            let even: Eq()(n, 2 * (n / 2)) = Nat/le/antisym(n, 2 * (n / 2), proved(), proved());
             Scale {
                 count = inner.count + 1,
                 half = inner.half,
@@ -58,11 +57,7 @@ pub let unique(
         | 0 => match Eq/subst((t: Nat) => Holds(t == 2 * n + 1), Eq/sym(e), True/qed()) end
         | jp + 1 =>
             let halved: Eq()(Nat/shl(2 * m + 1, kp), Nat/shl(2 * n + 1, jp)) =
-                Nat/le/antisym(
-                    Nat/shl(2 * m + 1, kp),
-                    Nat/shl(2 * n + 1, jp),
-                    proved(),
-                    proved());
+                Nat/le/antisym(Nat/shl(2 * m + 1, kp), Nat/shl(2 * n + 1, jp), proved(), proved());
             let inner = unique(kp, m, jp, n, halved);
             (count = Eq/cong((x: Nat) => x + 1, inner.count), half = inner.half)
         end

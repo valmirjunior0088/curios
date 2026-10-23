@@ -305,11 +305,7 @@ let tails(
                                 rest(b / 256),
                                 x[Nat/to_byte(m % 256)],
                                 x[Nat/to_byte(b % 256)],
-                                ih(m / 256, proved())(
-                                    b / 256,
-                                    True/qed(),
-                                    proved(),
-                                    tops))
+                                ih(m / 256, proved())(b / 256, True/qed(), proved(), tops))
                         | false =>
                             Eq/subst(
                                 (q: Nat) =>
@@ -370,20 +366,11 @@ pub let of_lt(a: Nat, b: Nat, under: Holds(a < b)) -> Holds(Bytes/ord/below(code
         match rank(a) < rank(b)
         | true => first_ranks(rank(a), top(a), rank(b), top(b), rest(a), rest(b), True/qed())
         | false =>
-            let same_rank: Holds(rank(a) == rank(b)) =
-                level(rank(a), rank(b), ranks, proved());
+            let same_rank: Holds(rank(a) == rank(b)) = level(rank(a), rank(b), ranks, proved());
             let tops: Holds(top(a) <= top(b)) = top_mono(a, b, proved(), same_rank);
             match top(a) < top(b)
             | true =>
-                first_tops(
-                    rank(a),
-                    top(a),
-                    rank(b),
-                    top(b),
-                    rest(a),
-                    rest(b),
-                    proved(),
-                    True/qed())
+                first_tops(rank(a), top(a), rank(b), top(b), rest(a), rest(b), proved(), True/qed())
             | false =>
                 let same_top: Holds(top(a) == top(b)) = level(top(a), top(b), tops, proved());
                 first_same(

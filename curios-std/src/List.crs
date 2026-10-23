@@ -194,9 +194,7 @@ pub let balanced(
             match half + half < count
             | false => combine(go(lo, half), go(lo + half, half))
             | true =>
-                combine(
-                    go(lo, half),
-                    combine(single(lo + half, proved()), go(lo + half + 1, half)))
+                combine(go(lo, half), combine(single(lo + half, proved()), go(lo + half + 1, half)))
             end
         | 0 < count => single(lo, proved())
         | _ => empty

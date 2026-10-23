@@ -923,9 +923,8 @@ fn a_certificate_corrupted_by_one_multiplier_is_refused_by_both_checkers() {
 #[test]
 fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     let refusal = |binders: &str, claim: &str| {
-        let program = format!(
-            "{HEADER}\nlet row({binders}) -> {claim} = proved(@{claim});\nIo/pure(())"
-        );
+        let program =
+            format!("{HEADER}\nlet row({binders}) -> {claim} = proved(@{claim});\nIo/pure(())");
         typecheck(&program).expect_err("the control is refused")
     };
 
