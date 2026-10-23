@@ -1,10 +1,6 @@
 //! Everything that needs a compiler behind the engine.
 //!
-//! **A crate rather than a feature of `curios-native`.** The launcher is `curios-native`'s own binary and must link no backend, so what needs one lives here, beside it: the launcher's crate has one configuration, the one every check builds, and no code in it is compiled only where a feature is on. `README.md` states the decision.
-//!
-//! **The engine is `curios-native`'s.** Every operation here runs on [`shared_engine`], the one configuration a module is later instantiated under, and hands back either bytes or a [`MachineCode`], so nothing above this crate names a wasmtime type. The two crates take Wasmtime from one row of the workspace manifest, which is what keeps a `.cwasm` written here readable there.
-//!
-//! `validate` deliberately stays with the engine: it is a wasmparser pass over bytes rather than a compilation, so a build with no backend can decide it.
+//! Every operation here runs on [`shared_engine`], the one configuration a module is later instantiated under, and hands back either bytes or a [`MachineCode`]. Why this is a crate beside `curios-native` rather than a feature of it, and what crosses between the two, are `README.md`'s decisions; why `validate` stays with the engine is `curios-native`'s.
 
 use {
     curios_native::{MachineCode, shared_engine},

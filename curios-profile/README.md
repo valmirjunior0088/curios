@@ -60,3 +60,9 @@ The elaboration is `curios-prelude-archive`'s `profile-elaboration`, and the cer
 **Rationale.** A `GlobalAlloc` cannot allocate the thread-local state per-thread attribution needs, and the profiled pipelines are single-threaded, so process-wide is precise where it is used. A binary that had to opt in could forget, and its columns would read zero — absent evidence rather than a failure — and the opt-in was four copies of one static. This crate's own test binary counts too, so a test can hold a boundary row's readings to the allocation made inside it. Every binary built with `enabled` pays a handful of relaxed atomics per allocation.
 
 **Rejected.** Each binary opting in, a place to forget.
+
+### A span is this crate's macro, not `tracing::instrument`
+
+**Decision.** `profile!`, written as a function's first statement, times the function, and its `=>` form times one expression; this crate's macros expand to `$crate::tracing::…`, asking nothing of the caller.
+
+**Rationale.** `tracing::instrument`'s expansion requires a crate literally named `tracing` in the invoking crate's extern prelude, so it cannot be re-exported, and every instrumenting crate would name `tracing` itself.

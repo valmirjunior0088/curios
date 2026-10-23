@@ -128,3 +128,9 @@ A subject is a tree or something built from one. A tree is a manifest root — t
 **Rationale.** A step's output is the user's — it streams live and in colour, and the echoed command line makes the terminal a transcript of the work — while a question's output is the program's, and streaming it prints work that is not being done. An inherited stderr lets a failing question explain itself in the tool's own words.
 
 **Rejected.** One verb that always captures, which costs a test and a format check their colour for a buffer nobody reads; a `git` verb beside `cargo`, for the commands outside the table, where only `release` asks git anything — it wraps its own calls privately, as `installer` owns `validated`.
+
+### The launcher is built by a cargo of its own
+
+**Decision.** `launcher build` builds `curios-native` in a `cargo` invocation of its own, separate from every build of the workspace, and files what it built where `curios/build.rs` embeds it.
+
+**Rationale.** Cargo unifies a dependency's features across everything one invocation builds, so a launcher built beside the compiler would link what the compiler turns on; spawned apart, workspace feature unification cannot reach it, and the launcher is built in the one configuration it ships in.

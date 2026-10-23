@@ -1,8 +1,8 @@
 //! Wasm-level optimization via the statically linked Binaryen library.
 //!
-//! This is deliberately the last stage of the pipeline: it consumes and produces serialized module bytes, after `curios_wasm::to_bytes`, and knows nothing about any Curios IR. Semantic optimization belongs to `curios-ersd`'s and `curios-cont`'s optimizers.
+//! It is the pipeline's last stage: it consumes and produces serialized module bytes, after `curios_wasm::to_bytes`, and knows nothing about any Curios IR, as `README.md` decides.
 //!
-//! [`optimize`] hands its observer the optimized module while it is alive, as an [`Optimized`] that renders through Binaryen's own text writer when it is formatted — the `wonder stage wasm-optm` payload. The text is eyes-only: nothing in the workspace parses it, and the folded s-expression dialect is Binaryen's to change.
+//! [`optimize`] hands its observer the optimized module while it is alive, as an [`Optimized`] that renders through Binaryen's own text writer when it is formatted — the `wonder stage wasm-optm` payload, eyes-only as `README.md` decides.
 
 mod sys;
 use sys::*;

@@ -43,3 +43,21 @@ The Curios core language: the term representation both checkers build on — wha
 **Rationale.** A place that is a vector's index moves for every item after one inserted, so every table keyed by it — where the module holds each name, what each item erased to — would be made again for one declaration added.
 
 **Rejected.** An item new to the unit appended after every other, which keeps no place in the stored order, since what reads it then stands before it; ranks kept current by a tree with subtree counts, which a reader asking by place would pay a logarithm for on every read.
+
+### Solving and satisfiability part company here
+
+**Decision.** A `UniverseContext` is data. Inferring the instance a program meant is the elaborator's universe solver's; deciding whether the resulting constraint set is satisfiable is each checker's own — the elaborator's by its solver, the kernel's by its own procedure in `curios-cert`.
+
+**Rationale.** Inferring an instance is inference over that data, so it sits with the elaborator; deciding satisfiability admits a program, so each checker decides it for itself.
+
+### A fold's arithmetic is Core's, and how far its operands reduce is the checker's
+
+**Decision.** The intrinsic folds are the boundary case of what a term is, and `Reducer` draws the line: what `2 + 2` folds to belongs here, while how far an operand reduces before a fold sees it is a strategy each checker supplies for itself.
+
+**Rationale.** What a fold computes is arithmetic on the representation, which is Core's; how far an operand reduces first is a strategy, and each checker has its own.
+
+### Two untrusted modules live here for their consumers
+
+**Decision.** `print` and `builders` live in this crate, though neither is trusted: `print` because `Term`'s `Display` is used throughout the elaborator's error paths, `builders` because neither the surface lowering nor the elaborator, which both build terms with it, owns what a term is.
+
+**Rationale.** Neither can admit a bad program: no judgment calls a builder, and printing decides nothing.

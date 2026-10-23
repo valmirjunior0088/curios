@@ -11,3 +11,9 @@ The Curios pretty-printing combinator DSL: single-use `Printer` actions composed
 **Rationale.** Both are monads naming their unit `pure`, and in one crate they would have to stay unflattened namespaces — an exception to the workspace's rule that a crate is a flat namespace — so that `parser::pure` and `printer::pure` stay distinguishable. Split, the crate name disambiguates, `curios_parse::pure` and `curios_print::pure`, as `curios-cert`'s flat judgments are disambiguated from the elaborator's by their crate. A crate that holds a name apart is cheaper than an exception to a layout rule, which has to be remembered where a crate boundary does not.
 
 **Rejected.** One crate with `parser::` and `printer::` modules, a standing exception to buy the two `pure`s.
+
+### It depends on nothing
+
+**Decision.** The document algebra is defined over `std::fmt` alone, and this crate depends on nothing.
+
+**Rationale.** No Curios term reaches it, which is what lets every IR crate depend on it without any of them depending on each other.

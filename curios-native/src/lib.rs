@@ -6,7 +6,7 @@
 //!
 //! **Runtime-only is a property of the crate, and it is checked.** No feature here reaches a compiler, so the isolated `cargo build -p curios-native` that `cargo xtask launcher build` runs cannot reach one, and every check builds the one configuration the launcher ships in. What holds it is `README.md`'s "The launcher is slim by exclusion": the guards in `curios/src/bundle.rs` scan the launcher image that ships.
 //!
-//! The split of the AOT operations follows wasmtime's own: [`validate`] needs no compiler and is here, while everything that does need one is `curios-cranelift`'s. A module compiled there arrives as a [`MachineCode`], which only an engine makes; bytes are read back through [`MachineCode::deserialize`] alone, the one door whose caller vouches for what it hands over. Binaryen is named nowhere here and never will be — optimization belongs to the native product.
+//! [`validate`] is here and everything that compiles is `curios-cranelift`'s, as `README.md`'s "Validation stays with the engine" decides. A module compiled there arrives as a [`MachineCode`], which only an engine makes; bytes are read back through [`MachineCode::deserialize`] alone, the one door whose caller vouches for what it hands over. Binaryen is named nowhere here and never will be — optimization belongs to the native product.
 
 mod bundle;
 pub use bundle::*;

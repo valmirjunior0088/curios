@@ -57,3 +57,9 @@ The runtime-only Curios engine: deserialize a precompiled `.cwasm` module and ru
 **Rationale.** A binding written against plain Rust types is where an answer can drift from its row unnoticed, and a shape held at linking fails before any program runs. Refusing rather than panicking keeps an embedder's process alive through a guest it hosts, and refusing rather than defaulting keeps a malformed value from becoming a valid one. Lowering a reply from its type is the host's half of [A host operation is a foreign declaration whose types are its whole contract](../documentation/design/runtime/a-host-operation-is-a-foreign-declaration-whose-types-are-its-whole-contract.md): the guest reads it unchecked, and what a row promises beyond its types is held by each host's own tests (`os_host/tests.rs`, `mock_host/tests.rs`).
 
 **Rejected.** Decoding a closed code to a default, or a `Bool` past `1` as `true`; one wire type read as another where the two are linked; panicking on a malformed operand; holding every reply to its row's promises in the adapter, the host's own code examined on every call; a registry of the host's rows apart from the declarations', a second namespace for the standard library alone; an answer checked where it is recorded, against rows its caller hands over beside the program that already holds them, and a second check, the host's, where the two are linked.
+
+### Validation stays with the engine
+
+**Decision.** `validate`, which decides whether a module's bytes are one the engine's configuration admits, is this crate's; everything that compiles is `curios-cranelift`'s.
+
+**Rationale.** Validation is a wasmparser pass over bytes rather than a compilation, so a build with no backend can decide it, and the split follows Wasmtime's own: what needs a compiler is the backend's, and what needs only the engine's configuration is the engine's.

@@ -85,3 +85,11 @@ The Curios surface language: the scannerless parser, surface AST, printer and fo
 **Rationale.** An application belongs to the expression whose result it calls. Measuring the ladder apart from its calls can keep every arm on a crowded line and send a single short argument to the next. Giving the ladder the whole chain to measure lets its structural breaks make room for the call. The call's own nested group still decides whether its arguments fit after that break.
 
 **Rejected.** Measuring only through `end`, which leaves the application out of the decision; adding an outer group while keeping an independent inner ladder group, which still lets the ladder stay flat after the outer group breaks; and forcing argument lists flat, which cannot accommodate long arguments or comments.
+
+### The tree keeps sugar as written
+
+**Decision.** The surface tree is literal: function-definition signatures, infix operators, destructuring patterns, postfix `!`, and string and spread literals are kept as written, and undone only while lowering.
+
+**Rationale.** A `Term` prints back as written, which is the printer's round trip and what the formatter rests on.
+
+**Rejected.** Desugaring in the parser, which loses the spelling the printer and the reports print.

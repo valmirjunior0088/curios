@@ -50,6 +50,16 @@ Install it with **zed: install dev extension** from the command palette, pointin
 
 The grammar is fetched from the `rev` named in `extension.toml`, not from your working tree: a grammar change is published by committing `editors/grammar/src/` beside the `grammar.js` that produced it, pushing, and moving that `rev`.
 
+## Design
+
+### The server is the compiler, and the extension fetches nothing
+
+**Decision.** The language server is the `curios` binary itself, `curios wonder server`, found as "Where it looks for the compiler" states. The extension downloads nothing and pins no version, and where it finds no binary it hands back the one-line installer.
+
+**Rationale.** The compiler on the user's `PATH` is then the one whose diagnostics they see, and installing Curios installs the server.
+
+**Rejected.** A server the extension downloads and pins, a second version beside the compiler the user installed.
+
 ## License
 
 Apache-2.0, the same as [the rest of Curios](https://github.com/valmirjunior0088/curios/blob/main/LICENSE). The text ships beside this file so that the packaged extension carries its own licence.

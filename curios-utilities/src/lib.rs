@@ -2,7 +2,7 @@
 //!
 //! Why names are never ordered, why every identity space has one source, why qualifiers and symbols are interned once per process, why a segment's legality is decided here, why a mount is a prefix, why the syntax registry states slots and never spellings, and why depth is bought with stack are `README.md`'s decisions.
 //!
-//! Two neighbours hold the rest of the shared foundations. The numeric half of the shared vocabulary — `Natural`, `Integer`, `Flt`, and the erased carriers' scalar semantics — is `curios-num`, the one crate that names `num-bigint`. The two combinator DSLs are `curios-parse` and `curios-print`, two crates because both name their unit `pure`.
+//! Two neighbours hold the rest of the shared foundations. The numeric half of the shared vocabulary — `Natural`, `Integer`, `Flt`, and the erased carriers' scalar semantics — is `curios-num`, the one crate that names `num-bigint`. The two combinator DSLs are `curios-parse` and `curios-print`, two crates as `curios-print/README.md` decides.
 
 mod macros;
 

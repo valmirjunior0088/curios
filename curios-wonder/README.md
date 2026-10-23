@@ -22,6 +22,12 @@ What the compiler knows about a program, handed out as records: the `wonder` eng
 
 **Rationale.** Filing only what the disk answers for is what keeps a server from filing a unit per keystroke, without starting every question cold, and what keeps a slot from holding a unit whose record names one nothing on disk reproduces. Keeping every unit is what gives a kept unit the units it was compiled after: the ones the fold held before it. Keeping apart from filing is why the engine holds `curios-verdicts`'s store rather than a `dyn Cache`, whose trait cannot say the first without the second.
 
+### A query reads the compiler's answer and computes none of its own
+
+**Decision.** A query runs the compiler as far as its question needs and reads the answer off what the compiler decided: a diagnostic is the `Report` the compile path would have printed, a goal is the entry of the batch elaboration already builds. The engine resolves no name and types no term of its own.
+
+**Rationale.** One source of truth that consumers walk, on the `Intrinsic::signature` principle, so what this crate says and what the compiler did cannot disagree.
+
 ## Measuring a question's latency
 
 Nothing that takes these figures is checked in: a driver and a fold are small, and a protocol stays readable where a script would need keeping.

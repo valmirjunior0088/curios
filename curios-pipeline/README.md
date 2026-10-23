@@ -8,7 +8,7 @@ The Curios compile driver: `compile_entrypoint`, `compile_units`, `Stage`, and t
 
 **Decision.** This crate depends on no runtime, no Binaryen, no CLI and no `curios-package`, and folds its stages over whatever predecessors it is handed. `curios-package` sits beside the boundary, and `curios-js` does not touch it.
 
-**Rationale.** Manifests, dependency resolution and the store answer what is in a compilation and where each part came from, which is a product's question: `curios` answers it over `curios-package`, and the browser, with no filesystem, answers it differently. A driver that knew manifests would need a plausible answer from every caller that has none. The boundary is the manifest's — no `curios-package` row here — and `curios-package/src/lib.rs` states it from the other side.
+**Rationale.** Manifests, dependency resolution and the store answer what is in a compilation and where each part came from, which is a product's question: `curios` answers it over `curios-package`, and the browser, with no filesystem, answers it differently. A driver that knew manifests would need a plausible answer from every caller that has none. The boundary is the manifest's — no `curios-package` row here — and [`curios-package`'s README](../curios-package/README.md#one-subsystem-one-owner) states it from the other side.
 
 **Rejected.** The driver resolving its own inputs, which puts a filesystem assumption below the browser product.
 

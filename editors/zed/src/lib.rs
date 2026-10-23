@@ -1,8 +1,8 @@
 //! What the extension adds beyond its grammar: which process answers as the language server, and where to find it.
 //!
-//! The server is the `curios` binary itself — `curios wonder server` — so there is nothing to download and no version to pin here: the compiler on the user's `PATH` is the one whose diagnostics they see, and installing Curios installs the server. The extension therefore never fetches, and when it can find no binary at all it hands back the one-line installer rather than a path it made up.
+//! The server is the `curios` binary itself, `curios wonder server`, and the extension fetches nothing, as `README.md`'s "The server is the compiler, and the extension fetches nothing" decides: when it can find no binary at all it hands back the one-line installer rather than a path it made up.
 //!
-//! Finding one is not the same as reading `PATH`, though. Zed inherits the `PATH` the desktop session launched it with, not the one an interactive shell assembles, so `~/.local/bin` — where the installer puts the binary — is routinely invisible here while every terminal on the machine can see it. Resolution therefore has three steps: an explicit setting, then `PATH`, then the installer's own directory.
+//! Resolution has the three steps `README.md`'s "Where it looks for the compiler" lists: an explicit setting, then `PATH`, then the installer's own directory.
 
 use zed_extension_api::{
     Command, Extension, LanguageServerId, Result, Worktree, process, register_extension,

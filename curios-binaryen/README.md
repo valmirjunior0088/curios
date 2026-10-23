@@ -19,3 +19,9 @@ WebAssembly-level optimization for the Curios native product via a statically li
 **Rationale.** The observation exists to show what the optimizer did, and its own printer is the one renderer that cannot misrepresent it; the module is alive between `BinaryenModuleOptimize` and `BinaryenModuleDispose`, so the capture is one C call, made only for an observer that looks.
 
 **Rejected.** A binary reader in `curios-wasm` printing the optimized bytes in the house rendering, whose bug would misrepresent the thing observed; reinstate for a consumer that must hold the optimized module as data, when the operand-less and memarg encodings can become paired tables beside `Instr` as the WAT `mnemonics!` table is. Parsing Binaryen's text, a second grammar with no other consumer. A `wasmprinter` dependency re-parsing bytes whose source module is still in memory.
+
+### The last stage, over bytes
+
+**Decision.** Binaryen runs last, over the serialized module `curios_wasm::to_bytes` writes, and this crate knows nothing about any Curios IR. Semantic optimization belongs to `curios-ersd`'s and `curios-cont`'s optimizers.
+
+**Rationale.** What a program means is held in the IRs above, so a rewrite that needs it is written where it is known; Binaryen's passes need only the module, and taking it as bytes keeps the library behind one seam that names no Curios type.

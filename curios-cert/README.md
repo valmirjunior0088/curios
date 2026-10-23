@@ -82,6 +82,12 @@ The Curios certifier: the kernel deciding, from a finished term alone, whether t
 
 **Rejected.** Judging at the parameter with an answer for each reader, which is the elaborator's own check: the decision's reason. One budget across the assignments, under which what a declaration costs to accept follows how many sorts it leaves.
 
+### The universe decisions are the kernel's
+
+**Decision.** The two decisions over a universe constraint set — the level entailment oracle (`entails`) and satisfiability (`satisfiable`) — sit in this crate rather than with the shared analyses.
+
+**Rationale.** They take a constraint set rather than an `Env`, so nothing reaches them through the seam the shared analyses run behind, and the kernel is their only caller: `Kernel::level_leq` for the first, the walk's universe verdict for the second.
+
 ## Measuring the certifier
 
 `cargo xtask profile-prelude certification <PATH>` certifies the fixed prelude under a record stream filed at `PATH`, the work of `curios-prelude`'s build script run by the program beside it; `cargo xtask profile-prelude elaboration <PATH>` does as much for the elaboration. The walk carries three kinds of span:
