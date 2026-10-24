@@ -101,6 +101,8 @@ pub(super) struct Audiences {
     bindings: Persistent<Qualifier, Vec<Qualifier>>,
     /// Each name one of this unit's exports shows at a path other than its own, with every such export: what a name under an internal root is seen through ([`AudienceScope::seen`]). Recorded beside the audiences, never folded into one: a name's own audience stays its declaring unit's.
     relayed: Persistent<Qualifier, Vec<Relay>>,
+    /// Each module one of this unit's exports shows at a path other than its own, with every such export: a module exported shows its public members with it, as resolution walks into them, so a name under an internal root is seen through an export of a module it is a member of too ([`AudienceScope::seen`]). Read off the exported children alone, which [`Audiences::revised`] reads again whole where any moved.
+    relayed_modules: Persistent<Qualifier, Vec<Relay>>,
     /// Each name the unit's export view exports a binding as, with every module and label it is exported under: what its audience and its relays are read again by.
     exports: Persistent<Qualifier, Vec<(Qualifier, String)>>,
 }
@@ -191,12 +193,34 @@ impl Audiences {
             }
         }
 
+        let mut relayed_modules: HashMap<Qualifier, Vec<Relay>> = HashMap::new();
+        for (module, interface) in public.iter() {
+            let exposure = modules.get(module).cloned().unwrap_or_default();
+            #[expect(
+                clippy::iter_over_hash_type,
+                reason = "each module's relays are sorted below"
+            )]
+            for (label, entry) in &interface.children {
+                let site = module.with(label);
+                if site != entry.target {
+                    relayed_modules
+                        .entry(entry.target)
+                        .or_default()
+                        .push(Relay {
+                            site,
+                            exposure: exposure.clone(),
+                        });
+                }
+            }
+        }
+
         // An audience is a set, and the walks above reach its roots in a hash's order: listed by root, so the list is the same from every compilation.
         for audience in modules.values_mut().chain(bindings.values_mut()) {
             audience.sort();
         }
         relayed
             .values_mut()
+            .chain(relayed_modules.values_mut())
             .for_each(|relays| relays.sort_by_key(|relay| relay.site));
         let mut exports = HashMap::<Qualifier, Vec<(Qualifier, String)>>::new();
         for (module, interface) in public.iter() {
@@ -216,8 +240,28 @@ impl Audiences {
             modules: persistent(modules),
             bindings: persistent(bindings),
             relayed: persistent(relayed),
+            relayed_modules: persistent(relayed_modules),
             exports: persistent(exports),
         }
+    }
+
+    /// Each module this unit exports at a path other than its own, with who may write that path, in path order: what a report reaches the module's members through ([`spell()`](super::spell())), as the audit sees them through it ([`AudienceScope::seen`]).
+    pub(super) fn module_exports(&self) -> Vec<curios_core::ModuleExport> {
+        let mut exports = self
+            .relayed_modules
+            .iter()
+            .flat_map(|(module, relays)| {
+                relays.iter().map(|relay| curios_core::ModuleExport {
+                    module: *module,
+                    at: curios_core::WritablePath {
+                        path: relay.site,
+                        audience: relay.exposure.clone(),
+                    },
+                })
+            })
+            .collect::<Vec<_>>();
+        exports.sort_by_key(|export| export.at.path);
+        exports
     }
 
     /// These audiences, of a unit whose tables were `earlier_table` and `earlier_public`, made those of `table` and `public`, which differ from them at `changed`'s modules alone. Every module's audience stands where no changed module declares or exports a child otherwise, and the audience and the relays of each name a changed module declares or exports, then or now, are read again; where a child moved, every audience is made again ([`Audiences::of`]). Beside them, the names whose audience or relays were read again, `None` where every one was.
@@ -376,6 +420,28 @@ impl Audiences {
     }
 }
 
+/// Each module above `name` from which a walk down `name`'s own labels through `public` reaches it — every hop a public child, the last a public binding standing for `name` — beside those labels: what an export of that module shows of `name` ([`AudienceScope::seen`]).
+fn shown_through(
+    public: &Table<PublicInterface>,
+    name: &Qualifier,
+) -> Vec<(Qualifier, Vec<String>)> {
+    let segments = name.segments();
+    (1..segments.len())
+        .filter_map(|depth| {
+            let module = segments[..depth]
+                .iter()
+                .fold(Qualifier::empty(), |module, label| module.with(label));
+            let below = &segments[depth..];
+            let (last, hops) = below.split_last()?;
+            let mut at = module;
+            for hop in hops {
+                at = public.get(&at)?.children.get(hop)?.target;
+            }
+            (public.get(&at)?.bindings.get(last)?.target == *name).then(|| (module, below.to_vec()))
+        })
+        .collect()
+}
+
 /// Who can see each declaration in a unit's scope: the audiences the unit decided, over the ones each unit lowered before it decided for itself.
 ///
 /// A *scope*, not a merged map. A name is asked of the unit that declares it, found by the prefix it lies under, so an earlier unit's audiences are made only where a lowering asks about one of that unit's names.
@@ -422,6 +488,10 @@ impl<'a> AudienceScope<'a> {
             return (self.binding(qualifier), Vec::new());
         };
 
+        // A module an export shows carries its public members with it, as resolution walks into them: the modules above the name its declaring unit's export view reaches it from.
+        let carried = self
+            .declaring(qualifier)
+            .map_or_else(Vec::new, |unit| shown_through(&unit.public, qualifier));
         let units = self
             .earlier
             .iter()
@@ -448,6 +518,17 @@ impl<'a> AudienceScope<'a> {
             for relay in relays.filter(|relay| !relay.site.is_within(&root)) {
                 audience.extend(relay.exposure.iter().copied());
                 sites.push(relay.site);
+            }
+            for (module, below) in &carried {
+                let relays = audiences.relayed_modules.get(module).into_iter().flatten();
+                for relay in relays.filter(|relay| !relay.site.is_within(&root)) {
+                    audience.extend(relay.exposure.iter().copied());
+                    sites.push(
+                        below
+                            .iter()
+                            .fold(relay.site, |site, label| site.with(label)),
+                    );
+                }
             }
         }
 

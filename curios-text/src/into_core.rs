@@ -1087,7 +1087,7 @@ impl PreparedText {
     pub fn spellings(&self, predecessors: &[&PreparedText]) -> curios_core::Spellings {
         spellings_over(
             self.imports(),
-            self.paths(),
+            (self.paths(), Rc::new(self.audiences().module_exports())),
             &self.mounts,
             &self.visible,
             predecessors,
@@ -3162,7 +3162,7 @@ fn into_core_unit_within(
         let paths = writable_paths(table.own(), public.own(), &audiences);
         let spellings = spellings_over(
             &shared.imports.borrow(),
-            Rc::new(paths),
+            (Rc::new(paths), Rc::new(audiences.module_exports())),
             &own,
             &visible_mounts,
             predecessors,
@@ -3826,7 +3826,10 @@ impl EntryNames {
 
         spellings_over(
             &self.imports,
-            Rc::new(writable_paths(&self.table, &self.public, audiences)),
+            (
+                Rc::new(writable_paths(&self.table, &self.public, audiences)),
+                Rc::new(audiences.module_exports()),
+            ),
             &self.mounts,
             &self.visible,
             predecessors,
@@ -3834,10 +3837,10 @@ impl EntryNames {
     }
 }
 
-/// `imports` as a lowering recorded them, beside the paths each unit in scope gives a global — `predecessors`' and then `paths`, the asking unit's own — with the prefixes in scope that unit may not name, `own` being the ones it claims and `visible` the ones it may name: what [`PreparedText::spellings`] and [`EntryNames::spellings`] answer.
+/// `imports` as a lowering recorded them, beside the paths each unit in scope gives a global and the modules it exports — `predecessors`' and then `(paths, modules)`, the asking unit's own — with the prefixes in scope that unit may not name, `own` being the ones it claims and `visible` the ones it may name: what [`PreparedText::spellings`] and [`EntryNames::spellings`] answer.
 fn spellings_over(
     imports: &curios_core::Imports,
-    paths: Rc<curios_core::Paths>,
+    (paths, modules): (Rc<curios_core::Paths>, Rc<Vec<curios_core::ModuleExport>>),
     own: &[Mount],
     visible: &[Mount],
     predecessors: &[&PreparedText],
@@ -3856,9 +3859,14 @@ fn spellings_over(
         .iter()
         .map(|earlier| curios_core::UnitPaths {
             paths: earlier.paths(),
+            modules: Rc::new(earlier.audiences().module_exports()),
             own: false,
         })
-        .chain([curios_core::UnitPaths { paths, own: true }])
+        .chain([curios_core::UnitPaths {
+            paths,
+            modules,
+            own: true,
+        }])
         .collect();
 
     curios_core::Spellings {

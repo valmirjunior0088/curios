@@ -505,3 +505,12 @@ fn a_closed_roots_name_shown_publicly_may_stand_in_any_signature() {
     )
     .unwrap();
 }
+
+/// A module an export shows carries its public members with it, as resolution walks into them: the `/std` that shows `/sys/Bool/True` shows its constructor `qed`, so a later unit's public signature may name it — as a string literal's proof of validity names it in every signature that holds one.
+#[test]
+fn a_constructor_of_a_type_shown_publicly_may_stand_in_any_signature() {
+    lower_with_prelude(
+        "pub mod M\n    pub let checked(p: /std/Bool/True/qed()) -> Type = Type;\nend\nType",
+    )
+    .unwrap();
+}

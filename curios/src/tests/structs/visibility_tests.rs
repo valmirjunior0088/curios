@@ -309,3 +309,17 @@ fn a_sys_operation_the_library_does_not_name_is_out_of_reach() {
         "#;
     assert_eq!(run(source), b"held");
 }
+
+// A string literal's proof of validity is `True/qed()`, which `/std/Bool` shows by exporting the `True` it holds: a public signature holding a literal is audited as seeing it, as a written `True/qed()` is.
+#[test]
+fn a_public_signature_may_hold_a_string_literal_and_a_written_qed() {
+    let source = r#"
+        use /std/{Eq};
+        use /std/Bool/{True};
+        pub let same: Eq()("a", "a") = Eq/refl();
+        pub let shown: Eq()(True/qed(), True/qed()) = Eq/refl();
+        /std/print("held")
+        "#;
+
+    assert_eq!(run(source), b"held");
+}

@@ -4,14 +4,17 @@
 
 use curios_utilities::Qualifier;
 
-/// The shortest spelling that resolves to `global` for a reader in module `island`, written inside `owner` (the entrypoint's final term when `None`): its bare label or a path through a child module, where the reader's own module declares the way there; an import in scope there, as it was written; a path through a module in scope there, from the label it was imported under down; or an absolute path whose audience includes the reader. `None` when the reader can reach it by none of those — a name only a refusal shows, spelled faithfully by the caller.
+/// The shortest spelling that resolves to `global` for a reader in module `island`, written inside `owner` (the entrypoint's final term when `None`): its bare label or a path through a child module, where the reader's own module declares the way there; an import in scope there, as it was written; a path through a module in scope there, from the label it was imported under down; or an absolute path whose audience includes the reader — a module an export shows carrying its public members to the export's path, as resolution walks into them. `None` when the reader can reach it by none of those — a name only a refusal shows, spelled faithfully by the caller.
 pub fn spell(
     spellings: &curios_core::Spellings,
     island: &Qualifier,
     owner: Option<&curios_core::Global>,
     global: &curios_core::Global,
 ) -> Option<String> {
-    let seen = spellings
+    let sees = |written: &curios_core::WritablePath| {
+        written.audience.iter().any(|root| island.is_within(root))
+    };
+    let declared = spellings
         .units
         .iter()
         .flat_map(|unit| {
@@ -21,10 +24,39 @@ pub fn spell(
                 .into_iter()
                 .flat_map(|paths| paths.iter());
 
-            paths.map(move |written| (written, unit.own))
+            paths.map(move |written| (written.clone(), unit.own))
         })
-        .filter(|(written, _)| written.audience.iter().any(|root| island.is_within(root)))
+        .filter(|(written, _)| sees(written))
         .collect::<Vec<_>>();
+    // A module an export shows carries its public members, as resolution walks into them: a path under an exported module has its counterpart under the export's path, which the export's audience may write.
+    let carried = spellings
+        .units
+        .iter()
+        .flat_map(|unit| unit.modules.iter().map(move |export| (export, unit.own)))
+        .flat_map(|(export, own)| {
+            declared
+                .iter()
+                .filter(move |(written, _)| {
+                    written.path.is_within(&export.module) && written.path != export.module
+                })
+                .map(move |(written, _)| {
+                    let below = &written.path.segments()[export.module.segments().len()..];
+                    let path = below
+                        .iter()
+                        .fold(export.at.path, |path, label| path.with(label));
+
+                    (
+                        curios_core::WritablePath {
+                            path,
+                            audience: export.at.audience.clone(),
+                        },
+                        own,
+                    )
+                })
+        })
+        .filter(|(written, _)| sees(written))
+        .collect::<Vec<_>>();
+    let seen = declared.into_iter().chain(carried).collect::<Vec<_>>();
     // Through a module a `use` brought into scope: its label, then the path from that module down. A head an import put in scope is vetted where the `use` is written and nowhere after, so a path under a prefix the reader may not name is written this way and no other.
     let through = spellings
         .imports
@@ -41,7 +73,6 @@ pub fn spell(
                 })
         })
         .collect::<Vec<_>>();
-
     let mut reachable = seen
         .into_iter()
         .filter(|(written, _)| {

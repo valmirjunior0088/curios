@@ -740,8 +740,17 @@ pub type Paths = Sorted<Global, Rc<Vec<WritablePath>>>;
 pub struct UnitPaths {
     /// Each global's paths in the unit ([`Paths`]). Made once for the unit and shared by every reader, so nothing in it is a reader's.
     pub paths: Rc<Paths>,
+    /// Each module the unit exports at a path other than its own: a module exported carries its public members with it, so a member is reached from the export's path down as it is from its own module's.
+    pub modules: Rc<Vec<ModuleExport>>,
     /// Whether the unit is the reader's own, where a module may also reach a path relatively, through its own declarations.
     pub own: bool,
+}
+
+/// One path a unit exports a module at, other than the module's own, and who may write it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleExport {
+    pub module: Qualifier,
+    pub at: WritablePath,
 }
 
 /// One absolute path reaching a global, and who may write it.
