@@ -199,6 +199,31 @@ fn a_test_declaration_registers_by_kind_in_declaration_order() {
 }
 
 #[test]
+fn nothing_names_a_test() {
+    // A test binds nothing, so a name written for one resolves as a name nothing declares does, bare or through its module.
+    let bare = run_err("test t = Type;\nt");
+    assert!(bare.contains("`t` is not in scope"), "{bare}");
+    let qualified = run_err("mod Inner\ntest t = Type;\nend\nInner/t");
+    assert!(qualified.contains("has no `t`"), "{qualified}");
+}
+
+#[test]
+fn a_test_takes_its_name_among_its_modules_declarations() {
+    // A test's path is its report line and what a filter selects, so its name is as unique as a binding's, whichever of the two is written first.
+    for source in [
+        "test t = Type;\nlet t: Type = Type;\n()",
+        "let t: Type = Type;\ntest t = Type;\n()",
+        "test t = Type;\ntest t = Type;\n()",
+    ] {
+        let report = run_err(source);
+        assert!(
+            report.contains("`t` is already declared in this module"),
+            "{source}: {report}"
+        );
+    }
+}
+
+#[test]
 fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
     // A test takes no parameters, but it is still a `() -> Test({})` in Core: `Test/main` holds the whole schedule and forces only the one it selected, so the body cannot be a bare value, and the empty telescope is the thunk.
     let module = lowered_module("test t = Type;\n()");

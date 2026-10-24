@@ -289,6 +289,8 @@ pub(crate) struct ModuleInfo {
     children: HashMap<String, ChildInfo>,
     #[archived_with(OrderedMap)]
     bindings: HashMap<String, bool>,
+    /// The names this module's tests take, in declaration order. Nothing resolves to a test, so none is a binding, but a test's path is its report line and what a filter selects, so its name is as unique among the module's declarations as a binding's.
+    tests: Vec<String>,
 }
 
 /// How a module declares a label, as a step of a path reads it: a child module, or a binding, each with its visibility.
@@ -311,6 +313,7 @@ impl ModuleInfo {
         Self {
             children: HashMap::new(),
             bindings: HashMap::new(),
+            tests: Vec::new(),
         }
     }
 
@@ -342,12 +345,26 @@ impl ModuleInfo {
     }
 
     pub(super) fn insert_binding(&mut self, label: &Label, vis_pub: bool) -> Result<(), Error> {
-        if self.bindings.contains_key(label.as_str()) {
-            return Err(duplicate(label));
-        }
-
+        self.take(label)?;
         self.bindings.insert(label.to_string(), vis_pub);
         Ok(())
+    }
+
+    /// Take `label` for a test, which binds nothing.
+    pub(super) fn insert_test(&mut self, label: &Label) -> Result<(), Error> {
+        self.take(label)?;
+        self.tests.push(label.to_string());
+        Ok(())
+    }
+
+    // Refuse `label` where a binding or a test of this module already has it: the names a module's declarations take are one set.
+    fn take(&self, label: &Label) -> Result<(), Error> {
+        let taken = self.bindings.contains_key(label.as_str())
+            || self.tests.iter().any(|test| test == label.as_str());
+        match taken {
+            true => Err(duplicate(label)),
+            false => Ok(()),
+        }
     }
 
     pub(crate) fn get_child(&self, label: &str) -> Option<bool> {

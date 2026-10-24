@@ -1266,14 +1266,14 @@ fn scan_module_info(heads: &[Headed]) -> Result<ModuleInfo, Error> {
             Head::Witness => {}
             // A `foreign` declaration is an ordinary binding, like a `let` — it has no body of its own, but it is called the same way.
             Head::Foreign(foreign) => info.insert_binding(&foreign.label, foreign.vis_pub)?,
-            // A test binds its name privately — referable within its subtree, colliding with a like-named sibling, never `pub`.
-            Head::Test(label) => info.insert_binding(label, false)?,
             // A broken item binds the name its head declared, public so a reference from anywhere resolves to it and is withheld rather than reported unbound; nothing can use the binding.
             Head::Broken { declares, .. } => {
                 if let Some(label) = declares {
                     info.insert_binding(label, true)?;
                 }
             }
+            // A test takes its name and binds nothing: no reference resolves to one.
+            Head::Test(label) => info.insert_test(label)?,
             Head::Use(_) => {}
         }
     }
@@ -1483,16 +1483,13 @@ fn process_items(
                     )?;
                 }
             }
-            // A witness is anonymous — no binding, no scope entry.
-            Head::Witness | Head::Use(_) => {}
+            // A witness is anonymous and nothing names a test — no binding, no scope entry.
+            Head::Witness | Head::Test(_) | Head::Use(_) => {}
             Head::Foreign(foreign) => context.insert_binding(
                 foreign.label.to_string(),
                 foreign.label.span(),
                 context.prefixed(&foreign.label),
             )?,
-            Head::Test(label) => {
-                context.insert_binding(label.to_string(), label.span(), context.prefixed(label))?
-            }
         }
     }
 
