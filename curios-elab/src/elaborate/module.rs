@@ -11,7 +11,7 @@ use recovery::*;
 mod tests;
 
 use {
-    super::{Context, Error, Mode, check, elaborate},
+    super::{Context, Error, Mode, check, elaborate, elaborate_func_type_sized},
     crate::{
         Declared, ErasedSite, Established, GoalReport, GoalSite, Published, Readers, ScheduledTest,
         Traces, Zonked, body_levels, check_concept_registry, check_is_sort, check_proof_totality,
@@ -19,7 +19,7 @@ use {
         decide_polarities, definition_variances, family_levels, field_variances, goal_sites,
         hold_prop, hold_variances, parameter_field, record_definition_totality,
         record_superclasses, record_variances, reduce_with, register_witness, report_goals,
-        sort_term, stamp_totality, state_proof_binders, superclass_targets, test_program_tail,
+        stamp_totality, state_proof_binders, superclass_targets, test_program_tail,
         validate_entry_universes, validate_universes, zonk, zonk_arity, zonk_entry, zonk_published,
         zonk_solved_term_metas,
     },
@@ -80,11 +80,14 @@ fn declaration_instance(value: &Term, name: &Global) -> Option<Universes> {
     found.borrow_mut().take()
 }
 
-/// [`add_declaration_sizing`] for a nested arity: the parameters, then the telescope they terminate in, sized inside the parameters' own scope. Only the parameters carry the extra rung.
-fn add_arity_sizing(
+/// Record what a declaration's domains impose on its result sort, each at the level typing read it at, one level to each domain: the first `uniform_count` are parameters, one rung above the result's level, and the rest must fit under it.
+///
+/// **Typing's level, not the reduct's**, the level the kernel sizes a domain at, which types it as written: "a former sized as typing read its parts sits where the kernel types it" (`documentation/design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md`). Read off a domain's reduct, an occurrence at a level its value drops — `/sys/List/List.{c}(Nat)`, which reduces to a node at `0`, or a type-valued definition's call — leaves the declaration's levels free to put the domain above its family, which the kernel refuses.
+fn size_domains(
     context: &mut Context,
     declaration: &Global,
-    arity: &Telescope<Telescope<()>>,
+    domains: &[(Plicity, Free, Term)],
+    levels: &[Level],
     uniform_count: usize,
     result_sort: &Term,
     kind: UniverseConstraintKind,
@@ -94,40 +97,77 @@ fn add_arity_sizing(
     };
     let result_level = result_level.clone();
 
-    context.with_frame(|context| {
-        let terminal = telescope_sizing(
-            context,
-            declaration,
-            arity,
-            uniform_count,
-            &result_level,
-            &kind,
-        )?;
-        telescope_sizing(context, declaration, &terminal, 0, &result_level, &kind)?;
-        Ok(())
-    })
+    for (position, ((_, binder, domain), level)) in domains.iter().zip(levels).enumerate() {
+        let upper = match position < uniform_count {
+            true => result_level.checked_add(1).map_err(Error::from)?,
+            false => result_level.clone(),
+        };
+        context
+            .universes_mut()
+            .add_leq(
+                level.clone(),
+                upper,
+                UniverseConstraintOrigin {
+                    extent: domain.extent(),
+                    kind: kind.clone(),
+                    declaration: Some(declaration.faithful().to_string()),
+                    binder: binder.hint().map(str::to_string),
+                    instantiated: None,
+                },
+            )
+            .map_err(Error::from)?;
+    }
+
+    Ok(())
 }
 
 /// A telescope's members as a walk opened them: each under its mark, at the binder minted for it.
 type Members = Vec<(Plicity, Free, Term)>;
 
-/// Walk a (params-first) telescope, checking each binder's type against `Type` under the earlier binders (fresh-gensym, assume), and return the rebuilt `(mark, label, type)` entries alongside the telescope's terminal — opened under those binders. Runs in the caller's frame; the same gensym-then-relabel discipline as `elaborate_tuple_type`.
+/// Walk a (params-first) telescope, checking each binder's type against `Type` under the earlier binders (fresh-gensym, assume), and return the rebuilt `(mark, label, type)` entries, the level typing read each at ([`size_domains`]'s), and the telescope's terminal — opened under those binders. Runs in the caller's frame; the same gensym-then-relabel discipline as `elaborate_tuple_type`.
 ///
 /// **Each member is entered under the mark its entry states.** A `use` entry joins the witness scope as well as the ordinary one, so resolution in the *later* entries' types finds it — which is what a function telescope does for a `use` premise, and what a concept's superclass edge needs to be visible to the field types below it ([`Context::enter`]).
 fn check_telescope_entries<B: Bound>(
     context: &mut Context,
     telescope: Telescope<B>,
-) -> Result<(Members, B), Error> {
+) -> Result<(Members, Vec<Level>, B), Error> {
     let mut entries = Vec::new();
+    let mut levels = Vec::new();
     let mut cursor = telescope.cursor();
     while let Some((_, ty)) = cursor.entry() {
         let mark = cursor.mark().expect("a mark stands at an entry");
-        let rebuilt = check_is_sort(context, &ty)?.0;
+        let (rebuilt, sort) = check_is_sort(context, &ty)?;
         let label = cursor.advance_fresh(|hint| context.fresh(hint));
         context.enter(&label, &rebuilt, mark);
         entries.push((mark, label, rebuilt));
+        levels.push(sort.level);
     }
-    Ok((entries, cursor.body().expect("a cursor past every entry")))
+    Ok((
+        entries,
+        levels,
+        cursor.body().expect("a cursor past every entry"),
+    ))
+}
+
+/// A struct former's written type, elaborated as [`check_is_sort`] elaborates a type, with the level typing read each of its parameters at handed back beside it, in order: what the struct's parameters are sized by ([`elaborate_struct`]). A former with no parameter is declared at its result sort and hands back none.
+///
+/// Its function type is walked by the walk every function type is, which reads each domain's sort, and around it this does what [`elaborate`] does around a term, as `elaborate_func_settle` does: the refusal placed at the term, the extent restamped, the settled node recorded. The elaboration cache is not consulted, a former's type being elaborated once.
+fn check_former_type(context: &mut Context, type_: &Term) -> Result<(Term, Vec<Level>), Error> {
+    let Subterm::FuncType(func_type) = &**type_ else {
+        return Ok((check_is_sort(context, type_)?.0, Vec::new()));
+    };
+    let (rebuilt, sort, levels) =
+        elaborate_func_type_sized(context, func_type).map_err(|error| {
+            error
+                .at_opt(type_.extent())
+                .in_scope(context.reader_scope())
+        })?;
+    let rebuilt = match type_.extent() {
+        Some(extent) => rebuilt.with_extent(extent),
+        None => rebuilt,
+    };
+    context.record_checked(&rebuilt, &sort.term());
+    Ok((rebuilt, levels))
 }
 
 /// Open an already-elaborated telescope: assume one fresh binder per entry and hand the entries back, without checking them again.
@@ -146,75 +186,6 @@ fn assume_telescope_entries<B: Bound>(
         entries.push((mark, label, ty));
     }
     (entries, cursor.body().expect("a cursor past every entry"))
-}
-
-/// Record what a telescope's domains impose on `result_level`, in the caller's frame, and hand back the terminal opened under the binders assumed for them. The first `uniform_count` domains are parameters and get one rung of slack; the rest must fit under the result level itself. Split out of [`add_declaration_sizing`] so a nested arity can size its terminal inside its parameters' own scope.
-fn telescope_sizing<B: Bound>(
-    context: &mut Context,
-    declaration: &Global,
-    telescope: &Telescope<B>,
-    uniform_count: usize,
-    result_level: &Level,
-    kind: &UniverseConstraintKind,
-) -> Result<B, Error> {
-    let mut cursor = telescope.cursor();
-    while let Some((hint, domain)) = cursor.entry() {
-        let position = cursor.args().len();
-
-        let domain_sort = sort_term(context, &domain)?;
-        let domain_sort = reduce_with(context, &domain_sort)?;
-        if let Subterm::Sort(_, domain_level) = &*domain_sort {
-            let upper = if position < uniform_count {
-                result_level.checked_add(1).map_err(Error::from)?
-            } else {
-                result_level.clone()
-            };
-            context
-                .universes_mut()
-                .add_leq(
-                    domain_level.clone(),
-                    upper,
-                    UniverseConstraintOrigin {
-                        extent: domain.extent(),
-                        kind: kind.clone(),
-                        declaration: Some(declaration.faithful().to_string()),
-                        binder: hint.map(str::to_string),
-                        instantiated: None,
-                    },
-                )
-                .map_err(Error::from)?;
-        }
-
-        context.advance_assumed(&mut cursor, &domain);
-    }
-
-    Ok(cursor.body().expect("a cursor past every entry"))
-}
-
-fn add_declaration_sizing<B: Bound>(
-    context: &mut Context,
-    declaration: &Global,
-    telescope: &Telescope<B>,
-    uniform_count: usize,
-    result_sort: &Term,
-    kind: UniverseConstraintKind,
-) -> Result<(), Error> {
-    let Subterm::Sort(_, result_level) = &*reduce_with(context, result_sort)? else {
-        return Ok(());
-    };
-    let result_level = result_level.clone();
-
-    context.with_frame(|context| {
-        telescope_sizing(
-            context,
-            declaration,
-            telescope,
-            uniform_count,
-            &result_level,
-            &kind,
-        )?;
-        Ok(())
-    })
 }
 
 /// Rebuild a registry entry's `params`/`indices` telescopes with *elaborated* types. `into_core` records the declaration's lowered spellings, and a lowered type must never leak into later reduction: implicit insertion saturates applications during elaboration, and an index type lowered without the hidden arguments elaboration inserts (e.g. `Eq`'s `@A`, which its written application never states) would open a telescope at the wrong arity the first time `reduce` meets the registry copy.
@@ -245,8 +216,9 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
     // Walk the parameters, then the index telescope they terminate in, checking each entry type against `Type` under the binders before it.
     let (param_entries, index_entries) = context.with_frame(|context| {
         // A `use` parameter is in the witness scope of the index types below it, as it is in the type constructor's own function type.
-        let (params, inner) = check_telescope_entries(context, induct_decl.arity.clone())?;
-        let (indices, ()) = check_telescope_entries(context, inner)?;
+        // A family's arity is typed and not sized, by either checker: its constructors' telescopes, which hold its parameters again, are.
+        let (params, _, inner) = check_telescope_entries(context, induct_decl.arity.clone())?;
+        let (indices, _, ()) = check_telescope_entries(context, inner)?;
 
         Ok::<_, Error>((params, indices))
     })?;
@@ -291,9 +263,9 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
             .map(|label| label.to_string())
             .collect::<Vec<_>>();
 
-        let (entries, targets) = context.with_frame(|context| {
+        let (entries, levels, targets) = context.with_frame(|context| {
             // Under the signature's own marks: a `use` parameter of the family is a witness slot of every constructor, in scope for the payload types after it.
-            let (entries, targets) = check_telescope_entries(context, signature.clone())?;
+            let (entries, levels, targets) = check_telescope_entries(context, signature.clone())?;
 
             // The targets are still checked by `elaborate_induct_type`, which is what compares them against the rebuilt index telescope — so the constructed type is rebuilt here from what the declaration fixes (this family, at the constructor's own parameter binders) and the targets the signature states, elaborated, and its indices taken back.
             let params = entries
@@ -305,13 +277,22 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
 
             match &*constructed {
                 Subterm::InductType(constructed) => {
-                    Ok::<_, Error>((entries, constructed.indices.clone()))
+                    Ok::<_, Error>((entries, levels, constructed.indices.clone()))
                 }
                 _ => Err(Error::UniverseInvariant(
                     "a constructor's terminal elaborates to its own family".into(),
                 )),
             }
         })?;
+        size_domains(
+            context,
+            name,
+            &entries,
+            &levels,
+            induct_decl.param_count(),
+            &induct_decl.result_sort,
+            UniverseConstraintKind::ConstructorSizing,
+        )?;
 
         let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
         constructors.push((
@@ -341,7 +322,13 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
 }
 
 /// Rebuild a struct's registry telescopes with *elaborated* types, so the field types `erase` and later construction sites consult are saturated (implicit insertion) and reduce correctly — the struct analogue of [`elaborate_induct_indices`], over the single (params-first) field telescope. Called from `elaborate_module_let` once the type-former is defined (field types may mention the struct itself and earlier items). A name with no registry entry is an ordinary binding; no-op.
-fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
+///
+/// `parameters` are the levels typing read the struct's parameters at, where its former's type was elaborated ([`check_former_type`]), one to each: the parameters are opened here rather than checked, so no check of their own reads them again.
+fn elaborate_struct(
+    context: &mut Context,
+    name: &Global,
+    parameters: &[Level],
+) -> Result<(), Error> {
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
         return Ok(());
     };
@@ -382,11 +369,11 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
     // Open the parameters, then check the field telescope they terminate in against `Type` under the binders before it.
     //
     // The parameters are opened rather than checked: `share_struct_params` elaborated them before the former's body was, and they are the terms that body was checked against. Elaborating them again would file a second set of universe instances beside the ones already in play.
-    let (param_entries, field_entries, supers) =
+    let (param_entries, field_entries, field_levels, supers) =
         context.with_frame(|context| -> Result<_, Error> {
             // Under their declared marks, so a `use` parameter is in the witness scope of the fields, as it is in the former's own function type, and a concept's superclass edge in that of the fields below it.
             let (params, inner) = assume_telescope_entries(context, struct_decl.arity.clone());
-            let (fields, ()) = check_telescope_entries(context, inner)?;
+            let (fields, field_levels, ()) = check_telescope_entries(context, inner)?;
 
             // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when no field is informative, the singleton-elimination condition (`elaborate_match::singleton_eliminable`) checked here at declaration time rather than per projection. A struct carries no indices, so nothing is forced and the condition reduces to: every field type is itself a proposition. With this enforced, every projection lands in a `Prop`, so `elaborate_proj` needs no guard.
             if declared_prop {
@@ -414,8 +401,33 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
                 false => None,
             };
 
-            Ok((params, fields, supers))
+            Ok((params, fields, field_levels, supers))
         })?;
+
+    assert_eq!(
+        parameters.len(),
+        param_entries.len(),
+        "a struct's former's type is a function type over its parameters, one domain to each"
+    );
+    let domains = param_entries
+        .iter()
+        .chain(&field_entries)
+        .cloned()
+        .collect::<Vec<_>>();
+    let levels = parameters
+        .iter()
+        .chain(&field_levels)
+        .cloned()
+        .collect::<Vec<_>>();
+    size_domains(
+        context,
+        name,
+        &domains,
+        &levels,
+        struct_decl.param_count(),
+        &struct_decl.result_sort,
+        UniverseConstraintKind::FieldSizing,
+    )?;
 
     let param_refs = param_labels.iter().map(String::as_str).collect::<Vec<_>>();
     let field_refs = field_labels.iter().map(String::as_str).collect::<Vec<_>>();
@@ -424,14 +436,6 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
         Telescope::build_marked(field_entries, ()).relabel(&field_refs),
     )
     .relabel(&param_refs);
-    add_arity_sizing(
-        context,
-        name,
-        &arity,
-        struct_decl.param_count(),
-        &struct_decl.result_sort,
-        UniverseConstraintKind::FieldSizing,
-    )?;
 
     context.update_struct(
         name,
@@ -797,7 +801,11 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     let name = Free::from(&def.name);
     let outer_site = context.set_checked_site(def.name);
     check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
-    let type_ = check_is_sort(context, &def.type_)?.0;
+    // A struct's former is typed over its parameters, which are sized at the levels that typing reads ([`elaborate_struct`]).
+    let (type_, parameters) = match context.struct_decl(&def.name).is_some() {
+        true => check_former_type(context, &def.type_)?,
+        false => (check_is_sort(context, &def.type_)?.0, Vec::new()),
+    };
 
     // A witness declaration registers into the program-wide table as soon as its signature is known — *before* its body elaborates, so a recursive witness (a `Show(Tree)` whose fields show subtrees) can resolve through its own entry.
     if context.is_witness_declaration(&def.name) {
@@ -827,7 +835,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     context.define_assuming(&name, &type_, &body, Some(&def.kind));
 
     // A struct's type-former lowers to a standalone `let`; rebuild its registry telescopes now that the former is defined (no-op for an ordinary let).
-    elaborate_struct(context, &def.name)?;
+    elaborate_struct(context, &def.name, &parameters)?;
 
     // A witness may resolve through its own table entry — the registration above exists to let it — and a body that does names itself. Cross-definition value recursion is unexpressible outside a `rec` item by construction, so such a witness becomes a single-member group below, and its self-references are bound by that group's binder rather than free.
     let recursive_witness = context.is_witness_declaration(&def.name) && {
@@ -912,11 +920,18 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     }
 
     let mut types = Vec::with_capacity(defs.len());
+    // Each struct former's parameters, at the levels typing read them at, as `elaborate_module_let` reads a lone one's.
+    let mut parameters = Vec::with_capacity(defs.len());
     for def in &defs {
         check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
         // A member's type is that member's own: a proof written in it credits the member's binders, not those of the member the item was entered at.
         context.enter_declaration(Some(def.name));
-        types.push(check_is_sort(context, &def.type_)?.0);
+        let (type_, levels) = match context.struct_decl(&def.name).is_some() {
+            true => check_former_type(context, &def.type_)?,
+            false => (check_is_sort(context, &def.type_)?.0, Vec::new()),
+        };
+        types.push(type_);
+        parameters.push(levels);
     }
 
     // Upgrade the assumptions to the *rebuilt* signatures before any body is checked (see `elaborate_rec`): a lowered (under-applied) type must not leak into later reduction. The lowered forms were only needed above, while the signatures checked each other.
@@ -976,22 +991,8 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         elaborate_induct_constructors(context, &def.name)?;
     }
     // A struct or concept group's field telescopes elaborate now that every former is defined, since each may name the others.
-    for def in &defs {
-        elaborate_struct(context, &def.name)?;
-    }
-    for def in &defs {
-        if let Some(induct_decl) = context.induct_decl(&def.name).cloned() {
-            for constructor in induct_decl.signatures() {
-                add_declaration_sizing(
-                    context,
-                    &def.name,
-                    &constructor.telescope,
-                    induct_decl.param_count(),
-                    &induct_decl.result_sort,
-                    UniverseConstraintKind::ConstructorSizing,
-                )?;
-            }
-        }
+    for (def, levels) in defs.iter().zip(&parameters) {
+        elaborate_struct(context, &def.name, levels)?;
     }
     context.sweep_parked()?;
 

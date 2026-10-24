@@ -18,6 +18,15 @@ pub(super) fn elaborate_func_type(
     context: &mut Context,
     ft: &FuncType,
 ) -> Result<(Term, Term), Error> {
+    let (rebuilt, sort, _) = elaborate_func_type_sized(context, ft)?;
+    Ok((rebuilt, sort.term()))
+}
+
+/// [`elaborate_func_type`], with the level typing read each domain at handed back beside the type and its sort, in order: what a struct's parameters are sized by, its former's type being a function type over them.
+pub(super) fn elaborate_func_type_sized(
+    context: &mut Context,
+    ft: &FuncType,
+) -> Result<(Term, Sort, Vec<Level>), Error> {
     // One walk, each domain opened once at the binders before it, rather than a recursion reopening the rest per binder.
     let mut domains: Vec<(Plicity, Free, Term)> = Vec::new();
     // The level of each domain, a proposition's among them, as typing read it.
@@ -68,12 +77,13 @@ pub(super) fn elaborate_func_type(
     let rebuilt = Term::func_type_marked(domains, output);
 
     // Sized from its parts' sorts as typing read each, a Π into a proposition being one: where the kernel types it, which reads a part as it is written. Sized from the parts' reducts, a part whose written type sits above its reduct's, a call typed by its codomain or an occurrence at a level its value drops, leaves the former below the sort the kernel finds.
+    let domains = levels.clone();
     levels.push(output_sort.level);
     let sort = Sort {
         quality: output_sort.quality,
         level: Level::max(levels),
     };
-    Ok((rebuilt, sort.term()))
+    Ok((rebuilt, sort, domains))
 }
 
 /// Refuse a written `use` binder whose type is not a concept application.

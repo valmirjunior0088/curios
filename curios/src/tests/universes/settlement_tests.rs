@@ -650,3 +650,68 @@ fn a_type_over_an_open_element_is_sized_by_the_level_the_element_is_born_at() {
 
     assert_eq!(run(source), b"0");
 }
+
+/// A recursive predicate over a list of any element type, its list type the one the hole `list` names, beside a predicate it is called with: a call's implicit written makes the list type a declaration states meet the one the callee states as two calls of one global, which joins the declaration's instance to the callee's, held where conversion compares it.
+const EVERY_OVER: &str = "pub let Wrap(T: Type) -> Type = List(T);
+let every(@T: Type, l: ${list}(T), pred: (T) -> Bool) -> Bool =
+    match l
+    | [] => true
+    | [h, ..t] => match pred(h) | true => every(t, pred) | false => false end
+    end;
+let small(n: Nat) -> Bool = n < 10;";
+
+// A domain is sized at the level typing read it at, which is where the kernel types it, and not at its reduct's. `List(Nat)` is written at the level of `/sys/List`'s instance and reduces to a node at `0`, and `Wrap(Nat)` is written at the level of `Wrap`'s; with the call's implicit written, that instance is the struct's own parameter, and read off the reduct the field stood above the struct's sort, which the kernel refused. Each struct certifies, its implicit written and left out.
+#[test]
+fn a_field_is_sized_at_the_level_its_written_type_stands_at() {
+    for list in ["List", "Wrap"] {
+        for implicit in ["@Nat, ", ""] {
+            let every = fill!(EVERY_OVER, list);
+            let source = fill!(
+                r#"use /std/{Nat, List, Bool};
+use /std/Bool/{Holds};
+
+${every}
+
+pub struct G: Type {
+    chars: ${list}(Nat),
+    @ok: Holds(every(${implicit}chars, small)),
+}
+
+/std/print("sized")"#,
+                every,
+                list,
+                implicit,
+            );
+
+            assert_eq!(typecheck(&source), Ok(()), "{list}, `{implicit}`");
+        }
+    }
+}
+
+// A parameter is sized as a field is: a struct's at the level its former's type was elaborated at, and a family's at the level each constructor's telescope reads it again at.
+#[test]
+fn a_parameter_is_sized_at_the_level_its_written_type_stands_at() {
+    for implicit in ["@Nat, ", ""] {
+        let every = fill!(EVERY_OVER, list = "List");
+        let source = fill!(
+            r#"use /std/{Nat, List, Bool};
+use /std/Bool/{Holds};
+
+${every}
+
+pub struct S(xs: List(Nat)): Type {
+    @ok: Holds(every(${implicit}xs, small)),
+}
+
+pub induct I(xs: List(Nat)): Type
+| made(Holds(every(${implicit}xs, small)))
+end
+
+/std/print("sized")"#,
+            every,
+            implicit,
+        );
+
+        assert_eq!(typecheck(&source), Ok(()), "`{implicit}`");
+    }
+}
