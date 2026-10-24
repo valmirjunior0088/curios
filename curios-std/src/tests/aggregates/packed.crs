@@ -32,11 +32,11 @@ test bytes_show_as_hexadecimal =
     Test/equal(Show/show(x[0x0F, 0xA0, 0x00]), "0fa000");
 
 -- The orders of `Bytes` and `Str` walk both runs' structure, so a type may name them: each is stated reflexive here, a statement an index walked upward under a guard is refused for.
-let _bytes_order_is_reflexive(a: Bytes) -> Eq()(Bytes/ord(a, a), Ordering/eq()) =
+let bytes_order_is_reflexive(a: Bytes) -> Eq()(Bytes/ord(a, a), Ordering/eq()) =
     Bytes/ord/refl(a);
 
 let _str_order_is_reflexive(a: Str) -> Eq()(Str/ord(a, a), Ordering/eq()) =
-    _bytes_order_is_reflexive(Str/to_bytes(a));
+    bytes_order_is_reflexive(Str/to_bytes(a));
 
 -- A proper prefix first, then the first place the two differ.
 test packed_orders_compare_by_prefix_then_by_atom =

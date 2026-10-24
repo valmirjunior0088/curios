@@ -60,7 +60,7 @@ let _it_divides_both_and_every_common_divisor_divides_it(
         right = Gcd/of(a, b).right,
         greatest = Gcd/of(a, b).greatest(d, p, q));
 
-let _nine_and_twenty_eight_are_coprime: Coprime(9, 28) =
+let nine_and_twenty_eight_are_coprime: Coprime(9, 28) =
     Eq/refl();
 
 let _a_common_divisor_of_coprime_numbers_is_one(
@@ -68,13 +68,13 @@ let _a_common_divisor_of_coprime_numbers_is_one(
     p: Divides(d, 9),
     q: Divides(d, 28),
 ) -> Eq()(d, 1) =
-    Coprime/common(_nine_and_twenty_eight_are_coprime, d, p, q);
+    Coprime/common(nine_and_twenty_eight_are_coprime, d, p, q);
 
-let _quotients_by_the_greatest_common_divisor_are_coprime: Coprime(2, 3) =
+let quotients_by_the_greatest_common_divisor_are_coprime: Coprime(2, 3) =
     Coprime/quotients(12, 18);
 
 let _euclid_s_lemma_cancels_a_coprime_factor: Divides(9, 18) =
-    Coprime/cancel(18, _nine_and_twenty_eight_are_coprime, Divides/intro(56, Eq/refl()));
+    Coprime/cancel(18, nine_and_twenty_eight_are_coprime, Divides/intro(56, Eq/refl()));
 
 let _a_reduced_fraction_is_the_only_one_with_its_cross_products(
     a: Nat,
@@ -82,7 +82,7 @@ let _a_reduced_fraction_is_the_only_one_with_its_cross_products(
     p: Coprime(a, b),
     e: Eq()(a * 3, 2 * b),
 ) -> {numerator: Eq()(a, 2), denominator: Eq()(b, 3)} =
-    Coprime/unique(p, _quotients_by_the_greatest_common_divisor_are_coprime, e);
+    Coprime/unique(p, quotients_by_the_greatest_common_divisor_are_coprime, e);
 
 test coprimality_is_decided =
     Test/all([

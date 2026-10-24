@@ -63,7 +63,7 @@ let walk2(sc: MScan, b: Bytes, acc: {Nat, Nat}) -> {Nat, Nat} =
                 | lead(_, _, _, payload) => (acc.0, payload)
                 | bad() => acc
                 end)
-        | cont(rem, _lo, _hi) =>
+        | cont(rem, _, _) =>
             let partial = acc.1 * 0x40 + (Byte/to_nat(h) - 0x80);
             walk2(
                 mstep(h, sc),

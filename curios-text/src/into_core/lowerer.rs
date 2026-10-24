@@ -288,7 +288,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .collect()
     }
 
-    /// [`Self::mint`] for written binders: one that carries a span, can be referred to and is not `_`-prefixed becomes a lint candidate.
+    /// [`Self::mint`] for written binders: one that carries a span and can be referred to becomes a lint candidate, whatever its name begins with.
     fn mint_written(
         &self,
         labels: impl IntoIterator<Item = (String, Option<Span>)>,
@@ -297,7 +297,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .into_iter()
             .map(|(name, span)| {
                 let hint = bindable(&name).then_some(name.as_str());
-                let candidate = span.filter(|_| bindable(&name) && !name.starts_with('_'));
+                let candidate = span.filter(|_| bindable(&name));
                 let Some(span) = candidate else {
                     let id = self.context.fresh_binder(hint);
                     return (name, id);

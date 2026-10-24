@@ -164,7 +164,7 @@ fn a_binder_only_a_proof_the_elaborator_wrote_reads_is_not_reported() {
             .map(|report| report.report.message)
             .collect::<Vec<_>>()
     };
-    let only_q = ["unused binder `q`; name it `_q` to keep it"];
+    let only_q = ["unused binder `q`; write `_` in its name's place"];
 
     assert_eq!(lints(&format!("{credited}/std/print(\"\")")), only_q);
     assert_eq!(

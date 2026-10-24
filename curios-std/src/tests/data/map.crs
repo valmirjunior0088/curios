@@ -358,14 +358,14 @@ test update_map_filter_union_and_get_or_rewrite_entries =
             Map/update(m, "a", (o: Option(Nat)) => Option/map(o, (n: Nat) => n + 10)),
             Map/of_list([("a", 11), ("b", 2), ("c", 3)])),
         Test/equal(
-            Map/update(m, "b", (_o: Option(Nat)) => Option/none()),
+            Map/update(m, "b", (_: Option(Nat)) => Option/none()),
             Map/of_list([("a", 1), ("c", 3)])),
         Test/equal(
-            Map/update(m, "d", (_o: Option(Nat)) => Option/some(4)),
+            Map/update(m, "d", (_: Option(Nat)) => Option/some(4)),
             Map/of_list([("a", 1), ("b", 2), ("c", 3), ("d", 4)])),
         Test/equal(Map/map(m, (n: Nat) => n * 2), Map/of_list([("a", 2), ("b", 4), ("c", 6)])),
         Test/equal(
-            Map/filter(m, (_k: Str, n: Nat) => Bool/not(Nat/is_even(n))),
+            Map/filter(m, (_: Str, n: Nat) => Bool/not(Nat/is_even(n))),
             Map/of_list([("a", 1), ("c", 3)])),
         Test/equal(
             Map/union(Map/of_list([("a", 1), ("x", 9)]), Map/of_list([("a", 100), ("y", 8)])),

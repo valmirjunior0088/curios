@@ -67,14 +67,17 @@ impl<'u> Items<'u> {
             .expect("an item declares a name")
     }
 
-    /// Whether the item at `place` is a root wherever it stands: a test or a witness.
+    /// Whether the item at `place` is a root wherever it stands: a test, a witness, or a declaration a `_` keeps unused.
     fn rooted(&self, place: usize) -> bool {
         self.items.declared(place).iter().any(|declared| {
             matches!(
                 declared,
                 curios_core::Declared::Witness | curios_core::Declared::Test
             )
-        })
+        }) || self
+            .reportable(place)
+            .iter()
+            .any(|(_, name)| name.qualifier().is_some_and(kept))
     }
 
     /// The names of the item at `place` the lint may report, each a module's: those of the definitions a reader wrote under their own name.
@@ -411,7 +414,7 @@ impl Reachability {
         child: &dyn Fn(&Qualifier, &str) -> Option<bool>,
         mod_spans: &HashMap<Qualifier, Span>,
     ) -> Vec<Lint> {
-        // Every dead reportable name, and the ones a reader wrote and did not keep with a `_`, with where each is written.
+        // Every dead reportable name, and the ones a reader wrote, with where each is written.
         let mut dead_names = Vec::new();
         let mut written = Vec::new();
         for (first, ()) in self.dead.iter() {
@@ -428,9 +431,7 @@ impl Reachability {
                 else {
                     continue;
                 };
-                if !name.qualifier().is_some_and(kept) {
-                    written.push((name, label));
-                }
+                written.push((name, label));
             }
         }
 
@@ -454,9 +455,6 @@ impl Reachability {
         modules.sort_by_key(|module| module.segments().len());
         let mut dead_modules = BTreeSet::new();
         for module in modules {
-            if kept(&module) {
-                continue;
-            }
             let private = child(&module.without_last(), module.last()) == Some(false);
             let within = |name: &curios_core::Global| {
                 name.qualifier().is_some_and(|path| path.is_within(&module))
@@ -474,7 +472,7 @@ impl Reachability {
 
         let mut lints = dead_modules
             .iter()
-            .map(|module| Lint::unused_declaration(module.last(), mod_spans[module].clone()))
+            .map(|module| Lint::unused_module(module.last(), mod_spans[module].clone()))
             .collect::<Vec<_>>();
         lints.extend(
             written

@@ -65,14 +65,14 @@ impl Lint {
         )
     }
 
-    /// A binder nothing referenced, underlined at the word. The name is kept by prefixing it with `_`, which is what the message says.
+    /// A binder nothing referenced, underlined at the word. The binder stays where the shape it fills needs a slot, and the name goes: `_` takes its place.
     pub(crate) fn unused_binder(name: &str, span: &Span, binder: LintedBinder) -> Self {
         Self {
             binder: Some(binder),
             ..Self::at(
                 LintKind::UnusedBinder,
                 Some(span),
-                format!("unused binder `{name}`; name it `_{name}` to keep it"),
+                format!("unused binder `{name}`; write `_` in its name's place"),
             )
         }
     }
@@ -83,12 +83,23 @@ impl Lint {
             .is_some_and(|binder| credited.contains(&(binder.declaration, binder.ordinal)))
     }
 
-    /// A declaration nothing reaches, underlined at its name. Kept by a `_` prefix, as a binder is, or by `pub`, which makes it part of what the unit hands out.
+    /// A declaration nothing reaches, underlined at its name. Deleted, made part of what the unit hands out by `pub`, or kept unused on purpose by a `_` prefix.
     pub(crate) fn unused_declaration(name: &str, span: Span) -> Self {
         Self::at(
             LintKind::UnusedDeclaration,
             Some(&span),
-            format!("unused declaration `{name}`; name it `_{name}` or make it `pub` to keep it"),
+            format!(
+                "unused declaration `{name}`; delete it, make it `pub`, or name it `_{name}` to keep it unused"
+            ),
+        )
+    }
+
+    /// A private module none of whose declarations anything reaches, underlined at its `mod`: one deletion removes them all.
+    pub(crate) fn unused_module(name: &str, span: Span) -> Self {
+        Self::at(
+            LintKind::UnusedDeclaration,
+            Some(&span),
+            format!("unused module `{name}`; delete it or make it `pub`"),
         )
     }
 

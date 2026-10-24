@@ -1,6 +1,6 @@
 //! The `unused-declaration` lint: a declaration nothing reaches from the unit's roots.
 //!
-//! Reachability rather than a reference count, so a private definition used only by itself, or only by another dead one, is dead. The roots are what the unit hands out or runs: every binding of a module reachable through `pub` children from a mount the unit claims — read off the public interfaces, so a re-export out of a private child counts as the facade it is — every test, every witness, and the entrypoint tail. The edges are the ones the dependency order already walks: a definition's free names, plus what its registry entry mentions. A constructor or a method wrapper is reached through its owner's namespace and reaches its owner through its own type, so neither is reported and neither is a root of its own.
+//! Reachability rather than a reference count, so a private definition used only by itself, or only by another dead one, is dead. The roots are what the unit hands out, runs or keeps: every binding of a module reachable through `pub` children from a mount the unit claims — read off the public interfaces, so a re-export out of a private child counts as the facade it is — every test, every witness, every declaration its author keeps unused by a `_` prefix on its name, and the entrypoint tail. The edges are the ones the dependency order already walks: a definition's free names, plus what its registry entry mentions. A constructor or a method wrapper is reached through its owner's namespace and reaches its owner through its own type, so neither is reported and neither is a root of its own.
 //!
 //! A private module none of whose declarations is reachable is reported once, at the `mod`, and its members are not: the fix is one deletion, and one line says so.
 
@@ -56,11 +56,11 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
         root(&curios_core::Global::Authored(target), &mut pending);
     }
     for (node, item) in items.iter().enumerate() {
-        if item.declared().any(|(_, kind, _)| {
+        if item.declared().any(|(name, kind, _)| {
             matches!(
                 kind,
                 curios_core::DefinitionKind::Witness | curios_core::DefinitionKind::Test
-            )
+            ) || (is_reportable(kind) && name.qualifier().is_some_and(kept))
         }) {
             pending.push(node);
         }
@@ -81,7 +81,7 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
         }
     }
 
-    // A declaration the reader wrote, by the name it was written under and where that name stands: what the lint may report. Kept by a `_` prefix on its own name or on a module above it, exactly as a binder is.
+    // A declaration the reader wrote, by the name it was written under and where that name stands: what the lint may report.
     let dead = items
         .iter()
         .zip(facts.iter())
@@ -90,7 +90,6 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
         .flat_map(|(_, (item, lowered))| item.declared().zip(&lowered.definitions))
         .filter(|((_, kind, _), _)| is_reportable(kind))
         .filter_map(|((name, _, _), declared)| Some((name, declared.label.as_ref()?)))
-        .filter(|(name, _)| !name.qualifier().is_some_and(kept))
         .collect::<Vec<_>>();
     let live = items
         .iter()
@@ -106,9 +105,6 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
     let mut modules = mod_spans.keys().collect::<Vec<_>>();
     modules.sort_by_key(|module| module.segments().len());
     for module in modules {
-        if kept(module) {
-            continue;
-        }
         let private = table
             .get(&module.without_last())
             .and_then(|parent| parent.get_child(module.last()))
@@ -129,7 +125,7 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
 
     let mut lints = dead_modules
         .iter()
-        .map(|module| Lint::unused_declaration(module.last(), mod_spans[module].clone()))
+        .map(|module| Lint::unused_module(module.last(), mod_spans[module].clone()))
         .collect::<Vec<_>>();
     lints.extend(
         dead.iter()
@@ -148,9 +144,9 @@ pub(super) fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Lint> 
     lints
 }
 
-/// Whether a `_` prefix keeps the declaration at `name`: on its own segment, or on any module above it, since keeping a module keeps what it holds.
+/// Whether a `_` prefix on its own name keeps the declaration at `name` unused on purpose, which makes it a root, so what it reads is used. A module's name keeps nothing.
 pub(super) fn kept(name: &Qualifier) -> bool {
-    name.iter().any(|segment| segment.starts_with('_'))
+    name.last().starts_with('_')
 }
 
 /// Whether a definition is one the reader declared under its own name: a `let`, a `foreign`, or the type former of an `induct`, `struct` or `concept`. A constructor, a method wrapper, a witness and a test are reached through their owner or are roots, and are never reported.

@@ -55,7 +55,7 @@ Every comma-separated list — parameter and argument lists, tuple and struct fi
 
 An identifier is a nonempty sequence of Unicode alphanumeric characters and `_`.
 
-A name beginning with `_` is one the author keeps unused: [`curios lint`](usage.md#lint) never reports an `_`-prefixed binder or declaration, nor anything inside an `_`-prefixed module. `_` alone is a binder that names nothing, and `@_` is its implicit form.
+A declaration whose name begins with `_` is one the author keeps unused: [`curios lint`](usage.md#lint) never reports it, and what it reads is used. `_` alone is a binder that names nothing, and `@_` is its implicit form: what a shape's slot is written as where nothing reads it. A binder has no kept form beside it, so one named otherwise, whatever it begins with, is reported where nothing reads it.
 
 The following words are reserved and cannot be used as path segments:
 

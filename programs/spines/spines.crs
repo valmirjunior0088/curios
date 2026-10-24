@@ -4,7 +4,7 @@ use /std/{Str, Nat, Map, Io};
 let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
     match n: (_) => Map(Nat, Nat)
     | 0 => m
-    | k + 1; _ih =>
+    | k + 1; _ =>
         let y = 75 * x % 65537;
         walk(k, i + 1, y, Map/insert(m, y, i % 1000003))
     end;

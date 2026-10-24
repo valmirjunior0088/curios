@@ -441,6 +441,19 @@ fn a_cycle_nothing_reaches_is_unused() {
     );
 }
 
+/// What a declaration kept unused by a `_` reads is used, goes unused with its reader once the reader's `_` is dropped, and is used again once it is back.
+#[test]
+fn what_a_declaration_kept_unused_reads_follows_its_prefix() {
+    same_lints(
+        "lint-kept",
+        "let helper: Type = Type;\n\nlet _scratch: Type = helper;\n\npub let x: Type = Type;\n",
+        &[
+            "let helper: Type = Type;\n\nlet scratch: Type = helper;\n\npub let x: Type = Type;\n",
+            "let helper: Type = Type;\n\nlet _scratch: Type = helper;\n\npub let x: Type = Type;\n",
+        ],
+    );
+}
+
 /// A private module every declaration of which goes unused is reported once, at the module, and a declaration added that reads one of them lifts the fold.
 #[test]
 fn a_private_module_whose_declarations_go_unused_is_folded() {

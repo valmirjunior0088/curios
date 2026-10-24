@@ -519,7 +519,7 @@ fn a_binder_a_reused_items_proof_reads_stays_credited_as_in_a_whole_compile() {
     let baseline = unit_of(CREDITED);
     assert_eq!(
         unused_binders(&baseline),
-        ["unused binder `q`; name it `_q` to keep it"],
+        ["unused binder `q`; write `_` in its name's place"],
         "`p` is read by the proof `proved` stands for, and `q` by nothing"
     );
 

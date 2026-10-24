@@ -171,7 +171,7 @@ fn a_parameter_the_body_never_reads_is_reported_at_its_word() {
         f
     "#
         ),
-        ["unused-binder: unused binder `n`; name it `_n` to keep it"]
+        ["unused-binder: unused binder `n`; write `_` in its name's place"]
     );
 }
 
@@ -198,7 +198,7 @@ fn a_parameter_only_a_later_parameters_type_mentions_is_used() {
         f
     "#
         ),
-        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+        ["unused-binder: unused binder `x`; write `_` in its name's place"]
     );
 }
 
@@ -212,7 +212,7 @@ fn only_the_sugars_own_parameters_are_exempted_by_the_result_type() {
         f
     "#
         ),
-        ["unused-binder: unused binder `n`; name it `_n` to keep it"]
+        ["unused-binder: unused binder `n`; write `_` in its name's place"]
     );
 }
 
@@ -225,7 +225,7 @@ fn a_local_binding_nothing_reads_is_reported() {
         Type
     "#
         ),
-        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+        ["unused-binder: unused binder `x`; write `_` in its name's place"]
     );
 }
 
@@ -238,7 +238,7 @@ fn a_pattern_leaf_nothing_reads_is_reported_alone() {
         a
     "#
         ),
-        ["unused-binder: unused binder `b`; name it `_b` to keep it"]
+        ["unused-binder: unused binder `b`; write `_` in its name's place"]
     );
 }
 
@@ -252,7 +252,7 @@ fn a_binder_shadowed_before_any_use_is_reported() {
         x
     "#
         ),
-        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+        ["unused-binder: unused binder `x`; write `_` in its name's place"]
     );
 }
 
@@ -264,7 +264,7 @@ fn an_implicit_parameter_is_a_binder_like_any_other() {
         (@A : Type) => Type
     "#
         ),
-        ["unused-binder: unused binder `A`; name it `_A` to keep it"]
+        ["unused-binder: unused binder `A`; write `_` in its name's place"]
     );
 }
 
@@ -285,7 +285,7 @@ fn a_match_arm_binder_nothing_reads_is_reported() {
         f
     "#
         ),
-        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+        ["unused-binder: unused binder `x`; write `_` in its name's place"]
     );
 }
 
@@ -308,24 +308,37 @@ fn a_fold_hypothesis_and_a_cons_tail_nothing_reads_are_reported() {
     "#
         ),
         [
-            "unused-binder: unused binder `ih`; name it `_ih` to keep it",
-            "unused-binder: unused binder `t`; name it `_t` to keep it",
+            "unused-binder: unused binder `ih`; write `_` in its name's place",
+            "unused-binder: unused binder `t`; write `_` in its name's place",
         ]
     );
 }
 
 #[test]
-fn an_underscore_prefixed_binder_and_a_wildcard_are_kept() {
+fn a_wildcard_binder_is_never_reported() {
     assert_eq!(
         lints(
             r#"
-        let _x = Type;
         let _ = Type;
-        let f(_n : Type, _ : Type) -> Type = Type;
+        let f(_ : Type, @_ : Type) -> Type = Type;
         f
     "#
         ),
         Vec::<String>::new()
+    );
+}
+
+/// A `_` prefix keeps no binder: a name nothing reads is reported whatever it begins with, and one the body reads is used.
+#[test]
+fn an_underscore_prefixed_binder_is_reported_where_nothing_reads_it() {
+    assert_eq!(
+        lints(
+            r#"
+        let f(_n : Type, _m : Type) -> Type = _m;
+        f
+    "#
+        ),
+        ["unused-binder: unused binder `_n`; write `_` in its name's place"]
     );
 }
 
@@ -365,7 +378,7 @@ fn a_sugar_field_parameter_nothing_reads_is_reported() {
         (f(x) = Type,)
     "#
         ),
-        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+        ["unused-binder: unused binder `x`; write `_` in its name's place"]
     );
 }
 
@@ -379,7 +392,7 @@ fn a_private_definition_nothing_reaches_is_reported_at_its_name() {
     "#
         ),
         [
-            "unused-declaration: unused declaration `helper`; name it `_helper` or make it `pub` to keep it"
+            "unused-declaration: unused declaration `helper`; delete it, make it `pub`, or name it `_helper` to keep it unused"
         ]
     );
 }
@@ -479,7 +492,9 @@ fn a_definition_used_only_by_itself_is_dead() {
         Type
     "#
         ),
-        ["unused-declaration: unused declaration `go`; name it `_go` or make it `pub` to keep it"]
+        [
+            "unused-declaration: unused declaration `go`; delete it, make it `pub`, or name it `_go` to keep it unused"
+        ]
     );
 }
 
@@ -494,8 +509,8 @@ fn two_dead_definitions_reaching_each_other_are_both_dead() {
     "#
         ),
         [
-            "unused-declaration: unused declaration `a`; name it `_a` or make it `pub` to keep it",
-            "unused-declaration: unused declaration `b`; name it `_b` or make it `pub` to keep it",
+            "unused-declaration: unused declaration `a`; delete it, make it `pub`, or name it `_a` to keep it unused",
+            "unused-declaration: unused declaration `b`; delete it, make it `pub`, or name it `_b` to keep it unused",
         ]
     );
 }
@@ -515,9 +530,7 @@ fn a_private_module_nothing_reaches_is_reported_once_at_the_mod() {
         Type
     "#
         ),
-        [
-            "unused-declaration: unused declaration `Internal`; name it `_Internal` or make it `pub` to keep it"
-        ]
+        ["unused-declaration: unused module `Internal`; delete it or make it `pub`"]
     );
 }
 
@@ -533,7 +546,9 @@ fn a_private_module_one_declaration_of_which_is_reached_reports_the_others() {
         Internal/a
     "#
         ),
-        ["unused-declaration: unused declaration `b`; name it `_b` or make it `pub` to keep it"]
+        [
+            "unused-declaration: unused declaration `b`; delete it, make it `pub`, or name it `_b` to keep it unused"
+        ]
     );
 }
 
@@ -562,13 +577,41 @@ fn an_underscore_prefixed_declaration_and_a_public_one_are_kept() {
             r#"
         let _scratch : Type = Type;
         pub let api : Type = Type;
+        Type
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
+/// A declaration a `_` keeps unused is a root: what it reads is used, as what a `test` reads is.
+#[test]
+fn what_a_declaration_kept_unused_reads_is_used() {
+    assert_eq!(
+        lints(
+            r#"
+        let helper : Type = Type;
+        let _scratch : Type = helper;
+        Type
+    "#
+        ),
+        Vec::<String>::new()
+    );
+}
+
+/// A `_` prefix marks a declaration, not a module: a private module none of whose declarations is reached is reported whatever its name begins with.
+#[test]
+fn an_underscore_prefixed_module_keeps_nothing() {
+    assert_eq!(
+        lints(
+            r#"
         mod _Later
             pub let x : Type = Type;
         end
         Type
     "#
         ),
-        Vec::<String>::new()
+        ["unused-declaration: unused module `_Later`; delete it or make it `pub`"]
     );
 }
 
@@ -582,7 +625,7 @@ fn a_parameter_the_result_mentions_is_used_when_an_earlier_parameter_has_a_funct
         cong
     "#
         ),
-        ["unused-binder: unused binder `y`; name it `_y` to keep it"]
+        ["unused-binder: unused binder `y`; write `_` in its name's place"]
     );
 }
 
@@ -636,12 +679,12 @@ fn a_local_parameter_nothing_mentions_is_reported_when_a_later_type_binds_its_na
         lints(
             r#"
         let g : Type =
-            let f(x : Type, _k : (x : Type) -> x) -> Type = Type;
+            let f(x : Type, _ : (x : Type) -> x) -> Type = Type;
             f;
         g
     "#
         ),
-        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+        ["unused-binder: unused binder `x`; write `_` in its name's place"]
     );
 }
 
@@ -655,7 +698,7 @@ fn a_parameter_a_later_one_of_its_name_shadows_is_reported_though_the_result_nam
         f
     "#
         ),
-        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+        ["unused-binder: unused binder `x`; write `_` in its name's place"]
     );
 }
 
@@ -670,7 +713,7 @@ fn a_local_parameter_a_later_one_of_its_name_shadows_is_reported_though_the_resu
         g
     "#
         ),
-        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+        ["unused-binder: unused binder `x`; write `_` in its name's place"]
     );
 }
 
@@ -684,8 +727,8 @@ fn every_parameter_but_the_last_of_a_name_the_result_mentions_is_reported() {
     "#
         ),
         [
-            "unused-binder: unused binder `x`; name it `_x` to keep it",
-            "unused-binder: unused binder `x`; name it `_x` to keep it"
+            "unused-binder: unused binder `x`; write `_` in its name's place",
+            "unused-binder: unused binder `x`; write `_` in its name's place"
         ]
     );
 }
@@ -700,7 +743,7 @@ fn a_pattern_leaf_is_reported_though_the_result_names_a_later_parameter_of_its_n
         f
     "#
         ),
-        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+        ["unused-binder: unused binder `x`; write `_` in its name's place"]
     );
 }
 
@@ -714,7 +757,7 @@ fn a_pattern_leaf_shadowing_a_parameter_the_result_mentions_is_reported_when_the
         f
     "#
         ),
-        ["unused-binder: unused binder `x`; name it `_x` to keep it"]
+        ["unused-binder: unused binder `x`; write `_` in its name's place"]
     );
 }
 
@@ -741,7 +784,7 @@ fn a_witness_parameter_a_later_one_of_its_name_shadows_is_reported() {
         Type
     "#
         ),
-        ["unused-binder: unused binder `A`; name it `_A` to keep it"]
+        ["unused-binder: unused binder `A`; write `_` in its name's place"]
     );
 }
 
@@ -794,8 +837,8 @@ fn a_derived_witness_uses_the_vocabulary_its_body_will_name() {
     assert_eq!(
         unused(&spelling("")),
         [
-            "unused-declaration: unused declaration `call`; name it `_call` or make it `pub` to keep it",
-            "unused-declaration: unused declaration `record`; name it `_record` or make it `pub` to keep it",
+            "unused-declaration: unused declaration `call`; delete it, make it `pub`, or name it `_call` to keep it unused",
+            "unused-declaration: unused declaration `record`; delete it, make it `pub`, or name it `_record` to keep it unused",
         ],
         "the control stopped holding: with no derived witness, nothing names the renderers",
     );
