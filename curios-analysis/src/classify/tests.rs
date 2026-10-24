@@ -27,6 +27,113 @@ fn int_mul(left: Term, right: Term) -> Term {
     Term::intrinsic(Intrinsic::IntMul(left, right))
 }
 
+fn mul(left: Term, right: Term) -> Term {
+    Term::intrinsic(Intrinsic::nat_mul(left, right))
+}
+
+fn pow(base: &Term, exponent: &Term) -> Term {
+    Term::intrinsic(Intrinsic::NatPow(base.clone(), exponent.clone()))
+}
+
+fn nat_min(left: &Term, right: &Term) -> Term {
+    Term::intrinsic(Intrinsic::NatMin(left.clone(), right.clone()))
+}
+
+/// `term` as the folds leave it, so a fixture stands in the normal form a reduct does.
+fn reduced(term: Term) -> Term {
+    Folding
+        .reduce(term)
+        .expect("the folding reducer spends nothing")
+}
+
+/// A product of two symbolic sums the fold leaves stuck, `(a + w + 1) * (w + a + 1)`, and the sum it distributes to as the fold writes it.
+fn stuck_product_and_its_distribution(a: &Term, w: &Term) -> (Term, Term) {
+    let sum =
+        |first: &Term, second: &Term| reduced(add(add(first.clone(), second.clone()), lit(1)));
+    let product = reduced(mul(sum(a, w), sum(w, a)));
+    let twice = |term: Term| mul(lit(2), term);
+    let distribution = reduced(add(
+        add(
+            add(
+                add(
+                    add(mul(a.clone(), a.clone()), twice(mul(a.clone(), w.clone()))),
+                    mul(w.clone(), w.clone()),
+                ),
+                twice(a.clone()),
+            ),
+            twice(w.clone()),
+        ),
+        lit(1),
+    ));
+    assert!(Nat::stuck_product(&product) && !Nat::has_stuck_product(&distribution));
+    (product, distribution)
+}
+
+/// A product the fold leaves stuck is one node with the sum it distributes to, to every reader above it: `pow(P, y) * pow(P, z)` against `pow(D, y) * pow(D, z)`, `P` the product and `D` its distribution, is spelled as one term with no checker asked, where the product reader pairs nothing of the pair as written since the two bases are two atoms to it; and so under `Nat/min`. Against the distribution of another polynomial, `D + 1`, the two stay apart.
+#[test]
+fn a_product_the_fold_leaves_stuck_is_one_node_with_its_distribution() {
+    let (a, w, y, z) = (sym(1, "a"), sym(2, "w"), sym(3, "y"), sym(4, "z"));
+    let (product, distribution) = stuck_product_and_its_distribution(&a, &w);
+    let powers = |base: &Term| mul(pow(base, &y), pow(base, &z));
+    let (this, that) = (powers(&product), powers(&distribution));
+    assert!(!classable(&atoms(&this, &that)));
+
+    let (classed_this, classed_that) =
+        layered(&mut Inert, &this, &that).expect("one polynomial is one node");
+    assert_eq!(classed_this, classed_that);
+
+    let mins = |base: &Term| add(nat_min(base, &y), nat_min(base, &z));
+    let (classed_this, classed_that) = layered(&mut Inert, &mins(&product), &mins(&distribution))
+        .expect("one polynomial is one node under a lattice operation");
+    assert_eq!(classed_this, classed_that);
+
+    let bumped = reduced(add(distribution, lit(1)));
+    let apart = layered(&mut Inert, &this, &powers(&bumped));
+    assert!(apart.is_none_or(|(this, that)| this != that));
+}
+
+/// Two nodes over one set of atoms that are two polynomials are read against nothing: their images part, so no normal form is taken, which is what keeps a web of products each naming the one before it from being distributed level against level. A pair that is one polynomial has its normal form taken once, to be read.
+#[test]
+fn two_polynomials_over_one_atom_set_cost_no_distribution() {
+    let (a, w, y, z) = (sym(1, "a"), sym(2, "w"), sym(3, "y"), sym(4, "z"));
+    let (product, distribution) = stuck_product_and_its_distribution(&a, &w);
+    let other = reduced(mul(
+        reduced(add(add(a.clone(), w.clone()), lit(1))),
+        reduced(add(add(w.clone(), a.clone()), lit(2))),
+    ));
+    assert!(Nat::stuck_product(&other));
+    let powers = |base: &Term| mul(pow(base, &y), pow(base, &z));
+
+    let mut classes = Classes::default();
+    let apart = classed(&mut Inert, &powers(&product), &powers(&other), &mut classes)
+        .expect("the inert reducer spends nothing");
+    assert!(apart.is_none_or(|(this, that)| this != that));
+    assert!(classes.canonical.is_empty());
+
+    let mut classes = Classes::default();
+    classed(
+        &mut Inert,
+        &powers(&product),
+        &powers(&distribution),
+        &mut classes,
+    )
+    .expect("the inert reducer spends nothing");
+    assert!(!classes.canonical.is_empty());
+}
+
+/// The root pair is the chain's to distribute, before its peels and not against a literal: a stuck sum classed against `0` is held in no bucket with a partner, so no normal form is taken.
+#[test]
+fn the_root_pair_against_a_literal_distributes_nothing() {
+    let (a, w, y) = (sym(1, "a"), sym(2, "w"), sym(3, "y"));
+    let (product, _) = stuck_product_and_its_distribution(&a, &w);
+    let stuck = reduced(add(product, y));
+    assert!(Nat::has_stuck_product(&stuck));
+
+    let mut classes = Classes::default();
+    classed(&mut Inert, &stuck, &lit(0), &mut classes).expect("the inert reducer spends nothing");
+    assert!(classes.canonical.is_empty());
+}
+
 /// The atoms of a pair, through the reducer that reduces nothing, so an atom is the operand as it was written.
 fn atoms(this: &Term, that: &Term) -> Vec<Term> {
     atoms_of(&mut Inert, this, that).expect("the inert reducer spends nothing")

@@ -6,7 +6,7 @@
 //!
 //! **A node is classed by the readers.** A node's operands are spelled first, and the node over them is held to the nodes of its operation spelled before it, by the chain's readers alone ([`agree`]), and takes the first one's spelling. So an operation one reader reads and the reader above it takes whole is one atom of the reader above wherever its own reader holds it one, and no checker is asked what a node's operands are. The walk folds nothing but a choice a fold made by its atoms' order: a magnitude is spelled by its own fold over its spelled operand ([`Operation::oriented`]), since which monomial leads it is the order of its operand's atoms, and the representatives may stand in another. It is Shostak's combined canonizer, the theory's canonizer taken once a term's subterms are replaced by their representatives (Rueß and Shankar, [*Combining Shostak Theories*](https://www.csl.sri.com/people/shankar/rta02.pdf)), for the operations whose canonizer is their fold. Any other fold over operands spelled alike is a reducer's to take again, where it takes one ([`refold`]).
 //!
-//! **A node is read against the nodes that stand over its atoms, and no others.** Holding a node asks a reading against each earlier node of its operation, and a term holds many of one: a long sum of operations would be read pair by pair, at every fold above it. The readers that pair operands hold two operations one where their operands pair off, and the linear ones where their normal forms agree, each over one set of atoms, so the earlier nodes are kept by the atoms each stands over (`bucket`) and two nodes over two sets are told apart with nothing read. A cost filter failing toward refusal, as the one on two atoms' heads is.
+//! **A node is held by its reader's identity, and read against no other node.** Holding a node asks a reading against each earlier node its reader may hold it one with, and a term holds many of one operation: a long sum would be read pair by pair, at every fold above it. The readers that pair operands hold two operations one where their operands pair off, each over one set of atoms, so the earlier nodes are kept by the operation and the atoms each stands over (`bucket`), and two nodes over two sets are told apart with nothing read. The reader of a carrier's sum normal form — a sum, a product and a successor floor at `Nat`, a sum and a product at `Int` — holds two nodes one exactly where they are one polynomial over their atoms, and a product the fold leaves stuck is one polynomial with the sum it distributes to; so such a node is kept by its carrier, its atoms with no literal among them, and its image in a prime field under one assignment of its atoms ([`image_under`]), which two spellings of one polynomial share and two polynomials share with the chance a hash collision has, and two nodes of one bucket are read in the normal form the reader reads, a stuck product distributed on either side as the chain distributes one before its peels, charged as every normalization gate is and written back nowhere ([`agree_spines`]). Whether two products of sums are one polynomial is polynomial identity testing, which nothing decides in polynomial time short of the expansion a web of products makes exponential, so the image is what keeps a web's levels apart with nothing distributed. Each is a cost filter failing toward refusal, as the one on two atoms' heads is.
 //!
 //! **A node the table leaves an operand out of is one with another of its kind where the operands it reads are.** A quotient carries a proof its meaning does not read, and its value is a function of its dividend and its divisor: two quotients of one dividend by one divisor are one, whatever their proofs, with no checker asked. Such a node is handed out as an atom once the operands its meaning reads are walked, no checker is asked whether two of them convert, and a walk that spells it holds it to the first node of its kind spelled over the same operands ([`Classes`]'s `unread`).
 //!
@@ -29,9 +29,10 @@ use {
     crate::{Outcome, Read, read},
     curios_algebra::{Carrier, Family, Operation, declares},
     curios_core::{
-        Apply, Cost, Declaration, Free, Intrinsic, Probe, ReduceError, Reducer, Subterm, Term, Var,
-        Visit, reduce_intrinsic,
+        Apply, Cost, Declaration, Free, Intrinsic, Nat, Probe, ReduceError, Reducer, Subterm, Term,
+        Var, Visit, int_normalize, int_stuck_product, reduce_intrinsic,
     },
+    curios_num::{Integer, Natural},
     curios_utilities::{Ordered, Persistent, recurse},
     std::{
         collections::HashMap,
@@ -154,6 +155,12 @@ pub struct Classes {
     spelled: Persistent<Term, Term>,
     /// The atoms each spelled term met stands over, so a node's are its operands' joined and a term two nodes share is read once.
     over: Persistent<Term, Over>,
+    /// Whether each spelled term holds a product the fold left stuck ([`stuck_under`]), read once per term.
+    stuck: Persistent<Term, bool>,
+    /// Each spelled term's image under the fixed assignment of its atoms ([`image_under`]), read once per term.
+    images: Persistent<Term, u64>,
+    /// Each spelled term's normal form where a reading asked for it ([`canonical`]), computed once per classification.
+    canonical: Persistent<Term, Term>,
     /// Each node the table leaves an operand out of, as first spelled, by its operation and the operands its meaning reads as they are spelled, universe instances erased: a later one over the same operands is spelled as it.
     unread: Persistent<(Kind, Vec<Term>), Term>,
     /// The place the next class or node takes.
@@ -284,6 +291,9 @@ impl Classes {
             held: Persistent::new(),
             spelled: Persistent::new(),
             over: Persistent::new(),
+            stuck: Persistent::new(),
+            images: Persistent::new(),
+            canonical: Persistent::new(),
             unread: Persistent::new(),
             ..self.clone()
         }
@@ -723,6 +733,21 @@ fn prepended_nodes(
             classes.over.insert(term.clone(), over.clone());
         }
     }
+    for (term, stuck) in prefix.stuck.iter() {
+        if !classes.stuck.contains_key(term) {
+            classes.stuck.insert(term.clone(), *stuck);
+        }
+    }
+    for (term, image) in prefix.images.iter() {
+        if !classes.images.contains_key(term) {
+            classes.images.insert(term.clone(), *image);
+        }
+    }
+    for (term, canonical) in prefix.canonical.iter() {
+        if !classes.canonical.contains_key(term) {
+            classes.canonical.insert(term.clone(), canonical.clone());
+        }
+    }
     let offset = classes.least - prefix.next;
     for (bucket, earlier) in prefix.nodes.iter() {
         let mut later = classes.nodes.get(bucket).cloned().unwrap_or_default();
@@ -731,7 +756,7 @@ fn prepended_nodes(
                 continue;
             }
             for (_, first) in earlier.iter() {
-                if agree(reducer, first, node)? {
+                if agree_spines(reducer, &mut classes, first, node)? {
                     return Ok(None);
                 }
             }
@@ -906,18 +931,175 @@ fn read_into(term: &Term) -> bool {
 /// The bucket a node of `kind` is held in: its operation, and the atoms it stands over.
 ///
 /// **The decision diagram is left its whole operation.** It holds two formulas one over two sets of atoms, `p && (p || q)` beside `p && (p || r)`, where every other reader of two operations of one kind holds them one over one set. So an operation over truth values is read against every earlier one of its kind.
-fn bucket(over: &mut Persistent<Term, Over>, kind: Kind, node: &Term) -> Bucket {
+///
+/// **A layer of a sum normal form is held by the polynomial it is.** A sum, a product and a successor floor at `Nat`, and a sum and a product at `Int`, are read by one reader, which holds two of them one exactly where they are one polynomial over their atoms, and a product the fold left stuck is one with the sum it distributes to; so such a node is bucketed by its carrier, its atoms and its image in a prime field under a fixed assignment of its atoms ([`image_under`]), which two equal polynomials share and two unequal ones share with the chance a hash collision has. A cost filter failing toward refusal, as the atoms are, and the one that keeps a web of products apart with nothing distributed.
+fn bucket(classes: &mut Classes, kind: Kind, node: &Term) -> Bucket {
+    if arithmetic(kind) {
+        let atoms = atoms_under(&mut classes.over, node);
+        let image = image_under(&mut classes.images, node);
+        return ((kind.0, Operation::Sum), hashed(&(&*atoms, image)));
+    }
     let atoms = match kind.0 {
         Carrier::Boolean => 0,
-        _ => hashed(&*atoms_under(over, node)),
+        _ => hashed(&*atoms_under(&mut classes.over, node)),
     };
     (kind, atoms)
+}
+
+/// Whether a node of `kind` is a layer of its carrier's sum normal form, the layers `Nat::normalize` and `int_normalize` walk: a sum, a product or a successor floor at `Nat`, and a sum or a product at `Int`.
+fn arithmetic(kind: Kind) -> bool {
+    matches!(
+        kind,
+        (
+            Carrier::Natural,
+            Operation::Sum | Operation::Product | Operation::Successor
+        ) | (Carrier::Integer, Operation::Sum | Operation::Product)
+    )
+}
+
+/// Whether `term`, as a walk spelled it, holds a product the fold left stuck under the layers its normalizer walks: a spelling short of the normal form the readers read. Memoized by term in `stuck`, so a spine's prefix is read once.
+fn stuck_under(stuck: &mut Persistent<Term, bool>, term: &Term) -> bool {
+    if let Some(known) = stuck.get(term) {
+        return *known;
+    }
+    let held = match &**term {
+        Subterm::Intrinsic(intrinsic) => {
+            Nat::stuck_product(term)
+                || int_stuck_product(term)
+                || match layer(intrinsic) {
+                    Some((kind, read)) if arithmetic(kind) => children(intrinsic)
+                        .iter()
+                        .take(read)
+                        .any(|operand| recurse(|| stuck_under(stuck, operand))),
+                    _ => false,
+                }
+        }
+        _ => false,
+    };
+    stuck.insert(term.clone(), held);
+    held
+}
+
+/// The prime the images are read in, 2⁶¹ − 1: a product of two residues fits a `u128`, and a hash is a residue by one remainder.
+const MODULUS: u64 = (1 << 61) - 1;
+
+/// The image of `term`, a weak-head `Nat` or `Int`, in the prime field under the fixed assignment of its atoms: the ring's own sum, product and constants over each atom's residue, a residue read off the atom's spelling up to universe instances, which is what the readers know an atom by. A ring homomorphism, so two terms that are one polynomial over their atoms have one image. Memoized by term in `images`.
+fn image_under(images: &mut Persistent<Term, u64>, term: &Term) -> u64 {
+    if let Some(known) = images.get(term) {
+        return *known;
+    }
+    let summed = |left: u64, right: u64| {
+        ((u128::from(left) + u128::from(right)) % u128::from(MODULUS)) as u64
+    };
+    let multiplied = |left: u64, right: u64| {
+        ((u128::from(left) * u128::from(right)) % u128::from(MODULUS)) as u64
+    };
+    let value = match &**term {
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => 0,
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(floor, inner))) => {
+            summed(natural_image(floor), recurse(|| image_under(images, inner)))
+        }
+        Subterm::Intrinsic(Intrinsic::NatAdd(left, right) | Intrinsic::IntAdd(left, right)) => {
+            summed(
+                recurse(|| image_under(images, left)),
+                recurse(|| image_under(images, right)),
+            )
+        }
+        Subterm::Intrinsic(Intrinsic::NatMul(left, right) | Intrinsic::IntMul(left, right)) => {
+            multiplied(
+                recurse(|| image_under(images, left)),
+                recurse(|| image_under(images, right)),
+            )
+        }
+        Subterm::Intrinsic(Intrinsic::Int(value)) => integer_image(value),
+        // An atom's residue is neither of the two values every polynomial is trivial at.
+        _ => 2 + hashed(&term.erased_universes()) % (MODULUS - 2),
+    };
+    images.insert(term.clone(), value);
+    value
+}
+
+/// The prime as a natural, for the big literals the folds hold.
+fn modulus() -> Natural {
+    Natural::parse_bytes(b"2305843009213693951", 10).expect("the prime is written in decimal")
+}
+
+/// `value` in the prime field.
+fn natural_image(value: &Natural) -> u64 {
+    let residue = value.rem(&modulus()).expect("the prime is not zero");
+    u64::try_from(&residue).expect("a residue fits a word")
+}
+
+/// `value` in the prime field, a negative one as the prime less its magnitude.
+fn integer_image(value: &Integer) -> u64 {
+    let residue = value
+        .rem(&Integer::from(modulus()))
+        .expect("the prime is not zero");
+    let magnitude = u64::try_from(&residue.magnitude()).expect("a residue fits a word");
+    match i32::try_from(&residue.sign()).expect("a sign fits") < 0 {
+        true => (MODULUS - magnitude) % MODULUS,
+        false => magnitude,
+    }
+}
+
+/// [`agree`], with the one normalization the chain takes before its peels (`convert_intrinsics`, step 2): where either node holds a product the fold left stuck, both are read in their normal form ([`canonical`]), since a reader of sums holds two nodes one only where their normal forms agree.
+fn agree_spines(
+    reducer: &mut impl Reducer,
+    classes: &mut Classes,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, ReduceError> {
+    if this == that
+        || !(stuck_under(&mut classes.stuck, this) || stuck_under(&mut classes.stuck, that))
+    {
+        return agree(reducer, this, that);
+    }
+    let this = canonical(reducer, classes, this)?;
+    let that = canonical(reducer, classes, that)?;
+    agree(reducer, &this, &that)
+}
+
+/// `term` in its carrier's sum normal form, every product the fold left stuck distributed and charged as `Nat::normalize` charges it, computed once per classification: the canonizer the fold stops short of, taken over the representatives and written back nowhere.
+fn canonical(
+    reducer: &mut impl Reducer,
+    classes: &mut Classes,
+    term: &Term,
+) -> Result<Term, ReduceError> {
+    if let Some(known) = classes.canonical.get(term) {
+        return Ok(known.clone());
+    }
+    let carrier = match &**term {
+        Subterm::Intrinsic(intrinsic) => layer(intrinsic).map(|(kind, _)| kind.0),
+        _ => None,
+    };
+    let normal = match carrier {
+        Some(Carrier::Natural) => Nat::normalize(reducer, term.clone())?,
+        Some(Carrier::Integer) => int_normalize(reducer, term.clone())?,
+        _ => term.clone(),
+    };
+    curios_profile::sample!("classify::canonized", 1);
+    classes.stuck.insert(normal.clone(), false);
+    classes.canonical.insert(term.clone(), normal.clone());
+    Ok(normal)
+}
+
+/// Whether `term` is a closed literal of `Nat` or `Int`: a constant of the sum normal form, which no reader reads as an atom.
+fn literal(term: &Term) -> bool {
+    term.as_nat()
+        .is_some_and(|value| value.to_natural().is_some())
+        || matches!(&**term, Subterm::Intrinsic(Intrinsic::Int(_)))
 }
 
 /// The opaque atoms `term` stands over as it is spelled: its operands' where the walk reads into it, and itself otherwise, known by its spelling with its universe instances erased, which is what a reader of a carrier that holds no type knows an atom by.
 fn atoms_under(over: &mut Persistent<Term, Over>, term: &Term) -> Over {
     if let Some(kept) = over.get(term) {
         return kept.clone();
+    }
+    // A literal is a constant of its carrier's normal form and no atom: `2 · a` and `a + a` stand over one atom, as the distribution of a product does over its factors'.
+    if literal(term) {
+        let atoms: Over = Rc::from([]);
+        over.insert(term.clone(), atoms.clone());
+        return atoms;
     }
     let operands = match &**term {
         Subterm::Intrinsic(intrinsic) => layer(intrinsic).and_then(|(_, read)| {
@@ -1219,13 +1401,13 @@ impl<'r, 'c, R: Reducer> Walk<'r, 'c, R> {
         if let Some(earlier) = classes.held.get(&node) {
             return Ok(earlier.clone());
         }
-        let bucket = bucket(&mut classes.over, kind, &node);
+        let bucket = bucket(classes, kind, &node);
         let mut earlier = classes.nodes.get(&bucket).cloned().unwrap_or_default();
         // What holding a node asks: a reading against each earlier node of its bucket, until one agrees.
         curios_profile::sample!("classify::held", earlier.len());
         let mut first = None;
         for (_, earlier) in earlier.iter() {
-            if agree(self.reducer, earlier, &node)? {
+            if agree_spines(self.reducer, classes, earlier, &node)? {
                 first = Some(earlier.clone());
                 break;
             }
