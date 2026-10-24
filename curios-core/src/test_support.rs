@@ -131,7 +131,7 @@ pub fn declaring(
 
         let item = match grouped {
             true => Item::Rec(RecItem::new(vec![former])),
-            false => Item::Let(former),
+            false => Item::Let(Box::new(former)),
         };
         formers.entry(place).or_default().push((name, reach, item));
     }

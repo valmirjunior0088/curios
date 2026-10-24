@@ -47,7 +47,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
 
     let module = Module {
         mounts: Vec::new(),
-        items: vec![Item::Let(definition)].into(),
+        items: vec![Item::Let(Box::new(definition))].into(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };
@@ -90,7 +90,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
 
     let module = Module {
         mounts: Vec::new(),
-        items: vec![Item::Let(definition)].into(),
+        items: vec![Item::Let(Box::new(definition))].into(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };

@@ -205,7 +205,7 @@ fn inductive_constructor_ownership_is_explicit() {
         .items
         .iter()
         .flat_map(|item| match item {
-            curios_core::Item::Let(definition) => vec![definition.clone()],
+            curios_core::Item::Let(definition) => vec![(**definition).clone()],
             curios_core::Item::Rec(rec) => rec.definitions(),
         })
         .map(|definition| {

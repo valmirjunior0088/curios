@@ -886,7 +886,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     if !recursive_witness {
         // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
         record_definition_totality(context, &definition, Totality::Total)?;
-        return Ok(Item::Let(definition));
+        return Ok(Item::Let(Box::new(definition)));
     }
 
     // The witness is a recursive group of one. Its members' occurrences were stamped `Bound` above, which is what `RecItem::try_new` then captures; the context binding moves from the self-mentioning body to the group's own projection, so a later item reducing this witness meets the fold rather than a free name the kernel would refuse.

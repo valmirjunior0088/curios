@@ -12,7 +12,7 @@ fn name(path: &str) -> Global {
 
 /// A `let` whose body is a bare reference to `mentions`. Fixture-only: the closure reads free variables, so one reference is the whole signal.
 fn mentioning(path: &str, mentions: &str) -> Item {
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         name: name(path),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
@@ -24,7 +24,7 @@ fn mentioning(path: &str, mentions: &str) -> Item {
         parameter_field: None,
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::free_var(&Free::from(&name(mentions))),
-    })
+    }))
 }
 
 fn module(items: Vec<Item>) -> Module {

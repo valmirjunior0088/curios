@@ -37,7 +37,7 @@ fn nat_lit(n: usize) -> Term {
 }
 
 fn definition(name: &str, type_: Term, body: Term) -> Item {
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         name: Global::Authored(Qualifier::from([name])),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
@@ -49,7 +49,7 @@ fn definition(name: &str, type_: Term, body: Term) -> Item {
         parameter_field: None,
         type_,
         body,
-    })
+    }))
 }
 
 /// A program of `items` closing with `body`, at no stated type yet — see [`stating`].
@@ -818,7 +818,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
     };
     let source = stating(
         &module(
-            vec![Item::Let(definition)],
+            vec![Item::Let(Box::new(definition))],
             Term::instance_of(&global("poly"), vec![Level::constant(2)]),
         ),
         Term::type_at(Level::constant(3)),
@@ -1059,7 +1059,7 @@ entry
 fn a_row_is_registered_by_the_item_that_declares_it() {
     let mut induct_decls = BTreeMap::new();
     induct_decls.insert(nominal("Opt"), opt_induct());
-    let former = Item::Let(Definition {
+    let former = Item::Let(Box::new(Definition {
         name: nominal("Opt"),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
@@ -1071,7 +1071,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
         parameter_field: None,
         type_: Term::type_ground(),
         body: opt_type(),
-    });
+    }));
     let six = definition(
         "six",
         opt_type(),
@@ -1876,10 +1876,10 @@ fn a_curried_call_chain_erases_in_work_proportional_to_its_depth() {
 #[test]
 fn a_proofs_body_is_withheld_from_erasures_reader() {
     let marked = |item| match item {
-        Item::Let(definition) => Item::Let(Definition {
+        Item::Let(definition) => Item::Let(Box::new(Definition {
             proof: true,
-            ..definition
-        }),
+            ..*definition
+        })),
         item => item,
     };
     let unit = module(

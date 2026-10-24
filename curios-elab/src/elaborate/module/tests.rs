@@ -58,7 +58,7 @@ fn a_declaration_instance_is_read_once_per_node() {
 }
 
 fn let_item(path: &str, type_: Term, body: Term) -> Item {
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         name: nominal(path),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
@@ -70,7 +70,7 @@ fn let_item(path: &str, type_: Term, body: Term) -> Item {
         parameter_field: None,
         type_,
         body,
-    })
+    }))
 }
 
 fn module(items: Vec<Item>) -> Module {

@@ -16,7 +16,7 @@ fn name() -> Global {
 
 /// `stated : Nat = <body>`, marked a proof where `proof`: the parts compared are read off the record, whatever a checker would make of the mark.
 fn stated(body: usize, proof: bool) -> Item {
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         name: name(),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
@@ -28,7 +28,7 @@ fn stated(body: usize, proof: bool) -> Item {
         parameter_field: None,
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(body))),
-    })
+    }))
 }
 
 /// Whether what `made` unfolds to is what `held` does, and whether its signature is.
@@ -69,7 +69,7 @@ fn a_definition_whose_mark_moved_unfolds_to_something_else() {
 
 /// `stated(1, false)` under a scheme of one constraint, `0 ≤ upper`, raised as `origin` says.
 fn constrained(upper: usize, origin: UniverseConstraintOrigin) -> Item {
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         universe_context: UniverseContext {
             parameter_count: 3,
             quality_count: 0,
@@ -80,10 +80,10 @@ fn constrained(upper: usize, origin: UniverseConstraintOrigin) -> Item {
             }],
         },
         ..match stated(1, false) {
-            Item::Let(definition) => definition,
+            Item::Let(definition) => *definition,
             Item::Rec(_) => unreachable!("a definition of its own"),
         }
-    })
+    }))
 }
 
 /// A signature digests as it is compared: where its scheme's constraint was raised, and why, is no part of either, so the definition elaborated now, the one restored from a store and one whose constraint another reason raised digest alike and compare alike, and one with another inequality does neither.

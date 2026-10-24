@@ -176,7 +176,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
     let module = declaring(
         Module {
             mounts: Vec::new(),
-            items: vec![Item::Let(definition)].into(),
+            items: vec![Item::Let(Box::new(definition))].into(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },

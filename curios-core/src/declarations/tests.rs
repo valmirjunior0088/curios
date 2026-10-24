@@ -11,7 +11,7 @@ fn name(path: &[&str]) -> Global {
 fn item(path: &[&str], kind: DefinitionKind) -> Item {
     let name = name(path);
 
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         name,
         kind,
         universe_context: UniverseContext::empty(),
@@ -23,7 +23,7 @@ fn item(path: &[&str], kind: DefinitionKind) -> Item {
         parameter_field: None,
         type_: Term::type_ground(),
         body: Term::free_var(&Free::from(&name)),
-    })
+    }))
 }
 
 fn written(path: &[&str]) -> Item {

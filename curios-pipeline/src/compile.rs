@@ -521,7 +521,7 @@ fn test_definition<'a>(
     test: &curios_core::Global,
 ) -> Option<&'a curios_core::Definition> {
     items.iter().find_map(|item| match item {
-        curios_core::Item::Let(def) if def.name == *test => Some(def),
+        curios_core::Item::Let(def) if def.name == *test => Some(def.as_ref()),
         _ => None,
     })
 }

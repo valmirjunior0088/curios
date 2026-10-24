@@ -9,7 +9,7 @@ use {
 
 /// A definition `name` of the ground type, whose body is `body`.
 fn item(name: &str, body: Term) -> Item {
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         name: Global::Authored(Qualifier::from([name])),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
@@ -21,7 +21,7 @@ fn item(name: &str, body: Term) -> Item {
         parameter_field: None,
         type_: Term::type_ground(),
         body,
-    })
+    }))
 }
 
 /// Two items spelling one structure apiece, and a third.

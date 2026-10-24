@@ -24,7 +24,7 @@ use {
 
 /// A top-level definition, as `recheck_module_verdicts` binds one.
 pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         name: *name,
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
@@ -37,16 +37,16 @@ pub(super) fn authored(name: &Global, type_: Term, body: Term) -> Item {
         parameter_field: None,
         type_,
         body,
-    })
+    }))
 }
 
 /// [`authored`] for a body that recurses without descending. `Totals::classify` recomputes the flag and reports a recorded `Total` it disagrees with, so a partial body must say so.
 pub(super) fn authored_partial(name: &Global, type_: Term, body: Term) -> Item {
     match authored(name, type_, body) {
-        Item::Let(definition) => Item::Let(Definition {
+        Item::Let(definition) => Item::Let(Box::new(Definition {
             totality: Totality::Partial,
-            ..definition
-        }),
+            ..*definition
+        })),
         item => item,
     }
 }
@@ -54,10 +54,10 @@ pub(super) fn authored_partial(name: &Global, type_: Term, body: Term) -> Item {
 /// [`authored`] for a proof a declaration wrote, marked as elaboration marks one where its item is published.
 pub(super) fn authored_proof(name: &Global, type_: Term, body: Term) -> Item {
     match authored(name, type_, body) {
-        Item::Let(definition) => Item::Let(Definition {
+        Item::Let(definition) => Item::Let(Box::new(Definition {
             proof: true,
-            ..definition
-        }),
+            ..*definition
+        })),
         item => item,
     }
 }
@@ -426,7 +426,7 @@ pub(super) fn sorted_definition(sort: Term) -> Module {
 
     Module {
         mounts: Vec::new(),
-        items: vec![Item::Let(definition)].into(),
+        items: vec![Item::Let(Box::new(definition))].into(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -795,7 +795,7 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Module
 
     Module {
         mounts: Vec::new(),
-        items: vec![Item::Let(definition)].into(),
+        items: vec![Item::Let(Box::new(definition))].into(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     }
@@ -874,7 +874,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
     declaring(
         Module {
             mounts: Vec::new(),
-            items: vec![Item::Let(definition)].into(),
+            items: vec![Item::Let(Box::new(definition))].into(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },
@@ -920,7 +920,7 @@ pub(super) fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: 
     declaring(
         Module {
             mounts: Vec::new(),
-            items: vec![Item::Let(definition)].into(),
+            items: vec![Item::Let(Box::new(definition))].into(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },
@@ -976,7 +976,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
     declaring(
         Module {
             mounts: Vec::new(),
-            items: vec![Item::Let(former)].into(),
+            items: vec![Item::Let(Box::new(former))].into(),
             witnesses: BTreeSet::new(),
             tests: Vec::new(),
         },
@@ -1621,10 +1621,10 @@ pub(super) fn reaching_definition(totality: Totality) -> Item {
     );
 
     match item {
-        Item::Let(definition) => Item::Let(Definition {
+        Item::Let(definition) => Item::Let(Box::new(Definition {
             totality,
-            ..definition
-        }),
+            ..*definition
+        })),
         item => item,
     }
 }
@@ -2338,9 +2338,9 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
         body: Term::type_at(Level::param(UniverseParam(0))),
     };
 
-    let mut items = vec![Item::Let(scheme)];
+    let mut items = vec![Item::Let(Box::new(scheme))];
     if let Some((universe_context, body)) = user {
-        items.push(Item::Let(Definition {
+        items.push(Item::Let(Box::new(Definition {
             name: Global::Authored(Qualifier::from(["user"])),
             kind: DefinitionKind::Authored,
             universe_context,
@@ -2352,7 +2352,7 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
             parameter_field: None,
             type_: Term::type_at(Level::param(UniverseParam(1))),
             body,
-        }));
+        })));
     }
 
     Module {
@@ -2452,7 +2452,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
 
     let x = Free::local(620, Some("x"));
     let s = Free::local(621, Some("s"));
-    let f_item = Item::Let(Definition {
+    let f_item = Item::Let(Box::new(Definition {
         name: f_name,
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext {
@@ -2482,7 +2482,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
                 wrap_at(Level::zero()),
             ),
         ),
-    });
+    }));
 
     let f_at = |level: Level, arg: &Free| {
         Term::apply(
@@ -2825,11 +2825,11 @@ pub(super) fn record_negative_in_itself(beside_a_family: bool) -> Program {
         module: collision_module(
             family
                 .into_iter()
-                .chain([Item::Let(Definition::former(
+                .chain([Item::Let(Box::new(Definition::former(
                     bad,
                     Qualifier::default(),
                     Nominal::Struct(record),
-                ))])
+                )))])
                 .collect(),
             induct_decls,
         ),
@@ -3335,7 +3335,7 @@ pub(super) fn alias_module(variances: Vec<Variance>) -> (Global, Module) {
     let carrier = Free::local(41, Some("A"));
     let held = Free::local(42, Some("x"));
 
-    let definition = Item::Let(Definition {
+    let definition = Item::Let(Box::new(Definition {
         name: alias,
         kind: DefinitionKind::Authored,
         universe_context: scheme.clone(),
@@ -3347,7 +3347,7 @@ pub(super) fn alias_module(variances: Vec<Variance>) -> (Global, Module) {
         parameter_field: None,
         type_: Term::func_type([(carrier, sort.clone())], sort.clone()),
         body: Term::func([(carrier, sort.clone())], Term::free_var(&carrier)),
-    });
+    }));
     let declaration = InductDecl {
         universe_context: scheme,
         arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),

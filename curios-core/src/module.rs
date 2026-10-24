@@ -1015,11 +1015,11 @@ impl Definition {
     }
 }
 
-/// A top-level item: a single `let` definition, or a `rec` group of mutually-recursive definitions (which may reference each other by `name`).
+/// A top-level item: a single `let` definition, or a `rec` group of mutually-recursive definitions (which may reference each other by `name`). A definition is held by a box: it carries what its declaration publishes beside its terms, and a group carries its members' behind the group it shares, so held inline it would size every item of a module by the widest.
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
 pub enum Item {
-    Let(Definition),
+    Let(Box<Definition>),
     Rec(RecItem),
 }
 
@@ -1034,7 +1034,7 @@ impl Item {
         };
 
         match self {
-            Item::Let(definition) => Item::Let(Definition {
+            Item::Let(definition) => Item::Let(Box::new(Definition {
                 name: definition.name,
                 kind: kind(&definition.kind),
                 universe_context: definition.universe_context.unplaced(),
@@ -1046,7 +1046,7 @@ impl Item {
                 parameter_field: definition.parameter_field,
                 type_: sharing.share(&definition.type_),
                 body: sharing.share(&definition.body),
-            }),
+            })),
             Item::Rec(rec) => Item::Rec(RecItem {
                 definitions: rec
                     .definitions
@@ -1154,7 +1154,7 @@ impl Item {
     /// Owned rather than borrowed, because a `rec` member's [`Definition`] is *materialized* from the group rather than stored — there is nothing to hand a reference to.
     pub fn definitions(&self) -> Vec<Definition> {
         match self {
-            Item::Let(definition) => vec![definition.clone()],
+            Item::Let(definition) => vec![Definition::clone(definition)],
             Item::Rec(rec) => rec.definitions(),
         }
     }
@@ -1369,7 +1369,7 @@ impl Module {
     fn definition_at(&self, located: &Located, name: &Global) -> Option<Definition> {
         let &(place, member) = located.get(name)?;
         match &self.items[place] {
-            Item::Let(definition) => Some(definition.clone()),
+            Item::Let(definition) => Some(Definition::clone(definition)),
             Item::Rec(rec) => rec.definitions().into_iter().nth(member),
         }
     }
@@ -1434,7 +1434,7 @@ impl Module {
             .position(|held| held == name)?;
         let declared = *self.items.declared(place.item()).get(at)?;
         let definition = match &self.items[place.item()] {
-            Item::Let(definition) => definition.clone(),
+            Item::Let(definition) => Definition::clone(definition),
             Item::Rec(rec) => rec.definitions().into_iter().nth(at)?,
         };
 

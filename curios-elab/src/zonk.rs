@@ -887,7 +887,7 @@ pub fn validate_lowered_universe_seeds(module: &Module, minted: &Minted) -> Resu
 
 fn zonk_item(context: &Zonk, item: &Item) -> Result<Item, Error> {
     match item {
-        Item::Let(def) => Ok(Item::Let(zonk_definition(context, def)?)),
+        Item::Let(def) => Ok(Item::Let(Box::new(zonk_definition(context, def)?))),
         Item::Rec(rec) => Ok(Item::Rec(RecItem::try_new(
             rec.definitions()
                 .iter()

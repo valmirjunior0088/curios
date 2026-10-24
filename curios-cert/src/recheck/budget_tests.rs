@@ -150,10 +150,10 @@ fn held_at_a_counted_index(unfolding: usize) -> Module {
         Term::func_type([(counted, Term::type_at(level()))], nat_type()),
         Term::func([(counted, Term::type_at(level()))], unfolded),
     ) {
-        Item::Let(definition) => Item::Let(Definition {
+        Item::Let(definition) => Item::Let(Box::new(Definition {
             universe_context: scheme(),
-            ..definition
-        }),
+            ..*definition
+        })),
         item => item,
     };
 

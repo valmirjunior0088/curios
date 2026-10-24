@@ -29,7 +29,7 @@ impl Erasable {
     fn of(item: &Item) -> Self {
         match item {
             Item::Let(definition) => Self {
-                item: Item::Let(project_definition(definition)),
+                item: Item::Let(Box::new(project_definition(definition))),
                 members: Vec::new(),
             },
             // Projected in place. Opening the group and closing it again rebuilds every node twice over and discards every memoized derivation on the way, where the rewrite itself is uniform under the group's own binders and needs neither.
@@ -214,7 +214,11 @@ impl<'a> Unit<'a> {
         };
         let erasable = self.projection.item(self.module, place.item());
         let (definition, body, universe_context) = match &erasable.item {
-            Item::Let(definition) => (definition, &definition.body, &definition.universe_context),
+            Item::Let(definition) => (
+                definition.as_ref(),
+                &definition.body,
+                &definition.universe_context,
+            ),
             Item::Rec(rec) => {
                 let (definition, projection) = &erasable.members[member as usize];
 

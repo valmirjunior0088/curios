@@ -34,10 +34,10 @@ fn named(path: &str) -> Global {
 /// `let name: type_ = body`, leaving `sorts` sorts to its caller.
 fn generic(name: &Global, sorts: usize, type_: Term, body: Term) -> Item {
     match authored(name, type_, body) {
-        Item::Let(definition) => Item::Let(Definition {
+        Item::Let(definition) => Item::Let(Box::new(Definition {
             universe_context: leaving(sorts),
-            ..definition
-        }),
+            ..*definition
+        })),
         item => item,
     }
 }
@@ -267,7 +267,7 @@ fn a_declaration_ill_typed_at_one_sort_alone_is_refused_at_it() {
         (Term::type_ground(), "`Type`", Quality::Prop),
     ] {
         let grouped = match handing_back("back", sort.clone()) {
-            Item::Let(definition) => Item::Rec(RecItem::new(vec![definition])),
+            Item::Let(definition) => Item::Rec(RecItem::new(vec![*definition])),
             item => item,
         };
         let only = named("only");
@@ -518,7 +518,7 @@ fn a_recursive_group_is_used_at_a_type_and_at_a_proposition() {
     let (held, held_type, qed) = held();
     let id = named("id");
     let group = match identity() {
-        Item::Let(definition) => Item::Rec(RecItem::new(vec![definition])),
+        Item::Let(definition) => Item::Rec(RecItem::new(vec![*definition])),
         item => item,
     };
 

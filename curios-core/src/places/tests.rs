@@ -33,7 +33,7 @@ fn module(items: Vec<Item>) -> Module {
 #[test]
 fn a_name_is_placed_at_the_item_and_the_member_that_declare_it() {
     let module = module(vec![
-        Item::Let(definition("first")),
+        Item::Let(Box::new(definition("first"))),
         Item::Rec(RecItem::new(vec![definition("even"), definition("odd")])),
         Item::Rec(RecItem::new(vec![definition("loop")])),
     ]);
@@ -53,7 +53,7 @@ fn a_name_is_placed_at_the_item_and_the_member_that_declare_it() {
 #[should_panic(expected = "a module declares one name twice")]
 fn a_module_declaring_a_name_twice_has_no_places() {
     Places::of(&module(vec![
-        Item::Let(definition("twice")),
+        Item::Let(Box::new(definition("twice"))),
         Item::Rec(RecItem::new(vec![definition("other"), definition("twice")])),
     ]));
 }
@@ -63,9 +63,9 @@ fn a_module_declaring_a_name_twice_has_no_places() {
 fn a_version_keeps_the_places_of_what_it_did_not_change() {
     let name = |name: &str| Global::Authored(Qualifier::from([name]));
     let module = module(vec![
-        Item::Let(definition("first")),
-        Item::Let(definition("second")),
-        Item::Let(definition("third")),
+        Item::Let(Box::new(definition("first"))),
+        Item::Let(Box::new(definition("second"))),
+        Item::Let(Box::new(definition("third"))),
     ]);
     let mut version = Module {
         items: module.items.version(),
@@ -74,7 +74,7 @@ fn a_version_keeps_the_places_of_what_it_did_not_change() {
     let first = version.items.places().next().expect("an item");
     let between = version
         .items
-        .insert_after(Some(first), Item::Let(definition("between")))
+        .insert_after(Some(first), Item::Let(Box::new(definition("between"))))
         .expect("a place between two");
     let held = Places::of(&version);
     let names = |module: &Module| {
@@ -120,10 +120,13 @@ fn a_version_keeps_the_places_of_what_it_did_not_change() {
 /// A version made of a module that placed its items at their indices has room before its first item, where an item named before every other goes.
 #[test]
 fn a_version_takes_an_item_before_its_first() {
-    let module = module(vec![Item::Let(definition("b")), Item::Let(definition("c"))]);
+    let module = module(vec![
+        Item::Let(Box::new(definition("b"))),
+        Item::Let(Box::new(definition("c"))),
+    ]);
     let mut items = module.items.version();
 
-    let first = items.insert_after(None, Item::Let(definition("a")));
+    let first = items.insert_after(None, Item::Let(Box::new(definition("a"))));
 
     assert!(first.is_some(), "a place before the first item");
     assert_eq!(first, items.places().next());
@@ -133,17 +136,17 @@ fn a_version_takes_an_item_before_its_first() {
 #[test]
 fn a_version_says_what_it_changed_of_its_items() {
     let module = module(vec![
-        Item::Let(definition("first")),
-        Item::Let(definition("second")),
-        Item::Let(definition("third")),
+        Item::Let(Box::new(definition("first"))),
+        Item::Let(Box::new(definition("second"))),
+        Item::Let(Box::new(definition("third"))),
     ]);
     let earlier = module.items.version();
     let places = earlier.places().collect::<Vec<_>>();
     let mut later = earlier.clone();
-    later.replace(places[1], Item::Let(definition("second")));
+    later.replace(places[1], Item::Let(Box::new(definition("second"))));
     later.remove(places[2]);
     let between = later
-        .insert_after(Some(places[0]), Item::Let(definition("between")))
+        .insert_after(Some(places[0]), Item::Let(Box::new(definition("between"))))
         .expect("a place between two");
 
     let changes = later.changed_since(&earlier).expect("two versions");

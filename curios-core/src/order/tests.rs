@@ -10,7 +10,7 @@ fn authored(name: &str) -> Global {
 
 /// `name`, whose body mentions each of `mentioned`.
 fn reading(name: &str, mentioned: &[&str]) -> Item {
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         name: authored(name),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
@@ -26,7 +26,7 @@ fn reading(name: &str, mentioned: &[&str]) -> Item {
                 .iter()
                 .map(|mentioned| Term::free_var(&Free::Global(authored(mentioned)))),
         ),
-    })
+    }))
 }
 
 /// A module of `items` and nothing else.

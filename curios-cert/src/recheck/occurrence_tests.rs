@@ -416,7 +416,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
 
     let module = Module {
         mounts: Vec::new(),
-        items: vec![Item::Let(constructor)].into(),
+        items: vec![Item::Let(Box::new(constructor))].into(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
     };

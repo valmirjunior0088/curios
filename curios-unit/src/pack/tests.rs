@@ -94,7 +94,7 @@ fn bytes_that_are_no_pack_are_refused() {
 
 /// A definition `name` of the ground type, its body the ground type too.
 fn item(name: &str) -> Item {
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         name: Global::Authored(Qualifier::from([name])),
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
@@ -106,7 +106,7 @@ fn item(name: &str) -> Item {
         parameter_field: None,
         type_: Term::type_ground(),
         body: Term::type_ground(),
-    })
+    }))
 }
 
 /// A pack of `items`, each a member of one run, beside `alone`.

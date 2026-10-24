@@ -26,7 +26,7 @@ fn lowered_module(body: Term) -> Module {
     declaring(
         Module {
             mounts: Vec::new(),
-            items: vec![Item::Let(Definition {
+            items: vec![Item::Let(Box::new(Definition {
                 name: Global::Authored(Qualifier::from(["held"])),
                 kind: DefinitionKind::Authored,
                 universe_context: UniverseContext::empty(),
@@ -38,7 +38,7 @@ fn lowered_module(body: Term) -> Module {
                 parameter_field: None,
                 type_: nat(),
                 body,
-            })]
+            }))]
             .into(),
             witnesses: Default::default(),
             tests: Default::default(),

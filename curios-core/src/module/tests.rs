@@ -89,7 +89,7 @@ fn every_local_a_term_mentions_is_found() {
     };
 
     let module = Module {
-        items: vec![Item::Let(definition)].into(),
+        items: vec![Item::Let(Box::new(definition))].into(),
         mounts: Vec::new(),
         witnesses: BTreeSet::new(),
         tests: Vec::new(),
@@ -105,7 +105,7 @@ fn every_local_a_term_mentions_is_found() {
 /// A module carrying `body` in its one definition.
 fn stored(body: Term) -> Module {
     Module {
-        items: vec![Item::Let(Definition {
+        items: vec![Item::Let(Box::new(Definition {
             name: Global::Authored(Qualifier::from(["held"])),
             kind: DefinitionKind::Authored,
             universe_context: UniverseContext::empty(),
@@ -117,7 +117,7 @@ fn stored(body: Term) -> Module {
             parameter_field: None,
             type_: Term::intrinsic(crate::Intrinsic::NatType),
             body,
-        })]
+        }))]
         .into(),
         mounts: Vec::new(),
         witnesses: BTreeSet::new(),
@@ -228,7 +228,11 @@ fn a_stored_unit_may_carry_a_global_it_names() {
 #[test]
 fn a_meta_free_module_projects_as_zonked() {
     let module = Module {
-        items: vec![Item::Let(definition("plain", UniverseContext::empty()))].into(),
+        items: vec![Item::Let(Box::new(definition(
+            "plain",
+            UniverseContext::empty(),
+        )))]
+        .into(),
         mounts: Vec::new(),
         witnesses: Default::default(),
         tests: Default::default(),
@@ -242,7 +246,7 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
     let mut holed = definition("holed", UniverseContext::empty());
     holed.body = Term::hole(0);
     let module = Module {
-        items: vec![Item::Let(holed)].into(),
+        items: vec![Item::Let(Box::new(holed))].into(),
         mounts: Vec::new(),
         witnesses: Default::default(),
         tests: Default::default(),
@@ -260,7 +264,7 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
         sign: Sign::Unmarked,
     })));
     let module = Module {
-        items: vec![Item::Let(infixed)].into(),
+        items: vec![Item::Let(Box::new(infixed))].into(),
         mounts: Vec::new(),
         witnesses: Default::default(),
         tests: Default::default(),
@@ -293,13 +297,13 @@ fn a_surviving_universe_metavariable_refuses_the_zonked_projection() {
     };
 
     for (name, item) in at(Level::meta(UniverseMetaId::from(0usize))) {
-        let refusal = Zonked::project(&over(vec![Item::Let(item)]))
+        let refusal = Zonked::project(&over(vec![Item::Let(Box::new(item))]))
             .expect_err("the level must refuse the projection");
         assert!(refusal.to_string().contains(name), "{refusal}");
     }
     for (name, item) in at(Level::zero()) {
         assert!(
-            Zonked::project(&over(vec![Item::Let(item)])).is_ok(),
+            Zonked::project(&over(vec![Item::Let(Box::new(item))])).is_ok(),
             "{name}"
         );
     }
@@ -308,10 +312,10 @@ fn a_surviving_universe_metavariable_refuses_the_zonked_projection() {
 /// A recompile's module is held to being finished by the items it made, every other being a finished baseline's: a hole in an item made refuses it, and a module whose items made are finished projects.
 #[test]
 fn a_revised_module_is_asked_of_its_items_made() {
-    let plain = Item::Let(definition("plain", UniverseContext::empty()));
+    let plain = Item::Let(Box::new(definition("plain", UniverseContext::empty())));
     let mut holed = definition("holed", UniverseContext::empty());
     holed.body = Term::hole(0);
-    let holed = Item::Let(holed);
+    let holed = Item::Let(Box::new(holed));
 
     let refusal = Zonked::revised(&over(vec![plain.clone(), holed.clone()]), [&holed])
         .expect_err("the hole must refuse the projection");
@@ -370,10 +374,10 @@ fn boxed(mut former: Definition) -> Definition {
 /// A struct's field types live only in its registry entry, so the item declaring it reaches them through the entry.
 #[test]
 fn a_struct_declaration_reaches_its_field_types() {
-    let module = over(vec![Item::Let(boxed(definition(
+    let module = over(vec![Item::Let(Box::new(boxed(definition(
         "Box",
         UniverseContext::empty(),
-    )))]);
+    ))))]);
 
     let reached = module.reaches(&module.items[0]);
 
@@ -383,11 +387,11 @@ fn a_struct_declaration_reaches_its_field_types() {
 /// A unit's nominal marks are read off the definitions it declares as type formers, which each place says of its names: of a stored module the formers are restored, and no other item is, each other item standing on bytes that hold none.
 #[test]
 fn nominal_marks_read_the_type_formers_and_no_other_item() {
-    let former = Item::Let(boxed(definition("Box", UniverseContext::empty())));
+    let former = Item::Let(Box::new(boxed(definition("Box", UniverseContext::empty()))));
     let items = [
-        Item::Let(definition("before", UniverseContext::empty())),
+        Item::Let(Box::new(definition("before", UniverseContext::empty()))),
         former.clone(),
-        Item::Let(definition("after", UniverseContext::empty())),
+        Item::Let(Box::new(definition("after", UniverseContext::empty()))),
     ];
     let unreadable = || Object::of(b"no item".to_vec());
     let parts = vec![
@@ -421,7 +425,7 @@ fn reading(name: &str, mentioned: &[&str]) -> Item {
             .map(|mentioned| Term::free_var(&Free::Global(authored(mentioned)))),
     );
 
-    Item::Let(reading)
+    Item::Let(Box::new(reading))
 }
 
 /// The first name of each item, in the order the module holds them.
@@ -435,7 +439,10 @@ fn an_item_follows_what_its_registry_entry_reaches() {
     let Item::Let(former) = reading("Box", &[]) else {
         unreachable!("a reading is one definition");
     };
-    let module = over(vec![Item::Let(boxed(former)), reading("Payload", &[])]);
+    let module = over(vec![
+        Item::Let(Box::new(boxed(*former))),
+        reading("Payload", &[]),
+    ]);
 
     assert_eq!(names(&module.ordered()), ["/Payload", "/Box"]);
 }
@@ -446,17 +453,20 @@ fn a_lexicon_revised_at_what_changed_answers_as_the_whole_one() {
     let nested = |path: &[&str]| {
         let mut definition = definition("placeholder", UniverseContext::empty());
         definition.name = Global::Authored(Qualifier::from(path.to_vec()));
-        Item::Let(definition)
+        Item::Let(Box::new(definition))
     };
     let then = over(vec![
-        Item::Let(boxed(definition("Box", UniverseContext::empty()))),
+        Item::Let(Box::new(boxed(definition("Box", UniverseContext::empty())))),
         reading("Payload", &[]),
         nested(&["a", "shared"]),
         nested(&["gone", "shared"]),
     ]);
     let now = over(vec![
-        Item::Let(definition("Box", UniverseContext::empty())),
-        Item::Let(boxed(definition("Crate", UniverseContext::empty()))),
+        Item::Let(Box::new(definition("Box", UniverseContext::empty()))),
+        Item::Let(Box::new(boxed(definition(
+            "Crate",
+            UniverseContext::empty(),
+        )))),
         reading("Payload", &[]),
         nested(&["a", "shared"]),
         nested(&["b", "other"]),

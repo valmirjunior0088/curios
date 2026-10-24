@@ -237,15 +237,16 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
                 name: named(format!("claim{index}")),
                 type_: Term::func_type_marked(binders.clone(), Term::proj(call.clone(), CLAIM)),
                 body: Term::func_marked(binders, Term::proj(call, PROOF)),
-                ..stated.clone()
+                ..Definition::clone(stated)
             }
         })
         .collect::<Vec<_>>();
     let names = claims.iter().map(|claim| claim.name).collect::<Vec<_>>();
-    program
-        .module
-        .items
-        .extend(claims.into_iter().map(Item::Let));
+    program.module.items.extend(
+        claims
+            .into_iter()
+            .map(|definition| Item::Let(Box::new(definition))),
+    );
 
     let program = Zonked::project(&program).expect("an elaborated program is zonked");
     let verdicts = recheck_with_prelude(&program, DEFAULT_STEP_BUDGET);

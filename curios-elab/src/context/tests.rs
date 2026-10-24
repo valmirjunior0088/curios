@@ -106,7 +106,7 @@ fn written(names: &[Global]) -> Declarations {
     let items = names
         .iter()
         .map(|name| {
-            Item::Let(Definition {
+            Item::Let(Box::new(Definition {
                 name: *name,
                 kind: DefinitionKind::Authored,
                 universe_context: UniverseContext::empty(),
@@ -118,7 +118,7 @@ fn written(names: &[Global]) -> Declarations {
                 parameter_field: None,
                 type_: Term::type_ground(),
                 body: Term::type_ground(),
-            })
+            }))
         })
         .collect::<Vec<_>>();
 
