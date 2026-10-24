@@ -158,16 +158,6 @@ impl<'s> Retyping<'s> {
         self.context.induct_decl(name)
     }
 
-    /// [`Context::instantiate_induct_decl_at`].
-    pub(crate) fn instantiate_induct_decl_at(
-        &mut self,
-        induct_decl: &InductDecl,
-        universes: &Universes,
-    ) -> Result<InductDecl, UniverseError> {
-        self.context
-            .instantiate_induct_decl_at(induct_decl, universes)
-    }
-
     /// [`Context::induct_facet`].
     pub(crate) fn induct_facet<T>(
         &mut self,

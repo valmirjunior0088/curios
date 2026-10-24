@@ -103,6 +103,24 @@ struct InductMatch<'a> {
     actual_indices: &'a [Term],
 }
 
+impl InductMatch<'_> {
+    /// The scrutinee's family as the registry holds it, read by reference.
+    fn family<'c>(&self, context: &'c Retyping) -> &'c InductDecl {
+        context
+            .induct_decl(self.name)
+            .expect("erase: scrutinee type names a registered inductive")
+    }
+
+    /// The payload of `tag`'s case at the scrutinee's parameters and universes: that one constructor of the family instantiated.
+    fn payload(&self, context: &Retyping, tag: &Atom) -> Result<Telescope<Vec<Term>>, Error> {
+        self.family(context)
+            .at(self.universes)
+            .payload(tag, self.params)
+            .expect("erase: constructor instantiates at its inductive's parameters")
+            .map_err(Error::from)
+    }
+}
+
 impl Lowering<'_> {
     /// Erase a match by its elimination form.
     pub(super) fn erase_match(
@@ -639,11 +657,10 @@ impl Lowering<'_> {
             }) => (*name, universes.clone(), params.clone(), indices.clone()),
             _ => unreachable!("erase: inductive match scrutinee checked by elaborate"),
         };
-        let induct_decl = context
-            .induct_decl(&name)
-            .cloned()
-            .expect("erase: scrutinee type names a registered inductive");
-        let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &universes)?;
+        // The family's constraints instantiated where the scrutinee stands, once: each arm then reads its one constructor at these universes ([`InductMatch::payload`]).
+        context
+            .induct_facet(&name, &universes, |_| Ok(()))
+            .expect("erase: scrutinee type names a registered inductive")?;
 
         let m = InductMatch {
             head,
@@ -656,7 +673,7 @@ impl Lowering<'_> {
 
         // A proof/type scrutinee carries no runtime tag; its subsingleton elimination reduces to its single live arm, erased inline.
         if is_erasable(context, &head_type)? {
-            return self.erase_erasable_scrutinee(context, &m, &induct_decl, cases, default);
+            return self.erase_erasable_scrutinee(context, &m, cases, default);
         }
 
         let family = self.induct_family(context, &name)?;
@@ -668,20 +685,30 @@ impl Lowering<'_> {
             .rev()
             .map(|(tag, arm)| (tag, arm))
             .collect::<HashMap<_, _>>();
-        let mut arms = Vec::new();
-        for (index, tag) in induct_decl.constructor_order().enumerate() {
-            let arm = by_tag.get(tag).copied();
-            // A constructor the default covers is no arm, and is read of the family only where one is written.
-            if arm.is_none() && default.is_some() {
-                continue;
+        // A constructor the default covers is no arm, and is read of the family only where one is written: with a default the written arms alone, in the order the family declares them; without one every constructor, a missing one an unreachable arm.
+        let walked = {
+            let family = m.family(context);
+            match default {
+                Some(_) => {
+                    let mut written = cases
+                        .iter()
+                        .filter_map(|(tag, _)| Some((family.constructor_index(tag)?, tag.clone())))
+                        .collect::<Vec<_>>();
+                    written.sort_unstable_by_key(|&(index, _)| index);
+                    written.dedup_by_key(|&mut (index, _)| index);
+                    written
+                }
+                None => family.constructor_order().cloned().enumerate().collect(),
             }
-            let row = self.induct_constructor(context, &name, index)?;
+        };
+        let mut arms = Vec::new();
+        for (index, tag) in &walked {
+            let arm = by_tag.get(tag).copied();
+            let row = self.induct_constructor(context, &name, *index)?;
             let (constructor, mask) = (row.id, row.mask);
             match arm {
                 Some(arm) => {
-                    let telescope = induct_decl
-                        .instantiate(tag, m.params)
-                        .expect("erase: constructor instantiates at its inductive's parameters");
+                    let telescope = m.payload(context, tag)?;
                     // Erasure opens the arm positionally; plicity is irrelevant.
                     let arm = self.variant_arm(
                         context,
@@ -799,7 +826,6 @@ impl Lowering<'_> {
         &mut self,
         context: &mut Retyping,
         m: &InductMatch<'_>,
-        induct_decl: &InductDecl,
         cases: &[(Atom, InductArm)],
         default: Option<&Term>,
     ) -> Result<Outcome, Error> {
@@ -810,9 +836,7 @@ impl Lowering<'_> {
             return self.walk(context, default, &expected, None);
         };
 
-        let telescope = induct_decl
-            .instantiate(tag, m.params)
-            .expect("erase: constructor instantiates at its inductive's parameters");
+        let telescope = m.payload(context, tag)?;
         let labels = scope
             .hint_iter()
             .map(|label| context.fresh(label))
