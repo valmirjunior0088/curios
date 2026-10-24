@@ -23,7 +23,8 @@ use {
     super::{Kernel, asked_classes, asked_within, stated_payload, unread_payload},
     crate::{
         accelerable, answers, answers_classed, atoms_within, instantiate_universes_scoped,
-        probe_spellings, read_operands, read_scrutinee, reduce_closed, reduce_intrinsic, refold,
+        probe_spellings, read_operands, read_scrutinee, read_scrutinee_classed, reduce_closed,
+        reduce_intrinsic, refold,
     },
     curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead},
     curios_core::{
@@ -345,7 +346,7 @@ fn answered(
 
 /// A stuck operation folded once more over its operands as classed, its opaque atoms by the kernel's own conversion and the operations among them by their own readers, where that decides more than the fold did (`curios_analysis::refold`): `None` where the algebra declares it no operation, or where the fold over the classed operands still stands at the operation. Conversion is asked only where some two of its atoms may be one.
 ///
-/// **Reduction asks conversion here, and at a missed equation, and nowhere else.** A fold pairs atoms by identity, so two atoms that convert without being identical — a call under two proofs of its bound, two calls whose arguments commute a sum — left `f(a + b) == f(b + a)` stuck where conversion holds its sides one term, and conversion was no congruence under the fold. Each checker asks its own conversion, the elaborator's reducer at the same point.
+/// **Reduction asks conversion here, at a missed equation and at a stuck elimination's atoms ([`scrutinee_read`]), and nowhere else.** A fold pairs atoms by identity, so two atoms that convert without being identical — a call under two proofs of its bound, two calls whose arguments commute a sum — left `f(a + b) == f(b + a)` stuck where conversion holds its sides one term, and conversion was no congruence under the fold. Each checker asks its own conversion, the elaborator's reducer at the same point.
 ///
 /// **Only of a term that names a local, and never by plain reduction.** A local-free term's reduct is remembered for the declaration and must be one function of the definition store whichever reduction takes it, so nothing is asked of it; and plain reduction asks nothing at all ([`Kernel::plainly`]), which is what answers a question and what a shared analysis reads by.
 ///
@@ -624,9 +625,15 @@ fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, Reduce
 /// The scrutinee `forced` as the elimination `cases` reads it, where the carriers' algebra decides more of it than the fold did (`curios_analysis::read_scrutinee`): a `Bool` connective as the literal its decision diagram is, a structural `Nat` as the successor its stuck products distribute to, and `forced` itself where the algebra decides nothing.
 ///
 /// **An elimination reads its scrutinee as conversion does.** Conversion holds the scrutinee equal to that value and is a congruence, so it holds the match equal to the value's arm, and a match left stuck there would be refused against its arm where two steps of conversion hold the two one. Both reductions take it, the diagram and the distribution asking no judgment, as a fold asks none. The elaborator's reducer reads at the same point by the same rule.
+///
+/// **Where the diagram hands back atoms that may be one, the kernel's conversion classes them** and the connective is read again over the classes, once for both literals: the third point reduction asks the kernel's conversion, under a stuck fold's two conditions ([`refolded`]) — only of a scrutinee that names a local, and never by plain reduction.
 fn scrutinee_read(kernel: &mut Kernel, cases: &Cases, forced: Term) -> Result<Term, ReduceError> {
     Ok(match read_scrutinee(kernel, cases, &forced)? {
         ScrutineeRead::Value(value) => value,
+        ScrutineeRead::Atoms(atoms) if !kernel.plain() && forced.has_local_free() => {
+            let mut classes = asked_classes(kernel, &atoms)?;
+            read_scrutinee_classed(kernel, &forced, &mut classes)?.unwrap_or(forced)
+        }
         ScrutineeRead::Silent | ScrutineeRead::Atoms(_) => forced,
     })
 }

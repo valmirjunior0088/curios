@@ -1984,6 +1984,50 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
     }
 }
 
+/// A stuck elimination classes its scrutinee's atoms in a judgment's reduction alone: a `Bool` match on `(f(a + b) < c && b < c) && ¬(f(b + a) < c)`, a contradiction once the elaborator's conversion holds the two calls one, is its false arm, and plain reduction, which asks nothing, leaves it standing. The control is the same connective over a call on another argument. The kernel's `whnf::equations_tests` holds this proposition under this name.
+#[test]
+fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alone() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+    let [b, c] = [&asked.b, &asked.c].map(Term::free_var);
+    let less =
+        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::nat_lt(left.clone(), right.clone()));
+    let and = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolAnd(left, right));
+    let not = |term: Term| {
+        Term::intrinsic(Intrinsic::BoolXor(
+            term,
+            Term::intrinsic(Intrinsic::Bool(true)),
+        ))
+    };
+    let on = |other: Term| {
+        let scrutinee = and(
+            and(less(&asked.call(&asked.a, &asked.b), &c), less(&b, &c)),
+            not(less(&other, &c)),
+        );
+        Term::bool_match(
+            scrutinee,
+            None,
+            Term::intrinsic(Intrinsic::NatType),
+            nat(2),
+            nat(1),
+        )
+    };
+
+    let classed = on(asked.call(&asked.b, &asked.a));
+    assert_eq!(reduce(&mut context, classed.clone()), Ok(nat(2)));
+    let plain = curios_analysis::Env::force(&mut context, &classed).ok();
+    assert!(
+        plain.as_ref().is_some_and(|plain| plain.as_nat().is_none()),
+        "plain reduction classed {classed}"
+    );
+
+    let other = reduce(&mut context, on(asked.call(&asked.a, &asked.c))).expect("reduces");
+    assert!(
+        other.as_nat().is_none(),
+        "a call on another argument classed: {other}"
+    );
+}
+
 /// An equation in force follows the solution an arm is checked under: under the guard `f(n) < 5`, an arm that refines `n` to `0` holds `f(0) < 5`, the recorded spelling stepping aside for that instance, and gives both back when it is left. The kernel's `whnf::equations_tests` holds this proposition under this name, by substituting the solution through the arm; here the variable stays spelled, so a term of the arm that still names it — the guard as written, or `f(n + 0) < 5`, which is no key — is read as the arm spells it.
 ///
 /// Mutation-checked four ways. With `Context::refine` restating nothing the instance stays stuck inside the arm. With the recorded equation left answering beside its instance, the recorded key still answers there. With a key spelled as it is written, the guard and its instance are two keys in the arm. With a stuck form put to the reduced spellings as it is written, `f(n + 0) < 5` is put to no equation, the instance naming no `n`. `context::tests` holds an instance that names no local withheld.

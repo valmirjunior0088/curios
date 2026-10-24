@@ -19,7 +19,8 @@ use {
     curios_analysis::{
         Answered, Classes, Driver, ScrutineeRead, Within, answers, answers_classed,
         apart_in_instance, atoms_within, case_target_indices, could_reduce_to, holds_no_type,
-        one_up_to_instances, pinned_instance, read_operands, read_scrutinee, refold,
+        one_up_to_instances, pinned_instance, read_operands, read_scrutinee,
+        read_scrutinee_classed, refold,
     },
     curios_core::{
         Advance, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost,
@@ -621,10 +622,16 @@ fn unread_payload(
     Ok(Some(fires.then_some(payload)))
 }
 
-/// The scrutinee `forced` as the elimination `cases` reads it, where the carriers' algebra decides more of it than the fold did (`curios_analysis::read_scrutinee`): a `Bool` connective as the literal its decision diagram is, a structural `Nat` as the successor its stuck products distribute to, and `forced` itself where the algebra decides nothing. The kernel's `scrutinee_read`, at the kernel's point. Both reductions take it, the diagram and the distribution asking no judgment.
+/// The scrutinee `forced` as the elimination `cases` reads it, where the carriers' algebra decides more of it than the fold did (`curios_analysis::read_scrutinee`): a `Bool` connective as the literal its decision diagram is, a structural `Nat` as the successor its stuck products distribute to, and `forced` itself where nothing decides it. The kernel's `scrutinee_read`, at the kernel's point. Both reductions take the algebra's answer, the diagram and the distribution asking no judgment.
+///
+/// **Where the diagram hands back atoms that may be one, the elaborator's conversion classes them** and the connective is read again over the classes, once for both literals: the third point a judgment's reduction asks its checker, under a stuck fold's two conditions ([`refolded`]) — only of a scrutinee that names a local, and never by plain reduction.
 fn scrutinee_read(context: &mut Context, cases: &Cases, forced: Term) -> Result<Term, ReduceError> {
     Ok(match read_scrutinee(context, cases, &forced)? {
         ScrutineeRead::Value(value) => value,
+        ScrutineeRead::Atoms(atoms) if !context.plain() && forced.has_local_free() => {
+            let mut classes = asked_classes(context, &atoms)?;
+            read_scrutinee_classed(context, &forced, &mut classes)?.unwrap_or(forced)
+        }
         ScrutineeRead::Silent | ScrutineeRead::Atoms(_) => forced,
     })
 }

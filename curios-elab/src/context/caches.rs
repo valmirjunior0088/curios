@@ -87,7 +87,7 @@ pub(crate) struct ElaborationStamp {
 pub(crate) struct Caches {
     /// Reducts that may read the scope, for as long as it stands as it did: every boundary of the scope clears them. [`Caches::begin_declaration`] clears every table where the budget is restored, so every node one holds was built under that budget, a hit on it is free, and nothing charges an insertion; a table that outlived the declaration would carry across an item boundary what the work after finalization reduced — the witness goals retried and the parked ones drained — and whether a declaration could afford its reductions would depend on that.
     ///
-    /// **One table for each of the two reductions**, as the kernel's local-bearing memos have: the first for a judgment's, which may ask the elaborator's conversion at a stuck fold and at a missed equation, and the second for plain reduction, which asks nothing (`Context::plainly`). A term's reduct under one is not its reduct under the other.
+    /// **One table for each of the two reductions**, as the kernel's local-bearing memos have: the first for a judgment's, which may ask the elaborator's conversion at a stuck fold, at a missed equation and at a stuck elimination's atoms, and the second for plain reduction, which asks nothing (`Context::plainly`). A term's reduct under one is not its reduct under the other.
     reduction: [HashMap<Term, Term>; 2],
     /// The reducts that stand for the declaration: a [`lasting`] term's, where its reduct is lasting too. See the module documentation for what clears them.
     lasting: [HashMap<Term, Term>; 2],

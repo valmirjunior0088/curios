@@ -1,6 +1,6 @@
 //! The questions a judgment's reduction puts to conversion.
 //!
-//! Reduction is plain or it asks. At a stuck fold or a missed equation it may put a question to the elaborator's conversion, whose answer rests on the solutions and the level constraints that stand; a question reduction puts to conversion is itself answered by plain reduction, which is what ends the regress, and a shared analysis reads a term plainly too, since totality may rest on no verdict of conversion's. [`Asking`] is the state of that protocol: whether reduction is plain now, whether conversion is answering a question with nothing committed, and the counts a remembered reduct is held against.
+//! Reduction is plain or it asks. At a stuck fold, a missed equation or a stuck elimination's atoms it may put a question to the elaborator's conversion, whose answer rests on the solutions and the level constraints that stand; a question reduction puts to conversion is itself answered by plain reduction, which is what ends the regress, and a shared analysis reads a term plainly too, since totality may rest on no verdict of conversion's. [`Asking`] is the state of that protocol: whether reduction is plain now, whether conversion is answering a question with nothing committed, and the counts a remembered reduct is held against.
 
 /// Where a context stands in the protocol by which reduction asks conversion.
 #[derive(Debug, Default)]

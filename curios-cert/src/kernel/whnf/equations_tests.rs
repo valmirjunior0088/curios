@@ -1424,3 +1424,41 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
         assert!(stuck.as_nat().is_none(), "{open} takes an arm: {stuck}");
     }
 }
+
+/// A stuck elimination classes its scrutinee's atoms in a judgment's reduction alone: a `Bool` match on `(f(a + b) < c && b < c) && ¬(f(b + a) < c)`, a contradiction once the kernel's conversion holds the two calls one, is its false arm, and plain reduction, which asks nothing, leaves it standing. No fold law reads the two comparisons together, so the classing at the dispatch is what decides it. The control is the same connective over a call on another argument, which no classing makes a contradiction. `curios-elab`'s `reduce::reduction_tests` holds this proposition under this name.
+#[test]
+fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alone() {
+    let mut kernel = kernel();
+    let asked = Asked::over(&mut kernel);
+    let [b, c] = [&asked.b, &asked.c].map(Term::free_var);
+    let less =
+        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::nat_lt(left.clone(), right.clone()));
+    let and = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolAnd(left, right));
+    let not = |term: Term| {
+        Term::intrinsic(Intrinsic::BoolXor(
+            term,
+            Term::intrinsic(Intrinsic::Bool(true)),
+        ))
+    };
+    let on = |other: Term| {
+        let scrutinee = and(
+            and(less(&asked.call(&asked.a, &asked.b), &c), less(&b, &c)),
+            not(less(&other, &c)),
+        );
+        Term::bool_match(scrutinee, None, nat_type(), nat(2), nat(1))
+    };
+
+    let classed = on(asked.call(&asked.b, &asked.a));
+    assert_eq!(whnf(&mut kernel, classed.clone()), Ok(nat(2)));
+    let plain = Env::force(&mut kernel, &classed).expect("reduces");
+    assert!(
+        plain.as_nat().is_none(),
+        "plain reduction classed {classed}"
+    );
+
+    let other = whnf(&mut kernel, on(asked.call(&asked.a, &asked.c))).expect("reduces");
+    assert!(
+        other.as_nat().is_none(),
+        "a call on another argument classed: {other}"
+    );
+}

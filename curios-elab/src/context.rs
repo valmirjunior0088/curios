@@ -2287,7 +2287,7 @@ impl<'s> Context<'s> {
         self.underway.attempt.universe_solver.state_token()
     }
 
-    /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold or at a missed equation — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frame::scrutinee_spellings`) are all filed by which reduction took them.
+    /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold, at a missed equation or at a stuck elimination's atoms — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frame::scrutinee_spellings`) are all filed by which reduction took them.
     pub(crate) fn plainly<R>(&mut self, read: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.typing.asking.set_plain(true);
         let answer = read(self);

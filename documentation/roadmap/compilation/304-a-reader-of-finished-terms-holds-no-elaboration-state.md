@@ -32,7 +32,7 @@ Observed at `9c543476a`, counted in a scratch copy with `FUSION_CAP` lifted: 2 4
 ## Decisions
 
 1. **What erases is decided through no engine that elaborates.** The type erasure holds then has no elaboration state to hide, and one reducer decides both what a term's type is and what of the term is kept. Which reducer, or none, is the open question below.
-2. **Erasure reads a type by the reduction that accepted the term.** Whatever it reduces through answers what a stuck fold and a missed equation ask, as both checkers' reducers do; a reducer that decides less leaves erasure a type it cannot read on a program both checkers accept.
+2. **Erasure reads a type by the reduction that accepted the term.** Whatever it reduces through answers what a stuck fold, a missed equation and a stuck elimination's atoms ask, as both checkers' reducers do; a reducer that decides less leaves erasure a type it cannot read on a program both checkers accept.
 
 ## Open questions
 

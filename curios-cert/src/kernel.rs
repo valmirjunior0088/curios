@@ -1241,7 +1241,7 @@ impl<'s> Kernel<'s> {
         self.scope.plain()
     }
 
-    /// Run `read` with reduction plain: it asks the kernel's conversion nothing, at a stuck fold or at a missed equation.
+    /// Run `read` with reduction plain: it asks the kernel's conversion nothing, at a stuck fold, at a missed equation or at a stuck elimination's atoms.
     ///
     /// **Two readers need it.** A question reduction puts to conversion is answered by plain reduction: conversion reduces, and left to ask again, a term that reaches itself through an unfolding would be asked about without end, so a question is one conversion the budget bounds, over the reduction that stood before reduction asked anything. And a shared analysis reads a term by it (`Env::force`): conversion's proof irrelevance is sound because acceptance waits on totality, which must therefore read terms on no verdict of conversion's.
     ///

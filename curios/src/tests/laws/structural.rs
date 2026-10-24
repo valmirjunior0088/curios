@@ -147,10 +147,10 @@ pub(super) const SEEDS: &[Seeds] = &[
             ),
         ],
     },
-    // Iota modulo the theory: a scrutinee the carriers' algebra holds equal to a literal or a successor where the fold leaves it standing — a connective's right operand as written under a stuck left, a product of two symbolic sums undistributed — is that value where a match takes it apart. Each near miss is a scrutinee the theory leaves open.
+    // Iota modulo the theory: a scrutinee the carriers' algebra holds equal to a literal or a successor where the fold leaves it standing — a connective's right operand as written under a stuck left, a product of two symbolic sums undistributed — is that value where a match takes it apart, two calls under two proofs of one bound being one atom where each checker classes them. Each near miss is a scrutinee the theory leaves open.
     Seeds {
         type_: "(Nat) -> Nat",
-        binders: "g: (Nat) -> Nat, k: (Nat) -> Nat, b: Bool, c: Bool, x: Nat, y: Nat",
+        binders: "g: (Nat) -> Nat, k: (Nat) -> Nat, b: Bool, c: Bool, x: Nat, y: Nat, h: (v: Nat, @_: Holds(0 < v)) -> Bool, n: Nat, p: Holds(0 < n), q: Holds(0 < n)",
         compound: Some(Compound {
             binder: "g: (Nat) -> Nat",
             term: "(z: Nat) => k(z + 1)",
@@ -175,6 +175,11 @@ pub(super) const SEEDS: &[Seeds] = &[
             held(
                 "iota at Bool over comparisons by what they state",
                 "match (x < y) && (y <= x): (_) => (Nat) -> Nat | true => k | false => g end",
+                "g",
+            ),
+            held(
+                "iota at Bool over atoms conversion classes one",
+                "match h(n, @p) && Bool/not(h(n, @q)): (_) => (Nat) -> Nat | true => k | false => g end",
                 "g",
             ),
             miss(
