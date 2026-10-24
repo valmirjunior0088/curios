@@ -504,13 +504,14 @@ pub(crate) fn resolve_witness(
             false => Resolution::NoMatch,
         });
     };
-    let concept = context
+    // Its universe context alone: the entry lists every method, which a goal reads none of.
+    let universe_context = context
         .concept(&concept_name)
-        .cloned()
+        .map(|concept| concept.universe_context.clone())
         .expect("the goal was classified as a registered concept");
     context
         .universes_mut()
-        .instantiate_at(&concept.universe_context, &universes, None)
+        .instantiate_at(&universe_context, &universes, None)
         .map_err(Error::from)?;
 
     // Step 2: superclass projections of local binders, breadth-first by depth. The graph is acyclic (checked at registration), so this is finite; two matches at the same minimal depth are ambiguous.

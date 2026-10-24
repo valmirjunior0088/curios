@@ -1,35 +1,32 @@
 # A reader pays for what it reads of a declaration
 
-[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a declaration read a fact at a time — "an instantiated declaration is read by facet — its sort, its arity, one constructor, one field — and only the facet asked is instantiated" — and a compilation end in time proportional to what was written plus what the budget counted; [an item imports what it reads of another's row](../../../curios-ersd/README.md#an-item-imports-what-it-reads-of-anothers-row) so that no row is copied once for each declaration that reads it. One reader may still take a row whole where it reads a fact of it, so that `k` readers of a row of width `w` cost `w·k`, and it is an investigation (*What is not yet known*): a call of one method of a wide concept. A row is a family's constructors, a structure's or a tuple type's fields, a function type's domains, or an erased schema.
+[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a declaration read a fact at a time — "an instantiated declaration is read by facet — its sort, its arity, one constructor, one field — and only the facet asked is instantiated" — and a compilation end in time proportional to what was written plus what the budget counted; [an item imports what it reads of another's row](../../../curios-ersd/README.md#an-item-imports-what-it-reads-of-anothers-row) so that no row is copied once for each declaration that reads it. Every reader it found reads the fact it asks, and what is left is to hold each stage's growth (*Verification and retirement*). A row is a family's constructors, a structure's or a tuple type's fields, a function type's domains, or an erased schema.
 
 ## What is wrong
 
-Counted over the commit that types a slot without copying its type, with a release compiler built `--features profile` in a scratch copy, by the protocol under *Measuring*. A reader's cost is the difference between 16 readers and one, divided by 15, in kilobytes allocated, at a row of width 1,000 and of width 4,000.
+No probe's reader pays the row it reads. Counted over the commit that resolves a witness without copying its concept, with a release compiler built `--features profile` in a scratch copy, by the protocol under *Measuring*: a reader's cost is the difference between 16 readers and one, divided by 15, in kilobytes allocated, at a row of width 1,000 and of width 4,000.
 
 | Reader of a row of width `w` | Elaboration | Kernel | Erasure |
 | --- | ---: | ---: | ---: |
-| A call of one method of a concept of `w` methods | 207–227 → 287–340 | 53 → 60 | 40 → 33 |
-| *Control:* a function's parameter typed by a closed tuple alias of `w` fields, projected at `x.0` | 93 → 100 | 33 → 27 | 20 → 20 |
-| *Control:* a function's unused parameter typed by a closed function-type alias of `w` domains | 87 → 87 | 27 → 27 | 20 → 20 |
-| *Control:* a construction of the last constructor of a family of `w` | 67 → 67 | 20 → 20 | 20 → 20 |
-| *Control:* two types of one family of `w` constructors compared | 273 → 280 | 47 → 40 | 27 → 27 |
-| *Control:* a function's unused parameter typed by a structure of `w` fields | 93 → 93 | 33 → 27 | 13 → 13 |
-| *Control:* a match writing one arm and a catch-all over a family of `w` constructors | 140 → 133 | 33 → 40 | 33 → 33 |
-| *Control:* `Eq/refl()` of two constructions of one constructor of a parameterized family of `w` | 1,033 → 1,033 | 300 → 300 | 60 → 60 |
+| A function's parameter typed by a closed tuple alias of `w` fields, projected at `x.0` | 93 → 93 | 33 → 27 | 20 → 27 |
+| A function's unused parameter typed by a closed function-type alias of `w` domains | 93 → 93 | 27 → 27 | 20 → 20 |
+| A call of one method of a concept of `w` methods | 200 → 180–240 | 60 → 60 | 40 → 33 |
+| A function reading the last field of a structure of `w` fields | 100 → 100 | 33 → 33 | 27 → 20 |
+| A construction of the last constructor of a family of `w` | 67 → 67 | 20 → 20 | 20 → 13 |
+| Two types of one family of `w` constructors compared | 287 → 287 | 40 → 40 | 33 → 33 |
+| A function's unused parameter typed by a structure of `w` fields | 93 → 93 | 27 → 33 | 20 → 20 |
+| A match writing one arm and a catch-all over a family of `w` constructors | 140 → 140 | 40 → 40 | 33 → 33 |
+| `Eq/refl()` of two constructions of one constructor of a parameterized family of `w` | 1,060 → 1,060 | 313 → 313 | 60 → 60 |
 
-The fold states a stage's bytes to a tenth of a megabyte, so a row moves by 7 KB a reader with nothing grown. A method call's elaboration allocates differently between two runs of one program, as no other probe's does, so its row gives the least and the most of four runs.
+The fold states a stage's bytes to a tenth of a megabyte, so a row moves by 7 KB a reader with nothing grown. A method call's elaboration allocates differently between two runs of one program, as no other probe's does, so its row gives the least and the most of three runs.
 
 ## What is known
 
 - **The peers read a synonym's kind and a constructor's tag without the rest.** GHC reads a type synonym's kind eagerly and its right-hand side through a thunk forced where it is needed, and a data type's constructor argument types lazily, "in the hope that we may never poke on those argument types" ([`TcIface`](https://downloads.haskell.org/ghc/8.0.1/docs/html/libraries/ghc-8.0.1/src/TcIface.html)); Rocq stores a constant's relevance on it, computed once where the constant is typed (`const_relevance`, [`constant_typing.ml`](https://github.com/rocq-prover/rocq/blob/master/kernel/constant_typing.ml)); Lean's IR constructor carries its index and its field counts and nothing of its family (`CtorInfo`, [`Basic.lean`](https://github.com/leanprover/lean4/blob/master/src/Lean/Compiler/IR/Basic.lean)), and its interpreter takes the IR "directly from the elab_environment", a declaration by name ([`ir_interpreter.cpp`](https://github.com/leanprover/lean4/blob/master/src/library/ir_interpreter.cpp)).
 
-## What is not yet known
-
-- **What a method call pays its concept.** One call of one method of a concept of 4,000 methods costs the elaborator 287 to 340 KB and 6,446 to 6,999 allocations over four runs, against 207 to 227 KB and 3,458 to 3,681 at 1,000, about an allocation for each method, and the kernel and erasure the same at both widths, counted with the figures above; what it allocates differs between two runs of one program. At `7c61c1a15` the growth stood in the allocations of `Context::standing_on` itself, a parked problem's retry, with no weak-head value filed as a key, so it is not the witness the call resolves, a structure of `w` methods. Settled by: gdb samples of the calls' elaboration at a concept of many methods, the cost attributed; a cost left is a stage here, and none left drops the item.
-
 ## Stages
 
-None is left: an investigation that finds a cost adds one.
+None is left.
 
 ## Measuring
 
@@ -37,4 +34,4 @@ Each probe is a program on standard input. A reader probe declares the row and `
 
 ## Verification and retirement
 
-Each stage holds its own growth shape under `growth_slopes`, whose every slope stays under three where the shape grows a row's width and its readers together. A stage that moves stored bytes states them and holds verdicts, erased results and executable artifacts equal; one that moves none holds `/std`'s images byte-identical at one path. A landed stage moves its contract to its owner, and this specification keeps the rest. Retire it once the investigation is settled and nothing references this file.
+Each stage holds its own growth shape under `growth_slopes`, whose every slope stays under three where the shape grows a row's width and its readers together. A stage that moves stored bytes states them and holds verdicts, erased results and executable artifacts equal; one that moves none holds `/std`'s images byte-identical at one path. A landed stage moves its contract to its owner, and this specification keeps the rest. Retire it once each stage's growth is held and nothing references this file.
