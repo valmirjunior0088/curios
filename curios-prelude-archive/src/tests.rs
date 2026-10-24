@@ -325,7 +325,7 @@ fn every_reader_a_row_names_spells_its_part() {
     assert!(stale.is_empty(), "{stale:#?}");
 }
 
-/// No term the prelude holds names a type former: elaboration spells a former applied in full as its node and one short of its application as its η-form, wherever a program writes it, so a former written and a former inferred are one term (`documentation/roadmap/theory/100-an-implicit-argument-written-is-the-argument-inferred.md`). Every former either root declares is checked, nominal or intrinsic, in every definition's type and body and every nominal entry's telescopes.
+/// No term the prelude holds names a type former: elaboration spells a former applied in full as its node and one short of its application as its η-form, wherever a program writes it, so a former written and a former inferred are one term (`documentation/design/theory/a-type-former-applied-in-full-is-its-node.md`). Every former either root declares is checked, nominal or intrinsic, in every definition's type and body and every nominal entry's telescopes.
 #[test]
 fn no_term_of_the_prelude_names_a_type_former() {
     with_prelude(|prelude| {
