@@ -22,7 +22,7 @@ pub(crate) use {
     curios_core::{
         accelerable, foreign_signature, free_locals_of, instantiate_qualities,
         instantiate_universes_scoped, open_quality, probe_spellings, reduce_closed,
-        reduce_intrinsic, rewrite_universe_levels_scoped_shared, universe_metas,
+        reduce_intrinsic, rewrite_universe_levels_scoped_shared, universe_metas, weak_head_value,
     },
 };
 

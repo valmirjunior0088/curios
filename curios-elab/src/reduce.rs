@@ -29,7 +29,7 @@ use {
         Proj, Quality, Rec, RecGroup, ReduceError, Reducer, Struct, StructDecl, StructType,
         Subterm, Telescope, Term, Tuple, TupleType, Universes, Var, Variant, Visit, accelerable,
         instantiate_universes_scoped, probe_spellings, project_erased_universes, project_literal,
-        reduce_closed, reduce_intrinsic,
+        reduce_closed, reduce_intrinsic, weak_head_value,
     },
     curios_utilities::{SyntaxRegistry, recurse},
     std::{
@@ -290,6 +290,11 @@ fn is_folded(term: &Term) -> bool {
 ///
 /// The group is `folded`'s own, deliberately: what this protects is the idempotence of forcing *this* term, so the cycle to rule out is the reduct re-mentioning the group whose call was demanded. All three outcomes are idempotent — `force(force(t)) = force(t)` — so what this clause decides is completeness, not whether the reducer stops; the budget spent per iteration already does that.
 fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+    // A weak-head value is its own forced form, asked of no table ([`weak_head_value`]).
+    if weak_head_value(&term) {
+        return Ok(term);
+    }
+
     // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
     //
     // The forced value is remembered apart from the reducts ([`Context::remember_forced`]) unless it is a folded recursive spelling. Plain reduction leaves a recursive call folded where forcing unfolds it, so a plain probe served a forced value would answer by whether a forced demand had run first. Without this store the elaborator would re-run the machine for every position that demands the same closed value — checking, conversion and re-validation each paying a `Str` literal's full scan while the kernel replays its memo.
@@ -1335,6 +1340,10 @@ pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceEr
 }
 
 fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceError> {
+    // A weak-head value is its own reduct, asked of no table ([`weak_head_value`]).
+    if weak_head_value(&term) {
+        return Ok(term);
+    }
     if let Some(cached) = context.cached_reduced(&term) {
         return Ok(cached);
     }

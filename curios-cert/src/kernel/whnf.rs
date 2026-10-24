@@ -24,7 +24,7 @@ use {
     crate::{
         accelerable, answers, answers_classed, atoms_within, instantiate_universes_scoped,
         probe_spellings, read_operands, read_scrutinee, read_scrutinee_classed, reduce_closed,
-        reduce_intrinsic, refold,
+        reduce_intrinsic, refold, weak_head_value,
     },
     curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead},
     curios_core::{
@@ -86,6 +86,10 @@ impl Reducer for Kernel<'_> {
             let term = self.by_value(&term);
             return self.reading(|kernel| kernel.reduce_forced(term));
         }
+        // A weak-head value is its own forced form, asked of no table ([`weak_head_value`]).
+        if weak_head_value(&term) {
+            return Ok(term);
+        }
         if let Some(remembered) = self.whnf_hit(&term, true) {
             return Ok(remembered);
         }
@@ -134,6 +138,11 @@ pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError>
 }
 
 fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
+    // A weak-head value is its own reduct, asked of no table ([`weak_head_value`]): read by value already, it names no binder a `let` could give way for.
+    if weak_head_value(&term) {
+        return Ok(term);
+    }
+
     // **The memo is consulted here, at every level, and not only where something outside reduction asks for one.**
     //
     // Probing only at the two `Reducer` methods would leave every internal call below — a scrutinee, an application's head, each turn of `force`'s loop, `expose_rec_tail`, `unfold_spelling` — re-deriving what the table already holds; the elaborator's reducer probes at its own entry and recurses through it, so probing here keeps the two strategies alike in reach as well as in rule. Reaching every level is safe because the table a term belongs to is decided inside [`Memos`](super::Memos), on the lookup as well as the store: a local-free term by the tables that live for the declaration, a local-bearing one by the tables that live only as long as the equations in force.

@@ -214,6 +214,24 @@ pub fn accelerable(term: &Term) -> bool {
     !term.has_local_free() && !term.has_metavar()
 }
 
+/// Whether `term` is its own weak-head value in the machine's domain ([`accelerable`]): a former reduction leaves as it is — a sort, a function, tuple, structure or inductive type, a tuple, a structure or a variant — however it is demanded.
+///
+/// **Its answer is the node.** The machine hands one back as the node it was given, and so does every host's reducer at its door, before any table is asked of it: a table would file it under itself, and asking conses it as a key, which walks a node a declaration has not met however shared it is. Lean 4's kernel stands the same easy cases outside its table (`whnf`'s "Do not cache easy cases"). A lambda is not one, its table entry recording its η probe, and nor is an intrinsic, which reduction may fold.
+pub fn weak_head_value(term: &Term) -> bool {
+    accelerable(term)
+        && matches!(
+            &**term,
+            Subterm::Sort(..)
+                | Subterm::FuncType(_)
+                | Subterm::TupleType(_)
+                | Subterm::Tuple(_)
+                | Subterm::InductType(_)
+                | Subterm::Variant(_)
+                | Subterm::StructType(_)
+                | Subterm::Struct(_)
+        )
+}
+
 /// How far the caller wants the focus taken: [`Demand::Whnf`] is the plain reducer contract, where a folded recursive application is its own normal form; [`Demand::Forced`] is the eliminator's, where a `rec` head unfolds because a value is required.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Demand {
@@ -461,6 +479,11 @@ impl Machine {
             return Ok(Step::Value(term));
         }
 
+        // A weak-head value is its own answer, handed back as the node it was given and asked of no table.
+        if weak_head_value(&term) {
+            return Ok(Step::Value(term));
+        }
+
         // A plain request reads what plain requests produced; a forced one may read either — see [`Machine::forced`]. Keyed on the term alone, a forced call's or a forced match's value answered a later plain request for the same term, where the strategy answers the folded call.
         if let Some(value) = host.closed_memo().remembered(&term, demand) {
             return Ok(Step::Value(value.clone()));
@@ -697,7 +720,7 @@ impl Machine {
                 }
             }
 
-            // Every remaining former — sorts, function and tuple types, tuples, structs, variants, inductive types, transients — is weak-head normal with its sub-terms unentered, exactly as in both hosts.
+            // What is left is a transient, which no reducer is handed: left as it is.
             value => Ok(Step::Value(Term::from(value))),
         }
     }
