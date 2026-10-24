@@ -6,4 +6,5 @@ mod coordination_tests;
 mod diagnostic_tests;
 mod knot_tests;
 mod loop_tests;
+mod rope_tests;
 mod std_tests;

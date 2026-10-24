@@ -598,7 +598,7 @@ impl<'a, 'b> FltEmitter<'a, 'b> {
     }
 
     fn declare(&mut self, helper: FltHelper, scope: Scope, instrs: Instrs) {
-        declare_helper(self.module, helper.func_name(), scope, f64_type(), instrs);
+        declare_helper(self.module, helper.func_name(), scope, [f64_type()], instrs);
     }
 
     /// Return the hardware's `apply` over `operands` — exact wherever this is reached — or the model's NaN when it produced one.

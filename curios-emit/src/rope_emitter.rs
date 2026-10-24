@@ -1,6 +1,6 @@
 //! The shared rope helper functions. Straight-line sequences are inlined at their use site; anything the emitter lowers to a *loop* is a helper here instead, so its mutable scratch locals are zeroed by the fresh activation rather than leaking across executions of one call site. Among them:
 //!
-//! - `$<carrier>/force` flattens a `Bytes` or `List` rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else is filled by an *iterative* tree walk (an explicit `$elems` worklist, grown by doubling), so a 100k-deep concat chain never touches the wasm call stack. The walk's first piece decides where the run goes: a flattened node whose run ends at its payload's written extent hands over that payload's room, and the walk writes the other pieces past the extent; any other first piece leaves a fresh payload, with room twice the run where the entry is a node and the piece no leaf. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
+//! - `$<carrier>/force` flattens a `Bytes` or `List` rope to its payload array: the leaf answers its payload, a cached node answers its cache, and everything else is written by `$<carrier>/write`, which puts each piece at the offset the lengths before it give and recurses into the shorter of two halves still to be walked, so its depth is at most 31 calls whatever the rope's and it allocates nothing but the payload. The run's first piece decides where it goes, before anything is written: a flattened node whose run ends at its payload's written extent hands over that payload's room, and the write fills the other pieces past the extent; any other first piece leaves a fresh payload, with room twice the run where the entry is a node and the piece no leaf. Only an entry *node* memoizes — intermediates are usually garbage the moment the walk passes them, and a view's fill is a single window copy of exactly its own size.
 //! - `$<carrier>/exact` answers a run as a payload exactly its length — the forced payload where its array is the run's, a copy of the run otherwise — for what leaves the rope as a flat array: a leaf sealed over a forced payload, and a host operand.
 //! - `$<carrier>/embed` places a host-built flat payload into a fresh leaf on re-entry.
 //! - `$<carrier>/slice` builds the window, O(1) over a flat-available base: bounds-check, the trivial windows answer an empty leaf or the rope itself, a view collapses (so windows never stack), and an uncached node base is forced first — O(n) once, which memoizes — so every `view` in existence has a *flat-available* base (a leaf or a cached node).
@@ -47,143 +47,55 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             self.module,
             func_name,
             Scope { params, locals },
-            result,
+            [result],
             instrs,
         );
     }
 
-    /// `$<carrier>/force (ref <base>) -> (ref <payload>)`.
+    /// `$<carrier>/force (ref <base>) -> (ref <payload>)`, with the `$<carrier>/write` it calls.
     ///
     /// ```wat
     /// if r.tag == 0                  → r.payload      ;; leaf
     /// if r.tag == 1 && r.cache != null → r.cache      ;; already forced
-    /// stack := array.new_default $elems 32            ;; explicit worklist
-    /// cur   := r
-    /// loop:                                           ;; per leaf-like chunk
-    ///   descend: while cur is an uncached node,
-    ///     push cur.right (growing the stack by doubling), cur := cur.left
-    ///   at the first chunk, out := its payload's room claimed, or a fresh one
-    ///   copy the chunk — a leaf payload, a node cache, or a view's window
-    ///   over its flat-available base — into out at offset, unless claimed
-    ///   pop cur from the stack; repeat until empty
+    /// first := r; while first is a node never flattened: first := first.left
+    /// out := first's payload, its room claimed, or a fresh one     ;; before anything is written
+    /// write(r, out, 0, claimed)
     /// if r.tag == 1:                                  ;; memoize, release tree
     ///   r.cache := out; r.room := room; r.left := null; r.right := null
     /// ```
     ///
-    /// The first chunk decides where the run goes ([`ForceWalk::place_first`]): a flattened node whose run ends at its payload's written extent hands the run its payload, the copy then writing only the pieces after it, and every other first chunk leaves the run a fresh payload. An entry *view* is not memoized (its fields are immutable): its fill is one window copy of exactly its own size, so there is nothing quadratic to fence off.
-    pub(crate) fn emit_force_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
-        let walk = ForceWalk::new(
-            rope,
-            self.table.elems_type(),
-            self.table.enter(&rope.base, false),
-        );
+    /// The first piece decides where the run goes ([`ForceWalk::place_first`]): a flattened node whose run ends at its payload's written extent hands the run its payload, the write then filling only the pieces after it, and every other first piece leaves the run a fresh payload. The write puts every piece at the offset the lengths before it give ([`ForceWalk::write_body`]). An entry *view* is not memoized (its fields are immutable): its fill is one window copy of exactly its own size, so there is nothing quadratic to fence off.
+    pub(crate) fn emit_force_func(
+        &mut self,
+        rope: &RopeData,
+        func_name: curios_wasm::FuncName,
+        write: curios_wasm::FuncName,
+    ) {
+        let walk = ForceWalk::new(rope);
 
         let mut instrs = walk.entry_shortcuts();
-        instrs.extend(walk.init_worklist());
-
-        // The descent body: classify `cur`, either resolving a leaf-like chunk — payload + source window — (exit to `$emit`) or pushing right and descending left.
-        let descend_label = curios_wasm::LabelName::from("descend");
-        let mut descend = vec![
-            // Leaf: the whole payload.
-            get(&walk.cur),
-            field_get(&rope.base, &rope.tag_field),
-            curios_wasm::Instr::I32Eqz,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("at_leaf"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&walk.cur),
-                    cast(&rope.leaf),
-                    field_get(&rope.leaf, &rope.payload_field),
-                    set(&walk.payload),
-                    curios_wasm::Instr::I32Const { value: 0 },
-                    set(&walk.src_off),
-                    get(&walk.cur),
-                    field_get(&rope.base, &rope.len_field),
-                    set(&walk.count),
-                    curios_wasm::Instr::Br {
-                        label_name: curios_wasm::LabelName::from("emit"),
-                    },
-                ],
-                else_instructions: vec![],
-            },
-        ];
-        descend.extend(walk.resolve_view_chunk());
-        // Cached node: its run, the first `len` slots of its cache.
-        descend.extend([
-            get(&walk.cur),
-            cast(&rope.node),
-            field_get(&rope.node, &rope.cache_field),
-            curios_wasm::Instr::RefIsNull,
-            curios_wasm::Instr::I32Eqz,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("at_cached"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&walk.cur),
-                    cast(&rope.node),
-                    field_get(&rope.node, &rope.cache_field),
-                    set(&walk.payload),
-                    curios_wasm::Instr::I32Const { value: 0 },
-                    set(&walk.src_off),
-                    get(&walk.cur),
-                    field_get(&rope.base, &rope.len_field),
-                    set(&walk.count),
-                    curios_wasm::Instr::Br {
-                        label_name: curios_wasm::LabelName::from("emit"),
-                    },
-                ],
-                else_instructions: vec![],
-            },
-        ]);
-        descend.extend(walk.push_uncached_node(&descend_label));
-
-        // The walk: descend to a chunk, place the run at the first, copy the chunk at the running offset, pop.
-        let walk_label = curios_wasm::LabelName::from("walk");
-        let mut copy = walk.place_first();
-        // array.copy out[offset..] <- payload[src_off..src_off+count]
-        copy.extend([
-            get(&walk.out),
-            get(&walk.offset),
-            get(&walk.payload),
-            get(&walk.src_off),
-            get(&walk.count),
-            curios_wasm::Instr::ArrayCopy {
-                target_name: rope.payload.clone(),
-                source_name: rope.payload.clone(),
-            },
-        ]);
-        let mut walk_body = vec![
-            curios_wasm::Instr::Block {
-                label_name: curios_wasm::LabelName::from("emit"),
-                block_type: curios_wasm::BlockType::Empty,
-                instructions: vec![curios_wasm::Instr::Loop {
-                    label_name: descend_label,
-                    block_type: curios_wasm::BlockType::Empty,
-                    instructions: descend,
-                }],
-            },
-            block("copied", copy),
-            get(&walk.offset),
-            get(&walk.count),
-            curios_wasm::Instr::I32Add,
-            set(&walk.offset),
-        ];
-        walk_body.extend(walk.pop_or_exit(&walk_label));
-        instrs.push(curios_wasm::Instr::Loop {
-            label_name: walk_label,
-            block_type: curios_wasm::BlockType::Empty,
-            instructions: walk_body,
-        });
-
+        instrs.extend(walk.find_first());
+        instrs.extend(walk.place_first());
+        instrs.extend(walk.write_entry(&write));
         instrs.extend(walk.memoize_entry_node());
 
         self.add_helper(
             func_name,
             vec![(walk.r.clone(), concrete_val(rope.base.clone(), false))],
             concrete_val(rope.payload.clone(), false),
-            walk.locals(),
+            walk.force_locals(),
             instrs,
+        );
+        let body = walk.write_body(&write);
+        declare_helper(
+            self.module,
+            write,
+            Scope {
+                params: walk.write_params(),
+                locals: walk.write_locals(),
+            },
+            [],
+            body,
         );
     }
 

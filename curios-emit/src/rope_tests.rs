@@ -71,7 +71,7 @@ fn a_read_of_an_unflattened_node_looks_in_its_children_before_it_forces() {
     }
 }
 
-/// A consumer of a forced payload bounds its walk by the run's `len` and never by its array's length, which a flattened payload may hold room past: equality, the pointwise combiners, a map, and the host's deep and scalar forms read no `array.len` at all, and a force reads two, its worklist's and, where it claims its first piece's room, the capacity of that piece's payload.
+/// A consumer of a forced payload bounds its walk by the run's `len` and never by its array's length, which a flattened payload may hold room past: equality, the pointwise combiners, a map, the host's deep and scalar forms and the write a force fills its payload by read no `array.len` at all, and a force reads one, the capacity of its first piece's payload, where it claims that piece's room.
 #[test]
 fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
     let packed = |op: curios_cont::Intrinsic| {
@@ -98,6 +98,8 @@ fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
         (&map, "$list/map"),
         (&host, "$list/bytes/force"),
         (&host, "$list/nat/to_longs"),
+        (&eql, "$bytes/write"),
+        (&map, "$list/write"),
     ] {
         assert_absent(func(wat, helper), "array.len");
     }
@@ -106,7 +108,35 @@ fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
         (&and, "$bytes/force"),
         (&map, "$list/force"),
     ] {
-        assert_eq!(count(func(wat, force), "array.len"), 2, "{force}");
+        assert_eq!(count(func(wat, force), "array.len"), 1, "{force}");
+    }
+}
+
+/// A flattening allocates nothing but its payload: the force decides where the run goes and calls the write, which copies each piece where its offset falls, recursing into the shorter of two halves still to be walked rather than keeping a worklist, in each carrier.
+#[test]
+fn a_flattening_allocates_nothing_but_its_payload() {
+    let bytes = wat(&intrinsic_main(
+        curios_cont::Intrinsic::BytesGet,
+        vec![bytes_lit(vec![1, 2, 3, 4]), nat(1)],
+    ));
+    let list = wat(&list_read());
+
+    for (wat, force, write, payload) in [
+        (&bytes, "$bytes/force", "$bytes/write", "$bytes"),
+        (&list, "$list/force", "$list/write", "$elems"),
+    ] {
+        let forced = func(wat, force);
+        assert_eq!(
+            count(forced, &format!("array.new_default {payload}")),
+            2,
+            "a force allocates its payload, roomy or exact, and nothing else: {forced}"
+        );
+        assert_contains(forced, &format!("call {write}"));
+
+        let written = func(wat, write);
+        assert_absent(written, "array.new");
+        assert_absent(written, "struct.new");
+        assert_contains(written, &format!("call {write}"));
     }
 }
 
@@ -152,7 +182,6 @@ fn a_flattening_reads_its_first_pieces_extent_before_it_allocates() {
         let extent = force
             .find("struct.get $rope/room $extent")
             .expect("the force reads the extent");
-        // The run's payload, which the worklist ahead of the walk may share a type with.
         assert!(
             force[extent..].contains(&format!("array.new_default {payload}")),
             "the force allocates the run's payload after the extent"

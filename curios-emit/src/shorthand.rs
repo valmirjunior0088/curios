@@ -219,12 +219,12 @@ pub(super) fn f64_type() -> curios_wasm::ValType {
     curios_wasm::ValType::Num(curios_wasm::NumType::F64)
 }
 
-/// Declare one helper: a final func type named after the function, plus the function itself. Helpers are called by name, never `ref.func`'d or exported, so no declaration beyond the pair is needed.
-pub(super) fn declare_helper(
+/// Declare one helper answering `results`, none for one called for what it writes: a final func type named after the function, plus the function itself. Helpers are called by name, never `ref.func`'d or exported, so no declaration beyond the pair is needed.
+pub(super) fn declare_helper<const N: usize>(
     module: &mut curios_wasm::Module,
     func_name: curios_wasm::FuncName,
     scope: Scope,
-    result: curios_wasm::ValType,
+    results: [curios_wasm::ValType; N],
     instrs: Vec<curios_wasm::Instr>,
 ) {
     let type_name = curios_wasm::TypeName::from(func_name.as_str());
@@ -238,7 +238,7 @@ pub(super) fn declare_helper(
                 inputs: curios_wasm::ResultType::from(
                     scope.params.iter().map(|(_, val_type)| val_type.clone()),
                 ),
-                outputs: curios_wasm::ResultType::from([result]),
+                outputs: curios_wasm::ResultType::from(results),
             }),
         },
     );

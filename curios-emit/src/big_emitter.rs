@@ -282,7 +282,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         result: curios_wasm::ValType,
         instrs: Vec<curios_wasm::Instr>,
     ) {
-        declare_helper(self.module, helper.func_name(), scope, result, instrs);
+        declare_helper(self.module, helper.func_name(), scope, [result], instrs);
     }
 
     /// A call to `helper`, marking it for emission.

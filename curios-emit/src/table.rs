@@ -1004,6 +1004,11 @@ impl<'a> Table<'a> {
         self.bytes_force.get().is_some()
     }
 
+    /// `$bytes/write`, which `$bytes/force` calls and is emitted with it.
+    pub(crate) fn bytes_write_func() -> curios_wasm::FuncName {
+        curios_wasm::FuncName::from("bytes/write")
+    }
+
     /// `$list/force (ref $rope/list) -> (ref $elems)`: the `List` mirror of [`bytes_force_func`](Self::bytes_force_func).
     pub(crate) fn list_force_func(&self) -> curios_wasm::FuncName {
         self.list_force
@@ -1013,6 +1018,11 @@ impl<'a> Table<'a> {
 
     pub(crate) fn list_force_used(&self) -> bool {
         self.list_force.get().is_some()
+    }
+
+    /// `$list/write`, which `$list/force` calls and is emitted with it.
+    pub(crate) fn list_write_func() -> curios_wasm::FuncName {
+        curios_wasm::FuncName::from("list/write")
     }
 
     /// `$bytes/exact (ref $rope/bytes) -> (ref $bytes)`: a `Bytes` run as a payload exactly its length — the forced payload where its array is the run's, a copy of the run where it holds room past it. What leaves the rope as a flat array takes this: a leaf made of a forced payload, and a host operand.

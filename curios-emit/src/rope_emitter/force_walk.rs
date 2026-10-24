@@ -1,93 +1,110 @@
-//! The iterative flattening walk a `force` emitter runs.
+//! The flattening a `force` emitter runs: where the run goes, decided by its first piece before anything is written, and the `write` helper that puts every piece at the offset the lengths before it give.
 
 use super::{
-    Chunk, RopeData, br, branch, cast, concrete_val, field_get, field_set, get, i32_const,
-    i64_const, i64_type, null, set, tee, wasm, when,
+    Chunk, RopeData, br, branch, call, cast, concrete_val, either, field_get, field_set, get,
+    i32_const, i32_type, i64_const, i64_type, null, repeat, set, tee, wasm, when,
 };
 
-/// The walk machinery of [`RopeEmitter::emit_force_func`](super::RopeEmitter::emit_force_func): one scratch-local roster plus the invariant-bearing instruction blocks — entry shortcuts, the destination its first piece decides, view resolution, worklist growth and descent, pop, memoization. The emitter inlines the chunk-count source and the copy body.
+/// The flattening of [`RopeEmitter::emit_force_func`](super::RopeEmitter::emit_force_func) and the `write` it calls: the names of both functions' parameters and locals, and the instruction blocks that bear the invariants — the entry shortcuts, the first piece and where it puts the run, the write, memoization.
 pub(super) struct ForceWalk<'r> {
     rope: &'r RopeData,
-    elems: curios_wasm::TypeName,
-    /// What a reference popped off the worklist enters the base through: `Table::enter` for `rope`'s base.
-    enter: curios_wasm::Instr,
     pub(super) r: curios_wasm::LocalName,
     node: curios_wasm::LocalName,
-    pub(super) out: curios_wasm::LocalName,
+    out: curios_wasm::LocalName,
     room: curios_wasm::LocalName,
     wide: curios_wasm::LocalName,
-    stack: curios_wasm::LocalName,
-    grown: curios_wasm::LocalName,
-    sp: curios_wasm::LocalName,
-    pub(super) offset: curios_wasm::LocalName,
-    pub(super) cur: curios_wasm::LocalName,
-    pub(super) payload: curios_wasm::LocalName,
-    pub(super) src_off: curios_wasm::LocalName,
-    pub(super) count: curios_wasm::LocalName,
+    first: curios_wasm::LocalName,
+    payload: curios_wasm::LocalName,
+    claimed: curios_wasm::LocalName,
+    piece: curios_wasm::LocalName,
+    at: curios_wasm::LocalName,
+    flat: curios_wasm::LocalName,
+    dst: curios_wasm::LocalName,
+    src_off: curios_wasm::LocalName,
     sb: curios_wasm::LocalName,
+    left: curios_wasm::LocalName,
+    right: curios_wasm::LocalName,
+    left_len: curios_wasm::LocalName,
 }
 
 impl<'r> ForceWalk<'r> {
-    /// The walk of a rope whose run occupies as many payload slots as it is long.
-    pub(super) fn new(
-        rope: &'r RopeData,
-        elems: curios_wasm::TypeName,
-        enter: curios_wasm::Instr,
-    ) -> Self {
+    /// The flattening of a rope whose run occupies as many payload slots as it is long.
+    pub(super) fn new(rope: &'r RopeData) -> Self {
+        let local = curios_wasm::LocalName::from;
         Self {
             rope,
-            elems,
-            enter,
-            r: curios_wasm::LocalName::from("r"),
-            node: curios_wasm::LocalName::from("node"),
-            out: curios_wasm::LocalName::from("out"),
-            room: curios_wasm::LocalName::from("room"),
-            wide: curios_wasm::LocalName::from("wide"),
-            stack: curios_wasm::LocalName::from("stack"),
-            grown: curios_wasm::LocalName::from("grown"),
-            sp: curios_wasm::LocalName::from("sp"),
-            offset: curios_wasm::LocalName::from("offset"),
-            cur: curios_wasm::LocalName::from("cur"),
-            payload: curios_wasm::LocalName::from("payload"),
-            src_off: curios_wasm::LocalName::from("src_off"),
-            count: curios_wasm::LocalName::from("count"),
-            sb: curios_wasm::LocalName::from("sb"),
+            r: local("r"),
+            node: local("node"),
+            out: local("out"),
+            room: local("room"),
+            wide: local("wide"),
+            first: local("first"),
+            payload: local("payload"),
+            claimed: local("claimed"),
+            piece: local("piece"),
+            at: local("at"),
+            flat: local("flat"),
+            dst: local("dst"),
+            src_off: local("src_off"),
+            sb: local("sb"),
+            left: local("left"),
+            right: local("right"),
+            left_len: local("left_len"),
         }
     }
 
-    /// The walk's scratch-local roster.
-    pub(super) fn locals(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
-        let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+    fn base(&self) -> curios_wasm::ValType {
+        concrete_val(self.rope.base.clone(), true)
+    }
+
+    fn payload_type(&self) -> curios_wasm::ValType {
+        concrete_val(self.rope.payload.clone(), true)
+    }
+
+    /// The force's locals beside its parameter `r`.
+    pub(super) fn force_locals(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
         vec![
             (
                 self.node.clone(),
                 concrete_val(self.rope.node.clone(), true),
             ),
-            (
-                self.out.clone(),
-                concrete_val(self.rope.payload.clone(), true),
-            ),
+            (self.out.clone(), self.payload_type()),
             (
                 self.room.clone(),
                 concrete_val(self.rope.room.clone(), true),
             ),
             (self.wide.clone(), i64_type()),
-            (self.stack.clone(), concrete_val(self.elems.clone(), true)),
-            (self.grown.clone(), concrete_val(self.elems.clone(), true)),
-            (self.sp.clone(), i32_val.clone()),
-            (self.offset.clone(), i32_val.clone()),
-            (self.cur.clone(), concrete_val(self.rope.base.clone(), true)),
-            (
-                self.payload.clone(),
-                concrete_val(self.rope.payload.clone(), true),
-            ),
-            (self.src_off.clone(), i32_val.clone()),
-            (self.count.clone(), i32_val),
-            (self.sb.clone(), concrete_val(self.rope.base.clone(), true)),
+            (self.first.clone(), self.base()),
+            (self.payload.clone(), self.payload_type()),
+            (self.claimed.clone(), i32_type()),
         ]
     }
 
-    /// The flat entries answer without walking: a leaf its payload, a cached node its memo (setting `node` on the way for the memoize epilogue). A view skips straight to the walk.
+    /// The write's parameters: the piece, the payload it is written into, the offset it starts at, and whether the run's first piece is claimed, already in place at offset zero.
+    pub(super) fn write_params(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
+        vec![
+            (self.piece.clone(), self.base()),
+            (self.out.clone(), self.payload_type()),
+            (self.at.clone(), i32_type()),
+            (self.claimed.clone(), i32_type()),
+        ]
+    }
+
+    /// The write's locals.
+    pub(super) fn write_locals(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
+        vec![
+            (self.flat.clone(), self.base()),
+            (self.dst.clone(), i32_type()),
+            (self.payload.clone(), self.payload_type()),
+            (self.src_off.clone(), i32_type()),
+            (self.sb.clone(), self.base()),
+            (self.left.clone(), self.base()),
+            (self.right.clone(), self.base()),
+            (self.left_len.clone(), i32_type()),
+        ]
+    }
+
+    /// The flat entries answer without walking: a leaf its payload, a cached node its memo (setting `node` on the way for the memoize epilogue). A view goes on to the walk.
     pub(super) fn entry_shortcuts(&self) -> Vec<curios_wasm::Instr> {
         vec![
             get(&self.r),
@@ -136,15 +153,56 @@ impl<'r> ForceWalk<'r> {
         ]
     }
 
-    /// Where the walk's first piece puts the run, ahead of that piece's copy, which `copied` closes: every later piece finds `out` set and is copied after the pieces before it.
+    /// Whether the rope in `of` is a node never flattened, an i32 on the stack: the one shape the walk descends into.
+    fn uncached(&self, of: &curios_wasm::LocalName) -> Vec<curios_wasm::Instr> {
+        wasm![
+            get(of),
+            field_get(&self.rope.base, &self.rope.tag_field),
+            i32_const(1),
+            curios_wasm::Instr::I32Eq,
+            either(
+                i32_type(),
+                wasm![
+                    get(of),
+                    cast(&self.rope.node),
+                    field_get(&self.rope.node, &self.rope.cache_field),
+                    curios_wasm::Instr::RefIsNull
+                ],
+                vec![i32_const(0)],
+            ),
+        ]
+    }
+
+    /// The run's first piece into `first`: down the left children from the entry, through every node never flattened.
+    pub(super) fn find_first(&self) -> Vec<curios_wasm::Instr> {
+        wasm![
+            get(&self.r),
+            set(&self.first),
+            repeat(
+                "first",
+                wasm![
+                    self.uncached(&self.first),
+                    when(wasm![
+                        get(&self.first),
+                        cast(&self.rope.node),
+                        field_get(&self.rope.node, &self.rope.left_field),
+                        set(&self.first),
+                        br("first")
+                    ]),
+                ]
+            ),
+        ]
+    }
+
+    /// Where the run goes, decided by its first piece before anything is written: the first piece's payload where the claim holds (`claimed` set), and a fresh one otherwise.
     ///
     /// ```wat
-    /// if out == null:                                    ;; the first piece
-    ///   if r.tag == 1 && cur.tag == 1:                   ;; a node entry, a flattened first piece
-    ///     room := cur.room
-    ///     if room != null && room.extent == cur.len && payload.len >= r.len:
-    ///       out := payload; room.extent := r.len; br copied   ;; the claim
-    ///   if r.tag == 1 && cur.tag != 0:                   ;; read, grown and read again
+    /// if r.tag == 1 && first.tag == 1:                   ;; a node entry, a flattened first piece
+    ///   room := first.room
+    ///   if room != null && room.extent == first.len && first.cache.len >= r.len:
+    ///     out := first.cache; room.extent := r.len; claimed := 1   ;; the claim
+    /// if !claimed:
+    ///   if r.tag == 1 && first.tag != 0:                 ;; read, grown and read again
     ///     out := new min(2 r.len, u32::MAX); room := room{r.len}
     ///   else:
     ///     out := new r.len; room := null
@@ -170,7 +228,7 @@ impl<'r> ForceWalk<'r> {
         let fits = wasm![
             get(&self.room),
             field_get(&self.rope.room, &self.rope.extent_field),
-            get(&self.cur),
+            get(&self.first),
             field_get(&self.rope.base, &self.rope.len_field),
             curios_wasm::Instr::I32Eq,
             get(&self.payload),
@@ -185,10 +243,15 @@ impl<'r> ForceWalk<'r> {
             get(&self.room),
             run_len(),
             field_set(&self.rope.room, &self.rope.extent_field),
-            br("copied"),
+            i32_const(1),
+            set(&self.claimed),
         ];
         let claimable = wasm![
-            get(&self.cur),
+            get(&self.first),
+            cast(&self.rope.node),
+            field_get(&self.rope.node, &self.rope.cache_field),
+            set(&self.payload),
+            get(&self.first),
             cast(&self.rope.node),
             field_get(&self.rope.node, &self.rope.room_field),
             set(&self.room),
@@ -236,16 +299,16 @@ impl<'r> ForceWalk<'r> {
             set(&self.room),
         ];
 
-        vec![
-            get(&self.out),
-            curios_wasm::Instr::RefIsNull,
+        wasm![
+            tag_is(&self.r, 1),
+            tag_is(&self.first, 1),
+            curios_wasm::Instr::I32And,
+            when(claimable),
+            get(&self.claimed),
+            curios_wasm::Instr::I32Eqz,
             when(wasm![
                 tag_is(&self.r, 1),
-                tag_is(&self.cur, 1),
-                curios_wasm::Instr::I32And,
-                when(claimable),
-                tag_is(&self.r, 1),
-                get(&self.cur),
+                get(&self.first),
                 field_get(&self.rope.base, &self.rope.tag_field),
                 curios_wasm::Instr::I32Eqz,
                 curios_wasm::Instr::I32Eqz,
@@ -255,155 +318,191 @@ impl<'r> ForceWalk<'r> {
         ]
     }
 
-    /// A fresh 32-slot worklist, the walk starting at the entry.
-    pub(super) fn init_worklist(&self) -> Vec<curios_wasm::Instr> {
+    /// The entry written whole into `out` from offset zero.
+    pub(super) fn write_entry(&self, write: &curios_wasm::FuncName) -> Vec<curios_wasm::Instr> {
         vec![
-            curios_wasm::Instr::I32Const { value: 32 },
-            curios_wasm::Instr::ArrayNewDefault {
-                type_name: self.elems.clone(),
-            },
-            set(&self.stack),
             get(&self.r),
-            set(&self.cur),
+            get(&self.out),
+            i32_const(0),
+            get(&self.claimed),
+            call(write),
         ]
     }
 
-    /// The view descent arm: its window over the base's flat payload — a leaf's payload or a cached node's cache (non-null by the slice invariant; the null trap at the copy is its enforcement).
-    pub(super) fn resolve_view_chunk(&self) -> Vec<curios_wasm::Instr> {
-        vec![
-            get(&self.cur),
+    /// Copy the flat piece in `flat` into `out` at `dst`: a leaf's payload, a view's window over its flat base, or a flattened node's cache. Not the claimed first piece, already in place: the only piece at offset zero once a claim holds, since a claimed piece is a node and no node is empty.
+    fn place(&self) -> Vec<curios_wasm::Instr> {
+        let leaf_payload = |of: &curios_wasm::LocalName| {
+            wasm![
+                get(of),
+                cast(&self.rope.leaf),
+                field_get(&self.rope.leaf, &self.rope.payload_field),
+                set(&self.payload)
+            ]
+        };
+        let node_cache = |of: &curios_wasm::LocalName| {
+            wasm![
+                get(of),
+                cast(&self.rope.node),
+                field_get(&self.rope.node, &self.rope.cache_field),
+                set(&self.payload)
+            ]
+        };
+        // A view's window over its base's flat payload — a leaf's payload or a cached node's cache, non-null by the slice invariant, the null trap at the copy its enforcement.
+        let view = wasm![
+            get(&self.flat),
+            cast(&self.rope.view),
+            field_get(&self.rope.view, &self.rope.base_field),
+            set(&self.sb),
+            get(&self.flat),
+            cast(&self.rope.view),
+            field_get(&self.rope.view, &self.rope.offset_field),
+            set(&self.src_off),
+            get(&self.sb),
             field_get(&self.rope.base, &self.rope.tag_field),
-            curios_wasm::Instr::I32Const { value: 2 },
-            curios_wasm::Instr::I32Eq,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("at_view"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&self.cur),
-                    cast(&self.rope.view),
-                    field_get(&self.rope.view, &self.rope.base_field),
-                    set(&self.sb),
-                    get(&self.cur),
-                    cast(&self.rope.view),
-                    field_get(&self.rope.view, &self.rope.offset_field),
-                    set(&self.src_off),
-                    get(&self.cur),
-                    field_get(&self.rope.base, &self.rope.len_field),
-                    set(&self.count),
-                    get(&self.sb),
+            curios_wasm::Instr::I32Eqz,
+            branch(leaf_payload(&self.sb), node_cache(&self.sb)),
+        ];
+        wasm![
+            get(&self.flat),
+            field_get(&self.rope.base, &self.rope.tag_field),
+            curios_wasm::Instr::I32Eqz,
+            branch(
+                wasm![leaf_payload(&self.flat), i32_const(0), set(&self.src_off)],
+                wasm![
+                    get(&self.flat),
                     field_get(&self.rope.base, &self.rope.tag_field),
-                    curios_wasm::Instr::I32Eqz,
-                    curios_wasm::Instr::If {
-                        label_name: curios_wasm::LabelName::from("view_base"),
-                        block_type: curios_wasm::BlockType::Empty,
-                        then_instructions: vec![
-                            get(&self.sb),
-                            cast(&self.rope.leaf),
-                            field_get(&self.rope.leaf, &self.rope.payload_field),
-                            set(&self.payload),
-                        ],
-                        else_instructions: vec![
-                            get(&self.sb),
-                            cast(&self.rope.node),
-                            field_get(&self.rope.node, &self.rope.cache_field),
-                            set(&self.payload),
-                        ],
-                    },
-                    curios_wasm::Instr::Br {
-                        label_name: curios_wasm::LabelName::from("emit"),
-                    },
-                ],
-                else_instructions: vec![],
-            },
+                    i32_const(2),
+                    curios_wasm::Instr::I32Eq,
+                    branch(
+                        view,
+                        wasm![node_cache(&self.flat), i32_const(0), set(&self.src_off)]
+                    ),
+                ]
+            ),
+            get(&self.claimed),
+            get(&self.dst),
+            curios_wasm::Instr::I32Eqz,
+            curios_wasm::Instr::I32And,
+            curios_wasm::Instr::I32Eqz,
+            when(wasm![
+                get(&self.out),
+                get(&self.dst),
+                get(&self.payload),
+                get(&self.src_off),
+                get(&self.flat),
+                field_get(&self.rope.base, &self.rope.len_field),
+                curios_wasm::Instr::ArrayCopy {
+                    target_name: self.rope.payload.clone(),
+                    source_name: self.rope.payload.clone(),
+                },
+            ]),
         ]
     }
 
-    /// The uncached-node descent tail: grow the worklist by doubling when full, push `cur.right`, descend into `cur.left`.
-    pub(super) fn push_uncached_node(
-        &self,
-        descend_label: &curios_wasm::LabelName,
-    ) -> Vec<curios_wasm::Instr> {
-        vec![
-            get(&self.sp),
-            get(&self.stack),
-            curios_wasm::Instr::ArrayLen,
-            curios_wasm::Instr::I32Eq,
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("grow"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&self.sp),
-                    curios_wasm::Instr::I32Const { value: 1 },
-                    curios_wasm::Instr::I32Shl,
-                    curios_wasm::Instr::ArrayNewDefault {
-                        type_name: self.elems.clone(),
-                    },
-                    set(&self.grown),
-                    get(&self.grown),
-                    curios_wasm::Instr::I32Const { value: 0 },
-                    get(&self.stack),
-                    curios_wasm::Instr::I32Const { value: 0 },
-                    get(&self.sp),
-                    curios_wasm::Instr::ArrayCopy {
-                        target_name: self.elems.clone(),
-                        source_name: self.elems.clone(),
-                    },
-                    get(&self.grown),
-                    set(&self.stack),
-                ],
-                else_instructions: vec![],
-            },
-            get(&self.stack),
-            get(&self.sp),
-            get(&self.cur),
-            cast(&self.rope.node),
-            field_get(&self.rope.node, &self.rope.right_field),
-            curios_wasm::Instr::ArraySet {
-                type_name: self.elems.clone(),
-            },
-            get(&self.sp),
-            curios_wasm::Instr::I32Const { value: 1 },
-            curios_wasm::Instr::I32Add,
-            set(&self.sp),
-            get(&self.cur),
-            cast(&self.rope.node),
-            field_get(&self.rope.node, &self.rope.left_field),
-            set(&self.cur),
-            curios_wasm::Instr::Br {
-                label_name: descend_label.clone(),
-            },
-        ]
-    }
+    /// The write's body: `piece` written into `out` from `at`, each flat piece copied where the lengths before it put it.
+    ///
+    /// ```wat
+    /// loop:
+    ///   if piece is a node never flattened:
+    ///     left, right := piece.left, piece.right
+    ///     if both are nodes never flattened:
+    ///       write the shorter at its offset, then piece := the longer   ;; recursion halves the run
+    ///     elif left is one: copy right at at + left.len; piece := left
+    ///     else: copy left at at; piece := right; at += left.len
+    ///     continue
+    ///   copy piece at at
+    /// ```
+    ///
+    /// **Recursion into the shorter half bounds the depth.** A call is made only where both children still need walking, on the shorter, at most half the run, so no chain of calls is longer than the run's length has bits — 31 for any run — whatever the rope's depth, and a lean of any depth is a loop. Nothing is allocated: an offset is the lengths before a piece, so no worklist holds what is pending.
+    pub(super) fn write_body(&self, write: &curios_wasm::FuncName) -> Vec<curios_wasm::Instr> {
+        let child = |field: &curios_wasm::FieldName, into: &curios_wasm::LocalName| {
+            wasm![
+                get(&self.piece),
+                cast(&self.rope.node),
+                field_get(&self.rope.node, field),
+                set(into)
+            ]
+        };
+        let past_left = || {
+            wasm![
+                get(&self.at),
+                get(&self.left_len),
+                curios_wasm::Instr::I32Add
+            ]
+        };
+        let place_at = |of: &curios_wasm::LocalName, offset: Vec<curios_wasm::Instr>| {
+            wasm![
+                get(of),
+                set(&self.flat),
+                offset,
+                set(&self.dst),
+                self.place()
+            ]
+        };
+        let recurse = |of: &curios_wasm::LocalName, offset: Vec<curios_wasm::Instr>| {
+            wasm![
+                get(of),
+                get(&self.out),
+                offset,
+                get(&self.claimed),
+                call(write)
+            ]
+        };
+        let node = wasm![
+            child(&self.rope.left_field, &self.left),
+            child(&self.rope.right_field, &self.right),
+            get(&self.left),
+            field_get(&self.rope.base, &self.rope.len_field),
+            set(&self.left_len),
+            self.uncached(&self.left),
+            self.uncached(&self.right),
+            curios_wasm::Instr::I32And,
+            when(wasm![
+                get(&self.left_len),
+                get(&self.piece),
+                field_get(&self.rope.base, &self.rope.len_field),
+                get(&self.left_len),
+                curios_wasm::Instr::I32Sub,
+                curios_wasm::Instr::I32LeU,
+                branch(
+                    wasm![
+                        recurse(&self.left, vec![get(&self.at)]),
+                        get(&self.right),
+                        set(&self.piece),
+                        past_left(),
+                        set(&self.at)
+                    ],
+                    wasm![
+                        recurse(&self.right, past_left()),
+                        get(&self.left),
+                        set(&self.piece)
+                    ],
+                ),
+                br("descend"),
+            ]),
+            self.uncached(&self.left),
+            when(wasm![
+                place_at(&self.right, past_left()),
+                get(&self.left),
+                set(&self.piece),
+                br("descend")
+            ]),
+            place_at(&self.left, vec![get(&self.at)]),
+            get(&self.right),
+            set(&self.piece),
+            past_left(),
+            set(&self.at),
+            br("descend"),
+        ];
 
-    /// Pop the next pending subtree; fall out of the walk when the worklist is empty.
-    pub(super) fn pop_or_exit(
-        &self,
-        walk_label: &curios_wasm::LabelName,
-    ) -> Vec<curios_wasm::Instr> {
-        vec![
-            get(&self.sp),
-            curios_wasm::Instr::If {
-                label_name: curios_wasm::LabelName::from("pop"),
-                block_type: curios_wasm::BlockType::Empty,
-                then_instructions: vec![
-                    get(&self.sp),
-                    curios_wasm::Instr::I32Const { value: 1 },
-                    curios_wasm::Instr::I32Sub,
-                    set(&self.sp),
-                    get(&self.stack),
-                    get(&self.sp),
-                    curios_wasm::Instr::ArrayGet {
-                        type_name: self.elems.clone(),
-                    },
-                    self.enter.clone(),
-                    set(&self.cur),
-                    curios_wasm::Instr::Br {
-                        label_name: walk_label.clone(),
-                    },
-                ],
-                else_instructions: vec![],
-            },
-        ]
+        vec![repeat(
+            "descend",
+            wasm![
+                self.uncached(&self.piece),
+                when(node),
+                place_at(&self.piece, vec![get(&self.at)]),
+            ],
+        )]
     }
 
     /// Memoize a node entry, its payload and that payload's room record, and release its tree (`node` was set at entry exactly when the tag is 1); a view entry has nowhere to memoize. Answers the filled payload.

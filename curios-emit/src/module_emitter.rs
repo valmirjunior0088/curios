@@ -856,11 +856,19 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         if self.table.bytes_force_used() {
-            ropes.emit_force_func(&self.table.bytes_rope(), self.table.bytes_force_func());
+            ropes.emit_force_func(
+                &self.table.bytes_rope(),
+                self.table.bytes_force_func(),
+                Table::bytes_write_func(),
+            );
         }
 
         if self.table.list_force_used() {
-            ropes.emit_force_func(&self.table.list_rope(), self.table.list_force_func());
+            ropes.emit_force_func(
+                &self.table.list_rope(),
+                self.table.list_force_func(),
+                Table::list_write_func(),
+            );
         }
 
         if self.table.bytes_embed_used() {
