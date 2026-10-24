@@ -37,7 +37,7 @@ pub(crate) fn declared(name: Global, entry: Nominal) -> Item {
 
     match grouped {
         true => Item::Rec(RecItem::new(vec![former])),
-        false => Item::Let(former),
+        false => Item::Let(Box::new(former)),
     }
 }
 

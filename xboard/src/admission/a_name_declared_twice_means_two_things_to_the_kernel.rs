@@ -27,19 +27,20 @@ pub(super) const TICKET: Ticket = Ticket {
 
 /// A top-level definition, as the walk binds one.
 fn authored(name: &Global, type_: Term, body: Term) -> Item {
-    Item::Let(Definition {
+    Item::Let(Box::new(Definition {
         name: *name,
         kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::default(),
         totality: Totality::Total,
         proof: false,
+        value_sort: None,
         variances: Vec::new(),
         field_variances: Vec::new(),
         parameter_field: None,
         type_,
         body,
-    })
+    }))
 }
 
 /// A nullary family at `result_sort` holding `constructors`, each of no payload.
