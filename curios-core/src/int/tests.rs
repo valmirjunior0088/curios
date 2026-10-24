@@ -212,3 +212,25 @@ fn a_sum_hands_back_the_monomial_it_read() {
         "a merge writes a coefficient over the spine it read"
     );
 }
+
+// A product of two widened sums — what widening a product of two symbolic sums leaves, each carrier keeping it as its weak-head form — has for its preimage the product of the sums it was widened from, each factor read by its own preimage. A factor that holds an `Int` no widening reaches has none, whether it is the atom or a sum over it.
+#[test]
+fn a_widened_product_of_sums_is_the_preimage_of_the_product_of_theirs() {
+    let (a, w, i) = (sym(0, "a"), sym(1, "w"), sym(2, "i"));
+    let widened = |term: &Term| Term::intrinsic(Intrinsic::NatToInt(term.clone()));
+    let sum = |first: &Term, second: &Term| add(add(widened(first), widened(second)), int(1));
+    let preimage = |term: &Term| int_preimage(term).expect("a widened natural");
+
+    assert_eq!(
+        int_preimage(&mul(sum(&a, &w), sum(&w, &a))),
+        Some(Nat::product_of(&[
+            preimage(&sum(&a, &w)),
+            preimage(&sum(&w, &a))
+        ]))
+    );
+    assert_eq!(
+        int_preimage(&mul(sum(&a, &w), add(i.clone(), int(1)))),
+        None
+    );
+    assert_eq!(int_preimage(&mul(sum(&a, &w), i)), None);
+}

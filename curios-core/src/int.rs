@@ -458,28 +458,33 @@ fn int_of_factors(reducer: &mut impl Reducer, product: &Term) -> Result<Term, Re
     })
 }
 
-/// The natural a reduced `Int` is the image of when it is one by construction: a non-negative constant over monomials with positive coefficients whose every factor is a widened natural. `None` for anything else — a negative coefficient, or a factor that is not widened, can make the value negative, and this reads no bound.
+/// The natural a reduced `Int` is the image of when it is one by construction: a non-negative constant over monomials with positive coefficients whose every factor is a widened natural, or a sum that is one in turn. `None` for anything else — a negative coefficient, or a factor that is not widened, can make the value negative, and this reads no bound.
 ///
 /// The inverse of [`int_of_nat`] on its image, rebuilt in `Nat`'s normal form. Two readers: `Int/to_nat`, whose inversion arm is the one-atom case of this, and the comparison, which decides a pair of such terms by comparing their preimages — ℕ → ℤ preserves and reflects order.
+///
+/// **A factor that is a sum is read by its own preimage.** A product of two symbolic sums is its own weak-head form at both carriers, so widening one leaves a product of two widened sums, each a factor no widening heads; read through, the widened product's preimage is the product it was widened from, as it stands.
 pub fn int_preimage(term: &Term) -> Option<Term> {
-    let mut atoms = Atoms::default();
-    let (constant, summands) = int_terms(term);
-    let natural = int_combination(&mut atoms, constant, &summands).natural();
-    natural.and_then(|natural| {
-        let mut preimages = Vec::with_capacity(natural.summands.len());
-        for summand in natural.summands {
-            let naturals = summand
-                .origin
-                .factors
-                .iter()
-                .map(|factor| match &**factor {
-                    Subterm::Intrinsic(Intrinsic::NatToInt(nat)) => Some(nat.clone()),
-                    _ => None,
-                })
-                .collect::<Option<Vec<_>>>()?;
-            preimages.push(Nat::scaled(summand.coefficient, Nat::product_of(&naturals)));
-        }
-        Some(Nat::sum_over_floor(preimages, natural.constant))
+    recurse(|| {
+        let mut atoms = Atoms::default();
+        let (constant, summands) = int_terms(term);
+        let natural = int_combination(&mut atoms, constant, &summands).natural();
+        natural.and_then(|natural| {
+            let mut preimages = Vec::with_capacity(natural.summands.len());
+            for summand in natural.summands {
+                let naturals = summand
+                    .origin
+                    .factors
+                    .iter()
+                    .map(|factor| match &**factor {
+                        Subterm::Intrinsic(Intrinsic::NatToInt(nat)) => Some(nat.clone()),
+                        Subterm::Intrinsic(Intrinsic::IntAdd(..)) => int_preimage(factor),
+                        _ => None,
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                preimages.push(Nat::scaled(summand.coefficient, Nat::product_of(&naturals)));
+            }
+            Some(Nat::sum_over_floor(preimages, natural.constant))
+        })
     })
 }
 
