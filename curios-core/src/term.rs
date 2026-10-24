@@ -2688,7 +2688,12 @@ impl Term {
 
 impl Term {
     /// Fill the memoized free-variable set bottom-up on a post-order [`Term::walk`]: each node's set is its children's sets unioned with its own identity (if it is a free `Var`), so filling reads the children's cached sets in O(children) rather than re-walking the subtree — a deep spine memoizes without native recursion. The filled bit is the walk's memo, exactly as in [`Term::warm_scalars`].
+    ///
+    /// A filled set is read as it stands, as [`Term::scalars`] reads its cache before it walks: every read of a set comes through here, and a walk allocates its frame stack before its first hook finds the root filled.
     fn warm_frees(&self) {
+        if self.inner.frees.is_filled() {
+            return;
+        }
         self.walk(
             &mut (),
             |_, term| {
