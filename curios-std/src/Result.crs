@@ -1,4 +1,4 @@
-pub use /sys/{Result};
+pub use /sys/{let Result};
 pub use /sys/Result/{success, failure};
 
 use /std/{Bool, Show, Spell, Fmt, Option, Ordering, Ord, Monad};
@@ -6,11 +6,11 @@ use /std/ops/{Eql, Cmp};
 
 --- `a` as a success.
 pub let pure(@E: Type, @A: Type, a: A) -> Result(E, A) =
-    Result/success(a);
+    success(a);
 
 --- `e` as a failure: in a `Result` region, the early return.
 pub let raise(@E: Type, @A: Type, e: E) -> Result(E, A) =
-    Result/failure(e);
+    failure(e);
 
 --- A failure handed to `handler`; a success passes through.
 pub let rescue(@E: Type, @A: Type, r: Result(E, A), handler: (E) -> Result(E, A)) -> Result(E, A) =
@@ -18,11 +18,11 @@ pub let rescue(@E: Type, @A: Type, r: Result(E, A), handler: (E) -> Result(E, A)
 
 --- `f` on the value of a success.
 pub let map(@A: Type, @B: Type, @E: Type, r: Result(E, A), f: (A) -> B) -> Result(E, B) =
-    match r | success(a) => Result/success(f(a)) | failure(e) => Result/failure(e) end;
+    match r | success(a) => success(f(a)) | failure(e) => failure(e) end;
 
 --- `f` on the error of a failure.
 pub let map_failure(@A: Type, @E: Type, @F: Type, r: Result(E, A), f: (E) -> F) -> Result(F, A) =
-    match r | success(a) => Result/success(a) | failure(e) => Result/failure(f(e)) end;
+    match r | success(a) => success(a) | failure(e) => failure(f(e)) end;
 
 --- `f` on the value of a success; a failure passes through.
 pub let bind(
@@ -32,11 +32,11 @@ pub let bind(
     m: Result(E, A),
     f: (A) -> Result(E, B),
 ) -> Result(E, B) =
-    match m | success(a) => f(a) | failure(e) => Result/failure(e) end;
+    match m | success(a) => f(a) | failure(e) => failure(e) end;
 
 --- A result of a result collapsed to one.
 pub let flatten(@A: Type, @E: Type, r: Result(E, Result(E, A))) -> Result(E, A) =
-    match r | success(inner) => inner | failure(e) => Result/failure(e) end;
+    match r | success(inner) => inner | failure(e) => failure(e) end;
 
 --- The value, or `default` on a failure.
 pub let unwrap_or(@A: Type, @E: Type, r: Result(E, A), default: A) -> A =

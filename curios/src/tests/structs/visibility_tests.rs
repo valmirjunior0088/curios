@@ -279,3 +279,33 @@ fn async_future_plumbing_is_not_reachable_from_user_code() {
         "unexpected error: {error}"
     );
 }
+
+// `/std` re-exports a `/sys` carrier's type without the module it heads, and names the operations it means a program to call: the rest of the module, the driver's `Io/advance` and `Flt`'s rounding modes among them, is out of a program's reach, while the facade's own names stay in it.
+#[test]
+fn a_sys_operation_the_library_does_not_name_is_out_of_reach() {
+    for (source, module) in [
+        (
+            "use /std/{Io};\nlet _x = Io/Io/advance;\n/std/print(\"no\")",
+            "Io",
+        ),
+        (
+            "use /std/{Flt};\nlet _x = Flt/Flt/ties_to_away/add;\n/std/print(\"no\")",
+            "Flt",
+        ),
+    ] {
+        let error = error(source);
+        assert!(
+            error.contains(&format!("`/std/{module}` has no module `{module}`")),
+            "unexpected error: {error}"
+        );
+    }
+
+    let source = r#"
+        use /std/{Option, Nat, Io};
+        let _x = Option/some(1);
+        let _y: Io(Nat) = Io/pure(1);
+        let _z = /std/Bool/True/qed();
+        /std/print("held")
+        "#;
+    assert_eq!(run(source), b"held");
+}

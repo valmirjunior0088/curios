@@ -1,4 +1,4 @@
-pub use /sys/{Option};
+pub use /sys/{let Option};
 pub use /sys/Option/{some, none};
 
 use /std/{Bool, Eq, Show, Spell, Fmt, Monad, Result, Ordering, Ord};
@@ -7,11 +7,11 @@ use /std/ops/{Eql, Cmp};
 
 --- `f` on the value, or `none`.
 pub let bind(@A: Sort, @B: Sort, m: Option(A), f: (A) -> Option(B)) -> Option(B) =
-    match m | some(a) => f(a) | none() => Option/none() end;
+    match m | some(a) => f(a) | none() => none() end;
 
 --- `f` on the value, kept as an option.
 pub let map(@A: Sort, @B: Sort, m: Option(A), f: (A) -> B) -> Option(B) =
-    match m | some(a) => Option/some(f(a)) | none() => Option/none() end;
+    match m | some(a) => some(f(a)) | none() => none() end;
 
 --- The value, or `default` when there is none.
 pub let unwrap_or(@A: Sort, m: Option(A), default: A) -> A =
@@ -27,22 +27,22 @@ pub let is_none(@A: Sort, m: Option(A)) -> Bool =
 
 --- `m` when it holds a value, `other` otherwise.
 pub let or(@A: Sort, m: Option(A), other: Option(A)) -> Option(A) =
-    match m | some(a) => Option/some(a) | none() => other end;
+    match m | some(a) => some(a) | none() => other end;
 
 --- `m` when it holds a value, otherwise what `other` answers.
 pub let or_else(@A: Sort, m: Option(A), other: () -> Option(A)) -> Option(A) =
-    match m | some(a) => Option/some(a) | none() => other() end;
+    match m | some(a) => some(a) | none() => other() end;
 
 --- The value when `pred` accepts it, `none` otherwise or when there is none.
 pub let filter(@A: Sort, m: Option(A), pred: (A) -> Bool) -> Option(A) =
     match m
-    | some(a) => match pred(a) | true => Option/some(a) | false => Option/none() end
-    | none() => Option/none()
+    | some(a) => match pred(a) | true => some(a) | false => none() end
+    | none() => none()
     end;
 
 --- An option of an option collapsed to one.
 pub let flatten(@A: Sort, m: Option(Option(A))) -> Option(A) =
-    match m | some(inner) => inner | none() => Option/none() end;
+    match m | some(inner) => inner | none() => none() end;
 
 --- The value as a success, or `e` as the failure.
 pub let to_result(@A: Type, @E: Type, m: Option(A), e: E) -> Result(E, A) =
@@ -78,12 +78,7 @@ let same_value_refl(@A: Sort, m: Option(A)) -> SameValue(m, m) =
 --- `some` is injective: two equal options that each hold a value hold one value.
 ---
 --- What takes an encoding apart with no value invented. A reader that answers an option is one function of every input, so `Eq/cong` carries an equation between two encodings to one between what it reads from each, and this carries that to the values read.
-pub let some_injective(
-    @A: Sort,
-    @x: A,
-    @y: A,
-    same: Eq()(Option/some(x), Option/some(y)),
-) -> Eq()(x, y) =
+pub let some_injective(@A: Sort, @x: A, @y: A, same: Eq()(some(x), some(y))) -> Eq()(x, y) =
     match same: (s, t, _) => SameValue(s, t) | refl(@value) => same_value_refl(value) end;
 
 satisfy (@A: Type, use Eql(A)) => Eql(Option(A)) {

@@ -20,11 +20,11 @@ A concept states the operations a form or generic code dispatches through. It ca
 
 ### An intrinsic carrier is extended in its own root module
 
-**Decision.** Each intrinsic carrier's `/std` facade is a root module named for the carrier. `/std/Cell` exposes write-once cells, `/std/Channel` extends bounded queues with sender and receiver ends, waits and offers, and `/std/Io` supplies descriptions and their composition.
+**Decision.** Each intrinsic carrier's `/std` facade is a root module named for the carrier. `/std/Cell` exposes write-once cells, `/std/Channel` extends bounded queues with sender and receiver ends, waits and offers, and `/std/Io` supplies descriptions and their composition. A facade re-exports the carrier's type alone, `pub use /sys/{let Io};`, and each operation of `/sys` it means a program to call by name; a `/sys` module is re-exported whole only where every public member is meant, as a type's constructors are with `/std/Bool`'s `True`.
 
-**Rationale.** The library extends a type where a program reaches it, following the [subject-based organization](../curios-text/README.md#sys-declares-no-host-operation-and-io-owns-only-the-sequencing) of the intrinsic substrate. A root module gives each carrier one home for its type and operations.
+**Rationale.** The library extends a type where a program reaches it, following the [subject-based organization](../curios-text/README.md#sys-declares-no-host-operation-and-io-owns-only-the-sequencing) of the intrinsic substrate. A root module gives each carrier one home for its type and operations. A module re-exported carries its public members, as resolution walks into them, so a re-export by label alone hands a program every operation `/sys` holds for the library.
 
-**Rejected.** Grouping `Cell` and `Channel` beneath `Io`, which makes their placement follow their effect carrier; retaining an `Io/Channel` re-export, which gives one facade two public homes.
+**Rejected.** Grouping `Cell` and `Channel` beneath `Io`, which makes their placement follow their effect carrier; retaining an `Io/Channel` re-export, which gives one facade two public homes. Re-exporting a carrier by its label, `pub use /sys/{Io};`, which also re-exports `/sys/Io` whole, `Io/Io/advance` and the rounding modules of `/sys/Flt` among what a program could then name.
 
 ### `/std` invents no value where a proof belongs, and text is addressed by position
 

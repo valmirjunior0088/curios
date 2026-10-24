@@ -1,4 +1,4 @@
-pub use /sys/{Byte};
+pub use /sys/{let Byte};
 pub use /sys/Byte/{to_nat};
 
 use /std/{Ordering, Nat, Bool, Show, Spell, Ord, Eq};

@@ -1,4 +1,4 @@
-pub use /sys/{Bytes};
+pub use /sys/{let Bytes};
 pub use /sys/Bytes/{get, len, eql, slice, replicate, and, or, xor};
 
 --- The number a minimal encoding denotes, which is `of_nat`'s inverse, with the bound a run's length puts on it.

@@ -1,4 +1,4 @@
-pub use /sys/{Flt};
+pub use /sys/{let Flt};
 pub use /sys/Flt/{add, sub, mul, div, fma, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     round, floor, ceil, trunc, nearest, copysign, to_nat, to_int, mantissa, exponent, to_le_bytes,
     of_le_bytes};

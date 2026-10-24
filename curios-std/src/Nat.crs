@@ -1,4 +1,4 @@
-pub use /sys/{Nat};
+pub use /sys/{let Nat};
 pub use /sys/Nat/{succ, eql, neq, add, sub, mul, div, rem, gt, ge, and, or, xor, shr, to_int,
     to_flt, to_byte};
 

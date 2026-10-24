@@ -1,4 +1,4 @@
-pub use /sys/{Bool};
+pub use /sys/{let Bool};
 pub use /sys/Bool/{True, False, xor, eql, Holds};
 
 --- Conjunction, with what a proof of one holds of its halves.

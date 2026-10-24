@@ -1,4 +1,4 @@
-pub use /sys/{Io};
+pub use /sys/{let Io};
 pub use /sys/Io/{pure, bind};
 
 --- The failure every host operation reports.
