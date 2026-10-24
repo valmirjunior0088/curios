@@ -58,13 +58,20 @@ impl Cache for Overlaid<'_> {
 }
 
 fn reused_through(root: &Path, shape: &Path, cache: &dyn Cache) -> bool {
-    folded_through(root, shape, cache).contains(&"reused /shape".to_string())
+    folded_through(root, shape, cache, Compiled::Built).contains(&"reused /shape".to_string())
 }
 
-/// What the fold did to the one mounted unit, through `cache`: read off the progress events, as every test here reads its answer.
-fn folded_through(root: &Path, shape: &Path, cache: &dyn Cache) -> Vec<String> {
+/// What the fold did to the one mounted unit, compiled for `compiled`, through `cache`: read off the progress events, as every test here reads its answer.
+fn folded_through(root: &Path, shape: &Path, cache: &dyn Cache, compiled: Compiled) -> Vec<String> {
     let governing = Governing::of(shape).expect("a governed package");
-    let library = order(&governing).expect("a resolvable library");
+    let library = order(&governing)
+        .expect("a resolvable library")
+        .into_iter()
+        .map(|unit| match compiled {
+            Compiled::Built => unit,
+            Compiled::Tested => unit.tested(),
+        })
+        .collect::<Vec<_>>();
     let (entrypoint, loader, _source) =
         Entrypoint::opened(&root.join("exe.crs")).expect("an openable entrypoint");
 
@@ -90,16 +97,26 @@ fn folded_through(root: &Path, shape: &Path, cache: &dyn Cache) -> Vec<String> {
 
 /// What a build's fold did to the one unit, through the store itself.
 fn folded(root: &Path) -> Vec<String> {
+    folded_as(root, Compiled::Built)
+}
+
+/// [`folded`], with the one unit compiled for `compiled`.
+fn folded_as(root: &Path, compiled: Compiled) -> Vec<String> {
     let verdicts = Verdicts::at(root.to_path_buf());
 
-    folded_through(root, &root.join("shape"), &verdicts)
+    folded_through(root, &root.join("shape"), &verdicts, compiled)
 }
 
 /// What a query's fold did to the one unit, through the store read as the `wonder` engine reads it.
 fn folded_overlaid(root: &Path, overlay: &Overlay) -> Vec<String> {
     let verdicts = Verdicts::at(root.to_path_buf());
 
-    folded_through(root, &root.join("shape"), &Overlaid(&verdicts, overlay))
+    folded_through(
+        root,
+        &root.join("shape"),
+        &Overlaid(&verdicts, overlay),
+        Compiled::Built,
+    )
 }
 
 /// A directory of its own, in this file's family.
@@ -432,6 +449,33 @@ fn slots(root: &Path) -> Vec<Vec<u8>> {
     slots.sort();
 
     slots
+}
+
+/// A unit held built is the baseline of its source compiled tested, and one held tested the baseline of it built: the two differ by the source's tests alone, so neither compiles whole after the other, and each is then filed under a slot of its own.
+#[test]
+fn a_unit_held_for_one_kind_is_the_baseline_of_the_other() {
+    let tested = fill!(
+        "${library}\nuse /std/{Test};\n\ntest the_message_holds =\n    Test/assert(true);\n",
+        library = library("first")
+    );
+
+    let built_first = project("baseline-built-first");
+    write(&built_first, "shape/lib.crs", &tested);
+    assert_eq!(folded(&built_first), ["compiling /shape"]);
+    assert_eq!(
+        folded_as(&built_first, Compiled::Tested),
+        ["recompiling /shape"]
+    );
+    assert_eq!(folded_as(&built_first, Compiled::Tested), ["reused /shape"]);
+    assert_eq!(folded(&built_first), ["reused /shape"]);
+
+    let tested_first = project("baseline-tested-first");
+    write(&tested_first, "shape/lib.crs", &tested);
+    assert_eq!(
+        folded_as(&tested_first, Compiled::Tested),
+        ["compiling /shape"]
+    );
+    assert_eq!(folded(&tested_first), ["recompiling /shape"]);
 }
 
 /// A slot whose files were edited since it was filed is a baseline, for a query and for a build alike: each compiles the unit over it.

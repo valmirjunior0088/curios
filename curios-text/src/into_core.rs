@@ -2495,6 +2495,8 @@ pub struct UnitSource<'a> {
     ///
     /// `None` is not "nothing declared" but "the caller did not decide", which is every caller that has no manifest to read one out of: a fold whose order is the whole of its dependency information cannot narrow, so the default has to be every predecessor. A unit that *does* declare them names them here, and a predecessor it did not name is then in the fold — contributing its identities, its universe seeds and its erased operands — while being unspellable.
     visible: Option<Vec<Qualifier>>,
+    /// What the unit is compiled for: what `source` was marked for ([`RootSource::tested`]), or the other kind, for a store looking up the same source's other compile ([`UnitSource::other`]).
+    compiled: Compiled,
 }
 
 impl<'a> UnitSource<'a> {
@@ -2504,6 +2506,7 @@ impl<'a> UnitSource<'a> {
             entrypoint: Some(entrypoint),
             source,
             visible: source.declared().map(<[Qualifier]>::to_vec),
+            compiled: source.compiled(),
         }
     }
 
@@ -2513,6 +2516,20 @@ impl<'a> UnitSource<'a> {
             entrypoint: None,
             source,
             visible: source.declared().map(<[Qualifier]>::to_vec),
+            compiled: source.compiled(),
+        }
+    }
+
+    /// The same unit compiled for the other kind: built where this one is tested, and tested where it is built. The two differ by the source's tests alone, so a store holding one offers it as the baseline of the other.
+    pub fn other(&self) -> Self {
+        Self {
+            entrypoint: self.entrypoint,
+            source: self.source,
+            visible: self.visible.clone(),
+            compiled: match self.compiled {
+                Compiled::Built => Compiled::Tested,
+                Compiled::Tested => Compiled::Built,
+            },
         }
     }
 
@@ -2580,7 +2597,7 @@ impl<'a> UnitSource<'a> {
 
     /// What this unit is compiled for ([`RootSource::tested`]). A built unit and a tested one are two lowerings of one source, so a store addresses them apart, as it does two units that declared differently.
     pub fn compiled(&self) -> Compiled {
-        self.source.compiled()
+        self.compiled
     }
 
     /// The `foreign` declarations this unit's package says a module answers, each beside the manifest row that says so ([`RootSource::answering`]).

@@ -642,14 +642,18 @@ impl Cache for Verdicts {
         self.hit(source, None)
     }
 
-    /// The nearest earlier compilation of the unit there is: what a session attached to this cache last had in hand for it, then the slot this tree filed for it however its files and the units before it have moved since, then whatever the scope offered.
+    /// The nearest earlier compilation of the unit there is: what a session attached to this cache last had in hand for it, then the slot this tree filed for it however its files and the units before it have moved since, then the same two of the unit compiled for the other kind ([`UnitSource::other`]), then whatever the scope offered.
     ///
-    /// Nearest first, because the order decides how much a compile over one redoes and nothing else — every one of the three is a unit judged when it was made, so the answer is the same over any of them. The session's is the last keystroke's, which is nearer the text being asked about than anything a build filed; a filed unit is nearer than the archived image; and the image is what is there when nothing else is, compiled after the units it stands among.
+    /// Nearest first, because the order decides how much a compile over one redoes and nothing else — every one of these is a unit judged when it was made, so the answer is the same over any of them. The session's is the last keystroke's, which is nearer the text being asked about than anything a build filed; a filed unit is nearer than its other kind, which differs by every test the source declares; and both are nearer than the archived image, which is what is there when nothing else is, compiled after the units it stands among.
     ///
-    /// **A build takes one as a question does.** A unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so what a build files is what it would have filed compiling whole, and it elaborates, judges and erases what its edit moved.
+    /// **A build takes one as a question does.** A unit compiled over a baseline is stored as the bytes a whole compile of the same text stores, so what a build files is what it would have filed compiling whole, and it elaborates, judges and erases what its edit moved — a tested unit over its built one, its tests.
     fn baseline(&self, source: &UnitSource<'_>, offered: Option<&Unit>) -> Option<Earlier> {
+        let other = source.other();
+
         self.kept(source)
             .or_else(|| self.earlier(source))
+            .or_else(|| self.kept(&other))
+            .or_else(|| self.earlier(&other))
             .or_else(|| {
                 offered.cloned().map(|unit| Earlier {
                     unit,
