@@ -74,8 +74,9 @@ mod wasm_conformance;
 use {
     crate::{run_wasm, to_compiled},
     curios_native::{Compiled, ForeignBindings, HostOps, MockHost, TestEnd},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Fold, Stage, compile_with_prelude},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, Fold, Stage, TestProgram, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::Qualifier,
 };
 
 /// Compile an already-parsed entrypoint under `loader` and run it.
@@ -152,18 +153,37 @@ fn error(source: &str) -> String {
 fn tests_error(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
     Fold::new(DEFAULT_STEP_BUDGET, &[], None)
-        .tests(&entrypoint, &RootSource::none().tested(), |_| {}, |_| {})
+        .tests(
+            &entrypoint,
+            &RootSource::none().tested(),
+            vec![Qualifier::empty()],
+            |_| {},
+            |_| {},
+        )
         .map(|_| ())
         .expect_err("the fixture is refused")
         .to_string()
 }
 
-/// Compile `source` as its own test program — the synthesized `Test/main` tail over its declared tests in place of the authored one — and run it under a fresh mock host with no arguments, returning what it wrote. That it ran to an answer is asserted, and what it answered is not: a fixture about a verdict reaches for the pieces itself.
-fn run_tests_program(source: &str) -> Vec<u8> {
+/// Compile `source` as its own test program over every test it declares — the synthesized `Test/main` tail over them in place of the authored one.
+fn test_program(source: &str) -> TestProgram {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
-    let (module, foreigns, _records) = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
-        .tests(&entrypoint, &RootSource::none().tested(), |_| {}, |_| {})
-        .expect("fixture compiles as a test program");
+    Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+        .tests(
+            &entrypoint,
+            &RootSource::none().tested(),
+            vec![Qualifier::empty()],
+            |_| {},
+            |_| {},
+        )
+        .expect("fixture compiles as a test program")
+}
+
+/// [`test_program`], run under a fresh mock host with no arguments, returning what it wrote. That it ran to an answer is asserted, and what it answered is not: a fixture about a verdict reaches for the pieces itself.
+fn run_tests_program(source: &str) -> Vec<u8> {
+    let (module, foreigns) = test_program(source)
+        .compiled
+        .expect("a test program scheduling a test is built");
 
     let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
 
@@ -186,6 +206,7 @@ fn ersd_optm_tests(source: &str) -> curios_ersd::Module {
         .tests(
             &entrypoint,
             &RootSource::none().tested(),
+            vec![Qualifier::empty()],
             |stage| {
                 if let Stage::ErsdOptm(module) = stage {
                     captured = Some(module.clone());

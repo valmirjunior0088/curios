@@ -6,7 +6,7 @@ use {
     curios_native::{ForeignBindings, MockHost, TestEnd},
     curios_pipeline::{DEFAULT_STEP_BUDGET, Fold},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::RootKind,
+    curios_utilities::{Qualifier, RootKind},
     std::path::PathBuf,
 };
 
@@ -39,12 +39,20 @@ pub(super) fn outcomes(unit: &str, mounted: RootSource) -> (usize, String) {
     let loader = RootSource::none();
 
     // No cache: a test must not file payloads into a project store.
-    let (module, foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[mounted.tested()], None)
-        .tests(&entrypoint, &loader, |_| {}, |_| {})
+    let program = Fold::new(DEFAULT_STEP_BUDGET, &[mounted.tested()], None)
+        .tests(
+            &entrypoint,
+            &loader,
+            vec![Qualifier::empty()],
+            |_| {},
+            |_| {},
+        )
         .unwrap_or_else(|error| panic!("`{unit}` failed to compile:\n{error}"));
+    let records = program.records;
+    let (module, foreigns) = program
+        .compiled
+        .unwrap_or_else(|| panic!("`{unit}` declares no tests"));
     let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
-
-    assert!(!records.is_empty(), "`{unit}` declares no tests");
 
     let mut passed = 0usize;
     let mut failures = String::new();

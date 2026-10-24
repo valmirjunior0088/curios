@@ -16,7 +16,7 @@ use {
     curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, order},
     curios_pipeline::{Cache, CompileError, Fold, TestRecord},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
-    curios_utilities::Source,
+    curios_utilities::{Qualifier, Source},
     curios_verdicts::{Program, Verdicts},
     curios_wonder::{STDIN_LABEL, STDIN_MOUNT},
     std::{cmp::Reverse, path::Path, sync::Arc},
@@ -62,19 +62,24 @@ impl Totals {
     }
 }
 
-/// Run the tests `selection` declares, optionally narrowed to those at or under the path `filter`, each declared subject filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed.
+/// Run the tests `selection` declares, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed.
 pub(crate) fn run_tests(
     budget: u64,
     selection: Selection,
     access: Access,
-    filter: Option<&str>,
+    filters: &[String],
 ) -> Result<bool, CompileError> {
+    let under = match filters.is_empty() {
+        true => vec![Qualifier::empty()],
+        false => filters.iter().map(|filter| prefix(filter)).collect(),
+    };
     let mut run = Run {
         budget,
         access,
-        filter,
+        filters,
+        under,
         totals: Totals::default(),
-        met: Met::default(),
+        declared: Vec::new(),
         refusal: None,
     };
 
@@ -163,6 +168,8 @@ struct Tests<'a> {
     loader: &'a RootSource,
     text: &'a str,
     entry: &'a Path,
+    /// The prefixes the program schedules the tests at or under.
+    under: &'a [Qualifier],
 }
 
 /// Where a subject's test payload is filed and whom its compilation is reported under: the store, the package and the name reserved in it for the payload, the subject a progress line names and the manifest a report names.
@@ -187,42 +194,34 @@ impl<'a> Filing<'a> {
     }
 }
 
-/// What a filter met among the tests of the subjects compiled so far: whether any stood at or under it, and the paths of the tests it passed over, which a filter that matched nothing is answered with.
-#[derive(Default)]
-struct Met {
-    any: bool,
-    passed: Vec<String>,
+/// The prefix a `--filter` argument names: its path's segments, so `/app/Map`, `/app/Map/` and `app/Map` are one prefix and `/` is the root, which every test stands under.
+fn prefix(filter: &str) -> Qualifier {
+    Qualifier::from(filter.split('/').filter(|segment| !segment.is_empty()))
 }
 
-impl Met {
-    /// How many of the nearest paths a refusal names.
-    const NAMED: usize = 3;
+/// How many of the nearest paths a refusal names.
+const NAMED: usize = 3;
 
-    /// The refusal of a `filter` no test stands at or under, naming the paths nearest it: those sharing the most of its trailing segments, then those the fewest edits away.
-    fn refusal(&self, filter: &str) -> String {
-        let mut nearest = self.passed.iter().collect::<Vec<_>>();
-        nearest.sort_by_key(|path| {
-            (
-                Reverse(shared_tail(path, filter)),
-                edits(path, filter),
-                path.as_str(),
-            )
-        });
-        nearest.dedup();
-        nearest.truncate(Self::NAMED);
+/// The refusal of a `filter` no test of `declared` stands at or under, naming the paths nearest it: those sharing the most of its trailing segments, then those the fewest edits away.
+fn matching_nothing(filter: &str, declared: &[Qualifier]) -> String {
+    let mut nearest = declared.iter().map(Qualifier::join).collect::<Vec<_>>();
+    // Ordered by path first, so a path two subjects declare is named once and ties fall in its order.
+    nearest.sort();
+    nearest.dedup();
+    nearest.sort_by_key(|path| (Reverse(shared_tail(path, filter)), edits(path, filter)));
+    nearest.truncate(NAMED);
 
-        let named = nearest
-            .iter()
-            .map(|path| format!("'{path}'"))
-            .collect::<Vec<_>>();
-        match named.as_slice() {
-            [] => format!("no test matches '{filter}'"),
-            [only] => format!("no test matches '{filter}'; the nearest is {only}"),
-            [rest @ .., last] => format!(
-                "no test matches '{filter}'; the nearest are {} and {last}",
-                rest.join(", ")
-            ),
-        }
+    let named = nearest
+        .iter()
+        .map(|path| format!("'{path}'"))
+        .collect::<Vec<_>>();
+    match named.as_slice() {
+        [] => format!("no test matches '{filter}'"),
+        [only] => format!("no test matches '{filter}'; the nearest is {only}"),
+        [rest @ .., last] => format!(
+            "no test matches '{filter}'; the nearest are {} and {last}",
+            rest.join(", ")
+        ),
     }
 }
 
@@ -255,9 +254,13 @@ fn edits(path: &str, filter: &str) -> usize {
 struct Run<'a> {
     budget: u64,
     access: Access,
-    filter: Option<&'a str>,
+    /// The `--filter` arguments as written, for a refusal to name.
+    filters: &'a [String],
+    /// The prefixes every subject's test program schedules the tests at or under: those `filters` name, or the root where none is given.
+    under: Vec<Qualifier>,
     totals: Totals,
-    met: Met,
+    /// Every test the subjects compiled so far declare, selected or not: what a filter meeting none is answered with.
+    declared: Vec<Qualifier>,
     /// The first reason a store refused filing, since a store nobody can write refuses every subject for one reason.
     refusal: Option<String>,
 }
@@ -276,7 +279,7 @@ impl Run<'_> {
         let subject = Subject::package(declared.package);
         // One store handle per subject, as `run` holds one per invocation: a handle's placed chain is one compilation's, and a second fold on the same handle would carry the first's placements into the chain the second payload is filed against — one entry too long, which the store withholds without a word.
         let store = self.access.filed(declared.root);
-        let (records, cwasm, foreigns) = tests_payload(
+        let tested = tests_payload(
             self.budget,
             Tests {
                 units: &units,
@@ -284,6 +287,7 @@ impl Run<'_> {
                 loader: &RootSource::none(),
                 text: LIBRARY_KEY,
                 entry: &library,
+                under: &self.under,
             },
             Filing {
                 store: store.as_ref(),
@@ -295,14 +299,7 @@ impl Run<'_> {
         )?;
         self.refused(store.as_ref());
 
-        self.selected(
-            &records,
-            &cwasm,
-            &library,
-            &subject,
-            Some(declared.manifest),
-            &foreigns,
-        )
+        self.selected(tested, &library, &subject, Some(declared.manifest))
     }
 
     /// An executable's tests: its entry, its own declarations compiled tested, with the tail scheduling their tests.
@@ -320,7 +317,7 @@ impl Run<'_> {
             .filed(declared.root)
             .map(|store| store.executing(declared.package, name));
         let (entrypoint, loader, source) = open(Some(entry))?;
-        let (records, cwasm, foreigns) = tests_payload(
+        let tested = tests_payload(
             self.budget,
             Tests {
                 units,
@@ -328,6 +325,7 @@ impl Run<'_> {
                 loader: &loader.tested(),
                 text: &source.text,
                 entry,
+                under: &self.under,
             },
             Filing {
                 store: store.as_ref(),
@@ -339,14 +337,7 @@ impl Run<'_> {
         )?;
         self.refused(store.as_ref());
 
-        self.selected(
-            &records,
-            &cwasm,
-            entry,
-            &subject,
-            Some(declared.manifest),
-            &foreigns,
-        )
+        self.selected(tested, entry, &subject, Some(declared.manifest))
     }
 
     /// A loose module's tests: a file, or standard input, mounted as a unit of its own and compiled as a library is, against the prelude alone, filed nowhere. `invoked` is the entry as `run` would pass it.
@@ -356,7 +347,7 @@ impl Run<'_> {
         invoked: &Path,
         subject: &Subject,
     ) -> Result<(), CompileError> {
-        let (records, cwasm, foreigns) = tests_payload(
+        let tested = tests_payload(
             self.budget,
             Tests {
                 units: &[unit.tested()],
@@ -364,12 +355,13 @@ impl Run<'_> {
                 loader: &RootSource::none(),
                 text: LIBRARY_KEY,
                 entry: invoked,
+                under: &self.under,
             },
             Filing::nowhere(subject),
         )?;
 
         // A loose subject has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
-        self.selected(&records, &cwasm, invoked, subject, None, &foreigns)
+        self.selected(tested, invoked, subject, None)
     }
 
     /// A loose program's tests: its entry, opened from a file or supplied from standard input, compiled against the prelude alone, filed nowhere. `invoked` is the entry as `run` passes it.
@@ -379,7 +371,7 @@ impl Run<'_> {
         invoked: &Path,
         subject: &Subject,
     ) -> Result<(), CompileError> {
-        let (records, cwasm, foreigns) = tests_payload(
+        let tested = tests_payload(
             self.budget,
             Tests {
                 units: &[],
@@ -387,12 +379,13 @@ impl Run<'_> {
                 loader: &loader.tested(),
                 text: &source.text,
                 entry: invoked,
+                under: &self.under,
             },
             Filing::nowhere(subject),
         )?;
 
         // A loose subject has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
-        self.selected(&records, &cwasm, invoked, subject, None, &foreigns)
+        self.selected(tested, invoked, subject, None)
     }
 
     /// Keep the first reason a store refused filing.
@@ -403,36 +396,28 @@ impl Run<'_> {
             .or_else(|| store.and_then(Verdicts::refused));
     }
 
-    /// Run every record of one compiled subject the filter selects, one instantiation each, between a `↳ Testing` step and a `↳ Tested` step carrying the unit's tally, which is folded into the run's. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
+    /// Run every test one compiled subject schedules, one instantiation each, between a `↳ Testing` step and a `↳ Tested` step carrying the unit's tally, which is folded into the run's; every test it declares is kept for a filter meeting none to be answered with. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
     fn selected(
         &mut self,
-        records: &[TestRecord],
-        cwasm: &[u8],
+        tested: Tested,
         entry: &Path,
         subject: &Subject,
         manifest: Option<&Path>,
-        foreigns: &ForeignStore,
     ) -> Result<(), CompileError> {
-        let filter = self.filter;
-        let selected = records
-            .iter()
-            .enumerate()
-            .filter(|(_, record)| filter.is_none_or(|prefix| under(&record.path, prefix)))
-            .collect::<Vec<_>>();
+        let Tested {
+            records,
+            declared,
+            built,
+        } = tested;
+        self.declared.extend(declared);
 
         // A unit with nothing to run reports its compile and nothing more: a tally of zeros would only restate the absence of lines above it.
-        if selected.is_empty() {
-            if filter.is_some() {
-                self.met
-                    .passed
-                    .extend(records.iter().map(|record| record.path.clone()));
-            }
+        let Some((cwasm, foreigns)) = built else {
             return Ok(());
-        }
-        self.met.any = true;
+        };
 
         // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
-        let compiled = unsafe { Compiled::deserialize(cwasm, foreigns.clone()) }
+        let compiled = unsafe { Compiled::deserialize(&cwasm, foreigns.clone()) }
             .map_err(CompileError::failure)?;
 
         step(Heading::Testing, subject);
@@ -441,9 +426,10 @@ impl Run<'_> {
         let mut unit = Totals::default();
 
         // Resolved once for the unit: its manifests are walked and its modules compiled here, and each test below is handed the resolution. A run instantiates a module in its own store, so every test still meets an instance of its own, which keeps one test's marks in a module's memory out of the next one's.
-        let bindings = bindings_of(manifest, foreigns).map_err(CompileError::failure)?;
+        let bindings = bindings_of(manifest, &foreigns).map_err(CompileError::failure)?;
 
-        for (index, record) in selected {
+        // The index is the test's place in the schedule, which holds the selected tests alone.
+        for (index, record) in records.iter().enumerate() {
             let arguments = vec![argv0.clone(), index.to_string().into_bytes()];
 
             match compiled.run_test(OsHost::with_args(arguments), bindings.clone()) {
@@ -479,7 +465,7 @@ impl Run<'_> {
         Ok(())
     }
 
-    /// The end of the run: a store's refusal said once, a filter that matched nothing refused by name, and the count line.
+    /// The end of the run: a store's refusal said once, each filter that matched nothing refused by name, and the count line.
     fn finish(self) -> Result<bool, CompileError> {
         if let Some(refusal) = self.refusal {
             fact(
@@ -488,10 +474,17 @@ impl Run<'_> {
             );
         }
 
-        if let Some(filter) = self.filter
-            && !self.met.any
-        {
-            return Err(CompileError::failure(self.met.refusal(filter)));
+        let unmatched = self
+            .filters
+            .iter()
+            .filter(|filter| {
+                let under = prefix(filter);
+                !self.declared.iter().any(|test| test.is_within(&under))
+            })
+            .map(|filter| matching_nothing(filter, &self.declared))
+            .collect::<Vec<_>>();
+        if !unmatched.is_empty() {
+            return Err(CompileError::failure(unmatched.join("\n")));
         }
 
         println!("{}", self.totals.line());
@@ -500,18 +493,26 @@ impl Run<'_> {
     }
 }
 
-/// The records and machine code of one subject compiled as a test program — from the filing's store when nothing it was made from has changed, and compiled and filed there otherwise. Without a store, compiled and filed nowhere.
+/// One subject compiled as a test program: the records of the tests it schedules, every test it declares, and the machine code with the rows it imports — `None` where it schedules none.
+struct Tested {
+    records: Vec<TestRecord>,
+    declared: Vec<Qualifier>,
+    built: Option<(Vec<u8>, ForeignStore)>,
+}
+
+/// One subject compiled as a test program under the run's selection — from the filing's store when nothing it was made from has changed and the selection is the one it was filed under, and compiled and filed there otherwise. Without a store, compiled and filed nowhere. A selection meeting none of the subject's tests is filed too, with no machine code, so a second run under it reuses every subject.
 fn tests_payload(
     budget: u64,
     tests: Tests<'_>,
     filing: Filing<'_>,
-) -> Result<(Vec<TestRecord>, Vec<u8>, ForeignStore), CompileError> {
+) -> Result<Tested, CompileError> {
     let Tests {
         units,
         entrypoint,
         loader,
         text,
         entry,
+        under,
     } = tests;
     let Filing {
         store,
@@ -527,18 +528,19 @@ fn tests_payload(
         entry,
         text,
         loader,
+        tests: Some(under),
     };
 
     if let Some((bytes, foreigns)) = store
         .and_then(|store| store.payload_get(&program, &sources, Runs::Native { engine: engine() }))
-        && let Some((records, cwasm)) = decode(&bytes)
+        && let Some(tested) = decode(&bytes, foreigns)
     {
         processing(subject, manifest);
         let mut line = Line::nested(Heading::Compiling, subject);
         line.outcome("reused");
         eprintln!();
 
-        return Ok((records, cwasm, foreigns));
+        return Ok(tested);
     }
 
     processing(subject, manifest);
@@ -548,42 +550,51 @@ fn tests_payload(
         .tests(
             entrypoint,
             loader,
+            under.to_vec(),
             |_| {},
             |progress| {
                 report(&mut steps, subject, progress);
             },
         )
-        .and_then(|(module, foreigns, records)| {
-            let cwasm = to_cwasm(&module).map_err(CompileError::failure)?;
-            Ok((records, cwasm, foreigns))
+        .and_then(|program| {
+            let built = program
+                .compiled
+                .map(|(module, foreigns)| to_cwasm(&module).map(|cwasm| (cwasm, foreigns)))
+                .transpose()
+                .map_err(CompileError::failure)?;
+
+            Ok(Tested {
+                records: program.records,
+                declared: program.declared,
+                built,
+            })
         });
     match compiled.is_ok() {
         true => steps.finish(),
         false => steps.interrupted(),
     }
-    let (records, cwasm, foreigns) = compiled?;
+    let tested = compiled?;
 
     if let Some(store) = store
-        && let Some(bytes) = encode(&records, &cwasm)
+        && let Some(bytes) = encode(
+            &tested.records,
+            &tested.declared,
+            tested.built.as_ref().map(|(cwasm, _)| cwasm.as_slice()),
+        )
     {
         store.payload_put(
             &program,
             &sources,
             bytes.as_ref(),
-            &foreigns,
+            tested
+                .built
+                .as_ref()
+                .map_or(&ForeignStore::default(), |(_, foreigns)| foreigns),
             Runs::Native { engine: engine() },
         );
     }
 
-    Ok((records, cwasm, foreigns))
-}
-
-/// Whether the test at `path` is at or under `prefix`, compared a whole segment at a time: `/app/Map` selects `/app/Map` and everything under it, and never `/app/MapBuilder`, since a path names modules and one module's name is no part of its neighbour's. A trailing `/` says nothing more, so `/` alone selects every test.
-fn under(path: &str, prefix: &str) -> bool {
-    let prefix = prefix.strip_suffix('/').unwrap_or(prefix);
-
-    path.strip_prefix(prefix)
-        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+    Ok(tested)
 }
 
 /// The failing declaration's body as written, indented beneath the report — absent when no span survived to slice it from.
@@ -593,34 +604,48 @@ fn body(record: &TestRecord) {
     }
 }
 
-/// What the store files for one test program: its records as `(path, body)` pairs beside the machine code, one archive as every other artifact in the store is. A corrupt or foreign payload fails to decode and is a miss, never an error.
+/// What the store files for one test program: its records as `(path, body)` pairs and every test it declares by its path's segments, beside the machine code — none where it schedules no test — one archive as every other artifact in the store is. A corrupt or foreign payload fails to decode and is a miss, never an error.
 #[curios_archive::archived]
 struct TestPayload {
     records: Vec<(String, String)>,
-    cwasm: Vec<u8>,
+    declared: Vec<Vec<String>>,
+    cwasm: Option<Vec<u8>>,
 }
 
-/// `records` and `cwasm` as the bytes the store files — `None` when they will not serialize, on which the record is withheld exactly as a unit's is.
-fn encode(records: &[TestRecord], cwasm: &[u8]) -> Option<curios_archive::Serialized> {
+/// `records`, `declared` and `cwasm` as the bytes the store files — `None` when they will not serialize, on which the record is withheld exactly as a unit's is.
+fn encode(
+    records: &[TestRecord],
+    declared: &[Qualifier],
+    cwasm: Option<&[u8]>,
+) -> Option<curios_archive::Serialized> {
     let payload = TestPayload {
         records: records
             .iter()
             .map(|record| (record.path.clone(), record.body.clone()))
             .collect(),
-        cwasm: cwasm.to_vec(),
+        declared: declared
+            .iter()
+            .map(|test| test.segments().to_vec())
+            .collect(),
+        cwasm: cwasm.map(<[u8]>::to_vec),
     };
 
     curios_archive::to_bytes(&payload).ok()
 }
 
-/// The inverse of [`encode`], `None` on any malformation.
-fn decode(bytes: &[u8]) -> Option<(Vec<TestRecord>, Vec<u8>)> {
+/// The inverse of [`encode`], with the rows the store filed beside the bytes, `None` on any malformation.
+fn decode(bytes: &[u8], foreigns: ForeignStore) -> Option<Tested> {
     let payload = curios_archive::from_bytes::<TestPayload>(bytes).ok()?;
     let records = payload
         .records
         .into_iter()
         .map(|(path, body)| TestRecord { path, body })
         .collect();
+    let declared = payload.declared.into_iter().map(Qualifier::from).collect();
 
-    Some((records, payload.cwasm))
+    Some(Tested {
+        records,
+        declared,
+        built: payload.cwasm.map(|cwasm| (cwasm, foreigns)),
+    })
 }

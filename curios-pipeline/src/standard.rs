@@ -8,7 +8,7 @@ mod tests;
 use {
     crate::{
         Cache, Checked, CompileError, EntryTail, Examined, Progress, ReadLowering, Refused, Stage,
-        TestRecord, Told, Typechecked, check_entrypoint_reading, compile_units_reading,
+        TestProgram, Told, Typechecked, check_entrypoint_reading, compile_units_reading,
         compile_with_tail, declared_test_paths, examine_entrypoint, lower_subject, recheck,
         recheck_measured, typecheck_entrypoint,
     },
@@ -97,18 +97,19 @@ impl<'a> Fold<'a> {
                     read: self.read,
                 },
             )
-            .map(|(module, foreigns, _records)| (module, foreigns))
+            .map(TestProgram::built)
         })
     }
 
-    /// [`Fold::compile`] with the entry compiled as a test program: the authored tail, or a library's absence of one, replaced by the synthesized `Test/main([...])` over every test in scope ([`EntryTail::Test`]) — which are the tests of the one unit marked tested, the entry's own where `loader` is ([`RootSource::tested`]). Everything else is the ordinary pipeline, kernel judgment included. Beside the program come one [`TestRecord`] per scheduled test, in schedule order — the report metadata execution alone cannot recover.
+    /// [`Fold::compile`] with the entry compiled as a test program: the authored tail, or a library's absence of one, replaced by the synthesized `Test/main([...])` over the tests in scope at or under any of `under` ([`EntryTail::Test`]) — which are tests of the one unit marked tested, the entry's own where `loader` is ([`RootSource::tested`]). Everything else is the ordinary pipeline, kernel judgment included, and a selection meeting no test builds no program ([`TestProgram`]).
     pub fn tests<O, P>(
         self,
         entrypoint: &curios_text::Entrypoint,
         loader: &RootSource,
+        under: Vec<Qualifier>,
         observe: O,
         progress: P,
-    ) -> Result<(curios_wasm::Module, ForeignStore, Vec<TestRecord>), CompileError>
+    ) -> Result<TestProgram, CompileError>
     where
         O: FnMut(Stage<'_>),
         P: FnMut(Progress<'_>),
@@ -122,7 +123,7 @@ impl<'a> Fold<'a> {
                 &SYNTAX,
                 &UnitSource::entry(entrypoint, loader),
                 self.cache,
-                EntryTail::Test,
+                EntryTail::Test { under },
                 Told {
                     observe: &mut observe,
                     read: self.read,

@@ -374,7 +374,7 @@ pub fn typecheck_entrypoint(
 }
 
 /// Put `entry` to what `tail` judges an authored entry at: the program contract, with what closes the program executed ([`executed`]), or the empty proposition where it is put as a proof. A test program's entry is left as it stands: its tail is the elaborator's to synthesize and to state the type of.
-fn state(entry: &mut curios_core::Entrypoint, tail: EntryTail, syntax: &SyntaxRegistry) {
+fn state(entry: &mut curios_core::Entrypoint, tail: &EntryTail, syntax: &SyntaxRegistry) {
     match tail {
         EntryTail::Program => {
             entry.body = executed(&entry.body, syntax);
@@ -385,7 +385,7 @@ fn state(entry: &mut curios_core::Entrypoint, tail: EntryTail, syntax: &SyntaxRe
 
             entry.type_ = Some(Term::free_var(&Free::from(&empty)));
         }
-        EntryTail::Test => {}
+        EntryTail::Test { .. } => {}
     }
 }
 
@@ -459,45 +459,74 @@ fn closing(function: &Term, syntax: &SyntaxRegistry) -> Term {
 const WITHHELD_ONLY_WHEN_BROKEN: &str = "an entry is withheld only for reaching an item that did not parse, which fails the compile first";
 
 /// Which final term a compilation checks, and what it is judged at: the one the author wrote, as a program or at `False`, or the test tail synthesized from a unit's registered tests. A policy rather than a boolean at each call site, so the program shapes a unit can compile to are named where they diverge — and the whole of what an entry can be judged at, since nothing else states its type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntryTail {
     /// The authored entrypoint as a program: judged at `Io({})`, each of its tails run through `/std/Program`.
     Program,
     /// The authored entrypoint as an alleged proof of the empty proposition, judged at `/sys/Bool/False`: how the soundness board puts a witness, through [`examine_entrypoint`].
     False,
-    /// The synthesized `Test/main([...])` over every test in scope, replacing an executable's authored tail, or a library's absence of one, where the entry is an empty program. Only the unit compiled tested holds tests ([`curios_text::RootSource::tested`]), so they are that unit's, wherever it stands in the fold. A scope with no tests gets `Test/main([])`, which runs nothing and answers that every test held.
-    Test,
+    /// The synthesized `Test/main([...])` over the tests in scope at or under any of `under`, a whole segment at a time, replacing an executable's authored tail, or a library's absence of one, where the entry is an empty program. Only the unit compiled tested holds tests ([`curios_text::RootSource::tested`]), so they are that unit's, wherever it stands in the fold. A tail selecting none is `Test/main([])`, which runs nothing and answers that every test held.
+    ///
+    /// **Which tests is the program's, never the unit's.** The unit holds every test it declares whatever is selected, so one tested unit serves every selection, `wonder` and `lint`; what the tail does not reach is linked into nothing, so a selection narrows the program's back end, where most of a test program's cost is.
+    Test { under: Vec<Qualifier> },
 }
 
 impl EntryTail {
-    /// Which tests the tail schedules: every one `own`, the entry's unit, and `scope` hold, in the fold's order and each unit's declaration order; a program and an entry at `False` schedule none.
+    /// Which tests the tail schedules: those `own`, the entry's unit, and `scope` hold that it selects, in the fold's order and each unit's declaration order; a program and an entry at `False` schedule none.
     ///
     /// A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     fn scheduled(
-        self,
+        &self,
         own: &curios_core::Module,
         scope: &[&curios_core::Module],
     ) -> Vec<curios_elab::ScheduledTest> {
+        let EntryTail::Test { under } = self else {
+            return Vec::new();
+        };
+        let selected = |test: &&Global| matches!(test, Global::Authored(path) if under.iter().any(|prefix| path.is_within(prefix)));
+
+        scope
+            .iter()
+            .copied()
+            .chain([own])
+            .flat_map(|module| {
+                let tests = module
+                    .tests
+                    .iter()
+                    .filter(selected)
+                    .copied()
+                    .collect::<Vec<_>>();
+                scheduled_tests(&tests, &module.items)
+            })
+            .collect()
+    }
+
+    /// Every test in scope, selected or not, by its path, in the order [`EntryTail::scheduled`] keeps: what a selection meeting none of them is answered with. None for a program or an entry at `False`.
+    fn declared(
+        &self,
+        own: &curios_core::Module,
+        scope: &[&curios_core::Module],
+    ) -> Vec<Qualifier> {
         match self {
             EntryTail::Program | EntryTail::False => Vec::new(),
-            EntryTail::Test => scope
+            EntryTail::Test { .. } => scope
                 .iter()
                 .copied()
                 .chain([own])
-                .flat_map(|module| scheduled_tests(&module.tests, &module.items))
+                .flat_map(|module| module.tests.iter().filter_map(Global::qualifier).copied())
                 .collect(),
         }
     }
 
     /// What the elaborator closes the program with: the authored `entry`, or the test tail over `scheduled`, which the elaborator synthesizes and states the type of.
     fn closing<'t>(
-        self,
+        &self,
         entry: &'t curios_core::Entrypoint,
         scheduled: &'t [curios_elab::ScheduledTest],
     ) -> Tail<'t> {
         match self {
             EntryTail::Program | EntryTail::False => Tail::Entry(entry),
-            EntryTail::Test => Tail::Tests(scheduled),
+            EntryTail::Test { .. } => Tail::Tests(scheduled),
         }
     }
 }
@@ -686,7 +715,7 @@ where
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry. An entry put as a proof states the empty proposition instead, and those two are the whole choice: the surface entry carries no type, so no caller states another. A test program's tail replaces the written entry, and the elaborator that synthesizes it states its type.
     //
     // `Io({})` is closed, which is what lets it be stated before elaboration at all. `Io(?T)` would need a metavariable minted before the elaboration context exists, which would leave the contract a post-hoc head test on the inferred type. What closes a program is of any type `/std/Program` executes, and that costs the contract nothing: the dispatch is a call inside the entry, at each of its tails, and the call answers `Io({})`.
-    state(&mut lowered.entry, tail, syntax);
+    state(&mut lowered.entry, &tail, syntax);
     let elab_tail = tail.closing(&lowered.entry, &scheduled);
 
     context.set_imports(names.imports().clone());
@@ -821,6 +850,8 @@ struct Entered {
     program: Zonked<Program>,
     /// One per scheduled test, when the entry is compiled as a test program.
     records: Vec<TestRecord>,
+    /// The path of every test in scope, scheduled or not, when the entry is compiled as a test program ([`EntryTail::declared`]).
+    declared: Vec<Qualifier>,
 }
 
 impl Entered {
@@ -927,9 +958,10 @@ where
         true => Vec::new(),
         false => test_records(&scheduled, &anchors_of(&lowered, predecessors)),
     };
+    let declared = tail.declared(lowered.core(), &predecessors.cores());
 
     // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry.
-    state(&mut written, tail, syntax);
+    state(&mut written, &tail, syntax);
     observe(Stage::Core(&Program {
         module: lowered.core().clone(),
         entry: written.clone(),
@@ -1030,6 +1062,7 @@ where
                     lowered,
                     program,
                     records,
+                    declared,
                 }),
             )
         }
@@ -1652,7 +1685,7 @@ where
             read: None,
         },
     )
-    .map(|(module, foreigns, _records)| (module, foreigns))
+    .map(TestProgram::built)
 }
 
 /// What a caller is told of a program's compile as it goes: each rung it produced ([`Stage`]), and its lowering, as soon as it is made ([`ReadLowering`]).
@@ -1661,7 +1694,28 @@ pub(crate) struct Told<'a, O> {
     pub(crate) read: Option<ReadLowering<'a>>,
 }
 
-/// The program `source` is, compiled through the full pipeline under `tail`, telling the caller what `told` asks for.
+/// A program compiled under its tail, with what a test program's tail read: what [`Fold::tests`](crate::Fold::tests) hands back, and, its records empty, what a program's compile is.
+#[derive(Debug)]
+pub struct TestProgram {
+    /// One per test the tail schedules, in schedule order — the report metadata execution alone cannot recover.
+    pub records: Vec<TestRecord>,
+    /// The path of every test in scope, scheduled or not: what a selection meeting none of them is answered with.
+    pub declared: Vec<Qualifier>,
+    /// The program and the rows it imports — `None` for a test tail that schedules no test, since a program running nothing is built past nothing but the kernel's judgment of it.
+    pub compiled: Option<(curios_wasm::Module, ForeignStore)>,
+}
+
+/// Why a program's compile holds the program: only a test tail scheduling nothing leaves it unbuilt.
+const A_PROGRAM_IS_BUILT: &str = "a program closing with its own term is built";
+
+impl TestProgram {
+    /// The program, from the compile of one closing with its own term.
+    pub(crate) fn built(self) -> (curios_wasm::Module, ForeignStore) {
+        self.compiled.expect(A_PROGRAM_IS_BUILT)
+    }
+}
+
+/// The program `source` is, compiled through the full pipeline under `tail`, telling the caller what `told` asks for: beside it, for a test tail, the tests it schedules and every test in scope. A test tail scheduling no test is judged and built no further.
 pub(crate) fn compile_with_tail<O>(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -1670,12 +1724,13 @@ pub(crate) fn compile_with_tail<O>(
     cache: Option<&dyn Cache>,
     tail: EntryTail,
     told: Told<'_, O>,
-) -> Result<(curios_wasm::Module, ForeignStore, Vec<TestRecord>), CompileError>
+) -> Result<TestProgram, CompileError>
 where
     O: FnMut(Stage<'_>),
 {
     curios_profile::profile!("compile_entrypoint");
     let Told { observe, read } = told;
+    let tested = matches!(tail, EntryTail::Test { .. });
     // Compiling reports no lint, so the findings go unread.
     let (_, entered) = enter(
         budget,
@@ -1690,10 +1745,19 @@ where
         },
     )?;
     let entered = entered?;
-    let ersd_module = entered.erased(budget, predecessors, syntax)?;
+    let compiled = match tested && entered.records.is_empty() {
+        true => None,
+        false => {
+            let ersd_module = entered.erased(budget, predecessors, syntax)?;
 
-    // What an embedder is handed is the rows the module imports, which the emitter knows as it writes them: a program asks for an implementation of what it reaches, so a row a dependency declares and nothing calls costs its consumers nothing — no module read, linked or carried in an executable.
-    let (module, reached) = lower_from_ersd(ersd_module, observe);
+            // What an embedder is handed is the rows the module imports, which the emitter knows as it writes them: a program asks for an implementation of what it reaches, so a row a dependency declares and nothing calls costs its consumers nothing — no module read, linked or carried in an executable.
+            Some(lower_from_ersd(ersd_module, observe))
+        }
+    };
 
-    Ok((module, reached, entered.records))
+    Ok(TestProgram {
+        records: entered.records,
+        declared: entered.declared,
+        compiled,
+    })
 }

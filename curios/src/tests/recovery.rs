@@ -4,9 +4,9 @@ use {
     super::{error, run_entrypoint, tests_error},
     crate::to_compiled,
     curios_native::{ForeignBindings, MockHost, TestEnd},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Fold},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, Fold, TestProgram},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::RootKind,
+    curios_utilities::{Qualifier, RootKind},
 };
 
 /// Run `source` as standard input is run — the reading that recovers past a broken item — expecting a refusal, and return its report.
@@ -166,9 +166,18 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
             .expect("the unit parses"),
     );
 
-    let (module, foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[unit], None)
-        .tests(&Entrypoint::trivial(), &RootSource::none(), |_| {}, |_| {})
+    let TestProgram {
+        records, compiled, ..
+    } = Fold::new(DEFAULT_STEP_BUDGET, &[unit], None)
+        .tests(
+            &Entrypoint::trivial(),
+            &RootSource::none(),
+            vec![Qualifier::empty()],
+            |_| {},
+            |_| {},
+        )
         .expect("the unit's test program compiles");
+    let (module, foreigns) = compiled.expect("a test program scheduling a test is built");
     let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
     assert_eq!(records.len(), 1);
 

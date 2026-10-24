@@ -72,6 +72,7 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
         entry: &entry,
         text: &source.text,
         loader: &loader,
+        tests: None,
     };
 
     let sources = scope.iter().map(UnitSource::mounted).collect::<Vec<_>>();

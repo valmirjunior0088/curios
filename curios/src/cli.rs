@@ -167,9 +167,9 @@ pub(crate) enum Mode {
         #[arg(
             long,
             value_name = "PREFIX",
-            help = "Run only the tests at or under the path PREFIX, e.g. /app/Map"
+            help = "Run only the tests at or under the path PREFIX, e.g. /app/Map; repeated, a test any of them selects runs"
         )]
-        filter: Option<String>,
+        filter: Vec<String>,
 
         #[command(flatten)]
         elaboration: Elaboration,

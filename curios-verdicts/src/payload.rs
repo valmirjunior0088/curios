@@ -15,8 +15,8 @@ use {
     curios_package::{Runs, payload_slot},
     curios_text::{RootSource, UnitSource},
     curios_unit::{digested, read_within, segments},
-    curios_utilities::digest,
-    std::{fs, io, path::Path},
+    curios_utilities::{Qualifier, digest},
+    std::{collections::BTreeSet, fs, io, path::Path},
 };
 
 /// What a payload is filed for: the executable it builds, and the entry it builds from.
@@ -33,6 +33,8 @@ pub struct Program<'a> {
     pub text: &'a str,
     /// The loader the entry's own `mod` declarations resolve through, and afterwards the log of what they read.
     pub loader: &'a RootSource,
+    /// The prefixes a test program schedules the tests at or under — `None` for a program, which schedules none. Part of what the payload is verified against rather than of where it is filed, so a run under another selection replaces the subject's one payload rather than filing a second.
+    pub tests: Option<&'a [Qualifier]>,
 }
 
 /// What a stored payload must still be true of to be believed, and the one thing it needs beside it to be used.
@@ -50,6 +52,8 @@ struct Record {
     reads: Vec<(String, String)>,
     /// What each unit of the compilation contained, in fold order — the digest of the bytes its own unit slot holds.
     predecessors: Vec<String>,
+    /// The prefixes the program's tests were scheduled under, spelled and in order ([`selection`]), or `None` for a program.
+    tests: Option<Vec<String>>,
     /// The payload's own digest, so a damaged artifact is a miss here rather than a failure to deserialize at run time — or, for a flipped byte inside a function's code, machine code that runs wrong. Its segment of the slot is exactly the byte string a bundled executable carries and `curios_native::run_bytes` deserializes.
     payload: String,
     /// The `ffi` rows the program imports, which is what a link types its marshalling by and holds each answer to: the standard library's that it reaches, which the host answers, and any of a package's own.
@@ -110,6 +114,7 @@ impl Verdicts {
             entry: (canonical(program.entry), digest(program.text.as_bytes())),
             reads: digested(program.loader.reads()),
             predecessors: filed,
+            tests: selection(program),
             payload: digest(bytes),
             foreigns: foreigns.clone(),
         };
@@ -142,9 +147,22 @@ fn slot(verdicts: &Verdicts, program: &Program<'_>, runs: Runs<'_>) -> Option<St
 fn agrees(program: &Program<'_>, record: &Record, units: &[String], bytes: &[u8]) -> bool {
     record.payload == digest(bytes)
         && chained(&record.predecessors, units)
+        && record.tests == selection(program)
         && record.entry == (canonical(program.entry), digest(program.text.as_bytes()))
         && read_within(&program.loader.directories(), &record.reads)
         && unchanged(&record.reads, None)
+}
+
+/// The prefixes `program`'s tests are scheduled under, as a record holds them: spelled, sorted and each once, since a selection is a set and two orders of one are one program.
+fn selection(program: &Program<'_>) -> Option<Vec<String>> {
+    program.tests.map(|prefixes| {
+        prefixes
+            .iter()
+            .map(Qualifier::join)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    })
 }
 
 /// A path as a record spells it: canonical, so the same file reached through a relative invocation and an absolute one is one entry.

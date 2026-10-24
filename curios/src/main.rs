@@ -240,12 +240,7 @@ fn dispatch() -> Result<(), Failure> {
         } => {
             let selection = contract.admit_any(subject, manifest, &here()?)?;
 
-            if !run_tests(
-                elaboration.budget,
-                selection,
-                contract.access,
-                filter.as_deref(),
-            )? {
+            if !run_tests(elaboration.budget, selection, contract.access, &filter)? {
                 process::exit(1);
             }
         }

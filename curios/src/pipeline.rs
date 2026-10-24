@@ -78,6 +78,7 @@ pub(crate) fn payload_of(
                     entry: path,
                     text: &source.text,
                     loader: &loader,
+                    tests: None,
                 },
             )
         });

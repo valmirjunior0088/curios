@@ -4,11 +4,14 @@ mod resource_tests;
 mod sequence_tests;
 
 use {
-    super::{error, ersd_optm, ersd_optm_tests, run, run_tests_program, run_text, tests_error},
+    super::{
+        error, ersd_optm, ersd_optm_tests, run, run_tests_program, run_text, test_program,
+        tests_error,
+    },
     curios_native::MockHost,
     curios_pipeline::{DEFAULT_STEP_BUDGET, Fold},
     curios_text::{Entrypoint, RootSource},
-    curios_utilities::RootKind,
+    curios_utilities::{Qualifier, RootKind},
 };
 
 #[test]
@@ -351,9 +354,70 @@ fn declared_tests_schedule_through_the_synthesized_tail() {
 }
 
 #[test]
-fn a_unit_with_no_tests_runs_nothing() {
-    // `Test/main([])`: the authored tail is replaced, nothing is scheduled and nothing is written.
-    assert_eq!(run_tests_program(r#"/std/print("ran\n")"#), b"");
+fn a_unit_with_no_tests_builds_no_program() {
+    // `Test/main([])` replaces the authored tail and is judged, and a program that would run nothing is built no further.
+    let program = test_program(r#"/std/print("ran\n")"#);
+    assert!(program.records.is_empty() && program.declared.is_empty());
+    assert!(program.compiled.is_none());
+}
+
+#[test]
+fn a_selection_schedules_the_tests_at_or_under_any_of_its_prefixes() {
+    // A whole segment at a time: `/Map` selects `/Map` and what is under it, and never `/MapBuilder`. What the tail does not schedule is still declared, for a selection meeting nothing to be answered with.
+    let entrypoint = r#"
+        use /std/{Test};
+        test Map = Test/assert(true);
+        mod Map
+            use /std/{Test};
+            test inner = Test/assert(true);
+        end
+        mod MapBuilder
+            use /std/{Test};
+            test beside = Test/assert(true);
+        end
+        mod Set
+            use /std/{Test};
+            test member = Test/assert(true);
+        end
+        ()
+        "#
+    .parse::<Entrypoint>()
+    .expect("fixture parses");
+    let selected = |under: &[&[&str]]| {
+        let program = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+            .tests(
+                &entrypoint,
+                &RootSource::none().tested(),
+                under
+                    .iter()
+                    .map(|prefix| Qualifier::from(prefix.iter().copied()))
+                    .collect(),
+                |_| {},
+                |_| {},
+            )
+            .expect("fixture compiles as a test program");
+        assert_eq!(
+            program
+                .declared
+                .iter()
+                .map(Qualifier::join)
+                .collect::<Vec<_>>(),
+            ["/Map", "/Map/inner", "/MapBuilder/beside", "/Set/member"]
+        );
+
+        program
+            .records
+            .into_iter()
+            .map(|record| record.path)
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(selected(&[&["Map"]]), ["/Map", "/Map/inner"]);
+    assert_eq!(
+        selected(&[&["Map", "inner"], &["Set"]]),
+        ["/Map/inner", "/Set/member"]
+    );
+    assert!(selected(&[&["Nothing"]]).is_empty());
 }
 
 #[test]
@@ -389,9 +453,16 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
         "#
     .parse::<Entrypoint>()
     .expect("fixture parses");
-    let (_module, _foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
-        .tests(&entrypoint, &RootSource::none().tested(), |_| {}, |_| {})
-        .expect("fixture compiles as a test program");
+    let records = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+        .tests(
+            &entrypoint,
+            &RootSource::none().tested(),
+            vec![Qualifier::empty()],
+            |_| {},
+            |_| {},
+        )
+        .expect("fixture compiles as a test program")
+        .records;
 
     assert_eq!(
         records
@@ -423,9 +494,10 @@ fn a_test_program_schedules_only_the_tested_units_tests() {
         unit
     };
     let scheduled = |units: &[RootSource], entrypoint: &Entrypoint, loader: &RootSource| {
-        let (_module, _foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, units, None)
-            .tests(entrypoint, loader, |_| {}, |_| {})
-            .expect("the test program compiles");
+        let records = Fold::new(DEFAULT_STEP_BUDGET, units, None)
+            .tests(entrypoint, loader, vec![Qualifier::empty()], |_| {}, |_| {})
+            .expect("the test program compiles")
+            .records;
 
         records
             .into_iter()
