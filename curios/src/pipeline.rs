@@ -88,9 +88,9 @@ pub(crate) fn payload_of(
     if let Some((cache, program)) = &filed
         && let Some((payload, foreigns)) = cache.payload_get(program, &sources, runs)
     {
-        // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step names the subject rather than a unit, because what came back is the whole program's.
+        // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step is the program's, because what came back is the whole program.
         processing(&subject, manifest.as_deref());
-        let mut line = Line::nested(Heading::Compiling, &subject);
+        let mut line = Line::nested(Heading::Linking, &subject);
         line.outcome("reused");
         eprintln!();
 
@@ -247,9 +247,9 @@ pub(crate) fn report(steps: &mut Steps, subject: &Subject, progress: Progress<'_
         Progress::Compiling(prefix) | Progress::Recompiling(prefix) => {
             steps.unit = Some(Line::nested(Heading::Compiling, &Subject::Mounted(*prefix)));
         }
-        // The entry program is the subject the header named, and its compile is a step of its own after any unit's: it compiles the program the units link into, which a store's reuse reports as `↳ Compiling <subject>; reused` in the same place.
+        // The entry program is the subject the header named, and its compile is a step of its own after any unit's: it links the units into the program, which a store's reuse reports as `↳ Linking <subject>; reused` in the same place.
         Progress::Entry => {
-            steps.payload = Some(Line::nested(Heading::Compiling, subject));
+            steps.payload = Some(Line::nested(Heading::Linking, subject));
         }
         Progress::Reused(prefix) => {
             Line::nested(Heading::Compiling, &Subject::Mounted(*prefix)).outcome("reused");

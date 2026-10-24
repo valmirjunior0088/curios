@@ -180,7 +180,7 @@ impl Run<'_> {
         });
         match &tested {
             Ok(tested) if tested.reused() => {
-                Line::nested(Heading::Compiling, &shown).outcome("reused");
+                Line::nested(Heading::Linking, &shown).outcome("reused");
                 eprintln!();
             }
             Ok(_) => steps.finish(),

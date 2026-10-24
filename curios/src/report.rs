@@ -6,6 +6,7 @@
 //! Processing     hello
 //! ↳ Compiling    /dep; reused
 //! ↳ Compiling    /hello; 1.4s
+//! ↳ Linking      hello; 0.9s
 //! ↳ Running      hello
 //! ```
 //!
@@ -88,8 +89,10 @@ macro_rules! headings {
 headings! {
     /// A subject being taken on: the header of the steps that deal with it. Deliberately neutral about which steps those are, since what follows may be a compile or a reuse, then a run or a test.
     Processing => "Processing",
-    /// A unit or a subject's payload being obtained — closed by the time the compile took, or by `reused` when the store already held it.
+    /// A unit being obtained — closed by the time its compile took, or by `reused` when the store already held it.
     Compiling => "Compiling",
+    /// A subject's program being made of its compiled units, through to the machine code a run executes — closed by the time that took, or by `reused` when the store already held the payload. A step of its own, and not a second `Compiling`, because a library's tests are a program named as its unit is.
+    Linking => "Linking",
     /// The handover of a subject's tests to their scheduler, whose report follows on stdout.
     Testing => "Testing",
     /// A subject's tests finished, with their tally.

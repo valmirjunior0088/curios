@@ -129,18 +129,18 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "3 passed, 1 failed, 1 trapped, 1 exited\n",
         ],
     );
-    // The library is taken on, its unit and then its test program compiled, tested and tallied; the executable, which declares no tests, is taken on and compiled and nothing more. Each program's own step follows the units it links: it is timed through to the machine code a run executes.
+    // The library is taken on, its unit compiled and its test program linked, tested and tallied; the executable, which declares no tests, is taken on, compiled and linked and nothing more. Each program's own step follows the units it links: it is timed through to the machine code a run executes.
     in_order(
         &stderr(&output),
         &[
             "Processing     /app\n",
             "↳ Compiling    /app; ",
-            "↳ Compiling    /app; ",
+            "↳ Linking      /app; ",
             "↳ Testing      /app\n",
             "↳ Tested       /app; 3 passed, 1 failed, 1 trapped, 1 exited\n",
             "Processing     app\n",
             "↳ Compiling    /app; ",
-            "↳ Compiling    app; ",
+            "↳ Linking      app; ",
         ],
     );
     assert!(
@@ -200,16 +200,16 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
 
     let warm = curios(&root, &["test", "--filter", "/app/addition_passes"]);
     assert_eq!(stdout(&warm), stdout(&cold));
-    // Each payload comes back whole, so each target's one step names the target rather than a unit.
+    // Each payload comes back whole, so each target's one step is its program's rather than a unit's.
     in_order(
         &stderr(&warm),
         &[
             "Processing     /app\n",
-            "↳ Compiling    /app; reused\n",
+            "↳ Linking      /app; reused\n",
             "↳ Testing      /app\n",
             "↳ Tested       /app; 1 passed, 0 failed\n",
             "Processing     app\n",
-            "↳ Compiling    app; reused\n",
+            "↳ Linking      app; reused\n",
         ],
     );
 }
@@ -371,13 +371,13 @@ fn run_neither_runs_nor_reports_a_test() {
     let output = curios(&root, &["run"]);
 
     assert_eq!(stdout(&output), "ran\n", "stderr: {}", stderr(&output));
-    // The target is taken on, its library compiled as a step and the program as the next, and the handover is the last step before the program's own output.
+    // The target is taken on, its library compiled as a step and the program linked as the next, and the handover is the last step before the program's own output.
     in_order(
         &stderr(&output),
         &[
             "Processing     app\n",
             "↳ Compiling    /app; ",
-            "↳ Compiling    app; ",
+            "↳ Linking      app; ",
             "↳ Running      app\n",
         ],
     );
@@ -463,18 +463,18 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
     let cold = curios(&root, &["test"]);
     assert_eq!(cold.status.code(), Some(0), "stderr: {}", stderr(&cold));
 
-    // Each target is filed against its own chain, so the second invocation compiles nothing: every target's one step names the target itself. A store handle shared across targets would carry the library's placement into every later fold, withholding each executable's payload on the invocation that first compiled it.
+    // Each target is filed against its own chain, so the second invocation compiles nothing: every target's one step is its program's. A store handle shared across targets would carry the library's placement into every later fold, withholding each executable's payload on the invocation that first compiled it.
     let warm = curios(&root, &["test"]);
     assert_eq!(stdout(&warm), stdout(&cold));
     in_order(
         &stderr(&warm),
         &[
             "Processing     /app\n",
-            "↳ Compiling    /app; reused\n",
+            "↳ Linking      /app; reused\n",
             "Processing     app\n",
-            "↳ Compiling    app; reused\n",
+            "↳ Linking      app; reused\n",
             "Processing     other\n",
-            "↳ Compiling    other; reused\n",
+            "↳ Linking      other; reused\n",
         ],
     );
 }
