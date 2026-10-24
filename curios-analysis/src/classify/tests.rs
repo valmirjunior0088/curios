@@ -474,7 +474,7 @@ fn an_operation_is_read_only_against_operations_over_its_atoms() {
     assert!(buckets.iter().all(|(_, nodes)| nodes.len() == 1));
 }
 
-/// The truth table holds two formulas one over two sets of atoms, so an operation over truth values is read against every earlier one of its operation: `p && (p || q)` is `p && (p || r)`, and an equality of the two is `true` once its fold is taken again.
+/// The decision diagram holds two formulas one over two sets of atoms, so an operation over truth values is read against every earlier one of its operation: `p && (p || q)` is `p && (p || r)`, and an equality of the two is `true` once its fold is taken again.
 ///
 /// Mutation-checked: with a formula kept by its atoms, as every other operation is, the two are never read against each other and the equality stays stuck.
 #[test]

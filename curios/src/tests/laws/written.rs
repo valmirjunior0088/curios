@@ -157,7 +157,7 @@ const ATOMS_HELD: &[&str] = &[
     "Eq()(h(i + j) * e(k + l), e(l + k) * h(j + i))",
     "Eq()(h(i + j) == e(k + l), e(l + k) == h(j + i))",
     "Eq()(h(i + j) + e(k + l) <= i, e(l + k) + h(j + i) <= i)",
-    // A connective's leaves as a set, and the truth table's laws over them.
+    // A connective's leaves as a set, and the decision diagram's laws over them.
     "Eq()(p(a + b) && q(c), q(c) && p(b + a))",
     "Eq()(p(a + b) || q(c + d), q(d + c) || p(b + a))",
     "Eq()(Bool/xor(p(a + b), q(c)), Bool/xor(q(c), p(b + a)))",
@@ -845,7 +845,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Bool/not(Bool/not(b)), b)",
             // `&&` and `||` are semilattices on their leaves, decided as sets by the peel: commuted, reassociated and repeated leaves are one value.
             "Eq()((b && c) && b, c && b)",
-            // The laws that relate one connective to another, which no single node sees and no leaf set holds: decided where two terms are compared, by a truth table over their atoms, so no spelling a guard was keyed on is ever changed. Absorption is the one whose other side is no connective at all.
+            // The laws that relate one connective to another, which no single node sees and no leaf set holds: decided where two terms are compared, by a decision diagram over their atoms, so no spelling a guard was keyed on is ever changed. Absorption is the one whose other side is no connective at all.
             "Eq()(Bool/not(b && c), Bool/not(b) || Bool/not(c))",
             "Eq()(Bool/not(b || c), Bool/not(b) && Bool/not(c))",
             "Eq()(b || (b && c), b)",
@@ -864,12 +864,20 @@ const CARRIERS: &[Carrier] = &[
         ],
     },
     Carrier {
-        name: "Bool, at the table's cap",
-        binders: "a0: Bool, a1: Bool, a2: Bool, a3: Bool, a4: Bool, a5: Bool, a6: Bool, a7: Bool, a8: Bool",
-        // Absorption over eight atoms, which is the cap.
-        held: &["Eq()(a0 || (a0 && a1 && a2 && a3 && a4 && a5 && a6 && a7), a0)"],
-        // The same law over nine: true, and declined, because a table doubles with every atom and the cap is where the question stops being asked. A candidate for a procedure that does not enumerate.
-        refused: &["Eq()(a0 || (a0 && a1 && a2 && a3 && a4 && a5 && a6 && a7 && a8), a0)"],
+        name: "Bool, past eight atoms",
+        binders: "a0: Bool, a1: Bool, a2: Bool, a3: Bool, a4: Bool, a5: Bool, a6: Bool, a7: Bool, a8: Bool, a9: Bool",
+        // No pair is declined for the atoms it holds: absorption over eight atoms and over nine, and two contradictions over five atoms each, which agree with `false` and with each other, so a chain through `false` is whole however many atoms its ends hold between them.
+        held: &[
+            "Eq()(a0 || (a0 && a1 && a2 && a3 && a4 && a5 && a6 && a7), a0)",
+            "Eq()(a0 || (a0 && a1 && a2 && a3 && a4 && a5 && a6 && a7 && a8), a0)",
+            "Eq()((a0 || a1 || a2 || a3 || a4) && Bool/not(a0) && Bool/not(a1) && Bool/not(a2) && Bool/not(a3) && Bool/not(a4), false)",
+            "Eq()(false, (a5 || a6 || a7 || a8 || a9) && Bool/not(a5) && Bool/not(a6) && Bool/not(a7) && Bool/not(a8) && Bool/not(a9))",
+            "Eq()((a0 || a1 || a2 || a3 || a4) && Bool/not(a0) && Bool/not(a1) && Bool/not(a2) && Bool/not(a3) && Bool/not(a4), (a5 || a6 || a7 || a8 || a9) && Bool/not(a5) && Bool/not(a6) && Bool/not(a7) && Bool/not(a8) && Bool/not(a9))",
+        ],
+        // The control: a contradiction is not a conjunction that holds where its atoms do.
+        refused: &[
+            "Eq()((a0 || a1 || a2 || a3 || a4) && Bool/not(a0) && Bool/not(a1) && Bool/not(a2) && Bool/not(a3) && Bool/not(a4), a0 && a5)",
+        ],
     },
     Carrier {
         name: "Bool, comparisons by what they state",
@@ -1294,7 +1302,7 @@ const INSTANCE_BINDERS: &str = "@K: Type, l: Tree(K), r: Tree(K), t: Tree(K)";
 
 /// Equations over calls apart in a universe instance, each closed by `Eq/refl()`. An atom of a carrier whose values hold no type is one up to universe instances, in every reader (`curios_core::same_atom`). A row is stated in a signature, where each call's level is its declaration's to close, so the kernel is handed the calls apart wherever the elaborator held them one by a reader and joined no level: it holds the row by the same reader, or the compilation is refused as the kernel's.
 const INSTANCES_HELD: &[&str] = &[
-    // A call commuted, at each carrier and under each reader that pairs operands: a connective's leaves, the truth table, the symmetric peel, a lattice's leaves, the fused pairing.
+    // A call commuted, at each carrier and under each reader that pairs operands: a connective's leaves, the decision diagram, the symmetric peel, a lattice's leaves, the fused pairing.
     "Eq()(even(l) && even(r), even(r) && even(l))",
     "Eq()(even(l) || even(r), even(r) || even(l))",
     "Eq()(even(l) != even(r), even(r) != even(l))",
@@ -1807,30 +1815,6 @@ fn a_mismatch_nothing_compared_says_so() {
         ))
         .expect_err("the claim is no law conversion decides")
     };
-
-    // Past the truth table's cap. Each of two contradictions over five atoms converts with `false`, and the two are not compared with each other: their pair holds ten atoms, and the table reads eight.
-    let atoms = (0..10)
-        .map(|index| format!("a{index}: Bool"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let contradiction = |from: usize| {
-        let names = (from..from + 5)
-            .map(|index| format!("a{index}"))
-            .collect::<Vec<_>>();
-        let negated = names
-            .iter()
-            .map(|name| format!("Bool/not({name})"))
-            .collect::<Vec<_>>();
-        format!("(({}) && {})", names.join(" || "), negated.join(" && "))
-    };
-    let past_cap = refusal(
-        &atoms,
-        &format!("Eq()({}, {})", contradiction(0), contradiction(5)),
-    );
-    assert!(
-        past_cap.contains("type mismatch") && past_cap.contains("not compared: two Boolean terms"),
-        "{past_cap}"
-    );
 
     // Operands nothing pairs: no factor of one product is a factor of the other.
     let unpaired = refusal(

@@ -1,9 +1,8 @@
-//! The truth table over two `Bool` terms' atoms: what it decides equal, what it leaves alone, and where it stops.
+//! The decision diagram over two `Bool` terms' atoms: what it decides equal, what it leaves alone, and what it is charged.
 
 use {
     super::{decide_bool, test_support::*},
-    crate::{Intrinsic, Nat, Term},
-    curios_algebra::BOOL_ATOM_CAP,
+    crate::{Exhaustion, Intrinsic, Nat, Term},
 };
 
 fn and(left: Term, right: Term) -> Term {
@@ -130,19 +129,46 @@ fn a_pair_that_differs_at_an_assignment_is_left_undecided() {
     assert!(!decided(&b, &c), "no connective on either side");
 }
 
-// The cap is on the atoms the two sides hold between them: at the cap a law is still decided, and one atom past it the same law is declined — completeness given up, never a verdict.
+/// `a0 || (a0 && a1 && … )` over so many atoms against the bare `a0`: absorption.
+fn absorbed(atoms: usize) -> (Term, Term) {
+    let chain = (1..atoms as u32)
+        .map(|index| sym(index, "a"))
+        .fold(sym(0, "a"), and);
+    (or(sym(0, "a"), chain), sym(0, "a"))
+}
+
+// No pair is declined: absorption is decided at every size, far past any a table reads, and what it is charged grows as the square of its atoms — the diagrams of a chain of conjunctions — a doubling of them charging under five times as much.
 #[test]
-fn a_pair_past_the_atom_cap_is_declined() {
-    let absorbed = |atoms: usize| {
-        let chain = (1..atoms as u32)
-            .map(|index| sym(index, "a"))
-            .fold(sym(0, "a"), and);
-        (or(sym(0, "a"), chain), sym(0, "a"))
+fn a_pair_is_decided_at_every_size_in_the_square_of_its_atoms() {
+    let mut last: Option<u64> = None;
+    for atoms in [32, 64, 128, 256] {
+        let (tree, atom) = absorbed(atoms);
+        let mut reducer = Budgeted {
+            remaining: u64::MAX,
+        };
+        assert!(
+            matches!(decide_bool(&mut reducer, &tree, &atom), Ok(true)),
+            "absorption over {atoms} atoms"
+        );
+        let spent = u64::MAX - reducer.remaining;
+        if let Some(last) = last {
+            assert!(spent < 5 * last, "{atoms} atoms: {spent} after {last}");
+        }
+        last = Some(spent);
+    }
+}
+
+// A pair its budget cannot finish exhausts the budget, which is no verdict, and a larger budget decides it: the comparison is priced in the budget and has no limit of its own.
+#[test]
+fn a_spent_budget_is_no_verdict_and_a_larger_one_decides() {
+    let (tree, atom) = absorbed(64);
+    let mut starved = Budgeted { remaining: 100 };
+    assert!(
+        decide_bool(&mut starved, &tree, &atom).is_err_and(|error| error.is_exhausted()),
+        "a budget of a hundred units"
+    );
+    let mut ample = Budgeted {
+        remaining: 10_000_000,
     };
-
-    let (tree, atom) = absorbed(BOOL_ATOM_CAP);
-    assert!(decided(&tree, &atom), "at the cap");
-
-    let (tree, atom) = absorbed(BOOL_ATOM_CAP + 1);
-    assert!(!decided(&tree, &atom), "one atom past it");
+    assert!(matches!(decide_bool(&mut ample, &tree, &atom), Ok(true)));
 }

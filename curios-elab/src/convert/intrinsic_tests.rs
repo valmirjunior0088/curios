@@ -363,7 +363,7 @@ fn intrinsic_bytes_slice_recurses_into_operands() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
-// A `Bool` connective against a term that is no intrinsic at all — absorption's shape — never reaches the intrinsic congruence, so the truth table over the two sides' atoms is asked at the head dispatch. The control differs at one assignment and stays apart.
+// A `Bool` connective against a term that is no intrinsic at all — absorption's shape — never reaches the intrinsic congruence, so the decision diagram over the two sides' atoms is asked at the head dispatch. The control differs at one assignment and stays apart.
 #[test]
 fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
     let mut context = context();

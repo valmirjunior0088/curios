@@ -348,7 +348,7 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
             .is_some_and(|found| found.compared.len() == 1 && found.sorts.len() == 1),
         ),
         (
-            "the truth table",
+            "the decision diagram",
             decide_bool(&mut Folding, &formula(), &formula()).is_ok_and(|equal| equal),
         ),
         (

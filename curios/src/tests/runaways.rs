@@ -35,6 +35,35 @@ pub(super) enum Runaway {
     Stacks(u32),
     /// `walk(g, k, top)` at so many steps, against `g(top)`: a recursion whose last step applies a variable.
     Walks(u32),
+    /// `b || (b && (a0 && … ))` over so many atoms, against `b`: absorption, which a decision diagram decides in the square of its atoms.
+    Absorption(u32),
+    /// `(x0 && … && c) || P` against `P || (c && x0 && … )`, `P` the disjunction of so many pairs `xi && yi`: one value, read from a side that meets every `xi` before any `yi`, an order whose diagrams double with every pair.
+    Pairs(u32),
+    /// [`Runaway::Pairs`] with its sides swapped, read from the side that meets each pair's two atoms together, an order whose diagrams grow by a few nodes a pair.
+    PairsTurned(u32),
+}
+
+/// The claim [`Runaway::Pairs`] and [`Runaway::PairsTurned`] state over so many pairs, the side that meets every `xi` first on the left or the right.
+fn pairs(count: u32, turned: bool) -> String {
+    let xs = (0..count)
+        .map(|index| format!("x{index}"))
+        .collect::<Vec<_>>();
+    let binders = (0..count)
+        .flat_map(|index| [format!("x{index}: Bool"), format!("y{index}: Bool")])
+        .chain(["c: Bool".to_string()])
+        .collect::<Vec<_>>()
+        .join(", ");
+    let pairs = (0..count)
+        .map(|index| format!("(x{index} && y{index})"))
+        .collect::<Vec<_>>()
+        .join(" || ");
+    let first = format!("({} && c) || ({pairs})", xs.join(" && "));
+    let second = format!("({pairs}) || (c && {})", xs.join(" && "));
+    let (left, right) = match turned {
+        false => (first, second),
+        true => (second, first),
+    };
+    format!("let claim({binders}) -> Eq()({left}, {right})")
 }
 
 const POWER: &str =
@@ -122,6 +151,24 @@ pub(super) fn runaway(shape: Runaway) -> String {
                 .to_string(),
             format!("let claim(g: (Nat) -> Nat, x: Nat) -> Eq()(walk(g, {steps}, x), g(x))"),
         ),
+        Runaway::Absorption(atoms) => {
+            let names = (0..atoms).map(|index| format!("a{index}")).collect::<Vec<_>>();
+            let binders = names
+                .iter()
+                .map(|name| format!("{name}: Bool"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            (
+                "Bool, Eq, Io",
+                String::new(),
+                format!(
+                    "let claim(b: Bool, {binders}) -> Eq()(b || (b && ({})), b)",
+                    names.join(" && ")
+                ),
+            )
+        }
+        Runaway::Pairs(count) => ("Bool, Eq, Io", String::new(), pairs(count, false)),
+        Runaway::PairsTurned(count) => ("Bool, Eq, Io", String::new(), pairs(count, true)),
     };
 
     fill!(
@@ -205,6 +252,33 @@ fn a_side_opened_alone_a_step_at_a_time_is_held_inside_its_budget() {
 fn a_recursion_that_ends_at_an_applied_variable_is_held_inside_its_budget() {
     assert_eq!(
         typecheck_within(300_000, &runaway(Runaway::Walks(2000))),
+        Ok(())
+    );
+}
+
+/// Absorption over two hundred and fifty-six atoms is decided inside a million units, in both checkers: a decision diagram reads a chain of conjunctions in the square of its atoms, where a table over them would double with every one.
+#[test]
+fn a_comparison_over_many_atoms_is_decided_inside_its_budget() {
+    assert_eq!(
+        typecheck_within(1_000_000, &runaway(Runaway::Absorption(256))),
+        Ok(())
+    );
+}
+
+/// Sixteen pairs read from the side that meets every `xi` before any `yi` are one value at every budget that can decide them and at none that cannot: refused for a million units, the budget spent deciding them, and held inside four million, a larger budget deciding what a smaller one could not. The same pair posed from the other side is held inside four hundred thousand: the order a diagram reads its atoms in moves what a comparison costs and never what it answers.
+#[test]
+fn an_order_that_costs_more_is_decided_by_a_larger_budget() {
+    let report = refused(1_000_000, Runaway::Pairs(16));
+    assert!(
+        report.contains("ran out of steps") && report.contains("deciding two Bool terms"),
+        "{report}"
+    );
+    assert_eq!(
+        typecheck_within(4_000_000, &runaway(Runaway::Pairs(16))),
+        Ok(())
+    );
+    assert_eq!(
+        typecheck_within(400_000, &runaway(Runaway::PairsTurned(16))),
         Ok(())
     );
 }

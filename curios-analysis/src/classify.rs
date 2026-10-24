@@ -10,7 +10,7 @@
 //!
 //! **A node the table leaves an operand out of is one with another of its kind where the operands it reads are.** A quotient carries a proof its meaning does not read, and its value is a function of its dividend and its divisor: two quotients of one dividend by one divisor are one, whatever their proofs, with no checker asked. Such a node is handed out as an atom once the operands its meaning reads are walked, no checker is asked whether two of them convert, and a walk that spells it holds it to the first node of its kind spelled over the same operands ([`Classes`]'s `unread`).
 //!
-//! **A node is forced before it is read, as the truth table forces it.** A stuck connective keeps its right operand as written, and an operand written as a call — a negation, an operator still spelled through its witness — is an operation only once it is reduced, so each node is reduced as a [`Probe`] before the walk asks the table what it is. An atom is therefore handed out in weak-head form, which is what lets its head say whether it may be another's.
+//! **A node is forced before it is read, as the decision diagram forces it.** A stuck connective keeps its right operand as written, and an operand written as a call — a negation, an operator still spelled through its witness — is an operation only once it is reduced, so each node is reduced as a [`Probe`] before the walk asks the table what it is. An atom is therefore handed out in weak-head form, which is what lets its head say whether it may be another's.
 //!
 //! **A stuck operation is classified once, from what its operands' classifications found.** A reducer folds a spine from its leaves and takes each stuck fold again ([`atoms_within`], [`refold`]), so the operation at each level stands over operations classified a moment before. Each classification is the walk's state once the operation's operands are walked ([`Classification`]), which a reducer files beside the operation and hands back to the operation above it. The walk meets an operand before anything after it, in its own order, so a first operand's classification is exactly where the walk of the operation above stands once that operand is walked; every later operand is walked against it, a node walked already met by its identity and not entered; and where the operands before a classification are small beside it, they are walked alone and placed before it, each key they share decided as the walk would decide it, and where one would move, the walk starts from the first operand instead. So what a fold above a spine walks is what is new at it, and what it decides is what one walk of the whole would decide.
 //!
@@ -894,7 +894,7 @@ fn read_into(term: &Term) -> bool {
 
 /// The bucket a node of `kind` is held in: its operation, and the atoms it stands over.
 ///
-/// **The truth table is left its whole operation.** It holds two formulas one over two sets of atoms, `p && (p || q)` beside `p && (p || r)`, where every other reader of two operations of one kind holds them one over one set. So an operation over truth values is read against every earlier one of its kind.
+/// **The decision diagram is left its whole operation.** It holds two formulas one over two sets of atoms, `p && (p || q)` beside `p && (p || r)`, where every other reader of two operations of one kind holds them one over one set. So an operation over truth values is read against every earlier one of its kind.
 fn bucket(over: &mut Persistent<Term, Over>, kind: Kind, node: &Term) -> Bucket {
     let atoms = match kind.0 {
         Carrier::Boolean => 0,

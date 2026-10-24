@@ -257,8 +257,6 @@ pub enum Callee {
 pub enum Declined {
     /// A commutative operation's operands, none of one side paired with one of the other.
     Unpaired,
-    /// Two `Bool` terms whose atoms pass the truth table's cap.
-    PastCap,
 }
 
 /// Every term an error's message prints, handed to `$visit` in order, a nested error's through `$recurse` and a reason's or a refusal's through `$terms`: the one list both readings of an error's terms expand, so the terms a report renames by and the terms it settles are one set.

@@ -5,8 +5,7 @@
 use {
     super::*,
     crate::Declined,
-    curios_algebra::BOOL_ATOM_CAP,
-    curios_core::{Free, Global, Intrinsic, Level, Term},
+    curios_core::{Cost, Free, Global, Intrinsic, Level, Term},
     curios_utilities::Qualifier,
 };
 
@@ -98,9 +97,28 @@ fn a_mismatch_says_what_was_not_compared() {
 
     assert!(!shown(None).contains("not compared"));
     assert!(shown(Some(Declined::Unpaired)).contains("not compared: no operand of one side"));
-    assert!(shown(Some(Declined::PastCap)).contains(&format!(
-        "not compared: two Boolean terms over more than {BOOL_ATOM_CAP} atoms"
-    )));
+}
+
+/// A spent budget is reported with the row of the charge it could not afford, what that charge was and what was left, as the kernel reports one.
+#[test]
+fn a_spent_budget_names_what_it_was_spent_on() {
+    let error = Error::ConvertExhausted {
+        this: Box::new(family("Left", vec![])),
+        that: Box::new(family("Right", vec![])),
+        refusal: ReduceError::exhausted(5, Cost::decision(8)),
+    };
+    let spelling = Rc::new(
+        Spelling::default()
+            .with_erased_universes()
+            .with_anonymous_metavars(),
+    );
+    let shown = Displayed(&error, spelling, &[]).to_string();
+
+    assert!(shown.contains("conversion ran out of steps"), "{shown}");
+    assert!(
+        shown.contains("deciding two Bool terms needed 8 units with 5 left"),
+        "{shown}"
+    );
 }
 
 /// A rejected candidate is reported as one: the metavariable by what it is, the candidate, and the report of the check that refused it beneath, indented under the sentence that introduces it.

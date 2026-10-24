@@ -49,7 +49,7 @@ use {
         Intrinsic, Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin,
         Probe, Proj, Quality, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm,
         Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, Universes, Variance, Variant, past_bool_cap,
+        UniverseContext, UniverseError, Universes, Variance, Variant,
     },
     curios_utilities::{Keyed, Plicity, recurse},
     std::{
@@ -3437,10 +3437,6 @@ impl Convert {
                 {
                     self.blocked.push(raw_problem(&problem.type_));
                     continue;
-                }
-                // Two `Bool` terms the truth table declined are a mismatch nothing compared, and the report says so — ahead of their operands being unpaired, which is only what the table's silence left them.
-                if past_bool_cap(context, &problem.this, &problem.that)? {
-                    self.declined = Some(Declined::PastCap);
                 }
                 return Ok(false);
             }

@@ -4,7 +4,7 @@
 //!
 //! 1. the driver's preparation of each side ([`Driver::prepare`]);
 //! 2. a stuck product distributed, where neither side is a literal;
-//! 3. the truth table over two `Bool` terms;
+//! 3. the decision diagram over two `Bool` terms;
 //! 4. two connective trees flattened, their leaves forced;
 //! 5. two comparisons read through their linear views — one proposition where the views agree, and otherwise both respelled alike;
 //! 6. the peels, the product-factor and comparison-side pairings first;
@@ -301,13 +301,13 @@ pub(crate) enum Read {
     Undecided(Box<(Intrinsic, Intrinsic)>),
 }
 
-/// Steps 3 to 6 over one pair: the truth table, the connective trees, the comparisons' views and the peels. It asks its reducer to reduce and nothing else, so the classification holds a node to another by it ([`agree`](crate::agree)) as the chain reads a pair by it.
+/// Steps 3 to 6 over one pair: the decision diagram, the connective trees, the comparisons' views and the peels. It asks its reducer to reduce and nothing else, so the classification holds a node to another by it ([`agree`](crate::agree)) as the chain reads a pair by it.
 pub(crate) fn read(
     driver: &mut impl Reducer,
     this: Intrinsic,
     that: Intrinsic,
 ) -> Result<Read, ReduceError> {
-    // **Two `Bool` terms, one of them a connective, are first put to the truth table over their atoms**, which decides what no leaf set or local law relates — De Morgan, absorption, distribution — and changes no spelling. A metavariable among the leaves is an atom like any other, since agreement at every assignment holds whatever it is solved to. Undecided is not unequal, so a pair the table leaves undecided goes on to everything below.
+    // **Two `Bool` terms, one of them a connective, are first put to the decision diagram over their atoms**, which decides what no leaf set or local law relates — De Morgan, absorption, distribution — and changes no spelling. A metavariable among the leaves is an atom like any other, since agreement at every assignment holds whatever it is solved to. Undecided is not unequal, so a pair the table leaves undecided goes on to everything below.
     if decide_bool(
         driver,
         &Term::intrinsic(this.clone()),
@@ -469,9 +469,9 @@ pub enum Agreement {
     Atoms(Vec<Term>),
 }
 
-/// Whether a `Bool` connective on either side agrees with the other side at every assignment of their atoms — the truth table both checkers put a connective to when the other side is no intrinsic at all, absorption's shape: `b || (b && c)` against the bare `b`, which the intrinsic chain never sees. Where each checker asks it is its own: the elaborator before its dispatch, the kernel in its fallback ahead of its unfolding retry.
+/// Whether a `Bool` connective on either side agrees with the other side at every assignment of their atoms — the decision diagram both checkers put a connective to when the other side is no intrinsic at all, absorption's shape: `b || (b && c)` against the bare `b`, which the intrinsic chain never sees. Where each checker asks it is its own: the elaborator before its dispatch, the kernel in its fallback ahead of its unfolding retry.
 ///
-/// The table keys its atoms on spelling, as every reader in the chain does, so a pair it does not decide hands its atoms back to be classed, as the chain's step 7 hands its own: `p(a + b) || (p(b + a) && q)` against `p(a + b)` is absorption once the two leaves are one atom.
+/// The diagram keys an opaque atom on its spelling, as every reader in the chain does, so a pair it does not decide hands its atoms back to be classed, as the chain's step 7 hands its own: `p(a + b) || (p(b + a) && q)` against `p(a + b)` is absorption once the two leaves are one atom.
 pub fn connectives_agree(
     reducer: &mut impl Reducer,
     this: &Term,

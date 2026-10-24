@@ -810,7 +810,7 @@ fn every_position_verdict_holds_at_every_closed_instantiation() {
     );
 }
 
-// The truth table's one verdict, held over values: a pair it decides equal must be one `Bool` at every closed instantiation of its symbols — naturals as well as booleans, because the comparison atoms are *not* independent of one another and the table treats them as if they were, which is sound only in the direction it answers. The undecided pairs are tallied and promise nothing; among them is a law that is true of the values and invisible to the table, `x < y || x < y + 1` against `x < y + 1`, which is what declining costs.
+// The decision diagram's one verdict, held over values: a pair it decides equal must be one `Bool` at every closed instantiation of its symbols — naturals as well as booleans, because the comparison atoms are *not* independent of one another and the table treats them as if they were, which is sound only in the direction it answers. The undecided pairs are tallied and promise nothing; among them is a law that is true of the values and invisible to the table, `x < y || x < y + 1` against `x < y + 1`, which is what declining costs.
 #[test]
 fn every_truth_table_decision_holds_at_every_closed_instantiation() {
     let bool_b = Free::local(0, Some("b"));

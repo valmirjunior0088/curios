@@ -95,3 +95,13 @@ fn multiplying_keeps_the_category() {
     assert_eq!(doubled.category(), Category::Payload);
     assert_eq!(doubled.get(), Cost::packed_bytes(8).get() * 2);
 }
+
+/// A step of a Boolean decision is charged the units it reports, with nothing added, under the row that says what the budget was spent on.
+#[test]
+fn a_decision_step_costs_the_units_it_reports() {
+    let step = Cost::decision(8);
+
+    assert_eq!(step.get(), 8);
+    assert_eq!(step.category(), Category::Decision);
+    assert!(Cost::decision(u64::MAX).is_refused());
+}

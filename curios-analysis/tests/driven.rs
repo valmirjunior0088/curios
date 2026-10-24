@@ -1702,7 +1702,7 @@ fn a_size_the_budget_cannot_read_refuses_the_classification() {
     assert_eq!(group_totality(&mut kernel(), group), Ok(Totality::Partial));
 }
 
-/// The conversion chain's respellings are probes: a connective's leaf with no value at the type level is read as written, an atom like any other, rather than turning the comparison into the leaf's own failure. The two sides differ by a unit the truth table sees through once the leaf is an atom.
+/// The conversion chain's respellings are probes: a connective's leaf with no value at the type level is read as written, an atom like any other, rather than turning the comparison into the leaf's own failure. The two sides differ by a unit the decision diagram sees through once the leaf is an atom.
 #[test]
 fn a_connective_leaf_with_no_value_is_compared_as_written() {
     let mut kernel = kernel();

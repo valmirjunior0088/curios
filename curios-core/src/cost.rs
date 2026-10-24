@@ -47,6 +47,8 @@ pub enum Category {
     Depth,
     /// Priced construction with no more specific row.
     Construction,
+    /// A step of the decision diagram two `Bool` terms are compared by, and what it stores.
+    Decision,
 }
 
 impl fmt::Display for Category {
@@ -60,6 +62,7 @@ impl fmt::Display for Category {
             Category::Buffer => "a temporary buffer",
             Category::Depth => "recursion depth",
             Category::Construction => "construction",
+            Category::Decision => "deciding two Bool terms",
         })
     }
 }
@@ -154,6 +157,11 @@ impl Cost {
     /// A temporary reducer buffer of `slots` logical units of payload or slots: the buffer header, plus its request.
     pub fn buffer(slots: u64) -> Self {
         Self::of(BUFFER_HEADER.saturating_add(slots), Category::Buffer)
+    }
+
+    /// A step of the decision diagram two `Bool` terms are compared by, in the units `curios-algebra`'s `Agreement` reports before taking it: one for the step and one a slot of each node or memo entry it stores, which are this module's units already.
+    pub fn decision(units: u64) -> Self {
+        Self::of(units, Category::Decision)
     }
 
     /// A term node retaining `slots` children or scalar fields: the node's fixed charge, plus one unit per slot.

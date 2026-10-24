@@ -11,15 +11,29 @@ use {
         GoalReport, Need, RegionOwner, ShapeDiagnosis, Underivable, Watched,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
-    curios_algebra::BOOL_ATOM_CAP,
     curios_analysis::{DeclaredPart, MemberLabel},
     curios_core::{
-        Anchors, CalleeId, Free, Global, Level, Quality, ReaderPosition, Spelling, Subterm, Term,
-        UniverseMetaId, WitnessKey,
+        Anchors, CalleeId, Free, Global, Level, Quality, ReaderPosition, ReduceError, Spelling,
+        Subterm, Term, UniverseMetaId, WitnessKey,
     },
     curios_utilities::{LINE_WIDTH, Plicity, Qualifier},
     std::{collections::HashMap, fmt, rc::Rc},
 };
+
+/// What a spent budget was refused, beneath the report it ends: the row of the charge it could not afford, with what that charge was and what was left, as the kernel names it.
+fn spent(f: &mut fmt::Formatter<'_>, refusal: &ReduceError) -> fmt::Result {
+    match refusal {
+        ReduceError::Exhausted {
+            category,
+            remaining,
+            attempted,
+        } => write!(
+            f,
+            "\n  {category} needed {attempted} units with {remaining} left"
+        ),
+        _ => Ok(()),
+    }
+}
 
 /// What a report on a dead arm adds: that the arm is never taken and what says so — its own guard, the guard of an arm around it that its case contradicts, or its scrutinee's indices, which also say it may be left out.
 pub(super) fn unreachable_arm_note(dead: &DeadArm, spelling: &Rc<Spelling>) -> String {
@@ -373,14 +387,20 @@ impl fmt::Display for Displayed<'_> {
             Watched::Goal(_) => "a written goal `?`".to_string(),
         };
         match self.0 {
-            Error::ReduceExhausted { term, .. } => {
+            Error::ReduceExhausted { term, refusal } => {
                 let term = term.spelled(spelling);
-                write!(f, "reduction ran out of steps on: {term}")
+                write!(f, "reduction ran out of steps on: {term}")?;
+                spent(f, refusal)
             }
-            Error::ConvertExhausted { this, that, .. } => {
+            Error::ConvertExhausted {
+                this,
+                that,
+                refusal,
+            } => {
                 let that = that.spelled(spelling);
                 let this = this.spelled(spelling);
-                write!(f, "conversion ran out of steps between {this} and {that}")
+                write!(f, "conversion ran out of steps between {this} and {that}")?;
+                spent(f, refusal)
             }
             Error::TypeMismatch {
                 inferred,
@@ -440,10 +460,6 @@ impl fmt::Display for Displayed<'_> {
                     Some(Declined::Unpaired) => write!(
                         f,
                         "\n  not compared: no operand of one side of a commutative operation is an operand of the other, and operands are paired where they are one term, never by the order they stand in"
-                    )?,
-                    Some(Declined::PastCap) => write!(
-                        f,
-                        "\n  not compared: two Boolean terms over more than {BOOL_ATOM_CAP} atoms are past what the truth table that decides them reads"
                     )?,
                     None => {}
                 }

@@ -194,7 +194,7 @@ fn every_law_holds_over_calls_apart_in_a_universe_instance() {
     }
 }
 
-/// The commutative operation a value of `carrier` is written two ways with, and the carrier of its two operands: an operation its own reader holds one with its operands swapped, and the reader of a law over it takes whole. A truth value is an equality of two naturals, which the truth table reads as an atom. `None` at a carrier with no such operation.
+/// The commutative operation a value of `carrier` is written two ways with, and the carrier of its two operands: an operation its own reader holds one with its operands swapped, and the reader of a law over it takes whole. A truth value is an equality of two naturals, which the decision diagram reads as an atom. `None` at a carrier with no such operation.
 fn commuted(carrier: Carrier) -> Option<(Carrier, Operation)> {
     let commuted = match carrier {
         Carrier::Natural | Carrier::Integer => (carrier, Operation::And),
@@ -326,7 +326,7 @@ fn every_law_holds_over_atoms_spelled_two_ways() {
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
 
-/// Every law at `Bool` with each variable a comparison written one way on the claim's left and another on its right, and each negation of a variable written as a spelling of the comparison's dual: across the `<`/`<=` seam at `Nat` and at `Int`, a sum of naturals against zero, a comparison of widened naturals against its preimage, and an equality either way round. A comparison is the atom of what it states, so the row holds only where every reader of a `Bool` atom knows it so — the truth table, the leaf sets, the commutative pairing and the fold's complement law. It is stated at several orders of its binders.
+/// Every law at `Bool` with each variable a comparison written one way on the claim's left and another on its right, and each negation of a variable written as a spelling of the comparison's dual: across the `<`/`<=` seam at `Nat` and at `Int`, a sum of naturals against zero, a comparison of widened naturals against its preimage, and an equality either way round. A comparison is the atom of what it states, so the row holds only where every reader of a `Bool` atom knows it so — the decision diagram, the leaf sets, the commutative pairing and the fold's complement law. It is stated at several orders of its binders.
 #[test]
 fn every_law_holds_at_comparisons_spelled_by_what_they_state() {
     const ORDERS: usize = 3;
@@ -368,6 +368,76 @@ fn every_law_holds_at_comparisons_spelled_by_what_they_state() {
         }
     }
     assert!(!instances.is_empty());
+    if let Err(failures) = closes(IMPORTS, &instances) {
+        panic!("{}", failures.join("\n"));
+    }
+}
+
+/// Every law at `Bool` with its first variable put to a conjunction of nine fresh atoms, and of thirty-two: an instance carries a law's pair past every number of atoms the law held, so the row holds only where no pair is declined for the atoms it holds.
+#[test]
+fn every_law_holds_with_a_variable_put_to_a_conjunction_of_many_atoms() {
+    for atoms in [9, 32] {
+        let conjunction = (0..atoms)
+            .map(|index| format!("a{index}"))
+            .collect::<Vec<_>>()
+            .join(" && ");
+        let binders = (0..atoms)
+            .map(|index| format!("a{index}: Bool"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let instances = rows(&declared())
+            .iter()
+            .filter(|row| row.carrier == Carrier::Boolean)
+            .filter_map(|row| {
+                let Expr::Var { index: first, .. } = first_var(&row.law.left)? else {
+                    unreachable!("a variable")
+                };
+                Some(spell_over(&row.law, |index, carrier| {
+                    match index == first && carrier == Carrier::Boolean {
+                        true => (format!("({conjunction})"), binders.clone()),
+                        false => {
+                            let name = name(index, carrier);
+                            (name.to_owned(), format!("{name}: {}", type_name(carrier)))
+                        }
+                    }
+                }))
+            })
+            .collect::<Vec<_>>();
+        assert!(!instances.is_empty());
+        if let Err(failures) = closes(IMPORTS, &instances) {
+            panic!("{}", failures.join("\n"));
+        }
+    }
+}
+
+/// Two contradictions over disjoint atoms, five and then sixteen a side, chained through `false`: each agrees with `false` and the two with each other, which is transitivity however many atoms the chain's ends hold between them.
+#[test]
+fn two_contradictions_chain_through_false_past_eight_atoms() {
+    let mut instances = Vec::new();
+    for side in [5, 16] {
+        let binders = (0..2 * side)
+            .map(|index| format!("a{index}: Bool"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let contradiction = |first: usize| {
+            let names = (first..first + side)
+                .map(|index| format!("a{index}"))
+                .collect::<Vec<_>>();
+            let negated = names
+                .iter()
+                .map(|name| format!("Bool/not({name})"))
+                .collect::<Vec<_>>();
+            format!("(({}) && {})", names.join(" || "), negated.join(" && "))
+        };
+        let (left, right) = (contradiction(0), contradiction(side));
+        for claim in [
+            format!("Eq()({left}, false)"),
+            format!("Eq()(false, {right})"),
+            format!("Eq()({left}, {right})"),
+        ] {
+            instances.push((binders.clone(), claim));
+        }
+    }
     if let Err(failures) = closes(IMPORTS, &instances) {
         panic!("{}", failures.join("\n"));
     }
@@ -647,7 +717,7 @@ fn a_metavariable_is_solved_through_every_law_that_can_solve_it() {
     assert!(misplaced.is_empty(), "{}", misplaced.join("\n\n"));
 }
 
-/// Whether a metavariable standing for one of `row`'s atoms is solved through the law. A commutativity solves at every carrier: one operand of each side pairs by identity, in either position, and the two left over are compared, which is where the metavariable meets its partner (`peel_commutative`, and `peel_comparison` and the cancellations before it). A distribution at `Nat` or `Int` solves though no operand pairs, the metavariable standing in both of two summands: the equation is linear in it, and the elaborator solves it to the quotient. A Boolean distribution does not: the truth table reads a metavariable as one more atom, so it decides an equation between known atoms and proposes no solution for an unknown one, which is incompleteness in the refusing direction. Nor does an exponent law: its metavariable is the base of two powers, atoms of a product no factor of which pairs by identity, and the equation is not linear in it, so nothing proposes a solution.
+/// Whether a metavariable standing for one of `row`'s atoms is solved through the law. A commutativity solves at every carrier: one operand of each side pairs by identity, in either position, and the two left over are compared, which is where the metavariable meets its partner (`peel_commutative`, and `peel_comparison` and the cancellations before it). A distribution at `Nat` or `Int` solves though no operand pairs, the metavariable standing in both of two summands: the equation is linear in it, and the elaborator solves it to the quotient. A Boolean distribution does not: the decision diagram reads a metavariable as one more atom, so it decides an equation between known atoms and proposes no solution for an unknown one, which is incompleteness in the refusing direction. Nor does an exponent law: its metavariable is the base of two powers, atoms of a product no factor of which pairs by identity, and the equation is not linear in it, so nothing proposes a solution.
 fn solves(row: &Row) -> bool {
     !matches!(
         (row.carrier, row.law.family),
