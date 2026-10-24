@@ -1,6 +1,5 @@
-use /std/{Nat, List, Char, Spell};
+use /std/{Nat, List, Char, Spell, Bool};
 use /std/ops/{Eql};
-use /std/Bool/{True, Holds};
 use /std/Char/{unicode};
 
 --- A character's `Indic_Conjunct_Break` class: what rule GB9c of UAX #29 reads to keep a conjunct in one cluster.
@@ -35,10 +34,10 @@ let of_code(code: Nat) -> IndicConjunctBreak =
     end;
 
 -- Every code `/sys` names is a case of `of_code`: a class the database gains is refused here until the ladder has its arm.
-let _every_code_the_database_names_is_a_case: Holds(
+let _every_code_the_database_names_is_a_case: Bool/Holds(
     List/all(/sys/indic_conjunct_break/codes, (code: Nat) =>
         code == /sys/indic_conjunct_break/none || of_code(code) != none())) =
-    True/qed();
+    Bool/True/qed();
 
 --- `c`'s class.
 pub let of_char(c: Char) -> IndicConjunctBreak =

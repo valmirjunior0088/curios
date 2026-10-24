@@ -1,5 +1,4 @@
-use /std/{Nat, Str, List, Vec, Eq, Option};
-use /std/Bool/{Holds};
+use /std/{Nat, Str, List, Vec, Eq, Option, Bool};
 use /std/Tui/{Style, Glyph, Line, Tile, View};
 
 --- `h` rows of `w` tiles: what a view is drawn as, and what the renderer compares from one frame to the next.
@@ -154,7 +153,7 @@ pub let get(
     frame: Frame(w, h),
     x: Nat,
     y: Nat,
-    @ok_x: Holds(x < w),
-    @ok_y: Holds(y < h),
+    @ok_x: Bool/Holds(x < w),
+    @ok_y: Bool/Holds(y < h),
 ) -> Tile =
     Vec/get(@Tile, @w, Vec/get(@Vec(Tile, w), @h, frame, y, @ok_y), x, @ok_x);

@@ -1,5 +1,4 @@
-use /std/{Nat, Int, Eq, proved};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Int, Eq, proved, Bool};
 
 --- `n` divided by `d`, floored: the quotient and the remainder, with Euclid's identity and the remainder's bound beside them.
 pub struct DivMod(n: Int, d: Nat): pub Type {
@@ -10,13 +9,13 @@ pub struct DivMod(n: Int, d: Nat): pub Type {
     --- `n` is the quotient's multiple of `d` and the remainder.
     joined: Eq()(n, quotient * Nat/to_int(d) + Nat/to_int(remainder)),
     --- The remainder is below `d`.
-    bounded: Holds(remainder < d),
+    bounded: Bool/Holds(remainder < d),
 }
 
 --- Division with remainder rounded toward negative infinity, certified, where `/` and `%` round toward zero: `of(-7, 2)` is `-4` and `1`.
 ---
 --- Through `Int`'s sign view: a natural is divided as `Nat/DivMod` divides it, and one below zero, `-1 - m`, has the quotient `-1 - m / d` and the remainder `d - 1 - m % d`. Each identity is an equation the elaborator proves from Euclid's at `Nat`, read through `Nat/to_int`.
-pub let of(n: Int, d: Nat, @ok: Holds(0 < d)) -> DivMod(n, d) =
+pub let of(n: Int, d: Nat, @ok: Bool/Holds(0 < d)) -> DivMod(n, d) =
     match Int/view(n)
     | nonneg(m) =>
         DivMod {
@@ -27,7 +26,7 @@ pub let of(n: Int, d: Nat, @ok: Holds(0 < d)) -> DivMod(n, d) =
                     Nat/to_int(m),
                     Nat/to_int(m / d) * Nat/to_int(d) + Nat/to_int(m % d),
                     proved()),
-            bounded = True/qed() }
+            bounded = Bool/True/qed() }
     | neg(m) =>
         DivMod {
             quotient = -1 - Nat/to_int(m / d),
@@ -48,21 +47,21 @@ pub let unique(
     d: Nat,
     q: Int,
     r: Nat,
-    @ok: Holds(0 < d),
+    @ok: Bool/Holds(0 < d),
     joined: Eq()(n, q * Nat/to_int(d) + Nat/to_int(r)),
-    bounded: Holds(r < d),
+    bounded: Bool/Holds(r < d),
 ) -> {quotient: Eq()(q, of(n, d).quotient), remainder: Eq()(r, of(n, d).remainder)} =
     let split = of(n, d);
-    let same: Holds(
+    let same: Bool/Holds(
         q * Nat/to_int(d) + Nat/to_int(r)
             == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)) = proved();
     let quotient: Eq()(q, split.quotient) = Int/eq_of_eql(q, split.quotient, proved());
-    let rest: Holds(
+    let rest: Bool/Holds(
         split.quotient * Nat/to_int(d) + Nat/to_int(r)
             == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)) =
         Eq/subst(
             (x: Int) =>
-                Holds(
+                Bool/Holds(
                     x * Nat/to_int(d) + Nat/to_int(r)
                         == split.quotient * Nat/to_int(d) + Nat/to_int(split.remainder)),
             quotient,

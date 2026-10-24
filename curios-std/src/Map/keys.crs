@@ -1,5 +1,4 @@
-use /std/{List, Option, Eq, Ord};
-use /std/Bool/{Holds};
+use /std/{List, Option, Eq, Ord, Bool};
 use /std/List/{Pairwise};
 use /std/Map/{Map, Key, Grounded, grounded};
 use /std/Map/internal/{Node};
@@ -46,5 +45,5 @@ pub let ordered(
     use Key(K),
     @V: Type,
     m: Map(K, V),
-) -> Holds(List/ordered(keys(m), Ord/lt((a: K, b: K) => Ord/ord(a, b)))) =
+) -> Bool/Holds(List/ordered(keys(m), Ord/lt((a: K, b: K) => Ord/ord(a, b)))) =
     Pairwise/adjacent(Ord/lt((a: K, b: K) => Ord/ord(a, b)), keys(m), pairwise(m));

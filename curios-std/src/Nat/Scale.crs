@@ -1,5 +1,4 @@
-use /std/{Nat, Eq, proved};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Eq, proved, Bool};
 
 --- A positive `n` as an odd number at a binary scale: `n` is `2 * half + 1` shifted left by `count`.
 ---
@@ -16,7 +15,7 @@ pub struct Scale(n: Nat): pub Type {
 --- A positive `n` taken apart into its factors of two and its odd part, by halving while it is even.
 ---
 --- Zero has no odd part, and the premise excludes it rather than a conventional answer standing in. The guard on `0 < n` is what totality reads the halving's descent from, so a type may mention the result, and on a closed `n` it computes there.
-pub let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =
+pub let of(n: Nat, @ok: Bool/Holds(0 < n)) -> Scale(n) =
     match 0 < n
     | true =>
         match 0 < n % 2
@@ -50,11 +49,12 @@ pub let unique(
     | 0 =>
         match j
         | 0 => (count = Eq/refl(), half = Nat/le/antisym(m, n, proved(), proved()))
-        | _ + 1 => match Eq/subst((t: Nat) => Holds(2 * m + 1 == t), e, True/qed()) end
+        | _ + 1 => match Eq/subst((t: Nat) => Bool/Holds(2 * m + 1 == t), e, Bool/True/qed()) end
         end
     | kp + 1 =>
         match j
-        | 0 => match Eq/subst((t: Nat) => Holds(t == 2 * n + 1), Eq/sym(e), True/qed()) end
+        | 0 =>
+            match Eq/subst((t: Nat) => Bool/Holds(t == 2 * n + 1), Eq/sym(e), Bool/True/qed()) end
         | jp + 1 =>
             let halved: Eq()(Nat/shl(2 * m + 1, kp), Nat/shl(2 * n + 1, jp)) =
                 Nat/le/antisym(Nat/shl(2 * m + 1, kp), Nat/shl(2 * n + 1, jp), proved(), proved());

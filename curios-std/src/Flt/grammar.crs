@@ -1,5 +1,4 @@
 use /std/{Nat, Int, Str, Char, Bool, Option, Result, Parse, Flt, proved};
-use /std/Bool/{Holds};
 use /std/Flt/{Rounding, exact, neg};
 use /std/Flt/internal/{Dyadic};
 use /std/Flt/digits/{pow2, div_mod};
@@ -17,7 +16,7 @@ pub let clamped(r: Rounding, negative: Bool, below: Bool) -> Flt =
 
 -- A numerator over a positive denominator.
 pub let Ratio: Type =
-    {numerator: Nat, denominator: Nat, positive: Holds(0 < denominator)};
+    {numerator: Nat, denominator: Nat, positive: Bool/Holds(0 < denominator)};
 
 --- `of_decimal` in the direction `r`. The sign goes into the rounding rather than after it, since a directed rounding reads it.
 pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
@@ -32,7 +31,7 @@ pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) 
                 (numerator = d * Nat/pow(10, Int/abs(e)), denominator = 1, positive = proved())
             | false => (numerator = d, denominator = Nat/pow(10, Int/abs(e)), positive = proved())
             end;
-        let whole: Holds(0 < spelled.denominator) = spelled.positive;
+        let whole: Bool/Holds(0 < spelled.denominator) = spelled.positive;
         let sh =
             Nat/to_int(54 + exact/bit_len(spelled.denominator))
                 - Nat/to_int(exact/bit_len(spelled.numerator));

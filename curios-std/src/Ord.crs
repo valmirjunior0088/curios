@@ -3,7 +3,6 @@ pub mod Ordering;
 pub use Ordering/{let Ordering};
 
 use /std/{Nat, List, Bool, Eq};
-use /std/Bool/{Holds};
 use /std/ops/{Eql};
 
 --- A total order: `ord` decides `lt`, `eq` or `gt`, and `Eql` is its superclass.
@@ -32,7 +31,7 @@ pub let Flips(@T: Type, ord: (T, T) -> Ordering) -> Prop =
 
 --- The law that `le` carries across a middle element.
 pub let Transitive(@T: Type, le: (T, T) -> Bool) -> Prop =
-    (a: T, b: T, c: T, Holds(le(a, b)), Holds(le(b, c))) -> Holds(le(a, c));
+    (a: T, b: T, c: T, Bool/Holds(le(a, b)), Bool/Holds(le(b, c))) -> Bool/Holds(le(a, c));
 
 --- `ord` as a relation: what it does not answer `gt` at.
 pub let le(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =

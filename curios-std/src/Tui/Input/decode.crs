@@ -1,6 +1,5 @@
 use /std/{Nat, Str, Char, Byte, Bytes, Bool, List, Option, Tty};
 use /std/Tui/{Key, Input, Reply, Mode};
-use /std/Bool/{Holds};
 
 let at(b: Bytes, i: Nat) -> Option(Nat) =
     Option/map(Bytes/try_get(b, i), Byte/to_nat);
@@ -16,11 +15,11 @@ let modified(code: Key/Code, m: Nat) -> Key =
         super = Nat/and(bits, 8) > 0 };
 
 -- The character of a code below the surrogates, which every code this decoder builds one from is.
-let low(code: Nat, @below: Holds(code < 0xD800)) -> Char =
+let low(code: Nat, @below: Bool/Holds(code < 0xD800)) -> Char =
     Char { code = code, @valid = Char/Valid/below_surrogates(code, below) };
 
 -- The key a control byte is. It is a byte's, which is what puts the letter or the sign it stands beside below the surrogates.
-let control(n: Nat, @byte: Holds(n <= 255)) -> Key =
+let control(n: Nat, @byte: Bool/Holds(n <= 255)) -> Key =
     choose
     | n == 0x0D => Key/plain(Key/Code/enter())
     | n == 0x09 => Key/plain(Key/Code/tab())
@@ -214,9 +213,12 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
         -- Where the end marker begins, at or after `start`, with room for all six of its bytes: past the last place that has room, the chunk ends inside the paste.
         let find(
             j: Nat,
-            @onward: Holds(start <= j),
+            @onward: Bool/Holds(start <= j),
         ) -> Option(
-            {at: Nat, onward: Holds(start <= at), room: Holds(at + 6 <= Bytes/len(bytes))}) =
+            {
+                at: Nat,
+                onward: Bool/Holds(start <= at),
+                room: Bool/Holds(at + 6 <= Bytes/len(bytes))}) =
             match Bool/holds(j + 6 <= Bytes/len(bytes))
             | none() => Option/none()
             | some(room) =>

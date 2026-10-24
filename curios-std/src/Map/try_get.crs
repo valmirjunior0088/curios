@@ -1,5 +1,4 @@
 use /std/{Nat, Bool, Option, List, Eq, Hash, Bytes};
-use /std/Bool/{True, False, Holds};
 use /std/List/{Member};
 use /std/Map/{Map, Key, Rooted, Grounded, grounded, empty, insert, remove, map, union, filter,
     update, to_list};
@@ -16,7 +15,7 @@ let apart_codes(
     use Key(K),
     key: K,
     other: K,
-    apart: (Eq()(other, key)) -> False,
+    apart: (Eq()(other, key)) -> Bool/False,
 ) -> Eq()(Hash/hash(key) == Hash/hash(other), false) =
     match Hash/hash(key) == Hash/hash(other)
     | false => Eq/refl()
@@ -26,7 +25,7 @@ let apart_codes(
                 Key/injective(
                     key,
                     other,
-                    Bytes/eq_of_eql(Hash/hash(key), Hash/hash(other), True/qed()))))
+                    Bytes/eq_of_eql(Hash/hash(key), Hash/hash(other), Bool/True/qed()))))
         end
     end;
 
@@ -66,7 +65,7 @@ let parted_answers(
     back: Eq()(n2, n),
     sound: Node/Sound(n),
     apart: Apart(Hash/hash(key), Node/first(n), c),
-    past: Holds(Node/deeper(n, c)),
+    past: Bool/Holds(Node/deeper(n, c)),
 ) -> Node/Answers(
     Node/wedge(c, bit(Hash/hash(key), c), key, v, n2),
     n,
@@ -120,7 +119,7 @@ pub let of_insert_other(
     key: K,
     v: V,
     other: K,
-    apart: (Eq()(other, key)) -> False,
+    apart: (Eq()(other, key)) -> Bool/False,
 ) -> Eq()(try_get(insert(m, key, v), other), try_get(m, other)) =
     let codes = apart_codes(key, other, apart);
     match m.root
@@ -174,7 +173,7 @@ pub let of_remove_other(
     m: Map(K, V),
     key: K,
     other: K,
-    apart: (Eq()(other, key)) -> False,
+    apart: (Eq()(other, key)) -> Bool/False,
 ) -> Eq()(try_get(remove(m, key), other), try_get(m, other)) =
     let codes = apart_codes(key, other, apart);
     match m.root
@@ -222,11 +221,11 @@ let held(
     n: Node(K, V),
     sound: Node/Sound(n),
     same: Eq()(Option/none(@V), Node/find(n, Hash/hash(Node/least(n).0))),
-) -> False =
+) -> Bool/False =
     match Eq/subst(
-        (o: Option(V)) => Holds(Option/is_none(o)),
+        (o: Option(V)) => Bool/Holds(Option/is_none(o)),
         Eq/trans(same, Node/found(n, sound, Node/least(n).0, Node/least_among(n))),
-        True/qed())
+        Bool/True/qed())
     end;
 
 -- Two sound roots that find alike at every key are one root.
@@ -299,8 +298,8 @@ let other_key(
     a: K,
     b: K,
     e: Eq()(Hash/hash(a) == Hash/hash(b), false),
-) -> (Eq()(b, a)) -> False =
-    Key/apart(a, b, Eq/subst((c: Bool) => Holds(Bool/not(c)), Eq/sym(e), True/qed()));
+) -> (Eq()(b, a)) -> Bool/False =
+    Key/apart(a, b, Eq/subst((c: Bool) => Bool/Holds(Bool/not(c)), Eq/sym(e), Bool/True/qed()));
 
 -- Inserting a sound node's entries into a map one by one leaves at a key the node's value there, and the map's where the node has none.
 let inserted_all(
@@ -490,7 +489,7 @@ pub let of_update_other(
     key: K,
     f: (Option(V)) -> Option(V),
     other: K,
-    apart: (Eq()(other, key)) -> False,
+    apart: (Eq()(other, key)) -> Bool/False,
 ) -> Eq()(try_get(update(m, key, f), other), try_get(m, other)) =
     match f(try_get(m, key))
     | some(v) => of_insert_other(m, key, v, other, apart)
@@ -537,6 +536,7 @@ pub let listed(
         Eq/sym(entries_of(m)),
         match m.root
         | none() =>
-            match Eq/subst((o: Option(V)) => Holds(Option/is_none(o)), found, True/qed()) end
+            match Eq/subst((o: Option(V)) => Bool/Holds(Option/is_none(o)), found, Bool/True/qed())
+            end
         | some(n) => Node/found_entry(n, key, v, found)
         end);

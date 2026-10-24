@@ -1,12 +1,11 @@
 pub use /sys/Int/{sign};
 
-use /std/{Nat, Int, Eq};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Int, Eq, Bool};
 
 --- `sign(a)` is `+1` where `a` is above zero.
 ---
 --- Conversion decides a sign where the comparison decides the operand's as a term, and reads no hypothesis: under one these laws are the step. Each is by [`Int/view`], whose arms are the forms a sign is computed of.
-pub let of_pos(a: Int, p: Holds(+0 < a)) -> Eq()(sign(a), +1) =
+pub let of_pos(a: Int, p: Bool/Holds(+0 < a)) -> Eq()(sign(a), +1) =
     match Int/view(a)
     | nonneg(0) => match p end
     | nonneg(_ + 1) => Eq/refl()
@@ -14,41 +13,41 @@ pub let of_pos(a: Int, p: Holds(+0 < a)) -> Eq()(sign(a), +1) =
     end;
 
 --- `sign(a)` is `-1` where `a` is below zero.
-pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(sign(a), -1) =
+pub let of_neg(a: Int, p: Bool/Holds(a < +0)) -> Eq()(sign(a), -1) =
     match Int/view(a)
     | nonneg(_) => match p end
     | neg(_) => Eq/refl()
     end;
 
 --- `sign(a)` is at least `-1`, whatever `a` is.
-pub let at_least(a: Int) -> Holds(-1 <= sign(a)) =
+pub let at_least(a: Int) -> Bool/Holds(-1 <= sign(a)) =
     match Int/view(a)
-    | nonneg(0) => True/qed()
-    | nonneg(_ + 1) => True/qed()
-    | neg(_) => True/qed()
+    | nonneg(0) => Bool/True/qed()
+    | nonneg(_ + 1) => Bool/True/qed()
+    | neg(_) => Bool/True/qed()
     end;
 
 --- `sign(a)` is at most `+1`, whatever `a` is.
-pub let at_most(a: Int) -> Holds(sign(a) <= +1) =
+pub let at_most(a: Int) -> Bool/Holds(sign(a) <= +1) =
     match Int/view(a)
-    | nonneg(0) => True/qed()
-    | nonneg(_ + 1) => True/qed()
-    | neg(_) => True/qed()
+    | nonneg(0) => Bool/True/qed()
+    | nonneg(_ + 1) => Bool/True/qed()
+    | neg(_) => Bool/True/qed()
     end;
 
 --- `sign(a)` is at most zero where `a` is.
-pub let of_not_pos(a: Int, p: Holds(a <= +0)) -> Holds(sign(a) <= +0) =
+pub let of_not_pos(a: Int, p: Bool/Holds(a <= +0)) -> Bool/Holds(sign(a) <= +0) =
     match Int/view(a)
-    | nonneg(0) => True/qed()
+    | nonneg(0) => Bool/True/qed()
     | nonneg(_ + 1) => match p end
-    | neg(_) => True/qed()
+    | neg(_) => Bool/True/qed()
     end;
 
 --- `sign(a)` is at least zero where `a` is.
-pub let of_not_neg(a: Int, p: Holds(+0 <= a)) -> Holds(+0 <= sign(a)) =
+pub let of_not_neg(a: Int, p: Bool/Holds(+0 <= a)) -> Bool/Holds(+0 <= sign(a)) =
     match Int/view(a)
-    | nonneg(0) => True/qed()
-    | nonneg(_ + 1) => True/qed()
+    | nonneg(0) => Bool/True/qed()
+    | nonneg(_ + 1) => Bool/True/qed()
     | neg(_) => match p end
     end;
 

@@ -1,5 +1,4 @@
-use /std/{List, Eq};
-use /std/Bool/{True, False};
+use /std/{List, Eq, Bool};
 
 --- `x` is an element of a list, as a proposition: the place it stands at is the proof.
 ---
@@ -14,7 +13,7 @@ end
 pub use Member/*;
 
 --- An empty list has no member.
-pub let absent(@T: Type, @x: T, i: Member()(x, [])) -> False =
+pub let absent(@T: Type, @x: T, i: Member()(x, [])) -> Bool/False =
     match i end;
 
 --- A member of a cons is its head or a member of its tail, and `P` follows from whichever it is.
@@ -32,7 +31,7 @@ pub let uncons(
 ) -> P =
     match i: (y, m, _) =>
         match m
-        | [] => True
+        | [] => Bool/True
         | [k, ..r] => (head: (Eq()(y, k)) -> P, tail: (Member()(y, r)) -> P) -> P
         end
     | here() => (head, _) => head(Eq/refl())

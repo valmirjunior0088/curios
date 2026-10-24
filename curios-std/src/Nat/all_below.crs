@@ -1,9 +1,8 @@
 use /std/{Nat, Bool, Eq, proved};
-use /std/Bool/{True, Holds};
 
 --- Whether `p` accepts every number below `k`.
 ---
---- A decision, so `Holds(all_below(k, p))` at a literal `k` is discharged by reduction running `p` at each number: a fact of every byte is had that way where the logic reads nothing of the operation it is about.
+--- A decision, so `Bool/Holds(all_below(k, p))` at a literal `k` is discharged by reduction running `p` at each number: a fact of every byte is had that way where the logic reads nothing of the operation it is about.
 pub let all_below(k: Nat, p: (Nat) -> Bool) -> Bool =
     match k | 0 => true | j + 1; rest => p(j) && rest end;
 
@@ -12,18 +11,18 @@ pub let at(
     k: Nat,
     p: (Nat) -> Bool,
     n: Nat,
-    all: Holds(all_below(k, p)),
-    under: Holds(n < k),
-) -> Holds(p(n)) =
-    match k: (m) => (all: Holds(all_below(m, p)), under: Holds(n < m)) -> Holds(p(n))
+    all: Bool/Holds(all_below(k, p)),
+    under: Bool/Holds(n < k),
+) -> Bool/Holds(p(n)) =
+    match k: (m) => (all: Bool/Holds(all_below(m, p)), under: Bool/Holds(n < m)) -> Bool/Holds(p(n))
     | 0 => (_, under) => match under end
     | j + 1; ih =>
         (all, under) =>
             match n < j
-            | true => ih(Bool/and/second(p(j), all_below(j, p), all), True/qed())
+            | true => ih(Bool/and/second(p(j), all_below(j, p), all), Bool/True/qed())
             | false =>
                 Eq/subst(
-                    (m: Nat) => Holds(p(m)),
+                    (m: Nat) => Bool/Holds(p(m)),
                     Nat/le/antisym(j, n, proved(), proved()),
                     Bool/and/first(p(j), all_below(j, p), all))
             end

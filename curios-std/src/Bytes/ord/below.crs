@@ -1,5 +1,4 @@
 use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, proved};
-use /std/Bool/{True, Holds};
 
 --- Whether `a` and `b` part at a byte where `a`'s is the smaller, neither running out before it.
 ---
@@ -25,16 +24,22 @@ pub let of_heads(
     k: Byte,
     t: Bytes,
     r: Bytes,
-    under: Holds(h < k),
-) -> Holds(below(x[h, ..t], x[k, ..r])) =
+    under: Bool/Holds(h < k),
+) -> Bool/Holds(below(x[h, ..t], x[k, ..r])) =
     Eq/subst(
-        (o: Ordering) => Holds(match o | eq() => below(t, r) | lt() => true | gt() => false end),
+        (o: Ordering) =>
+            Bool/Holds(match o | eq() => below(t, r) | lt() => true | gt() => false end),
         Eq/sym(Nat/ord/of_lt(Byte/to_nat(h), Byte/to_nat(k), proved())),
-        True/qed());
+        Bool/True/qed());
 
 --- A run below another at a byte is `lt` to it.
-pub let lt(a: Bytes, b: Bytes, parted: Holds(below(a, b))) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
-    match a: (m) => (b: Bytes, parted: Holds(below(m, b))) -> Eq()(Bytes/ord(m, b), Ordering/lt())
+pub let lt(
+    a: Bytes,
+    b: Bytes,
+    parted: Bool/Holds(below(a, b)),
+) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
+    match a: (m) =>
+        (b: Bytes, parted: Bool/Holds(below(m, b))) -> Eq()(Bytes/ord(m, b), Ordering/lt())
     | x[] => (_, parted) => match parted end
     | x[h, .._]; ih =>
         (b, parted) =>
@@ -55,9 +60,10 @@ pub let onto(
     b: Bytes,
     s: Bytes,
     u: Bytes,
-    parted: Holds(below(a, b)),
-) -> Holds(below(x[..a, ..s], x[..b, ..u])) =
-    match a: (m) => (b: Bytes, parted: Holds(below(m, b))) -> Holds(below(x[..m, ..s], x[..b, ..u]))
+    parted: Bool/Holds(below(a, b)),
+) -> Bool/Holds(below(x[..a, ..s], x[..b, ..u])) =
+    match a: (m) =>
+        (b: Bytes, parted: Bool/Holds(below(m, b))) -> Bool/Holds(below(x[..m, ..s], x[..b, ..u]))
     | x[] => (_, parted) => match parted end
     | x[h, .._]; ih =>
         (b, parted) =>
@@ -66,7 +72,7 @@ pub let onto(
             | x[k, ..r] =>
                 match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
                 | eq() => ih(r, parted)
-                | lt() => True/qed()
+                | lt() => Bool/True/qed()
                 | gt() => match parted end
                 end
             end
@@ -77,9 +83,9 @@ pub let past(
     p: Bytes,
     a: Bytes,
     b: Bytes,
-    parted: Holds(below(a, b)),
-) -> Holds(below(x[..p, ..a], x[..p, ..b])) =
-    match p: (m) => Holds(below(x[..m, ..a], x[..m, ..b]))
+    parted: Bool/Holds(below(a, b)),
+) -> Bool/Holds(below(x[..p, ..a], x[..p, ..b])) =
+    match p: (m) => Bool/Holds(below(x[..m, ..a], x[..m, ..b]))
     | x[] => parted
     | x[_, .._]; ih => ih
     end;

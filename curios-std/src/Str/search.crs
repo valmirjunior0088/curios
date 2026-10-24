@@ -1,6 +1,5 @@
 use /std/{Str, Char, Bool, Bytes, Nat, Option, proved};
 use /std/Str/{At};
-use /std/Bool/{Holds};
 
 --- The first character at or after `from` that `pred` accepts, and where it is, or `none`: one walk forward, which stops there.
 pub let seek(s: Str, from: At(s), pred: (Char) -> Bool) -> Option({at: At(s), char: Char}) =
@@ -24,11 +23,11 @@ pub let meets(
     from: At(s),
     piece: Str,
     p: At(piece),
-) -> Option({past: At(s), reach: Holds(from.offset <= past.offset)}) =
+) -> Option({past: At(s), reach: Bool/Holds(from.offset <= past.offset)}) =
     At/forward(
         (at) =>
-            (p: At(piece), reached: Holds(from.offset <= at.offset)) -> Option(
-                {past: At(s), reach: Holds(from.offset <= past.offset)}),
+            (p: At(piece), reached: Bool/Holds(from.offset <= at.offset)) -> Option(
+                {past: At(s), reach: Bool/Holds(from.offset <= past.offset)}),
         (at, again) =>
             (p, reached) =>
                 match At/try_next(piece, p)
@@ -73,8 +72,8 @@ pub let Found(s: Str, from: At(s)) -> Type =
     {
         start: At(s),
         past: At(s),
-        ordered: Holds(from.offset <= start.offset),
-        progress: Holds(start.offset < past.offset)};
+        ordered: Bool/Holds(from.offset <= start.offset),
+        progress: Bool/Holds(start.offset < past.offset)};
 
 --- The first occurrence at or after `from` of the needle whose first character `first` reads, or `none`.
 ---
@@ -83,7 +82,7 @@ pub let occurrence(
     s: Str,
     from: At(s),
     needle: Str,
-    first: {char: Char, past: At(needle), progress: Holds(0 < past.offset)},
+    first: {char: Char, past: At(needle), progress: Bool/Holds(0 < past.offset)},
 ) -> Option(Found(s, from)) =
     let lead_byte =
         Bytes/get(
@@ -96,7 +95,7 @@ pub let occurrence(
                 first.progress,
                 first.past.within));
     At/forward(
-        (at) => (reached: Holds(from.offset <= at.offset)) -> Option(Found(s, from)),
+        (at) => (reached: Bool/Holds(from.offset <= at.offset)) -> Option(Found(s, from)),
         (at, again) =>
             (reached) =>
                 match at.offset < Bytes/len(s.bytes)

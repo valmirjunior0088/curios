@@ -1,5 +1,4 @@
 use /std/{Nat, Bool, Option, Ord, Hash, Spell, Str, Show, proved};
-use /std/Bool/{Holds};
 use /std/ops/{Eql};
 use /std/time/{iso8601};
 
@@ -8,7 +7,7 @@ let sound(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Bool =
 
 --- That the four spell a time of day. A second of `60` is admitted, since RFC 3339 and TOML write a leap second that way; `OffsetDateTime/to_timestamp` counts it as the next minute's first, as POSIX does.
 pub let Valid(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Prop =
-    Holds(sound(hour, minute, second, nanosecond));
+    Bool/Holds(sound(hour, minute, second, nanosecond));
 
 --- A time of day, to the nanosecond.
 pub struct Time: pub Type {
@@ -56,8 +55,8 @@ pub let try_of(hour: Nat, minute: Nat, second: Nat, nanosecond: Nat) -> Option(T
 pub let of_seconds(
     seconds: Nat,
     nanosecond: Nat,
-    @in_day: Holds(seconds < 86400),
-    @in_second: Holds(nanosecond < 1000000000),
+    @in_day: Bool/Holds(seconds < 86400),
+    @in_second: Bool/Holds(nanosecond < 1000000000),
 ) -> Time =
     let hour = seconds / 3600;
     let minute = seconds % 3600 / 60;

@@ -45,12 +45,11 @@ use grammar/{of_decimal_in, of_str_in, of_hex_str_in};
 
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Fmt, Ord,
     Vec, Eq, proved};
-use /std/Bool/{True, False, Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `b` is eight bytes long, decided.
 pub let EightBytes(b: Bytes) -> Prop =
-    Holds(Bytes/len(b) == 8);
+    Bool/Holds(Bytes/len(b) == 8);
 
 --- Whether `f` is a number: neither infinity nor a NaN.
 pub let is_finite(f: Flt) -> Bool =
@@ -58,11 +57,11 @@ pub let is_finite(f: Flt) -> Bool =
 
 --- That `f` is a number, decided: the domain `to_int` states.
 pub let Finite(f: Flt) -> Prop =
-    Holds(-inf.0 < f && f < +inf.0);
+    Bool/Holds(-inf.0 < f && f < +inf.0);
 
 --- That `f` is zero or above and a number, decided: the domain `to_nat` states. `-0.0` qualifies.
 pub let NonNeg(f: Flt) -> Prop =
-    Holds(+0.0 <= f && f < +inf.0);
+    Bool/Holds(+0.0 <= f && f < +inf.0);
 
 --- Whether `f` is a NaN, of either sign and kind.
 pub let is_nan(f: Flt) -> Bool =
@@ -124,12 +123,12 @@ pub let unordered(a: Flt, b: Flt) -> Bool =
 
 --- That `f` is a finite nonzero value, decided: the domain of `log_b`.
 pub let FiniteNonZero(f: Flt) -> Prop =
-    Holds(is_finite(f) && Bool/not(is_zero(f)));
+    Bool/Holds(is_finite(f) && Bool/not(is_zero(f)));
 
---- `f` is finite, read off the evidence that it is finite and nonzero: the decision `Finite` states splits, and where it fails `FiniteNonZero(f)` is `False`.
+--- `f` is finite, read off the evidence that it is finite and nonzero: the decision `Finite` states splits, and where it fails `FiniteNonZero(f)` is `Bool/False`.
 let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
-    match -inf.0 < f && f < +inf.0: (d) => (Holds(d && Bool/not(is_zero(f)))) -> Holds(d)
-    | true => (_) => True/qed()
+    match -inf.0 < f && f < +inf.0: (d) => (Bool/Holds(d && Bool/not(is_zero(f)))) -> Bool/Holds(d)
+    | true => (_) => Bool/True/qed()
     | false => (no) => match no end
     end(ok);
 
@@ -336,7 +335,7 @@ pub let signaling_nan(p: Flt) -> Flt =
 --- The float whose little-endian bytes these are, or `none` unless there are exactly eight.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
     match Bytes/len(b) == 8: (_) => Option(Flt)
-    | true => Option/some(of_le_bytes(b, @True/qed()))
+    | true => Option/some(of_le_bytes(b, @Bool/True/qed()))
     | false => Option/none()
     end;
 
@@ -384,9 +383,9 @@ pub let eq_of_le_bytes(a: Flt, b: Flt, same: Eq()(to_le_bytes(a), to_le_bytes(b)
 ---
 --- So the order `Nat/ord` reads through the key is a total order that answers `eq` exactly at an equation, by `Nat/ord`'s own laws. A key at or above `2^63` is a pattern with its sign clear, lifted, and one below it a pattern with its sign set, complemented, and neither map folds two patterns into one below `2^64`, where eight bytes keep every pattern.
 pub let total_key_injective(a: Flt, b: Flt, e: Eq()(total_key(a), total_key(b))) -> Eq()(a, b) =
-    let la: Holds(Bytes/to_nat(to_le_bytes(a)) < 18446744073709551616) =
+    let la: Bool/Holds(Bytes/to_nat(to_le_bytes(a)) < 18446744073709551616) =
         Bytes/to_nat/below(to_le_bytes(a));
-    let lb: Holds(Bytes/to_nat(to_le_bytes(b)) < 18446744073709551616) =
+    let lb: Bool/Holds(Bytes/to_nat(to_le_bytes(b)) < 18446744073709551616) =
         Bytes/to_nat/below(to_le_bytes(b));
     let bits: Eq()(Bytes/to_nat(to_le_bytes(a)), Bytes/to_nat(to_le_bytes(b))) =
         match Bytes/to_nat(to_le_bytes(a)) >= 9223372036854775808
@@ -398,11 +397,11 @@ pub let total_key_injective(a: Flt, b: Flt, e: Eq()(total_key(a), total_key(b)))
                     Bytes/to_nat(to_le_bytes(b)),
                     proved(),
                     proved())
-            | false => match proved(@False) end
+            | false => match proved(@Bool/False) end
             end
         | false =>
             match Bytes/to_nat(to_le_bytes(b)) >= 9223372036854775808
-            | true => match proved(@False) end
+            | true => match proved(@Bool/False) end
             | false =>
                 Nat/le/antisym(
                     Bytes/to_nat(to_le_bytes(a)),
@@ -417,7 +416,7 @@ pub let total_key_injective(a: Flt, b: Flt, e: Eq()(total_key(a), total_key(b)))
 pub let to_str(f: Flt) -> Str =
     let b = to_le_bytes(f);
     -- `to_le_bytes`'s length reduces to eight, so every index below discharges its bound by reduction.
-    let at(i: Nat, @ok: Holds(i < 8)) -> Nat = Byte/to_nat(Bytes/get(b, i, @ok));
+    let at(i: Nat, @ok: Bool/Holds(i < 8)) -> Nat = Byte/to_nat(Bytes/get(b, i, @ok));
     let b6 = at(6);
     let b7 = at(7);
     let exp_field = b7 % 0x80 * 16 + b6 / 0x10;
@@ -500,7 +499,7 @@ pub let of_hex_str(s: Str) -> Option(Flt) =
     of_hex_str_in(Rounding/ties_to_even(), s);
 
 --- `f` written with exactly `n` significant digits, rounded to nearest with ties to even, and laid out as `to_str` lays out digits (§5.12.2). `rounded/to_str_significant` takes the direction.
-pub let to_str_significant(f: Flt, n: Nat, @ok: Holds(0 < n)) -> Str =
+pub let to_str_significant(f: Flt, n: Nat, @ok: Bool/Holds(0 < n)) -> Str =
     match n
     | 0 => match ok end
     | k + 1 => to_str_significant_in(Rounding/ties_to_even(), f, k + 1)
@@ -532,13 +531,13 @@ satisfy Mul(Flt) {
 
 --- No precondition: IEEE division is total.
 satisfy Div(Flt) {
-    Ok(_) = True,
+    Ok(_) = Bool/True,
     div(a, b) = div(a, b),
 }
 
 --- No precondition: IEEE remainder is total.
 satisfy Rem(Flt) {
-    Ok(_) = True,
+    Ok(_) = Bool/True,
     rem(a, b) = rem(a, b),
 }
 

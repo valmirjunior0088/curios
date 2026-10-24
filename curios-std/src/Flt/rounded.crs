@@ -3,7 +3,6 @@ use /std/Flt/{Rounding, exact, reduction};
 use /std/Flt/internal/{Dyadic};
 use /std/Flt/grammar/{of_str_in, of_hex_str_in, of_decimal_in};
 use /std/Flt/digits/{to_str_significant_in};
-use /std/Bool/{Holds};
 
 --- `a + b`, in the direction `r` names.
 pub let add(r: Rounding, a: Flt, b: Flt) -> Flt =
@@ -142,7 +141,7 @@ pub let of_decimal(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> 
     of_decimal_in(r, negative, d, e, digits);
 
 --- `Flt/to_str_significant` in the direction `r` names: exactly `n` significant digits (§5.12.2).
-pub let to_str_significant(r: Rounding, f: Flt, n: Nat, @ok: Holds(0 < n)) -> Str =
+pub let to_str_significant(r: Rounding, f: Flt, n: Nat, @ok: Bool/Holds(0 < n)) -> Str =
     match n
     | 0 => match ok end
     | k + 1 => to_str_significant_in(r, f, k + 1)

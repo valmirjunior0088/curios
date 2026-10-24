@@ -1,5 +1,4 @@
 use /std/{Nat, Int, Str, Bool, List, Fmt, Flt, proved};
-use /std/Bool/{Holds};
 use /std/Flt/{Rounding, exact, to_str};
 use /std/Flt/internal/{Dyadic};
 
@@ -7,19 +6,23 @@ pub let pow2(k: Nat) -> Nat =
     Nat/shl(1, k);
 
 --- The quotient and remainder of `r` by a positive `s`.
-pub let div_mod(r: Nat, s: Nat, @positive: Holds(0 < s)) -> {Nat, Nat} =
+pub let div_mod(r: Nat, s: Nat, @positive: Bool/Holds(0 < s)) -> {Nat, Nat} =
     (r / s, r % s);
 
 -- A scale and the decimal exponent it stands at, the scale positive.
 pub let Scaled: Type =
-    {s: Nat, k: Int, positive: Holds(0 < s)};
+    {s: Nat, k: Int, positive: Bool/Holds(0 < s)};
 
 --- `s` raised by tens until `rpm` is no longer above it, and `k` by one each time. A positive scale grows under each ten, so every step leaves less of `rpm` above it, and the walk descends on what is left: it is what lets `to_str` stand in a type with no count beside it.
-pub let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Holds(0 < s)) -> Scaled =
+pub let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Bool/Holds(0 < s)) -> Scaled =
     Nat/descend(
         (gap: Nat) => gap,
         (gap: Nat) =>
-            (s: Nat, k: Int, @positive: Holds(0 < s), @within: Holds(rpm - s <= gap)) -> Scaled,
+            (
+                s: Nat,
+                k: Int,
+                @positive: Bool/Holds(0 < s),
+                @within: Bool/Holds(rpm - s <= gap)) -> Scaled,
         (gap, ih) =>
             (s, k, @positive, @within) =>
                 match rpm > s
@@ -32,7 +35,7 @@ pub let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Holds(0 < s)) -> Scaled =
 
 -- A remainder and the two half-gaps beside it, lowered to the decimal exponent they stand at, the gap below positive.
 pub let Lowered: Type =
-    {r: Nat, mp: Nat, mm: Nat, k: Int, below: Holds(0 < mm)};
+    {r: Nat, mp: Nat, mm: Nat, k: Int, below: Bool/Holds(0 < mm)};
 
 --- `r`, `mp` and `mm` raised by tens while ten of `r + mp` still fit in `s`, and `k` lowered by one each time. The gap above is positive, so every step leaves less of `s` above `r + mp`, which the walk descends on.
 pub let scale_down(
@@ -41,8 +44,8 @@ pub let scale_down(
     mm: Nat,
     s: Nat,
     k: Int,
-    @above: Holds(0 < mp),
-    @below: Holds(0 < mm),
+    @above: Bool/Holds(0 < mp),
+    @below: Bool/Holds(0 < mm),
 ) -> Lowered =
     Nat/descend(
         (gap: Nat) => gap,
@@ -52,9 +55,9 @@ pub let scale_down(
                 mp: Nat,
                 mm: Nat,
                 k: Int,
-                @above: Holds(0 < mp),
-                @below: Holds(0 < mm),
-                @within: Holds(s - (r + mp) <= gap)) -> Lowered,
+                @above: Bool/Holds(0 < mp),
+                @below: Bool/Holds(0 < mm),
+                @within: Bool/Holds(s - (r + mp) <= gap)) -> Lowered,
         (gap, ih) =>
             (r, mp, mm, k, @above, @below, @within) =>
                 match (r + mp) * 10 <= s
@@ -83,8 +86,8 @@ pub let generate(
     mp: Nat,
     mm: Nat,
     even: Bool,
-    @scale: Holds(0 < s),
-    @below: Holds(0 < mm),
+    @scale: Bool/Holds(0 < s),
+    @below: Bool/Holds(0 < mm),
 ) -> List(Nat) =
     Nat/descend(
         (gap: Nat) => gap,
@@ -93,8 +96,8 @@ pub let generate(
                 r: Nat,
                 mp: Nat,
                 mm: Nat,
-                @below: Holds(0 < mm),
-                @within: Holds(s - mm <= gap)) -> List(Nat),
+                @below: Bool/Holds(0 < mm),
+                @within: Bool/Holds(s - mm <= gap)) -> List(Nat),
         (gap, ih) =>
             (r, mp, mm, @below, @within) =>
                 let mp10 = mp * 10;
@@ -145,9 +148,9 @@ pub let Start: Type =
         s: Nat,
         mp: Nat,
         mm: Nat,
-        scale: Holds(0 < s),
-        above: Holds(0 < mp),
-        below: Holds(0 < mm)};
+        scale: Bool/Holds(0 < s),
+        above: Bool/Holds(0 < mp),
+        below: Bool/Holds(0 < mm)};
 
 pub let setup(f_mant: Nat, exp_field: Nat) -> Start =
     let hidden = pow2(52);

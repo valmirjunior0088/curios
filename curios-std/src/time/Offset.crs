@@ -1,5 +1,4 @@
 use /std/{Int, Bool, Option, Ord, Hash, Spell, Str, Show};
-use /std/Bool/{Holds};
 use /std/ops/{Eql};
 use /std/time/{iso8601};
 
@@ -8,7 +7,7 @@ pub induct Offset: pub Type
 --- UTC is known and the local offset is not.
 | unknown()
 --- `seconds` east of UTC, less than a day either way.
-| known(seconds: Int, @ok: Holds(Int/abs(seconds) <= 86399))
+| known(seconds: Int, @ok: Bool/Holds(Int/abs(seconds) <= 86399))
 end
 
 pub use Offset/*;

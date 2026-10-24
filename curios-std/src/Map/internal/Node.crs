@@ -1,5 +1,4 @@
 use /std/{Bytes, Nat, Bool, Option, List, Eq, Hash, Ord, Ordering, proved};
-use /std/Bool/{True, False, Holds};
 use /std/List/{Member, Pairwise};
 use /std/Map/{Key};
 use /std/Map/bits/{bit, crit, Apart, Parting, parting, turned, carried, reheaded, other_clear,
@@ -36,10 +35,10 @@ pub let deeper_down(
     t: Node(K, V),
     c: Nat,
     d: Nat,
-    past: Holds(deeper(t, c)),
-    le: Holds(d <= c),
-) -> Holds(deeper(t, d)) =
-    match t | leaf(_, _) => True/qed() | fork(_, _, _) => proved() end;
+    past: Bool/Holds(deeper(t, c)),
+    le: Bool/Holds(d <= c),
+) -> Bool/Holds(deeper(t, d)) =
+    match t | leaf(_, _) => Bool/True/qed() | fork(_, _, _) => proved() end;
 
 --- What a fork states of its two sides: each sound and forking past its bit, and their first keys apart at that bit, which the zero side's has clear.
 ---
@@ -55,16 +54,16 @@ pub struct Forked(
 ): pub Prop {
     zero: Zero,
     one: One,
-    under_zero: Holds(past_zero),
-    under_one: Holds(past_one),
+    under_zero: Bool/Holds(past_zero),
+    under_one: Bool/Holds(past_one),
     apart: Apart(a, b, c),
-    clear: Holds(Bool/not(bit(a, c))),
+    clear: Bool/Holds(Bool/not(bit(a, c))),
 }
 
 --- A trie is sound where every fork of it is: a leaf as it stands, and a fork by [`Forked`] of its sides.
 pub let Sound(@K: Type, use Key(K), @V: Type, t: Node(K, V)) -> Prop =
     match t
-    | leaf(_, _) => True
+    | leaf(_, _) => Bool/True
     | fork(c, z, o) => Forked(Sound(z), Sound(o), first(z), first(o), c, deeper(z, c), deeper(o, c))
     end;
 
@@ -83,10 +82,10 @@ pub induct Shaped(K: Type, use Key(K), V: Type): (Node(K, V), Bytes, Option(Nat)
     @top_one: Option(Nat),
     zero: Shaped(K, V)(z, a, top_zero),
     one: Shaped(K, V)(o, b, top_one),
-    under_zero: Holds(past(top_zero, c)),
-    under_one: Holds(past(top_one, c)),
+    under_zero: Bool/Holds(past(top_zero, c)),
+    under_one: Bool/Holds(past(top_one, c)),
     apart: Apart(a, b, c),
-    clear: Holds(Bool/not(bit(a, c)))): (Node/fork(c, z, o), a, Option/some(c))
+    clear: Bool/Holds(Bool/not(bit(a, c)))): (Node/fork(c, z, o), a, Option/some(c))
 end
 
 --- A sound node in the form a map holds.
@@ -127,7 +126,7 @@ pub let read(
     w: Shaped(K, V)(t, a, p),
 ) -> Read(t, a, p) =
     match w: (t, a, p, _) => Read(t, a, p)
-    | leaf() => Read { sound = True/qed(), first = Eq/refl(), top = Eq/refl() }
+    | leaf() => Read { sound = Bool/True/qed(), first = Eq/refl(), top = Eq/refl() }
     | fork(@c, @_, @o, @a, @_, @_, @_, zero, one, under_zero, under_one, apart, clear) =>
         let rz = read(zero);
         let ro = read(one);
@@ -137,9 +136,15 @@ pub let read(
                     zero = rz.sound,
                     one = ro.sound,
                     under_zero =
-                        Eq/subst((q: Option(Nat)) => Holds(past(q, c)), Eq/sym(rz.top), under_zero),
+                        Eq/subst(
+                            (q: Option(Nat)) => Bool/Holds(past(q, c)),
+                            Eq/sym(rz.top),
+                            under_zero),
                     under_one =
-                        Eq/subst((q: Option(Nat)) => Holds(past(q, c)), Eq/sym(ro.top), under_one),
+                        Eq/subst(
+                            (q: Option(Nat)) => Bool/Holds(past(q, c)),
+                            Eq/sym(ro.top),
+                            under_one),
                     apart =
                         Eq/subst(
                             (e: Bytes) => Apart(e, first(o), c),
@@ -147,7 +152,7 @@ pub let read(
                             Eq/subst((e: Bytes) => Apart(a, e, c), Eq/sym(ro.first), apart)),
                     clear =
                         Eq/subst(
-                            (e: Bytes) => Holds(Bool/not(bit(e, c))),
+                            (e: Bytes) => Bool/Holds(Bool/not(bit(e, c))),
                             Eq/sym(rz.first),
                             clear) },
             first = rz.first,
@@ -156,14 +161,14 @@ pub let read(
 
 --- What a node keeps of the one it stands in for, at a bit the old one forked past: it forks past it too, and its first key agrees with the old one's through it.
 pub struct Held(a: Bytes, b: Bytes, c: Nat, past: Bool): pub Prop {
-    under: Holds(past),
-    agree: (j: Nat, within: Holds(j <= c)) -> Eq()(bit(a, j), bit(b, j)),
+    under: Bool/Holds(past),
+    agree: (j: Nat, within: Bool/Holds(j <= c)) -> Eq()(bit(a, j), bit(b, j)),
 }
 
 --- A node that may stand where another did: sound, and keeping the other's place under every fork above it.
 pub struct Stands(@K: Type, use Key(K), @V: Type, n: Node(K, V), t: Node(K, V)): pub Prop {
     sound: Sound(n),
-    kept: (c: Nat, past: Holds(deeper(t, c))) -> Held(first(n), first(t), c, deeper(n, c)),
+    kept: (c: Nat, past: Bool/Holds(deeper(t, c))) -> Held(first(n), first(t), c, deeper(n, c)),
 }
 
 -- A fork whose zero side gave way to a sound node that keeps its place under the fork may stand where the fork did.
@@ -189,8 +194,8 @@ let zero_side(
                 apart = reheaded(first(z), first(n), first(o), c, sound.apart, held.agree),
                 clear =
                     Eq/subst(
-                        (v: Bool) => Holds(Bool/not(v)),
-                        Eq/sym(held.agree(c, True/qed())),
+                        (v: Bool) => Bool/Holds(Bool/not(v)),
+                        Eq/sym(held.agree(c, Bool/True/qed())),
                         sound.clear) },
         kept = (_, past) => Held { under = past, agree = (j, _) => held.agree(j, proved()) } };
 
@@ -274,17 +279,19 @@ pub let reached(
             keys(z),
             i,
             (in_zero) =>
-                let agree = within(z, sound.zero, c, sound.under_zero, x, in_zero, c, True/qed());
+                let agree =
+                    within(z, sound.zero, c, sound.under_zero, x, in_zero, c, Bool/True/qed());
                 match bit(Hash/hash(x), c)
                 | false => reached(z, sound.zero, x, in_zero)
                 | true =>
-                    match Eq/subst((b: Bool) => Holds(Bool/not(b)), Eq/sym(agree), sound.clear) end
+                    match Eq/subst((b: Bool) => Bool/Holds(Bool/not(b)), Eq/sym(agree), sound.clear)
+                    end
                 end,
             (in_one) =>
-                let agree = within(o, sound.one, c, sound.under_one, x, in_one, c, True/qed());
+                let agree = within(o, sound.one, c, sound.under_one, x, in_one, c, Bool/True/qed());
                 let set = other_set(first(z), first(o), c, sound.apart, sound.clear);
                 match bit(Hash/hash(x), c)
-                | false => match Eq/subst((b: Bool) => Holds(b), Eq/sym(agree), set) end
+                | false => match Eq/subst((b: Bool) => Bool/Holds(b), Eq/sym(agree), set) end
                 | true => reached(o, sound.one, x, in_one)
                 end)
     end;
@@ -321,8 +328,9 @@ pub let hit(
     h: Eq()(find(t, k), Option/some(v)),
 ) -> Eq()(Hash/hash(lookup(t, k).0), k) =
     match Hash/hash(lookup(t, k).0) == k
-    | true => Bytes/eq_of_eql(Hash/hash(lookup(t, k).0), k, True/qed())
-    | false => match Eq/subst((m: Option(V)) => Holds(Option/is_none(m)), h, True/qed()) end
+    | true => Bytes/eq_of_eql(Hash/hash(lookup(t, k).0), k, Bool/True/qed())
+    | false =>
+        match Eq/subst((m: Option(V)) => Bool/Holds(Option/is_none(m)), h, Bool/True/qed()) end
     end;
 
 --- A walk by an encoding whose bit at `c` is not the one every key of a sound node has there, `c` a bit the node forks past, finds nothing.
@@ -333,18 +341,18 @@ pub let missing(
     t: Node(K, V),
     sound: Sound(t),
     c: Nat,
-    past: Holds(deeper(t, c)),
+    past: Bool/Holds(deeper(t, c)),
     k: Bytes,
-    apart: Holds(bit(k, c) != bit(first(t), c)),
+    apart: Bool/Holds(bit(k, c) != bit(first(t), c)),
 ) -> Eq()(find(t, k), Option/none()) =
-    let agree = within(t, sound, c, past, lookup(t, k).0, looked_up(t, k), c, True/qed());
+    let agree = within(t, sound, c, past, lookup(t, k).0, looked_up(t, k), c, Bool/True/qed());
     match Hash/hash(lookup(t, k).0) == k
     | false => Eq/refl()
     | true =>
-        let same = Bytes/eq_of_eql(Hash/hash(lookup(t, k).0), k, True/qed());
-        let moved: Holds(bit(Hash/hash(lookup(t, k).0), c) != bit(first(t), c)) =
-            Eq/subst((e: Bytes) => Holds(bit(e, c) != bit(first(t), c)), Eq/sym(same), apart);
-        match Eq/subst((b: Bool) => Holds(b != bit(first(t), c)), agree, moved) end
+        let same = Bytes/eq_of_eql(Hash/hash(lookup(t, k).0), k, Bool/True/qed());
+        let moved: Bool/Holds(bit(Hash/hash(lookup(t, k).0), c) != bit(first(t), c)) =
+            Eq/subst((e: Bytes) => Bool/Holds(bit(e, c) != bit(first(t), c)), Eq/sym(same), apart);
+        match Eq/subst((b: Bool) => Bool/Holds(b != bit(first(t), c)), agree, moved) end
     end;
 
 --- That `n` answers `x` at the encoding `k`, and at every other what `t` answers: what a node that may stand where `t` did says once the key encoding to `k` is set to `x`.
@@ -366,18 +374,23 @@ pub let Gone(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Prop =
         Option/none());
 
 -- Two bits of which one is set and the other clear differ.
-let set_clear(a: Bool, b: Bool, set: Holds(a), clear: Holds(Bool/not(b))) -> Holds(a != b) =
+let set_clear(
+    a: Bool,
+    b: Bool,
+    set: Bool/Holds(a),
+    clear: Bool/Holds(Bool/not(b)),
+) -> Bool/Holds(a != b) =
     match a
     | false => match set end
     | true =>
         match b
         | true => match clear end
-        | false => True/qed()
+        | false => Bool/True/qed()
         end
     end;
 
 -- An encoding the key encoding to `k` is equal to has the key's bits.
-let same_bit(k: Bytes, j: Bytes, c: Nat, same: Holds(k == j)) -> Eq()(bit(k, c), bit(j, c)) =
+let same_bit(k: Bytes, j: Bytes, c: Nat, same: Bool/Holds(k == j)) -> Eq()(bit(k, c), bit(j, c)) =
     Eq/cong((e: Bytes) => bit(e, c), Bytes/eq_of_eql(k, j, same));
 
 --- A fork whose zero side gave way to a node that answers `x` at `k` in its place answers `x` at `k` in the fork's place, `k`'s bit at the fork being clear: an encoding with that bit set is the one side's, and is not `k`.
@@ -391,7 +404,7 @@ pub let zero_answers(
     n: Node(K, V),
     k: Bytes,
     x: Option(V),
-    clear: Holds(Bool/not(bit(k, c))),
+    clear: Bool/Holds(Bool/not(bit(k, c))),
     answers: Answers(n, z, k, x),
 ) -> Answers(Node/fork(c, n, o), Node/fork(c, z, o), k, x) =
     (j) =>
@@ -402,8 +415,8 @@ pub let zero_answers(
             | false => Eq/refl()
             | true =>
                 match Eq/subst(
-                    (b: Bool) => Holds(Bool/not(b)),
-                    same_bit(k, j, c, True/qed()),
+                    (b: Bool) => Bool/Holds(Bool/not(b)),
+                    same_bit(k, j, c, Bool/True/qed()),
                     clear)
                 end
             end
@@ -420,7 +433,7 @@ pub let one_answers(
     n: Node(K, V),
     k: Bytes,
     x: Option(V),
-    set: Holds(bit(k, c)),
+    set: Bool/Holds(bit(k, c)),
     answers: Answers(n, o, k, x),
 ) -> Answers(Node/fork(c, z, n), Node/fork(c, z, o), k, x) =
     (j) =>
@@ -429,7 +442,9 @@ pub let one_answers(
         | false =>
             match k == j
             | false => Eq/refl()
-            | true => match Eq/subst((b: Bool) => Holds(b), same_bit(k, j, c, True/qed()), set) end
+            | true =>
+                match Eq/subst((b: Bool) => Bool/Holds(b), same_bit(k, j, c, Bool/True/qed()), set)
+                end
             end
         end;
 
@@ -469,7 +484,7 @@ pub let wedge_answers(
     same: Eq()(Hash/hash(key), k),
     sound: Sound(t),
     apart: Apart(k, first(t), c),
-    past: Holds(deeper(t, c)),
+    past: Bool/Holds(deeper(t, c)),
 ) -> Answers(wedge(c, bit(k, c), key, v, t), t, k, Option/some(v)) =
     (j) =>
         -- On the leaf's side, the node finds nothing, so what is left is the leaf's own answer, read at `k`.
@@ -503,9 +518,9 @@ pub let wedge_answers(
                 | false => Eq/refl()
                 | true =>
                     match Eq/subst(
-                        (b: Bool) => Holds(Bool/not(b)),
-                        same_bit(k, j, c, True/qed()),
-                        True/qed())
+                        (b: Bool) => Bool/Holds(Bool/not(b)),
+                        same_bit(k, j, c, Bool/True/qed()),
+                        Bool/True/qed())
                     end
                 end
             end
@@ -516,7 +531,10 @@ pub let wedge_answers(
                 match k == j
                 | false => Eq/refl()
                 | true =>
-                    match Eq/subst((b: Bool) => Holds(b), same_bit(k, j, c, True/qed()), True/qed())
+                    match Eq/subst(
+                        (b: Bool) => Bool/Holds(b),
+                        same_bit(k, j, c, Bool/True/qed()),
+                        Bool/True/qed())
                     end
                 end
             end
@@ -539,8 +557,8 @@ let wedge_deeper(
     v: V,
     t: Node(K, V),
     d: Nat,
-    under: Holds(d < c),
-) -> Holds(deeper(wedge(c, b, key, v, t), d)) =
+    under: Bool/Holds(d < c),
+) -> Bool/Holds(deeper(wedge(c, b, key, v, t), d)) =
     match b | false => under | true => under end;
 
 -- A leaf wedged in above a node it parts from at a bit leaves the node's first key as it was below that bit.
@@ -557,7 +575,7 @@ let wedge_agree(
     same: Eq()(Hash/hash(key), k),
     apart: Apart(k, first(t), c),
     j: Nat,
-    under: Holds(j < c),
+    under: Bool/Holds(j < c),
 ) -> Eq()(bit(first(wedge(c, b, key, v, t)), j), bit(first(t), j)) =
     match b
     | false =>
@@ -582,7 +600,7 @@ let wedge_held(
     same: Eq()(Hash/hash(key), k),
     apart: Apart(k, first(t), c),
     d: Nat,
-    under: Holds(d < c),
+    under: Bool/Holds(d < c),
 ) -> Held(first(wedge(c, b, key, v, t)), first(t), d, deeper(wedge(c, b, key, v, t), d)) =
     Held {
         under = wedge_deeper(c, b, key, v, t, d, under),
@@ -600,26 +618,27 @@ let wedged_at(
     t: Node(K, V),
     sound: Sound(t),
     apart: Apart(Hash/hash(key), first(t), c),
-    past: Holds(deeper(t, c)),
+    past: Bool/Holds(deeper(t, c)),
     is: Eq()(bit(Hash/hash(key), c), b),
 ) -> Sound(wedge(c, b, key, v, t)) =
     match b: (m) => (is: Eq()(bit(Hash/hash(key), c), m)) -> Sound(wedge(c, m, key, v, t))
     | false =>
         (is) =>
             Forked {
-                zero = True/qed(),
+                zero = Bool/True/qed(),
                 one = sound,
-                under_zero = True/qed(),
+                under_zero = Bool/True/qed(),
                 under_one = past,
                 apart = apart,
-                clear = Eq/subst((x: Bool) => Holds(Bool/not(x)), Eq/sym(is), True/qed()) }
+                clear =
+                    Eq/subst((x: Bool) => Bool/Holds(Bool/not(x)), Eq/sym(is), Bool/True/qed()) }
     | true =>
         (is) =>
             Forked {
                 zero = sound,
-                one = True/qed(),
+                one = Bool/True/qed(),
                 under_zero = past,
-                under_one = True/qed(),
+                under_one = Bool/True/qed(),
                 apart = turned(Hash/hash(key), first(t), c, apart),
                 clear =
                     other_clear(
@@ -627,7 +646,7 @@ let wedged_at(
                         first(t),
                         c,
                         apart,
-                        Eq/subst((x: Bool) => Holds(x), Eq/sym(is), True/qed())) }
+                        Eq/subst((x: Bool) => Bool/Holds(x), Eq/sym(is), Bool/True/qed())) }
     end(is);
 
 --- A leaf of `key`, whose encoding is `k`, wedged in above a sound node on the side `k`'s bit at `c` says, where `k` parts from the node's first key at `c` and the node forks past it, is sound.
@@ -643,7 +662,7 @@ pub let wedged(
     same: Eq()(Hash/hash(key), k),
     sound: Sound(t),
     apart: Apart(k, first(t), c),
-    past: Holds(deeper(t, c)),
+    past: Bool/Holds(deeper(t, c)),
 ) -> Sound(wedge(c, bit(k, c), key, v, t)) =
     Eq/subst(
         (e: Bytes) => (apart: Apart(e, first(t), c)) -> Sound(wedge(c, bit(e, c), key, v, t)),
@@ -660,7 +679,7 @@ pub induct Inserted(K: Type, use Key(K), V: Type, t: Node(K, V), k: Bytes, v: V)
     c: Nat,
     @back: Eq()(n, t),
     @apart: Apart(k, first(t), c),
-    @past: Holds(deeper(t, c)))
+    @past: Bool/Holds(deeper(t, c)))
 end
 
 --- `key` under the sound node `t` at `v`, where `k` is `key`'s encoding, computed once by the caller; a leaf's is derived here, where it is compared.
@@ -682,14 +701,14 @@ pub let insert(
         let e0 = Hash/hash(k0);
         let kept: Stands(Node/leaf(k0, v), t) =
             Stands {
-                sound = True/qed(),
-                kept = (_, _) => Held { under = True/qed(), agree = (_, _) => Eq/refl() } };
+                sound = Bool/True/qed(),
+                kept = (_, _) => Held { under = Bool/True/qed(), agree = (_, _) => Eq/refl() } };
         match e0 == k
         | true =>
             Inserted/replaced(
                 Node/leaf(k0, v),
                 @kept,
-                @leaf_answers(k0, v0, v, k, Bytes/eq_of_eql(e0, k, True/qed())))
+                @leaf_answers(k0, v0, v, k, Bytes/eq_of_eql(e0, k, Bool/True/qed())))
         | false =>
             let found: Parting(k, e0, crit(k, e0)) = parting(k, e0);
             match crit(k, e0)
@@ -698,7 +717,7 @@ pub let insert(
                     Node/leaf(k0, v),
                     @kept,
                     @leaf_answers(k0, v0, v, k, Eq/sym(found)))
-            | at(c) => Inserted/parted(t, c, @Eq/refl(), @found, @True/qed())
+            | at(c) => Inserted/parted(t, c, @Eq/refl(), @found, @Bool/True/qed())
             end
         end
     | fork(tc, z, o) =>
@@ -716,7 +735,7 @@ pub let insert(
                         sound,
                         stands.sound,
                         stands.kept(tc, sound.under_zero)),
-                    @zero_answers(tc, z, o, z2, k, Option/some(v), True/qed(), answers))
+                    @zero_answers(tc, z, o, z2, k, Option/some(v), Bool/True/qed(), answers))
             | replaced(z2, @stands, @answers) =>
                 Inserted/replaced(
                     Node/fork(tc, z2, o),
@@ -728,7 +747,7 @@ pub let insert(
                         sound,
                         stands.sound,
                         stands.kept(tc, sound.under_zero)),
-                    @zero_answers(tc, z, o, z2, k, Option/some(v), True/qed(), answers))
+                    @zero_answers(tc, z, o, z2, k, Option/some(v), Bool/True/qed(), answers))
             | parted(z2, c, @back, @apart, @past) =>
                 match tc < c
                 | true =>
@@ -757,7 +776,7 @@ pub let insert(
                                     same,
                                     apart,
                                     tc,
-                                    True/qed()))),
+                                    Bool/True/qed()))),
                         @Eq/subst(
                             (m: Node(K, V)) =>
                                 Answers(
@@ -773,12 +792,20 @@ pub let insert(
                                 wedge(c, bit(k, c), key, v, z),
                                 k,
                                 Option/some(v),
-                                True/qed(),
+                                Bool/True/qed(),
                                 wedge_answers(c, key, k, v, z, same, sound.zero, apart, past))))
                 | false =>
                     let here: Apart(k, first(t), c) = apart;
-                    let under: Holds(c < tc) =
-                        below_clear(k, first(z), c, tc, apart, True/qed(), sound.clear, True/qed());
+                    let under: Bool/Holds(c < tc) =
+                        below_clear(
+                            k,
+                            first(z),
+                            c,
+                            tc,
+                            apart,
+                            Bool/True/qed(),
+                            sound.clear,
+                            Bool/True/qed());
                     Inserted/parted(t, c, @Eq/refl(), @here, @under)
                 end
             end
@@ -788,12 +815,12 @@ pub let insert(
                 Inserted/added(
                     Node/fork(tc, z, o2),
                     @one_side(tc, z, o, o2, sound, stands.sound, stands.kept(tc, sound.under_one)),
-                    @one_answers(tc, z, o, o2, k, Option/some(v), True/qed(), answers))
+                    @one_answers(tc, z, o, o2, k, Option/some(v), Bool/True/qed(), answers))
             | replaced(o2, @stands, @answers) =>
                 Inserted/replaced(
                     Node/fork(tc, z, o2),
                     @one_side(tc, z, o, o2, sound, stands.sound, stands.kept(tc, sound.under_one)),
-                    @one_answers(tc, z, o, o2, k, Option/some(v), True/qed(), answers))
+                    @one_answers(tc, z, o, o2, k, Option/some(v), Bool/True/qed(), answers))
             | parted(o2, c, @back, @apart, @past) =>
                 match tc < c
                 | true =>
@@ -822,7 +849,7 @@ pub let insert(
                                     same,
                                     apart,
                                     tc,
-                                    True/qed()))),
+                                    Bool/True/qed()))),
                         @Eq/subst(
                             (m: Node(K, V)) =>
                                 Answers(
@@ -838,19 +865,19 @@ pub let insert(
                                 wedge(c, bit(k, c), key, v, o),
                                 k,
                                 Option/some(v),
-                                True/qed(),
+                                Bool/True/qed(),
                                 wedge_answers(c, key, k, v, o, same, sound.one, apart, past))))
                 | false =>
-                    let under: Holds(c < tc) =
+                    let under: Bool/Holds(c < tc) =
                         below_set(
                             k,
                             first(o),
                             c,
                             tc,
                             apart,
-                            True/qed(),
+                            Bool/True/qed(),
                             other_set(first(z), first(o), tc, sound.apart, sound.clear),
-                            True/qed());
+                            Bool/True/qed());
                     let here: Apart(k, first(t), c) =
                         carried(
                             k,
@@ -904,13 +931,18 @@ let zero_left(
                     agree = (_, _) => Eq/refl() } };
 
 -- Two bits of which one is clear and the other set differ.
-let clear_set(a: Bool, b: Bool, clear: Holds(Bool/not(a)), set: Holds(b)) -> Holds(a != b) =
+let clear_set(
+    a: Bool,
+    b: Bool,
+    clear: Bool/Holds(Bool/not(a)),
+    set: Bool/Holds(b),
+) -> Bool/Holds(a != b) =
     match a
     | true => match clear end
     | false =>
         match b
         | false => match set end
-        | true => True/qed()
+        | true => Bool/True/qed()
         end
     end;
 
@@ -958,7 +990,7 @@ let leaf_absent(
                         | false => Option/none()
                         end,
                         Option/none()),
-                Bytes/eq_of_eql(k, j, True/qed()),
+                Bytes/eq_of_eql(k, j, Bool/True/qed()),
                 Eq/subst(
                     (b: Bool) =>
                         Eq()(
@@ -978,7 +1010,7 @@ pub let one_left_answers(
     o: Node(K, V),
     k: Bytes,
     sound: Sound(Node/fork(c, z, o)),
-    clear: Holds(Bool/not(bit(k, c))),
+    clear: Bool/Holds(Bool/not(bit(k, c))),
     empty: Gone(z, k),
 ) -> Answers(o, Node/fork(c, z, o), k, Option/none()) =
     (j) =>
@@ -994,7 +1026,7 @@ pub let one_left_answers(
                     clear_set(
                         bit(j, c),
                         bit(first(o), c),
-                        True/qed(),
+                        Bool/True/qed(),
                         other_set(first(z), first(o), c, sound.apart, sound.clear))),
                 Eq/sym(empty(j)))
         | true =>
@@ -1002,8 +1034,8 @@ pub let one_left_answers(
             | false => Eq/refl()
             | true =>
                 match Eq/subst(
-                    (b: Bool) => Holds(Bool/not(b)),
-                    same_bit(k, j, c, True/qed()),
+                    (b: Bool) => Bool/Holds(Bool/not(b)),
+                    same_bit(k, j, c, Bool/True/qed()),
                     clear)
                 end
             end
@@ -1019,7 +1051,7 @@ pub let zero_left_answers(
     o: Node(K, V),
     k: Bytes,
     sound: Sound(Node/fork(c, z, o)),
-    set: Holds(bit(k, c)),
+    set: Bool/Holds(bit(k, c)),
     empty: Gone(o, k),
 ) -> Answers(z, Node/fork(c, z, o), k, Option/none()) =
     (j) =>
@@ -1032,12 +1064,14 @@ pub let zero_left_answers(
                     c,
                     sound.under_zero,
                     j,
-                    set_clear(bit(j, c), bit(first(z), c), True/qed(), sound.clear)),
+                    set_clear(bit(j, c), bit(first(z), c), Bool/True/qed(), sound.clear)),
                 Eq/sym(empty(j)))
         | false =>
             match k == j
             | false => Eq/refl()
-            | true => match Eq/subst((b: Bool) => Holds(b), same_bit(k, j, c, True/qed()), set) end
+            | true =>
+                match Eq/subst((b: Bool) => Bool/Holds(b), same_bit(k, j, c, Bool/True/qed()), set)
+                end
             end
         end;
 
@@ -1060,7 +1094,8 @@ pub let remove(
     match t
     | leaf(k0, v0) =>
         match Hash/hash(k0) == k
-        | true => Removed/gone(leaf_gone(k0, v0, k, Bytes/eq_of_eql(Hash/hash(k0), k, True/qed())))
+        | true =>
+            Removed/gone(leaf_gone(k0, v0, k, Bytes/eq_of_eql(Hash/hash(k0), k, Bool/True/qed())))
         | false => Removed/absent(leaf_absent(k0, v0, k, Eq/refl()))
         end
     | fork(c, z, o) =>
@@ -1068,32 +1103,32 @@ pub let remove(
         | false =>
             match remove(z, k, @sound.zero)
             | absent(answers) =>
-                Removed/absent(zero_answers(c, z, o, z, k, Option/none(), True/qed(), answers))
+                Removed/absent(zero_answers(c, z, o, z, k, Option/none(), Bool/True/qed(), answers))
             | gone(empty) =>
                 Removed/kept(
                     o,
                     @one_left(c, z, o, sound),
-                    @one_left_answers(c, z, o, k, sound, True/qed(), empty))
+                    @one_left_answers(c, z, o, k, sound, Bool/True/qed(), empty))
             | kept(z2, @stands, @answers) =>
                 Removed/kept(
                     Node/fork(c, z2, o),
                     @zero_side(c, z, o, z2, sound, stands.sound, stands.kept(c, sound.under_zero)),
-                    @zero_answers(c, z, o, z2, k, Option/none(), True/qed(), answers))
+                    @zero_answers(c, z, o, z2, k, Option/none(), Bool/True/qed(), answers))
             end
         | true =>
             match remove(o, k, @sound.one)
             | absent(answers) =>
-                Removed/absent(one_answers(c, z, o, o, k, Option/none(), True/qed(), answers))
+                Removed/absent(one_answers(c, z, o, o, k, Option/none(), Bool/True/qed(), answers))
             | gone(empty) =>
                 Removed/kept(
                     z,
                     @zero_left(c, z, o, sound),
-                    @zero_left_answers(c, z, o, k, sound, True/qed(), empty))
+                    @zero_left_answers(c, z, o, k, sound, Bool/True/qed(), empty))
             | kept(o2, @stands, @answers) =>
                 Removed/kept(
                     Node/fork(c, z, o2),
                     @one_side(c, z, o, o2, sound, stands.sound, stands.kept(c, sound.under_one)),
-                    @one_answers(c, z, o, o2, k, Option/none(), True/qed(), answers))
+                    @one_answers(c, z, o, o2, k, Option/none(), Bool/True/qed(), answers))
             end
         end
     end;
@@ -1128,9 +1163,9 @@ let map_deeper(
     t: Node(K, V),
     f: (V) -> W,
     c: Nat,
-    past: Holds(deeper(t, c)),
-) -> Holds(deeper(map(t, f), c)) =
-    match t | leaf(_, _) => True/qed() | fork(_, _, _) => past end;
+    past: Bool/Holds(deeper(t, c)),
+) -> Bool/Holds(deeper(map(t, f), c)) =
+    match t | leaf(_, _) => Bool/True/qed() | fork(_, _, _) => past end;
 
 --- A sound node with its values rewritten is sound.
 pub let mapped(
@@ -1143,7 +1178,7 @@ pub let mapped(
     sound: Sound(t),
 ) -> Sound(map(t, f)) =
     match t
-    | leaf(_, _) => True/qed()
+    | leaf(_, _) => Bool/True/qed()
     | fork(c, z, o) =>
         Forked {
             zero = mapped(z, f, sound.zero),
@@ -1160,7 +1195,7 @@ pub let mapped(
                         sound.apart)),
             clear =
                 Eq/subst(
-                    (e: Bytes) => Holds(Bool/not(bit(e, c))),
+                    (e: Bytes) => Bool/Holds(Bool/not(bit(e, c))),
                     Eq/sym(map_first(z, f)),
                     sound.clear) }
     end;
@@ -1196,11 +1231,11 @@ let within(
     t: Node(K, V),
     sound: Sound(t),
     c: Nat,
-    past: Holds(deeper(t, c)),
+    past: Bool/Holds(deeper(t, c)),
     x: K,
     i: Member()(x, keys(t)),
     j: Nat,
-    le: Holds(j <= c),
+    le: Bool/Holds(j <= c),
 ) -> Eq()(bit(Hash/hash(x), j), bit(first(t), j)) =
     match t
     | leaf(_, _) =>
@@ -1274,8 +1309,8 @@ pub let across(
                 turned(Hash/hash(x), first(o), c, from_zero),
                 (j, le) => within(o, sound.one, c, sound.under_one, y, in_one, j, le))),
         Eq/subst(
-            (v: Bool) => Holds(Bool/not(v)),
-            Eq/sym(within(z, sound.zero, c, sound.under_zero, x, in_zero, c, True/qed())),
+            (v: Bool) => Bool/Holds(Bool/not(v)),
+            Eq/sym(within(z, sound.zero, c, sound.under_zero, x, in_zero, c, Bool/True/qed())),
             sound.clear));
 
 --- The keys under a sound node are in strict order, each before every one after it.
@@ -1295,9 +1330,9 @@ pub let ascending(
             ascending(o, sound.one),
             (x, y, i, j) =>
                 Eq/subst(
-                    (r: Ordering) => Holds(Ordering/is_lt(r)),
+                    (r: Ordering) => Bool/Holds(Ordering/is_lt(r)),
                     Eq/sym(Eq/trans(Key/monotone(x, y), across(c, z, o, sound, x, y, i, j))),
-                    True/qed()))
+                    Bool/True/qed()))
     end;
 
 --- The entry a walk down the zero sides ends at, which is the one of the least key.
@@ -1331,19 +1366,19 @@ pub let least_below(
     sound: Sound(t),
     x: K,
     i: Member()(x, keys(t)),
-) -> Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(least(t).0, x)) =
+) -> Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(least(t).0, x)) =
     match t
     | leaf(k, _) =>
         Member/uncons(
             i,
             (e) =>
                 Eq/subst(
-                    (y: K) => Holds(Ordering/is_le(Ord/ord(k, y))),
+                    (y: K) => Bool/Holds(Ordering/is_le(Ord/ord(k, y))),
                     Eq/sym(e),
                     Eq/subst(
-                        (r: Ordering) => Holds(Ordering/is_le(r)),
+                        (r: Ordering) => Bool/Holds(Ordering/is_le(r)),
                         Eq/sym(Key/refl(k)),
-                        True/qed())),
+                        Bool/True/qed())),
             (rest) => match Member/absent(rest) end)
     | fork(c, z, o) =>
         Member/split(
@@ -1352,12 +1387,12 @@ pub let least_below(
             (in_zero) => least_below(z, sound.zero, x, in_zero),
             (in_one) =>
                 Eq/subst(
-                    (r: Ordering) => Holds(Ordering/is_le(r)),
+                    (r: Ordering) => Bool/Holds(Ordering/is_le(r)),
                     Eq/sym(
                         Eq/trans(
                             Key/monotone(least(z).0, x),
                             across(c, z, o, sound, least(z).0, x, least_among(z), in_one))),
-                    True/qed()))
+                    Bool/True/qed()))
     end;
 
 --- No key under a sound node is above its greatest entry's.
@@ -1369,19 +1404,19 @@ pub let greatest_above(
     sound: Sound(t),
     x: K,
     i: Member()(x, keys(t)),
-) -> Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, greatest(t).0)) =
+) -> Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, greatest(t).0)) =
     match t
     | leaf(k, _) =>
         Member/uncons(
             i,
             (e) =>
                 Eq/subst(
-                    (y: K) => Holds(Ordering/is_le(Ord/ord(y, k))),
+                    (y: K) => Bool/Holds(Ordering/is_le(Ord/ord(y, k))),
                     Eq/sym(e),
                     Eq/subst(
-                        (r: Ordering) => Holds(Ordering/is_le(r)),
+                        (r: Ordering) => Bool/Holds(Ordering/is_le(r)),
                         Eq/sym(Key/refl(k)),
-                        True/qed())),
+                        Bool/True/qed())),
             (rest) => match Member/absent(rest) end)
     | fork(c, z, o) =>
         Member/split(
@@ -1389,12 +1424,12 @@ pub let greatest_above(
             i,
             (in_zero) =>
                 Eq/subst(
-                    (r: Ordering) => Holds(Ordering/is_le(r)),
+                    (r: Ordering) => Bool/Holds(Ordering/is_le(r)),
                     Eq/sym(
                         Eq/trans(
                             Key/monotone(x, greatest(o).0),
                             across(c, z, o, sound, x, greatest(o).0, in_zero, greatest_among(o)))),
-                    True/qed()),
+                    Bool/True/qed()),
             (in_one) => greatest_above(o, sound.one, x, in_one))
     end;
 
@@ -1433,10 +1468,10 @@ let zero_key_clear(
     sound: Sound(Node/fork(c, z, o)),
     y: K,
     i: Member()(y, keys(z)),
-) -> Holds(Bool/not(bit(Hash/hash(y), c))) =
+) -> Bool/Holds(Bool/not(bit(Hash/hash(y), c))) =
     Eq/subst(
-        (b: Bool) => Holds(Bool/not(b)),
-        Eq/sym(within(z, sound.zero, c, sound.under_zero, y, i, c, True/qed())),
+        (b: Bool) => Bool/Holds(Bool/not(b)),
+        Eq/sym(within(z, sound.zero, c, sound.under_zero, y, i, c, Bool/True/qed())),
         sound.clear);
 
 -- A key under the one side of a sound fork has the fork's bit set.
@@ -1450,14 +1485,14 @@ let one_key_set(
     sound: Sound(Node/fork(c, z, o)),
     y: K,
     i: Member()(y, keys(o)),
-) -> Holds(bit(Hash/hash(y), c)) =
+) -> Bool/Holds(bit(Hash/hash(y), c)) =
     Eq/subst(
-        (b: Bool) => Holds(b),
-        Eq/sym(within(o, sound.one, c, sound.under_one, y, i, c, True/qed())),
+        (b: Bool) => Bool/Holds(b),
+        Eq/sym(within(o, sound.one, c, sound.under_one, y, i, c, Bool/True/qed())),
         other_set(first(z), first(o), c, sound.apart, sound.clear));
 
 -- A bit held both set and clear.
-let clash(b: Bool, set: Holds(b), clear: Holds(Bool/not(b))) -> False =
+let clash(b: Bool, set: Bool/Holds(b), clear: Bool/Holds(Bool/not(b))) -> Bool/False =
     match b | true => clear | false => set end;
 
 -- No leaf finds alike with a sound fork at every key's encoding: the fork's least key on each side would both be the leaf's, and they differ at the fork's bit.
@@ -1474,7 +1509,7 @@ let leaf_not_fork(
     same: (x: K) -> Eq()(
         find(Node/leaf(k1, v1), Hash/hash(x)),
         find(Node/fork(c, z, o), Hash/hash(x))),
-) -> False =
+) -> Bool/False =
     let t = Node/fork(c, z, o);
     let (a, b) = (least(z).0, least(o).0);
     let at_a: Eq()(Hash/hash(k1), Hash/hash(a)) =
@@ -1492,7 +1527,7 @@ let leaf_not_fork(
     clash(
         bit(Hash/hash(a), c),
         Eq/subst(
-            (e: Bytes) => Holds(bit(e, c)),
+            (e: Bytes) => Bool/Holds(bit(e, c)),
             Eq/trans(Eq/sym(at_b), at_a),
             one_key_set(c, z, o, sound, b, least_among(o))),
         zero_key_clear(c, z, o, sound, a, least_among(z)));
@@ -1508,9 +1543,9 @@ let forks_past(
     sound: Sound(Node/fork(c, z, o)),
     u: Node(K, V),
     sound_u: Sound(u),
-    past: Holds(deeper(u, c)),
+    past: Bool/Holds(deeper(u, c)),
     same: (x: K) -> Eq()(find(Node/fork(c, z, o), Hash/hash(x)), find(u, Hash/hash(x))),
-) -> False =
+) -> Bool/False =
     let t = Node/fork(c, z, o);
     let (a, b) = (least(z).0, least(o).0);
     -- Where the walk of `u` by a key of `t` ends, a key that encodes as it does and has `u`'s first key's bit at `c`.
@@ -1532,7 +1567,7 @@ let forks_past(
                     lookup(u, Hash/hash(y)).0,
                     looked_up(u, Hash/hash(y)),
                     c,
-                    True/qed()));
+                    Bool/True/qed()));
     let agree: Eq()(bit(Hash/hash(a), c), bit(Hash/hash(b), c)) =
         Eq/trans(
             landed(a, Member/left(keys(o), least_among(z))),
@@ -1540,7 +1575,7 @@ let forks_past(
     clash(
         bit(Hash/hash(a), c),
         Eq/subst(
-            (x: Bool) => Holds(x),
+            (x: Bool) => Bool/Holds(x),
             Eq/sym(agree),
             one_key_set(c, z, o, sound, b, least_among(o))),
         zero_key_clear(c, z, o, sound, a, least_among(z)));
@@ -1565,7 +1600,8 @@ pub let canonical(
             let at = same(k1);
             match Hash/hash(lookup(Node/leaf(k2, v2), Hash/hash(k1)).0) == Hash/hash(k1)
             | false =>
-                match Eq/subst((m: Option(V)) => Holds(Option/is_some(m)), at, True/qed()) end
+                match Eq/subst((m: Option(V)) => Bool/Holds(Option/is_some(m)), at, Bool/True/qed())
+                end
             | true =>
                 let keys_same: Eq()(k2, k1) =
                     Key/injective(
@@ -1574,7 +1610,7 @@ pub let canonical(
                         Bytes/eq_of_eql(
                             Hash/hash(lookup(Node/leaf(k2, v2), Hash/hash(k1)).0),
                             Hash/hash(k1),
-                            True/qed()));
+                            Bool/True/qed()));
                 Eq/trans(
                     Eq/cong((y: K) => Node/leaf(y, v1), Eq/sym(keys_same)),
                     Eq/cong((w: V) => Node/leaf(k2, w), Option/some_injective(at)))
@@ -1595,7 +1631,7 @@ pub let canonical(
                     sound_t,
                     Node/fork(c2, z2, o2),
                     sound_u,
-                    True/qed(),
+                    Bool/True/qed(),
                     same)
                 end
             | false =>
@@ -1608,7 +1644,7 @@ pub let canonical(
                         sound_u,
                         Node/fork(c1, z1, o1),
                         sound_t,
-                        True/qed(),
+                        Bool/True/qed(),
                         (x) => Eq/sym(same(x)))
                     end
                 | false =>
@@ -1638,7 +1674,7 @@ pub let canonical(
                                                 set_clear(
                                                     bit(Hash/hash(x), c1),
                                                     bit(first(z1), c1),
-                                                    True/qed(),
+                                                    Bool/True/qed(),
                                                     sound_t.clear)),
                                             Eq/sym(
                                                 missing(
@@ -1650,7 +1686,7 @@ pub let canonical(
                                                     set_clear(
                                                         bit(Hash/hash(x), c1),
                                                         bit(first(z2), c1),
-                                                        True/qed(),
+                                                        Bool/True/qed(),
                                                         sound_d.clear))))
                                     end);
                             let ones =
@@ -1668,7 +1704,7 @@ pub let canonical(
                                                 clear_set(
                                                     bit(Hash/hash(x), c1),
                                                     bit(first(o1), c1),
-                                                    True/qed(),
+                                                    Bool/True/qed(),
                                                     other_set(
                                                         first(z1),
                                                         first(o1),
@@ -1685,7 +1721,7 @@ pub let canonical(
                                                     clear_set(
                                                         bit(Hash/hash(x), c1),
                                                         bit(first(o2), c1),
-                                                        True/qed(),
+                                                        Bool/True/qed(),
                                                         other_set(
                                                             first(z2),
                                                             first(o2),
@@ -1732,7 +1768,7 @@ pub let either_side(
                     clear_set(
                         bit(k, c),
                         bit(first(o), c),
-                        True/qed(),
+                        Bool/True/qed(),
                         other_set(first(z), first(o), c, sound.apart, sound.clear)))),
             unit(g(find(z, k), rest)))
     | true =>
@@ -1747,7 +1783,7 @@ pub let either_side(
                         c,
                         sound.under_zero,
                         k,
-                        set_clear(bit(k, c), bit(first(z), c), True/qed(), sound.clear))),
+                        set_clear(bit(k, c), bit(first(z), c), Bool/True/qed(), sound.clear))),
                 unit(rest)))
     end;
 
@@ -1863,7 +1899,8 @@ pub let found_entry(
     let holds: Eq()(lookup(t, Hash/hash(x)).1, v) =
         match Hash/hash(lookup(t, Hash/hash(x)).0) == Hash/hash(x)
         | true => Option/some_injective(h)
-        | false => match Eq/subst((m: Option(V)) => Holds(Option/is_none(m)), h, True/qed()) end
+        | false =>
+            match Eq/subst((m: Option(V)) => Bool/Holds(Option/is_none(m)), h, Bool/True/qed()) end
         end;
     Eq/subst(
         (p: {K, V}) => Member()(p, entries(t)),

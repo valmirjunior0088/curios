@@ -1,7 +1,6 @@
 pub use /sys/Nat/{pow};
 
-use /std/{Nat, Eq, proved};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Eq, proved, Bool};
 
 --- A power of a power is the power to the product of the exponents.
 ---
@@ -16,10 +15,10 @@ pub let of_mul(x: Nat, y: Nat, a: Nat) -> Eq()(pow(x * y, a), pow(x, a) * pow(y,
 --- A power of a positive base is positive.
 ---
 --- Conversion holds a power at least one where it holds the base so as a term, `pow(2, k)` or `pow(x + 1, k)`, and reads no hypothesis: under one this is the step, a product of two positives at each successor.
-pub let positive(x: Nat, k: Nat, p: Holds(0 < x)) -> Holds(0 < pow(x, k)) =
+pub let positive(x: Nat, k: Nat, p: Bool/Holds(0 < x)) -> Bool/Holds(0 < pow(x, k)) =
     match k
-    | 0 => True/qed()
+    | 0 => Bool/True/qed()
     | kp + 1 =>
-        let inner: Holds(0 < pow(x, kp)) = positive(x, kp, p);
+        let inner: Bool/Holds(0 < pow(x, kp)) = positive(x, kp, p);
         proved()
     end;

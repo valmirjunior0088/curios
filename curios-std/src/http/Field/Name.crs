@@ -1,5 +1,4 @@
 use /std/{Str, Bytes, Byte, Nat, Bool, Option, Spell};
-use /std/Bool/{Holds};
 use /std/ops/{Eql};
 
 --- Whether `b` may stand in a token (RFC 9110 §5.6.2): a letter, a digit, or one of ``!#$%&'*+-.^_`|~``.
@@ -30,7 +29,7 @@ pub struct Name: pub Type {
     --- The name as written, its casing the writer's.
     text: Str,
     --- Why the text is a token.
-    @token: Holds(is_token(text)),
+    @token: Bool/Holds(is_token(text)),
 }
 
 --- Names are compared without case, as RFC 9110 §5.1 reads them: `Content-Type` and `content-type` are one name.

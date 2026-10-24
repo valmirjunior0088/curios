@@ -1,19 +1,18 @@
 use /std/{Nat, Byte, Bytes, Bool, Char, proved};
-use /std/Bool/{True, Holds};
 
 -- A run is read as the seven bytes `curios-unicode` packs it in: its first scalar in three, its last in three, least significant first, then its class's code.
-let _a_run_is_seven_bytes: Holds(/sys/unicode/run == 7) =
-    True/qed();
+let _a_run_is_seven_bytes: Bool/Holds(/sys/unicode/run == 7) =
+    Bool/True/qed();
 
 -- The runs of a table a search has not ruled out.
 struct Span(runs: Nat): Type {
     lo: Nat,
     hi: Nat,
-    @within: Holds(hi <= runs),
+    @within: Bool/Holds(hi <= runs),
 }
 
 -- The number the three bytes of `t` from `at` spell, least significant first.
-let number(t: Bytes, at: Nat, @fits: Holds(at + 3 <= Bytes/len(t))) -> Nat =
+let number(t: Bytes, at: Nat, @fits: Bool/Holds(at + 3 <= Bytes/len(t))) -> Nat =
     Byte/to_nat(Bytes/get(t, at)) + 256 * Byte/to_nat(Bytes/get(t, at + 1))
         + 65536 * Byte/to_nat(Bytes/get(t, at + 2));
 
@@ -30,8 +29,8 @@ pub let class(table: Bytes, missing: Nat, c: Char) -> Nat =
             | true =>
                 let mid = (span.lo + span.hi) / 2;
                 let at = 7 * mid;
-                let inside: Holds(mid < span.hi) = proved();
-                let room: Holds(at + 7 <= Bytes/len(table)) = proved();
+                let inside: Bool/Holds(mid < span.hi) = proved();
+                let room: Bool/Holds(at + 7 <= Bytes/len(table)) = proved();
                 choose
                 | scalar < number(table, at) =>
                     again(Span(runs) { lo = span.lo, hi = mid }, proved())

@@ -1,6 +1,5 @@
-use /std/{Nat, Char, Spell};
+use /std/{Nat, Char, Spell, Bool};
 use /std/ops/{Eql};
-use /std/Bool/{Holds};
 
 --- A character, or a named key, as the kitty keyboard protocol names them. The End key is `end_key`, since `end` is a reserved word.
 pub induct Code: pub Type
@@ -21,7 +20,7 @@ pub induct Code: pub Type
 | page_up()
 | page_down()
 --- A function key, by its number: F1 to F35, the keys the protocol names.
-| f(n: Nat, @from: Holds(1 <= n), @to: Holds(n <= 35))
+| f(n: Nat, @from: Bool/Holds(1 <= n), @to: Bool/Holds(n <= 35))
 end
 
 pub use Code/*;

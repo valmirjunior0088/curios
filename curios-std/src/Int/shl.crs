@@ -1,14 +1,13 @@
 pub use /sys/Int/{shl};
 
-use /std/{Nat, Int, Eq, proved};
-use /std/Bool/{Holds};
+use /std/{Nat, Int, Eq, proved, Bool};
 
 --- A shift by `i` is a shift by `i - j` and then by `j`, where `j <= i`: [`Nat/shl/split`] at a signed value.
 pub let split(
     x: Int,
     i: Nat,
     j: Nat,
-    fits: Holds(j <= i),
+    fits: Bool/Holds(j <= i),
 ) -> Eq()(shl(x, i), shl(shl(x, i - j), j)) =
     Eq/cong((count: Nat) => shl(x, count), Eq/sym(Nat/le/add_sub_cancel(j, i, fits)));
 
@@ -20,8 +19,8 @@ pub let unique(
     k: Nat,
     n: Int,
     j: Nat,
-    odd_m: Holds(Int/abs(m) % 2 == 1),
-    odd_n: Holds(Int/abs(n) % 2 == 1),
+    odd_m: Bool/Holds(Int/abs(m) % 2 == 1),
+    odd_n: Bool/Holds(Int/abs(n) % 2 == 1),
     e: Eq()(shl(m, k), shl(n, j)),
 ) -> {count: Eq()(k, j), value: Eq()(m, n)} =
     let left: Eq()(Int/abs(m), 2 * (Int/abs(m) / 2) + 1) =

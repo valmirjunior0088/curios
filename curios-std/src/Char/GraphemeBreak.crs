@@ -1,6 +1,5 @@
-use /std/{Nat, List, Char, Spell};
+use /std/{Nat, List, Char, Spell, Bool};
 use /std/ops/{Eql};
-use /std/Bool/{True, Holds};
 use /std/Char/{unicode};
 
 --- A character's `Grapheme_Cluster_Break` class: what segmenting text into extended grapheme clusters reads (UAX #29).
@@ -65,10 +64,10 @@ let of_code(code: Nat) -> GraphemeBreak =
     end;
 
 -- Every code `/sys` names is a case of `of_code`: a class the database gains is refused here until the ladder has its arm.
-let _every_code_the_database_names_is_a_case: Holds(
+let _every_code_the_database_names_is_a_case: Bool/Holds(
     List/all(/sys/grapheme_break/codes, (code: Nat) =>
         code == /sys/grapheme_break/other || of_code(code) != other())) =
-    True/qed();
+    Bool/True/qed();
 
 --- `c`'s class.
 pub let of_char(c: Char) -> GraphemeBreak =

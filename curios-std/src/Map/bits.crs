@@ -1,5 +1,4 @@
 use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, proved};
-use /std/Bool/{True, False, Holds};
 
 --- The bit of `k` in its byte `g` at place `o` of nine: place zero says the byte is there, and the eight after it are the byte's own from its top. A byte the run does not have has every place clear, so a run that ends is below every run that goes on.
 pub let at_place(k: Bytes, g: Nat, o: Nat) -> Bool =
@@ -68,10 +67,15 @@ let every(x: Nat) -> Bool =
     Nat/all_below(8, halves(x)) && Nat/shr(x, 8) == 0;
 
 -- Of every byte, at each of its eight places, decided by running it.
-let table: Holds(Nat/all_below(256, every)) =
-    True/qed();
+let table: Bool/Holds(Nat/all_below(256, every)) =
+    Bool/True/qed();
 
-let halved(x: Nat, k: Nat, small: Holds(x < 256), place: Holds(k < 8)) -> Holds(halves(x)(k)) =
+let halved(
+    x: Nat,
+    k: Nat,
+    small: Bool/Holds(x < 256),
+    place: Bool/Holds(k < 8),
+) -> Bool/Holds(halves(x)(k)) =
     Nat/all_below/at(
         8,
         halves(x),
@@ -86,23 +90,28 @@ let halved(x: Nat, k: Nat, small: Holds(x < 256), place: Holds(k < 8)) -> Holds(
 let split(
     x: Nat,
     k: Nat,
-    small: Holds(x < 256),
-    place: Holds(k < 8),
-) -> Holds(Nat/shr(x, k) == 2 * Nat/shr(x, k + 1) + low(x, k)) =
+    small: Bool/Holds(x < 256),
+    place: Bool/Holds(k < 8),
+) -> Bool/Holds(Nat/shr(x, k) == 2 * Nat/shr(x, k + 1) + low(x, k)) =
     Bool/and/first(
         Nat/shr(x, k) == 2 * Nat/shr(x, k + 1) + low(x, k),
         low(x, k) <= 1,
         halved(x, k, small, place));
 
 -- A low bit is at most one.
-let single(x: Nat, k: Nat, small: Holds(x < 256), place: Holds(k < 8)) -> Holds(low(x, k) <= 1) =
+let single(
+    x: Nat,
+    k: Nat,
+    small: Bool/Holds(x < 256),
+    place: Bool/Holds(k < 8),
+) -> Bool/Holds(low(x, k) <= 1) =
     Bool/and/second(
         Nat/shr(x, k) == 2 * Nat/shr(x, k + 1) + low(x, k),
         low(x, k) <= 1,
         halved(x, k, small, place));
 
 -- A byte shifted eight places is nothing.
-let spent(x: Nat, small: Holds(x < 256)) -> Holds(Nat/shr(x, 8) == 0) =
+let spent(x: Nat, small: Bool/Holds(x < 256)) -> Bool/Holds(Nat/shr(x, 8) == 0) =
     Bool/and/second(
         Nat/all_below(8, halves(x)),
         Nat/shr(x, 8) == 0,
@@ -152,36 +161,36 @@ let rungs(x: Nat, y: Nat) -> Eq()(place(x, y), 7 - seek(x, y, 8) + 1) =
 
 -- What `seek` finds of two bytes that differ: a shift below eight at which their low bits differ, with every shift above it the same in both.
 struct Sought(x: Nat, y: Nat, j: Nat): Prop {
-    within: Holds(j < 8),
-    above: (m: Nat, over: Holds(j < m), within: Holds(m <= 8)) -> Eq()(
+    within: Bool/Holds(j < 8),
+    above: (m: Nat, over: Bool/Holds(j < m), within: Bool/Holds(m <= 8)) -> Eq()(
         Nat/shr(x, m),
         Nat/shr(y, m)),
-    differs: Holds(low(x, j) != low(y, j)),
+    differs: Bool/Holds(low(x, j) != low(y, j)),
 }
 
 let sought(
     x: Nat,
     y: Nat,
     k: Nat,
-    small_x: Holds(x < 256),
-    small_y: Holds(y < 256),
-    bound: Holds(k <= 8),
-    above: (m: Nat, over: Holds(k <= m), within: Holds(m <= 8)) -> Eq()(
+    small_x: Bool/Holds(x < 256),
+    small_y: Bool/Holds(y < 256),
+    bound: Bool/Holds(k <= 8),
+    above: (m: Nat, over: Bool/Holds(k <= m), within: Bool/Holds(m <= 8)) -> Eq()(
         Nat/shr(x, m),
         Nat/shr(y, m)),
-    apart: Holds(x != y),
+    apart: Bool/Holds(x != y),
 ) -> Sought(x, y, seek(x, y, k)) =
     match k: (n) =>
         (
-            bound: Holds(n <= 8),
-            above: (m: Nat, over: Holds(n <= m), within: Holds(m <= 8)) -> Eq()(
+            bound: Bool/Holds(n <= 8),
+            above: (m: Nat, over: Bool/Holds(n <= m), within: Bool/Holds(m <= 8)) -> Eq()(
                 Nat/shr(x, m),
                 Nat/shr(y, m))) -> Sought(x, y, seek(x, y, n))
     | 0 =>
         (_, above) =>
             match Eq/subst(
-                (v: Nat) => Holds(x != v),
-                Eq/sym(above(0, True/qed(), True/qed())),
+                (v: Nat) => Bool/Holds(x != v),
+                Eq/sym(above(0, Bool/True/qed(), Bool/True/qed())),
                 apart)
             end
     | j + 1; ih =>
@@ -193,20 +202,20 @@ let sought(
                     above = (m, over, within) => above(m, proved(), within),
                     differs =
                         match low(x, j) != low(y, j)
-                        | true => True/qed()
+                        | true => Bool/True/qed()
                         | false =>
-                            let same_low: Holds(low(x, j) == low(y, j)) = True/qed();
-                            let same_next: Holds(Nat/shr(x, j + 1) == Nat/shr(y, j + 1)) =
+                            let same_low: Bool/Holds(low(x, j) == low(y, j)) = Bool/True/qed();
+                            let same_next: Bool/Holds(Nat/shr(x, j + 1) == Nat/shr(y, j + 1)) =
                                 Eq/subst(
-                                    (v: Nat) => Holds(Nat/shr(x, j + 1) == v),
-                                    above(j + 1, True/qed(), proved()),
-                                    True/qed());
+                                    (v: Nat) => Bool/Holds(Nat/shr(x, j + 1) == v),
+                                    above(j + 1, Bool/True/qed(), proved()),
+                                    Bool/True/qed());
                             let left = split(x, j, small_x, proved());
                             let right = split(y, j, small_y, proved());
                             match Eq/subst(
-                                (v: Nat) => Holds(Nat/shr(x, j) != v),
+                                (v: Nat) => Bool/Holds(Nat/shr(x, j) != v),
                                 Nat/le/antisym(Nat/shr(y, j), Nat/shr(x, j), proved(), proved()),
-                                True/qed())
+                                Bool/True/qed())
                             end
                         end }
             | false =>
@@ -214,12 +223,12 @@ let sought(
                     proved(),
                     (m, over, within) =>
                         match j < m
-                        | true => above(m, True/qed(), within)
+                        | true => above(m, Bool/True/qed(), within)
                         | false =>
                             Eq/subst(
                                 (v: Nat) => Eq()(Nat/shr(x, v), Nat/shr(y, v)),
                                 Nat/le/antisym(j, m, over, proved()),
-                                Nat/eq_of_eql(Nat/shr(x, j), Nat/shr(y, j), True/qed()))
+                                Nat/eq_of_eql(Nat/shr(x, j), Nat/shr(y, j), Bool/True/qed()))
                         end)
             end
     end(bound, above);
@@ -229,7 +238,7 @@ let onward(
     h: Byte,
     t: Bytes,
     j: Nat,
-    over: Holds(9 <= j),
+    over: Bool/Holds(9 <= j),
 ) -> Eq()(bit(x[h, ..t], j), bit(t, j - 9)) =
     Eq/subst(
         (v: Nat) => Eq()(bit(x[h, ..t], v), bit(t, j - 9)),
@@ -237,27 +246,27 @@ let onward(
         Eq/refl());
 
 -- A bit below nine is its place in the first byte.
-let inward(k: Bytes, j: Nat, under: Holds(j < 9)) -> Eq()(bit(k, j), at_place(k, 0, j)) =
-    let first: Holds(j / 9 < 1) = Nat/DivMod/div_lt_of_lt_mul(1, j, 9, proved());
+let inward(k: Bytes, j: Nat, under: Bool/Holds(j < 9)) -> Eq()(bit(k, j), at_place(k, 0, j)) =
+    let first: Bool/Holds(j / 9 < 1) = Nat/DivMod/div_lt_of_lt_mul(1, j, 9, proved());
     Eq/subst(
         (v: Nat) => Eq()(at_place(k, j / 9, v), at_place(k, 0, j)),
         Nat/le/antisym(j, j % 9, proved(), proved()),
         Eq/subst(
             (v: Nat) => Eq()(at_place(k, v, j), at_place(k, 0, j)),
-            Nat/le/antisym(0, j / 9, True/qed(), proved()),
+            Nat/le/antisym(0, j / 9, Bool/True/qed(), proved()),
             Eq/refl()));
 
 --- Two runs apart at the bit `c`: the first bit they differ at.
 pub struct Apart(a: Bytes, b: Bytes, c: Nat): pub Prop {
     --- They agree at every bit below it.
-    below: (j: Nat, under: Holds(j < c)) -> Eq()(bit(a, j), bit(b, j)),
+    below: (j: Nat, under: Bool/Holds(j < c)) -> Eq()(bit(a, j), bit(b, j)),
     --- They differ at it.
-    differs: Holds(bit(a, c) != bit(b, c)),
+    differs: Bool/Holds(bit(a, c) != bit(b, c)),
 }
 
 -- What a walk that began at byte `g` found at `c`: a bit at or past the walk's start, the runs apart at it counted from there.
 struct Shifted(a: Bytes, b: Bytes, g: Nat, c: Nat): Prop {
-    over: Holds(9 * g <= c),
+    over: Bool/Holds(9 * g <= c),
     apart: Apart(a, b, c - 9 * g),
 }
 
@@ -271,7 +280,7 @@ let led(
     t: Bytes,
     r: Bytes,
     j: Nat,
-    under: Holds(j < 9),
+    under: Bool/Holds(j < 9),
 ) -> Eq()(bit(x[h, ..t], j), bit(x[h, ..r], j)) =
     Eq/trans(inward(x[h, ..t], j, under), Eq/sym(inward(x[h, ..r], j, under)));
 
@@ -287,7 +296,7 @@ let lifted(
         below =
             (j, under) =>
                 match j < 9
-                | true => led(h, t, r, j, True/qed())
+                | true => led(h, t, r, j, Bool/True/qed())
                 | false =>
                     Eq/trans(
                         onward(h, t, j, proved()),
@@ -296,10 +305,10 @@ let lifted(
         differs = apart.differs };
 
 -- A number that is not zero is above it.
-let positive(x: Nat, apart: Holds(x != 0)) -> Holds(0 < x) =
+let positive(x: Nat, apart: Bool/Holds(x != 0)) -> Bool/Holds(0 < x) =
     match x
     | 0 => match apart end
-    | _ + 1 => True/qed()
+    | _ + 1 => Bool/True/qed()
     end;
 
 -- Two bytes whose shifts agree at a place and at the next have one low bit there.
@@ -307,9 +316,9 @@ let lows(
     x: Nat,
     y: Nat,
     m: Nat,
-    small_x: Holds(x < 256),
-    small_y: Holds(y < 256),
-    place: Holds(m < 8),
+    small_x: Bool/Holds(x < 256),
+    small_y: Bool/Holds(y < 256),
+    place: Bool/Holds(m < 8),
     here: Eq()(Nat/shr(x, m), Nat/shr(y, m)),
     next: Eq()(Nat/shr(x, m + 1), Nat/shr(y, m + 1)),
 ) -> Eq()(low(x, m), low(y, m)) =
@@ -322,35 +331,35 @@ let tested(
     x: Nat,
     y: Nat,
     m: Nat,
-    small_x: Holds(x < 256),
-    small_y: Holds(y < 256),
-    place: Holds(m < 8),
-    differs: Holds(low(x, m) != low(y, m)),
-) -> Holds(low(x, m) != 0 != (low(y, m) != 0)) =
+    small_x: Bool/Holds(x < 256),
+    small_y: Bool/Holds(y < 256),
+    place: Bool/Holds(m < 8),
+    differs: Bool/Holds(low(x, m) != low(y, m)),
+) -> Bool/Holds(low(x, m) != 0 != (low(y, m) != 0)) =
     let one_x = single(x, m, small_x, place);
     let one_y = single(y, m, small_y, place);
     match low(x, m) != 0
     | true =>
         match low(y, m) != 0
         | true =>
-            let up_x = positive(low(x, m), True/qed());
-            let up_y = positive(low(y, m), True/qed());
+            let up_x = positive(low(x, m), Bool/True/qed());
+            let up_y = positive(low(y, m), Bool/True/qed());
             match Eq/subst(
-                (v: Nat) => Holds(low(x, m) != v),
+                (v: Nat) => Bool/Holds(low(x, m) != v),
                 Nat/le/antisym(low(y, m), low(x, m), proved(), proved()),
                 differs)
             end
-        | false => True/qed()
+        | false => Bool/True/qed()
         end
     | false =>
         match low(y, m) != 0
-        | true => True/qed()
+        | true => Bool/True/qed()
         | false =>
             match Eq/subst(
-                (v: Nat) => Holds(low(x, m) != v),
+                (v: Nat) => Bool/Holds(low(x, m) != v),
                 Eq/trans(
-                    Nat/eq_of_eql(low(y, m), 0, True/qed()),
-                    Eq/sym(Nat/eq_of_eql(low(x, m), 0, True/qed()))),
+                    Nat/eq_of_eql(low(y, m), 0, Bool/True/qed()),
+                    Eq/sym(Nat/eq_of_eql(low(x, m), 0, Bool/True/qed()))),
                 differs)
             end
         end
@@ -366,7 +375,7 @@ let within(
     found: Sought(Byte/to_nat(h), Byte/to_nat(k), s),
 ) -> Apart(x[h, ..t], x[k, ..r], 7 - s + 1) =
     let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
-    let bound: Holds(s < 8) = found.within;
+    let bound: Bool/Holds(s < 8) = found.within;
     let (a, b) = (x[h, ..t], x[k, ..r]);
     Apart {
         below =
@@ -375,7 +384,7 @@ let within(
                     inward(a, j, proved()),
                     Eq/trans(
                         match j: (n) =>
-                            (under: Holds(n < 7 - s + 1)) -> Eq()(
+                            (under: Bool/Holds(n < 7 - s + 1)) -> Eq()(
                                 at_place(a, 0, n),
                                 at_place(b, 0, n))
                         | 0 => (_) => Eq/refl()
@@ -396,22 +405,22 @@ let within(
                         Eq/sym(inward(b, j, proved())))),
         differs =
             Eq/subst(
-                (v: Bool) => Holds(v != bit(b, 7 - s + 1)),
+                (v: Bool) => Bool/Holds(v != bit(b, 7 - s + 1)),
                 Eq/sym(inward(a, 7 - s + 1, proved())),
                 Eq/subst(
-                    (v: Bool) => Holds(at_place(a, 0, 7 - s + 1) != v),
+                    (v: Bool) => Bool/Holds(at_place(a, 0, 7 - s + 1) != v),
                     Eq/sym(inward(b, 7 - s + 1, proved())),
                     Eq/subst(
-                        (v: Nat) => Holds(low(hn, v) != 0 != (low(kn, v) != 0)),
+                        (v: Nat) => Bool/Holds(low(hn, v) != 0 != (low(kn, v) != 0)),
                         Nat/le/antisym(s, 7 - (7 - s), proved(), proved()),
                         tested(hn, kn, s, proved(), proved(), bound, found.differs)))) };
 
 -- A run that ends where another has a byte is apart from it at that byte's first bit.
 let ended(k: Byte, r: Bytes) -> Apart(x[], x[k, ..r], 0) =
-    Apart { below = (_, under) => match under end, differs = True/qed() };
+    Apart { below = (_, under) => match under end, differs = Bool/True/qed() };
 
 let outlasted(h: Byte, t: Bytes) -> Apart(x[h, ..t], x[], 0) =
-    Apart { below = (_, under) => match under end, differs = True/qed() };
+    Apart { below = (_, under) => match under end, differs = Bool/True/qed() };
 
 -- What `parts` answers is true of the two runs.
 let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
@@ -431,7 +440,7 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                 | true =>
                     Eq/subst(
                         (y: Byte) => Found(x[h, ..t], x[y, ..r], g, parts(t, r, g + 1)),
-                        Byte/eq_of_eql(h, k, True/qed()),
+                        Byte/eq_of_eql(h, k, Bool/True/qed()),
                         match parts(t, r, g + 1): (found) =>
                             (inner: Found(t, r, g + 1, found)) -> Found(
                                 x[h, ..t],
@@ -462,7 +471,7 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                             8,
                             proved(),
                             proved(),
-                            True/qed(),
+                            Bool/True/qed(),
                             (m, over, within) =>
                                 Eq/subst(
                                     (v: Nat) => Eq()(Nat/shr(hn, v), Nat/shr(kn, v)),
@@ -474,7 +483,7 @@ let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
                                                 Nat/shr(kn, 8),
                                                 0,
                                                 spent(kn, proved()))))),
-                            True/qed());
+                            Bool/True/qed());
                     Shifted {
                         over = proved(),
                         apart =
@@ -521,12 +530,15 @@ pub let carried(
     e: Nat,
     first: Apart(a, b, c),
     second: Apart(b, d, e),
-    earlier: Holds(c < e),
+    earlier: Bool/Holds(c < e),
 ) -> Apart(a, d, c) =
     Apart {
         below = (j, under) => Eq/trans(first.below(j, under), second.below(j, proved())),
         differs =
-            Eq/subst((v: Bool) => Holds(bit(a, c) != v), second.below(c, earlier), first.differs) };
+            Eq/subst(
+                (v: Bool) => Bool/Holds(bit(a, c) != v),
+                second.below(c, earlier),
+                first.differs) };
 
 --- A run that agrees with another through a bit is apart at that bit from whatever the other is.
 pub let reheaded(
@@ -535,34 +547,44 @@ pub let reheaded(
     b: Bytes,
     c: Nat,
     apart: Apart(a, b, c),
-    agree: (j: Nat, within: Holds(j <= c)) -> Eq()(bit(n, j), bit(a, j)),
+    agree: (j: Nat, within: Bool/Holds(j <= c)) -> Eq()(bit(n, j), bit(a, j)),
 ) -> Apart(n, b, c) =
     Apart {
         below = (j, under) => Eq/trans(agree(j, proved()), apart.below(j, under)),
         differs =
             Eq/subst(
-                (v: Bool) => Holds(v != bit(b, c)),
-                Eq/sym(agree(c, True/qed())),
+                (v: Bool) => Bool/Holds(v != bit(b, c)),
+                Eq/sym(agree(c, Bool/True/qed())),
                 apart.differs) };
 
 -- Two bits that differ, the first set, leave the second clear.
-let clear_of(a: Bool, b: Bool, differs: Holds(a != b), set: Holds(a)) -> Holds(Bool/not(b)) =
+let clear_of(
+    a: Bool,
+    b: Bool,
+    differs: Bool/Holds(a != b),
+    set: Bool/Holds(a),
+) -> Bool/Holds(Bool/not(b)) =
     match a
     | true =>
         match b
         | true => match differs end
-        | false => True/qed()
+        | false => Bool/True/qed()
         end
     | false => match set end
     end;
 
 -- Two bits that differ, the first clear, leave the second set.
-let set_of(a: Bool, b: Bool, differs: Holds(a != b), clear: Holds(Bool/not(a))) -> Holds(b) =
+let set_of(
+    a: Bool,
+    b: Bool,
+    differs: Bool/Holds(a != b),
+    clear: Bool/Holds(Bool/not(a)),
+) -> Bool/Holds(b) =
     match a
     | true => match clear end
     | false =>
         match b
-        | true => True/qed()
+        | true => Bool/True/qed()
         | false => match differs end
         end
     end;
@@ -571,10 +593,10 @@ let set_of(a: Bool, b: Bool, differs: Holds(a != b), clear: Holds(Bool/not(a))) 
 let not_both_clear(
     a: Bool,
     b: Bool,
-    differs: Holds(a != b),
-    clear_a: Holds(Bool/not(a)),
-    clear_b: Holds(Bool/not(b)),
-) -> False =
+    differs: Bool/Holds(a != b),
+    clear_a: Bool/Holds(Bool/not(a)),
+    clear_b: Bool/Holds(Bool/not(b)),
+) -> Bool/False =
     match a
     | true => match clear_a end
     | false =>
@@ -588,10 +610,10 @@ let not_both_clear(
 let not_both_set(
     a: Bool,
     b: Bool,
-    differs: Holds(a != b),
-    set_a: Holds(a),
-    set_b: Holds(b),
-) -> False =
+    differs: Bool/Holds(a != b),
+    set_a: Bool/Holds(a),
+    set_b: Bool/Holds(b),
+) -> Bool/False =
     match a
     | true =>
         match b
@@ -607,8 +629,8 @@ pub let other_clear(
     b: Bytes,
     c: Nat,
     apart: Apart(a, b, c),
-    set: Holds(bit(a, c)),
-) -> Holds(Bool/not(bit(b, c))) =
+    set: Bool/Holds(bit(a, c)),
+) -> Bool/Holds(Bool/not(bit(b, c))) =
     clear_of(bit(a, c), bit(b, c), apart.differs, set);
 
 --- Of two runs apart at a bit the first has clear, the second has it set.
@@ -617,8 +639,8 @@ pub let other_set(
     b: Bytes,
     c: Nat,
     apart: Apart(a, b, c),
-    clear: Holds(Bool/not(bit(a, c))),
-) -> Holds(bit(b, c)) =
+    clear: Bool/Holds(Bool/not(bit(a, c))),
+) -> Bool/Holds(bit(b, c)) =
     set_of(bit(a, c), bit(b, c), apart.differs, clear);
 
 --- Two runs both clear at a bit, apart at a bit the first is not past, are apart before it.
@@ -628,18 +650,18 @@ pub let below_clear(
     c: Nat,
     d: Nat,
     apart: Apart(a, b, c),
-    clear_a: Holds(Bool/not(bit(a, d))),
-    clear_b: Holds(Bool/not(bit(b, d))),
-    not_past: Holds(Bool/not(d < c)),
-) -> Holds(c < d) =
+    clear_a: Bool/Holds(Bool/not(bit(a, d))),
+    clear_b: Bool/Holds(Bool/not(bit(b, d))),
+    not_past: Bool/Holds(Bool/not(d < c)),
+) -> Bool/Holds(c < d) =
     match c < d
-    | true => True/qed()
+    | true => Bool/True/qed()
     | false =>
         match not_both_clear(
             bit(a, d),
             bit(b, d),
             Eq/subst(
-                (m: Nat) => Holds(bit(a, m) != bit(b, m)),
+                (m: Nat) => Bool/Holds(bit(a, m) != bit(b, m)),
                 Nat/le/antisym(c, d, proved(), proved()),
                 apart.differs),
             clear_a,
@@ -654,18 +676,18 @@ pub let below_set(
     c: Nat,
     d: Nat,
     apart: Apart(a, b, c),
-    set_a: Holds(bit(a, d)),
-    set_b: Holds(bit(b, d)),
-    not_past: Holds(Bool/not(d < c)),
-) -> Holds(c < d) =
+    set_a: Bool/Holds(bit(a, d)),
+    set_b: Bool/Holds(bit(b, d)),
+    not_past: Bool/Holds(Bool/not(d < c)),
+) -> Bool/Holds(c < d) =
     match c < d
-    | true => True/qed()
+    | true => Bool/True/qed()
     | false =>
         match not_both_set(
             bit(a, d),
             bit(b, d),
             Eq/subst(
-                (m: Nat) => Holds(bit(a, m) != bit(b, m)),
+                (m: Nat) => Bool/Holds(bit(a, m) != bit(b, m)),
                 Nat/le/antisym(c, d, proved(), proved()),
                 apart.differs),
             set_a,
@@ -679,18 +701,20 @@ let shifts(
     y: Nat,
     n: Nat,
     m: Nat,
-    small_x: Holds(x < 256),
-    small_y: Holds(y < 256),
-    le: Holds(m + n <= 8),
-    ge: Holds(8 <= m + n),
-    lows: (i: Nat, over: Holds(m <= i), under: Holds(i < 8)) -> Eq()(low(x, i), low(y, i)),
+    small_x: Bool/Holds(x < 256),
+    small_y: Bool/Holds(y < 256),
+    le: Bool/Holds(m + n <= 8),
+    ge: Bool/Holds(8 <= m + n),
+    lows: (i: Nat, over: Bool/Holds(m <= i), under: Bool/Holds(i < 8)) -> Eq()(
+        low(x, i),
+        low(y, i)),
 ) -> Eq()(Nat/shr(x, m), Nat/shr(y, m)) =
     match n: (count) =>
         (
             m: Nat,
-            le: Holds(m + count <= 8),
-            ge: Holds(8 <= m + count),
-            lows: (i: Nat, over: Holds(m <= i), under: Holds(i < 8)) -> Eq()(
+            le: Bool/Holds(m + count <= 8),
+            ge: Bool/Holds(8 <= m + count),
+            lows: (i: Nat, over: Bool/Holds(m <= i), under: Bool/Holds(i < 8)) -> Eq()(
                 low(x, i),
                 low(y, i))) -> Eq()(Nat/shr(x, m), Nat/shr(y, m))
     | 0 =>
@@ -703,16 +727,16 @@ let shifts(
                     Eq/sym(Nat/eq_of_eql(Nat/shr(y, 8), 0, spent(y, small_y)))))
     | i + 1; ih =>
         (m, le, ge, lows) =>
-            let same_next: Holds(Nat/shr(x, m + 1) == Nat/shr(y, m + 1)) =
+            let same_next: Bool/Holds(Nat/shr(x, m + 1) == Nat/shr(y, m + 1)) =
                 Eq/subst(
-                    (v: Nat) => Holds(Nat/shr(x, m + 1) == v),
+                    (v: Nat) => Bool/Holds(Nat/shr(x, m + 1) == v),
                     ih(m + 1, proved(), proved(), (at, over, under) => lows(at, proved(), under)),
-                    True/qed());
-            let same_low: Holds(low(x, m) == low(y, m)) =
+                    Bool/True/qed());
+            let same_low: Bool/Holds(low(x, m) == low(y, m)) =
                 Eq/subst(
-                    (v: Nat) => Holds(low(x, m) == v),
+                    (v: Nat) => Bool/Holds(low(x, m) == v),
                     lows(m, proved(), proved()),
-                    True/qed());
+                    Bool/True/qed());
             let left = split(x, m, small_x, proved());
             let right = split(y, m, small_y, proved());
             Nat/le/antisym(Nat/shr(x, m), Nat/shr(y, m), proved(), proved())
@@ -723,13 +747,14 @@ let lesser(
     x: Nat,
     y: Nat,
     m: Nat,
-    small_x: Holds(x < 256),
-    small_y: Holds(y < 256),
-    bound: Holds(m <= 8),
-    under: Holds(Nat/shr(x, m) < Nat/shr(y, m)),
-) -> Holds(x < y) =
+    small_x: Bool/Holds(x < 256),
+    small_y: Bool/Holds(y < 256),
+    bound: Bool/Holds(m <= 8),
+    under: Bool/Holds(Nat/shr(x, m) < Nat/shr(y, m)),
+) -> Bool/Holds(x < y) =
     match m: (n) =>
-        (bound: Holds(n <= 8), under: Holds(Nat/shr(x, n) < Nat/shr(y, n))) -> Holds(x < y)
+        (bound: Bool/Holds(n <= 8), under: Bool/Holds(Nat/shr(x, n) < Nat/shr(y, n))) -> Bool/Holds(
+            x < y)
     | 0 => (_, under) => under
     | i + 1; ih =>
         (bound, under) =>
@@ -744,9 +769,9 @@ let untested(
     x: Nat,
     y: Nat,
     m: Nat,
-    small_x: Holds(x < 256),
-    small_y: Holds(y < 256),
-    place: Holds(m < 8),
+    small_x: Bool/Holds(x < 256),
+    small_y: Bool/Holds(y < 256),
+    place: Bool/Holds(m < 8),
     same: Eq()(low(x, m) != 0, low(y, m) != 0),
 ) -> Eq()(low(x, m), low(y, m)) =
     let one_x = single(x, m, small_x, place);
@@ -755,8 +780,8 @@ let untested(
     | true =>
         match low(y, m) != 0
         | true =>
-            let up_x = positive(low(x, m), True/qed());
-            let up_y = positive(low(y, m), True/qed());
+            let up_x = positive(low(x, m), Bool/True/qed());
+            let up_y = positive(low(y, m), Bool/True/qed());
             Nat/le/antisym(low(x, m), low(y, m), proved(), proved())
         | false => match Bool/false_neq_true(Eq/sym(same)) end
         end
@@ -765,8 +790,8 @@ let untested(
         | true => match Bool/false_neq_true(same) end
         | false =>
             Eq/trans(
-                Nat/eq_of_eql(low(x, m), 0, True/qed()),
-                Eq/sym(Nat/eq_of_eql(low(y, m), 0, True/qed())))
+                Nat/eq_of_eql(low(x, m), 0, Bool/True/qed()),
+                Eq/sym(Nat/eq_of_eql(low(y, m), 0, Bool/True/qed())))
         end
     end;
 
@@ -777,7 +802,7 @@ let agreed(
     t: Bytes,
     r: Bytes,
     m: Nat,
-    place: Holds(m < 8),
+    place: Bool/Holds(m < 8),
     same: Eq()(bit(x[h, ..t], 7 - m + 1), bit(x[k, ..r], 7 - m + 1)),
 ) -> Eq()(low(Byte/to_nat(h), m), low(Byte/to_nat(k), m)) =
     let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
@@ -802,13 +827,13 @@ let lowered(
     r: Bytes,
     c: Nat,
     apart: Apart(x[h, ..t], x[h, ..r], c),
-    over: Holds(9 <= c),
+    over: Bool/Holds(9 <= c),
 ) -> Apart(t, r, c - 9) =
     Apart {
         below = (j, under) => apart.below(j + 9, proved()),
         differs =
             Eq/subst(
-                (v: Nat) => Holds(bit(x[h, ..t], v) != bit(x[h, ..r], v)),
+                (v: Nat) => Bool/Holds(bit(x[h, ..t], v) != bit(x[h, ..r], v)),
                 Eq/sym(Nat/le/add_sub_cancel(9, c, over)),
                 apart.differs) };
 
@@ -818,10 +843,10 @@ pub let before(
     b: Bytes,
     c: Nat,
     apart: Apart(a, b, c),
-    clear: Holds(Bool/not(bit(a, c))),
+    clear: Bool/Holds(Bool/not(bit(a, c))),
 ) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
     match a: (m) =>
-        (b: Bytes, c: Nat, apart: Apart(m, b, c), clear: Holds(Bool/not(bit(m, c)))) -> Eq()(
+        (b: Bytes, c: Nat, apart: Apart(m, b, c), clear: Bool/Holds(Bool/not(bit(m, c)))) -> Eq()(
             Bytes/ord(m, b),
             Ordering/lt())
     | x[] =>
@@ -837,12 +862,13 @@ pub let before(
                 match c: (n) =>
                     (
                         apart: Apart(x[h, ..t], x[], n),
-                        clear: Holds(Bool/not(bit(x[h, ..t], n)))) -> Eq()(
+                        clear: Bool/Holds(Bool/not(bit(x[h, ..t], n)))) -> Eq()(
                         Ordering/gt(),
                         Ordering/lt())
                 | 0 => (_, clear) => match clear end
                 | _ + 1 =>
-                    (apart, _) => match Bool/false_neq_true(Eq/sym(apart.below(0, True/qed()))) end
+                    (apart, _) =>
+                        match Bool/false_neq_true(Eq/sym(apart.below(0, Bool/True/qed()))) end
                 end(apart, clear)
             | x[k, ..r] =>
                 let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
@@ -858,8 +884,8 @@ pub let before(
                                 0,
                                 proved(),
                                 proved(),
-                                True/qed(),
-                                True/qed(),
+                                Bool/True/qed(),
+                                Bool/True/qed(),
                                 (m, _, under) =>
                                     agreed(
                                         h,
@@ -881,7 +907,7 @@ pub let before(
                                 c - 9,
                                 lowered(h, t, r, c, apart, proved()),
                                 Eq/subst(
-                                    (v: Bool) => Holds(Bool/not(v)),
+                                    (v: Bool) => Bool/Holds(Bool/not(v)),
                                     onward(h, t, c, proved()),
                                     clear)))(
                         apart)
@@ -889,8 +915,8 @@ pub let before(
                     match c: (n) =>
                         (
                             apart: Apart(x[h, ..t], x[k, ..r], n),
-                            clear: Holds(Bool/not(bit(x[h, ..t], n))),
-                            under: Holds(n < 9)) -> Eq()(
+                            clear: Bool/Holds(Bool/not(bit(x[h, ..t], n))),
+                            under: Bool/Holds(n < 9)) -> Eq()(
                             Bytes/ord(x[h, ..t], x[k, ..r]),
                             Ordering/lt())
                     | 0 => (_, clear, _) => match clear end
@@ -915,17 +941,17 @@ pub let before(
                                             m,
                                             within,
                                             apart.below(7 - m + 1, proved())));
-                            let off: Holds(Bool/not(low(hn, 7 - i) != 0)) =
+                            let off: Bool/Holds(Bool/not(low(hn, 7 - i) != 0)) =
                                 Eq/subst(
-                                    (v: Bool) => Holds(Bool/not(v)),
+                                    (v: Bool) => Bool/Holds(Bool/not(v)),
                                     inward(x[h, ..t], i + 1, under),
                                     clear);
-                            let parted: Holds(low(hn, 7 - i) != 0 != (low(kn, 7 - i) != 0)) =
+                            let parted: Bool/Holds(low(hn, 7 - i) != 0 != (low(kn, 7 - i) != 0)) =
                                 Eq/subst(
-                                    (v: Bool) => Holds(v != at_place(x[k, ..r], 0, i + 1)),
+                                    (v: Bool) => Bool/Holds(v != at_place(x[k, ..r], 0, i + 1)),
                                     inward(x[h, ..t], i + 1, under),
                                     Eq/subst(
-                                        (v: Bool) => Holds(bit(x[h, ..t], i + 1) != v),
+                                        (v: Bool) => Bool/Holds(bit(x[h, ..t], i + 1) != v),
                                         inward(x[k, ..r], i + 1, under),
                                         apart.differs));
                             match low(hn, 7 - i) != 0
@@ -934,11 +960,11 @@ pub let before(
                                 match low(kn, 7 - i) != 0
                                 | false => match parted end
                                 | true =>
-                                    let zero: Holds(low(hn, 7 - i) == 0) = True/qed();
-                                    let up = positive(low(kn, 7 - i), True/qed());
+                                    let zero: Bool/Holds(low(hn, 7 - i) == 0) = Bool/True/qed();
+                                    let up = positive(low(kn, 7 - i), Bool/True/qed());
                                     let left = split(hn, 7 - i, proved(), proved());
                                     let right = split(kn, 7 - i, proved(), proved());
-                                    let lower: Holds(hn < kn) =
+                                    let lower: Bool/Holds(hn < kn) =
                                         lesser(
                                             hn,
                                             kn,
@@ -960,7 +986,7 @@ pub let before(
                                         Eq/refl())
                                 end
                             end
-                    end(apart, clear, True/qed())
+                    end(apart, clear, Bool/True/qed())
                 end
             end
     end(b, c, apart, clear);

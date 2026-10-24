@@ -1,24 +1,28 @@
 pub use /sys/Int/{lt};
 
 use /std/{Int, Bool, Eq};
-use /std/Bool/{True, Holds};
 
 --- A comparison that came back `false` is the other one: `a <= b` failing gives `b < a`.
 ---
 --- The dual of `le/of_not_lt`, and as it is, the hypothesis itself: conversion reads a negated `Int` comparison as its dual.
-pub let of_not_le(a: Int, b: Int, p: Holds(Bool/not(a <= b))) -> Holds(b < a) =
+pub let of_not_le(a: Int, b: Int, p: Bool/Holds(Bool/not(a <= b))) -> Bool/Holds(b < a) =
     p;
 
 --- A bound whose two sides differ is strict: `a <= b` and `a == b` failing give `a < b`.
 ---
 --- The case of a disequality its loose bound holds in, as `of_not_le` is the case it fails in.
-pub let of_le_ne(a: Int, b: Int, p: Holds(a <= b), q: Holds(Bool/not(a == b))) -> Holds(a < b) =
+pub let of_le_ne(
+    a: Int,
+    b: Int,
+    p: Bool/Holds(a <= b),
+    q: Bool/Holds(Bool/not(a == b)),
+) -> Bool/Holds(a < b) =
     match a < b
-    | true => True/qed()
+    | true => Bool/True/qed()
     | false =>
-        let back: Holds(b <= a) = Int/le/of_not_lt(a, b, True/qed());
+        let back: Bool/Holds(b <= a) = Int/le/of_not_lt(a, b, Bool/True/qed());
         let same: Eq()(a, b) = Int/le/antisym(a, b, p, back);
-        let absurd: Holds(Bool/not(a == a)) =
-            Eq/subst((x: Int) => Holds(Bool/not(a == x)), Eq/sym(same), q);
+        let absurd: Bool/Holds(Bool/not(a == a)) =
+            Eq/subst((x: Int) => Bool/Holds(Bool/not(a == x)), Eq/sym(same), q);
         match absurd end
     end;

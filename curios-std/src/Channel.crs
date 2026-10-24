@@ -3,7 +3,6 @@ pub use /sys/Channel/{Push, Take};
 
 use /std/{Nat, Bool, Option, Cell, Io};
 use /std/Io/{Offer};
-use /std/Bool/{Holds};
 
 -- The cell the waiters of one side wait on, kept in a capacity-one channel until a change of that side fills it and the next waiter makes another.
 struct Woken: Type {
@@ -46,7 +45,7 @@ pub struct Receiver(A: Type): Type {
 pub let new(
     @A: Type,
     capacity: Nat,
-    @positive: Holds(0 < capacity),
+    @positive: Bool/Holds(0 < capacity),
 ) -> Io({Sender(A), Receiver(A)}) =
     let channel = /sys/Channel/new(@A, capacity, @positive)!;
     let readers = /sys/Channel/new(@Cell({}), 1)!;

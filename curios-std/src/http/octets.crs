@@ -1,5 +1,4 @@
 use /std/{Bytes, Byte, Nat, Bool, Option};
-use /std/Bool/{Holds};
 
 --- Whether `b` is optional whitespace, a space or a tab (RFC 9110 §5.6.3): the whitespace a field line's value and a list's members are trimmed of, and no other.
 pub let is_ows(b: Byte) -> Bool =
@@ -19,8 +18,8 @@ let trim_end(
     b: Bytes,
     start: Nat,
     stop: Nat,
-    @ordered: Holds(start <= stop),
-    @reached: Holds(stop <= Bytes/len(b)),
+    @ordered: Bool/Holds(start <= stop),
+    @reached: Bool/Holds(stop <= Bytes/len(b)),
 ) -> Bytes =
     match Bool/holds(start < stop)
     | none() => Bytes/slice(b, start, stop - start)
@@ -32,7 +31,7 @@ let trim_end(
     end;
 
 -- `b` from `start` on, without the optional whitespace at either end: the walk that finds where it begins hands the index to the one that finds where it ends, so each cut is made under the bounds its walk kept.
-let trim_from(b: Bytes, start: Nat, @reached: Holds(start <= Bytes/len(b))) -> Bytes =
+let trim_from(b: Bytes, start: Nat, @reached: Bool/Holds(start <= Bytes/len(b))) -> Bytes =
     match Bool/holds(start < Bytes/len(b))
     | none() => x[]
     | some(inside) =>

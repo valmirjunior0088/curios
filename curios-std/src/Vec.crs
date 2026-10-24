@@ -1,5 +1,4 @@
-use /std/{Nat, List, Eq, Show, Spell, Fmt};
-use /std/Bool/{True, False, Holds};
+use /std/{Nat, List, Eq, Show, Spell, Fmt, Bool};
 use /std/ops/{Eql};
 
 --- That `l` holds exactly `n` elements.
@@ -15,8 +14,8 @@ pub struct Vec(T: Type, n: Nat): pub Type {
 }
 
 -- Zero is no successor, refuted by the comparison that decides it.
-let zero_not_succ(@n: Nat, e: Eq()(0, n + 1)) -> False =
-    Eq/subst((m: Nat) => Holds(0 == m), e, True/qed());
+let zero_not_succ(@n: Nat, e: Eq()(0, n + 1)) -> Bool/False =
+    Eq/subst((m: Nat) => Bool/Holds(0 == m), e, Bool/True/qed());
 
 -- A successor cancels off both sides, which is how a tail's length is read off the whole's.
 let succ_cancel(@a: Nat, @b: Nat, e: Eq()(a + 1, b + 1)) -> Eq()(a, b) =
@@ -57,7 +56,7 @@ pub let cons(@T: Type, @n: Nat, x: T, v: Vec(T, n)) -> Vec(T, n + 1) =
     Vec { list = [x, ..v.list], counted = Eq/cong((w: Nat) => w + 1, v.counted) };
 
 --- The element at `i`, under the evidence that `i < n`.
-pub let get(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, @ok: Holds(i < n)) -> T =
+pub let get(@T: Type, @n: Nat, v: Vec(T, n), i: Nat, @ok: Bool/Holds(i < n)) -> T =
     List/get(@T, v.list, i);
 
 --- The first element of a nonempty vector.

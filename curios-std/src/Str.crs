@@ -27,7 +27,6 @@ pub use ord/{let ord};
 
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord,
     proved};
-use /std/Bool/{True, Holds};
 use /std/ops/{Eql, Cmp};
 
 --- What a byte begins, as UTF-8 reads it.
@@ -112,7 +111,12 @@ pub let after(s: Str, at: At(s)) -> Str =
         @valid = Valid/after(s.valid, at.offset, at.within, at.boundary) };
 
 --- The text from `from` to `to`, cut in O(1): what lies before `to` in the text after `from`.
-pub let between(s: Str, from: At(s), to: At(s), @ordered: Holds(from.offset <= to.offset)) -> Str =
+pub let between(
+    s: Str,
+    from: At(s),
+    to: At(s),
+    @ordered: Bool/Holds(from.offset <= to.offset),
+) -> Str =
     before(after(s, from), At/to_after(s, from, to, @ordered));
 
 --- `s` as its extended grapheme clusters, in order: what a reader sees as its characters, each a letter with its marks, an emoji sequence or a flag as one, by the boundaries of [`At/next_grapheme`].
@@ -171,7 +175,7 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
         b: Bytes,
         v: Valid/from(sc, b),
         acc: {A, Nat},
-        p: Holds(pending_at(sc, acc.1)),
+        p: Bool/Holds(pending_at(sc, acc.1)),
     ) -> {A, Nat} =
         match b
         | x[] => acc
@@ -180,7 +184,12 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
             | lead() =>
                 match classify(h)
                 | ascii() =>
-                    go(Scan/lead(), t, v, (f(Char { code = Byte/to_nat(h) }, acc.0), 0), True/qed())
+                    go(
+                        Scan/lead(),
+                        t,
+                        v,
+                        (f(Char { code = Byte/to_nat(h) }, acc.0), 0),
+                        Bool/True/qed())
                 | lead(rem, lo, hi, partial) =>
                     go(Scan/cont(rem, lo, hi), t, v, (acc.0, partial), begins_scalars_of(h))
                 | bad() => match Valid/from_bad(@t, v) end
@@ -194,8 +203,8 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                     | true =>
                         let last =
                             Eq/subst(
-                                (r: Nat) => Holds(pending(r, lo, hi, acc.1)),
-                                Nat/eq_of_eql(rem, 1, True/qed()),
+                                (r: Nat) => Bool/Holds(pending(r, lo, hi, acc.1)),
+                                Nat/eq_of_eql(rem, 1, Bool/True/qed()),
                                 p);
                         go(
                             Scan/lead(),
@@ -212,23 +221,31 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                                                 acc.1,
                                                 Byte/to_nat(h),
                                                 last,
-                                                True/qed()) },
+                                                Bool/True/qed()) },
                                     acc.0),
                                 0),
-                            True/qed())
+                            Bool/True/qed())
                     | false =>
                         go(
                             Scan/cont(rem - 1, 0x80, 0xBF),
                             t,
                             v,
                             (acc.0, partial),
-                            advanced(rem, lo, hi, acc.1, Byte/to_nat(h), p, True/qed(), True/qed()))
+                            advanced(
+                                rem,
+                                lo,
+                                hi,
+                                acc.1,
+                                Byte/to_nat(h),
+                                p,
+                                Bool/True/qed(),
+                                Bool/True/qed()))
                     end
                 end
             | bad() => match Valid/from_bad(@x[h, ..t], v) end
             end
         end;
-    go(Scan/lead(), s.bytes, s.valid, (init, 0), True/qed()).0;
+    go(Scan/lead(), s.bytes, s.valid, (init, 0), Bool/True/qed()).0;
 
 --- The characters.
 pub let to_list(s: Str) -> List(Char) =
@@ -289,7 +306,7 @@ pub let follows(
     s: Str,
     from: At(s),
     piece: Str,
-) -> Option({past: At(s), reach: Holds(from.offset <= past.offset)}) =
+) -> Option({past: At(s), reach: Bool/Holds(from.offset <= past.offset)}) =
     meets(s, from, piece, At/start(piece));
 
 --- The position past the longest run of characters from `from` that `pred` accepts, which is not before `from`: one walk forward, which stops at the first character refused or at the end.
@@ -297,12 +314,12 @@ pub let span(
     s: Str,
     from: At(s),
     pred: (Char) -> Bool,
-) -> {past: At(s), reach: Holds(from.offset <= past.offset)} =
+) -> {past: At(s), reach: Bool/Holds(from.offset <= past.offset)} =
     At/forward(
         (at) =>
-            (reached: Holds(from.offset <= at.offset)) -> {
+            (reached: Bool/Holds(from.offset <= at.offset)) -> {
                 past: At(s),
-                reach: Holds(from.offset <= past.offset)},
+                reach: Bool/Holds(from.offset <= past.offset)},
         (at, again) =>
             (reached) =>
                 match At/try_next(s, at)
@@ -404,7 +421,7 @@ pub let replace(s: Str, from: Str, to: Str) -> Str =
 --- `s` with each character `with` answers for replaced by the answer, and the runs between copied as the pieces of `s` they are, so what comes back is text without being checked again: one walk forward, which is what an encoder escapes through.
 pub let escape(s: Str, with: (Char) -> Option(Str)) -> Str =
     At/forward(
-        (at) => (written: Str, run: At(s), ordered: Holds(run.offset <= at.offset)) -> Str,
+        (at) => (written: Str, run: At(s), ordered: Bool/Holds(run.offset <= at.offset)) -> Str,
         (at, again) =>
             (written, run, ordered) =>
                 match At/try_next(s, at)

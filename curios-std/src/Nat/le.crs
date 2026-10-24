@@ -1,20 +1,19 @@
 pub use /sys/Nat/{le};
 
 use /std/{Nat, Bool, Eq};
-use /std/Bool/{True, Holds};
 
 --- `n <= n`.
-pub let refl(n: Nat) -> Holds(n <= n) =
-    True/qed();
+pub let refl(n: Nat) -> Bool/Holds(n <= n) =
+    Bool/True/qed();
 
 --- `a <= a + k`.
-pub let add_r(a: Nat, k: Nat) -> Holds(a <= a + k) =
-    True/qed();
+pub let add_r(a: Nat, k: Nat) -> Bool/Holds(a <= a + k) =
+    Bool/True/qed();
 
 --- `a < b` gives `a <= b`.
-pub let of_lt(a: Nat, b: Nat, p: Holds(a < b)) -> Holds(a <= b) =
+pub let of_lt(a: Nat, b: Nat, p: Bool/Holds(a < b)) -> Bool/Holds(a <= b) =
     match a
-    | 0 => True/qed()
+    | 0 => Bool/True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
@@ -25,26 +24,32 @@ pub let of_lt(a: Nat, b: Nat, p: Holds(a < b)) -> Holds(a <= b) =
 --- A comparison that came back `false` is the other one: `a < b` failing gives `b <= a`.
 ---
 --- The decided pair is total, so refuting one settles the other. Reduction answers the other comparison inside a guard's own `false` arm, but a refutation held as a hypothesis is a term neither reduction nor the facts in scope read, and this is the bridge from it to the conclusion.
-pub let of_not_lt(a: Nat, b: Nat, p: Holds(Bool/not(a < b))) -> Holds(b <= a) =
+pub let of_not_lt(a: Nat, b: Nat, p: Bool/Holds(Bool/not(a < b))) -> Bool/Holds(b <= a) =
     match a
     | 0 =>
         match b
-        | 0 => True/qed()
+        | 0 => Bool/True/qed()
         | _ + 1 => match p end
         end
-    | ap + 1 => match b | 0 => True/qed() | bp + 1 => of_not_lt(ap, bp, p) end
+    | ap + 1 => match b | 0 => Bool/True/qed() | bp + 1 => of_not_lt(ap, bp, p) end
     end;
 
 --- An equation's bound: `a = b` gives `a <= b`.
 ---
 --- How a proof the elaborator writes from the facts in scope reads an equation: as this bound and the one [`Eq/sym`] turns it into.
-pub let of_eq(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Holds(a <= b) =
-    Eq/subst((x: Nat) => Holds(a <= x), e, refl(a));
+pub let of_eq(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Bool/Holds(a <= b) =
+    Eq/subst((x: Nat) => Bool/Holds(a <= x), e, refl(a));
 
 --- Transitivity.
-pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Holds(a <= b), q: Holds(b <= c)) -> Holds(a <= c) =
+pub let trans(
+    @a: Nat,
+    @b: Nat,
+    @c: Nat,
+    p: Bool/Holds(a <= b),
+    q: Bool/Holds(b <= c),
+) -> Bool/Holds(a <= c) =
     match a
-    | 0 => True/qed()
+    | 0 => Bool/True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
@@ -57,7 +62,7 @@ pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Holds(a <= b), q: Holds(b <= c)) -> 
     end;
 
 --- `a <= b` gives `n + a <= n + b`.
-pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Holds(a <= b)) -> Holds(n + a <= n + b) =
+pub let add_mono_l(n: Nat, @a: Nat, @b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(n + a <= n + b) =
     p;
 
 --- `a <= b` and `c <= d` give `a + c <= b + d`: two bounds added side by side.
@@ -68,17 +73,17 @@ pub let add(
     @b: Nat,
     @c: Nat,
     @d: Nat,
-    p: Holds(a <= b),
-    q: Holds(c <= d),
-) -> Holds(a + c <= b + d) =
+    p: Bool/Holds(a <= b),
+    q: Bool/Holds(c <= d),
+) -> Bool/Holds(a + c <= b + d) =
     trans(@a + c, @b + c, @b + d, p, q);
 
 --- `a <= b` gives `a * k <= b * k`.
 ---
 --- The successor case is one application of [`add_mono_l`]: `(a + 1) * k` is `k + a * k`, which is what that step has to produce.
-pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Holds(a <= b)) -> Holds(a * k <= b * k) =
+pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(a * k <= b * k) =
     match a
-    | 0 => True/qed()
+    | 0 => Bool/True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
@@ -87,13 +92,13 @@ pub let mul_mono_r(@a: Nat, @b: Nat, k: Nat, p: Holds(a <= b)) -> Holds(a * k <=
     end;
 
 --- `n - k <= n`: `Nat` subtraction never grows what it takes from.
-pub let sub_le(n: Nat, k: Nat) -> Holds(n - k <= n) =
+pub let sub_le(n: Nat, k: Nat) -> Bool/Holds(n - k <= n) =
     match k
     | 0 => refl(n)
     | kp + 1 =>
         match n
-        | 0 => True/qed()
-        | np + 1 => trans(@np - kp, @np, @np + 1, sub_le(np, kp), True/qed())
+        | 0 => Bool/True/qed()
+        | np + 1 => trans(@np - kp, @np, @np + 1, sub_le(np, kp), Bool/True/qed())
         end
     end;
 
@@ -102,10 +107,10 @@ pub let of_in_range(
     c: Nat,
     lo: Nat,
     hi: Nat,
-    h: Holds(Nat/in_range(c, lo, hi)),
-) -> {low: Holds(lo <= c), high: Holds(c <= hi)} =
+    h: Bool/Holds(Nat/in_range(c, lo, hi)),
+) -> {low: Bool/Holds(lo <= c), high: Bool/Holds(c <= hi)} =
     match c >= lo
-    | true => (low = True/qed(), high = h)
+    | true => (low = Bool/True/qed(), high = h)
     | false => match h end
     end;
 
@@ -114,16 +119,16 @@ pub let to_in_range(
     c: Nat,
     lo: Nat,
     hi: Nat,
-    low: Holds(lo <= c),
-    high: Holds(c <= hi),
-) -> Holds(Nat/in_range(c, lo, hi)) =
+    low: Bool/Holds(lo <= c),
+    high: Bool/Holds(c <= hi),
+) -> Bool/Holds(Nat/in_range(c, lo, hi)) =
     match c >= lo
     | true => high
     | false => match low end
     end;
 
 --- Two bounds facing each other pin one value.
-pub let antisym(a: Nat, b: Nat, p: Holds(a <= b), q: Holds(b <= a)) -> Eq()(a, b) =
+pub let antisym(a: Nat, b: Nat, p: Bool/Holds(a <= b), q: Bool/Holds(b <= a)) -> Eq()(a, b) =
     match a
     | 0 =>
         match b
@@ -138,7 +143,7 @@ pub let antisym(a: Nat, b: Nat, p: Holds(a <= b), q: Holds(b <= a)) -> Eq()(a, b
     end;
 
 --- `a + (b - a) = b` under `a <= b`, which is what makes it true, since `Nat` subtraction truncates.
-pub let add_sub_cancel(a: Nat, b: Nat, p: Holds(a <= b)) -> Eq()(a + (b - a), b) =
+pub let add_sub_cancel(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Eq()(a + (b - a), b) =
     match a
     | 0 => Eq/refl()
     | ap + 1 =>
@@ -151,9 +156,9 @@ pub let add_sub_cancel(a: Nat, b: Nat, p: Holds(a <= b)) -> Eq()(a + (b - a), b)
 --- `a <= b` gives `a - b <= 0`: `Nat` subtraction truncates where it would go below zero.
 ---
 --- The case [`add_sub_cancel`] leaves out, where `a - b` is no difference: a proof the elaborator writes over a truncated subtraction splits on `b <= a` and takes this in the arm where that fails. Conversion does not decide it there: the arm's guard answers its own spellings, and `a - b <= 0` is none of them.
-pub let sub_zero(a: Nat, b: Nat, p: Holds(a <= b)) -> Holds(a - b <= 0) =
+pub let sub_zero(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(a - b <= 0) =
     match a
-    | 0 => True/qed()
+    | 0 => Bool/True/qed()
     | ap + 1 =>
         match b
         | 0 => match p end
@@ -169,10 +174,10 @@ pub let mul(
     @b: Nat,
     @c: Nat,
     @d: Nat,
-    p: Holds(a <= b),
-    q: Holds(c <= d),
-) -> Holds(a * d + b * c <= a * c + b * d) =
+    p: Bool/Holds(a <= b),
+    q: Bool/Holds(c <= d),
+) -> Bool/Holds(a * d + b * c <= a * c + b * d) =
     Eq/subst(
-        (x: Nat) => Holds(a * x + b * c <= a * c + b * x),
+        (x: Nat) => Bool/Holds(a * x + b * c <= a * c + b * x),
         add_sub_cancel(c, d, q),
         mul_mono_r(@a, @b, d - c, p));

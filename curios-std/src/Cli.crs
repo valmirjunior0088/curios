@@ -17,7 +17,6 @@ pub use Parsed/{let Parsed, Slot, Carrier, option_slots, slots, Slots, Values, C
 
 use /std/{Str, Bytes, Nat, Int, Flt, Bool, Char, List, Option, Result, Map, Io, Show, Fmt, Process,
     print, print_err};
-use /std/Bool/{True};
 use /std/ops/{Eql};
 
 --- How an argument's text is read: the type it is read into, the placeholder help shows for it, the reader, the printer help shows a default with, and the values it takes where they are a closed set, which help lists.
@@ -284,9 +283,9 @@ pub induct Refused: (List(Problem)) -> pub Prop
 end
 
 let Clear(problems: List(Problem)) -> Prop =
-    match problems | [] => True | [p, ..more] => Refused([p, ..more]) end;
+    match problems | [] => Bool/True | [p, ..more] => Refused([p, ..more]) end;
 
---- That `command`, with `version` where it has one, describes one unambiguous command line, decided by reduction: `True` where it does, and otherwise `Refused` of every problem it has.
+--- That `command`, with `version` where it has one, describes one unambiguous command line, decided by reduction: `Bool/True` where it does, and otherwise `Refused` of every problem it has.
 pub let WellFormed(command: Command, version: Option(Str)) -> Prop =
     Clear(check/problems(command, version));
 
@@ -305,7 +304,7 @@ pub let declare(command: Command, version: Option(Str), @ok: WellFormed(command,
 pub let checked(command: Command, version: Option(Str)) -> Result(List(Problem), Cli) =
     match check/problems(command, version): (problems) =>
         (made: (ok: Clear(problems)) -> Cli) -> Result(List(Problem), Cli)
-    | [] => (made) => Result/success(made(True/qed()))
+    | [] => (made) => Result/success(made(Bool/True/qed()))
     | [p, ..more] => (_) => Result/failure([p, ..more])
     end((ok) => Cli { command = command, version = version, @ok = ok });
 
@@ -434,7 +433,7 @@ pub let try_main(
 ) -> Io({}) =
     match check/problems(command, version): (problems) =>
         (go: (ok: Clear(problems)) -> Io({})) -> Io({})
-    | [] => (go) => go(True/qed())
+    | [] => (go) => go(Bool/True/qed())
     | [p, ..more] =>
         (_) =>
             let _ =

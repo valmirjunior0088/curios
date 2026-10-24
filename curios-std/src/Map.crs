@@ -26,7 +26,6 @@ pub mod greatest;
 pub use greatest/{let greatest};
 
 use /std/{Nat, Bool, Bytes, Str, List, Option, Eq, Hash, Show, Spell, Fmt};
-use /std/Bool/{True, Holds};
 use /std/ops/{Eql};
 
 -- That a root's trie is sound, in the form a map holds: a family over the root that applies no function to it.
@@ -38,7 +37,7 @@ end
 
 -- A root is sound where its trie is.
 let Grounded(@K: Type, use Key(K), @V: Type, root: Option(Node(K, V))) -> Prop =
-    match root | none() => True | some(n) => Node/Sound(n) end;
+    match root | none() => Bool/True | some(n) => Node/Sound(n) end;
 
 -- What a map holds of its root, read as the root's soundness.
 let grounded(
@@ -49,7 +48,7 @@ let grounded(
     held: Rooted(K, V)(root),
 ) -> Grounded(root) =
     match held: (r, _) => Grounded(r)
-    | none() => True/qed()
+    | none() => Bool/True/qed()
     | some(shaped) => Node/read(shaped).sound
     end;
 
@@ -86,7 +85,14 @@ pub let has(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Bool =
     Option/is_some(try_get(m, key));
 
 --- The value at `key`, under the evidence that it has an entry.
-pub let get(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, @ok: Holds(has(m, key))) -> V =
+pub let get(
+    @K: Type,
+    use Key(K),
+    @V: Type,
+    m: Map(K, V),
+    key: K,
+    @ok: Bool/Holds(has(m, key)),
+) -> V =
     match try_get(m, key)
     | some(v) => v
     | none() => match ok end
@@ -99,7 +105,7 @@ pub let insert(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Ma
     | none() =>
         Map {
             root = Option/some(Node/leaf(key, v)),
-            @rooted = rooted(Node/leaf(key, v), True/qed()) }
+            @rooted = rooted(Node/leaf(key, v), Bool/True/qed()) }
     | some(n) =>
         match Node/insert(n, key, k, v, @Eq/refl(), @grounded(m.rooted))
         | replaced(n2, @stands) =>

@@ -1,13 +1,12 @@
 use /std/{Nat, Bool, List};
 use /std/ops/{Eql};
 use /std/Tui/{Key};
-use /std/Bool/{Holds};
 
 --- The one of a program's parts that holds the keys, by its label: a ring over the labels a program names, which Tab moves on and Shift with Tab back, from either end round to the other.
 pub struct Focus(P: Type): pub Type {
     labels: List(P),
     at: Nat,
-    @inside: Holds(at < List/len(labels)),
+    @inside: Bool/Holds(at < List/len(labels)),
 }
 
 --- `first` holding the keys, and `rest` after it in the ring.

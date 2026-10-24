@@ -1,5 +1,4 @@
 use /std/{Bytes, Byte, Nat, Bool, Option, Result, proved};
-use /std/Bool/{Holds};
 use /std/http/{Limits, Refusal, Framing, Field};
 use /std/Io/{Reader};
 
@@ -8,14 +7,14 @@ let is(b: Bytes, i: Nat, byte: Nat) -> Bool =
 
 --- Where a search of `b` from `from` on found what it sought: an index at or after `from`, with `room` bytes of `b` from it on, so a cut there needs no bound decided again.
 pub let Found(b: Bytes, from: Nat, room: Nat) -> Type =
-    {at: Nat, onward: Holds(from <= at), within: Holds(at + room <= Bytes/len(b))};
+    {at: Nat, onward: Bool/Holds(from <= at), within: Bool/Holds(at + room <= Bytes/len(b))};
 
 -- The search behind `line_end`, the index it began at carried down so the answer states it and the walk is a loop.
 let line_end_from(
     b: Bytes,
     from: Nat,
     i: Nat,
-    @onward: Holds(from <= i),
+    @onward: Bool/Holds(from <= i),
 ) -> Option(Found(b, from, 2)) =
     match Bool/holds(i + 1 < Bytes/len(b))
     | none() => Option/none()
@@ -36,7 +35,7 @@ pub struct Searched: pub Type {
     through: Nat,
     ending: Nat,
     lined: Bool,
-    @begun: Holds(start + ending <= through),
+    @begun: Bool/Holds(start + ending <= through),
 }
 
 --- A head's reading before it has searched anything.
@@ -54,7 +53,7 @@ let head_from(
     let next(
         ending: Nat,
         lined: Bool,
-        @ok: Holds(s.start + ending <= i + 1),
+        @ok: Bool/Holds(s.start + ending <= i + 1),
     ) -> Reader/Step(Searched, Refusal, Bytes) =
         head_from(
             limits,

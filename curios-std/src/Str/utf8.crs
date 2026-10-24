@@ -1,5 +1,4 @@
 use /std/{Byte, Bytes, Bool, Char, Eq, Nat, proved};
-use /std/Bool/{True, False, Holds};
 use /std/Str/{Class, Scan};
 
 --- What `c` begins.
@@ -81,15 +80,15 @@ let scalars_within(
     max: Nat,
     min2: Nat,
     max2: Nat,
-    s: Holds(scalars(min, max)),
-    low: Holds(min <= min2),
-    high: Holds(max2 <= max),
-) -> Holds(scalars(min2, max2)) =
+    s: Bool/Holds(scalars(min, max)),
+    low: Bool/Holds(min <= min2),
+    high: Bool/Holds(max2 <= max),
+) -> Bool/Holds(scalars(min2, max2)) =
     match max < 0xD800
     | true =>
         match max2 < 0xD800
-        | true => True/qed()
-        | false => match proved(@False) end
+        | true => Bool/True/qed()
+        | false => match proved(@Bool/False) end
         end
     | false =>
         match min >= 0xE000
@@ -99,14 +98,14 @@ let scalars_within(
             | false => match s end
             | true =>
                 match max2 < 0xD800
-                | true => True/qed()
+                | true => Bool/True/qed()
                 | false =>
                     match min2 >= 0xE000
-                    | false => match proved(@False) end
+                    | false => match proved(@Bool/False) end
                     | true =>
                         match max2 <= 0x10FFFF
-                        | true => True/qed()
-                        | false => match proved(@False) end
+                        | true => Bool/True/qed()
+                        | false => match proved(@Bool/False) end
                         end
                     end
                 end
@@ -120,8 +119,8 @@ pub let concluded(
     hi: Nat,
     partial: Nat,
     c: Nat,
-    p: Holds(pending(1, lo, hi, partial)),
-    inside: Holds(Nat/in_range(c, lo, hi)),
+    p: Bool/Holds(pending(1, lo, hi, partial)),
+    inside: Bool/Holds(Nat/in_range(c, lo, hi)),
 ) -> Char/Valid(partial * 0x40 + (c - 0x80)) =
     scalars_within(
         partial * 0x40 + (lo - 0x80),
@@ -139,10 +138,10 @@ pub let advanced(
     hi: Nat,
     partial: Nat,
     c: Nat,
-    p: Holds(pending(rem, lo, hi, partial)),
-    inside: Holds(Nat/in_range(c, lo, hi)),
-    more: Holds(Bool/not(rem == 1)),
-) -> Holds(pending(rem - 1, 0x80, 0xBF, partial * 0x40 + (c - 0x80))) =
+    p: Bool/Holds(pending(rem, lo, hi, partial)),
+    inside: Bool/Holds(Nat/in_range(c, lo, hi)),
+    more: Bool/Holds(Bool/not(rem == 1)),
+) -> Bool/Holds(pending(rem - 1, 0x80, 0xBF, partial * 0x40 + (c - 0x80))) =
     match rem
     | 0 => match p end
     | r1 + 1 =>
@@ -185,16 +184,16 @@ let each_below(k: Nat) -> Bool =
     match k | 0 => true | kp + 1 => begins_scalars(Nat/to_byte(kp % 256)) && each_below(kp) end;
 
 --- `classify`'s promise, decided once over every byte rather than proved family by family: the check is a structural recursion the build runs, so a change to `classify`'s ranges that broke it would stop the build rather than wait for a proof to be revisited.
-let every_byte: Holds(each_below(256)) =
-    True/qed();
+let every_byte: Bool/Holds(each_below(256)) =
+    Bool/True/qed();
 
 --- A byte below `m`, read out of the check over every byte below `m`.
 let begins_below(
     m: Nat,
     n: Nat,
-    all: Holds(each_below(m)),
-    inside: Holds(n < m),
-) -> Holds(begins_scalars(Nat/to_byte(n % 256))) =
+    all: Bool/Holds(each_below(m)),
+    inside: Bool/Holds(n < m),
+) -> Bool/Holds(begins_scalars(Nat/to_byte(n % 256))) =
     match m
     | 0 => match inside end
     | mp + 1 =>
@@ -202,16 +201,16 @@ let begins_below(
         | false => match all end
         | true =>
             match n < mp
-            | true => begins_below(mp, n, all, True/qed())
+            | true => begins_below(mp, n, all, Bool/True/qed())
             | false =>
                 Eq/subst(
-                    (k: Nat) => Holds(begins_scalars(Nat/to_byte(k % 256))),
+                    (k: Nat) => Bool/Holds(begins_scalars(Nat/to_byte(k % 256))),
                     Nat/le/antisym(mp, n, proved(), inside),
-                    True/qed())
+                    Bool/True/qed())
             end
         end
     end;
 
 --- Every byte begins only scalar values.
-pub let begins_scalars_of(c: Byte) -> Holds(begins_scalars(c)) =
-    begins_below(256, Byte/to_nat(c), every_byte, True/qed());
+pub let begins_scalars_of(c: Byte) -> Bool/Holds(begins_scalars(c)) =
+    begins_below(256, Byte/to_nat(c), every_byte, Bool/True/qed());

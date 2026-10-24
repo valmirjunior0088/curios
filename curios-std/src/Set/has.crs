@@ -1,5 +1,4 @@
 use /std/{Bool, Option, Eq, Map};
-use /std/Bool/{False};
 use /std/Map/{Key};
 use /std/Set/{Set, empty, insert, remove, union};
 
@@ -31,7 +30,7 @@ pub let of_insert_other(
     s: Set(K),
     k: K,
     other: K,
-    apart: (Eq()(other, k)) -> False,
+    apart: (Eq()(other, k)) -> Bool/False,
 ) -> Eq()(has(insert(s, k), other), has(s, other)) =
     held(Map/try_get/of_insert_other(s.map, k, (), other, apart));
 
@@ -46,7 +45,7 @@ pub let of_remove_other(
     s: Set(K),
     k: K,
     other: K,
-    apart: (Eq()(other, k)) -> False,
+    apart: (Eq()(other, k)) -> Bool/False,
 ) -> Eq()(has(remove(s, k), other), has(s, other)) =
     held(Map/try_get/of_remove_other(s.map, k, other, apart));
 

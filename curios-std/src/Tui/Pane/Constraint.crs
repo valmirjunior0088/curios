@@ -1,5 +1,4 @@
 use /std/{Nat, Bool, List};
-use /std/Bool/{Holds};
 
 --- How a part claims its share of an axis.
 pub induct Constraint: pub Type
@@ -8,9 +7,9 @@ pub induct Constraint: pub Type
 --- At least this many, and a share of what the others leave as a fill of weight one takes.
 | min(Nat)
 --- This percentage of the whole axis, at most the whole.
-| percent(p: Nat, @at_most: Holds(p <= 100))
+| percent(p: Nat, @at_most: Bool/Holds(p <= 100))
 --- A share of whatever the others leave, by its weight, which is above nothing.
-| fill(weight: Nat, @positive: Holds(0 < weight))
+| fill(weight: Nat, @positive: Bool/Holds(0 < weight))
 end
 
 pub use Constraint/*;

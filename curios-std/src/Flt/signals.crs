@@ -1,5 +1,4 @@
 use /std/{Flt, Nat, Int, Bool, List, Vec, Option};
-use /std/Bool/{True};
 use /std/Flt/{Rounding, Exceptions, rounded, exact, reduction};
 use /std/Flt/internal/{Dyadic};
 
@@ -63,7 +62,7 @@ pub let div(r: Rounding, a: Flt, b: Flt) -> Exceptions =
             match x.mantissa == +0
             | true => Exceptions/none
             | false =>
-                let (q, sticky) = Dyadic/quotient(x, y, @True/qed());
+                let (q, sticky) = Dyadic/quotient(x, y, @Bool/True/qed());
                 from_exact(r, q, sticky, rounded/div(r, a, b))
             end
         end

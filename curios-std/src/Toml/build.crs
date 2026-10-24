@@ -1,7 +1,6 @@
 use /std/{Nat, Bool, Bytes, Str, List, Map, Result, Toml};
 use /std/Toml/{Error};
 use /std/Toml/Error/{Rule};
-use /std/Bool/{Holds};
 
 induct Seg: Type
 | plain(Str)
@@ -60,7 +59,7 @@ let seg_name(seg: Seg) -> Str =
 let replace_at(
     items: List(Toml),
     index: Nat,
-    ok: Holds(index < List/len(items)),
+    ok: Bool/Holds(index < List/len(items)),
     value: Toml,
 ) -> List(Toml) =
     [..List/slice(items, 0, index), value, ..List/drop(@Toml, items, index + 1, @ok)];

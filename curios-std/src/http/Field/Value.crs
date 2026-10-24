@@ -1,5 +1,4 @@
 use /std/{Str, Bytes, Byte, Nat, Int, Bool, List, Option, Result, Spell};
-use /std/Bool/{True, Holds};
 use /std/time/{Timestamp, Date, DateTime, Month, Weekday, Offset, OffsetDateTime, rfc3339};
 use /std/ops/{Eql};
 
@@ -13,7 +12,7 @@ pub struct Value: pub Type {
     --- The octets, as the wire carries them.
     bytes: Bytes,
     --- Why every octet may stand in a value.
-    @clean: Holds(Bytes/all(bytes, admits)),
+    @clean: Bool/Holds(Bytes/all(bytes, admits)),
 }
 
 satisfy Eql(Value) {
@@ -29,7 +28,7 @@ pub let empty: Value =
     Value { bytes = x[] };
 
 --- The value the literal `s` spells.
-pub let lit(s: Str, @_: Holds(Bytes/all(Str/to_bytes(s), admits))) -> Value =
+pub let lit(s: Str, @_: Bool/Holds(Bytes/all(Str/to_bytes(s), admits))) -> Value =
     Value { bytes = Str/to_bytes(s) };
 
 --- The value `b` holds, or `none` where an octet of it may not stand in one.
@@ -50,7 +49,7 @@ pub let to_str(v: Value) -> Option(Str) =
 --- One octet a value may hold.
 pub struct Octet: pub Type {
     byte: Byte,
-    @clean: Holds(admits(byte)),
+    @clean: Bool/Holds(admits(byte)),
 }
 
 --- `v` with `o` ahead of it: how a value is built an octet at a time, each carrying its own reason.
@@ -61,7 +60,7 @@ pub let cons(o: Octet, v: Value) -> Value =
 
 --- `a` then `b`: octets that may each stand in a value may stand in one together.
 pub let append(a: Value, b: Value) -> Value =
-    match a.bytes: (m) => (Holds(Bytes/all(m, admits))) -> Value
+    match a.bytes: (m) => (Bool/Holds(Bytes/all(m, admits))) -> Value
     | x[] => (_) => b
     | x[h, ..t]; rest =>
         (clean) =>
@@ -84,7 +83,7 @@ let digit_octets: List(Octet) =
         Octet { byte = '8' },
         Octet { byte = '9' }];
 
-let digit(n: Nat, @below: Holds(n < 10)) -> Octet =
+let digit(n: Nat, @below: Bool/Holds(n < 10)) -> Octet =
     List/get(digit_octets, n);
 
 -- `n` in two digits ahead of `rest`, what is past its tens left out.
@@ -92,7 +91,7 @@ let two_digits(n: Nat, rest: Value) -> Value =
     cons(digit(n / 10 % 10), cons(digit(n % 10), rest));
 
 -- `n`, below ten thousand, in four digits ahead of `rest`: the year as the fixed-length form writes it.
-let year_digits(n: Nat, rest: Value, @below: Holds(n < 10000)) -> Value =
+let year_digits(n: Nat, rest: Value, @below: Bool/Holds(n < 10000)) -> Value =
     cons(digit(n / 1000), cons(digit(n / 100 % 10), two_digits(n, rest)));
 
 -- The weekday in the three letters the Internet message format writes it in.
@@ -125,31 +124,31 @@ let month_name(m: Month) -> Str =
     end;
 
 -- A weekday's and a month's three letters may each stand in a value: by cases, a literal's reason at each.
-let weekday_admitted(d: Weekday) -> Holds(Bytes/all(Str/to_bytes(weekday_name(d)), admits)) =
+let weekday_admitted(d: Weekday) -> Bool/Holds(Bytes/all(Str/to_bytes(weekday_name(d)), admits)) =
     match d
-    | sunday() => True/qed()
-    | monday() => True/qed()
-    | tuesday() => True/qed()
-    | wednesday() => True/qed()
-    | thursday() => True/qed()
-    | friday() => True/qed()
-    | saturday() => True/qed()
+    | sunday() => Bool/True/qed()
+    | monday() => Bool/True/qed()
+    | tuesday() => Bool/True/qed()
+    | wednesday() => Bool/True/qed()
+    | thursday() => Bool/True/qed()
+    | friday() => Bool/True/qed()
+    | saturday() => Bool/True/qed()
     end;
 
-let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(month_name(m)), admits)) =
+let month_admitted(m: Month) -> Bool/Holds(Bytes/all(Str/to_bytes(month_name(m)), admits)) =
     match m
-    | january() => True/qed()
-    | february() => True/qed()
-    | march() => True/qed()
-    | april() => True/qed()
-    | may() => True/qed()
-    | june() => True/qed()
-    | july() => True/qed()
-    | august() => True/qed()
-    | september() => True/qed()
-    | october() => True/qed()
-    | november() => True/qed()
-    | december() => True/qed()
+    | january() => Bool/True/qed()
+    | february() => Bool/True/qed()
+    | march() => Bool/True/qed()
+    | april() => Bool/True/qed()
+    | may() => Bool/True/qed()
+    | june() => Bool/True/qed()
+    | july() => Bool/True/qed()
+    | august() => Bool/True/qed()
+    | september() => Bool/True/qed()
+    | october() => Bool/True/qed()
+    | november() => Bool/True/qed()
+    | december() => Bool/True/qed()
     end;
 
 --- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7), `Sun, 06 Nov 1994 08:49:37 GMT`: its date and time in UTC, or `none` where its year has more than the four digits the form has room for. Each octet is built as one a value may hold, so a message is dated with no check that could refuse.

@@ -1,5 +1,4 @@
-use /std/{List, Option, Eq, Ord};
-use /std/Bool/{True, False, Holds};
+use /std/{List, Option, Eq, Ord, Bool};
 use /std/List/{Member};
 use /std/Map/{Map, Key, keys, Grounded, grounded};
 use /std/Map/internal/{Node};
@@ -12,8 +11,8 @@ pub let greatest(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Option({K, V})
 --- That `found` is an entry whose key is at or above `x` in the keys' order.
 pub let Above(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
     match found
-    | none() => False
-    | some(entry) => Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, entry.0))
+    | none() => Bool/False
+    | some(entry) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(x, entry.0))
     end;
 
 -- The keys under a root hold the key of the root's greatest entry.
@@ -26,7 +25,7 @@ let among_root(
     match root | none() => Option/none() | some(n) => Option/some(Node/greatest(n)) end,
     match root | none() => [] | some(n) => Node/collect(n, []) end) =
     match root
-    | none() => True/qed()
+    | none() => Bool/True/qed()
     | some(n) =>
         Eq/subst(
             (l: List(K)) => Member()(Node/greatest(n).0, l),

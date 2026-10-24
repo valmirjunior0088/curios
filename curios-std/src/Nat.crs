@@ -73,12 +73,11 @@ pub mod Scale;
 pub use Scale/{let Scale};
 
 use /std/{Str, Option, Char, Bool, Show, Spell, Ord, Eq};
-use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
---- That `n` is not zero, decided — what `/` and `%` on `Nat` ask of a divisor. It is the proposition `Holds(0 < n)` is: a natural is not zero exactly where zero is below it, which conversion decides.
+--- That `n` is not zero, decided — what `/` and `%` on `Nat` ask of a divisor. It is the proposition `Bool/Holds(0 < n)` is: a natural is not zero exactly where zero is below it, which conversion decides.
 pub let NonZero(n: Nat) -> Prop =
-    Holds(n != 0);
+    Bool/Holds(n != 0);
 
 satisfy Eql(Nat) {
     eql = eql,
@@ -173,11 +172,11 @@ pub let is_even(n: Nat) -> Bool =
     n % 2 == 0;
 
 --- How many factors of two a positive `n` holds: [`Scale/of`]'s count.
-pub let trailing_zeros(n: Nat, @ok: Holds(0 < n)) -> Nat =
+pub let trailing_zeros(n: Nat, @ok: Bool/Holds(0 < n)) -> Nat =
     Scale/of(n).count;
 
 --- A positive `n` with its factors of two divided out, which is odd: `2 * half + 1` for [`Scale/of`]'s half.
-pub let odd_part(n: Nat, @ok: Holds(0 < n)) -> Nat =
+pub let odd_part(n: Nat, @ok: Bool/Holds(0 < n)) -> Nat =
     2 * Scale/of(n).half + 1;
 
 --- Whether `lo <= c <= hi`.
@@ -185,7 +184,7 @@ pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
     match c >= lo | true => c <= hi | false => false end;
 
 --- A decided equality is an equation: `a == b` gives `Eq()(a, b)`, by recursion on both sides, since `a + 1 == b + 1` is `a == b` after cancellation.
-pub let eq_of_eql(a: Nat, b: Nat, h: Holds(a == b)) -> Eq()(a, b) =
+pub let eq_of_eql(a: Nat, b: Nat, h: Bool/Holds(a == b)) -> Eq()(a, b) =
     match a
     | 0 =>
         match b

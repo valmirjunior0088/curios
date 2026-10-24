@@ -1,15 +1,14 @@
 pub use /sys/Bool/{or};
 
 use /std/{Bool};
-use /std/Bool/{True, Holds};
 
 --- A disjunction from its first decision: `a || b` holds where `a` does. By cases on `a`, since `||` reduces at each.
-pub let of_first(a: Bool, b: Bool, p: Holds(a)) -> Holds(a || b) =
+pub let of_first(a: Bool, b: Bool, p: Bool/Holds(a)) -> Bool/Holds(a || b) =
     match a
-    | true => True/qed()
+    | true => Bool/True/qed()
     | false => match p end
     end;
 
 --- A disjunction from its second decision: `a || b` holds where `b` does.
-pub let of_second(a: Bool, b: Bool, q: Holds(b)) -> Holds(a || b) =
-    match a | true => True/qed() | false => q end;
+pub let of_second(a: Bool, b: Bool, q: Bool/Holds(b)) -> Bool/Holds(a || b) =
+    match a | true => Bool/True/qed() | false => q end;

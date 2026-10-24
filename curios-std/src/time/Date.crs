@@ -1,5 +1,4 @@
 use /std/{Nat, Int, Bool, List, Option, Ord, Hash, Spell, Str, Show, proved};
-use /std/Bool/{False, Holds};
 use /std/ops/{Eql};
 use /std/time/{Month, Weekday, iso8601};
 
@@ -39,7 +38,7 @@ pub let days_in_year(year: Int) -> Nat =
 
 --- That the three spell a day: a day `month` has in `year`.
 pub let Valid(year: Int, month: Month, day: Nat) -> Prop =
-    Holds(Nat/in_range(day, 1, days_in_month(year, month)));
+    Bool/Holds(Nat/in_range(day, 1, days_in_month(year, month)));
 
 --- A calendar date, in the proleptic Gregorian calendar with a year 0, as ISO 8601 counts years.
 pub struct Date: pub Type {
@@ -86,10 +85,10 @@ let in_months(
     year: Int,
     months: List(Month),
     r: Nat,
-    within: Holds(r < span(year, months)),
+    within: Bool/Holds(r < span(year, months)),
 ) -> Date =
     match months
-    | [] => match proved(@False) end
+    | [] => match proved(@Bool/False) end
     | [m, ..rest] =>
         match r < days_in_month(year, m)
         | true =>

@@ -44,9 +44,9 @@ pub concept Mul(A: Type): pub Type {
 
 --- Division, which `/` dispatches through, under the precondition `Ok` each carrier states on its divisor.
 ---
---- A literal divisor discharges the precondition by reduction, and a computed one from the facts in scope — a guard or a hypothesis. A carrier whose division is total states `True`.
+--- A literal divisor discharges the precondition by reduction, and a computed one from the facts in scope — a guard or a hypothesis. A carrier whose division is total states `Bool/True`.
 pub concept Div(A: Type): pub Type {
-    --- The precondition this carrier states for a divisor: `True` where division is total, and a proposition the caller must discharge where it is not.
+    --- The precondition this carrier states for a divisor: `Bool/True` where division is total, and a proposition the caller must discharge where it is not.
     Ok(A) -> Prop,
     --- The quotient, under the evidence that `b` may be divided by.
     div(a: A, b: A, @ok: Ok(b)) -> A,

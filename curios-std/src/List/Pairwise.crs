@@ -1,5 +1,4 @@
 use /std/{List, Bool, Eq, Ord};
-use /std/Bool/{True, Holds};
 use /std/List/{Member, ordered};
 
 --- Every element of a list stands in `le` to every element after it.
@@ -12,7 +11,7 @@ pub induct Pairwise(@T: Type, le: (T, T) -> Bool): (List(T)) -> pub Prop
 | cons(
     @x: T,
     @l: List(T),
-    head: (y: T, Member()(y, l)) -> Holds(le(x, y)),
+    head: (y: T, Member()(y, l)) -> Bool/Holds(le(x, y)),
     rest: Pairwise(le)(l)): ([x, ..l])
 end
 
@@ -25,9 +24,9 @@ pub let head(
     @h: T,
     @t: List(T),
     whole: Pairwise(le)([h, ..t]),
-) -> (y: T, Member()(y, t)) -> Holds(le(h, y)) =
+) -> (y: T, Member()(y, t)) -> Bool/Holds(le(h, y)) =
     match whole: (s, _) =>
-        match s | [] => True | [k, ..r] => (y: T, Member()(y, r)) -> Holds(le(k, y)) end
+        match s | [] => Bool/True | [k, ..r] => (y: T, Member()(y, r)) -> Bool/Holds(le(k, y)) end
     | cons(head, _) => head
     end;
 
@@ -39,7 +38,7 @@ pub let tail(
     @t: List(T),
     whole: Pairwise(le)([h, ..t]),
 ) -> Pairwise(le)(t) =
-    match whole: (s, _) => match s | [] => True | [_, ..r] => Pairwise(le)(r) end
+    match whole: (s, _) => match s | [] => Bool/True | [_, ..r] => Pairwise(le)(r) end
     | cons(_, rest) => rest
     end;
 
@@ -50,23 +49,23 @@ let below(
     transitive: Ord/Transitive(le),
     l: List(T),
     a: T,
-    lead: Holds(ordered/leads(le, a, l)),
-    given: Holds(ordered(l, le)),
+    lead: Bool/Holds(ordered/leads(le, a, l)),
+    given: Bool/Holds(ordered(l, le)),
     y: T,
     i: Member()(y, l),
-) -> Holds(le(a, y)) =
+) -> Bool/Holds(le(a, y)) =
     match l: (m) =>
         (
             a: T,
-            lead: Holds(ordered/leads(le, a, m)),
-            given: Holds(ordered(m, le)),
-            i: Member()(y, m)) -> Holds(le(a, y))
+            lead: Bool/Holds(ordered/leads(le, a, m)),
+            given: Bool/Holds(ordered(m, le)),
+            i: Member()(y, m)) -> Bool/Holds(le(a, y))
     | [] => (_, _, _, i) => match Member/absent(i) end
     | [k, ..r]; ih =>
         (a, lead, given, i) =>
             Member/uncons(
                 i,
-                (e) => Eq/subst((z: T) => Holds(le(a, z)), Eq/sym(e), lead),
+                (e) => Eq/subst((z: T) => Bool/Holds(le(a, z)), Eq/sym(e), lead),
                 (rest) =>
                     transitive(
                         a,
@@ -82,9 +81,9 @@ pub let of_ordered(
     le: (T, T) -> Bool,
     transitive: Ord/Transitive(le),
     l: List(T),
-    given: Holds(ordered(l, le)),
+    given: Bool/Holds(ordered(l, le)),
 ) -> Pairwise(le)(l) =
-    match l: (m) => (given: Holds(ordered(m, le))) -> Pairwise(le)(m)
+    match l: (m) => (given: Bool/Holds(ordered(m, le))) -> Pairwise(le)(m)
     | [] => (_) => Pairwise/empty()
     | [h, ..t]; ih =>
         (given) =>
@@ -106,7 +105,7 @@ pub let of_ordered(
 pub let everywhere(
     @T: Type,
     @le: (T, T) -> Bool,
-    holds: (a: T, b: T) -> Holds(le(a, b)),
+    holds: (a: T, b: T) -> Bool/Holds(le(a, b)),
     l: List(T),
 ) -> Pairwise(le)(l) =
     match l: (m) => Pairwise(le)(m)
@@ -122,12 +121,12 @@ pub let joined(
     @b: List(T),
     first: Pairwise(le)(a),
     second: Pairwise(le)(b),
-    across: (x: T, y: T, Member()(x, a), Member()(y, b)) -> Holds(le(x, y)),
+    across: (x: T, y: T, Member()(x, a), Member()(y, b)) -> Bool/Holds(le(x, y)),
 ) -> Pairwise(le)([..a, ..b]) =
     match a: (m) =>
         (
             first: Pairwise(le)(m),
-            across: (x: T, y: T, Member()(x, m), Member()(y, b)) -> Holds(
+            across: (x: T, y: T, Member()(x, m), Member()(y, b)) -> Bool/Holds(
                 le(x, y))) -> Pairwise(le)([..m, ..b])
     | [] => (_, _) => second
     | [h, ..t]; ih =>
@@ -148,9 +147,9 @@ pub let adjacent(
     le: (T, T) -> Bool,
     l: List(T),
     whole: Pairwise(le)(l),
-) -> Holds(ordered(l, le)) =
-    match l: (m) => (whole: Pairwise(le)(m)) -> Holds(ordered(m, le))
-    | [] => (_) => True/qed()
+) -> Bool/Holds(ordered(l, le)) =
+    match l: (m) => (whole: Pairwise(le)(m)) -> Bool/Holds(ordered(m, le))
+    | [] => (_) => Bool/True/qed()
     | [h, ..t]; ih =>
         (whole) =>
             ordered/cons(
@@ -158,9 +157,9 @@ pub let adjacent(
                 h,
                 t,
                 match t: (r) =>
-                    (leading: (y: T, Member()(y, r)) -> Holds(le(h, y))) -> Holds(
+                    (leading: (y: T, Member()(y, r)) -> Bool/Holds(le(h, y))) -> Bool/Holds(
                         ordered/leads(le, h, r))
-                | [] => (_) => True/qed()
+                | [] => (_) => Bool/True/qed()
                 | [k, .._] => (leading) => leading(k, Member/here())
                 end(head(whole)),
                 ih(tail(whole)))

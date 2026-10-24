@@ -1,5 +1,4 @@
-use /std/{Nat, Byte, Bytes, proved};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Byte, Bytes, proved, Bool};
 
 --- The number a minimal encoding denotes, which is `of_nat`'s inverse.
 ---
@@ -10,11 +9,11 @@ pub let to_nat(b: Bytes) -> Nat =
 --- The number a run denotes is below `256` to the run's length.
 ---
 --- What makes [`to_nat`] a bounded reading, so a fixed-width pattern has a fixed range: a float's eight bytes denote a number below `2^64`.
-pub let below(b: Bytes) -> Holds(to_nat(b) < Nat/pow(256, Bytes/len(b))) =
-    match b: (z) => Holds(to_nat(z) < Nat/pow(256, Bytes/len(z)))
-    | x[] => True/qed()
+pub let below(b: Bytes) -> Bool/Holds(to_nat(b) < Nat/pow(256, Bytes/len(b))) =
+    match b: (z) => Bool/Holds(to_nat(z) < Nat/pow(256, Bytes/len(z)))
+    | x[] => Bool/True/qed()
     | x[h, ..t]; ih =>
-        let top: Holds(Byte/to_nat(h) <= 255) = True/qed();
+        let top: Bool/Holds(Byte/to_nat(h) <= 255) = Bool/True/qed();
         let _ = ih;
         proved()
     end;

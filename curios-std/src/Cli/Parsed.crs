@@ -1,5 +1,4 @@
 use /std/{Str, Nat, Bool, List, Option};
-use /std/Bool/{True, False};
 use /std/Cli/{Field, Kind, Presence, Positional, Positionals, Command, positionals};
 
 --- What a parse fills and `get` reads by name: an option's long name or a positional's, and the type it is read into.
@@ -118,8 +117,8 @@ pub let Lookup(spec: List(Slot), name: Str) -> Type =
 --- That `name` is one of `spec`'s, decided by reduction: a name the declaration lacks is refused where it is written.
 pub let Has(spec: List(Slot), name: Str) -> Prop =
     match spec
-    | [] => False
-    | [s, ..rest] => match s.name == name | true => True | false => Has(rest, name) end
+    | [] => Bool/False
+    | [s, ..rest] => match s.name == name | true => Bool/True | false => Has(rest, name) end
     end;
 
 let read(
@@ -133,7 +132,7 @@ let read(
     | cons(@s, @rest, head, tail) =>
         let pick =
             match s.name == name: (b) =>
-                (here: match b | true => True | false => Has(rest, name) end) -> match b
+                (here: match b | true => Bool/True | false => Has(rest, name) end) -> match b
                 | true => s.T
                 | false => Lookup(rest, name)
                 end
@@ -155,8 +154,9 @@ pub let get(
 --- That `name` is one of `commands`', decided by reduction.
 pub let HasIn(commands: List(Command), name: Str) -> Prop =
     match commands
-    | [] => False
-    | [c, ..rest] => match /std/Cli/name(c) == name | true => True | false => HasIn(rest, name) end
+    | [] => Bool/False
+    | [c, ..rest] =>
+        match /std/Cli/name(c) == name | true => Bool/True | false => HasIn(rest, name) end
     end;
 
 --- The first of `commands` named `name`.
@@ -168,7 +168,10 @@ pub let NamedIn(commands: List(Command), name: Str) -> Command =
 
 --- That `c` is a group with a command named `name`.
 pub let HasCommand(c: Command, name: Str) -> Prop =
-    match c | leaf(_, _, _, _) => False | group(_, _, _, commands) => HasIn(commands, name) end;
+    match c
+    | leaf(_, _, _, _) => Bool/False
+    | group(_, _, _, commands) => HasIn(commands, name)
+    end;
 
 --- The command of `c` named `name`.
 pub let Named(c: Command, name: Str) -> Command =
@@ -184,7 +187,7 @@ let pick(
     | here(@c, @rest, parsed) =>
         let found =
             match /std/Cli/name(c) == name: (b) =>
-                (held: match b | true => True | false => HasIn(rest, name) end) -> Option(
+                (held: match b | true => Bool/True | false => HasIn(rest, name) end) -> Option(
                     Parsed(match b | true => c | false => NamedIn(rest, name) end))
             | true => (_) => Option/some(parsed)
             | false => (_) => Option/none()
@@ -193,7 +196,7 @@ let pick(
     | there(@c, @rest, more) =>
         let found =
             match /std/Cli/name(c) == name: (b) =>
-                (held: match b | true => True | false => HasIn(rest, name) end) -> Option(
+                (held: match b | true => Bool/True | false => HasIn(rest, name) end) -> Option(
                     Parsed(match b | true => c | false => NamedIn(rest, name) end))
             | true => (_) => Option/none()
             | false => (later) => pick(more, name, @later)

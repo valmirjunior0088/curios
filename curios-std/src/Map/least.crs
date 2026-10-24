@@ -1,5 +1,4 @@
-use /std/{List, Option, Eq, Ord};
-use /std/Bool/{True, False, Holds};
+use /std/{List, Option, Eq, Ord, Bool};
 use /std/List/{Member};
 use /std/Map/{Map, Key, keys, Grounded, grounded};
 use /std/Map/internal/{Node};
@@ -10,13 +9,13 @@ pub let least(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Option({K, V}) =
 
 --- That `found` is an entry whose key is one of `l`, or no entry at all.
 pub let Among(@K: Type, @V: Type, found: Option({K, V}), l: List(K)) -> Prop =
-    match found | none() => True | some(entry) => Member()(entry.0, l) end;
+    match found | none() => Bool/True | some(entry) => Member()(entry.0, l) end;
 
 --- That `found` is an entry whose key is at or below `x` in the keys' order.
 pub let Below(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
     match found
-    | none() => False
-    | some(entry) => Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(entry.0, x))
+    | none() => Bool/False
+    | some(entry) => Bool/Holds(Ord/le((a: K, b: K) => Ord/ord(a, b))(entry.0, x))
     end;
 
 -- The keys under a root hold the key of the root's least entry.
@@ -29,7 +28,7 @@ let among_root(
     match root | none() => Option/none() | some(n) => Option/some(Node/least(n)) end,
     match root | none() => [] | some(n) => Node/collect(n, []) end) =
     match root
-    | none() => True/qed()
+    | none() => Bool/True/qed()
     | some(n) =>
         Eq/subst(
             (l: List(K)) => Member()(Node/least(n).0, l),

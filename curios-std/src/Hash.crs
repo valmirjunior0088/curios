@@ -5,7 +5,6 @@ pub mod nat;
 pub mod int;
 
 use /std/{Nat, Byte, Bytes, Bool, Str, List, Option, Int, Flt};
-use /std/Bool/{Holds};
 
 --- How a value encodes to the bytes that identify it.
 ---
@@ -38,7 +37,7 @@ pub let tagged(tag: Nat, parts: List(Bytes)) -> Bytes =
 --- One polynomial lane: `acc · base + byte + 1` reduced modulo `prime`, folded over `b`.
 ---
 --- The modulus is a parameter, so the evidence that it is positive is this telescope's `ok`, which `%`'s bound is proved from.
-let lane(b: Bytes, base: Nat, prime: Nat, @ok: Holds(0 < prime)) -> Nat =
+let lane(b: Bytes, base: Nat, prime: Nat, @ok: Bool/Holds(0 < prime)) -> Nat =
     Bytes/fold(b, 1, (byte, acc) => (acc * base + Byte/to_nat(byte) + 1) % prime);
 
 --- Eight bytes summarizing `b`.

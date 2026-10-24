@@ -1,5 +1,4 @@
-use /std/{Nat, Eq, proved};
-use /std/Bool/{True, Holds};
+use /std/{Nat, Eq, proved, Bool};
 
 --- `n` divided by `d`: the quotient and remainder, with Euclid's identity and the remainder's bound beside them.
 pub struct DivMod(n: Nat, d: Nat): pub Type {
@@ -10,14 +9,14 @@ pub struct DivMod(n: Nat, d: Nat): pub Type {
     --- `n` is the quotient's multiple of `d` and the remainder.
     joined: Eq()(n, quotient * d + remainder),
     --- The remainder is below `d`.
-    bounded: Holds(remainder < d),
+    bounded: Bool/Holds(remainder < d),
 }
 
 --- Division with remainder, certified: the quotient and remainder `/` and `%` compute, with their equation and bound.
 ---
 --- Both proofs are the reducer's own: Euclid's identity recombines the quotient and remainder into `n`, and a remainder sits below its divisor by definition.
-pub let of(n: Nat, d: Nat, @ok: Holds(0 < d)) -> DivMod(n, d) =
-    DivMod { quotient = n / d, remainder = n % d, joined = Eq/refl(), bounded = True/qed() };
+pub let of(n: Nat, d: Nat, @ok: Bool/Holds(0 < d)) -> DivMod(n, d) =
+    DivMod { quotient = n / d, remainder = n % d, joined = Eq/refl(), bounded = Bool/True/qed() };
 
 --- `m * d <= n` gives `m <= n / d`: the quotient is the largest multiplier that fits.
 ---
@@ -26,9 +25,9 @@ pub let le_div_of_mul_le(
     m: Nat,
     n: Nat,
     d: Nat,
-    @ok: Holds(0 < d),
-    p: Holds(m * d <= n),
-) -> Holds(m <= n / d) =
+    @ok: Bool/Holds(0 < d),
+    p: Bool/Holds(m * d <= n),
+) -> Bool/Holds(m <= n / d) =
     proved();
 
 --- `n < m * d` gives `n / d < m`: a quotient of at least `m` would scale past `n`, since the quotient's multiple of `d` is at most `n` — a product the elaborator proves from the facts in scope.
@@ -36,9 +35,9 @@ pub let div_lt_of_lt_mul(
     m: Nat,
     n: Nat,
     d: Nat,
-    @ok: Holds(0 < d),
-    p: Holds(n < m * d),
-) -> Holds(n / d < m) =
+    @ok: Bool/Holds(0 < d),
+    p: Bool/Holds(n < m * d),
+) -> Bool/Holds(n / d < m) =
     proved();
 
 --- A quotient and a remainder are the ones `/` and `%` compute: a `q` and an `r` with `n = q * d + r` and `r < d` are `n / d` and `n % d`.
@@ -49,9 +48,9 @@ pub let unique(
     d: Nat,
     q: Nat,
     r: Nat,
-    @ok: Holds(0 < d),
+    @ok: Bool/Holds(0 < d),
     joined: Eq()(n, q * d + r),
-    bounded: Holds(r < d),
+    bounded: Bool/Holds(r < d),
 ) -> {quotient: Eq()(q, n / d), remainder: Eq()(r, n % d)} =
     let quotient: Eq()(q, n / d) = Nat/le/antisym(q, n / d, proved(), proved());
     let euclid: Eq()(n, n / d * d + n % d) = Eq/refl();

@@ -30,7 +30,6 @@ pub mod sort;
 pub use sort/{let sort};
 
 use /std/{Nat, Bool, Option, Str, Show, Spell, Fmt, Monad, Ordering, Ord, proved};
-use /std/Bool/{Holds};
 use /std/ops/{Eql, Cmp};
 
 --- The element at `i`, or `none` past the end.
@@ -38,7 +37,7 @@ pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
-pub let drop(@T: Type, a: List(T), k: Nat, @ok: Holds(k <= len(a))) -> List(T) =
+pub let drop(@T: Type, a: List(T), k: Nat, @ok: Bool/Holds(k <= len(a))) -> List(T) =
     slice(@T, a, k, len(a) - k);
 
 --- The concatenation, in order.
@@ -184,10 +183,10 @@ pub let balanced(
     @A: Type,
     n: Nat,
     empty: A,
-    single: (i: Nat, Holds(i < n)) -> A,
+    single: (i: Nat, Bool/Holds(i < n)) -> A,
     combine: (A, A) -> A,
 ) -> A =
-    let go(lo: Nat, count: Nat, @bounded: Holds(lo + count <= n)) -> A =
+    let go(lo: Nat, count: Nat, @bounded: Bool/Holds(lo + count <= n)) -> A =
         choose
         | 1 < count =>
             let half = count / 2;

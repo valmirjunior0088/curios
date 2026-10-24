@@ -1,5 +1,4 @@
 use /std/{Bytes, Str, Nat, Bool, List, Option, Result, Parse, Json, Html, Spell, Fmt};
-use /std/Bool/{Holds};
 use /std/ops/{Eql};
 use /std/http/{Method, Url, Field, Status, Version, Limits, Refusal, Framing, read, syntax};
 
@@ -9,7 +8,7 @@ pub struct Response: pub Type {
     headers: List(Field),
     body: Bytes,
     --- Why the body is one the status carries.
-    @bodied: Holds(Status/carries_content(status.code) || Bytes/len(body) == 0),
+    @bodied: Bool/Holds(Status/carries_content(status.code) || Bytes/len(body) == 0),
 }
 
 satisfy Eql(Response) {
@@ -54,8 +53,8 @@ pub let with_header(
     r: Response,
     name: Str,
     value: Str,
-    @_: Holds(Field/Name/is_token(name)),
-    @_: Holds(Bytes/all(Str/to_bytes(value), Field/Value/admits)),
+    @_: Bool/Holds(Field/Name/is_token(name)),
+    @_: Bool/Holds(Bytes/all(Str/to_bytes(value), Field/Value/admits)),
 ) -> Response =
     Response { ..r, headers = [..r.headers, Field/of(name, value)], @bodied = r.bodied };
 
@@ -79,22 +78,22 @@ pub let of(
     code: Nat,
     kind: Str,
     body: Bytes,
-    @_: Holds(100 <= code && code <= 999),
-    @_: Holds(Bytes/all(Str/to_bytes(kind), Field/Value/admits)),
-    @_: Holds(Status/carries_content(code) || Bytes/len(body) == 0),
+    @_: Bool/Holds(100 <= code && code <= 999),
+    @_: Bool/Holds(Bytes/all(Str/to_bytes(kind), Field/Value/admits)),
+    @_: Bool/Holds(Status/carries_content(code) || Bytes/len(body) == 0),
 ) -> Response =
     Response { status = Status/of(code), headers = [Field/of("Content-Type", kind)], body = body };
 
 --- A reply with `code`, its usual reason, and neither headers nor content: what a 204 or a 304 is.
-pub let empty(code: Nat, @_: Holds(100 <= code && code <= 999)) -> Response =
+pub let empty(code: Nat, @_: Bool/Holds(100 <= code && code <= 999)) -> Response =
     Response { status = Status/of(code), headers = [], body = x[] };
 
 --- Plain text, under a status that carries content.
 pub let of_text(
     code: Nat,
     s: Str,
-    @_: Holds(100 <= code && code <= 999),
-    @content: Holds(Status/carries_content(code)),
+    @_: Bool/Holds(100 <= code && code <= 999),
+    @content: Bool/Holds(Status/carries_content(code)),
 ) -> Response =
     match Status/carries_content(code)
     | true => of(code, "text/plain; charset=utf-8", Str/to_bytes(s))
@@ -105,8 +104,8 @@ pub let of_text(
 pub let of_json(
     code: Nat,
     j: Json,
-    @_: Holds(100 <= code && code <= 999),
-    @content: Holds(Status/carries_content(code)),
+    @_: Bool/Holds(100 <= code && code <= 999),
+    @content: Bool/Holds(Status/carries_content(code)),
 ) -> Response =
     match Status/carries_content(code)
     | true => of(code, "application/json", Str/to_bytes(Json/encode(j)))
@@ -117,8 +116,8 @@ pub let of_json(
 pub let of_html(
     code: Nat,
     h: Html,
-    @_: Holds(100 <= code && code <= 999),
-    @content: Holds(Status/carries_content(code)),
+    @_: Bool/Holds(100 <= code && code <= 999),
+    @content: Bool/Holds(Status/carries_content(code)),
 ) -> Response =
     match Status/carries_content(code)
     | true => of(code, "text/html; charset=utf-8", Str/to_bytes(Html/encode(h)))

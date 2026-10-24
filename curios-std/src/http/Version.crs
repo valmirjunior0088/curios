@@ -1,12 +1,11 @@
 use /std/{Nat, Bool, Spell};
-use /std/Bool/{Holds};
 use /std/ops/{Eql};
 
 --- The version an HTTP/1 message states: its minor number, one digit (RFC 9112 §2.3). The major number is 1, the only one this library speaks.
 pub struct Version: pub Type {
     minor: Nat,
     --- Why the minor number is one digit.
-    @digit: Holds(minor <= 9),
+    @digit: Bool/Holds(minor <= 9),
 }
 
 satisfy Eql(Version) {
