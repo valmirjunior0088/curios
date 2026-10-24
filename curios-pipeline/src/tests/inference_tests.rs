@@ -352,6 +352,24 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
     );
 }
 
+/// A parameter written `_` has no name to quote, so the report describes it and the advice writes it as the program does.
+#[test]
+fn a_wildcard_parameter_nothing_types_is_described_rather_than_quoted() {
+    let source = r#"
+        let f = (_) => true;
+        f
+    "#;
+
+    let error = compile(source).unwrap_err();
+
+    assert!(
+        error.contains("the type of a parameter was never determined")
+            && error.contains("annotate the parameter: (_: T) => ...")
+            && !error.contains("'_'"),
+        "unexpected error: {error}"
+    );
+}
+
 #[test]
 fn typecheck_accepts_a_well_typed_program() {
     // The fast path stops after `elaborate → zonk`; a well-typed program passes without running erase/cont/optimize/wasm.

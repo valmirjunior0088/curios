@@ -1347,7 +1347,7 @@ pub(super) fn payload_fills(
         Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
             written[member],
             payload_plicities[slot],
-            payload.labels()[slot],
+            payload.hints()[slot],
         ),
         // A marked binder with no hidden payload left in its run: at the plain payload the plain binders before it have reached, which no mark binds, or past the last.
         Misaligned::Surplus { member } => match stands_at(&payload_plicities, written, member) {
@@ -1356,7 +1356,7 @@ pub(super) fn payload_fills(
                     constructor: tag.to_string(),
                 },
                 position: slot + 1,
-                binder: String::new(),
+                binder: None,
                 expected: payload_plicities[slot],
                 written: written[member],
             },

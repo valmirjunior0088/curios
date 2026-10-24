@@ -573,7 +573,7 @@ fn infix_method(
     let goal = Term::struct_type_at(*concept_name, universes.clone(), vec![operand_type.clone()]);
     let provenance = WitnessOrigin {
         func: CalleeId::Operator(op),
-        binder: format!("its '{field_name}' implementation"),
+        role: Some(format!("its '{field_name}' implementation")),
     };
     let (slot, witness) =
         context.fresh_witness_metavar(goal.clone(), term.extent(), provenance.clone());
@@ -677,7 +677,7 @@ fn sequencing_witness(
     let goal = Term::struct_type_at(concept_name, universes, vec![monad.clone()]);
     let provenance = WitnessOrigin {
         func: CalleeId::Function(Free::global(bind)),
-        binder: premise_label(1),
+        role: Some(premise_label(1)),
     };
     let (slot, witness) =
         context.fresh_witness_metavar(goal.clone(), term.extent(), provenance.clone());
@@ -1177,7 +1177,7 @@ pub(super) fn elaborate_func_check(
         Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
             written_plicities[member],
             slots[slot],
-            ft.telescope.labels()[slot],
+            ft.telescope.hints()[slot],
         )
         .at_opt(written_at(telescope, member)),
         // A marked binder with no hidden slot left in its run. It stands at the explicit slot the plain binders before it have reached, which a mark can never claim, or past the last slot, where it claims nothing.
@@ -1185,7 +1185,7 @@ pub(super) fn elaborate_func_check(
             Some(slot) => Error::BinderPlicityMismatch {
                 site: BinderSite::Parameter,
                 position: slot + 1,
-                binder: ft.telescope.labels()[slot].to_string(),
+                binder: ft.telescope.hints()[slot].map(str::to_string),
                 expected: slots[slot],
                 written: written_plicities[member],
             },
@@ -1267,16 +1267,14 @@ pub(super) fn elaborate_func_infer(
                 }
                 Subterm::Metavar(metavar) if metavar.is_hole() => match settle {
                     None => {
-                        return Err(Error::domain_never_determined(
-                            hint.unwrap_or("_").to_string(),
-                        ));
+                        return Err(Error::domain_never_determined(hint.map(str::to_string)));
                     }
                     Some((lambda, scope)) => {
                         let result = context
                             .metavar_entry(metavar.id)
                             .map(|entry| entry.result.clone())
                             .unwrap_or_else(Term::type_ground);
-                        let binder = hint.unwrap_or("_").to_string();
+                        let binder = hint.map(str::to_string);
                         let named =
                             context.fresh_domain_metavar(scope, result, lambda.extent(), binder);
                         context.solve_metavar(metavar.id, named.clone());

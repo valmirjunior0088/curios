@@ -157,7 +157,7 @@ pub(super) fn insert_auto_argument(
     origin: &Term,
     position: usize,
 ) -> Result<Term, Error> {
-    let binder = binder_name(label);
+    let binder = label.map(str::to_string);
 
     match plicity {
         // An obligation already decided in the goal's favour is filled here, because *here* is where the facts that decide it are in scope: a scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established in the arm the call sits in, and the inhabitant written here sits inside that arm. One that follows from the facts in scope is proved here for the same reason ([`crate::entail`]). A bound not yet decided because its subject still waits on a metavariable — one a later argument or the expectation pins — is parked instead, and filled once the subject is known ([`attempt_discharge`]); one waiting only on a recursive member's slot is asked of that procedure first ([`waits_past_its_group`]).
@@ -228,7 +228,7 @@ pub(super) fn insert_witness_argument(
 ) -> Result<Term, Error> {
     let provenance = WitnessOrigin {
         func: func.clone(),
-        binder: premise_label(position),
+        role: Some(premise_label(position)),
     };
     let (id, metavar) =
         context.fresh_witness_metavar(type_.clone(), origin.extent(), provenance.clone());
@@ -363,13 +363,6 @@ fn bound_exhausted(
     exhausted_bound(context, error, bound, site)
 }
 
-/// A binder's user-facing name: its minting hint, or `_` where it has none.
-///
-/// The head's function type is the *rebuilt* one, whose binders were re-closed under freshly minted identities; a report should still name the binder as written, and the hint is what the mint carried forward.
-pub(super) fn binder_name(hint: Option<&str>) -> String {
-    hint.unwrap_or("_").to_string()
-}
-
 pub(super) fn elaborate_apply(
     context: &mut Context,
     apply: &Apply,
@@ -439,7 +432,7 @@ pub(super) fn elaborate_apply(
         Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
             written[member],
             marks[slot],
-            ft.telescope.labels()[slot],
+            ft.telescope.hints()[slot],
         )
         .at_opt(arguments[member].term.extent()),
         Misaligned::Surplus { member } => Error::hidden_member_without_slot(written[member])

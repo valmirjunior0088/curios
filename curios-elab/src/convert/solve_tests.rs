@@ -382,7 +382,7 @@ fn a_metavariable_born_in_an_arm_is_restricted_to_the_candidate_that_embeds_it()
         (context, converted)
     };
 
-    let (context, converted) = embedding(MetavarOrigin::Domain("x".into()));
+    let (context, converted) = embedding(MetavarOrigin::Domain(Some("x".into())));
     assert_eq!(converted, Ok(true));
     assert!(context.metavar_solution(MetavarId(0)).is_some());
     let Some(Subterm::Metavar(narrowed)) = context
@@ -421,7 +421,7 @@ fn a_stand_in_keeps_the_binders_the_candidate_reaches_and_prunes_the_rest() {
     let outer = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&z)]);
     let embedded = Term::metavar_birthed(
         1,
-        MetavarOrigin::Domain("x".into()),
+        MetavarOrigin::Domain(Some("x".into())),
         vec![Term::free_var(&z), Term::free_var(&w)],
     );
     let candidate = Term::func_type([(x, embedded)], nat_type());
@@ -486,7 +486,7 @@ fn an_argument_reached_through_a_non_pattern_entry_is_spelled_through_it() {
         };
         let embedded = Term::metavar_birthed(
             1,
-            MetavarOrigin::Domain("x".into()),
+            MetavarOrigin::Domain(Some("x".into())),
             vec![Term::free_var(&r), argument],
         );
         let candidate = Term::func_type([(x, embedded)], nat_type());
@@ -519,7 +519,7 @@ fn an_argument_reached_through_a_non_pattern_entry_is_spelled_through_it() {
             x,
             Term::metavar_birthed(
                 stand_in.id,
-                MetavarOrigin::Domain("x".into()),
+                MetavarOrigin::Domain(Some("x".into())),
                 vec![Term::free_var(&r), Term::free_var(&s)],
             ),
         )],
@@ -1401,7 +1401,7 @@ fn a_slot_met_against_a_dictionarys_name_is_solved_to_the_name() {
     };
     let premise = MetavarOrigin::Witness(WitnessOrigin {
         func: CalleeId::Function(Free::from(&nominal("holds"))),
-        binder: "key".into(),
+        role: Some("key".into()),
     });
 
     assert_eq!(solved(premise), Some(Term::free_var(&dictionary)));

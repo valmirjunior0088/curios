@@ -140,3 +140,42 @@ fn a_rejected_candidate_is_reported_with_the_check_that_refused_it() {
         "an inferred hole cannot be /Candidate\n  it does not check where it stands:\n    type mismatch\n      inferred: /Left\n      expected: /Right"
     );
 }
+
+/// A watched slot with no name is described rather than quoted: an implicit binder written `_` reads as the callee's implicit argument, and a witness slot, which never has a name, by what it is to the callee.
+#[test]
+fn a_watched_slot_with_no_name_is_described_rather_than_quoted() {
+    let callee = || Callee::Function(Free::Global(Global::Authored(Qualifier::from(["f"]))));
+    let shown = |watched: Watched| {
+        let error = Error::rejected_candidate(
+            watched,
+            family("Candidate", vec![]),
+            Error::type_mismatch(family("Left", vec![]), family("Right", vec![])),
+        );
+        let spelling = Rc::new(
+            Spelling::default()
+                .with_erased_universes()
+                .with_anonymous_metavars(),
+        );
+        Displayed(&error, spelling, &[]).to_string()
+    };
+
+    let implicit = shown(Watched::Implicit {
+        callee: callee(),
+        binder: None,
+    });
+    let witness = shown(Watched::Witness {
+        callee: callee(),
+        role: Some("its 2nd 'use' premise".to_string()),
+    });
+
+    assert!(
+        implicit.starts_with("the implicit argument of '/f' cannot be /Candidate"),
+        "{implicit}"
+    );
+    assert!(
+        witness.starts_with(
+            "the witness argument of '/f' for its 2nd 'use' premise cannot be /Candidate"
+        ),
+        "{witness}"
+    );
+}

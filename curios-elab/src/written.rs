@@ -319,7 +319,7 @@ impl Writing {
         match self.restored(context, witness) {
             true => context.open_witness_slot(WitnessOrigin {
                 func: callee,
-                binder: String::new(),
+                role: None,
             }),
             false => self.term(context, witness),
         }
@@ -411,7 +411,7 @@ impl Writing {
             .chain(std::iter::once(Argument {
                 term: context.open_witness_slot(WitnessOrigin {
                     func: CalleeId::Function(Free::Global(wrapper)),
-                    binder: String::new(),
+                    role: None,
                 }),
                 plicity: Plicity::Witness,
             }))

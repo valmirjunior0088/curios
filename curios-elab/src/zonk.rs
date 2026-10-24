@@ -1241,7 +1241,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
             }
 
             let solution = context.metavar_solution(*id).ok_or_else(|| {
-                // An unsolved metavariable the *elaborator* minted (an omitted implicit or witness argument) is reported by the binder it filled — the provenance rides on the node itself — not as a bare hole: the user never wrote this metavariable, so a generic "cannot infer" would point at nothing they can see.
+                // An unsolved metavariable the *elaborator* minted (an omitted implicit or witness argument) is reported by the slot it filled — its binder, or its role to the callee — the provenance riding on the node itself, not as a bare hole: the user never wrote this metavariable, so a generic "cannot infer" would point at nothing they can see.
                 let error = match origin {
                     MetavarOrigin::Implicit(origin) => {
                         // The birth record's `result` is the binder's instantiated type — the bound nothing discharged, or the type nothing determined, which the record decided at the mint since this walk cannot ask; display it through whatever solutions landed, keeping the raw spelling if holes survive, exactly as the witness branch below does with its goal.
@@ -1285,7 +1285,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                         Error::no_witness(
                             goal,
                             callee(context, &origin.func),
-                            origin.binder.clone(),
+                            origin.role.clone(),
                             None,
                             None,
                         )

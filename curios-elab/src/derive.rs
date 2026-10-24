@@ -330,9 +330,9 @@ struct Constructor<'a> {
 impl Constructor<'_> {
     /// One binder per payload, hinted by the written label where there is one.
     fn binders(&self, context: &mut Context) -> Vec<Free> {
-        self.signature.telescope.labels()[self.param_count..]
+        self.signature.telescope.hints()[self.param_count..]
             .iter()
-            .map(|label| context.fresh((!label.is_empty()).then_some(*label)))
+            .map(|hint| context.fresh(*hint))
             .collect()
     }
 
@@ -449,7 +449,7 @@ fn witness_call(
     premise: Option<&str>,
     args: Vec<Term>,
 ) -> Term {
-    let binder = match premise {
+    let role = match premise {
         Some(type_) => format!(
             "{} — add `use {}({type_})` to the telescope",
             classified.payload.described,
@@ -459,7 +459,7 @@ fn witness_call(
     };
     let provenance = WitnessOrigin {
         func: classified.payload.callee.clone(),
-        binder,
+        role: Some(role),
     };
     // Placed like the application around it: a goal deferred to the module's drain reports at the term it was born from, and that term is the declaration.
     let goal = site.at(Term::metavar_birthed(

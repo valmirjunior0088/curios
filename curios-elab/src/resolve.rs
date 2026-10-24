@@ -79,7 +79,7 @@ pub(crate) fn no_witness_error(
     site: Option<&Extent>,
 ) -> Error {
     let callee = callee(context, &provenance.func);
-    let binder = provenance.binder.clone();
+    let role = provenance.role.clone();
     let site = site.copied();
 
     pending(context, [goal], move |reporting, [goal]| {
@@ -88,7 +88,7 @@ pub(crate) fn no_witness_error(
         Error::no_witness(
             resolved_for_display(reporting, &goal),
             callee,
-            binder,
+            role,
             need,
             shape,
         )
@@ -755,7 +755,7 @@ fn instantiate(
             while let Some(plicity) = cursor.mark() {
                 let (hint, ty) = cursor.entry().expect("a mark stands at an entry");
                 let position = positions.next(plicity);
-                let binder = hint.unwrap_or("_").to_string();
+                let binder = hint.map(str::to_string);
                 let arg = match plicity {
                     Plicity::Implicit => {
                         let proposition =
@@ -779,7 +779,7 @@ fn instantiate(
                     Plicity::Witness => {
                         let provenance = WitnessOrigin {
                             func: CalleeId::Witness(witness.name),
-                            binder: premise_label(position),
+                            role: Some(premise_label(position)),
                         };
                         let (id, metavar) =
                             context.fresh_witness_metavar(ty.clone(), extent, provenance.clone());

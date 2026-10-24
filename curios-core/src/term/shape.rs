@@ -858,23 +858,25 @@ impl Rec {
     }
 }
 
-/// Provenance of an inserted implicit argument: the applied callee (`func`) had no `@`-argument for its implicit binder `binder` at some call site, so the elaborator filled the slot with a fresh metavariable.
+/// Provenance of an inserted implicit argument: the applied callee (`func`) had no `@`-argument for an implicit binder at some call site, so the elaborator filled the slot with a fresh metavariable. `binder` is the binder's name, `None` where it was written `_` or declared as its type alone.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct ImplicitOrigin {
     pub func: CalleeId,
-    pub binder: String,
+    pub binder: Option<String>,
 }
 
-/// Provenance of an inserted witness argument: the applied function (`func`) had no `use`-argument for its witness binder `binder` at some call site, so the elaborator filled the slot with a fresh metavariable and registered a resolution goal for it. An occurrence still unsolved at zonk reports as a missing witness (naming the goal type from the birth record) rather than an uninferred implicit.
+/// Provenance of an inserted witness argument: the applied function (`func`) had no `use`-argument for a witness slot at some call site, so the elaborator filled the slot with a fresh metavariable and registered a resolution goal for it. An occurrence still unsolved at zonk reports as a missing witness (naming the goal type from the birth record) rather than an uninferred implicit.
+///
+/// A `use` slot has no name, so `role` is what the slot is to its callee as a report says it — `its 2nd 'use' premise`, `its 'Eql' superclass` — and `None` where nothing states one.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct WitnessOrigin {
     pub func: CalleeId,
-    pub binder: String,
+    pub role: Option<String>,
 }
 
-/// Provenance of a metavariable — which mechanism minted it, deciding both how zonk reports it unsolved and what an elaboration site may do with it. An unsolved `Implicit`/`Witness` survivor names the binder it filled, an unsolved `Domain` the lambda parameter whose type was never determined, and an unsolved `Hole` is a bare "cannot infer", while a `Goal` is reported unconditionally.
+/// Provenance of a metavariable — which mechanism minted it, deciding both how zonk reports it unsolved and what an elaboration site may do with it. An unsolved `Implicit`/`Witness` survivor names the slot it filled — by its binder, or by its role to the callee — an unsolved `Domain` the lambda parameter whose type was never determined, and an unsolved `Hole` is a bare "cannot infer", while a `Goal` is reported unconditionally.
 ///
 /// **A site may special-case a `Hole`; a `Goal` always takes the general path.** Inferring a binding over an elided annotation, synthesizing an elided motive, refusing a lambda whose domain nothing pins — each of those is a decision about a *silent* hole, and one matching any bare metavariable would discard a written `?` in those positions unelaborated and compile the program with a goal in it. [`Metavar::is_hole`] is the one predicate those sites ask, so the rule is stated in the type rather than re-derived per site.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -882,8 +884,8 @@ pub struct WitnessOrigin {
 pub enum MetavarOrigin {
     /// A silent inference hole: an elided annotation, motive, lambda domain or element type (`into_core` mints it via `Term::hole`), or an elaborator placeholder with no provenance of its own — a parked problem's stand-in, a recursive group's slot, the type a goal in synthesis position stands over. Its solution is spliced without comment; unsolved, it is the bare "cannot infer".
     Hole,
-    /// A settle-synthesized lambda's unannotated domain, named by its binder: minted when a lambda whose expectation never gained structure is synthesized at a settle tier, replacing the silent hole (which is solved with it). Solved — by the body, or by whatever the settled type later unifies with — it splices silently like a hole; unsolved, zonk reports the parameter whose type was never determined, by name.
-    Domain(String),
+    /// A settle-synthesized lambda's unannotated domain, named by its binder where it has a name: minted when a lambda whose expectation never gained structure is synthesized at a settle tier, replacing the silent hole (which is solved with it). Solved — by the body, or by whatever the settled type later unifies with — it splices silently like a hole; unsolved, zonk reports the parameter whose type was never determined, by name where it has one.
+    Domain(Option<String>),
     Implicit(ImplicitOrigin),
     Witness(WitnessOrigin),
     /// A written goal `?` (`into_core` mints it via `Term::goal`): the user asked what elaboration determines here, so zonk errors with the goal's scope, type, and solution — solved or not — instead of splicing.
@@ -915,7 +917,7 @@ impl fmt::Display for MetavarId {
 
 /// A metavariable: a placeholder term standing for an as-yet-unknown subterm, born from a surface hole `?` and (possibly) solved by unification. The solution, when one exists, lives in the elaborator's solution store (`Solutions`), keyed by `id`, spelled with the *birth telescope's* free names.
 ///
-/// `origin` rides with the node and says what minted it — a silent hole, an elaborator-inserted implicit/witness argument (zonk's unsolved report then names the binder instead of a bare id), or a written goal `?` (zonk reports it unconditionally). Each id is minted exactly once (`into_core` desugared holes as `Hole` and written goals as `Goal`, core insertions above the floor `into_core` returns with theirs), so every occurrence of an id carries the same origin and the derived equality never splits an id.
+/// `origin` rides with the node and says what minted it — a silent hole, an elaborator-inserted implicit/witness argument (zonk's unsolved report then names the slot instead of a bare id), or a written goal `?` (zonk reports it unconditionally). Each id is minted exactly once (`into_core` desugared holes as `Hole` and written goals as `Goal`, core insertions above the floor `into_core` returns with theirs), so every occurrence of an id carries the same origin and the derived equality never splits an id.
 ///
 /// `spine` is the delayed substitution — one term per binder of the birth telescope (`MetaEntry::telescope` order), recording what that binder corresponds to at this occurrence. Identity (`Var::free(name)`) at birth. The entries are ordinary term content: `traverse` walks them, so `close` captures them and `open` substitutes them, and the mapping survives re-closing under fresh names — which is what lets a solution mentioning a sibling binder resolve correctly wherever the occurrence ends up. An empty spine is a not-yet-birthed `into_core` hole and resolves as the identity.
 ///

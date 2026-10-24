@@ -30,7 +30,7 @@ fn a_bound_given_up_in_a_dead_arm_says_the_arm_is_never_taken() {
         "#,
     );
     assert!(
-        error.contains("implicit argument '_' of 'needs' was not inferred")
+        error.contains("an implicit argument of 'needs' was not inferred")
             && error.contains("this arm is never taken: its guard flag is always false"),
         "expected the bound's report to say the arm is dead, got: {error}"
     );

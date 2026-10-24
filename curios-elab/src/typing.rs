@@ -1083,21 +1083,20 @@ fn watched_blockers(
 /// A metavariable by what it is, read off the provenance an occurrence of it carries: what a report names it by. One no occurrence names is an inferred hole.
 pub(crate) fn watched(context: &Context, id: MetavarId, origin: Option<&MetavarOrigin>) -> Watched {
     match origin {
-        Some(MetavarOrigin::Implicit(origin)) => Watched::Slot {
+        Some(MetavarOrigin::Implicit(origin)) => Watched::Implicit {
             callee: callee(context, &origin.func),
-            noun: "implicit argument",
             binder: origin.binder.clone(),
         },
-        Some(MetavarOrigin::Witness(origin)) => Watched::Slot {
+        Some(MetavarOrigin::Witness(origin)) => Watched::Witness {
             callee: callee(context, &origin.func),
-            noun: "witness argument",
-            binder: origin.binder.clone(),
+            role: origin.role.clone(),
         },
         // Named by the extent the goal was born with, never by an occurrence's: substituted into a declaration's type, the goal rides the extent of the binder it replaced, which would name the declaration rather than the `?`. Where that is in a file is the report's to say.
         Some(MetavarOrigin::Goal) => Watched::Goal(context.goal_extent(id).copied()),
-        Some(MetavarOrigin::Domain(binder)) => {
-            Watched::Described(format!("the type of parameter '{binder}'"))
-        }
+        Some(MetavarOrigin::Domain(binder)) => Watched::Described(match binder {
+            Some(binder) => format!("the type of parameter '{binder}'"),
+            None => "the type of a parameter".to_string(),
+        }),
         Some(MetavarOrigin::Hole) | None => Watched::Described("an inferred hole".to_string()),
     }
 }
@@ -1757,9 +1756,9 @@ fn check_written_motive(
     // The written binder names become the scope's labels, so the motive prints back the way it was spelled.
     let hints = match &*checked {
         Subterm::Func(Func { telescope, .. }) if telescope.len() == arity => telescope
-            .labels()
+            .hints()
             .into_iter()
-            .map(|label| (!label.is_empty()).then(|| label.to_string()))
+            .map(|hint| hint.map(str::to_string))
             .collect::<Vec<_>>(),
         _ => vec![None; arity],
     };

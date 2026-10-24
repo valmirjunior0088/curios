@@ -293,7 +293,9 @@ impl ErasedSite {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            ErasedSite::Bound { callee, binder } => callee.slot("bound", binder, spelling),
+            ErasedSite::Bound { callee, binder } => {
+                callee.slot("bound", binder.as_deref(), spelling)
+            }
             ErasedSite::OperandBound(operation) => {
                 format!("the bound of '{}'", operation.spelled(spelling))
             }
@@ -347,17 +349,20 @@ impl Callee {
         }
     }
 
-    /// One of this callee's slots as a report names it, `the bound 'ok' of '/f'`. An operator's slot is named by the operator alone: its binder is minted, and `'_'` names nothing a reader can find.
-    pub(crate) fn slot(&self, noun: &str, binder: &str, spelling: &Spelling) -> String {
-        match self {
-            Callee::Operator { .. } => format!("the {noun} of {}", self.phrase(spelling)),
-            Callee::Function(_)
-            | Callee::Constructor { .. }
-            | Callee::Witness { .. }
-            | Callee::Structure(_)
-            | Callee::Anonymous => {
-                format!("the {noun} '{binder}' of {}", self.phrase(spelling))
+    /// One of this callee's slots as a report names it, `the bound 'ok' of '/f'`, and `the bound of '/f'` where the slot has no name. An operator's slot is named by the operator alone: its binder is minted, and names nothing a reader can find.
+    pub(crate) fn slot(&self, noun: &str, binder: Option<&str>, spelling: &Spelling) -> String {
+        match (self, binder) {
+            (Callee::Operator { .. }, _) | (_, None) => {
+                format!("the {noun} of {}", self.phrase(spelling))
             }
+            (
+                Callee::Function(_)
+                | Callee::Constructor { .. }
+                | Callee::Witness { .. }
+                | Callee::Structure(_)
+                | Callee::Anonymous,
+                Some(binder),
+            ) => format!("the {noun} '{binder}' of {}", self.phrase(spelling)),
         }
     }
 }
@@ -377,11 +382,16 @@ impl fmt::Display for Displayed<'_> {
         let anchors = self.2;
         // A watched metavariable by what it is.
         let named = |watched: &Watched| match watched {
-            Watched::Slot {
-                callee,
-                noun,
-                binder,
-            } => callee.slot(noun, binder, spelling),
+            Watched::Implicit { callee, binder } => {
+                callee.slot("implicit argument", binder.as_deref(), spelling)
+            }
+            Watched::Witness { callee, role } => match role {
+                Some(role) => format!(
+                    "the witness argument of {} for {role}",
+                    callee.phrase(spelling)
+                ),
+                None => format!("the witness argument of {}", callee.phrase(spelling)),
+            },
             Watched::Described(description) => description.clone(),
             // Where it was written is the report's note.
             Watched::Goal(_) => "a written goal `?`".to_string(),
@@ -472,7 +482,9 @@ impl fmt::Display for Displayed<'_> {
             } => {
                 let candidate = candidate.spelled(spelling);
                 let born = match watched {
-                    Watched::Slot { .. } => "where the argument was left out",
+                    Watched::Implicit { .. } | Watched::Witness { .. } => {
+                        "where the argument was left out"
+                    }
                     Watched::Described(_) | Watched::Goal(_) => "where it stands",
                 };
                 write!(
@@ -738,9 +750,9 @@ impl fmt::Display for Displayed<'_> {
                     Plicity::Implicit => "written with `@`",
                     Plicity::Witness => "written with `use`",
                 };
-                let named = match binder.is_empty() {
-                    true => String::new(),
-                    false => format!(" '{binder}'"),
+                let named = match binder {
+                    None => String::new(),
+                    Some(binder) => format!(" '{binder}'"),
                 };
                 match site {
                     BinderSite::Parameter => write!(
@@ -1249,9 +1261,9 @@ impl fmt::Display for Displayed<'_> {
                     // A literal's slot is a field, written in braces under `@`. One declared as its type alone has no name to quote.
                     Callee::Structure(name) => {
                         let name = spelling.symbol(name);
-                        let field = match binder.as_str() {
-                            "_" => "a hidden field".to_string(),
-                            binder => format!("hidden field '{binder}'"),
+                        let field = match binder {
+                            None => "a hidden field".to_string(),
+                            Some(binder) => format!("hidden field '{binder}'"),
                         };
                         let guard = match searched {
                             true => "decide the bound with a guard before the literal, or ",
@@ -1264,38 +1276,48 @@ impl fmt::Display for Displayed<'_> {
                     }
                     Callee::Function(func) => {
                         let func = spelled_free(func, spelling);
+                        let argument = match binder {
+                            None => "an implicit argument".to_string(),
+                            Some(binder) => format!("implicit argument '{binder}'"),
+                        };
                         let guard = match searched {
                             true => "decide the bound with a guard before the call, or ",
                             false => "",
                         };
                         write!(
                             f,
-                            "implicit argument '{binder}' of '{func}' was not inferred\n  {why}\n  {guard}supply it explicitly: {func}(@...)"
+                            "{argument} of '{func}' was not inferred\n  {why}\n  {guard}supply it explicitly: {func}(@...)"
                         )
                     }
                     // An operator has no argument list to write the bound into, so the report names the two places it can be established: a guard before the operation, or the method call the operator stands for — with its type argument first, since a leading `@` fills that slot and not the bound.
                     Callee::Operator { method, .. } => write!(
                         f,
                         "{} was not discharged\n  {why}\n  an operator takes no written arguments: decide the bound with a guard before the operation, or call {}(@T, a, b, @proof)",
-                        callee.slot("bound", binder, spelling),
+                        callee.slot("bound", binder.as_deref(), spelling),
                         spelling.symbol(method)
                     ),
-                    Callee::Constructor { .. } => write!(
-                        f,
-                        "implicit argument '{binder}' of {} was not inferred\n  {why}\n  supply it explicitly",
-                        callee.phrase(spelling)
-                    ),
+                    Callee::Constructor { .. } => {
+                        let argument = match binder {
+                            None => "an implicit argument".to_string(),
+                            Some(binder) => format!("implicit argument '{binder}'"),
+                        };
+                        write!(
+                            f,
+                            "{argument} of {} was not inferred\n  {why}\n  supply it explicitly",
+                            callee.phrase(spelling)
+                        )
+                    }
                     // A head the program gave no name to: a computed function, or a projection out of a recursive group. There is nothing to quote, so the advice names the slot rather than a callee it cannot spell.
                     Callee::Anonymous => write!(
                         f,
                         "{} was not inferred\n  {why}\n  supply it explicitly at the call site",
-                        callee.slot("implicit argument", binder, spelling)
+                        callee.slot("implicit argument", binder.as_deref(), spelling)
                     ),
                     // A witness is never called, so there is no argument to supply: its parameters are filled from the goal it answers.
                     Callee::Witness { .. } => write!(
                         f,
                         "{} was not inferred\n  {why}\n  a witness is never called: its parameters are filled from the goal it is resolved for",
-                        callee.slot("implicit parameter", binder, spelling)
+                        callee.slot("implicit parameter", binder.as_deref(), spelling)
                     ),
                 }
             }
@@ -1306,7 +1328,7 @@ impl fmt::Display for Displayed<'_> {
                 proposition,
             } => {
                 let given = given.spelled(spelling);
-                let slot = callee.slot("implicit argument", binder, spelling);
+                let slot = callee.slot("implicit argument", binder.as_deref(), spelling);
                 match proposition {
                     true => write!(
                         f,
@@ -1319,9 +1341,13 @@ impl fmt::Display for Displayed<'_> {
                 }
             }
             Error::DomainNeverDetermined { binder } => {
+                let (parameter, written) = match binder {
+                    None => ("a parameter".to_string(), "_"),
+                    Some(binder) => (format!("parameter '{binder}'"), binder.as_str()),
+                };
                 write!(
                     f,
-                    "the type of parameter '{binder}' was never determined\n  a lambda's parameter type comes from its annotation, its body, or its position's expected type, and none supplied one\n  annotate the parameter: ({binder}: T) => ..."
+                    "the type of {parameter} was never determined\n  a lambda's parameter type comes from its annotation, its body, or its position's expected type, and none supplied one\n  annotate the parameter: ({written}: T) => ..."
                 )
             }
             Error::WitnessMemberNeverStated => {
@@ -1344,9 +1370,9 @@ impl fmt::Display for Displayed<'_> {
                     Plicity::Implicit | Plicity::Explicit => "@_",
                 };
                 let (written, slot) = (mark(written), mark(slot));
-                let stands = match binder.is_empty() {
-                    true => format!("a `{slot}` member"),
-                    false => format!("the `{slot}` member '{binder}'"),
+                let stands = match binder {
+                    None => format!("a `{slot}` member"),
+                    Some(binder) => format!("the `{slot}` member '{binder}'"),
                 };
                 write!(
                     f,
@@ -1436,10 +1462,14 @@ impl fmt::Display for Displayed<'_> {
             Error::NoWitness {
                 goal,
                 callee,
-                binder,
+                role,
                 need,
                 shape,
             } => {
+                let needed = match role {
+                    Some(role) => format!("needed by {} for {role}", callee.phrase(spelling)),
+                    None => format!("needed by {}", callee.phrase(spelling)),
+                };
                 let written = match need {
                     Some(Need::Embedding(diagnosis)) => diagnosis.goal.as_deref(),
                     _ => None,
@@ -1455,11 +1485,10 @@ impl fmt::Display for Displayed<'_> {
                     )?;
                 }
                 match need {
-                    None => write!(f, "\n  needed by {} for {binder}", callee.phrase(spelling)),
+                    None => write!(f, "\n  {needed}"),
                     Some(Need::Joining(joining)) => write!(
                         f,
-                        "\n  needed by {} for {binder}\n  {} joins two texts, and {} builds one from a format",
-                        callee.phrase(spelling),
+                        "\n  {needed}\n  {} joins two texts, and {} builds one from a format",
                         joining.concat.spelled(spelling),
                         joining.render.spelled(spelling)
                     ),

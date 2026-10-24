@@ -2519,13 +2519,13 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// Mint the metavariable standing for a settle-synthesized lambda's unannotated domain — like [`Context::fresh_hole_metavar`] but carrying the binder's name, so zonk's unsolved report can point at the parameter whose type was never determined instead of raising a bare "cannot infer", and born at the settle site's ambient `scope` rather than under the lambda's own binders.
+    /// Mint the metavariable standing for a settle-synthesized lambda's unannotated domain — like [`Context::fresh_hole_metavar`] but carrying the binder's name where it has one, so zonk's unsolved report can point at the parameter whose type was never determined instead of raising a bare "cannot infer", and born at the settle site's ambient `scope` rather than under the lambda's own binders.
     pub(crate) fn fresh_domain_metavar(
         &mut self,
         scope: &DomainScope,
         result: Term,
         extent: Option<Extent>,
-        binder: String,
+        binder: Option<String>,
     ) -> Term {
         let id = self.underway.attempt.solutions.mint();
         self.birth_under(

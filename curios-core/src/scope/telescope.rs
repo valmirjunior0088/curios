@@ -212,12 +212,20 @@ impl<B: Bound> Telescope<B> {
             })
     }
 
-    /// The binder hint at each position (`""` when unnamed), walking the spine without opening — names are structural, no substitution needed.
+    /// The binder hint at each position (`""` when unnamed), walking the spine without opening — names are structural, no substitution needed. The labels a tuple type's fields compare by; a report naming a binder reads [`Telescope::hints`].
     pub fn labels(&self) -> Vec<&str> {
+        self.hints()
+            .into_iter()
+            .map(Option::unwrap_or_default)
+            .collect()
+    }
+
+    /// The binder hint at each position, `None` where the binder has no name.
+    pub fn hints(&self) -> Vec<Option<&str>> {
         let mut out = Vec::new();
         let mut cur = self;
         while let Telescope::Cons(_, _, rest) = cur {
-            out.push(rest.first_hint().unwrap_or_default());
+            out.push(rest.first_hint());
             cur = &rest.body;
         }
         out

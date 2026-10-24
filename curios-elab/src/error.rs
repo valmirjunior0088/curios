@@ -192,11 +192,15 @@ pub struct ShapeDiagnosis {
 /// One still-unsolved metavariable a postponed conversion watched, by what it is: what a reader can act on.
 #[derive(Debug, Clone)]
 pub enum Watched {
-    /// An implicit or witness argument of a callee, by the slot it was inserted for: `noun` says which kind, and the callee is its identity, spelled for the reader where the report is made.
-    Slot {
+    /// An implicit argument of a callee, by the binder it was inserted for: the callee is its identity, spelled for the reader where the report is made, and `binder` the binder's name where it has one.
+    Implicit {
         callee: Callee,
-        noun: &'static str,
-        binder: String,
+        binder: Option<String>,
+    },
+    /// A witness argument of a callee, by what its slot is to the callee where something states it: `its 2nd 'use' premise`.
+    Witness {
+        callee: Callee,
+        role: Option<String>,
     },
     /// The type of a parameter, an inferred hole: described where it was found, since nothing about it needs a position or names a declaration.
     Described(String),
@@ -599,7 +603,7 @@ pub enum Error {
     BinderPlicityMismatch {
         site: BinderSite,
         position: usize,
-        binder: String,
+        binder: Option<String>,
         expected: Plicity,
         written: Plicity,
     },
@@ -817,7 +821,7 @@ pub enum Error {
     /// An inserted implicit argument that unification never pinned. Carries the insertion provenance (the applied function and the binder it filled) so the report names the hole instead of a bare metavar id, and the binder's instantiated type — the `bound` nothing discharged — because naming the slot says where the refusal is and naming its type says what was asked for. A decided proposition is the case that needs both: `Has(layout, "sidebr")` is the whole of why the call was refused, and the binder alone reports a refusal the reader cannot act on. `proposition` is whether `bound` is one: a type argument nothing determined — `@T: Type`, `@n: Nat` — was never an obligation, and reporting it as one discharged by nothing would name a fault the author cannot find.
     UninferredImplicit {
         callee: Callee,
-        binder: String,
+        binder: Option<String>,
         bound: Box<Term>,
         proposition: bool,
         /// What `bound` reduced to when it was asked at the mint, kept when that is an inductive type: `Has(spec, "prot")` reduces to `False`, and the reduct is the sentence the spelling alone does not say.
@@ -828,32 +832,32 @@ pub enum Error {
     /// An argument handed where an implicit argument declared at the other sort is still open: a proof where the implicit is declared at `Type`, which is where `proposition`, and a value of a type where it is declared at `Prop`. `given`, the argument's type, is the one candidate the argument offers the implicit, and neither sort admits what stands at the other, so the implicit stays unsolved and the argument's own mismatch would show it as `?`.
     ImplicitAtOtherSort {
         callee: Callee,
-        binder: String,
+        binder: Option<String>,
         given: Box<Term>,
         proposition: bool,
     },
     /// A settle-synthesized lambda's domain that nothing ever pinned — not the body, not anything the settled type met. Carries only the binder's name: the metavariable is elaboration state the reader cannot see, and the parameter is what they can annotate.
     DomainNeverDetermined {
-        binder: String,
+        binder: Option<String>,
     },
     /// A lambda writes `use _` where no expected function type states the member. A `use` member holds a place and states no type, so a lambda nothing is checking has none to take: there is no annotation to ask for, unlike [`Error::DomainNeverDetermined`].
     WitnessMemberNeverStated,
-    /// A hidden member written where a hidden slot of the other mark stands. Hidden members are written in order from the first of their run, so the slot met is the one the author skipped: `binder` names it, empty where it has no name.
+    /// A hidden member written where a hidden slot of the other mark stands. Hidden members are written in order from the first of their run, so the slot met is the one the author skipped: `binder` names it where it has a name.
     HiddenMemberOutOfOrder {
         written: Plicity,
         slot: Plicity,
-        binder: String,
+        binder: Option<String>,
     },
     /// A hidden member with no slot left: written after its run's last slot, or after the plain member the run precedes.
     HiddenMemberWithoutSlot {
         written: Plicity,
     },
-    /// A witness goal that resolution could not discharge: no matching local `use` binder, no superclass projection, and no witness-table entry. `callee`/`binder` are the insertion provenance (who the goal was inserted for and the `use` binder it fills).
+    /// A witness goal that resolution could not discharge: no matching local `use` binder, no superclass projection, and no witness-table entry. `callee`/`role` are the insertion provenance: who the goal was inserted for, and what its slot is to the callee where something states it.
     NoWitness {
         goal: Box<Term>,
         /// Boxed for the reason `shape` is: a witness callee's concept and key inline would push this variant, already the roster's largest, past what `result_large_err` admits.
         callee: Box<Callee>,
-        binder: String,
+        role: Option<String>,
         /// Present when the goal's concept is one the compiler resolves for a form of its own: what that form needed the witness for.
         need: Option<Need>,
         /// Present when the goal keys on a labeled tuple shape whose bare twin is registered: the shape-specific half of the report. Boxed because two [`WitnessKey`]s inline push this variant — already the roster's largest — past what `result_large_err` admits.
@@ -1499,7 +1503,7 @@ impl Error {
 
     pub(crate) fn uninferred_implicit(
         callee: Callee,
-        binder: String,
+        binder: Option<String>,
         bound: Term,
         proposition: bool,
         reduct: Option<Term>,
@@ -1517,7 +1521,7 @@ impl Error {
 
     pub(crate) fn implicit_at_other_sort(
         callee: Callee,
-        binder: String,
+        binder: Option<String>,
         given: Term,
         proposition: bool,
     ) -> Self {
@@ -1529,7 +1533,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn domain_never_determined(binder: String) -> Self {
+    pub(crate) fn domain_never_determined(binder: Option<String>) -> Self {
         Self::DomainNeverDetermined { binder }
     }
 
@@ -1540,12 +1544,12 @@ impl Error {
     pub(crate) fn hidden_member_out_of_order(
         written: Plicity,
         slot: Plicity,
-        binder: &str,
+        binder: Option<&str>,
     ) -> Self {
         Self::HiddenMemberOutOfOrder {
             written,
             slot,
-            binder: binder.to_string(),
+            binder: binder.map(str::to_string),
         }
     }
 
@@ -1556,14 +1560,14 @@ impl Error {
     pub(crate) fn no_witness<T: Into<Term>>(
         goal: T,
         callee: Callee,
-        binder: String,
+        role: Option<String>,
         need: Option<Need>,
         shape: Option<Box<ShapeDiagnosis>>,
     ) -> Self {
         Self::NoWitness {
             goal: Box::new(goal.into()),
             callee: Box::new(callee),
-            binder,
+            role,
             need,
             shape,
         }
@@ -2132,7 +2136,9 @@ impl Error {
                         written(extent),
                         "this goal `?` was never solved".to_string(),
                     ),
-                    Watched::Slot { .. } | Watched::Described(_) => None,
+                    Watched::Implicit { .. } | Watched::Witness { .. } | Watched::Described(_) => {
+                        None
+                    }
                 })
                 .collect(),
             // Each use whose scheme's bound is on the cycle, past the place the report itself stands at, which is the first the path knows.
@@ -2294,8 +2300,11 @@ pub enum ErasedSite {
     Recursive(Vec<Global>),
     /// Local definitions of one recursive group that yield a sort, by the labels they were written under.
     LocallyRecursive(Vec<String>),
-    /// The bound a slot of `callee` states, which a call left to be discharged.
-    Bound { callee: Callee, binder: String },
+    /// The bound a slot of `callee` states, which a call left to be discharged, by the slot's name where it has one.
+    Bound {
+        callee: Callee,
+        binder: Option<String>,
+    },
     /// The bound a built-in operation states of an operand.
     OperandBound(Box<Term>),
 }

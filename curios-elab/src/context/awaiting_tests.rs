@@ -27,7 +27,7 @@ fn awaited(context: &Context, id: usize) -> bool {
 fn premise() -> WitnessOrigin {
     WitnessOrigin {
         func: CalleeId::Function(Free::local(0, None)),
-        binder: "key".into(),
+        role: Some("key".into()),
     }
 }
 

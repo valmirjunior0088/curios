@@ -1,7 +1,6 @@
 use {
     super::{
-        Misaligned, align, binder_name, check_args_against, insert_auto_argument, is_placeholder,
-        premise_label,
+        Misaligned, align, check_args_against, insert_auto_argument, is_placeholder, premise_label,
     },
     crate::{
         Context, Error, Mode, Occurrence, attempt_witness_goal, check, elaborate, expect, is_prop,
@@ -103,7 +102,7 @@ pub(super) fn elaborate_struct_type(
     if params.is_empty() && param_count != 0 {
         let mut cursor = parameters.cursor();
         while let Some((hint, ty)) = cursor.entry() {
-            let binder = binder_name(hint);
+            let binder = hint.map(str::to_string);
             let proposition = is_prop(context, &ty).probed()?.unwrap_or(false);
             let (_, arg) = context.fresh_metavar(
                 ty,
@@ -178,7 +177,7 @@ pub(super) fn check_dependent_fields(
         FieldSource::Resolve { func, edge } => {
             let provenance = WitnessOrigin {
                 func: func.clone(),
-                binder: format!("its '{edge}' superclass"),
+                role: Some(format!("its '{edge}' superclass")),
             };
             let (id, metavar) =
                 context.fresh_witness_metavar(ty.clone(), origin.extent(), provenance.clone());
@@ -382,10 +381,12 @@ pub(super) fn elaborate_struct(
         Misaligned::Surplus { member } => {
             Error::hidden_member_without_slot(marks[member]).at_opt(written[member].2.extent())
         }
-        Misaligned::Mark { member, slot } => {
-            Error::hidden_member_out_of_order(marks[member], slots[slot], labels[slot])
-                .at_opt(written[member].2.extent())
-        }
+        Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
+            marks[member],
+            slots[slot],
+            field_telescope.hints()[slot],
+        )
+        .at_opt(written[member].2.extent()),
         Misaligned::Missing | Misaligned::Extra { .. } => {
             unreachable!("a literal's plain fields are counted before its entries are aligned")
         }
@@ -477,7 +478,7 @@ pub(super) fn resolve_struct_params(
             None if premise => {
                 let provenance = WitnessOrigin {
                     func: CalleeId::Function(Free::Global(*name)),
-                    binder: premise_label(premises),
+                    role: Some(premise_label(premises)),
                 };
                 let (id, metavar) =
                     context.fresh_witness_metavar(ty.clone(), term.extent(), provenance.clone());
@@ -485,7 +486,7 @@ pub(super) fn resolve_struct_params(
                 metavar
             }
             None => {
-                let binder = binder_name(hint);
+                let binder = hint.map(str::to_string);
                 let proposition = is_prop(context, &ty).probed()?.unwrap_or(false);
                 context
                     .fresh_metavar(
@@ -649,7 +650,7 @@ pub(super) fn elaborate_struct_spread(
             Misaligned::Mark { member, slot } => Error::hidden_member_out_of_order(
                 marks[member],
                 claimable_marks[slot],
-                labels[claimable[slot]],
+                field_telescope.hints()[claimable[slot]],
             )
             .at_opt(fields[1 + member].extent()),
             Misaligned::Missing | Misaligned::Extra { .. } => {
