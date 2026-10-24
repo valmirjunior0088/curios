@@ -121,7 +121,7 @@ fn unanswered(
 }
 
 /// What answers a program's rows natively ahead of the host: each module its packages declare for the rows it reaches, accepted against the hash its row pins and compiled here, where Cranelift is, to the machine code `run`, `test` and `compile` alike resolve it from. Shared by the three, so what a bundled executable carries and what a run links are one resolution, and a reached row nothing answers is refused before anything runs or is written.
-pub(crate) fn bindings_of(
+pub fn bindings_of(
     manifest: Option<&Path>,
     foreigns: &ForeignStore,
 ) -> Result<ForeignBindings, String> {
@@ -169,10 +169,7 @@ pub(crate) fn bindings_of(
 }
 
 /// What a browser links for a program's rows ahead of the host: each gateway its packages declare for the rows it reaches, accepted against the hash its row pins, with the declarations of the program it answers and every file its `static` table serves, read here once. A reached row nothing answers is refused before anything is written.
-pub(crate) fn linked_of(
-    manifest: Option<&Path>,
-    foreigns: &ForeignStore,
-) -> Result<Vec<Linked>, String> {
+pub fn linked_of(manifest: Option<&Path>, foreigns: &ForeignStore) -> Result<Vec<Linked>, String> {
     let reached = reached(manifest, foreigns, Target::Browser)?;
 
     let mut linked = Vec::new();

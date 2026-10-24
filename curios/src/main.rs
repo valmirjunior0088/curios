@@ -2,7 +2,7 @@
 //!
 //! **Neither subcommand compiles unconditionally.** A declared executable's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. A loose program has no project, so it consults nothing. `pipeline` owns that decision and everything downstream of it.
 //!
-//! Argument parsing lives in `cli`, what each command accepts and the admission of its argument in `contract`, compilation and payload reuse in `pipeline`, what answers a program's `foreign` rows in `link`, executable emission in `bundle`, a page's in `browser` and its serving in `serve` — this file only dispatches, mapping any error to stderr and a failure exit.
+//! Argument parsing lives in `cli`, what each command accepts and the admission of its argument in `contract`, compilation and payload reuse in `pipeline`, what a test run shows in `test_runner`, executable emission in `bundle`, a page's in `browser` and its serving in `serve` — this file only dispatches, mapping any error to stderr and a failure exit. What answers a program's `foreign` rows and what a test run compiles and runs are the library's (`curios::bindings_of`, `curios::test_subjects`).
 
 mod bundle;
 use bundle::*;
@@ -12,9 +12,6 @@ use cli::*;
 
 mod contract;
 use contract::*;
-
-mod link;
-use link::*;
 
 mod browser;
 use browser::*;
@@ -32,7 +29,7 @@ mod test_runner;
 use test_runner::*;
 
 use {
-    curios::optimize,
+    curios::{bindings_of, optimize},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost},

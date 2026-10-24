@@ -1,7 +1,8 @@
 //! A browser build: the page a program is built into, shared by `compile`, which writes it, and `run`, which serves it, so the two cannot drift apart; the directory it is written as; and the name its program runs by.
 
 use {
-    crate::{Failure, linked_of, payload_of},
+    crate::{Failure, payload_of},
+    curios::linked_of,
     curios_browser::page,
     curios_package::{Entry, Program, Target},
     curios_verdicts::Verdicts,

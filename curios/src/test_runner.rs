@@ -1,29 +1,21 @@
-//! `curios test`: every declared test of what the subject selects — for the governing package entire its library's and then each executable's, and for a library, a program or a loose file its own — each unit compiled as a test program, the synthesized `Test/main` tail in place of the authored one, and every registered test run in an instantiation of its own, `[argv0, index]` as the program's arguments. The guest prints its own outcome line and answers its verdict, which is read off what its entry hands back and never off an exit code; what only the compiler knows — the failing declaration's body as written, the count line — is printed here from the records the compile hands back.
-//!
-//! The store is consulted exactly as `run` consults it: one payload per declared subject, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records beside the machine code so a warm run recompiles nothing and still reports everything. A loose program has no store, so its tests are compiled every time.
+//! `curios test` as the command line shows it: the subjects a selection declares tests in, each compiled as a test program and every one of its tests run in an instantiation of its own, `[argv0, index]` as the program's arguments — what is compiled, filed and run being the library's (`curios::test_subjects`). The guest prints its own outcome line and answers its verdict, which is read off what its entry hands back and never off an exit code; what only the compiler knows — the failing declaration's body as written, the count line — is printed here from the records the compile hands back.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::{
-        Access, Heading, Line, Steps, Subject, bindings_of, drained, fact, note_unlinked, open,
-        processing, report, step, supplied,
+        Access, Heading, Line, Steps, Subject, drained, fact, note_unlinked, processing, report,
+        step,
     },
-    curios::{engine, to_cwasm},
-    curios_abi::ForeignStore,
-    curios_native::{Compiled, OsHost, TestEnd},
-    curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, order},
-    curios_pipeline::{Cache, CompileError, Fold, TestRecord},
-    curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
-    curios_utilities::{Qualifier, Source},
-    curios_verdicts::{Program, Verdicts},
-    curios_wonder::{STDIN_LABEL, STDIN_MOUNT},
-    std::{cmp::Reverse, path::Path, sync::Arc},
+    curios::{Named, TestSubject, test_subjects},
+    curios_native::{OsHost, TestEnd},
+    curios_package::Selection,
+    curios_pipeline::{CompileError, TestRecord},
+    curios_utilities::Qualifier,
+    curios_verdicts::Verdicts,
+    std::cmp::Reverse,
 };
-
-/// What stands in for a library's entry text when the payload is keyed. A library is compiled through [`Entrypoint::trivial`], which is built rather than parsed and so has no text of its own; the key has to be *something* constant, and naming it here says which constant and why. The library's own content reaches the address through the unit chain, so nothing depends on this being the program.
-const LIBRARY_KEY: &str = "<library>";
 
 /// The tally a `↳ Tested` step and the count line report, in the order they spell it.
 #[derive(Default)]
@@ -69,6 +61,9 @@ pub(crate) fn run_tests(
     access: Access,
     filters: &[String],
 ) -> Result<bool, CompileError> {
+    if let Selection::Program(program) = &selection {
+        note_unlinked(program, "is tested");
+    }
     let under = match filters.is_empty() {
         true => vec![Qualifier::empty()],
         false => filters.iter().map(|filter| prefix(filter)).collect(),
@@ -83,114 +78,20 @@ pub(crate) fn run_tests(
         refusal: None,
     };
 
-    match selection {
-        Selection::Entire(entire) => {
-            let governing = entire.governing;
-            let declared = Declared {
-                package: &governing.package.name,
-                root: &governing.root,
-                manifest: &governing.manifest,
-            };
-            // The same scope for every subject: the dependency graph, with the governing package's own library last — the order `wonder` walks and `run` compiles. The library is tested in its own run and built in every executable's, so each run reads the graph for itself.
-            let units = || order(&governing).map_err(CompileError::failure);
-
-            // The library first, when there is one, then every executable in declaration order — each a test program of its own, scheduling only its own unit's tests.
-            if governing.directory.join(LIBRARY).is_file() {
-                run.library(units()?, &declared)?;
-            }
-            let units = units()?;
-            for executable in &governing.package.executables {
-                let entry = governing.directory.join(&executable.path);
-                run.executable(&units, &entry, &executable.name, &declared)?;
-            }
-        }
-        Selection::Library(library) => {
-            let declared = Declared {
-                package: &library.package,
-                root: &library.root,
-                manifest: &library.manifest,
-            };
-            run.library(library.units, &declared)?;
-        }
-        Selection::Program(program) => match program.home() {
-            Some(home) => {
-                let package = home.package.clone();
-                let root = home.root.clone();
-                let manifest = home.manifest.clone();
-                let executable = home.executable.clone();
-                let Entry::File(entry) = program.entry().clone() else {
-                    unreachable!("a declared program is written in a file");
-                };
-                let declared = Declared {
-                    package: &package,
-                    root: &root,
-                    manifest: &manifest,
-                };
-                run.executable(&program.into_units(), &entry, &executable, &declared)?;
-            }
-            // A loose program is tested in the form it is written in: a module as a unit of its own, and a program as its entry. Standard input is drained once, before its form is known, since either reading needs the whole text.
-            None => match program.entry() {
-                Entry::File(path) => {
-                    note_unlinked(&program, "is tested");
-                    let subject = Subject::File(path.clone());
-                    match RootSource::loose_module(path, &Overlay::default()) {
-                        Some(unit) => run.loose_module(unit, path, &subject)?,
-                        None => run.loose_program(open(Some(path))?, path, &subject)?,
-                    }
-                }
-                Entry::Stdin => {
-                    let text = drained()?;
-                    // argv[0] is the entry as `run` passes it, which for standard input is the `-` that asked for it.
-                    let invoked = Path::new(Spelling::STDIN);
-                    match RootSource::labelled_module(STDIN_MOUNT, STDIN_LABEL, &text) {
-                        Some(unit) => run.loose_module(unit, invoked, &Subject::Stdin)?,
-                        None => run.loose_program(supplied(&text)?, invoked, &Subject::Stdin)?,
-                    }
-                }
-            },
-        },
+    for subject in test_subjects(selection, drained)? {
+        run.subject(&subject)?;
     }
 
     run.finish()
 }
 
-/// Where a declared subject's test payload is filed and whom it is reported under: the package it is filed under, the governing root its store sits beside, and the manifest a report names and its rows are linked from.
-struct Declared<'a> {
-    package: &'a str,
-    root: &'a Path,
-    manifest: &'a Path,
-}
-
-/// One subject's test program as it is compiled: the units it stands on, its entry with the loader that entry's `mod` lines resolve through, the text the entry was parsed from and the file it is. The subject is the one unit marked tested among them, the entry's own or the last of `units` ([`RootSource::tested`]), whose tests the program schedules.
-struct Tests<'a> {
-    units: &'a [RootSource],
-    entrypoint: &'a Entrypoint,
-    loader: &'a RootSource,
-    text: &'a str,
-    entry: &'a Path,
-    /// The prefixes the program schedules the tests at or under.
-    under: &'a [Qualifier],
-}
-
-/// Where a subject's test payload is filed and whom its compilation is reported under: the store, the package and the name reserved in it for the payload, the subject a progress line names and the manifest a report names.
-struct Filing<'a> {
-    store: Option<&'a Verdicts>,
-    package: &'a str,
-    reserved: &'a str,
-    subject: &'a Subject,
-    manifest: Option<&'a Path>,
-}
-
-impl<'a> Filing<'a> {
-    /// A loose subject's: filed nowhere and under no package, reported under `subject` alone.
-    fn nowhere(subject: &'a Subject) -> Self {
-        Self {
-            store: None,
-            package: "",
-            reserved: "",
-            subject,
-            manifest: None,
-        }
+/// What a subject is reported as.
+fn shown(named: &Named) -> Subject {
+    match named {
+        Named::Library(package) => Subject::package(package),
+        Named::Executable(name) => Subject::Executable(name.clone()),
+        Named::File(path) => Subject::File(path.clone()),
+        Named::Stdin => Subject::Stdin,
     }
 }
 
@@ -250,7 +151,7 @@ fn edits(path: &str, filter: &str) -> usize {
     row[filter.len()]
 }
 
-/// One `curios test` invocation as it goes: how each subject is compiled, which of its tests run, and what has been tallied.
+/// One `curios test` invocation as it goes: which of each subject's tests run, and what has been tallied.
 struct Run<'a> {
     budget: u64,
     access: Access,
@@ -266,173 +167,38 @@ struct Run<'a> {
 }
 
 impl Run<'_> {
-    /// A library's tests. It has no written entry, so it is compiled through the trivial one: the subject is the scope's final unit, compiled tested, and the tail replacing that entry schedules its tests. `LIBRARY_KEY` stands in for the entry text the payload is keyed on — a built entry has none, and the library's own content rides in through the unit chain regardless.
-    fn library(
-        &mut self,
-        mut units: Vec<RootSource>,
-        declared: &Declared<'_>,
-    ) -> Result<(), CompileError> {
-        if let Some(library) = units.pop() {
-            units.push(library.tested());
+    /// One subject: its test program compiled or reused, narrated as `run` narrates a compile, and every test it schedules run, one instantiation each, between a `↳ Testing` step and a `↳ Tested` step carrying the subject's tally, which is folded into the run's. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
+    fn subject(&mut self, subject: &TestSubject) -> Result<(), CompileError> {
+        let shown = shown(subject.named());
+        let store = subject.filed(|root| self.access.filed(root));
+        processing(&shown, subject.manifest());
+
+        // The program's own step lasts until its machine code exists: a test program is the whole program the units link into, and its back end is most of what a cold run takes.
+        let mut steps = Steps::default();
+        let tested = subject.compile(self.budget, store.as_ref(), &self.under, |progress| {
+            report(&mut steps, &shown, progress);
+        });
+        match &tested {
+            Ok(tested) if tested.reused() => {
+                Line::nested(Heading::Compiling, &shown).outcome("reused");
+                eprintln!();
+            }
+            Ok(_) => steps.finish(),
+            Err(_) => steps.interrupted(),
         }
-        let library = declared.manifest.with_file_name(LIBRARY);
-        let subject = Subject::package(declared.package);
-        // One store handle per subject, as `run` holds one per invocation: a handle's placed chain is one compilation's, and a second fold on the same handle would carry the first's placements into the chain the second payload is filed against — one entry too long, which the store withholds without a word.
-        let store = self.access.filed(declared.root);
-        let tested = tests_payload(
-            self.budget,
-            Tests {
-                units: &units,
-                entrypoint: &Entrypoint::trivial(),
-                loader: &RootSource::none(),
-                text: LIBRARY_KEY,
-                entry: &library,
-                under: &self.under,
-            },
-            Filing {
-                store: store.as_ref(),
-                package: declared.package,
-                reserved: "tests/",
-                subject: &subject,
-                manifest: Some(declared.manifest),
-            },
-        )?;
+        let tested = tested?;
         self.refused(store.as_ref());
+        self.declared.extend(tested.declared().iter().copied());
 
-        self.selected(tested, &library, &subject, Some(declared.manifest))
-    }
-
-    /// An executable's tests: its entry, its own declarations compiled tested, with the tail scheduling their tests.
-    fn executable(
-        &mut self,
-        units: &[RootSource],
-        entry: &Path,
-        name: &str,
-        declared: &Declared<'_>,
-    ) -> Result<(), CompileError> {
-        let subject = Subject::Executable(name.to_string());
-        // The executable's own name, under which `run` files the unit of its declarations too: the tests' payload is another product, and the declarations are the same unit.
-        let store = self
-            .access
-            .filed(declared.root)
-            .map(|store| store.executing(declared.package, name));
-        let (entrypoint, loader, source) = open(Some(entry))?;
-        let tested = tests_payload(
-            self.budget,
-            Tests {
-                units,
-                entrypoint: &entrypoint,
-                loader: &loader.tested(),
-                text: &source.text,
-                entry,
-                under: &self.under,
-            },
-            Filing {
-                store: store.as_ref(),
-                package: declared.package,
-                reserved: &format!("tests/{name}"),
-                subject: &subject,
-                manifest: Some(declared.manifest),
-            },
-        )?;
-        self.refused(store.as_ref());
-
-        self.selected(tested, entry, &subject, Some(declared.manifest))
-    }
-
-    /// A loose module's tests: a file, or standard input, mounted as a unit of its own and compiled as a library is, against the prelude alone, filed nowhere. `invoked` is the entry as `run` would pass it.
-    fn loose_module(
-        &mut self,
-        unit: RootSource,
-        invoked: &Path,
-        subject: &Subject,
-    ) -> Result<(), CompileError> {
-        let tested = tests_payload(
-            self.budget,
-            Tests {
-                units: &[unit.tested()],
-                entrypoint: &Entrypoint::trivial(),
-                loader: &RootSource::none(),
-                text: LIBRARY_KEY,
-                entry: invoked,
-                under: &self.under,
-            },
-            Filing::nowhere(subject),
-        )?;
-
-        // A loose subject has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
-        self.selected(tested, invoked, subject, None)
-    }
-
-    /// A loose program's tests: its entry, opened from a file or supplied from standard input, compiled against the prelude alone, filed nowhere. `invoked` is the entry as `run` passes it.
-    fn loose_program(
-        &mut self,
-        (entrypoint, loader, source): (Entrypoint, RootSource, Arc<Source>),
-        invoked: &Path,
-        subject: &Subject,
-    ) -> Result<(), CompileError> {
-        let tested = tests_payload(
-            self.budget,
-            Tests {
-                units: &[],
-                entrypoint: &entrypoint,
-                loader: &loader.tested(),
-                text: &source.text,
-                entry: invoked,
-                under: &self.under,
-            },
-            Filing::nowhere(subject),
-        )?;
-
-        // A loose subject has no package, so nothing declares what would answer a `foreign` of its own; `bindings_of` refuses one it reaches, saying so.
-        self.selected(tested, invoked, subject, None)
-    }
-
-    /// Keep the first reason a store refused filing.
-    fn refused(&mut self, store: Option<&Verdicts>) {
-        self.refusal = self
-            .refusal
-            .take()
-            .or_else(|| store.and_then(Verdicts::refused));
-    }
-
-    /// Run every test one compiled subject schedules, one instantiation each, between a `↳ Testing` step and a `↳ Tested` step carrying the unit's tally, which is folded into the run's; every test it declares is kept for a filter meeting none to be answered with. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
-    fn selected(
-        &mut self,
-        tested: Tested,
-        entry: &Path,
-        subject: &Subject,
-        manifest: Option<&Path>,
-    ) -> Result<(), CompileError> {
-        let Tested {
-            records,
-            declared,
-            built,
-        } = tested;
-        self.declared.extend(declared);
-
-        // A unit with nothing to run reports its compile and nothing more: a tally of zeros would only restate the absence of lines above it.
-        let Some((cwasm, foreigns)) = built else {
+        // A subject with nothing to run reports its compile and nothing more: a tally of zeros would only restate the absence of lines above it.
+        let Some(run) = tested.loaded(subject).map_err(CompileError::failure)? else {
             return Ok(());
         };
 
-        // SAFETY: the payload was precompiled in this process, or read back from the project's own store where a compilation of this compiler filed it.
-        let compiled = unsafe { Compiled::deserialize(&cwasm, foreigns.clone()) }
-            .map_err(CompileError::failure)?;
-
-        step(Heading::Testing, subject);
-        // argv[0] is the entry as `run` passes it: the path's bytes, since `/std/Process/args` promises opaque byte strings.
-        let argv0 = entry.as_os_str().as_encoded_bytes().to_vec();
+        step(Heading::Testing, &shown);
         let mut unit = Totals::default();
-
-        // Resolved once for the unit: its manifests are walked and its modules compiled here, and each test below is handed the resolution. A run instantiates a module in its own store, so every test still meets an instance of its own, which keeps one test's marks in a module's memory out of the next one's.
-        let bindings = bindings_of(manifest, &foreigns).map_err(CompileError::failure)?;
-
-        // The index is the test's place in the schedule, which holds the selected tests alone.
-        for (index, record) in records.iter().enumerate() {
-            let arguments = vec![argv0.clone(), index.to_string().into_bytes()];
-
-            match compiled.run_test(OsHost::with_args(arguments), bindings.clone()) {
+        for (index, record) in tested.records().iter().enumerate() {
+            match run.run(index, OsHost::with_args) {
                 // The guest printed `path: passed` and answered that the test held.
                 Ok(TestEnd::Answered(true)) => unit.passed += 1,
                 // The guest printed `path: failed` and its report, and answered that the test did not hold; the body as written is what only the records know.
@@ -457,12 +223,20 @@ impl Run<'_> {
             }
         }
 
-        let mut line = Line::nested(Heading::Tested, subject);
+        let mut line = Line::nested(Heading::Tested, &shown);
         line.outcome(&unit.line());
         eprintln!();
         self.totals.add(&unit);
 
         Ok(())
+    }
+
+    /// Keep the first reason a store refused filing.
+    fn refused(&mut self, store: Option<&Verdicts>) {
+        self.refusal = self
+            .refusal
+            .take()
+            .or_else(|| store.and_then(Verdicts::refused));
     }
 
     /// The end of the run: a store's refusal said once, each filter that matched nothing refused by name, and the count line.
@@ -493,159 +267,9 @@ impl Run<'_> {
     }
 }
 
-/// One subject compiled as a test program: the records of the tests it schedules, every test it declares, and the machine code with the rows it imports — `None` where it schedules none.
-struct Tested {
-    records: Vec<TestRecord>,
-    declared: Vec<Qualifier>,
-    built: Option<(Vec<u8>, ForeignStore)>,
-}
-
-/// One subject compiled as a test program under the run's selection — from the filing's store when nothing it was made from has changed and the selection is the one it was filed under, and compiled and filed there otherwise. Without a store, compiled and filed nowhere. A selection meeting none of the subject's tests is filed too, with no machine code, so a second run under it reuses every subject.
-fn tests_payload(
-    budget: u64,
-    tests: Tests<'_>,
-    filing: Filing<'_>,
-) -> Result<Tested, CompileError> {
-    let Tests {
-        units,
-        entrypoint,
-        loader,
-        text,
-        entry,
-        under,
-    } = tests;
-    let Filing {
-        store,
-        package,
-        reserved,
-        subject,
-        manifest,
-    } = filing;
-    let sources = units.iter().map(UnitSource::mounted).collect::<Vec<_>>();
-    let program = Program {
-        package,
-        executable: reserved,
-        entry,
-        text,
-        loader,
-        tests: Some(under),
-    };
-
-    if let Some((bytes, foreigns)) = store
-        .and_then(|store| store.payload_get(&program, &sources, Runs::Native { engine: engine() }))
-        && let Some(tested) = decode(&bytes, foreigns)
-    {
-        processing(subject, manifest);
-        let mut line = Line::nested(Heading::Compiling, subject);
-        line.outcome("reused");
-        eprintln!();
-
-        return Ok(tested);
-    }
-
-    processing(subject, manifest);
-    let mut steps = Steps::default();
-    // The program's own step lasts until its machine code exists: a test program is the whole program the units link into, and its back end is most of what a cold run takes.
-    let compiled = Fold::new(budget, units, store.map(|store| store as &dyn Cache))
-        .tests(
-            entrypoint,
-            loader,
-            under.to_vec(),
-            |_| {},
-            |progress| {
-                report(&mut steps, subject, progress);
-            },
-        )
-        .and_then(|program| {
-            let built = program
-                .compiled
-                .map(|(module, foreigns)| to_cwasm(&module).map(|cwasm| (cwasm, foreigns)))
-                .transpose()
-                .map_err(CompileError::failure)?;
-
-            Ok(Tested {
-                records: program.records,
-                declared: program.declared,
-                built,
-            })
-        });
-    match compiled.is_ok() {
-        true => steps.finish(),
-        false => steps.interrupted(),
-    }
-    let tested = compiled?;
-
-    if let Some(store) = store
-        && let Some(bytes) = encode(
-            &tested.records,
-            &tested.declared,
-            tested.built.as_ref().map(|(cwasm, _)| cwasm.as_slice()),
-        )
-    {
-        store.payload_put(
-            &program,
-            &sources,
-            bytes.as_ref(),
-            tested
-                .built
-                .as_ref()
-                .map_or(&ForeignStore::default(), |(_, foreigns)| foreigns),
-            Runs::Native { engine: engine() },
-        );
-    }
-
-    Ok(tested)
-}
-
 /// The failing declaration's body as written, indented beneath the report — absent when no span survived to slice it from.
 fn body(record: &TestRecord) {
     for line in record.body.lines() {
         println!("    {line}");
     }
-}
-
-/// What the store files for one test program: its records as `(path, body)` pairs and every test it declares by its path's segments, beside the machine code — none where it schedules no test — one archive as every other artifact in the store is. A corrupt or foreign payload fails to decode and is a miss, never an error.
-#[curios_archive::archived]
-struct TestPayload {
-    records: Vec<(String, String)>,
-    declared: Vec<Vec<String>>,
-    cwasm: Option<Vec<u8>>,
-}
-
-/// `records`, `declared` and `cwasm` as the bytes the store files — `None` when they will not serialize, on which the record is withheld exactly as a unit's is.
-fn encode(
-    records: &[TestRecord],
-    declared: &[Qualifier],
-    cwasm: Option<&[u8]>,
-) -> Option<curios_archive::Serialized> {
-    let payload = TestPayload {
-        records: records
-            .iter()
-            .map(|record| (record.path.clone(), record.body.clone()))
-            .collect(),
-        declared: declared
-            .iter()
-            .map(|test| test.segments().to_vec())
-            .collect(),
-        cwasm: cwasm.map(<[u8]>::to_vec),
-    };
-
-    curios_archive::to_bytes(&payload).ok()
-}
-
-/// The inverse of [`encode`], with the rows the store filed beside the bytes, `None` on any malformation.
-fn decode(bytes: &[u8], foreigns: ForeignStore) -> Option<Tested> {
-    let payload = curios_archive::from_bytes::<TestPayload>(bytes).ok()?;
-    let records = payload
-        .records
-        .into_iter()
-        .map(|(path, body)| TestRecord { path, body })
-        .collect();
-    let declared = payload.declared.into_iter().map(Qualifier::from).collect();
-
-    Some(Tested {
-        records,
-        declared,
-        built: payload.cwasm.map(|cwasm| (cwasm, foreigns)),
-    })
 }

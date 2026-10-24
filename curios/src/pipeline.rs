@@ -4,7 +4,7 @@
 
 use {
     crate::{Heading, Line, Subject, fact, note, processing},
-    curios::{engine, optimize, to_cwasm},
+    curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
     curios_document::Documentation,
     curios_package::{Entry, Program, Runs, Target},
@@ -13,7 +13,6 @@ use {
     curios_utilities::Source,
     curios_verdicts::Verdicts,
     curios_wasm::Module,
-    curios_wonder::{STDIN_LABEL, written_as_a_module},
     std::{fs, io, path::Path, sync::Arc},
 };
 
@@ -167,33 +166,16 @@ pub(crate) fn subject_of(program: &Program) -> Subject {
 pub(crate) fn open(
     entry: Option<&Path>,
 ) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
-    let Some(path) = entry else {
-        return supplied(&drained()?);
-    };
-
-    Entrypoint::opened(path).map_err(|error| match fs::read_to_string(path) {
-        // A text written as a module fails the program grammar at its end, where it was never meant to hold a term: say what it is rather than what the grammar expected there.
-        Ok(text) if Form::of(path, &text) == Form::Module => {
-            CompileError::failure(written_as_a_module(path.display()))
-        }
-        _ => CompileError::Failure(vec![error.report()]),
-    })
+    match entry {
+        Some(path) => opened(path),
+        None => supplied(&drained()?),
+    }
 }
 
 /// Standard input, drained to end — once, since a second read finds nothing.
 pub(crate) fn drained() -> Result<String, CompileError> {
     io::read_to_string(io::stdin())
         .map_err(|error| CompileError::failure(format!("failed to read standard input: {error}")))
-}
-
-/// The program `text`, arrived on standard input, parsed — and refused as [`open`] refuses a file when it is written as a module.
-pub(crate) fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
-    Entrypoint::supplied(STDIN_LABEL, text).map_err(|error| {
-        match Form::of(Path::new(STDIN_LABEL), text) {
-            Form::Module => CompileError::failure(written_as_a_module(STDIN_LABEL)),
-            Form::Program => CompileError::Failure(vec![error.report()]),
-        }
-    })
 }
 
 /// Compile `entrypoint` against `units` in the order given, and make the payload `finish` makes of the module, narrating each step under a header that names `manifest` when it is not where the invocation stands.
