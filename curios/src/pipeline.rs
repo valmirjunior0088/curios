@@ -98,21 +98,20 @@ pub(crate) fn payload_of(
     }
 
     let compiled = compile_entry(
-        budget,
-        &units,
+        Fold::new(
+            budget,
+            &units,
+            cache.as_ref().map(|cache| cache as &dyn Cache),
+        ),
         &entrypoint,
         &loader,
         &subject,
         manifest.as_deref(),
-        cache.as_ref().map(|cache| cache as &dyn Cache),
-    )
-    .and_then(|(module, foreigns)| {
-        match target {
-            Target::Native => to_cwasm(&module).map_err(CompileError::failure),
-            Target::Browser => Ok(optimize(&module, false, |_| {})),
-        }
-        .map(|payload| (payload, foreigns))
-    });
+        |module| match target {
+            Target::Native => to_cwasm(module).map_err(CompileError::failure),
+            Target::Browser => Ok(optimize(module, false, |_| {})),
+        },
+    );
 
     if let (Ok((payload, foreigns)), Some((cache, program))) = (&compiled, &filed) {
         cache.payload_put(program, &sources, payload, foreigns, runs);
@@ -196,64 +195,86 @@ pub(crate) fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source
     })
 }
 
-/// Compile `entrypoint` against `units` in the order given, narrating each step under a header that names `manifest` when it is not where the invocation stands.
-pub(crate) fn compile_entry(
-    budget: u64,
-    units: &[RootSource],
+/// Compile `entrypoint` against `units` in the order given, and make the payload `finish` makes of the module, narrating each step under a header that names `manifest` when it is not where the invocation stands.
+///
+/// The program's own step lasts until `finish` returns, so what it reports is what the payload took: the program the units link into, compiled to what a run executes.
+pub(crate) fn compile_entry<P>(
+    fold: Fold<'_>,
     entrypoint: &Entrypoint,
     loader: &RootSource,
     subject: &Subject,
     manifest: Option<&Path>,
-    cache: Option<&dyn Cache>,
-) -> Result<(Module, ForeignStore), CompileError> {
-    // Every subject heads a group, since a compile and a handover always follow it. What the scope decides is whether the entry's own compile is a step of its own: with units to fold, those are the steps and the entry finishes among them unannounced; with none, the entry's compile is the one step there is.
-    let has_units = !units.is_empty();
+    finish: impl FnOnce(&Module) -> Result<P, CompileError>,
+) -> Result<(P, ForeignStore), CompileError> {
     processing(subject, manifest);
 
     // The entry is the one subject the fold cannot name — it owns the empty prefix — so it is reported under the name the caller was asked for.
-    let mut line: Option<Line> = None;
+    let mut steps = Steps::default();
 
-    let compiled = Fold::new(budget, units, cache).compile(
-        entrypoint,
-        loader,
-        |_| {},
-        |progress| report(&mut line, subject, has_units, progress),
-    );
+    let compiled = fold
+        .compile(
+            entrypoint,
+            loader,
+            |_| {},
+            |progress| {
+                report(&mut steps, subject, progress);
+            },
+        )
+        .and_then(|(module, foreigns)| finish(&module).map(|payload| (payload, foreigns)));
 
     // A refusal is not a compiler dying mid-operation, which is the one case an unterminated line is left to mean: this one finished, and is about to say why. Closing the innermost line here is what lets the report below start at column zero, as every line of it after the first already does — and as the same `Report` renders through `wonder`.
-    if compiled.is_err() && line.is_some() {
-        eprintln!();
+    match compiled.is_ok() {
+        true => steps.finish(),
+        false => steps.interrupted(),
     }
 
     compiled
 }
 
-/// Fold one [`Progress`] event onto the open status line, opening and closing lines as subjects begin and end.
+/// The status lines a compilation's [`Progress`] opens: the unit being compiled, and the subject's own payload, which stays open past the fold until its caller has made what the payload is compiled to.
 ///
-/// The line outlives each event, which is why it is threaded rather than owned here: `↳ Compiling /hello` and the `; 1.4s` that completes it are two separate writes to one line.
-pub(crate) fn report(
-    line: &mut Option<Line>,
-    subject: &Subject,
-    has_units: bool,
-    progress: Progress<'_>,
-) {
+/// The lines outlive each event, which is why they are threaded rather than owned by [`report`]: `↳ Compiling /hello` and the `; 1.4s` that completes it are two separate writes to one line.
+#[derive(Default)]
+pub(crate) struct Steps {
+    unit: Option<Line>,
+    payload: Option<Line>,
+}
+
+impl Steps {
+    /// Close the payload's line with what it took, once the payload exists: the program's own compile through to the machine code a run executes, which is where a test program's time goes.
+    pub(crate) fn finish(&mut self) {
+        if let Some(mut line) = self.payload.take() {
+            line.done();
+            eprintln!();
+        }
+    }
+
+    /// End whichever line a refusal interrupted, so the report below starts at column zero.
+    pub(crate) fn interrupted(&mut self) {
+        if self.unit.take().or(self.payload.take()).is_some() {
+            eprintln!();
+        }
+    }
+}
+
+/// Fold one [`Progress`] event onto `steps`, opening and closing lines as subjects begin and end.
+pub(crate) fn report(steps: &mut Steps, subject: &Subject, progress: Progress<'_>) {
     match progress {
         // A recompile over a baseline reads as a compile: what the line reports is that the unit is being worked on and how long it took, and the store this product hands the fold never offers a baseline anyway.
         Progress::Compiling(prefix) | Progress::Recompiling(prefix) => {
-            *line = Some(Line::nested(Heading::Compiling, &Subject::Mounted(*prefix)));
+            steps.unit = Some(Line::nested(Heading::Compiling, &Subject::Mounted(*prefix)));
         }
-        // The entry program *is* the subject the header named, so among unit steps its compile adds none of its own. With no units there is no other step, and this is it.
+        // The entry program is the subject the header named, and its compile is a step of its own after any unit's: it compiles the program the units link into, which a store's reuse reports as `↳ Compiling <subject>; reused` in the same place.
         Progress::Entry => {
-            if !has_units {
-                *line = Some(Line::nested(Heading::Compiling, subject));
-            }
+            steps.payload = Some(Line::nested(Heading::Compiling, subject));
         }
         Progress::Reused(prefix) => {
             Line::nested(Heading::Compiling, &Subject::Mounted(*prefix)).outcome("reused");
             eprintln!();
         }
+        // A unit's compile ends with the fold's step; the payload's ends where its caller finishes it.
         Progress::Compiled => {
-            if let Some(mut open) = line.take() {
+            if let Some(mut open) = steps.unit.take() {
                 open.done();
                 eprintln!();
             }

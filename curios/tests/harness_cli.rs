@@ -129,16 +129,18 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "3 passed, 1 failed, 1 trapped, 1 exited\n",
         ],
     );
-    // The library is taken on, compiled, tested and tallied; the executable, which declares no tests, is taken on and compiled and nothing more.
+    // The library is taken on, its unit and then its test program compiled, tested and tallied; the executable, which declares no tests, is taken on and compiled and nothing more. Each program's own step follows the units it links: it is timed through to the machine code a run executes.
     in_order(
         &stderr(&output),
         &[
             "Processing     /app\n",
             "↳ Compiling    /app; ",
+            "↳ Compiling    /app; ",
             "↳ Testing      /app\n",
             "↳ Tested       /app; 3 passed, 1 failed, 1 trapped, 1 exited\n",
             "Processing     app\n",
             "↳ Compiling    /app; ",
+            "↳ Compiling    app; ",
         ],
     );
     assert!(
@@ -369,12 +371,13 @@ fn run_neither_runs_nor_reports_a_test() {
     let output = curios(&root, &["run"]);
 
     assert_eq!(stdout(&output), "ran\n", "stderr: {}", stderr(&output));
-    // The target is taken on, its library compiled as a step, and the handover is the last step before the program's own output.
+    // The target is taken on, its library compiled as a step and the program as the next, and the handover is the last step before the program's own output.
     in_order(
         &stderr(&output),
         &[
             "Processing     app\n",
             "↳ Compiling    /app; ",
+            "↳ Compiling    app; ",
             "↳ Running      app\n",
         ],
     );

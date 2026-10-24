@@ -7,7 +7,7 @@ mod tests;
 
 use {
     crate::{
-        Access, Heading, Line, Subject, bindings_of, drained, fact, note_unlinked, open,
+        Access, Heading, Line, Steps, Subject, bindings_of, drained, fact, note_unlinked, open,
         processing, report, step, supplied,
     },
     curios::{engine, to_cwasm},
@@ -544,19 +544,27 @@ fn tests_payload(
     }
 
     processing(subject, manifest);
-    let mut line: Option<Line> = None;
-    let compiled = Fold::new(budget, units, store.map(|store| store as &dyn Cache)).tests(
-        entrypoint,
-        loader,
-        tail,
-        |_| {},
-        |progress| report(&mut line, subject, !units.is_empty(), progress),
-    );
-    if compiled.is_err() && line.is_some() {
-        eprintln!();
+    let mut steps = Steps::default();
+    // The program's own step lasts until its machine code exists: a test program is the whole program the units link into, and its back end is most of what a cold run takes.
+    let compiled = Fold::new(budget, units, store.map(|store| store as &dyn Cache))
+        .tests(
+            entrypoint,
+            loader,
+            tail,
+            |_| {},
+            |progress| {
+                report(&mut steps, subject, progress);
+            },
+        )
+        .and_then(|(module, foreigns, records)| {
+            let cwasm = to_cwasm(&module).map_err(CompileError::failure)?;
+            Ok((records, cwasm, foreigns))
+        });
+    match compiled.is_ok() {
+        true => steps.finish(),
+        false => steps.interrupted(),
     }
-    let (module, foreigns, records) = compiled?;
-    let cwasm = to_cwasm(&module).map_err(CompileError::failure)?;
+    let (records, cwasm, foreigns) = compiled?;
 
     if let Some(store) = store
         && let Some(bytes) = encode(&records, &cwasm)
