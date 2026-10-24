@@ -45,11 +45,11 @@ use {
     curios_analysis::{Classes, foreign_congruence},
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
-        Frees, Func, FuncType, Global, InductDecl, InductInstance, InductType, Instance,
-        InstanceHead, Intrinsic, Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarId,
-        MetavarOrigin, Probe, Proj, Quality, Rec, ReduceError, Scope, Step, Struct, StructType,
-        Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, Universes, Variance, Variant,
+        Frees, Func, FuncType, Global, InductInstance, InductType, Instance, InstanceHead,
+        Intrinsic, Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin,
+        Probe, Proj, Quality, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseError, Universes, Variance, Variant,
     },
     curios_utilities::{Keyed, Plicity, recurse},
     std::{
@@ -1225,16 +1225,11 @@ impl Convert {
             return Ok(false);
         }
 
-        // Recover the declared types from the registry so each argument compares at its own type rather than a flat `Type`. When an index is a proof, that type is a proposition and irrelevance applies — two instances of a family indexed by a proof convert whatever the proofs. Falls back to `Type` if the inductive is somehow absent or arity-mismatched.
-        let arity = match context.induct_decl(&this.name).cloned() {
-            Some(induct_decl) => Some(instantiate_bound_at(
-                context,
-                &induct_decl.universe_context,
-                &induct_decl.arity,
-                &this.universes,
-            )?),
-            None => None,
-        };
+        // Recover the declared types from the registry so each argument compares at its own type rather than a flat `Type`. When an index is a proof, that type is a proposition and irrelevance applies — two instances of a family indexed by a proof convert whatever the proofs. Falls back to `Type` if the inductive is somehow absent or arity-mismatched. The family's arity alone is read, at this side's universes.
+        let arity = context
+            .induct_facet(&this.name, &this.universes, |at| at.arity())
+            .transpose()
+            .map_err(ReduceError::Universe)?;
         // The parameters against the arity, then the indices against the telescope it terminates in — the same order the arguments are compared in below.
         let arg_types = match arity {
             Some(arity) if arity.len() == this.params.len() => {
@@ -1312,25 +1307,14 @@ impl Convert {
             return Ok(false);
         }
 
-        // Recover the payload types from the constructor's registry telescope (instantiated at this side's parameters) so each payload field compares at its own type — η and proof irrelevance fire per field, instead of a structural compare at `Type`. Same recovery `erase` uses; falls back to `Type` if the inductive is somehow absent.
-        let telescope = match context.induct_decl(&this.name).cloned() {
-            Some(induct_decl) => {
-                let constructor = induct_decl.constructor(&this.tag);
-                match constructor {
-                    Some(constructor) => Some(
-                        instantiate_bound_at(
-                            context,
-                            &induct_decl.universe_context,
-                            &constructor.telescope,
-                            &this.universes,
-                        )?
-                        .open_params(&this.params),
-                    ),
-                    None => None,
-                }
-            }
-            None => None,
-        };
+        // Recover the payload types from the constructor's registry telescope (instantiated at this side's parameters) so each payload field compares at its own type — η and proof irrelevance fire per field, instead of a structural compare at `Type`. Same recovery `erase` uses; falls back to `Type` if the inductive is somehow absent. That one constructor of the family is read, at this side's universes.
+        let telescope = context
+            .induct_facet(&this.name, &this.universes, |at| {
+                at.payload(&this.tag, &this.params).transpose()
+            })
+            .transpose()
+            .map_err(ReduceError::Universe)?
+            .flatten();
 
         for (a, b) in this.params.into_iter().zip(that.params) {
             self.enqueue(Term::type_ground(), a, b);
@@ -1520,8 +1504,7 @@ impl Convert {
                         universes,
                         params,
                         ..
-                    })) => declared_at(context, name, universes, params)?
-                        .map(|declaration| (declaration, params.clone())),
+                    })) => Some((name, universes, params)),
                     _ => None,
                 };
 
@@ -1532,12 +1515,17 @@ impl Convert {
                         return Ok(false);
                     }
 
-                    let signature = family
-                        .as_ref()
-                        .and_then(|(declaration, params)| {
-                            declaration.instantiate(&this_atom, params)
-                        })
-                        .filter(|signature| signature.len() == this_scope.arity());
+                    // Each arm's one constructor of the family, at the scrutinee's universes and parameters.
+                    let signature = match family {
+                        Some((name, universes, params)) => {
+                            declared_facet(context, name, universes, params, |at| {
+                                at.payload(&this_atom, params).transpose()
+                            })?
+                            .flatten()
+                        }
+                        None => None,
+                    }
+                    .filter(|signature| signature.len() == this_scope.arity());
                     let binders = match signature {
                         Some(signature) => self.open_telescope(context, &signature)?.0,
                         None => (0..this_scope.arity())
@@ -3552,7 +3540,7 @@ fn looked_up(
     )))
 }
 
-/// What `read` takes of `name`'s declaration at one occurrence's universes, where the occurrence states as many parameters as it declares: one facet instantiated, as [`declared_at`] instantiates them all.
+/// What `read` takes of `name`'s declaration at one occurrence's universes, where the occurrence states as many parameters as it declares: one facet instantiated, and no other.
 fn declared_facet<T>(
     context: &mut Context,
     name: &Global,
@@ -3570,26 +3558,6 @@ fn declared_facet<T>(
     context
         .induct_facet(name, universes, read)
         .transpose()
-        .map_err(ReduceError::Universe)
-}
-
-/// `name`'s declaration at one occurrence's universes, where the occurrence states as many parameters as it declares.
-fn declared_at(
-    context: &mut Context,
-    name: &Global,
-    universes: &Universes,
-    params: &[Term],
-) -> Result<Option<InductDecl>, ReduceError> {
-    let Some(declaration) = context.induct_decl(name).cloned() else {
-        return Ok(None);
-    };
-    if declaration.param_count() != params.len() {
-        return Ok(None);
-    }
-
-    context
-        .instantiate_induct_decl_at(&declaration, universes)
-        .map(Some)
         .map_err(ReduceError::Universe)
 }
 

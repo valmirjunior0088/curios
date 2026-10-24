@@ -183,6 +183,7 @@ fn base(growth: Growth) -> usize {
         | Growth::Constructors
         | Growth::Values
         | Growth::DefaultedMatches
+        | Growth::ComparedConstructions
         | Growth::Methods => 250,
         Growth::List | Growth::Parentheses | Growth::Arrow => 1000,
         Growth::StringLiteral => 2000,

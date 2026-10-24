@@ -53,6 +53,8 @@ pub(super) enum Growth {
     Values,
     /// An inductive type of so many constructors and so many functions, each matching it with one arm and a catch-all.
     DefaultedMatches,
+    /// A parameterized inductive type of so many constructors and so many proofs, each that two constructions of its last constructor are one.
+    ComparedConstructions,
     /// A concept of so many methods, each a wrapper of its own, satisfied once and called once.
     Methods,
     /// Calls of an identity function, each the argument of the next.
@@ -81,7 +83,7 @@ pub(super) enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub(super) const ALL: [Growth; 31] = [
+    pub(super) const ALL: [Growth; 32] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -101,6 +103,7 @@ impl Growth {
         Growth::Constructors,
         Growth::Values,
         Growth::DefaultedMatches,
+        Growth::ComparedConstructions,
         Growth::Methods,
         Growth::Calls,
         Growth::Parentheses,
@@ -300,6 +303,22 @@ pub(super) fn grown(growth: Growth, size: usize) -> String {
                 .collect::<String>();
             program(
                 &format!("induct K: Type\n{constructors}end\n\n{matches}"),
+                "a",
+            )
+        }
+        Growth::ComparedConstructions => {
+            let constructors = (0..size)
+                .map(|index| format!("| k{index}(A)\n"))
+                .collect::<String>();
+            let proofs = (0..size)
+                .map(|index| {
+                    format!(
+                        "let e{index}: /std/Eq()(W/k{last}(Nat/add({index}, 1)), W/k{last}({index} + 1)) = /std/Eq/refl();\n"
+                    )
+                })
+                .collect::<String>();
+            program(
+                &format!("induct W(A: Type): Type\n{constructors}end\n\n{proofs}"),
                 "a",
             )
         }
