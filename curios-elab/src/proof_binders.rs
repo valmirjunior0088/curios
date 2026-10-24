@@ -7,8 +7,11 @@
 //! **A name the item declares is the one binder its terms do not hold.** It is asked here with them, at its declared type, and the answer is kept on its definition ([`curios_core::Definition::proof`]): a proof a declaration wrote is bound, from its publication on, to a body no judgment unfolds it to. That mark does decide a judgment, which a binder's never does, since a name that does not unfold is a constant to conversion. It refuses nothing a body unfolded would admit, because conversion holds two proofs of one proposition equal before it reduces either.
 
 use {
-    crate::{Context, Error, Opened, Published, is_proof_in},
-    curios_core::{Advance, Bound, DefinitionKind, Free, Item, ProofBinders, Telescope, Term},
+    crate::{Context, Error, Opened, Published, Sort, is_proof_in},
+    curios_core::{
+        Advance, Bound, Definition, DefinitionKind, Free, Item, ProofBinders, Quality, Subterm,
+        Telescope, Term,
+    },
 };
 
 /// The marking walk's questions, answered by the engine's rule under the binders the walk has entered.
@@ -80,6 +83,26 @@ fn proves(context: &mut Context, kind: &DefinitionKind, type_: &Term) -> Result<
         && is_proof_in(context, &mut Opened::default(), type_)?)
 }
 
+/// The sort `definition`'s value inhabits, where it takes no parameter and its type is written as a sort ([`curios_core::Definition::value_sort`]): its value is then a type, and this is that type's own sort, read off the value. `None` where the sort's quality is one nothing has decided, or it names a universe nothing has solved.
+///
+/// The type is read as written, never reduced: every definition is asked, and running each type to learn it is no sort would spend on all of them what only a type alias reads back.
+fn value_sort(context: &mut Context, definition: &Definition) -> Result<Option<Term>, Error> {
+    if definition.proof || !matches!(&*definition.type_, Subterm::Sort(..)) {
+        return Ok(None);
+    }
+    let sort = Sort::of(context, &definition.body).map_err(|error| {
+        Error::from_reduce(error, |refusal| {
+            Error::reduce_exhausted(definition.body.clone(), refusal)
+        })
+    })?;
+    if matches!(sort.quality, Quality::Meta(_)) {
+        return Ok(None);
+    }
+    let sort = sort.term();
+
+    Ok((!sort.has_universe_meta()).then_some(sort))
+}
+
 /// State, on every binder of `published`, whether it binds a proof: each function literal's and each `let`'s in the item's terms, each constructor's payloads in the registry entries the item declares, which an arm then binds under, and each name the item declares, on its definition.
 ///
 /// **Before the item is published**, so no declaration reads a binder that has not said. A recursive item's members are walked under the names they are published as, their bodies closed throughout, as [`curios_core::RecGroup::map_members`] rewrites them.
@@ -96,6 +119,7 @@ pub(crate) fn state_proof_binders(
             definition.type_ = stated(context, &definition.type_, &[])?;
             definition.body = stated(context, &definition.body, &[])?;
             definition.proof = proves(context, &definition.kind, &definition.type_)?;
+            definition.value_sort = value_sort(context, definition)?;
         }
         Item::Rec(rec) => {
             let members = rec

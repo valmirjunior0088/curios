@@ -67,6 +67,7 @@ impl<'a> Baseline<'a> {
                     && this.type_ == that.type_
                     && this.body == that.body
                     && this.proof == that.proof
+                    && this.value_sort == that.value_sort
             }
             (Item::Rec(this), Item::Rec(that)) => {
                 this.group == that.group

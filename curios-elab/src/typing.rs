@@ -232,13 +232,19 @@ pub(crate) fn is_proof_in(
     verdict
 }
 
-/// [`is_proof_in`]'s walk, a loop past each function's parameters to what it ultimately returns, each opened binder joining `opened`.
+/// [`is_proof_in`]'s walk, a loop past each function's parameters to what it ultimately returns, each opened binder joining `opened`. A function type takes its codomain's quality, so a type whose head's declaration settles its quality ([`Sort::declared_quality`]) answers by it, a function-type alias by the sort it publishes, its domains unopened.
 fn proof_end(context: &mut Context, opened: &mut Opened, type_: &Term) -> Result<bool, Error> {
     let mut type_ = type_.clone();
     loop {
-        // A proposition known by its head is one with nothing run to read it.
-        if is_declared_prop_in(context, opened, &type_)? {
-            return Ok(true);
+        // A proposition known by its head is one, and a type known by its head none, with nothing run to read it.
+        let declared = Sort::declared_quality(context, &Binders::default(), opened, &type_)
+            .map_err(|error| {
+                Error::from_reduce(error, |refusal| {
+                    Error::reduce_exhausted(type_.clone(), refusal)
+                })
+            })?;
+        if let Some(quality) = declared {
+            return Ok(quality.is_prop());
         }
 
         let reduced = reduce_with(context, &type_)?;

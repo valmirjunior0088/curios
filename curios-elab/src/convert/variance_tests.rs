@@ -106,6 +106,7 @@ fn define_pick(context: &mut Context, variance: Variance) {
         variances: vec![variance],
         field_variances: Vec::new(),
         parameter_field: None,
+        value_sort: None,
         type_: Term::func_type([(carrier, sort.clone())], nat_type()),
         body: Term::func([(carrier, sort)], nat(3)),
     };
@@ -425,6 +426,7 @@ fn define_records(context: &mut Context) {
                 .expect("a record's value reads within the budget"),
             field_variances: field_variances(&scheme, &type_, &body),
             parameter_field: None,
+            value_sort: None,
             type_,
             body,
         };

@@ -115,6 +115,7 @@ impl<'a> Standing<'a> {
                     variances: &definition.variances,
                     field_variances: &definition.field_variances,
                     parameter_field: definition.parameter_field,
+                    value_sort: definition.value_sort.as_ref(),
                     island: definition.island,
                 })
             }
@@ -133,6 +134,7 @@ impl<'a> Standing<'a> {
                     variances: &[],
                     field_variances: &[],
                     parameter_field: None,
+                    value_sort: None,
                     island: definition.island,
                 })
             }

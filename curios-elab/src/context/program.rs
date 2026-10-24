@@ -34,6 +34,8 @@ pub(crate) struct Program<'s> {
     field_variances: BTreeMap<Global, (Vec<Vec<Variance>>, usize)>,
     /// Each finished definition whose value is a field of one of its binders, with which and its arity ([`curios_core::Definition::parameter_field`]).
     parameter_fields: BTreeMap<Global, (ParameterField, usize)>,
+    /// Each finished definition whose value is a type, with the sort the value inhabits ([`curios_core::Definition::value_sort`]).
+    value_sorts: BTreeMap<Global, Term>,
     /// Every prefix this compilation mounts — the scope's, then the unit's own. Accumulated as each module is seeded, from the `mounts` that module carries, so the elaborator answers a privilege question out of what was actually mounted rather than out of a stamp copied onto each declaration.
     mounts: Vec<Mount>,
 }
@@ -368,6 +370,21 @@ impl<'s> Program<'s> {
             Some(filed) => Some(*filed),
             None => self.scope?.definition(name)?.parameter_field(),
         }
+    }
+
+    /// File the sort a finished definition's value inhabits, where its value is a type, replacing what an earlier elaboration of the name left.
+    pub(crate) fn record_definition_value_sort(&mut self, name: &Global, sort: Option<&Term>) {
+        match sort {
+            Some(sort) => self.value_sorts.insert(*name, sort.clone()),
+            None => self.value_sorts.remove(name),
+        };
+    }
+
+    /// The sort a definition's value inhabits, where it files one: this unit's, then a unit's in scope.
+    pub(crate) fn definition_value_sort(&self, name: &Global) -> Option<&Term> {
+        self.value_sorts
+            .get(name)
+            .or_else(|| self.scope?.definition(name)?.value_sort)
     }
 
     /// A definition's recorded totality, or `None` for a name not yet classified — a member of the group currently elaborating, which `group_totality` settles for the group as a whole.

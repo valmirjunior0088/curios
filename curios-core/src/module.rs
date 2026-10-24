@@ -763,6 +763,10 @@ pub struct Definition {
     ///
     /// Written by `curios-elab` as the definition's item is published, with its binders' marks, and `false` until then. A constructor of a proposition and a law's projection are the compiler's own terms and stay what they unfold to. The certifier holds the mark one way, as it holds a binder's: a definition marked at a type it reads as no proposition is refused, and one left unmarked unfolds and is refused nowhere.
     pub proof: bool,
+    /// The sort this definition's value inhabits, where it takes no parameter and its type is written as a sort, so that its value is a type: that type's own sort, read off the value and never off the annotation, which may name a larger universe. A sort term under [`Self::universe_context`], read at an occurrence's universes as [`InductDecl::result_sort`](super::InductDecl::result_sort) is. `None` for any other definition, and until the item is published.
+    ///
+    /// Written by `curios-elab` as the definition's item is published, beside [`Self::proof`], and read by every judgment that asks a binder's sort, quality or proof-ness where the binder's type is written as this definition, before anything is reduced: the value is not walked to learn it. The certifier holds it one way, as it holds the proof mark: it computes the value's sort where it checks the definition and refuses one stated otherwise, and a definition stating none is read by its reduct and refused nowhere.
+    pub value_sort: Option<Term>,
     pub type_: Term,
     pub body: Term,
 }
@@ -877,6 +881,7 @@ impl RecItem {
                 variances: Vec::new(),
                 field_variances: Vec::new(),
                 parameter_field: None,
+                value_sort: None,
                 type_: member.type_.open(&name_refs),
                 body: member.body.open(&name_refs),
             })
@@ -979,6 +984,7 @@ impl Definition {
             variances: Vec::new(),
             field_variances: Vec::new(),
             parameter_field: None,
+            value_sort: None,
             proof: false,
             type_,
             body,
@@ -1044,6 +1050,10 @@ impl Item {
                 variances: definition.variances.clone(),
                 field_variances: definition.field_variances.clone(),
                 parameter_field: definition.parameter_field,
+                value_sort: definition
+                    .value_sort
+                    .as_ref()
+                    .map(|sort| sharing.share(sort)),
                 type_: sharing.share(&definition.type_),
                 body: sharing.share(&definition.body),
             })),

@@ -26,6 +26,7 @@ fn stated(body: usize, proof: bool) -> Item {
         variances: Vec::new(),
         field_variances: Vec::new(),
         parameter_field: None,
+        value_sort: None,
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::intrinsic(Intrinsic::Nat(Nat::new(body))),
     }))

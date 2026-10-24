@@ -21,6 +21,7 @@ fn item(path: &[&str], kind: DefinitionKind) -> Item {
         variances: Vec::new(),
         field_variances: Vec::new(),
         parameter_field: None,
+        value_sort: None,
         type_: Term::type_ground(),
         body: Term::free_var(&Free::from(&name)),
     }))

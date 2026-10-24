@@ -174,6 +174,8 @@ pub enum Error {
     },
     /// A binder that states it binds a proof, or a definition marked one, at a type that is no proposition and no function into one. A mark is what the closed machine reads to bind a substituend unreduced, and what an environment reads to hold a name with nothing to unfold to, so one is held to what no judgment reads the value of.
     NoProof(Term),
+    /// A definition stating its value inhabits a sort its value does not inhabit: `stated` where the value is at `reached`. What a definition states of its value's sort is what every judgment asking a binder of it its sort reads before anything is reduced, so it is held to the sort its value has, as a proof mark is held to its type.
+    ValueSort { stated: Term, reached: Term },
     /// A proposition eliminated into a relevant result while carrying something a program could read back. Permitted only for an empty proposition or a singleton whose payload is entirely determined.
     LargeElimination(Global),
     /// Elaboration-only syntax — a metavariable, an unresolved infix operator, or a polymorphic numeric literal — reached the kernel. The term was handed over before elaboration finished with it.
@@ -351,6 +353,13 @@ impl fmt::Display for Displayed<'_> {
                 write!(
                     formatter,
                     "a binder states it binds a proof at `{type_}`, which is no proposition"
+                )
+            }
+            Error::ValueSort { stated, reached } => {
+                let (stated, reached) = (stated.spelled(spelling), reached.spelled(spelling));
+                write!(
+                    formatter,
+                    "a definition states its value inhabits `{stated}`, where it inhabits `{reached}`"
                 )
             }
             Error::NotAMotive { stated, refusal } => {
@@ -951,7 +960,21 @@ impl<'s> Kernel<'s> {
         value: &Term,
         universes: &UniverseContext,
     ) -> Result<(), Error> {
-        self.globals.insert(name, type_, Some(value), universes)
+        self.globals
+            .insert(name, type_, Some(value), None, universes)
+    }
+
+    /// [`Kernel::define`] with the sort `value` inhabits where it is a type and the walk checked it at one ([`curios_core::Definition::value_sort`]).
+    pub(crate) fn define_sorted(
+        &mut self,
+        name: &Free,
+        type_: &Term,
+        value: &Term,
+        value_sort: Option<&Term>,
+        universes: &UniverseContext,
+    ) -> Result<(), Error> {
+        self.globals
+            .insert(name, type_, Some(value), value_sort, universes)
     }
 
     /// Record a top-level name with a type and no body: an assumption that never unfolds, so a permanent neutral. A walk records a definition marked a proof so ([`curios_core::Definition::proof`]), once its body is checked; every other item is defined with its body, and a `foreign` is a term `infer` types rather than a name, so the other callers are the fixtures that need an opaque head. Refused where a definition already stands under `name`, as [`Kernel::define`] is.
@@ -961,7 +984,7 @@ impl<'s> Kernel<'s> {
         type_: &Term,
         universes: &UniverseContext,
     ) -> Result<(), Error> {
-        self.globals.insert(name, type_, None, universes)
+        self.globals.insert(name, type_, None, None, universes)
     }
 
     /// Register an `induct` declaration's registry entry, refused where one already stands under `name`.
@@ -1367,6 +1390,22 @@ impl<'s> Kernel<'s> {
             self.reads.body(global);
         }
         self.globals.value_at(name)
+    }
+
+    /// The sort `name`'s value inhabits through a bare occurrence, where it states one ([`curios_core::Definition::value_sort`]): a read of its body, of which the sort is a fact. A definition with universe parameters is withheld.
+    pub(crate) fn value_sort(&self, name: &Free) -> Option<&Term> {
+        if let Some(global) = name.as_global() {
+            self.reads.body(global);
+        }
+        self.globals.value_sort(name)
+    }
+
+    /// The sort `name`'s value inhabits at a *stated* universe instance, under its own parameters, where it states one.
+    pub(crate) fn value_sort_at(&self, name: &Free) -> Option<&Term> {
+        if let Some(global) = name.as_global() {
+            self.reads.body(global);
+        }
+        self.globals.value_sort_at(name)
     }
 
     /// Record `term` as an erased position if the type it was judged at makes it one: a term at a `Prop`-sorted type is a proof, and one at a sort is a type.

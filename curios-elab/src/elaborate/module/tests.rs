@@ -68,6 +68,7 @@ fn let_item(path: &str, type_: Term, body: Term) -> Item {
         variances: Vec::new(),
         field_variances: Vec::new(),
         parameter_field: None,
+        value_sort: None,
         type_,
         body,
     }))

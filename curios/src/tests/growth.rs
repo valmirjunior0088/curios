@@ -55,6 +55,10 @@ pub(super) enum Growth {
     DefaultedMatches,
     /// A parameterized inductive type of so many constructors and so many proofs, each that two constructions of its last constructor are one.
     ComparedConstructions,
+    /// A closed tuple alias of so many fields and so many functions, each projecting the first field of the parameter it types.
+    AliasReaders,
+    /// A closed function-type alias of so many domains and so many functions, each taking a parameter it types and leaving it unread.
+    ArrowAliasReaders,
     /// A concept of so many methods, each a wrapper of its own, satisfied once and called once.
     Methods,
     /// Calls of an identity function, each the argument of the next.
@@ -83,7 +87,7 @@ pub(super) enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub(super) const ALL: [Growth; 32] = [
+    pub(super) const ALL: [Growth; 34] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -104,6 +108,8 @@ impl Growth {
         Growth::Values,
         Growth::DefaultedMatches,
         Growth::ComparedConstructions,
+        Growth::AliasReaders,
+        Growth::ArrowAliasReaders,
         Growth::Methods,
         Growth::Calls,
         Growth::Parentheses,
@@ -319,6 +325,30 @@ pub(super) fn grown(growth: Growth, size: usize) -> String {
                 .collect::<String>();
             program(
                 &format!("induct W(A: Type): Type\n{constructors}end\n\n{proofs}"),
+                "a",
+            )
+        }
+        Growth::AliasReaders => {
+            let readers = (0..size)
+                .map(|index| format!("let f{index}(x: T) -> Nat = x.0;\n"))
+                .collect::<String>();
+            program(
+                &format!(
+                    "let T: Type = {{{}}};\n{readers}",
+                    repeated("Nat", size, ", ")
+                ),
+                "a",
+            )
+        }
+        Growth::ArrowAliasReaders => {
+            let readers = (0..size)
+                .map(|index| format!("let g{index}(_f: F) -> Nat = {index};\n"))
+                .collect::<String>();
+            program(
+                &format!(
+                    "let F: Type = ({}) -> Nat;\n{readers}",
+                    repeated("Nat", size, ", ")
+                ),
                 "a",
             )
         }

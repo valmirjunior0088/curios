@@ -407,6 +407,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         variances: Vec::new(),
         field_variances: Vec::new(),
         parameter_field: None,
+        value_sort: None,
         type_: Term::func_type_marked(
             [(Plicity::Implicit, parameter, Term::type_ground())],
             Term::type_ground(),

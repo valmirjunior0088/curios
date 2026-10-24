@@ -30,6 +30,8 @@ pub(crate) struct Defined<'a> {
     pub(crate) field_variances: &'a [Vec<Variance>],
     /// The field of one of its binders its value is, where it is one ([`curios_core::Definition::parameter_field`]).
     pub(crate) parameter_field: Option<ParameterField>,
+    /// The sort its value inhabits, where its value is a type ([`curios_core::Definition::value_sort`]).
+    pub(crate) value_sort: Option<&'a Term>,
     /// The module declaring it.
     pub(crate) island: Qualifier,
 }

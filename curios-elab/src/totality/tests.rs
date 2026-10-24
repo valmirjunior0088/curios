@@ -22,6 +22,7 @@ fn mentioning(path: &str, mentions: &str) -> Item {
         variances: Vec::new(),
         field_variances: Vec::new(),
         parameter_field: None,
+        value_sort: None,
         type_: Term::intrinsic(Intrinsic::NatType),
         body: Term::free_var(&Free::from(&name(mentions))),
     }))

@@ -67,12 +67,15 @@ fn at_sorts<B: Bound>(value: &B, sorts: &[Quality]) -> B {
 /// A definition polymorphic in a level is checked *generically*, at its own parameters rather than at any instance. That is the right reading — a scheme is valid exactly when its body checks with its parameters held abstract — and it is also the only one available, since the kernel sees no use sites. One that leaves a sort to its caller is checked at every assignment of them ([`at_every_sort`]), and stored as it is stated: an occurrence states the sorts with the levels, and reads the type and the body at them.
 ///
 /// `proof` is the definition's mark ([`curios_core::Definition::proof`]), held to its type one way, as a binder's is ([`hold_proof`]): a name marked a proof at a type that is no proposition is refused, since a judgment reads what such a name unfolds to, and one left unmarked unfolds and is refused nowhere. The sort this check types the statement at answers, with nothing run: no proposition stands at a `Type`, so a statement typed at one reduces to none.
+///
+/// `value_sort` is the sort the definition states its value inhabits ([`curios_core::Definition::value_sort`]), held one way too: a stated sort the checked value does not inhabit is refused ([`Error::ValueSort`]), since every judgment that asks a binder of the name its sort reads it unreduced, and a definition stating none is read by its reduct and refused nowhere.
 pub(crate) fn check_definition(
     kernel: &mut Kernel,
     name: &Free,
     type_: &Term,
     body: &Term,
     proof: bool,
+    value_sort: Option<&Term>,
     universes: &UniverseContext,
 ) -> Result<(), Error> {
     at_every_sort(kernel, universes, |kernel, sorts| {
@@ -82,24 +85,41 @@ pub(crate) fn check_definition(
         if proof && !sort.is_prop() {
             return Err(Error::NoProof(type_.clone()));
         }
-        check(kernel, &body, &type_)
+        check(kernel, &body, &type_)?;
+        match value_sort {
+            Some(stated) => hold_value_sort(kernel, &at_sorts(stated, sorts), &body),
+            None => Ok(()),
+        }
     })?;
 
-    define_as_stated(kernel, name, type_, body, proof, universes)
+    define_as_stated(kernel, name, type_, body, proof, value_sort, universes)
 }
 
-/// Bring `name : type_` into scope as its definition states it: unfolding to `body`, or to nothing where it is marked a proof, whose body its own check read and no judgment after it does. A refused definition stands the same way, so what a name is to the rest of a walk is what it is to a walk over a unit that mounts this one.
+/// Refuse `stated` where the checked `value` does not inhabit it: the sort the value's own classification reaches, which is what reading the name's reduct would have answered.
+fn hold_value_sort(kernel: &mut Kernel, stated: &Term, value: &Term) -> Result<(), Error> {
+    let reached = Sort::of(kernel, value)?.term();
+    match convert(kernel, &Term::type_ground(), stated, &reached)? {
+        true => Ok(()),
+        false => Err(Error::ValueSort {
+            stated: stated.clone(),
+            reached,
+        }),
+    }
+}
+
+/// Bring `name : type_` into scope as its definition states it: unfolding to `body`, or to nothing where it is marked a proof, whose body its own check read and no judgment after it does, with the sort its value inhabits where it states one. A refused definition stands the same way, so what a name is to the rest of a walk is what it is to a walk over a unit that mounts this one.
 pub(crate) fn define_as_stated(
     kernel: &mut Kernel,
     name: &Free,
     type_: &Term,
     body: &Term,
     proof: bool,
+    value_sort: Option<&Term>,
     universes: &UniverseContext,
 ) -> Result<(), Error> {
     match proof {
         true => kernel.declare(name, type_, universes),
-        false => kernel.define(name, type_, body, universes),
+        false => kernel.define_sorted(name, type_, body, value_sort, universes),
     }
 }
 
@@ -234,6 +254,7 @@ pub(crate) fn check_rec_group(
             &group.member_type(index),
             &Term::rec_proj(group.clone(), index),
             *proof,
+            None,
             universes,
         )?;
     }

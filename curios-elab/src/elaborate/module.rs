@@ -879,6 +879,8 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
         variances,
         field_variances,
         parameter_field,
+        // Stated where the item is published, over its final terms.
+        value_sort: None,
         type_,
         body,
     };
@@ -1229,6 +1231,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             variances: Vec::new(),
             field_variances: Vec::new(),
             parameter_field: None,
+            value_sort: None,
             type_,
             body,
         })

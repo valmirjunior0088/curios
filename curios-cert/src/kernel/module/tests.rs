@@ -399,6 +399,7 @@ fn a_definition_marked_a_proof_unfolds_to_nothing() {
                 &statement,
                 &body,
                 proof,
+                None,
                 &UniverseContext::empty(),
             ),
             Ok(()),
@@ -419,10 +420,30 @@ fn a_definition_marked_a_proof_at_no_proposition_is_refused() {
             &Term::intrinsic(Intrinsic::NatType),
             &Term::intrinsic(Intrinsic::Nat(Nat::new(2usize))),
             true,
+            None,
             &UniverseContext::empty(),
         ),
         Err(Error::NoProof(_)),
     ));
+}
+
+/// The sort a definition states its value inhabits is held to the sort the value has: `Nat` stated a proposition is refused, and stated at `Type` admitted, so no judgment reads a sort off the name that its reduct denies.
+#[test]
+fn a_definition_stating_its_value_at_a_sort_it_does_not_inhabit_is_refused() {
+    let at = |stated: Term| {
+        check_definition(
+            &mut kernel(),
+            &lemma(),
+            &Term::type_ground(),
+            &Term::intrinsic(Intrinsic::NatType),
+            false,
+            Some(&stated),
+            &UniverseContext::empty(),
+        )
+    };
+
+    assert!(matches!(at(Term::prop()), Err(Error::ValueSort { .. })));
+    assert_eq!(at(Term::type_ground()), Ok(()));
 }
 
 /// A statement that reduces to a proposition is typed at `Prop` as written, and its proof is one: the mark is read off the sort the statement is typed at, with the statement unreduced. `((T: Prop) => T)(Fam)` is typed at `Prop` and is `Fam`. The same redex over `Type` is no statement of a proposition at all: no proposition stands where a type is wanted.
@@ -453,6 +474,7 @@ fn a_definition_marked_a_proof_at_a_statement_that_reduces_to_a_proposition_is_a
                 [Term::tuple(Vec::<Term>::new())],
             ),
             true,
+            None,
             &UniverseContext::empty(),
         ),
         Err(Error::Mismatch { .. }),
@@ -479,6 +501,7 @@ fn a_definition_marked_a_proof_at_a_statement_that_reduces_to_a_proposition_is_a
             &statement,
             &body,
             true,
+            None,
             &UniverseContext::empty(),
         ),
         Ok(()),

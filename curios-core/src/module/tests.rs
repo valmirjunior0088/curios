@@ -18,6 +18,7 @@ fn definition(name: &str, universe_context: UniverseContext) -> Definition {
         variances: Vec::new(),
         field_variances: Vec::new(),
         parameter_field: None,
+        value_sort: None,
         type_: Term::type_ground(),
         body: Term::free_var(&Free::from(&global)),
     }
@@ -84,6 +85,7 @@ fn every_local_a_term_mentions_is_found() {
         variances: Vec::new(),
         field_variances: Vec::new(),
         parameter_field: None,
+        value_sort: None,
         type_: Term::intrinsic(crate::Intrinsic::NatType),
         body: Term::free_var(&mentioned),
     };
@@ -115,6 +117,7 @@ fn stored(body: Term) -> Module {
             variances: Vec::new(),
             field_variances: Vec::new(),
             parameter_field: None,
+            value_sort: None,
             type_: Term::intrinsic(crate::Intrinsic::NatType),
             body,
         }))]

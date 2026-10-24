@@ -297,8 +297,9 @@ impl Parts {
     pub(crate) const CONCEPT: Parts = Parts(1 << 7);
     pub(crate) const ERASED: Parts = Parts(1 << 8);
     pub(crate) const RAN: Parts = Parts(1 << 9);
+    pub(crate) const SORT: Parts = Parts(1 << 10);
     /// Every part: what a declaration made or taken away moves of what it declares.
-    pub(crate) const ALL: Parts = Parts((1 << 10) - 1);
+    pub(crate) const ALL: Parts = Parts((1 << 11) - 1);
 
     /// The part `question` asks of the name it is about, where it asks one: a witness's key, whether one is declared and whether lemmas are on offer ask none.
     pub(crate) fn of(question: &Question) -> Option<Parts> {
@@ -308,6 +309,7 @@ impl Parts {
             Question::Kind(_) => Parts::KIND,
             Question::Totality(_) => Parts::TOTALITY,
             Question::Variances(_) => Parts::VARIANCES,
+            Question::Sort(_) => Parts::SORT,
             Question::Induct(_) => Parts::INDUCT,
             Question::Struct(_) => Parts::STRUCT,
             Question::Concept(_) => Parts::CONCEPT,
@@ -327,6 +329,7 @@ impl Parts {
             (Parts::KIND, Question::Kind(name)),
             (Parts::TOTALITY, Question::Totality(name)),
             (Parts::VARIANCES, Question::Variances(name)),
+            (Parts::SORT, Question::Sort(name)),
             (Parts::INDUCT, Question::Induct(name)),
             (Parts::STRUCT, Question::Struct(name)),
             (Parts::CONCEPT, Question::Concept(name)),

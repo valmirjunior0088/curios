@@ -36,6 +36,7 @@ fn lowered_module(body: Term) -> Module {
                 variances: Vec::new(),
                 field_variances: Vec::new(),
                 parameter_field: None,
+                value_sort: None,
                 type_: nat(),
                 body,
             }))]

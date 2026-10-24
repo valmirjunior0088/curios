@@ -910,6 +910,7 @@ fn zonk_definition(context: &Zonk, def: &Definition) -> Result<Definition, Error
         variances: def.variances.clone(),
         field_variances: def.field_variances.clone(),
         parameter_field: def.parameter_field,
+        value_sort: def.value_sort.clone(),
         type_,
         body,
     })

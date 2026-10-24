@@ -27,6 +27,7 @@ pub(crate) struct Same {
     kind: bool,
     totality: bool,
     variances: bool,
+    sort: bool,
     induct: bool,
     struct_: bool,
     concept: bool,
@@ -64,6 +65,10 @@ impl Same {
             variances: made.variances == held.variances
                 && made.field_variances == held.field_variances
                 && made.parameter_field == held.parameter_field,
+            sort: match (&made.value_sort, &held.value_sort) {
+                (Some(made), Some(held)) => spelled_alike(made, held),
+                (made, held) => made.is_none() && held.is_none(),
+            },
             ..Self::default()
         }
     }
@@ -85,8 +90,9 @@ impl Same {
             body: group && totality && mine.proof == theirs.proof,
             kind,
             totality,
-            // A group's member files no vector.
+            // A group's member files no vector, and no sort.
             variances: true,
+            sort: true,
             ..Self::default()
         }
     }
@@ -109,6 +115,7 @@ impl Same {
             (self.kind, Parts::KIND),
             (self.totality, Parts::TOTALITY),
             (self.variances, Parts::VARIANCES),
+            (self.sort, Parts::SORT),
             (self.induct, Parts::INDUCT),
             (self.struct_, Parts::STRUCT),
             (self.concept, Parts::CONCEPT),
@@ -126,6 +133,7 @@ impl Same {
             Question::Kind(_) => self.kind,
             Question::Totality(_) => self.totality,
             Question::Variances(_) => self.variances,
+            Question::Sort(_) => self.sort,
             Question::Induct(_) => self.induct,
             Question::Struct(_) => self.struct_,
             Question::Concept(_) => self.concept,
@@ -249,6 +257,14 @@ pub(crate) fn item_part_digest(
                 });
 
             sealed(curios_archive::to_bytes(&variances)).map(Some)
+        }
+        Question::Sort(_) => {
+            // A group's member files none.
+            let sort = plain
+                .and_then(|definition| definition.value_sort.as_ref())
+                .map(|sort| sharing.share(sort));
+
+            sealed(curios_archive::to_bytes(&sort)).map(Some)
         }
         // An entry's scheme is read by what it is compared by, the rest of it as it is stored.
         Question::Induct(_) => entry

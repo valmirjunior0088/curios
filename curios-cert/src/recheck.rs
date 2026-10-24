@@ -752,6 +752,7 @@ fn verdicts_within<'s>(
                     &definition.type_,
                     &definition.body,
                     definition.proof,
+                    definition.value_sort.as_ref(),
                     &definition.universe_context,
                 );
                 // Whether the definition holds a group that does not descend, noted where the group was typed — see `Kernel::definition_encloses_partial`.
@@ -770,6 +771,7 @@ fn verdicts_within<'s>(
                         &definition.type_,
                         &definition.body,
                         definition.proof,
+                        definition.value_sort.as_ref(),
                         &definition.universe_context,
                     ) {
                         verdicts.push(Verdict {
@@ -802,6 +804,7 @@ fn verdicts_within<'s>(
                             &rec.group.member_type(member),
                             &Term::rec_proj(rec.group.clone(), member),
                             *proof,
+                            None,
                             &universes,
                         ) {
                             verdicts.push(Verdict {
@@ -1403,17 +1406,27 @@ fn stands(
 /// Take the verdict `records` hold of `item`, a record for each name it declares: each name stands at its type with its real body, as the walk leaves an item it does not judge, and what the walk refuses of it is handed back — a stamp that says `Total` where the verdict taken does not, as for an item judged.
 fn take(kernel: &mut Kernel, item: &Item, records: &[(Global, HeldReads)]) -> Vec<Verdict> {
     let mut refusals = Vec::new();
-    let mut defined =
-        |name: &Global, type_: &Term, body: &Term, proof: bool, universes: &UniverseContext| {
-            if let Err(error) =
-                define_as_stated(kernel, &Free::from(name), type_, body, proof, universes)
-            {
-                refusals.push(Verdict {
-                    name: Some(*name),
-                    error,
-                });
-            }
-        };
+    let mut defined = |name: &Global,
+                       type_: &Term,
+                       body: &Term,
+                       proof: bool,
+                       value_sort: Option<&Term>,
+                       universes: &UniverseContext| {
+        if let Err(error) = define_as_stated(
+            kernel,
+            &Free::from(name),
+            type_,
+            body,
+            proof,
+            value_sort,
+            universes,
+        ) {
+            refusals.push(Verdict {
+                name: Some(*name),
+                error,
+            });
+        }
+    };
     let stamps = match item {
         Item::Let(definition) => {
             defined(
@@ -1421,6 +1434,7 @@ fn take(kernel: &mut Kernel, item: &Item, records: &[(Global, HeldReads)]) -> Ve
                 &definition.type_,
                 &definition.body,
                 definition.proof,
+                definition.value_sort.as_ref(),
                 &definition.universe_context,
             );
             vec![(definition.name, definition.totality)]
@@ -1433,6 +1447,7 @@ fn take(kernel: &mut Kernel, item: &Item, records: &[(Global, HeldReads)]) -> Ve
                     &rec.group.member_type(member),
                     &Term::rec_proj(rec.group.clone(), member),
                     definition.proof,
+                    None,
                     &universes,
                 );
             }

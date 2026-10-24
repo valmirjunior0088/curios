@@ -105,6 +105,9 @@ impl Sort {
         if let Some(level) = declared_into_prop(kernel, type_)? {
             return Ok(Sort::Prop(level));
         }
+        if let Some(sort) = published(kernel, type_)? {
+            return Ok(sort);
+        }
 
         let reduced = kernel.reduce_forced(type_.clone())?;
 
@@ -184,6 +187,9 @@ pub(crate) fn declared_into_prop(
     kernel: &mut Kernel,
     type_: &Term,
 ) -> Result<Option<Level>, Error> {
+    if let Some(Sort::Prop(level)) = published(kernel, type_)? {
+        return Ok(Some(level));
+    }
     if !matches!(&**type_, Subterm::Apply(_)) || !heads_a_declaration(kernel, type_) {
         return Ok(None);
     }
@@ -195,6 +201,30 @@ pub(crate) fn declared_into_prop(
         Subterm::Sort(Quality::Prop, level) => Some(level.clone()),
         _ => None,
     })
+}
+
+/// The sort `type_` stands at where it is written as a definition stating the sort of its value ([`curios_core::Definition::value_sort`]), at the universes an occurrence states: this kernel checked the statement where it checked the definition, so it is read with nothing run. A binder in scope under the name is no such definition.
+fn published(kernel: &mut Kernel, type_: &Term) -> Result<Option<Sort>, Error> {
+    let (name, universes) = match &**type_ {
+        Subterm::Var(var) => (var.unwrap(), None),
+        Subterm::Instance(Instance {
+            head: InstanceHead::Var(var),
+            universes,
+        }) => (var.unwrap(), Some(universes)),
+        _ => return Ok(None),
+    };
+    if kernel.local_type(name).is_some() {
+        return Ok(None);
+    }
+    let sort = match universes {
+        None => kernel.value_sort(name).cloned(),
+        Some(universes) => match kernel.value_sort_at(name) {
+            Some(sort) => Some(instantiate_universes_scoped(sort, universes)?),
+            None => None,
+        },
+    };
+
+    sort.map(|sort| as_sort(kernel, &sort)).transpose()
 }
 
 /// Whether the spine `term` is headed by a name this kernel defined, which no binder in scope shadows.

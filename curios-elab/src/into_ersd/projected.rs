@@ -65,6 +65,8 @@ fn project_definition(definition: &Definition) -> Definition {
         variances: Vec::new(),
         field_variances: Vec::new(),
         parameter_field: None,
+        // Read by erasure for its quality alone: every level is one here.
+        value_sort: definition.value_sort.as_ref().map(project_erased_universes),
         type_: project_erased_universes(&definition.type_),
         body: project_erased_universes(&definition.body),
     }
@@ -236,6 +238,7 @@ impl<'a> Unit<'a> {
             variances: &[],
             field_variances: &[],
             parameter_field: None,
+            value_sort: definition.value_sort.as_ref(),
             island: definition.island,
         })
     }

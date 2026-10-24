@@ -8,7 +8,7 @@ use {
     crate::{Binders, Context, Opened, probe_open_sort, reduce, reduce_forced, synth_neutral},
     curios_core::{
         Bound, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, MatchResult,
-        Quality, ReduceError, StructType, Subterm, Term, TupleType,
+        Quality, ReduceError, StructType, Subterm, Term, TupleType, instantiate_universes_scoped,
     },
 };
 
@@ -106,6 +106,9 @@ impl Sort {
         // Asked of the type as written, before anything is run to classify it.
         if let Some(level) = Sort::declared_into_prop(context, binders, opened, type_)? {
             return Ok(Sort::prop_at(level));
+        }
+        if let Some(sort) = Sort::published(context, type_)? {
+            return Ok(sort);
         }
 
         let reduced = reduce_forced(context, type_.clone())?;
@@ -403,6 +406,9 @@ impl Sort {
         opened: &Opened,
         type_: &Term,
     ) -> Result<Option<(Quality, Level)>, ReduceError> {
+        if let Some(sort) = Sort::published(context, type_)? {
+            return Ok(Some((sort.quality, sort.level)));
+        }
         let mut head = type_;
         while let Subterm::Apply(apply) = &**head {
             head = &apply.head;
@@ -431,6 +437,35 @@ impl Sort {
             },
             None => None,
         })
+    }
+
+    /// The sort `type_` stands at where it is written as a definition that publishes the sort of its value ([`curios_core::Definition::value_sort`]): a name, at the universes an occurrence of it states. Read before anything is run, so the value is not walked to learn it. `None` for any other type.
+    pub(crate) fn published(
+        context: &mut Context,
+        type_: &Term,
+    ) -> Result<Option<Sort>, ReduceError> {
+        let (var, universes) = match &**type_ {
+            Subterm::Var(var) => (var, None),
+            Subterm::Instance(Instance {
+                head: InstanceHead::Var(var),
+                universes,
+            }) => (var, Some(universes)),
+            _ => return Ok(None),
+        };
+        let Some(name) = var.unwrap().as_global() else {
+            return Ok(None);
+        };
+        let Some(sort) = context.definition_value_sort(name) else {
+            return Ok(None);
+        };
+        let sort = match universes {
+            Some(universes) => {
+                instantiate_universes_scoped(&sort, universes).map_err(ReduceError::Universe)?
+            }
+            None => sort,
+        };
+
+        Sort::from_universe(context, &sort).map(Some)
     }
 
     /// The universe term this sort denotes. The inverse of [`Sort::from_universe`]; used as the type-of-a-type a type-former reports.

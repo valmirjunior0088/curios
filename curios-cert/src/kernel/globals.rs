@@ -36,6 +36,8 @@ pub(crate) struct Held<'a> {
     pub(crate) type_: &'a Term,
     /// `None` for something with a type and no body: a definition marked a proof ([`curios_core::Definition::proof`]), whose body its own check read and no judgment after it does, and a fixture's opaque head.
     pub(crate) value: Option<&'a Term>,
+    /// The sort its value inhabits, where it is a definition whose value is a type and states it ([`curios_core::Definition::value_sort`]): checked where the definition was checked.
+    pub(crate) value_sort: Option<&'a Term>,
     pub(crate) universes: &'a UniverseContext,
 }
 
@@ -49,6 +51,7 @@ pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) ->
             Item::Let(definition) => Some(Held {
                 type_: &definition.type_,
                 value: (!definition.proof).then_some(&definition.body),
+                value_sort: definition.value_sort.as_ref(),
                 universes: &definition.universe_context,
             }),
             Item::Rec(_) => unreachable!("a definition's place is a definition's"),
@@ -60,6 +63,7 @@ pub(crate) fn held<'a>(module: &'a Module, places: &'a Places, name: &Global) ->
                 Some(Held {
                     type_,
                     value: (!rec.definitions[member as usize].proof).then_some(body),
+                    value_sort: None,
                     universes: rec.group.universe_context(),
                 })
             }
@@ -342,6 +346,7 @@ impl<'s> Globals<'s> {
 struct Definition {
     type_: Term,
     value: Option<Term>,
+    value_sort: Option<Term>,
     universes: UniverseContext,
 }
 
@@ -449,6 +454,7 @@ impl<'s> Environment<'s> {
             return Some(Held {
                 type_: &definition.type_,
                 value: definition.value.as_ref(),
+                value_sort: definition.value_sort.as_ref(),
                 universes: &definition.universes,
             });
         }
@@ -462,7 +468,7 @@ impl<'s> Environment<'s> {
         adopted.or_else(|| self.scope.and_then(|scope| scope.held(name)))
     }
 
-    /// Record `name` at `type_`, generalized over `universes`, with `value` as its body where it has one — or refuse it, where a definition already stands under `name`.
+    /// Record `name` at `type_`, generalized over `universes`, with `value` as its body where it has one and `value_sort` as the sort that body inhabits where it is a type the walk checked it at — or refuse it, where a definition already stands under `name`.
     ///
     /// **Written once.** A judgment reads what a name means when it is made, and a remembered reduct is a function of the definitions it unfolded. An entry written over a held name would leave both stating what the environment no longer holds, so the write is refused and neither is ever revisited: the memos, a sibling component, need to know nothing of this one.
     pub(super) fn insert(
@@ -470,6 +476,7 @@ impl<'s> Environment<'s> {
         name: &Free,
         type_: &Term,
         value: Option<&Term>,
+        value_sort: Option<&Term>,
         universes: &UniverseContext,
     ) -> Result<(), Error> {
         if self.held(name).is_some() {
@@ -481,6 +488,7 @@ impl<'s> Environment<'s> {
             Definition {
                 type_: type_.clone(),
                 value: value.cloned(),
+                value_sort: value_sort.cloned(),
                 universes: universes.clone(),
             },
         );
@@ -634,5 +642,17 @@ impl<'s> Environment<'s> {
     /// What `name` unfolds to at a *stated* universe instance, which is the one position a polymorphic definition may be unfolded from.
     pub(super) fn value_at(&self, name: &Free) -> Option<&Term> {
         self.held(name).and_then(|held| held.value)
+    }
+
+    /// The sort `name`'s value inhabits through a bare occurrence, where it states one: a definition with universe parameters is withheld, as its value is.
+    pub(super) fn value_sort(&self, name: &Free) -> Option<&Term> {
+        self.held(name)
+            .filter(|held| held.universes.width() == 0)
+            .and_then(|held| held.value_sort)
+    }
+
+    /// The sort `name`'s value inhabits at a *stated* universe instance, under its own parameters, where it states one.
+    pub(super) fn value_sort_at(&self, name: &Free) -> Option<&Term> {
+        self.held(name).and_then(|held| held.value_sort)
     }
 }

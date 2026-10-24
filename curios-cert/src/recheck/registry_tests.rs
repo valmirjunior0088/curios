@@ -164,6 +164,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         variances: Vec::new(),
         field_variances: Vec::new(),
         parameter_field: None,
+        value_sort: None,
         type_: Term::type_at(Level::param(UniverseParam(1))),
         body: Term::induct_type_at(
             family,

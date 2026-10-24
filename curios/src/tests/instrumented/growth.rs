@@ -184,6 +184,8 @@ fn base(growth: Growth) -> usize {
         | Growth::Values
         | Growth::DefaultedMatches
         | Growth::ComparedConstructions
+        | Growth::AliasReaders
+        | Growth::ArrowAliasReaders
         | Growth::Methods => 250,
         Growth::List | Growth::Parentheses | Growth::Arrow => 1000,
         Growth::StringLiteral => 2000,
