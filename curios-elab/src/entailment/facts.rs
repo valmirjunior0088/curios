@@ -180,6 +180,18 @@ impl Facts {
         Ok(named)
     }
 
+    /// Every spelling a report writes a counterexample's atoms through, a spelling before any that would stand for the same reduct after it: the operands as stated, then those `inferred` holds — a bound a metavariable elaboration solved states its operands through the solution, and the names beneath them — then the names beneath the operands as stated ([`Facts::beneath`]), where a reading of them runs out leaving them out.
+    pub(super) fn report_spellings(
+        &self,
+        context: &mut Context,
+        inferred: Vec<(Term, Term)>,
+    ) -> Vec<(Term, Term)> {
+        let mut spellings = self.spelled.clone();
+        spellings.extend(inferred);
+        spellings.extend(self.beneath(context).unwrap_or_default());
+        spellings
+    }
+
     /// Whether `form` holds a remainder the facts were lifted over: a goal that does is not met by their sum, which is over the dividend, and is proved by refuting its negation, lifted as they were.
     pub(super) fn lifted_over(&self, form: &LinearForm) -> bool {
         self.lifts
@@ -188,9 +200,14 @@ impl Facts {
     }
 }
 
-/// `term` with each reduct of `spelled` written as the operand stated beside it, an outer reduct before one inside it.
+/// `term` with each reduct of `spelled` written as the operand stated beside it, an outer reduct before one inside it. A reduct spelled twice takes its first spelling: two equal reducts would each hold the other, and every reduct inside them, unreplaced.
 pub(super) fn respelled(spelled: &[(Term, Term)], term: &Term) -> Term {
-    let mut pending = spelled.iter().collect::<Vec<_>>();
+    let mut pending: Vec<&(Term, Term)> = Vec::new();
+    for spelling in spelled {
+        if !pending.iter().any(|(known, _)| *known == spelling.0) {
+            pending.push(spelling);
+        }
+    }
     let mut term = term.clone();
     while let Some(at) = (0..pending.len()).find(|&index| {
         let (reduct, _) = pending[index];

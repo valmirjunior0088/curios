@@ -132,17 +132,6 @@ pub(crate) fn entail(
     }
     Ok(match entailed {
         Entailed::Refused(refusal) => {
-            // A bound that is a metavariable elaboration has solved, as the statement `proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and a counterexample would name an atom by the body it unfolds to. What the solution states is read here, for the report alone: the proof is written over what the search read, and one written over the solution does not check. A reading that runs out leaves the report as the search made it.
-            let refusal = match stated {
-                Some(_) => refusal,
-                None => {
-                    let solved = zonk_solved_term_metas(context, bound);
-                    match stated_spellings(context, &solved) {
-                        Ok(spelled) => refusal.respelled(&spelled),
-                        Err(_) => refusal,
-                    }
-                }
-            };
             // A fact and an atom are written as the statement they were read from states them, where a metavariable elaboration has since solved may still stand — an operator's witness in a local definition's annotation among them: substituted, as it is in the bound the report names above it.
             let mut refusal = refusal;
             for term in refusal.terms_mut() {
@@ -247,15 +236,22 @@ fn linear(
     };
     // What the cap is set against: the rows one bound's search derived, products and cases included.
     curios_profile::sample!("entailment::derived", DERIVED_ROWS - budget);
-    // A counterexample's atoms named as the operands as stated name them, and then as the operands written beneath those do, which are asked only now the search is over; a reading of them that runs out leaves the report as the search made it.
+    // A counterexample's atoms named in one pass through every spelling the report has, so an outer reduct is replaced before one inside it whichever reading found either: the operands as stated, and the operands written beneath them, which are asked only now the search is over. A bound that is a metavariable elaboration has solved, as the statement `proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and what the solution states is read here, for the report alone, since the proof is written over what the search read and one written over the solution does not check. A reading that runs out leaves its spellings out.
     let refused = |context: &mut Context, views: &LinearViews, outcome: SearchOutcome| {
         let refuted = refuted(context, views, &outcome);
         let refusal = Refusal {
             refuted,
             ..Refusal::of(&facts, views, outcome, absurd)
         };
-        let beneath = facts.beneath(context).unwrap_or_default();
-        Ok::<_, Error>(Entailed::Refused(refusal.respelled(&beneath)))
+        let inferred = match stated {
+            Some(_) => Vec::new(),
+            None => {
+                let solved = zonk_solved_term_metas(context, bound);
+                stated_spellings(context, &solved).unwrap_or_default()
+            }
+        };
+        let spellings = facts.report_spellings(context, inferred);
+        Ok::<_, Error>(Entailed::Refused(refusal.respelled(&spellings)))
     };
     let certificate = match searched {
         Ok(certificate) => certificate,

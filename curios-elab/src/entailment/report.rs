@@ -89,7 +89,7 @@ impl Refusal {
             .chain(values.iter_mut().map(|(atom, _)| atom))
     }
 
-    /// The refusal with its counterexample's atoms written through `spelled`, each reduct as the operand stated beside it.
+    /// The refusal with its counterexample's atoms written through `spelled`, each reduct as the operand stated beside it, in one pass ([`respelled`]): an outer reduct is replaced before one inside it, whichever reading found either.
     pub(super) fn respelled(self, spelled: &[(Term, Term)]) -> Self {
         self.rewritten(|atom| respelled(spelled, atom))
     }
@@ -128,7 +128,7 @@ impl Refusal {
         }
         let outcome = match outcome {
             SearchOutcome::Counterexample(assignment) => {
-                Conclusion::Counterexample(counterexample(facts, views, &assignment))
+                Conclusion::Counterexample(counterexample(views, &assignment))
             }
             SearchOutcome::Exhausted(cap) => Conclusion::Exhausted(cap),
             SearchOutcome::Unwritten => Conclusion::Unwritten,
@@ -144,12 +144,8 @@ impl Refusal {
     }
 }
 
-/// Each atom's term and value, where every unknown is an atom; nothing where one is a product. An atom is the reduct the view read, and is written as the operand `facts` read it from states it, as the facts beside it are.
-fn counterexample(
-    facts: &Facts,
-    views: &LinearViews,
-    assignment: &[(Monomial, Rational)],
-) -> Vec<(Term, String)> {
+/// Each atom's term and value, where every unknown is an atom; nothing where one is a product. An atom is the reduct the view read, written as its operands state it once every spelling a report has is known ([`Refusal::respelled`]).
+fn counterexample(views: &LinearViews, assignment: &[(Monomial, Rational)]) -> Vec<(Term, String)> {
     if assignment
         .iter()
         .any(|(monomial, _)| monomial.atoms().len() != 1)
@@ -164,7 +160,7 @@ fn counterexample(
     values.sort_by_key(|(atom, _)| atom.index());
     values
         .into_iter()
-        .map(|(atom, value)| (facts.respell(views.term(&atom)), value.to_string()))
+        .map(|(atom, value)| (views.term(&atom).clone(), value.to_string()))
         .collect()
 }
 

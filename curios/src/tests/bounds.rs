@@ -1042,6 +1042,48 @@ fn a_counterexample_spells_an_operand_of_an_operation_as_written() {
     }
 }
 
+/// A counterexample names a call as the bound states it whatever a fact spells inside the call's unfolding: every spelling is applied in one pass, an outer reduct before one inside it, so `Nat/to_int(d)` written in a fact and met again inside `Int/DivMod/of`'s body no longer hides the call. Through an annotation the bound is a metavariable's solution, read for the report alone; through a written proposition it is stated; and a disequality naming the call again spells it once.
+#[test]
+fn a_counterexample_names_a_call_whatever_a_fact_spells_inside_it() {
+    let recombined = "n: Int, d: Nat, q: Int, r: Nat, @ok: Holds(0 < d), joined: Eq()(n, q * Nat/to_int(d) + Nat/to_int(r)), bounded: Holds(r < d)";
+    let refusal = |binders: &str, body: &str| {
+        typecheck(&format!(
+            "{HEADER}\nlet row({binders}) -> Nat = {body};\nIo/pure(())"
+        ))
+        .expect_err("the control is refused")
+    };
+
+    let original = refusal(
+        recombined,
+        "let _: Holds(q * Nat/to_int(d) + Nat/to_int(r) == Int/DivMod/of(n, d).quotient * Nat/to_int(d) + Nat/to_int(Int/DivMod/of(n, d).remainder)) = proved(); 0",
+    );
+    assert!(
+        original.contains("it fails at d = 1, r = 0, Int/DivMod/of(n, d).remainder = 1, n = 0\n"),
+        "{original}"
+    );
+
+    for (binders, body) in [
+        (
+            "n: Int, d: Nat, w: Nat, z: Int, @ok: Holds(0 < d), h: Holds(Nat/to_int(d) < z)",
+            "let _: Holds(Int/DivMod/of(n, d).remainder < w) = proved(); 0",
+        ),
+        (
+            "n: Int, d: Nat, w: Nat, @ok: Holds(0 < d), h: Holds(Int/DivMod/of(n, d).remainder != w)",
+            "let _ = proved(@Holds(Int/DivMod/of(n, d).remainder < w)); 0",
+        ),
+    ] {
+        let refused = refusal(binders, body);
+        let failing = refused
+            .lines()
+            .find(|line| line.contains("it fails at"))
+            .unwrap_or_default();
+        assert!(
+            failing.contains("Int/DivMod/of(n, d).remainder = ") && !failing.contains("match"),
+            "{body:?} reported {refused}"
+        );
+    }
+}
+
 #[test]
 fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     let refusal = |declared: &str, binders: &str, body: &str| {
