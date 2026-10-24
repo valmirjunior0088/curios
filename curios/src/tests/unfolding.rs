@@ -197,6 +197,30 @@ pub(super) fn predicates(rules: usize, consumed: Consumed, twice: bool) -> Strin
     source
 }
 
+/// A web of `rules` conjunctions, each definition naming the one before it twice, claimed `true` at a binder by `Eq/refl()`: a claim that does not hold, since the web is `n % 2 == 0`.
+fn conjunctions(rules: usize) -> String {
+    let mut source = String::from(
+        "use /std/{Nat, Bool, Eq};\n\n\
+         let Pred: Type = (x: Nat) -> Bool;\n\
+         let both(p: Pred, q: Pred) -> Pred = (x) => p(x) && q(x);\n\
+         let base: Pred = (x) => x % 2 == 0;\n\n",
+    );
+    for rule in 0..rules {
+        let previous = match rule {
+            0 => "base".to_string(),
+            _ => format!("r{}", rule - 1),
+        };
+        let _ = writeln!(source, "let r{rule}: Pred = both({previous}, {previous});");
+    }
+    let _ = writeln!(
+        source,
+        "\nlet probe(n: Nat) -> Eq()(r{}(n), true) = Eq/refl();\n",
+        rules - 1
+    );
+    source.push_str(TAIL);
+    source
+}
+
 /// Compile for its verdict and its wall clock alone.
 fn compile_only(source: &str) -> (Result<(), String>, f64) {
     let entrypoint = source.parse::<Entrypoint>().expect("probe parses");
@@ -472,6 +496,18 @@ fn a_proved_web_of_twenty_definitions_compiles() {
         outcome,
         Ok(()),
         "the proved web of twenty definitions compiles"
+    );
+}
+
+/// A `&&` web of twenty definitions, each naming the one before it twice, claimed `true`: a graph of a node a definition and a tree of a million paths, which the converters flatten before they peel it against the literal. It is refused for the mismatch it is, inside the default budget, because a connective is flattened once per subterm; flattened once per path, the comparison ran the declaration out of its budget from sixteen definitions on. Not a measurement — a refusal to regress to exhaustion.
+#[test]
+fn a_conjunction_web_of_twenty_definitions_is_refused_as_a_mismatch() {
+    let (outcome, _) = compile_only(&conjunctions(20));
+    let refusal = outcome.expect_err("the web is no tautology");
+
+    assert!(
+        refusal.contains("type mismatch") && !refusal.contains("ran out of steps"),
+        "the web is refused for its budget rather than its mismatch:\n{refusal}"
     );
 }
 

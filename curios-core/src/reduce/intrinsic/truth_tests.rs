@@ -1,8 +1,8 @@
-//! The decision diagram over two `Bool` terms' atoms: what it decides equal, what it leaves alone, and what it is charged.
+//! The decision diagram over two `Bool` terms' atoms: what it decides equal, what it leaves alone, and what it is charged; and a connective's leaves as the converters flatten them.
 
 use {
-    super::{decide_bool, test_support::*},
-    crate::{Exhaustion, Intrinsic, Nat, Term},
+    super::{decide_bool, normalize_bool, test_support::*},
+    crate::{Exhaustion, Intrinsic, Nat, Subterm, Term},
 };
 
 fn and(left: Term, right: Term) -> Term {
@@ -172,3 +172,34 @@ fn a_spent_budget_is_no_verdict_and_a_larger_one_decides() {
     };
     assert!(matches!(decide_bool(&mut ample, &tree, &atom), Ok(true)));
 }
+
+/// `w(0) = s0` and `w(k) = (w(k - 1) && sk) && (sk && w(k - 1))`: each level names the one below it twice, a graph of three nodes a level and a tree of a path for every way down.
+fn web(depth: u32) -> Term {
+    (1..=depth).fold(sym(0, "s"), |below, level| {
+        let leaf = sym(level, "s");
+        and(and(below.clone(), leaf.clone()), and(leaf, below))
+    })
+}
+
+/// The leaves of a `&&` tree.
+fn conjuncts(term: &Term) -> usize {
+    match &**term {
+        Subterm::Intrinsic(Intrinsic::BoolAnd(left, right)) => conjuncts(left) + conjuncts(right),
+        _ => 1,
+    }
+}
+
+// A connective is flattened once per subterm: a web twenty levels deep holds a leaf a level, where a walk of its paths would force and keep a million and spend the budget its graph needs many times over.
+#[test]
+fn a_connective_is_flattened_once_per_subterm() {
+    let web = web(20);
+    let Subterm::Intrinsic(connective) = &*web else {
+        unreachable!("a conjunction")
+    };
+    let mut reducer = Budgeted { remaining: 100_000 };
+    let flattened = normalize_bool(&mut reducer, connective)
+        .expect("flattened inside the budget")
+        .expect("a conjunction flattens");
+    assert_eq!(conjuncts(&flattened), 21);
+}
+

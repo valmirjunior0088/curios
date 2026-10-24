@@ -42,11 +42,14 @@ use {
     },
     curios_algebra::{Carrier, Comparison, Deduction, Half},
     curios_num::{Binary, Floating, Integer, Natural},
+    std::collections::HashSet,
 };
 
 /// A `&&` or `||` tree with every leaf forced and the tree re-nested to the left, asked for by name where a comparison needs one set of leaves against another — the converters' rule for two conjunctions or two disjunctions, the twin of `Nat::normalize` for a stuck product. `None` for any other intrinsic.
 ///
 /// The fold leaves a stuck connective's right operand as written, on the record `reduce_bool_binary` keeps of the `&&`/`||` cliff, so a leaf as the fold left it may be a spelling that reduces to a subtree — a witness projection standing for `c && d`. Forcing each leaf and descending is what makes the leaf set the value's rather than the spelling's, and it is paid once per comparison of two trees rather than at every reduction of one, which is the whole of the difference from the cliff. The rebuilt tree is reduced again, so a leaf that forced to a literal meets the lattice laws where it stands. Every forcing is a [`Probe`]: a leaf with no value at the type level stays the leaf it was written as.
+///
+/// **A term met again is passed over**, as written and as forced. `&&` and `||` are idempotent, so a subterm a second path reaches adds no leaf, and what is forced, kept and charged is the tree's graph: a web of definitions each naming the one before it twice is a graph of a few nodes a level and a tree of a path for every way down (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`).
 pub fn normalize_bool(
     reducer: &mut impl Reducer,
     intrinsic: &Intrinsic,
@@ -61,13 +64,21 @@ pub fn normalize_bool(
         false => Intrinsic::BoolOr(left, right),
     };
 
+    let mut written = HashSet::new();
+    let mut met = HashSet::new();
     let mut leaves = Vec::new();
     let mut pending = vec![right.clone(), left.clone()];
     while let Some(term) = pending.pop() {
+        if !written.insert(term.clone()) {
+            continue;
+        }
         let forced = reducer
             .reduce_forced(term.clone())
             .probed()?
             .unwrap_or(term);
+        if !met.insert(forced.clone()) {
+            continue;
+        }
         match (&*forced, conjunction) {
             (Subterm::Intrinsic(Intrinsic::BoolAnd(left, right)), true)
             | (Subterm::Intrinsic(Intrinsic::BoolOr(left, right)), false) => {
@@ -82,7 +93,7 @@ pub fn normalize_bool(
     let tree = leaves
         .into_iter()
         .reduce(|acc, leaf| Term::intrinsic(rebuild(acc, leaf)))
-        .expect("a connective has two operands, so at least two leaves");
+        .expect("a connective has an operand, so at least one leaf");
     Ok(Some(
         reducer
             .reduce_forced(tree.clone())
