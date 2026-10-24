@@ -1,6 +1,9 @@
 //! What a rope's run holds once it is read: every element in its place, whatever shape built it.
 
-use {crate::tests::run_text, curios_native::MockHost};
+use {
+    crate::tests::{compile, run_text},
+    curios_native::{MockHost, test_support::run_within_heap},
+};
 
 /// Every element at its position, weighed so an element out of place moves the sum, as the program weighs its runs.
 fn weighed(run: &[u64]) -> u64 {
@@ -103,4 +106,36 @@ fn a_flattening_writes_every_element_where_it_stands() {
         .join(" ");
 
     assert_eq!(String::from_utf8(io.output().to_vec()).unwrap(), expected);
+}
+
+/// A run built once from a window and read once holds no room: room is given past a flattened node, the run itself read and grown since, and a window first piece shows nothing of the kind. The run here is a window of twelve mebibytes of a base it keeps alive, read whole once by a cut; under a heap of sixty-four mebibytes the base and an exact payload fit, and the base and a payload twice the run do not.
+#[test]
+fn a_run_built_from_a_window_and_read_once_holds_no_room() {
+    let compiled = compile(
+        r#"
+        use /std/{Str, Nat, Bytes, List, Io};
+        let entry() -> /std/Io({}) =
+            let arguments = /std/Process/args()!;
+            let mib =
+                match List/try_get(arguments, 1)
+                | some(bytes) =>
+                    match Str/of_bytes(bytes)
+                    | success(s) => match Nat/of_str(s) | some(v) => v | none() => 0 end
+                    | failure(_) => 0
+                    end
+                | none() => 0
+                end;
+            let base = Bytes/replicate(mib * 1048576 + 1, 0x41);
+            let window = Bytes/slice(base, 1, mib * 1048576);
+            let built = x[..window, ..Bytes/replicate(16, 0x42)];
+            let cut = Bytes/drop(built, 1);
+            /std/print(Nat/to_str(Bytes/len(cut)));
+        entry()
+        "#,
+    )
+    .expect("the build compiles");
+    let (system, io) = MockHost::builder().args(["window", "12"]).build();
+    run_within_heap(&compiled, system, 64 << 20).expect("the base and an exact payload fit");
+
+    assert_eq!(io.output(), (12 * 1_048_576 + 15).to_string().as_bytes());
 }

@@ -202,7 +202,7 @@ impl<'r> ForceWalk<'r> {
     ///   if room != null && room.extent == first.len && first.cache.len >= r.len:
     ///     out := first.cache; room.extent := r.len; claimed := 1   ;; the claim
     /// if !claimed:
-    ///   if r.tag == 1 && first.tag != 0:                 ;; read, grown and read again
+    ///   if r.tag == 1 && first.tag == 1:                 ;; the run itself read, grown and read again
     ///     out := new min(2 r.len, u32::MAX); room := room{r.len}
     ///   else:
     ///     out := new r.len; room := null
@@ -308,10 +308,7 @@ impl<'r> ForceWalk<'r> {
             curios_wasm::Instr::I32Eqz,
             when(wasm![
                 tag_is(&self.r, 1),
-                get(&self.first),
-                field_get(&self.rope.base, &self.rope.tag_field),
-                curios_wasm::Instr::I32Eqz,
-                curios_wasm::Instr::I32Eqz,
+                tag_is(&self.first, 1),
                 curios_wasm::Instr::I32And,
                 branch(roomy, exact),
             ]),
