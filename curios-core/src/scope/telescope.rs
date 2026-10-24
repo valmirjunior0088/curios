@@ -16,6 +16,8 @@ use {
 /// A dependent context: a chain of entries, each a type under a mark, where each `Cons` tail is a one-binder [`Scope`], so every later entry — and the final `Done` payload — may mention the binders before it. Function types, function literals, and tuple types all reuse it and differ only in the payload: a `Term` (the return type or body) for Π/λ, `()` for Σ, where the fields themselves are the point.
 ///
 /// **A member's mark is its entry's.** How a member binds — plain, implicit or witness — is stated here and nowhere beside the telescope, so no walk can pair a member with another's mark. The mark is part of the telescope's identity, compared and hashed with the entry's type: two function types differing in a mark alone are two types. A tuple type and an index telescope are built all-plain ([`Telescope::build`]), since their members are always written.
+///
+/// **A telescope states its width.** Each `Cons` carries how many entries the telescope it heads holds ([`Width`]), stated as it is built out of the width of the telescope it holds, so [`Telescope::len`] reads it, and no telescope states a width its spine does not have: a `Cons` is built here alone ([`Telescope::cons`]), and a reader elsewhere passes over the count. It stands on the telescope and not on the formers that hold one, so every reader of a width reads it, and no sequence's length is stated beside the sequence.
 #[curios_archive::archived(recursive)]
 pub enum Telescope<B: Bound> {
     Done(Box<B>),
@@ -23,12 +25,24 @@ pub enum Telescope<B: Bound> {
         Plicity,
         Term,
         #[archived_omit_bounds] Scope<One, Telescope<B>>,
+        Width,
     ),
 }
+
+/// How many entries a telescope holds from the `Cons` that carries it: built only beside the `Cons` it counts ([`Telescope::cons`]), out of the count of the telescope that `Cons` holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct Width(u32);
 
 impl<B: Bound> Telescope<B> {
     pub fn done(body: B) -> Self {
         Telescope::Done(body.into())
+    }
+
+    /// The entry `type_` under `mark` ahead of `rest`, counting one more entry than `rest` holds.
+    pub fn cons(mark: Plicity, type_: Term, rest: Scope<One, Telescope<B>>) -> Self {
+        let width = u32::try_from(rest.body.len() + 1).expect("telescope width exhausted");
+        Telescope::Cons(mark, type_, rest, Width(width))
     }
 
     /// Build an all-plain telescope from `(binder, type)` entries in written order: [`Telescope::build_marked`] with every member explicit, which is what a tuple type, an index telescope and a function over written arguments alone are.
@@ -95,7 +109,7 @@ impl<B: Bound> Telescope<B> {
                 _ => closed(ty, index),
             };
 
-            telescope = Telescope::Cons(
+            telescope = Telescope::cons(
                 *mark,
                 ty,
                 Scope {
@@ -135,14 +149,12 @@ impl<B: Bound> Telescope<B> {
         Ok((cursor.into_args(), body))
     }
 
+    /// How many entries it holds, as its head states ([`Width`]).
     pub fn len(&self) -> usize {
-        let mut n = 0;
-        let mut cur = self;
-        while let Telescope::Cons(_, _, rest) = cur {
-            n += 1;
-            cur = &rest.body;
+        match self {
+            Telescope::Done(_) => 0,
+            Telescope::Cons(.., Width(width)) => *width as usize,
         }
-        n
     }
 
     pub fn is_empty(&self) -> bool {
@@ -153,7 +165,7 @@ impl<B: Bound> Telescope<B> {
     pub fn map_terminal(&self, f: impl FnOnce(&B) -> B) -> Self {
         match self {
             Telescope::Done(body) => Telescope::Done(Box::new(f(body))),
-            Telescope::Cons(plicity, domain, rest) => Telescope::Cons(
+            Telescope::Cons(plicity, domain, rest, ..) => Telescope::cons(
                 *plicity,
                 domain.clone(),
                 rest.map_body(|inner| inner.map_terminal(f)),
@@ -167,7 +179,7 @@ impl<B: Bound> Telescope<B> {
         loop {
             match current {
                 Telescope::Done(body) => return body,
-                Telescope::Cons(_, _, rest) => current = &rest.body,
+                Telescope::Cons(_, _, rest, ..) => current = &rest.body,
             }
         }
     }
@@ -177,12 +189,12 @@ impl<B: Bound> Telescope<B> {
         let mut at = self;
         for _ in 0..index {
             match at {
-                Telescope::Cons(_, _, rest) => at = &rest.body,
+                Telescope::Cons(_, _, rest, ..) => at = &rest.body,
                 Telescope::Done(_) => return None,
             }
         }
         match at {
-            Telescope::Cons(_, ty, _) => Some(ty),
+            Telescope::Cons(_, ty, ..) => Some(ty),
             Telescope::Done(_) => None,
         }
     }
@@ -191,7 +203,7 @@ impl<B: Bound> Telescope<B> {
     pub fn prefix(&self) -> Telescope<()> {
         let mut entries = Vec::new();
         let mut current = self;
-        while let Telescope::Cons(mark, ty, rest) = current {
+        while let Telescope::Cons(mark, ty, rest, ..) = current {
             entries.push((*mark, ty.clone(), rest.labels.clone()));
             current = &rest.body;
         }
@@ -200,7 +212,7 @@ impl<B: Bound> Telescope<B> {
             .into_iter()
             .rev()
             .fold(Telescope::Done(Box::new(())), |rest, (mark, ty, labels)| {
-                Telescope::Cons(
+                Telescope::cons(
                     mark,
                     ty,
                     Scope {
@@ -224,7 +236,7 @@ impl<B: Bound> Telescope<B> {
     pub fn hints(&self) -> Vec<Option<&str>> {
         let mut out = Vec::new();
         let mut cur = self;
-        while let Telescope::Cons(_, _, rest) = cur {
+        while let Telescope::Cons(_, _, rest, ..) = cur {
             out.push(rest.first_hint());
             cur = &rest.body;
         }
@@ -235,7 +247,7 @@ impl<B: Bound> Telescope<B> {
     pub fn marks(&self) -> Vec<Plicity> {
         let mut out = Vec::new();
         let mut cur = self;
-        while let Telescope::Cons(mark, _, rest) = cur {
+        while let Telescope::Cons(mark, _, rest, ..) = cur {
             out.push(*mark);
             cur = &rest.body;
         }
@@ -246,7 +258,7 @@ impl<B: Bound> Telescope<B> {
     pub fn proofs(&self) -> Vec<bool> {
         let mut out = Vec::new();
         let mut cur = self;
-        while let Telescope::Cons(_, _, rest) = cur {
+        while let Telescope::Cons(_, _, rest, ..) = cur {
             out.push(rest.binds_proof(0));
             cur = &rest.body;
         }
@@ -265,7 +277,7 @@ impl<B: Bound> Telescope<B> {
         let body = loop {
             match current {
                 Telescope::Done(body) => break body,
-                Telescope::Cons(mark, ty, rest) => {
+                Telescope::Cons(mark, ty, rest, ..) => {
                     let Scope {
                         arity,
                         labels,
@@ -286,7 +298,7 @@ impl<B: Bound> Telescope<B> {
                     body: Box::new(rest),
                 };
 
-                Telescope::Cons(mark, ty, scope.with_proofs(&[*proof]))
+                Telescope::cons(mark, ty, scope.with_proofs(&[*proof]))
             },
         )
     }
@@ -296,7 +308,7 @@ impl<B: Bound> Telescope<B> {
         let (mut this, mut that) = (self, other);
         loop {
             match (this, that) {
-                (Telescope::Cons(left, _, rest), Telescope::Cons(right, _, others)) => {
+                (Telescope::Cons(left, _, rest, ..), Telescope::Cons(right, _, others, ..)) => {
                     if left != right {
                         return false;
                     }
@@ -314,7 +326,7 @@ impl<B: Bound> Telescope<B> {
         let mut cur = self;
         for _ in 0..index {
             match cur {
-                Telescope::Cons(_, _, rest) => cur = &rest.body,
+                Telescope::Cons(_, _, rest, ..) => cur = &rest.body,
                 Telescope::Done(_) => return None,
             }
         }
@@ -336,7 +348,7 @@ impl<B: Bound> Telescope<B> {
         let body = loop {
             match current {
                 Telescope::Done(body) => break body,
-                Telescope::Cons(_, ty, rest) => {
+                Telescope::Cons(_, ty, rest, ..) => {
                     entries.push((ty, rest.labels));
                     current = *rest.body;
                 }
@@ -346,7 +358,7 @@ impl<B: Bound> Telescope<B> {
         entries.into_iter().zip(marks).rev().fold(
             Telescope::Done(body),
             |rest, ((ty, labels), mark)| {
-                Telescope::Cons(
+                Telescope::cons(
                     *mark,
                     ty,
                     Scope {
@@ -367,7 +379,7 @@ impl<B: Bound> Telescope<B> {
         let body = loop {
             match current {
                 Telescope::Done(body) => break body,
-                Telescope::Cons(mark, ty, rest) => {
+                Telescope::Cons(mark, ty, rest, ..) => {
                     let label = labels.next().expect("relabel arity");
                     let labels = rest
                         .labels
@@ -383,7 +395,7 @@ impl<B: Bound> Telescope<B> {
             .into_iter()
             .rev()
             .fold(Telescope::Done(body), |rest, (mark, ty, labels)| {
-                Telescope::Cons(
+                Telescope::cons(
                     mark,
                     ty,
                     Scope {
@@ -529,7 +541,7 @@ impl<'a, B: Bound> Cursor<'a, B> {
     pub fn entry(&self) -> Option<(Option<&'a str>, Term)> {
         match self.at {
             Telescope::Done(_) => None,
-            Telescope::Cons(_, ty, rest) => Some((rest.first_hint(), self.opened(ty))),
+            Telescope::Cons(_, ty, rest, ..) => Some((rest.first_hint(), self.opened(ty))),
         }
     }
 
@@ -544,7 +556,7 @@ impl<'a, B: Bound> Cursor<'a, B> {
     /// What the scope remembers of the binder at this position, for a caller that renders it; `None` at the end, or for a scope built without labels.
     pub(crate) fn label(&self) -> Option<&'a Label> {
         match self.at {
-            Telescope::Cons(_, _, rest) => rest.label(0),
+            Telescope::Cons(_, _, rest, ..) => rest.label(0),
             Telescope::Done(_) => None,
         }
     }
@@ -562,7 +574,7 @@ impl<'a, B: Bound> Cursor<'a, B> {
     /// Whether anything after the entry at this position names its binder. Read off the unopened remainder, which opening earlier binders does not change.
     pub fn binder_used(&self) -> bool {
         match self.at {
-            Telescope::Cons(_, _, rest) => rest.uses(0),
+            Telescope::Cons(_, _, rest, ..) => rest.uses(0),
             Telescope::Done(_) => false,
         }
     }
@@ -570,7 +582,7 @@ impl<'a, B: Bound> Cursor<'a, B> {
     /// Step past the entry at this position, opening its binder at `arg`. Stepping past the end is a caller's arity bug.
     pub fn advance(&mut self, arg: Term) {
         match self.at {
-            Telescope::Cons(_, _, rest) => {
+            Telescope::Cons(_, _, rest, ..) => {
                 self.at = &rest.body;
                 self.args.push(arg);
             }
@@ -616,7 +628,7 @@ pub trait Advance {
 impl<B: Bound> Advance for Cursor<'_, B> {
     fn hint(&self) -> Option<&str> {
         match self.at {
-            Telescope::Cons(_, _, rest) => rest.first_hint(),
+            Telescope::Cons(_, _, rest, ..) => rest.first_hint(),
             Telescope::Done(_) => None,
         }
     }
@@ -679,7 +691,9 @@ impl Telescope<Term> {
     /// Whether any metavariable in a function/Π telescope (`Func`/`FuncType`) — the parameter types and the trailing body/return type — satisfies `pred`, short-circuiting on the first hit.
     pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
-            Telescope::Cons(_, ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
+            Telescope::Cons(_, ty, rest, ..) => {
+                ty.any_metavar(pred) || rest.body().any_metavar(pred)
+            }
             Telescope::Done(body) => body.any_metavar(pred),
         }
     }
@@ -687,7 +701,7 @@ impl Telescope<Term> {
     /// Whether any `Term` in a function/Π telescope (`Func`/`FuncType`) — the parameter types and the trailing body/return type — satisfies `pred`, short-circuiting on the first hit. The telescope leg of `Subterm::any_child_term`: `pred` carries the per-node memoized recursion, so this visits each `Term` exactly once.
     pub(crate) fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
-            Telescope::Cons(_, ty, rest) => pred(ty) || rest.body().any_term(pred),
+            Telescope::Cons(_, ty, rest, ..) => pred(ty) || rest.body().any_term(pred),
             Telescope::Done(body) => pred(body),
         }
     }
@@ -695,7 +709,7 @@ impl Telescope<Term> {
     /// Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and the trailing body/return type. Concrete in `Term` — no collector trait needed. See `Subterm::collect_construction_names`.
     pub fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
-            Telescope::Cons(_, ty, rest) => {
+            Telescope::Cons(_, ty, rest, ..) => {
                 ty.collect_construction_names(names);
                 rest.body().collect_construction_names(names);
             }
@@ -708,7 +722,9 @@ impl Telescope<Vec<Term>> {
     /// Whether any metavariable in a constructor signature — the payload domains, or one of the index targets it terminates in — satisfies `pred`, short-circuiting on the first hit.
     pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
-            Telescope::Cons(_, ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
+            Telescope::Cons(_, ty, rest, ..) => {
+                ty.any_metavar(pred) || rest.body().any_metavar(pred)
+            }
             Telescope::Done(targets) => targets.iter().any(|target| target.any_metavar(pred)),
         }
     }
@@ -718,7 +734,9 @@ impl Telescope<Telescope<()>> {
     /// Whether any metavariable in a nested arity telescope — a declaration's parameter domains and, at its terminal, its index or field domains — satisfies `pred`, short-circuiting on the first hit.
     pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
-            Telescope::Cons(_, ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
+            Telescope::Cons(_, ty, rest, ..) => {
+                ty.any_metavar(pred) || rest.body().any_metavar(pred)
+            }
             Telescope::Done(inner) => inner.any_metavar(pred),
         }
     }
@@ -728,7 +746,9 @@ impl Telescope<()> {
     /// Whether any metavariable in a Σ telescope (`TupleType`) — only the field types; its `Done` body is `()` — satisfies `pred`, short-circuiting on the first hit.
     pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
-            Telescope::Cons(_, ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
+            Telescope::Cons(_, ty, rest, ..) => {
+                ty.any_metavar(pred) || rest.body().any_metavar(pred)
+            }
             // The trailing body is `()`, which holds no metavariables.
             Telescope::Done(_) => false,
         }
@@ -737,7 +757,7 @@ impl Telescope<()> {
     /// Whether any `Term` in a Σ telescope (`TupleType`) — only the field types; its `Done` body is `()` — satisfies `pred`, short-circuiting on the first hit. See the `Telescope<Term>` counterpart above.
     pub(crate) fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         match self {
-            Telescope::Cons(_, ty, rest) => pred(ty) || rest.body().any_term(pred),
+            Telescope::Cons(_, ty, rest, ..) => pred(ty) || rest.body().any_term(pred),
             // The trailing body is `()`, which holds no terms.
             Telescope::Done(_) => false,
         }
@@ -745,7 +765,7 @@ impl Telescope<()> {
 
     /// Walk a Σ telescope (`TupleType`): only the field types — its `Done` body is `()`, which contributes no names.
     pub fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
-        if let Telescope::Cons(_, ty, rest) = self {
+        if let Telescope::Cons(_, ty, rest, ..) = self {
             ty.collect_construction_names(names);
             rest.body().collect_construction_names(names);
         }
@@ -756,7 +776,7 @@ impl<B: Bound> fmt::Debug for Telescope<B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Telescope::Done(body) => f.debug_tuple("Done").field(body).finish(),
-            Telescope::Cons(mark, ty, rest) => f
+            Telescope::Cons(mark, ty, rest, ..) => f
                 .debug_tuple("Cons")
                 .field(mark)
                 .field(ty)
@@ -770,7 +790,9 @@ impl<B: Bound> Clone for Telescope<B> {
     fn clone(&self) -> Self {
         match self {
             Telescope::Done(body) => Telescope::Done(body.clone()),
-            Telescope::Cons(mark, ty, rest) => Telescope::Cons(*mark, ty.clone(), rest.clone()),
+            Telescope::Cons(mark, ty, rest, width) => {
+                Telescope::Cons(*mark, ty.clone(), rest.clone(), *width)
+            }
         }
     }
 }
@@ -779,7 +801,7 @@ impl<B: Bound> PartialEq for Telescope<B> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Telescope::Done(a), Telescope::Done(b)) => a == b,
-            (Telescope::Cons(ma, ta, ra), Telescope::Cons(mb, tb, rb)) => {
+            (Telescope::Cons(ma, ta, ra, ..), Telescope::Cons(mb, tb, rb, ..)) => {
                 ma == mb && ta == tb && ra == rb
             }
             _ => false,
@@ -796,7 +818,7 @@ impl<B: Bound> Hash for Telescope<B> {
                 state.write_u8(0);
                 body.hash(state);
             }
-            Telescope::Cons(mark, ty, rest) => {
+            Telescope::Cons(mark, ty, rest, ..) => {
                 state.write_u8(1);
                 mark.hash(state);
                 ty.hash(state);
@@ -819,7 +841,7 @@ impl<B: Bound> Bound for Telescope<B> {
         let mut current = self;
         let body = loop {
             match current {
-                Telescope::Cons(mark, ty, rest) => {
+                Telescope::Cons(mark, ty, rest, ..) => {
                     entries.push((
                         *mark,
                         visit.visit_subterm(ty),
@@ -838,7 +860,7 @@ impl<B: Bound> Bound for Telescope<B> {
             Telescope::Done(body.into()),
             |rest, (mark, ty, labels, arity)| {
                 visit.leave_scope(arity);
-                Telescope::Cons(
+                Telescope::cons(
                     mark,
                     ty,
                     Scope {
@@ -857,7 +879,7 @@ impl<B: Bound> Bound for Telescope<B> {
         let mut current = self;
         loop {
             match current {
-                Telescope::Cons(_, ty, rest) => {
+                Telescope::Cons(_, ty, rest, ..) => {
                     reach = reach.max(ty.reach().saturating_sub(depth));
                     depth += rest.arity();
                     current = rest.body();
@@ -874,7 +896,7 @@ impl<B: Bound> Bound for Telescope<B> {
         let mut current = self;
         loop {
             match current {
-                Telescope::Cons(_, ty, rest) => {
+                Telescope::Cons(_, ty, rest, ..) => {
                     sets.push(ty.free_vars());
                     current = rest.body();
                 }
@@ -890,7 +912,7 @@ impl<B: Bound> Bound for Telescope<B> {
         let mut current = self;
         loop {
             match current {
-                Telescope::Cons(_, ty, rest) => match ty.has_metavar() {
+                Telescope::Cons(_, ty, rest, ..) => match ty.has_metavar() {
                     true => return true,
                     false => current = rest.body(),
                 },
@@ -903,7 +925,7 @@ impl<B: Bound> Bound for Telescope<B> {
         let mut current = self;
         loop {
             match current {
-                Telescope::Cons(_, ty, rest) => match ty.has_transient() {
+                Telescope::Cons(_, ty, rest, ..) => match ty.has_transient() {
                     true => return true,
                     false => current = rest.body(),
                 },
@@ -916,7 +938,7 @@ impl<B: Bound> Bound for Telescope<B> {
         let mut current = self;
         loop {
             match current {
-                Telescope::Cons(_, ty, rest) => match ty.has_universe_meta() {
+                Telescope::Cons(_, ty, rest, ..) => match ty.has_universe_meta() {
                     true => return true,
                     false => current = rest.body(),
                 },

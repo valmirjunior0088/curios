@@ -1682,7 +1682,7 @@ fn entries<B: Bound>(telescope: &Telescope<B>) -> (Vec<&Term>, &B) {
     let mut rest = telescope;
     loop {
         match rest {
-            Telescope::Cons(_, type_, scope) => {
+            Telescope::Cons(_, type_, scope, ..) => {
                 types.push(type_);
                 rest = scope.body();
             }

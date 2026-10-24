@@ -523,7 +523,7 @@ pub(super) fn is_placeholder(context: &Context, term: &Term) -> bool {
 /// The link at the cursor's entry, opened at every argument before it: what [`argument_site`] and `result_metavars_from` read, since a later domain's shape can depend on an earlier argument. It costs the remainder's size, so only the paths that read it — a failed check, a literal that might park — ask for it.
 fn opened_link(cursor: &Cursor<'_, Term>) -> Scope<One, Telescope<Term>> {
     match cursor.rest() {
-        Telescope::Cons(_, _, link) => link,
+        Telescope::Cons(_, _, link, ..) => link,
         Telescope::Done(_) => unreachable!("an entry stands at the cursor"),
     }
 }
@@ -543,7 +543,7 @@ fn argument_site(
         let mut cursor = rest.body();
         let mut explicit = position + 1;
         for later in later_plicities {
-            let Telescope::Cons(_, ty, next) = cursor else {
+            let Telescope::Cons(_, ty, next, ..) = cursor else {
                 break;
             };
             if *later == Plicity::Explicit {

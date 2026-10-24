@@ -207,7 +207,7 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<(), 
         let mut walk = &induct_decl.arity;
         loop {
             match walk {
-                Telescope::Cons(_, _, rest) => walk = rest.body(),
+                Telescope::Cons(_, _, rest, ..) => walk = rest.body(),
                 Telescope::Done(indices) => break owned(indices.labels()),
             }
         }
@@ -339,7 +339,7 @@ fn elaborate_struct(
     let mut written = &struct_decl.arity;
     let fields = loop {
         match written {
-            Telescope::Cons(_, entry, rest) => {
+            Telescope::Cons(_, entry, rest, ..) => {
                 check_written_type_totality(context, entry, ErasedSite::FieldOf(*name))?;
                 written = rest.body();
             }
@@ -347,7 +347,7 @@ fn elaborate_struct(
         }
     };
     let mut written = fields;
-    while let Telescope::Cons(_, entry, rest) = written {
+    while let Telescope::Cons(_, entry, rest, ..) = written {
         check_written_type_totality(context, entry, ErasedSite::FieldOf(*name))?;
         written = rest.body();
     }
@@ -472,7 +472,7 @@ fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseM
                 let mut current = telescope;
                 loop {
                     match current {
-                        Telescope::Cons(_, domain, rest) => {
+                        Telescope::Cons(_, domain, rest, ..) => {
                             domains.push(domain);
                             current = rest.body();
                         }
@@ -502,7 +502,7 @@ fn result_sort_only_metas(context: &Context, type_: &Term) -> BTreeSet<UniverseM
 fn parameter_metas(arity: &Telescope<Telescope<()>>) -> BTreeSet<UniverseMetaId> {
     let mut metas = BTreeSet::new();
     let mut current = arity;
-    while let Telescope::Cons(_, domain, rest) = current {
+    while let Telescope::Cons(_, domain, rest, ..) = current {
         metas.extend(domain.universe_metas());
         current = rest.body();
     }

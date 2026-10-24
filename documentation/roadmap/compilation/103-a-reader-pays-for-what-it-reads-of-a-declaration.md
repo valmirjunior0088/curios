@@ -1,8 +1,6 @@
 # A reader pays for what it reads of a declaration
 
-[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a declaration read a fact at a time — "an instantiated declaration is read by facet — its sort, its arity, one constructor, one field — and only the facet asked is instantiated" — and a compilation end in time proportional to what was written plus what the budget counted; [an item imports what it reads of another's row](../../../curios-ersd/README.md#an-item-imports-what-it-reads-of-anothers-row) so that no row is copied once for each declaration that reads it. One reader takes a row whole where it reads a fact of it, so `k` readers of a row of width `w` cost `w·k`: every reader that asks a telescope its width, which walks it. A row is a family's constructors, a structure's or a tuple type's fields, a function type's domains, or an erased schema.
-
-Every stage is ready. Two readers are investigations (*What is not yet known*): a call of one method of a wide concept, and a read of a wide structure's last field.
+[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a declaration read a fact at a time — "an instantiated declaration is read by facet — its sort, its arity, one constructor, one field — and only the facet asked is instantiated" — and a compilation end in time proportional to what was written plus what the budget counted; [an item imports what it reads of another's row](../../../curios-ersd/README.md#an-item-imports-what-it-reads-of-anothers-row) so that no row is copied once for each declaration that reads it. Two readers may still take a row whole where they read a fact of it, so that `k` readers of a row of width `w` cost `w·k`, and each is an investigation (*What is not yet known*): a call of one method of a wide concept, and a read of a wide structure's last field. A row is a family's constructors, a structure's or a tuple type's fields, a function type's domains, or an erased schema.
 
 ## What is wrong
 
@@ -22,17 +20,9 @@ Counted over the commit that types a slot without copying its type, with a relea
 
 The fold states a stage's bytes to a tenth of a megabyte, so a row moves by 7 KB a reader with nothing grown. A method call's elaboration allocates differently between two runs of one program, as no other probe's does, so its row gives the least and the most of four runs.
 
-### A telescope's width is walked
-
-`Telescope::len` walks the spine to count it, so every reader that asks a row its width and not its entries walks `w` of them for one number: the kernel's application and projection for an arity and an out-of-range report, and erasure's register for a width (`register_shape` → `shape_walk`). The walk allocates nothing, and none of the figures above shows it.
-
 ## What is known
 
 - **The peers read a synonym's kind and a constructor's tag without the rest.** GHC reads a type synonym's kind eagerly and its right-hand side through a thunk forced where it is needed, and a data type's constructor argument types lazily, "in the hope that we may never poke on those argument types" ([`TcIface`](https://downloads.haskell.org/ghc/8.0.1/docs/html/libraries/ghc-8.0.1/src/TcIface.html)); Rocq stores a constant's relevance on it, computed once where the constant is typed (`const_relevance`, [`constant_typing.ml`](https://github.com/rocq-prover/rocq/blob/master/kernel/constant_typing.ml)); Lean's IR constructor carries its index and its field counts and nothing of its family (`CtorInfo`, [`Basic.lean`](https://github.com/leanprover/lean4/blob/master/src/Lean/Compiler/IR/Basic.lean)), and its interpreter takes the IR "directly from the elab_environment", a declaration by name ([`ir_interpreter.cpp`](https://github.com/leanprover/lean4/blob/master/src/library/ir_interpreter.cpp)).
-
-## Decided
-
-- **A telescope states its width.** Each `Cons` carries the length of the telescope it heads, as a count only `curios-core`'s telescope module builds, so `len` is constant time and no construction states a length its spine does not have; elsewhere a telescope is built through `Telescope::cons`. A positional slot is found by walking to it, never by listing every mark. Rejected: the width on `TupleType` and `FuncType` alone, the two formers whose readers ask it today, which leaves `len`'s other readers walking and states a sequence's length beside the sequence rather than on it.
 
 ## What is not yet known
 
@@ -41,7 +31,7 @@ The fold states a stage's bytes to a tenth of a megabyte, so a row moves by 7 KB
 
 ## Stages
 
-8. **A telescope states its width.** The count on `Cons` and `Telescope::cons`, then the readers that walk to learn a width or one slot: `marks` read at one position, erasure's register and projection. Stored bytes: every telescope. Check: the growths `AliasReaders` and `ArrowAliasReaders`; `tests::laws`; `/std`'s verdicts and erased forms equal. Size: two commits.
+None is left: an investigation that finds a cost adds one.
 
 ## Measuring
 
@@ -49,4 +39,4 @@ Each probe is a program on standard input. A reader probe declares the row and `
 
 ## Verification and retirement
 
-Each stage holds its own growth shape under `growth_slopes`, whose every slope stays under three where the shape grows a row's width and its readers together. A stage that moves stored bytes states them and holds verdicts, erased results and executable artifacts equal; one that moves none holds `/std`'s images byte-identical at one path. A landed stage moves its contract to its owner — a telescope's width to `curios-core`'s telescope module — and this specification keeps the rest. Retire it once every stage has landed, both investigations are settled, and nothing references this file.
+Each stage holds its own growth shape under `growth_slopes`, whose every slope stays under three where the shape grows a row's width and its readers together. A stage that moves stored bytes states them and holds verdicts, erased results and executable artifacts equal; one that moves none holds `/std`'s images byte-identical at one path. A landed stage moves its contract to its owner, and this specification keeps the rest. Retire it once both investigations are settled and nothing references this file.

@@ -432,8 +432,8 @@ fn telescopes_alike<B: Bound>(
     loop {
         match (this, that) {
             (
-                Telescope::Cons(this_mark, this_type, this_rest),
-                Telescope::Cons(that_mark, that_type, that_rest),
+                Telescope::Cons(this_mark, this_type, this_rest, ..),
+                Telescope::Cons(that_mark, that_type, that_rest, ..),
             ) => {
                 if this_mark != that_mark
                     || this_rest.arity() != that_rest.arity()

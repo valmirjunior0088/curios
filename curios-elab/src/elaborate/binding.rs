@@ -1150,12 +1150,12 @@ pub(super) fn elaborate_func_check(
         let mut link = telescope;
         for _ in 0..member {
             match link {
-                Telescope::Cons(_, _, rest) => link = rest.body(),
+                Telescope::Cons(_, _, rest, ..) => link = rest.body(),
                 Telescope::Done(_) => return None,
             }
         }
         match link {
-            Telescope::Cons(_, domain, _) => domain.extent(),
+            Telescope::Cons(_, domain, ..) => domain.extent(),
             Telescope::Done(_) => None,
         }
     }

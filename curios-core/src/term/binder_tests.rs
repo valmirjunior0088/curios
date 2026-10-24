@@ -395,7 +395,7 @@ fn a_telescope_builds_as_closing_each_entry_over_the_rest_would() {
     let folded = binders.iter().zip(&types).rev().fold(
         Telescope::done(body.clone()),
         |rest, (binder, type_)| {
-            Telescope::Cons(
+            Telescope::cons(
                 Plicity::Explicit,
                 type_.clone(),
                 Scope::close(One, &[binder], rest),
@@ -430,7 +430,7 @@ fn a_telescope_opens_each_entry_as_opening_one_binder_at_a_time_would() {
     let expected_body = loop {
         match current {
             Telescope::Done(body) => break *body,
-            Telescope::Cons(_, type_, rest) => {
+            Telescope::Cons(_, type_, rest, ..) => {
                 expected_types.push(type_);
                 current = rest.open(&[&args[expected_types.len() - 1]]);
                 residuals.push(current.clone());

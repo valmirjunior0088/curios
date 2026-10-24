@@ -160,7 +160,7 @@ impl<E: ProofBinders> Marking<'_, E> {
         let outcome = loop {
             match current {
                 Telescope::Done(body) => break payload(self, body),
-                Telescope::Cons(mark, type_, rest) => {
+                Telescope::Cons(mark, type_, rest, ..) => {
                     let walked = match self.term(type_) {
                         Ok(walked) => walked,
                         Err(refusal) => break Err(refusal),
@@ -200,7 +200,7 @@ impl<E: ProofBinders> Marking<'_, E> {
                     body: Box::new(marked),
                 };
 
-                Telescope::Cons(mark, type_, scope.with_proofs(&[proof]))
+                Telescope::cons(mark, type_, scope.with_proofs(&[proof]))
             },
         )))
     }

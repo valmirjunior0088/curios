@@ -864,7 +864,7 @@ fn the_restored_prelude_marks_binders_and_none_at_a_sort() {
             Box::new(move |_, term: &Term| {
                 if let Subterm::Func(function) = &**term {
                     let mut telescope = &function.telescope;
-                    while let Telescope::Cons(_, type_, rest) = telescope {
+                    while let Telescope::Cons(_, type_, rest, ..) = telescope {
                         if rest.binds_proof(0) {
                             counter.set(counter.get() + 1);
                             if matches!(&**type_, Subterm::Sort(..)) {

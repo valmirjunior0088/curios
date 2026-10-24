@@ -484,7 +484,7 @@ impl Writing {
     ) -> Telescope<B> {
         match telescope {
             Telescope::Done(body) => Telescope::Done(Box::new(payload(self, context, body))),
-            Telescope::Cons(mark, type_, rest) => {
+            Telescope::Cons(mark, type_, rest, ..) => {
                 let mark = *mark;
                 let walked = self.term(context, type_);
                 let opened = self.released(type_);
@@ -504,7 +504,7 @@ impl Writing {
                     rest
                 });
 
-                Telescope::Cons(mark, walked, rest)
+                Telescope::cons(mark, walked, rest)
             }
         }
     }

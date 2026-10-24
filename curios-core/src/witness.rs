@@ -506,7 +506,7 @@ fn terminal(type_: &Term) -> &Term {
             loop {
                 match telescope {
                     Telescope::Done(body) => return terminal(body),
-                    Telescope::Cons(_, _, scope) => telescope = scope.body(),
+                    Telescope::Cons(_, _, scope, ..) => telescope = scope.body(),
                 }
             }
         }

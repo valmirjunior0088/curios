@@ -317,7 +317,7 @@ pub(super) fn audit_public_exposures(
                 // The parameter domains alone: `arity.free_vars()` would reach the fields it terminates in, and the two are audited under different rules — parameters belong to the nominal type's public face, fields to its representation.
                 let mut walk = &struct_decl.arity;
                 let mut param_dependencies = Vec::new();
-                while let curios_core::Telescope::Cons(_, domain, rest) = walk {
+                while let curios_core::Telescope::Cons(_, domain, rest, ..) = walk {
                     param_dependencies.extend(globals(&domain.free_vars()));
                     walk = rest.body();
                 }
