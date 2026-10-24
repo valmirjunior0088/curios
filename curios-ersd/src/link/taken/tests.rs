@@ -107,6 +107,46 @@ fn a_suffix_imports_the_constructors_it_names_at_their_positions() {
     assert_eq!(shape(&taken.module), shape(&using));
 }
 
+/// Over a module that imports the family, a constructor's position is the one its import states, and the family's count is the import's.
+#[test]
+fn a_suffix_over_an_imported_family_imports_it_at_the_positions_the_module_states() {
+    let (first, imported) = digit(5, 0);
+    let (using, also) = digit(5, 3);
+
+    let mut module = Module::new();
+    let family = module
+        .link(
+            &first,
+            &Resolution {
+                imports_rows: true,
+                ..Default::default()
+            },
+        )
+        .family(imported);
+    let mark = module.mark();
+    module.link(
+        &using,
+        &Resolution {
+            families: [(also, family)].into(),
+            imports_rows: true,
+            ..Default::default()
+        },
+    );
+
+    let taken = module
+        .taken(&mark, &[], |_| false, |_| None)
+        .expect("the suffix names no value or function");
+    taken
+        .module
+        .verify_fragment()
+        .expect("what is taken is a fragment");
+
+    let imports = taken.module.imports();
+    assert_eq!(imports.families().values().collect::<Vec<_>>(), [&5]);
+    assert_eq!(imports.constructors().values().collect::<Vec<_>>(), [&3]);
+    assert_eq!(shape(&taken.module), shape(&using));
+}
+
 #[test]
 fn a_fragment_taken_back_out_is_the_fragment_that_was_linked() {
     let (program, mark, _, function, interface) = linked();

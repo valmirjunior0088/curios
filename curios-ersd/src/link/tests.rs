@@ -226,6 +226,78 @@ fn an_imported_row_the_program_does_not_hold_is_not_linked() {
     Module::new().link(&using, &Resolution::default());
 }
 
+/// A module that imports rows holds a family no fragment declares at the count its readers state, with the constructors they name and no other, each read once at its position however many name it.
+#[test]
+fn a_row_no_fragment_declares_is_imported_at_what_its_readers_state() {
+    let (third, imported) = digit(5, 3);
+    let (first, also) = digit(5, 0);
+    let (again, once_more) = digit(5, 3);
+    let importing = Resolution {
+        imports_rows: true,
+        ..Default::default()
+    };
+
+    let mut module = Module::new();
+    let family = module.link(&third, &importing).family(imported);
+    for (fragment, held) in [(&first, also), (&again, once_more)] {
+        module.link(
+            fragment,
+            &Resolution {
+                families: [(held, family)].into(),
+                imports_rows: true,
+                ..Default::default()
+            },
+        );
+    }
+
+    let imports = module.imports();
+    assert_eq!(
+        imports.families().iter().collect::<Vec<_>>(),
+        [(&family, &5)]
+    );
+    let mut positions = imports.constructors().values().copied().collect::<Vec<_>>();
+    positions.sort_unstable();
+    assert_eq!(positions, [0, 3]);
+    assert_eq!(module.constructors().len(), 2);
+    module
+        .verify_fragment()
+        .expect("a module that imports its rows is a fragment");
+}
+
+/// A fragment's imported product is the module's import at the width the fragment states, and lists no field.
+#[test]
+fn an_imported_product_is_imported_at_its_width() {
+    let mut builder = ErsdBuilder::new();
+    let schema = builder.import_product(Some("Pair".into()), 2, false);
+    let one = nat(&mut builder, 1);
+    builder.item_value(
+        None,
+        Rhs::Product {
+            schema,
+            fields: vec![one, one],
+        },
+    );
+    let fragment = builder.into_module().expect("the fragment verifies");
+
+    let mut module = Module::new();
+    let landed = module
+        .link(
+            &fragment,
+            &Resolution {
+                imports_rows: true,
+                ..Default::default()
+            },
+        )
+        .product(schema);
+
+    assert_eq!(module.imports().products().get(&landed), Some(&2));
+    assert_eq!(module.product_width(landed), Some(2));
+    assert_eq!(
+        module.product(landed).map(|schema| schema.fields.len()),
+        Some(0)
+    );
+}
+
 #[test]
 fn a_fragments_rows_are_linked_without_its_items() {
     let (fragment, schema) = pair();

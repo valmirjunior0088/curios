@@ -289,35 +289,43 @@ impl Module {
         }
         for &product in &named.products.order {
             let held = self.product(product)?;
+            let width = self.product_width(product)?;
             let registered = match held.shared {
                 true => module.add_product(ProductSchema {
                     debug_name: held.debug_name.clone(),
-                    fields: vec![Field::opaque(None); held.width()],
+                    fields: vec![Field::opaque(None); width],
                     shared: true,
                 }),
-                false => module.import_product(held.debug_name.clone(), held.width(), false),
+                false => module.import_product(held.debug_name.clone(), width, false),
             };
             tables.products.insert(product, registered);
         }
-        // A family's list read once for every constructor named of it: the program declares each family it holds, so a constructor's place in the list is its position.
+        // A constructor's position is what its import states where the program imports its family, and otherwise its place in the family's list, read once for every constructor named of the family.
         let mut positions = BTreeMap::new();
         for &family in &named.families.order {
             let held = self.family(family)?;
-            let registered = module.import_family(held.debug_name.clone(), held.constructors.len());
-            positions.extend(
-                held.constructors
-                    .iter()
-                    .enumerate()
-                    .filter(|&(_, constructor)| named.constructors.seen.contains(constructor))
-                    .map(|(position, &constructor)| (constructor, position)),
-            );
+            let registered =
+                module.import_family(held.debug_name.clone(), self.constructor_count(family)?);
+            if !self.imports().families().contains_key(&family) {
+                positions.extend(
+                    held.constructors
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, constructor)| named.constructors.seen.contains(constructor))
+                        .map(|(position, &constructor)| (constructor, position)),
+                );
+            }
             tables.families.insert(family, registered);
         }
         for &constructor in &named.constructors.order {
             let row = self.constructor(constructor)?;
+            let position = match self.imports().constructors().get(&constructor) {
+                Some(&position) => position as usize,
+                None => positions[&constructor],
+            };
             let landed = module.import_constructor(
                 tables.families[&row.family],
-                positions[&constructor],
+                position,
                 row.debug_name.clone(),
                 row.width(),
             );

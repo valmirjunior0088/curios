@@ -60,7 +60,7 @@ pub struct ImportedFunction {
 
 /// What a module uses and does not define. A value and a function each in the order it was first used: the place of one here is how whoever links the module says what it stands for. A row another module declares by its identity here, with what this module reads of it, which is all the module holds of the row: a product its width, a family how many constructors it declares, and each constructor of it the module names its position in the declaration.
 ///
-/// A module with imports is a fragment: it verifies with no entry ([`Module::verify_fragment`]), every import bound before its first item, and it is never optimized, analysed or lowered. Linking resolves every one ([`Module::link`]), so the program a back end is handed has none, and holds every row it names whole.
+/// A module with imports is a fragment: it verifies with no entry ([`Module::verify_fragment`]), every import bound before its first item, and it is never optimized, analysed or lowered. Linking a program resolves every one ([`Module::link`]), so the program a back end is handed has none, and holds every row it names whole. An item evaluated where it is erased runs in a module that holds as imports the rows its fragments import and no fragment linked into it declares ([`Resolution::imports_rows`](crate::Resolution::imports_rows)): its evaluator holds a family, a product and a constructor by its identity and reads nothing of one ([`evaluate_since`](crate::evaluate_since)).
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived]
 pub struct Imports {
@@ -108,7 +108,7 @@ impl Imports {
 
 /// The erased program as flat, first-order data. See the crate documentation for the representation contract.
 ///
-/// Archived as what an item of a stored unit erased to. The constant interning index is skipped — it is exactly the inverse of the `constants` arena — so the serialized bytes stay deterministic (a hash map's iteration order is not). A restored module is linked from and never built on, so nothing rebuilds the index: linking interns a fragment's constants into the program that takes them.
+/// Archived as what an item of a stored unit erased to. The constant interning index is skipped — it is exactly the inverse of the `constants` arena — so the serialized bytes stay deterministic (a hash map's iteration order is not), and so is the index of imported constructors by position, the inverse of the positions [`Imports`] states. A restored module is linked from and never built on, so nothing rebuilds either: linking interns a fragment's constants into the program that takes them, and imports a row into the module that holds it as one.
 #[derive(Debug, Clone, Default)]
 #[curios_archive::archived(recursive)]
 pub struct Module {
@@ -128,6 +128,8 @@ pub struct Module {
     imports: Imports,
     #[archived_with(curios_archive::Skip)]
     constant_index: HashMap<Constant, ConstantId>,
+    #[archived_with(curios_archive::Skip)]
+    imported_at: BTreeMap<(FamilyId, u32), ConstructorId>,
 }
 
 impl Module {
@@ -363,6 +365,17 @@ impl Module {
             .position(|&listed| listed == id)
     }
 
+    /// The constructor this module holds at `position` of `family`: the one its list holds there where this module declares the family, and the one it imports at that position where it imports it, found without a scan. `None` where it holds none there.
+    pub fn constructor_at(&self, family: FamilyId, position: usize) -> Option<ConstructorId> {
+        match self.imports.families.contains_key(&family) {
+            true => self
+                .imported_at
+                .get(&(family, u32::try_from(position).ok()?))
+                .copied(),
+            false => self.family(family)?.constructors.get(position).copied(),
+        }
+    }
+
     pub fn foreign(&self, id: ForeignId) -> Option<&Arc<ForeignFunction>> {
         self.foreigns.get(id.index())
     }
@@ -455,10 +468,9 @@ impl Module {
         width: usize,
     ) -> ConstructorId {
         let id = self.add_constructor(family, debug_name, vec![Field::opaque(None); width]);
-        self.imports.constructors.insert(
-            id,
-            u32::try_from(position).expect("constructor position exhausted"),
-        );
+        let position = u32::try_from(position).expect("constructor position exhausted");
+        self.imports.constructors.insert(id, position);
+        self.imported_at.insert((family, position), id);
         id
     }
 
