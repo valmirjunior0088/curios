@@ -1,5 +1,5 @@
--- `Int` through its sign view, at zero, at both signs and at equal magnitudes of opposite sign: the order's laws, cancellation, `abs` and `sign` of a product, and the signed scale.
-use /std/{Nat, Int, Ordering, Eq};
+-- `Int` through its sign view, at zero, at both signs and at equal magnitudes of opposite sign: the order's laws, cancellation, the extrema, `abs` and `sign` of a product, the signed scale and floored division.
+use /std/{Nat, Int, Bool, List, Ordering, Eq, Test};
 use /std/Bool/{True, Holds};
 
 let _a_number_orders_as_equal_to_itself(a: Int) -> Eq()(Int/ord(a, a), Ordering/eq()) =
@@ -64,6 +64,29 @@ let _an_integer_is_its_sign_times_its_magnitude(
 ) -> Eq()(a, Int/sign(a) * Nat/to_int(Int/abs(a))) =
     Int/sign/times_abs(a);
 
+test parity_the_extrema_and_the_sign_compute =
+    Test/all([
+        Test/assert(Nat/is_even(0)),
+        Test/assert(Bool/not(Nat/is_even(7))),
+        Test/equal([Int/min(-3, +2), Int/max(-3, +2)], [-3, +2]),
+        Test/equal([Nat/min(7, 3), Nat/max(7, 3), Nat/min(4, 4)], [3, 7, 4]),
+        Test/equal(
+            [Nat/min(18446744073709551616, 5), Nat/max(18446744073709551616, 5)],
+            [5, 18446744073709551616]),
+        Test/equal(
+            [
+                Int/min(-18446744073709551616, +5),
+                Int/max(-18446744073709551616, -18446744073709551617)],
+            [-18446744073709551616, -18446744073709551616]),
+        Test/equal([Int/sign(-9), Int/sign(+0), Int/sign(+4)], [-1, +0, +1]),
+        Test/equal([Int/sign(-18446744073709551616), Int/sign(+18446744073709551616)], [-1, +1]),
+        Test/equal(
+            [Int/abs(-9), Int/abs(+0), Int/abs(+4), Int/abs(-1073741824)],
+            [9, 0, 4, 1073741824]),
+        Test/equal(
+            [Int/abs(-18446744073709551616), Int/abs(+18446744073709551616)],
+            [18446744073709551616, 18446744073709551616])]);
+
 let _a_shift_splits_at_a_smaller_count(
     x: Int,
     i: Nat,
@@ -97,3 +120,12 @@ let _a_stated_split_is_the_computed_one: {
     quotient: Eq()(-4, Int/DivMod/of(-7, 2).quotient),
     remainder: Eq()(1, Int/DivMod/of(-7, 2).remainder)} =
     Int/DivMod/unique(-7, 2, -4, 1, Eq/refl(), True/qed());
+
+-- Floored division at both signs, each split rejoined: the quotient's multiple of the divisor and the remainder are the dividend, and the remainder is below the divisor, where `/` and `%` leave a negative remainder.
+test floored_division_rejoins_every_dividend_with_a_remainder_below_its_divisor =
+    Test/assert(
+        List/all(
+            [-7, -6, -5, -1, +0, +1, +5, +6, +7],
+            (n: Int) =>
+                let split = Int/DivMod/of(n, 3);
+                split.quotient * +3 + Nat/to_int(split.remainder) == n && split.remainder < 3));

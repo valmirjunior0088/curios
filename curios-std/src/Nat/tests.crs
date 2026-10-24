@@ -1,0 +1,47 @@
+-- `/std/Nat` beyond the operators: powers, divisors, logarithms and roots computed, a bound decided by running it, and the proofs of the factors of a product, Euclid's division, the greatest common divisor and the binary scale.
+mod products;
+
+mod euclid;
+
+mod gcd;
+
+mod scale;
+
+use /std/{Nat, Bool, Test};
+use /std/Bool/{True, Holds};
+
+test powers_divisors_logarithms_and_roots_compute =
+    Test/equal(
+        [
+            Nat/pow(2, 10),
+            Nat/pow(7, 0),
+            Nat/pow(0, 3),
+            Nat/gcd(48, 18),
+            Nat/gcd(0, 5),
+            Nat/gcd(5, 0),
+            Nat/gcd(0, 0),
+            Nat/lcm(4, 6),
+            Nat/lcm(0, 6),
+            Nat/log2(1),
+            Nat/log2(1024),
+            Nat/log2(1023),
+            Nat/log2(0),
+            Nat/sqrt(0),
+            Nat/sqrt(15),
+            Nat/sqrt(16),
+            Nat/sqrt(1000000)],
+        [1024, 1, 0, 6, 5, 5, 0, 12, 0, 0, 10, 9, 0, 0, 3, 4, 1000]);
+
+-- A decision of every number below a bound holds where each number meets it, and of no bound one number fails.
+test a_decision_of_every_number_below_a_bound_is_decided_at_each =
+    Test/all([
+        Test/assert(Nat/all_below(10, (n) => n < 10)),
+        Test/assert(Bool/not(Nat/all_below(10, (n) => n < 9))),
+        Test/assert(Nat/all_below(0, (_) => false))]);
+
+-- A fact the logic reads of no operation is had of every byte by running it: the low bit of a number, which no law of `and` states, is at most one.
+let _a_fact_of_every_byte_is_decided_by_running_it(
+    n: Nat,
+    under: Holds(n < 256),
+) -> Holds(Nat/and(n, 1) <= 1) =
+    Nat/all_below/at(256, (m) => Nat/and(m, 1) <= 1, n, True/qed(), under);

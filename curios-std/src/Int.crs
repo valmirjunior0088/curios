@@ -1,3 +1,5 @@
+mod tests;
+
 pub use /sys/{let Int};
 pub use /sys/Int/{eql, neq, add, sub, div, rem, gt, ge, and, or, xor, shr, to_nat, to_flt};
 

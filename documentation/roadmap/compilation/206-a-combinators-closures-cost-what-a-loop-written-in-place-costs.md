@@ -9,4 +9,4 @@
 ## Refinement
 
 - **The design, one of two**: a specialization of a function at a call that passes it known closures, so the combinator's loop runs over direct calls and its description is the loop's own; or a weight for a description that counts a combinator's body once where several descriptions share it.
-- **Check**: the five tests above with `Handle/retried` in `/std`'s six readings, and `curios-std`'s tcp, fs, Tty and Tui units.
+- **Check**: the five tests above with `Handle/retried` in `/std`'s six readings, and `curios-std`'s tcp, fs, Tty and Tui tests.

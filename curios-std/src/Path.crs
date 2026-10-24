@@ -1,3 +1,5 @@
+mod tests;
+
 use /std/{Bytes, Byte, Str, Nat, Bool, Option, Result, List, Show, Spell, Fmt};
 use /std/ops/{Eql};
 

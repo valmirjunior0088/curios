@@ -1,3 +1,5 @@
+mod tests;
+
 --- How a key type encodes to the byte string that identifies it, in its own order: the concept, a witness for each key type the library has, and the laws every key has from it.
 pub mod Key;
 pub use Key/{let Key};

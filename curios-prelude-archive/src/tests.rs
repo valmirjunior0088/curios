@@ -15,12 +15,10 @@ use {
     },
 };
 
-/// Every `.crs` file `/std` is authored in, in the one tree `curios-std` holds.
+/// Every `.crs` file `/std` is authored in, in the one tree `curios-std` holds, its modules of tests among them.
 ///
 /// Walked rather than listed, for the reason the build script discovers its inputs rather than naming them: a module added without being registered is a mistake `the_std_record_names_every_authored_source_and_no_other` catches against this walk.
 pub(crate) fn authored() -> Vec<PathBuf> {
-    // The library's own tests sit inside its directory as units of their own, which no header of `/std` declares and `curios-std`'s suite holds.
-    let tests = std_directory().join("tests");
     let mut sources = Vec::new();
     let mut pending = Vec::from([std_directory()]);
 
@@ -29,7 +27,6 @@ pub(crate) fn authored() -> Vec<PathBuf> {
             let path = entry.expect("a readable entry").path();
 
             match path.is_dir() {
-                true if path == tests => {}
                 true => pending.push(path),
                 false if path.extension().is_some_and(|kind| kind == "crs") => sources.push(path),
                 false => {}
@@ -41,7 +38,7 @@ pub(crate) fn authored() -> Vec<PathBuf> {
     sources
 }
 
-/// **The standard library lints clean.**
+/// **The standard library lints clean**, lowered with its tests, as `curios lint` lints a package: a declaration only a test reads is read.
 ///
 /// The lints are exact and always on, so the honest test of them is the largest corpus in the tree: an import nothing resolves through, a binder nothing reads or a private declaration nothing reaches in `/std` is a finding to fix there, not a rule to relax. A binder only a proof the elaborator wrote reads is used, which only elaboration says, so the lowering here is credited with what the build script's elaboration recorded; lowering and restoring are the whole cost, so this belongs in the ordinary suite. A failure renders each lint as `curios lint` would.
 #[test]
@@ -49,7 +46,7 @@ fn every_authored_source_is_lint_clean() {
     // Both roots, in the order the build script folds them: `/std`'s imports resolve only against a lowered `/sys`, and an unresolved import is not a lint but a lowering failure.
     let mut sys = prepare_prelude(&sys_source(), &[], &SYNTAX)
         .unwrap_or_else(|error| panic!("/sys failed to lower: {}", error.format()));
-    let mut std = prepare_prelude(&std_source(), &[&sys], &SYNTAX)
+    let mut std = prepare_prelude(&std_source().tested(), &[&sys], &SYNTAX)
         .unwrap_or_else(|error| panic!("/std failed to lower: {}", error.format()));
     // Credited as a recompile credits a declaration it reuses: with what the build's elaboration of the same sources recorded as read by a proof it wrote.
     with_prelude(|units| {

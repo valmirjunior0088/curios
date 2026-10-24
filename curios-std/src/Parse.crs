@@ -1,3 +1,5 @@
+mod tests;
+
 --- Why a parser refused, and where.
 pub mod Error;
 pub use Error/{let Error};

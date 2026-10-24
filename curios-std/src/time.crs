@@ -1,3 +1,5 @@
+mod tests;
+
 --- A reading of the monotonic clock, good for measuring alone.
 pub mod Instant;
 pub use Instant/{let Instant};

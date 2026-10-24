@@ -1,3 +1,5 @@
+mod tests;
+
 --- A terminal colour, in the four forms a terminal understands.
 pub mod Color;
 pub use Color/{let Color};

@@ -1,0 +1,4 @@
+-- `/std/Io`: the pieces a reader's named reads ask for, and waiting.
+mod reader;
+
+mod waits;

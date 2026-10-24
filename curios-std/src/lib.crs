@@ -1,3 +1,5 @@
+mod tests;
+
 -- Core: what performs nothing.
 --- The concepts the infix operators dispatch through, each supplying the method its operator calls.
 pub mod ops;

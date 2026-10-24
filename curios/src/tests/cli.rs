@@ -1,4 +1,4 @@
-//! What `/std/Cli` refuses at compile time, and what `Cli/main` writes where. The surface `parse` and `help` accept is the corpus unit's; neither a refusal nor a stream nor an exit status is a `Test` a program can declare, so those stay here.
+//! What `/std/Cli` refuses at compile time, and what `Cli/main` writes where. The surface `parse` and `help` accept is held by `/std/Cli/tests`; neither a refusal nor a stream nor an exit status is a `Test` a program can declare, so those stay here.
 
 use {
     super::{compile, error},

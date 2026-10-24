@@ -895,7 +895,7 @@ dependencies = [
  "curios-text",
  "curios-unicode",
  "curios-utilities",
- "curios-wonder",
+ "curios-verdicts",
 ]
 
 [[package]]

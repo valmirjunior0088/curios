@@ -18,8 +18,9 @@ curios-package = { workspace = true }
 curios = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-native = { workspace = true }
-curios-wonder = { workspace = true }
+# The scratch store the claims file what they compiled into.
+curios-verdicts = { workspace = true }
 # The conformance cases `/std/Str/graphemes` is held to, and the lookups `/std/Char`'s answers are compared with.
 curios-unicode = { workspace = true, features = ["test-support"] }
-# `fill!`, for the unit the conformance cases are written into.
+# `fill!`, for the program the conformance cases are written into.
 curios-utilities = { workspace = true, features = ["test-support"] }

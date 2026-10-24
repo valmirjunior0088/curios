@@ -175,6 +175,7 @@ enum Purity {
 
 /// Whether each root module `/std` declares performs anything: the one statement of which ones do not.
 const PURITY: &[(&str, Purity)] = &[
+    ("tests", Purity::Pure),
     ("ops", Purity::Pure),
     ("Eq", Purity::Pure),
     ("Bool", Purity::Pure),

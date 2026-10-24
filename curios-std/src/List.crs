@@ -1,3 +1,5 @@
+mod tests;
+
 pub use /sys/{let List};
 pub use /sys/List/{get, len, slice, map, fold};
 

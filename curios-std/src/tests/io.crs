@@ -1,6 +1,0 @@
--- `/std/Io` and what closes a program: the pieces a reader's named reads ask for, the witnesses of `/std/Program` where what they execute lets a test go on, and waiting in `Io`.
-mod reader;
-
-mod program;
-
-mod waits;

@@ -1,3 +1,5 @@
+mod tests;
+
 -- How UTF-8 reads bytes: what a byte begins, how far through a character a walk has come, and the ranges a character in flight can still end in.
 mod utf8;
 pub use utf8/{classify, step, scan_from, count_scalars};

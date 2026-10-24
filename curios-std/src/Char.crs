@@ -1,3 +1,5 @@
+mod tests;
+
 --- That a code point is a Unicode scalar value, which is what `Char` carries, and deciding it where no guard has.
 pub mod Valid;
 pub use Valid/{let Valid};

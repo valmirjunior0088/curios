@@ -1,0 +1,6 @@
+-- `/std/Str`: UTF-8 validity and the scalar boundaries `Char` admits, stepping, cutting and trimming at them, and taking a text apart.
+mod utf8;
+
+mod str;
+
+mod decomposition;

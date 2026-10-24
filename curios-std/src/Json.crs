@@ -1,3 +1,5 @@
+mod tests;
+
 mod encode;
 pub use encode/{let encode};
 
