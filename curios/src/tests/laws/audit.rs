@@ -85,7 +85,7 @@ fn held_at(compound: fn(&Law) -> Option<(Expr, Expr)>) {
     }
 }
 
-/// Every law between truth values with both sides under a `Bool` match: a side the theory reads as a literal reaches its arm, so a row holds only where the elimination reads its scrutinee as conversion does, Coq Modulo Theory's elimination modulo its theory. Between naturals, the seeds of iota modulo the theory hold it alone: a law over powers, put to a product the fold leaves standing on one side and to its distribution on the other, meets an entry of `documentation/roadmap/arithmetic/000-findings.md`.
+/// Every law between truth values with both sides under a `Bool` match: a side the theory reads as a literal reaches its arm, so a row holds only where the elimination reads its scrutinee as conversion does, Coq Modulo Theory's elimination modulo its theory. Between naturals, `every_law_holds_at_a_product_of_two_sums_against_its_distribution_under_a_match` holds it at the one shape the fold leaves standing, and the seeds of iota modulo the theory hold the rest.
 #[test]
 fn every_law_between_truth_values_holds_under_a_match() {
     let instances = rows(&declared())
@@ -102,6 +102,36 @@ fn every_law_between_truth_values_holds_under_a_match() {
                 binders,
                 format!("Eq()({}, {})", under(&left), under(&right)),
             )
+        })
+        .collect::<Vec<_>>();
+    assert!(!instances.is_empty());
+    if let Err(failures) = closes(IMPORTS, &instances) {
+        panic!("{}", failures.join("\n"));
+    }
+}
+
+/// Every law at `Nat` with its first variable put to a product of two sums on the left and to the sum that product distributes to on the right, both sides under a structural `Nat` match. The two are one polynomial spelled two ways, a product the fold leaves standing and its distribution, and under a match each reaches conversion as a scrutinee the congruence compares whole: the chain distributes the pair at its root, and every reader above the pair meets the two as one node only where the classification reads them in their normal form — `pow(x, y + z)` against `pow(x, y) * pow(x, z)` at `x := P` and `x := D` is the row the readers refused before it did.
+#[test]
+fn every_law_holds_at_a_product_of_two_sums_against_its_distribution_under_a_match() {
+    let instances = rows(&declared())
+        .iter()
+        .filter(|row| row.law.left.carrier() == Carrier::Natural)
+        .filter_map(|row| {
+            let (var, product) = product_of_two_sums(&row.law)?;
+            let law = Law {
+                left: substitute(&row.law.left, &var, &product),
+                right: substitute(&row.law.right, &var, &distribution_of_two_sums()),
+                ..row.law.clone()
+            };
+            let (binders, left, right) = spell_parts(&law, |_, index, carrier| {
+                let name = name(index, carrier);
+                (name.to_owned(), format!("{name}: {}", type_name(carrier)))
+            });
+            let under = |side: &str| format!("match {side}: (_) => Nat | 0 => 0 | m + 1 => m end");
+            Some((
+                binders,
+                format!("Eq()({}, {})", under(&left), under(&right)),
+            ))
         })
         .collect::<Vec<_>>();
     assert!(!instances.is_empty());
@@ -685,7 +715,7 @@ fn successor_of_a_fresh_variable(law: &Law) -> Option<(Expr, Expr)> {
     Some((var, compound))
 }
 
-/// The product a law's first variable is replaced by, where its carrier is numeric: two sums of both fresh variables and one, `(a + w + 1) * (w + a + 1)`.
+/// The product a law's first variable is replaced by, where its carrier is numeric: two sums of both fresh variables and one, `(a + w + 1) * (w + a + 1)`; the sum it distributes to is [`distribution_of_two_sums`].
 fn product_of_two_sums(law: &Law) -> Option<(Expr, Expr)> {
     let var = first_var(&law.left)?;
     let Expr::Var { carrier, .. } = var else {
@@ -705,6 +735,39 @@ fn product_of_two_sums(law: &Law) -> Option<(Expr, Expr)> {
         _ => return None,
     };
     Some((var, compound))
+}
+
+/// The sum [`product_of_two_sums`]' product distributes to at `Nat`, written summand by summand as the fold merges it: `a * a + a * w + a * w + w * w + a + a + w + w + 1`.
+fn distribution_of_two_sums() -> Expr {
+    let carrier = Carrier::Natural;
+    let (a, w) = (fresh(3, carrier), fresh(4, carrier));
+    let product = |left: &Expr, right: &Expr| Expr::Apply {
+        carrier,
+        operation: Operation::Product,
+        operands: vec![left.clone(), right.clone()],
+    };
+    let one = Expr::Constant {
+        value: Constant::One,
+        carrier,
+    };
+    [
+        product(&a, &a),
+        product(&a, &w),
+        product(&a, &w),
+        product(&w, &w),
+        a.clone(),
+        a,
+        w.clone(),
+        w,
+        one,
+    ]
+    .into_iter()
+    .reduce(|sum, summand| Expr::Apply {
+        carrier,
+        operation: Operation::Sum,
+        operands: vec![sum, summand],
+    })
+    .expect("nine summands")
 }
 
 /// Every law whose first variable stands on both sides, with that variable on the left read through a metavariable the comparison must solve: `h(Eq/refl())` against `h(@w, e: Eq()(left[x := w], right))`. A law [`solves`] names as one that cannot must still refuse, so a change that moves one is seen, as a refused row moving is.
