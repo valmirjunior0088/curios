@@ -1,11 +1,16 @@
 //! Deciding a `Nat` comparison, including under symbols.
 //!
 //! [`compare_nat`] cancels what the two sides share before it looks at what is left, so `x + a < x + b` decides on `a` and `b` rather than stalling on the whole spine. `curios-algebra`'s `Comparison` is the verdict — which of the three orderings the operands may still take, so an undecided answer is carried back rather than guessed — and every fact that narrows it is the algebra's: the floors, a bound against a literal, a dominator, divisibility. What is decided here is what to observe and in what order: which terms to normalize, which side is bare, which operand bounds which.
+//!
+//! **A pair decides how much of itself to build.** Two symbolic sides are distributed before they cancel, since what they share may be spelled two ways; a side against a literal is read as it stands, since nothing of it cancels but its floor, and its floor, what it is at least, its bounds and the divisor of its coefficients are read through a product the fold left stuck — so a web of products meets a literal with nothing distributed, as it meets one in the conversion chain.
 
 use {
-    super::{compare_int_among, lattice_verdict, nat_bound, nat_dominators, nat_least, sum_bound},
+    super::{
+        compare_int_among, lattice_verdict, nat_bound, nat_dominators, nat_least, nat_modular,
+        sum_bound,
+    },
     crate::{Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
-    curios_algebra::{Carrier, Comparison, Side, apart_modulo},
+    curios_algebra::{Carrier, Comparison, Side},
     curios_num::Natural,
     curios_utilities::Keyed,
     std::collections::HashMap,
@@ -93,9 +98,20 @@ pub(super) fn compare_nat_among(
     left: Term,
     right: Term,
 ) -> Result<(Comparison, Term, Term), ReduceError> {
-    // The comparison cancels like terms across both sides, so a stuck product on either is distributed first, by name.
-    let left = Nat::normalize(reducer, left)?;
-    let right = Nat::normalize(reducer, right)?;
+    // The comparison cancels like terms across two symbolic sides, so a stuck product on either is distributed first, by name; against a literal nothing cancels but the floor, and the side is read as it stands.
+    let left = reducer.reduce_forced(left)?;
+    let right = reducer.reduce_forced(right)?;
+    let literal = |side: &Term| {
+        side.as_nat()
+            .is_some_and(|value| value.to_natural().is_some())
+    };
+    let (left, right) = match literal(&left) || literal(&right) {
+        true => (left, right),
+        false => (
+            Nat::normalize(reducer, left)?,
+            Nat::normalize(reducer, right)?,
+        ),
+    };
     // Cancel first, so everything below reads the residuals: the shared part decides nothing on its own, and removing it is what lets `cmp(x + a, x + b)` reach `cmp(a, b)` — and `cmp(a + b, b + a)` reach equality — instead of stalling on two inners that differ only by what they share.
     let cancelled = Nat::cancellation(&left, &right);
     reducer.spend(sum_bound(Nat::residuals(&cancelled)))?;
@@ -131,14 +147,10 @@ pub(super) fn compare_nat_among(
         decided => decided,
     };
 
-    // Divisibility decides what no ordering does: floors apart modulo the gcd of every coefficient make the sides unequal at every value, which is `x * 2 + 1 == y * 2` reducing to `false`. Read last, and only where equality is still open, so a verdict the stages above reached costs nothing more.
+    // Divisibility decides what no ordering does: floors apart modulo the gcd of every coefficient make the sides unequal at every value, which is `x * 2 + 1 == y * 2` reducing to `false`, and `(2 * a + 2 * c + 1) * (2 * b + 2 * d + 1) == 2` with the product standing, its floor and its divisor read through it. Read last, and only where equality is still open, so a verdict the stages above reached costs nothing more.
     let outcome = match outcome {
         Comparison::Stuck | Comparison::Le | Comparison::Ge => {
-            let coefficients = Nat::summands(&left.inner)
-                .into_iter()
-                .chain(Nat::summands(&right.inner))
-                .map(|summand| Nat::monomial(&summand).0);
-            match apart_modulo((&left.floor, &right.floor), coefficients) {
+            match nat_modular(&left.whole).apart(&nat_modular(&right.whole)) {
                 true => outcome.unequal(),
                 false => outcome,
             }

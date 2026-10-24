@@ -6,14 +6,15 @@ use {
     super::{Asked, image_bound, lattice_verdict, sum_bound},
     crate::{
         Intrinsic, ReduceError, Reducer, Subterm, Term, int_cancellation, int_footprint,
-        int_has_stuck_product, int_monomial, int_normalize, int_preimage, int_rebuild_cancelled,
-        int_residuals, int_split_by_sign, int_terms,
+        int_has_stuck_product, int_normalize, int_preimage, int_rebuild_cancelled, int_residuals,
+        int_split_by_sign, int_terms,
     },
-    curios_algebra::{Carrier, Comparison, apart_modulo},
-    curios_num::Natural,
+    curios_algebra::{Carrier, Comparison, Modular},
+    curios_utilities::recurse,
+    std::collections::HashMap,
 };
 
-/// The structural outcome of comparing two `Int`s, with the operands their shared part cancelled off. A stuck product on either side is distributed first, by name, as `compare_nat` distributes.
+/// The structural outcome of comparing two `Int`s, with the operands their shared part cancelled off. A stuck product on either of two symbolic sides is distributed first, by name, and a side against a literal is read as it stands, as `compare_nat` reads a pair.
 pub(super) fn compare_int(
     reducer: &mut impl Reducer,
     left: Term,
@@ -29,13 +30,19 @@ pub(super) fn compare_int_among(
     left: Term,
     right: Term,
 ) -> Result<(Comparison, Term, Term), ReduceError> {
-    let left = match int_has_stuck_product(&left) {
-        true => int_normalize(reducer, left)?,
-        false => left,
-    };
-    let right = match int_has_stuck_product(&right) {
-        true => int_normalize(reducer, right)?,
-        false => right,
+    // A pair decides how much of itself to build, as `compare_nat` decides: two symbolic sides are distributed before they cancel, and a side against a literal stands, its constant and its divisor read through a product the fold left stuck.
+    let (left, right) = match left.as_int().is_some() || right.as_int().is_some() {
+        true => (left, right),
+        false => (
+            match int_has_stuck_product(&left) {
+                true => int_normalize(reducer, left)?,
+                false => left,
+            },
+            match int_has_stuck_product(&right) {
+                true => int_normalize(reducer, right)?,
+                false => right,
+            },
+        ),
     };
     let cancelled = int_cancellation(&left, &right);
     reducer.spend(sum_bound(int_residuals(&cancelled)))?;
@@ -43,17 +50,10 @@ pub(super) fn compare_int_among(
 
     let outcome = match (left.as_int(), right.as_int()) {
         (Some(l), Some(r)) => Comparison::of(l.cmp(&r)),
-        // Two sound verdicts, intersected: the preimages' order when both sides are widened naturals, and divisibility as `compare_nat` reads it — the argument needs every monomial to be an integer and nothing more, so it holds below zero, and the two constants are apart modulo the gcd exactly when their difference is.
+        // Two sound verdicts, intersected: the preimages' order when both sides are widened naturals, and divisibility as `compare_nat` reads it — the argument needs every monomial to be an integer and nothing more, so it holds below zero, and the two constants are apart modulo the gcd exactly when their difference is, a product left standing read through.
         _ => {
-            let (constant_left, summands_left) = int_terms(&left);
-            let (constant_right, summands_right) = int_terms(&right);
-            let coefficients = summands_left
-                .iter()
-                .chain(&summands_right)
-                .map(|summand| int_monomial(summand).0.magnitude());
-            let difference = (constant_left - constant_right).magnitude();
             let pulled_back = compare_preimages(reducer, asked, &left, &right)?;
-            let ordered = match apart_modulo((&difference, &Natural::zero()), coefficients) {
+            let ordered = match int_modular(&left).apart(&int_modular(&right)) {
                 true => pulled_back.unequal(),
                 false => pulled_back,
             };
@@ -68,6 +68,32 @@ pub(super) fn compare_int_among(
     };
 
     Ok((outcome, left, right))
+}
+
+/// A reduced `Int`'s constant and the divisor of its symbolic coefficients, read through every layer of its form as `nat_modular` reads a `Nat`'s. Once per node.
+pub(super) fn int_modular(term: &Term) -> Modular {
+    int_modular_within(term, &mut HashMap::new())
+}
+
+/// [`int_modular`], with each node's reading remembered in `known`.
+fn int_modular_within(term: &Term, known: &mut HashMap<usize, Modular>) -> Modular {
+    if let Some(known) = known.get(&term.identity()) {
+        return known.clone();
+    }
+    let modular = match &**term {
+        Subterm::Intrinsic(Intrinsic::Int(value)) => Modular::literal(value.clone()),
+        Subterm::Intrinsic(Intrinsic::IntAdd(left, right)) => {
+            recurse(|| int_modular_within(left, known))
+                .sum(&recurse(|| int_modular_within(right, known)))
+        }
+        Subterm::Intrinsic(Intrinsic::IntMul(left, right)) => {
+            recurse(|| int_modular_within(left, known))
+                .product(&recurse(|| int_modular_within(right, known)))
+        }
+        _ => Modular::atom(),
+    };
+    known.insert(term.identity(), modular.clone());
+    modular
 }
 
 /// The verdict on two `Int`s that are, once their difference is split by sign, both non-negative combinations of widened naturals: the `Nat` comparison of their preimages, which is sound because ℕ → ℤ preserves and reflects order. `Stuck` for any other pair. What makes `0 <= Nat/to_int(n)` true — the floor a widened natural carries is `Nat`'s own, read through the embedding rather than restated.

@@ -6,10 +6,10 @@ use {
     super::{operand_bound, shift_bound, sum_bound},
     crate::{Cost, Declaration, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term, same_atom},
     curios_algebra::{
-        Carrier, Divided, FloorSplit, Half, Observed, Operation, cofactor, euclid_split, floor_law,
-        power_of_two,
+        Carrier, Divided, FloorSplit, Half, Modular, Observed, Operation, cofactor, euclid_split,
+        floor_law, power_of_two,
     },
-    curios_num::Natural,
+    curios_num::{Integer, Natural},
     curios_utilities::recurse,
     std::{collections::HashMap, iter},
 };
@@ -165,6 +165,36 @@ fn nat_least_within(term: &Term, known: &mut HashMap<usize, Natural>) -> Natural
     known.insert(term.identity(), least.clone());
 
     least
+}
+
+/// A reduced `Nat`'s floor and the divisor of its symbolic coefficients, read through every layer of its form, a product the fold left stuck among them (`curios-algebra`'s `Modular`): what the divisibility reading reads of a side, distributed or not, the same on a distributed side as its summands' coefficients give. Once per node, as [`nat_bound`] is read.
+pub(super) fn nat_modular(term: &Term) -> Modular {
+    nat_modular_within(term, &mut HashMap::new())
+}
+
+/// [`nat_modular`], with each node's reading remembered in `known`.
+fn nat_modular_within(term: &Term, known: &mut HashMap<usize, Modular>) -> Modular {
+    if let Some(known) = known.get(&term.identity()) {
+        return known.clone();
+    }
+    let modular = match &**term {
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => Modular::literal(Integer::from(0)),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(floor, inner))) => {
+            Modular::literal(Integer::from(floor.clone()))
+                .sum(&recurse(|| nat_modular_within(inner, known)))
+        }
+        Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) => {
+            recurse(|| nat_modular_within(left, known))
+                .sum(&recurse(|| nat_modular_within(right, known)))
+        }
+        Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => {
+            recurse(|| nat_modular_within(left, known))
+                .product(&recurse(|| nat_modular_within(right, known)))
+        }
+        _ => Modular::atom(),
+    };
+    known.insert(term.identity(), modular.clone());
+    modular
 }
 
 /// The operands a reduced term never exceeds, as terms, each with whether the bound is strict — [`nat_bound`]'s criterion read at the operands instead of at a literal, as `curios-algebra`'s `Operation::dominators` states it per operation.

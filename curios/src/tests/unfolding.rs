@@ -414,9 +414,27 @@ fn scrutinee_refinement_measurements() {
 
 /// The [`predicates`] web carried over `Nat` — `+` for `both`, `*` for `anyof`, remainders for the leaves — and proved at `Eq()(top(n), 0)`. Each rule names the one before it twice, as the `twice` arm of [`predicates`] does.
 fn numerics(rules: usize) -> String {
-    let mut source = String::from(
-        "use /std/{Str, Nat, Eq};\n\n\
-         let Fn: Type = (x: Nat) -> Nat;\n\
+    let mut source = numeric_web(rules, "use /std/{Str, Nat, Eq};\n\n");
+    source.push_str(
+        "let probe(n: Nat, e: Eq()(top(n), 0)) -> Str =\n    match e: (_, _, _) => Str | refl(@z) => \"y\" end;\n\n",
+    );
+    source.push_str(TAIL);
+    source
+}
+
+/// [`numerics`]' web against a literal through the comparison fold rather than through `Eq()`: `top(n) < 5` reduces on both sides of a conversion, as a guard's proposition does, and a comparison reads a side against a literal as it stands, so the web is never distributed.
+fn numerics_compared(rules: usize) -> String {
+    let mut source = numeric_web(rules, "use /std/{Nat};\nuse /std/Bool/{Holds};\n\n");
+    source.push_str("let probe(n: Nat, h: Holds(top(n) < 5)) -> Holds(top(n) + 0 < 5) = h;\n\n");
+    source.push_str(TAIL);
+    source
+}
+
+/// The web's definitions through `top`, under `imports`.
+fn numeric_web(rules: usize, imports: &str) -> String {
+    let mut source = String::from(imports);
+    source.push_str(
+        "let Fn: Type = (x: Nat) -> Nat;\n\
          let both(p: Fn, q: Fn) -> Fn = (x) => p(x) + q(x);\n\
          let anyof(p: Fn, q: Fn) -> Fn = (x) => p(x) * q(x);\n\
          let base: Fn = (x) => x % 2;\n\
@@ -441,10 +459,6 @@ fn numerics(rules: usize) -> String {
     }
 
     let _ = writeln!(source, "\nlet top: Fn = r{};\n", rules - 1);
-    source.push_str(
-        "let probe(n: Nat, e: Eq()(top(n), 0)) -> Str =\n    match e: (_, _, _) => Str | refl(@z) => \"y\" end;\n\n",
-    );
-    source.push_str(TAIL);
     source
 }
 
@@ -480,6 +494,18 @@ fn a_ten_definition_numeric_web_compiles() {
     let (outcome, _) = compile_only(&numerics(10));
 
     assert_eq!(outcome, Ok(()), "the ten-definition numeric web compiles");
+}
+
+/// The numeric web against a literal through the comparison fold, where [`a_symbolic_web_compares_against_zero_in_linear_units`] takes it through `Eq()`: a comparison reads a side against a literal as it stands, so `top(n) < 5` is left open on the web's weak-head form and its budget is spent on no distribution. Not a measurement — a refusal to regress to running out of steps.
+#[test]
+fn a_symbolic_web_compared_against_a_literal_elaborates_within_the_budget() {
+    let (outcome, _) = compile_only(&numerics_compared(10));
+
+    assert_eq!(
+        outcome,
+        Ok(()),
+        "the ten-definition web compared against a literal elaborates"
+    );
 }
 
 /// The proved door at twenty definitions, each naming the one before it twice: the `&&` and `||` web its comparison against `true` reads is a graph of a few dozen nodes and a tree of millions. It compiles because the decision diagram reads a term once; read once per path, the comparison runs the declaration out of its budget well short of this size. Not a measurement — a refusal to regress to not compiling.

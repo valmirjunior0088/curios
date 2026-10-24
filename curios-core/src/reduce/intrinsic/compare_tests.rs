@@ -562,6 +562,99 @@ fn int_decides_floors_apart_modulo_the_coefficients_gcd_unequal() {
     );
 }
 
+// A side against a literal is read as it stands: nothing of it cancels but its floor, and its floor, its bounds and its divisor are read through a product the fold left stuck. So `(2 · a + 2 · c + 1) · (2 · b + 2 · d + 1)` is apart from `2` with nothing distributed, open against `3`, above `0` by what its factors are at least, and the operand handed back still holds the product — which is what keeps a web of products against a literal inside its budget.
+#[test]
+fn nat_reads_a_side_against_a_literal_as_it_stands() {
+    let (a, b, c, d) = (sym(0, "a"), sym(1, "b"), sym(2, "c"), sym(3, "d"));
+    let odd = |first: &Term, second: &Term| {
+        Nat::rebuild(
+            1u32.into(),
+            add(scaled(2, first.clone()), scaled(2, second.clone())),
+        )
+    };
+    let product = Term::intrinsic(Intrinsic::nat_mul(odd(&a, &c), odd(&b, &d)));
+    assert!(Nat::stuck_product(&product));
+
+    let (apart, left, _) = compare_nat(&mut Inert, product.clone(), lit(2)).expect("reduces");
+    assert_eq!(apart, Comparison::Ne, "an odd product is never `2`");
+    assert!(
+        Nat::has_stuck_product(&left),
+        "the product stands as written: {left}"
+    );
+    let (open, _, _) = compare_nat(&mut Inert, product.clone(), lit(3)).expect("reduces");
+    assert_eq!(open, Comparison::Stuck, "floors that agree decide nothing");
+    let (above, _, _) = compare_nat(&mut Inert, product, lit(0)).expect("reduces");
+    assert_eq!(
+        above,
+        Comparison::Gt,
+        "a product of two floors is at least one"
+    );
+}
+
+// Two symbolic sides are distributed before they cancel, as they were: `(a + c + 1) · (b + d + 1) + e` against its distribution plus `e` is one number, and nothing short of the distribution says so.
+#[test]
+fn nat_distributes_two_symbolic_sides_before_cancelling() {
+    let (a, b, c, d, e) = (
+        sym(0, "a"),
+        sym(1, "b"),
+        sym(2, "c"),
+        sym(3, "d"),
+        sym(4, "e"),
+    );
+    let successor =
+        |first: &Term, second: &Term| Nat::rebuild(1u32.into(), add(first.clone(), second.clone()));
+    let product = Term::intrinsic(Intrinsic::nat_mul(successor(&a, &c), successor(&b, &d)));
+    let times = |left: &Term, right: &Term| {
+        Term::intrinsic(Intrinsic::nat_mul(left.clone(), right.clone()))
+    };
+    let monomials = [
+        times(&a, &b),
+        times(&a, &d),
+        times(&c, &b),
+        times(&c, &d),
+        a.clone(),
+        c.clone(),
+        b.clone(),
+        d.clone(),
+        e.clone(),
+    ];
+    let distributed = Nat::rebuild(
+        1u32.into(),
+        monomials.into_iter().reduce(add).expect("nine summands"),
+    );
+
+    let (equal, _, _) = compare_nat(&mut Inert, add(product, e), distributed).expect("reduces");
+    assert_eq!(equal, Comparison::Eq);
+}
+
+// The signed twin of reading a side against a literal as it stands: `(2 · i + 2 · k + 1) · (2 · j + 2 · l + 1)` is apart from `2` with the product left standing, and open against `3`.
+#[test]
+fn int_reads_a_side_against_a_literal_as_it_stands() {
+    let (i, j, k, l) = (sym(0, "i"), sym(1, "j"), sym(2, "k"), sym(3, "l"));
+    let integer = |value: i32| Term::intrinsic(Intrinsic::Int(Integer::from(value)));
+    let times = |coefficient: i32, factor: &Term| {
+        Term::intrinsic(Intrinsic::IntMul(integer(coefficient), factor.clone()))
+    };
+    let plus = |left: Term, right: Term| Term::intrinsic(Intrinsic::IntAdd(left, right));
+    let odd =
+        |first: &Term, second: &Term| plus(plus(times(2, first), times(2, second)), integer(1));
+    let product = Term::intrinsic(Intrinsic::IntMul(odd(&i, &k), odd(&j, &l)));
+    assert!(crate::int_stuck_product(&product));
+
+    let (apart, left, _) = compare_int(&mut Inert, product.clone(), integer(2)).expect("reduces");
+    assert_eq!(apart, Comparison::Ne, "an odd product is never `2`");
+    assert!(
+        crate::int_has_stuck_product(&left),
+        "the product stands as written"
+    );
+    let (open, _, _) = compare_int(&mut Inert, product, integer(3)).expect("reduces");
+    assert_eq!(
+        open,
+        Comparison::Stuck,
+        "constants that agree decide nothing"
+    );
+}
+
 // The `<`/`<=` seam, as conversion aligns it: `x + 1 <= y` and `x < y` have one linear view once `<` is read as the `<=` of its successor, so they are one proposition — on either side of the pair.
 #[test]
 fn a_floored_le_meets_the_lt_it_spells() {

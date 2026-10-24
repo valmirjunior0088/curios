@@ -1,6 +1,12 @@
 //! Comparing two numbers under atoms: which orderings they may still take, and the facts that narrow it.
 
-use {curios_num::Natural, std::cmp::Ordering};
+#[cfg(test)]
+mod tests;
+
+use {
+    curios_num::{Integer, Natural},
+    std::cmp::Ordering,
+};
 
 /// The orderings two operands may still take: `Lt`, `Eq` and `Gt` pin one; `Le` and `Ge` record a *non-strict* bound the operands force without pinning equality — `succ x ≥ 1` — so `<` and `>=` decide where `==` still cannot; `Ne` is forced unequal with the order undecided, which divisibility proves; and `Stuck` is all three. Every comparison of the family reads this one verdict, each mapping it to a `Bool` or to nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -107,4 +113,56 @@ pub fn apart_modulo(
         });
 
     !divisor.is_zero() && !divisor.is_one() && floors.0 % &divisor != floors.1 % &divisor
+}
+
+/// A sum's floor and the greatest common divisor of its symbolic coefficients, read off its layers without distributing a product. Every symbolic summand is a coefficient times an integer, so the sum is its floor modulo the divisor whatever its atoms take: a literal is its value over no symbolic part, an atom is zero over the divisor one, a sum of two is the floors' sum over the divisors' gcd, and a product of two is the floors' product over the gcd of each floor's magnitude times the other's divisor and of the two divisors. Every coefficient a distribution would write is a multiple of one of those three, and merging like terms keeps each a multiple of what it was, so the divisor read here divides the distributed sum's own, and what it holds apart the distributed sum's would. The floor is an integer so that one reading serves `Nat` and `Int`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Modular {
+    pub floor: Integer,
+    pub divisor: Natural,
+}
+
+impl Modular {
+    /// A literal: its value, over no symbolic part.
+    pub fn literal(value: Integer) -> Self {
+        Self {
+            floor: value,
+            divisor: Natural::zero(),
+        }
+    }
+
+    /// An atom: nothing known of its value, under a coefficient of one.
+    pub fn atom() -> Self {
+        Self {
+            floor: Integer::from(0),
+            divisor: Natural::one(),
+        }
+    }
+
+    /// The reading of two summed.
+    pub fn sum(&self, other: &Self) -> Self {
+        Self {
+            floor: self.floor.clone() + other.floor.clone(),
+            divisor: self.divisor.gcd(&other.divisor),
+        }
+    }
+
+    /// The reading of two multiplied.
+    pub fn product(&self, other: &Self) -> Self {
+        let across = (self.floor.magnitude() * other.divisor.clone())
+            .gcd(&(other.floor.magnitude() * self.divisor.clone()));
+        Self {
+            floor: self.floor.clone() * other.floor.clone(),
+            divisor: across.gcd(&(self.divisor.clone() * other.divisor.clone())),
+        }
+    }
+
+    /// Whether two sums are equal at no value: their floors differ modulo the gcd of their divisors ([`apart_modulo`]), below zero as above it, since the argument needs every monomial to be an integer and nothing more.
+    pub fn apart(&self, other: &Self) -> bool {
+        let difference = (self.floor.clone() - other.floor.clone()).magnitude();
+        apart_modulo(
+            (&difference, &Natural::zero()),
+            [self.divisor.clone(), other.divisor.clone()],
+        )
+    }
 }
