@@ -1,6 +1,6 @@
 //! A metavariable's spine: what each binder it was born under stands for at one occurrence, in binding order — the delayed substitution its solution is read through ([`Metavar::spine`](super::Metavar)).
 //!
-//! **Persistent, and carrying its facts.** The entries are a persistent vector, shared between every occurrence born under one scope and with the scope that holds them, so a birth costs nothing more than the one before it and an entry added for a binder costs a logarithm of the scope. Beside the entries the spine keeps what a node derives from its children — the hash, the reach and the containment flags, each entry counted once — so a node holding a spine derives its own without reading it, and two spines are told apart by their hashes before their entries.
+//! **Persistent, and carrying its facts.** The entries are a persistent vector, shared between every occurrence born under one scope and with the scope that holds them, so a birth costs nothing more than the one before it and an entry added for a binder costs a logarithm of the scope. Beside the entries the spine keeps what a node derives from its children — the hash, the reach, the containment flags and the free names, each entry counted once — so a node holding a spine derives its own without reading it, and two spines are told apart by their hashes before their entries.
 //!
 //! **The identity is known as such.** A spine a metavariable is born with names each of its birth binders as itself, and a reader that would apply or invert it reads it as the identity without walking it ([`MetavarSpine::is_identity`]). Any spine a walk rewrote, or one built from a list, is not known to be one, which is the cautious answer: it is read entry by entry.
 //!
@@ -10,8 +10,8 @@
 mod tests;
 
 use {
-    super::{Bound, Free, Term},
-    curios_utilities::Ordered,
+    super::{Bound, Free, Frees, Names, Term},
+    curios_utilities::{Ordered, Sorted},
     std::{
         borrow::Borrow,
         fmt,
@@ -77,11 +77,55 @@ fn placed_hash(rank: i64, hash: u64) -> u64 {
     mixed ^ (mixed >> 31)
 }
 
+/// The free names a spine's entries hold: how many entries hold each, and the set of them, which a name enters with the first entry holding it and leaves with the last. Counted so that an entry taken out takes out only the names no other entry holds, as the containment counts beside it do.
+#[derive(Clone)]
+struct Held {
+    counts: Sorted<Free, u32>,
+    names: Frees,
+}
+
+impl Default for Held {
+    fn default() -> Self {
+        Self {
+            counts: Sorted::new(),
+            names: Frees::empty(),
+        }
+    }
+}
+
+impl Held {
+    fn add(&mut self, entry: &Term) {
+        for name in &entry.free_vars() {
+            match self.counts.get(name).copied() {
+                Some(count) => self.counts.insert(*name, count + 1),
+                None => {
+                    self.counts.insert(*name, 1);
+                    self.names.insert(*name);
+                }
+            }
+        }
+    }
+
+    fn remove(&mut self, entry: &Term) {
+        for name in &entry.free_vars() {
+            match self.counts.get(name).copied() {
+                Some(1) => {
+                    self.counts.remove(name);
+                    self.names.remove(name);
+                }
+                Some(count) => self.counts.insert(*name, count - 1),
+                None => unreachable!("an entry taken out was counted where it was put in"),
+            }
+        }
+    }
+}
+
 /// A metavariable's spine. See the module documentation.
 #[derive(Clone, Default)]
 pub struct MetavarSpine {
     entries: Ordered<Term>,
     facts: Facts,
+    held: Held,
     /// Whether each entry is known to be its own birth binder: so for the spine a metavariable is born with, and an empty one; not for one a walk rewrote or one built from a list.
     identity: bool,
 }
@@ -105,6 +149,7 @@ impl MetavarSpine {
     fn push(&mut self, entry: Term) {
         let rank = self.entries.len() as i64;
         self.facts.add(Facts::of(rank, &entry));
+        self.held.add(&entry);
         self.entries.insert(rank, entry);
     }
 
@@ -153,6 +198,8 @@ impl MetavarSpine {
             });
             spine.facts.remove(Facts::of(rank, entry));
             spine.facts.add(Facts::of(rank, &new));
+            spine.held.remove(entry);
+            spine.held.add(&new);
             spine.entries.insert(rank, new);
         }
         let mut rewritten = rewritten?;
@@ -172,6 +219,24 @@ impl MetavarSpine {
     /// The newest binder an entry holds free, by its index.
     pub(crate) fn newest_local(&self) -> Option<u64> {
         self.facts.newest_local
+    }
+
+    /// The free names its entries hold, kept as the spine is built and rewritten: a metavariable's free variables, read without reading an entry.
+    pub fn free_vars(&self) -> Frees {
+        self.held.names.clone()
+    }
+
+    /// Whether an entry holds any of `names` free: none does where every one is a local newer than the newest local an entry holds, and otherwise the spine's names answer.
+    pub fn mentions_any(&self, names: &Names) -> bool {
+        if names.is_empty() {
+            return false;
+        }
+        if let Some(oldest) = names.oldest_local()
+            && self.facts.newest_local.is_none_or(|newest| newest < oldest)
+        {
+            return false;
+        }
+        self.held.names.holds_any(names)
     }
 
     /// Whether an entry holds a metavariable: what a walk looking for metavariables asks before it reads the spine, and passes over it where none does.

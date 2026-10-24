@@ -244,9 +244,7 @@ fn restriction_leaving(
                 continue;
             }
             let spines = metavar_spines(&term, id);
-            let named = spines
-                .iter()
-                .any(|spine| spine.iter().any(|entry| entry.mentions_any(&labels)));
+            let named = spines.iter().any(|spine| spine.mentions_any(&labels));
             let (true, Some(provenance), Some(entry)) =
                 (named, origins.get(&id), context.metavar_entry(id))
             else {

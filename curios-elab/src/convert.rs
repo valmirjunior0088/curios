@@ -45,11 +45,11 @@ use {
     curios_analysis::{Classes, foreign_congruence},
     curios_core::{
         Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
-        Func, FuncType, Global, InductDecl, InductInstance, InductType, Instance, InstanceHead,
-        Intrinsic, Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarId, MetavarOrigin,
-        Probe, Proj, Quality, Rec, ReduceError, Scope, Step, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, Universes, Variance, Variant,
+        Frees, Func, FuncType, Global, InductDecl, InductInstance, InductType, Instance,
+        InstanceHead, Intrinsic, Level, Lockstep, Many, Match, MatchResult, Metavar, MetavarId,
+        MetavarOrigin, Probe, Proj, Quality, Rec, ReduceError, Scope, Step, Struct, StructType,
+        Subterm, Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, Universes, Variance, Variant,
     },
     curios_utilities::{Keyed, Plicity, recurse},
     std::{
@@ -370,14 +370,8 @@ fn by_value(context: &Context, metavar: &Metavar, mut candidate: Term) -> Term {
         .filter(|entry| metavar.spine.is_identity() && entry.scoped == Scoped::Held)
         .map(|entry| entry.frames.clone());
     let named = match birth {
-        Some(_) => HashSet::new(),
-        None => {
-            let mut named = HashSet::new();
-            for entry in metavar.spine.iter() {
-                named.extend(entry.free_vars().iter().copied());
-            }
-            named
-        }
+        Some(_) => Frees::empty(),
+        None => metavar.spine.free_vars(),
     };
     let names = |name: &Free| match &birth {
         Some(frames) => frames.binds_locally(name),

@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::{Global, Intrinsic, Nat, Var},
+    crate::{Global, Intrinsic, MetavarId, MetavarOrigin, Nat, Var},
     curios_utilities::Qualifier,
     std::hash::DefaultHasher,
 };
@@ -78,4 +78,44 @@ fn only_a_walk_that_rewrites_an_entry_loses_the_identity() {
     assert_eq!(identity.len(), 2);
     assert!(identity.is_identity());
     assert!(MetavarSpine::from(Vec::new()).is_identity());
+}
+
+/// A spine's names are its entries', each counted by the entries holding it: rewriting one entry that held a name leaves it where another entry still does, and takes it out where none does.
+#[test]
+fn a_spine_holds_the_names_of_its_entries() {
+    let (a, b) = (local(1, "a"), local(2, "b"));
+    let g = Free::Global(Global::Authored(Qualifier::from(["g"])));
+    let spine = MetavarSpine::from(vec![
+        Term::free_var(&a),
+        Term::apply(Term::free_var(&g), [Term::free_var(&a)]),
+        Term::free_var(&b),
+    ]);
+    let names = |spine: &MetavarSpine| spine.free_vars().iter().copied().collect::<Vec<_>>();
+    assert_eq!(names(&spine), [g, a, b]);
+
+    let rewritten = spine
+        .rewritten(|entry| (*entry == Term::free_var(&a)).then(|| Term::var(Var::bound(0))))
+        .expect("an entry was rewritten");
+    assert_eq!(names(&rewritten), [g, a, b]);
+
+    let rewritten = rewritten
+        .rewritten(|entry| (*entry == Term::free_var(&b)).then(|| Term::var(Var::bound(1))))
+        .expect("an entry was rewritten");
+    assert_eq!(names(&rewritten), [g, a]);
+    assert!(rewritten.mentions_any(&Names::new([a, b])));
+    assert!(!rewritten.mentions_any(&Names::new([b])));
+}
+
+/// A metavariable's free variables are its spine's names, the one set the spine keeps, read without reading an entry.
+#[test]
+fn a_metavariables_set_is_its_spines() {
+    let spine = MetavarSpine::identity_over(&[local(0, "a"), local(1, "b"), local(2, "c")]);
+    let hole = Term::metavar_birthed(MetavarId(5), MetavarOrigin::Hole, spine.clone());
+
+    assert!(hole.free_vars().shares(&spine.free_vars()));
+    assert!(
+        Term::tuple([hole.clone(), Term::free_var(&local(1, "b"))])
+            .free_vars()
+            .shares(&spine.free_vars())
+    );
 }

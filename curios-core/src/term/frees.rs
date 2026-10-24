@@ -61,6 +61,24 @@ impl Frees {
         FreesIter(self.0.iter_from(&Free::local(0, None)))
     }
 
+    /// The set with `name` in it, copying the path to it and sharing every other node with the version it was.
+    pub(crate) fn insert(&mut self, name: Free) {
+        Rc::make_mut(&mut self.0).insert(name, ());
+    }
+
+    /// The set with `name` taken out.
+    pub(crate) fn remove(&mut self, name: &Free) {
+        Rc::make_mut(&mut self.0).remove(name);
+    }
+
+    /// Whether the set holds any of `names`: the smaller of the two probing the other.
+    pub fn holds_any(&self, names: &Names) -> bool {
+        match self.len() < names.len() {
+            true => self.iter().any(|name| names.contains(name)),
+            false => names.iter().any(|name| self.contains(name)),
+        }
+    }
+
     /// Whether the two are one version of one set, sharing every node: so where a node's set is its child's.
     pub(crate) fn shares(&self, other: &Self) -> bool {
         self.0.same_version(&other.0)

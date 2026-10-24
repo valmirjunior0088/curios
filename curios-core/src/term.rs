@@ -2705,10 +2705,14 @@ impl Term {
             &mut (),
             |_, term| {
                 if term.inner.frees.is_filled() {
-                    Enter::Skip(())
-                } else {
-                    Enter::Descend
+                    return Enter::Skip(());
                 }
+                // A metavariable's set is its spine's, which the spine keeps as it is built: filled here, its entries unvisited, where descending would take every binder in scope.
+                if let Subterm::Metavar(_) = term.look() {
+                    term.inner.frees.fill(term.look().free_vars_from_children());
+                    return Enter::Skip(());
+                }
+                Enter::Descend
             },
             |_, term, _| term.inner.frees.fill(term.look().free_vars_from_children()),
         );
@@ -2749,11 +2753,7 @@ impl Term {
         if let Some(only) = names.only() {
             return self.mentions_free(only);
         }
-        let frees = self.get_or_init_free_vars();
-        match frees.len() < names.len() {
-            true => frees.iter().any(|name| names.contains(name)),
-            false => names.iter().any(|name| frees.contains(name)),
-        }
+        self.get_or_init_free_vars().holds_any(names)
     }
 
     /// Whether `needle` occurs in this term as a subterm, at any depth and under any binder — a syntactic occurrence, decided by term equality. A bound variable never equals a free one, so a needle that is a free variable is found exactly where `mentions_free` finds it; a compound needle is found where its spelling stands whole, which is also the only place a case equation recorded against that spelling can fire.

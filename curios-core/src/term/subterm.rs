@@ -607,6 +607,9 @@ impl Subterm {
         {
             return Frees::single(*name);
         }
+        if let Subterm::Metavar(Metavar { spine, .. }) = self {
+            return spine.free_vars();
+        }
         let mut union = Union::default();
         self.any_child_term(&mut |child| {
             union.add(child.get_or_init_free_vars());

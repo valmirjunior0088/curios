@@ -2797,7 +2797,7 @@ impl<'s> Context<'s> {
             self.metavar_solution(*id).is_none()
                 && metavar_spines(term, *id)
                     .iter()
-                    .any(|spine| spine.iter().any(|entry| entry.mentions_any(&labels)))
+                    .any(|spine| spine.mentions_any(&labels))
         })
     }
 
