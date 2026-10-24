@@ -102,6 +102,15 @@ pub(super) fn spell_sides(
     law: &Law,
     variable: impl Fn(Side, usize, Carrier) -> (String, String),
 ) -> (String, String) {
+    let (binders, left, right) = spell_parts(law, variable);
+    (binders, format!("Eq()({left}, {right})"))
+}
+
+/// [`spell_sides`]' binders and its two sides, for a claim that puts each side somewhere before it equates them.
+pub(super) fn spell_parts(
+    law: &Law,
+    variable: impl Fn(Side, usize, Carrier) -> (String, String),
+) -> (String, String, String) {
     let mut proofs = Vec::new();
     let mut side = |side: Side, expr: &Expr| {
         let mut spelling = Spelling {
@@ -112,18 +121,15 @@ pub(super) fn spell_sides(
         proofs = spelling.proofs;
         spelled
     };
-    let claim = format!(
-        "Eq()({}, {})",
-        side(Side::Left, &law.left),
-        side(Side::Right, &law.right)
-    );
+    let left = side(Side::Left, &law.left);
+    let right = side(Side::Right, &law.right);
     let binders = variables(law)
         .iter()
         .map(|(index, carrier)| variable(Side::Left, *index, *carrier).1)
         .chain(proofs)
         .collect::<Vec<_>>()
         .join(", ");
-    (binders, claim)
+    (binders, left, right)
 }
 
 /// The variables a law states, each once, in the order its left side and then its right meet them.

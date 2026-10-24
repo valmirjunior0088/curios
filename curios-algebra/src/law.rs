@@ -83,6 +83,18 @@ pub enum Expr {
     },
 }
 
+impl Expr {
+    /// The carrier the term's value is of: a variable's or a constant's own, and an operation's result, a comparison's being the Boolean algebra whatever it compares.
+    pub fn carrier(&self) -> Carrier {
+        match self {
+            Expr::Var { carrier, .. } | Expr::Constant { carrier, .. } => *carrier,
+            Expr::Apply {
+                carrier, operation, ..
+            } => result_carrier(*carrier, *operation),
+        }
+    }
+}
+
 /// One equation a family states, from the family it instantiates.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Law {

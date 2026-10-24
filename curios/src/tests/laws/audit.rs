@@ -1,14 +1,14 @@
 //! The audit of the theory conversion decides, generated from the law table's rows: the conditions a theory kept in conversion must meet — Coq Modulo Theory's, whose metatheory with strong elimination is Jouannaud and Strub's (2017) — put to both checkers at every declared law.
 //!
-//! Conversion stays symmetric (each law reversed), transitive (two laws chained through a side they share), and closed under substitution (each law at compound terms that change its atoms, and through a solved metavariable); and constructors stay free modulo the theory, which is what inversion reads when it concludes a clash (a case split on an equation between distinct constructors needs no arm). A finite grid is evidence about the implemented fragment, not a metatheorem, and it grows with the law table it is generated from.
+//! Conversion stays symmetric (each law reversed), transitive (two laws chained through a side they share), and closed under substitution (each law at compound terms that change its atoms, and through a solved metavariable); constructors stay free modulo the theory, which is what inversion reads when it concludes a clash (a case split on an equation between distinct constructors needs no arm); and an elimination matches modulo the theory, which is what reduction reads when it takes an arm (each law between truth values with both sides under a match, and the seeds of iota modulo the theory). A finite grid is evidence about the implemented fragment, not a metatheorem, and it grows with the law table it is generated from.
 //!
 //! The seeds of the rules no law table states are held to the first three conditions too — reversed, chained and at a compound term — with each checker asked alone, and a seed a checker lets go under one of them is a row of the table of parted rows.
 
 use {
     super::{
         Answers, Audit, Binder, IMPORTS, Row, SEEDS, STRUCTURAL, Side, applied, asked_alone, claim,
-        closes, declared, hold_to_the_table, name, orders, rows, spell, spell_over, spell_sides,
-        top_level, type_name, variables,
+        closes, declared, hold_to_the_table, name, orders, rows, spell, spell_over, spell_parts,
+        spell_sides, top_level, type_name, variables,
     },
     crate::tests::typecheck,
     curios_algebra::{Carrier, Constant, Expr, Family, Law, Operation, declares},
@@ -77,6 +77,31 @@ fn held_at(compound: fn(&Law) -> Option<(Expr, Expr)>) {
                 right: substitute(&row.law.right, &var, &compound),
                 ..row.law.clone()
             }))
+        })
+        .collect::<Vec<_>>();
+    assert!(!instances.is_empty());
+    if let Err(failures) = closes(IMPORTS, &instances) {
+        panic!("{}", failures.join("\n"));
+    }
+}
+
+/// Every law between truth values with both sides under a `Bool` match: a side the theory reads as a literal reaches its arm, so a row holds only where the elimination reads its scrutinee as conversion does, Coq Modulo Theory's elimination modulo its theory. Between naturals, the seeds of iota modulo the theory hold it alone: a law over powers, put to a product the fold leaves standing on one side and to its distribution on the other, meets an entry of `documentation/roadmap/arithmetic/000-findings.md`.
+#[test]
+fn every_law_between_truth_values_holds_under_a_match() {
+    let instances = rows(&declared())
+        .iter()
+        .filter(|row| row.law.left.carrier() == Carrier::Boolean)
+        .map(|row| {
+            let (binders, left, right) = spell_parts(&row.law, |_, index, carrier| {
+                let name = name(index, carrier);
+                (name.to_owned(), format!("{name}: {}", type_name(carrier)))
+            });
+            let under =
+                |side: &str| format!("match {side}: (_) => Nat | true => 1 | false => 0 end");
+            (
+                binders,
+                format!("Eq()({}, {})", under(&left), under(&right)),
+            )
         })
         .collect::<Vec<_>>();
     assert!(!instances.is_empty());
