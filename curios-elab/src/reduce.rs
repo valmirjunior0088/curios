@@ -30,7 +30,10 @@ use {
         reduce_closed, reduce_intrinsic,
     },
     curios_utilities::{SyntaxRegistry, recurse},
-    std::collections::{BTreeSet, HashMap},
+    std::{
+        cell::OnceCell,
+        collections::{BTreeSet, HashMap},
+    },
 };
 
 /// The elaborator's side of the closed-machine seam: the same delta `reduce_var` and `reduce_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
@@ -867,12 +870,14 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
     let proofs = proofs_named(context, &probe)?;
     // The spelling a settled entry is compared at: the probe's own, its universes erased.
     let compared = project_erased_universes(&probe);
+    // The probe as the kernel spells it, which the filter in front of every entry reads: spelled where the filter first asks and kept for the lookup, as the kernel keeps its candidate. A settlement made in between commits nothing, so the spelling stands.
+    let probe_spelling = OnceCell::new();
 
     // The entries already put to the shared rule, so each is asked once however many settlements the loop makes.
     let mut consulted = Vec::new();
 
     loop {
-        let unsettled = match scan_settled(context, &probe, &compared, &proofs)? {
+        let unsettled = match scan_settled(context, &probe, &probe_spelling, &compared, &proofs)? {
             Scan::Answer(answer) => return Ok(Some(answer)),
             Scan::Settle {
                 frame,
@@ -882,7 +887,14 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
             Scan::Miss => None,
         };
         // The settled spellings once more, by the rule both reducers share, before another settlement is paid for: the kernel's order.
-        if let Some(answer) = answered(context, value, &probe, &proofs, &mut consulted)? {
+        if let Some(answer) = answered(
+            context,
+            value,
+            &probe,
+            &probe_spelling,
+            &proofs,
+            &mut consulted,
+        )? {
             return Ok(Some(answer));
         }
         let Some((frame, key, original)) = unsettled else {
@@ -890,7 +902,9 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
             #[cfg(feature = "profile")]
             if let asked @ 1.. = context
                 .visible_scrutinee_entries()
-                .filter(|(_, _, entry)| could_settle(context, &entry.original, &probe, &proofs))
+                .filter(|(_, _, entry)| {
+                    could_settle(context, &entry.original, &probe, &probe_spelling, &proofs)
+                })
                 .count()
             {
                 curios_profile::sample!("reduce::missed_lookup", asked);
@@ -945,12 +959,15 @@ fn answered(
     context: &mut Context,
     value: &Term,
     probe: &Term,
+    probe_spelling: &OnceCell<Term>,
     proofs: &[Free],
     consulted: &mut Vec<(usize, Term)>,
 ) -> Result<Option<Term>, ReduceError> {
     let settled = context
         .visible_scrutinee_entries()
-        .filter(|(_, _, entry)| could_settle(context, &entry.original, probe, proofs))
+        .filter(|(_, _, entry)| {
+            could_settle(context, &entry.original, probe, probe_spelling, proofs)
+        })
         .filter_map(
             |(frame, key, entry)| match context.settled_key(frame, key) {
                 Some(Some(settled)) => Some((
@@ -1017,11 +1034,17 @@ pub(crate) fn answered_guard(
     Ok(answer.and_then(|answer| answer.as_bool()))
 }
 
-/// Whether `probe` could be the term the scrutinee recorded as `original` reduces to (`curios_analysis::could_reduce_to`), both read as the kernel spells them ([`Context::kernel_spelling`]), as the kernel's own filter reads its own. A solved metavariable stands over a spine of every local in scope where it was born — a guard written through a concept holds its witness as one — so left standing it reads as naming them all, and the filter would pass what the kernel's does not. A local definition left named reads the other way, on either side: under `let n = m + 0`, a guard over `n` names no `m`, and a form over `m` would be put to no equation, and a form over `n` names no `m` where the guard is read over it, where the kernel, which holds both by value, answers each.
-fn could_settle(context: &Context, original: &Term, probe: &Term, proofs: &[Free]) -> bool {
+/// Whether `probe` could be the term the scrutinee recorded as `original` reduces to (`curios_analysis::could_reduce_to`), both read as the kernel spells them ([`Context::kernel_spelling`]), as the kernel's own filter reads its own: the probe's spelling is made once for the lookup and kept in `probe_spelling`, as the kernel keeps its candidate's. A solved metavariable stands over a spine of every local in scope where it was born — a guard written through a concept holds its witness as one — so left standing it reads as naming them all, and the filter would pass what the kernel's does not. A local definition left named reads the other way, on either side: under `let n = m + 0`, a guard over `n` names no `m`, and a form over `m` would be put to no equation, and a form over `n` names no `m` where the guard is read over it, where the kernel, which holds both by value, answers each.
+fn could_settle(
+    context: &Context,
+    original: &Term,
+    probe: &Term,
+    probe_spelling: &OnceCell<Term>,
+    proofs: &[Free],
+) -> bool {
     could_reduce_to(
         &context.kernel_spelled(original),
-        &context.kernel_spelled(probe),
+        probe_spelling.get_or_init(|| context.kernel_spelled(probe)),
         proofs,
     )
 }
@@ -1164,6 +1187,7 @@ enum Scan {
 fn scan_settled(
     context: &mut Context,
     probe: &Term,
+    probe_spelling: &OnceCell<Term>,
     compared: &Term,
     proofs: &[Free],
 ) -> Result<Scan, ReduceError> {
@@ -1179,7 +1203,9 @@ fn scan_settled(
             }
             Some(None) => {}
             None => {
-                if unsettled.is_none() && could_settle(context, &entry.original, probe, proofs) {
+                if unsettled.is_none()
+                    && could_settle(context, &entry.original, probe, probe_spelling, proofs)
+                {
                     unsettled = Some((frame, key.clone(), entry.original.clone()));
                 }
             }
