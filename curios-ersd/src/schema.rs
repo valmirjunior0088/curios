@@ -11,18 +11,47 @@ use super::{ConstructorId, FamilyId, ProductId};
 #[curios_archive::archived]
 pub struct ProductSchema {
     pub debug_name: Option<String>,
-    /// One entry per relevant field, in declaration order.
-    pub fields: Vec<Field>,
-    /// Whether every row of this width shares this schema.
-    ///
-    /// The interned anonymous row is shared, and that is why it records no shape: it is written with no type in hand, and any tuple of its arity answers to it. It is also the row a multi-result host call or cell operation packs its results into — a site that never names a schema at all — so a shared row must stay a structural tuple downstream, where a declared structure's row earns a heap type of its own.
-    pub shared: bool,
+    pub fields: ProductFields,
+}
+
+/// What a product schema states of its row: a structure's fields, or a width every tuple of it shares.
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub enum ProductFields {
+    /// A structure's row: one entry per relevant field, in declaration order, each at the shape its declaration states. None where the module imports the schema, whose width the import states ([`Module::product_width`](crate::Module::product_width)).
+    Declared(Vec<Field>),
+    /// The anonymous row every tuple of this width shares, stated by its width alone: it is written with no type in hand and any tuple of its width answers to it, so it records no shape, and each of its fields reads as opaque. It is also the row a multi-result host call or cell operation packs its results into — a site that never names a schema at all — so a shared row stays a structural tuple downstream, where a declared structure's row earns a heap type of its own.
+    Shared(usize),
 }
 
 impl ProductSchema {
-    /// The number of fields it lists: its width where the module declares it, and none where the module imports it, whose width the import states ([`Module::product_width`](crate::Module::product_width)).
+    /// The number of fields it states: a declared row's, a shared row's width, and none where the module imports the schema, whose width the import states ([`Module::product_width`](crate::Module::product_width)).
     pub fn width(&self) -> usize {
-        self.fields.len()
+        match &self.fields {
+            ProductFields::Declared(fields) => fields.len(),
+            ProductFields::Shared(width) => *width,
+        }
+    }
+
+    /// Whether every row of its width shares it ([`ProductFields::Shared`]).
+    pub fn is_shared(&self) -> bool {
+        matches!(self.fields, ProductFields::Shared(_))
+    }
+
+    /// The fields a declared row lists, and none for a shared one, whose fields state nothing a width does not.
+    pub fn declared_fields(&self) -> &[Field] {
+        match &self.fields {
+            ProductFields::Declared(fields) => fields,
+            ProductFields::Shared(_) => &[],
+        }
+    }
+
+    /// The carrier shape of each field in order: a declared row's as its declaration states, and a shared row's opaque.
+    pub fn shapes(&self) -> Vec<FieldShape> {
+        match &self.fields {
+            ProductFields::Declared(fields) => fields.iter().map(|field| field.shape).collect(),
+            ProductFields::Shared(width) => vec![FieldShape::Opaque; *width],
+        }
     }
 }
 

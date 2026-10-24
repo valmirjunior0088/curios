@@ -12,9 +12,9 @@ mod tests;
 use {
     super::{Landing, Linked, Mark},
     crate::{
-        Atom, BlockId, CellOperation, ChannelOperation, ConstantId, ConstructorId, FamilyId, Field,
-        ForeignId, FunctionId, Interface, Module, ProductId, ProductSchema, Rhs, Statement, Tables,
-        Terminator, ValueId,
+        Atom, BlockId, CellOperation, ChannelOperation, ConstantId, ConstructorId, FamilyId,
+        ForeignId, FunctionId, Interface, Module, ProductFields, ProductId, ProductSchema, Rhs,
+        Statement, Tables, Terminator, ValueId,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -290,13 +290,12 @@ impl Module {
         for &product in &named.products.order {
             let held = self.product(product)?;
             let width = self.product_width(product)?;
-            let registered = match held.shared {
+            let registered = match held.is_shared() {
                 true => module.add_product(ProductSchema {
                     debug_name: held.debug_name.clone(),
-                    fields: vec![Field::opaque(None); width],
-                    shared: true,
+                    fields: ProductFields::Shared(width),
                 }),
-                false => module.import_product(held.debug_name.clone(), width, false),
+                false => module.import_product(held.debug_name.clone(), width),
             };
             tables.products.insert(product, registered);
         }

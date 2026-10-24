@@ -17,8 +17,8 @@ use {
     super::{
         Analysis, Atom, BlockId, CellOperation, ChannelOperation, Constant, ConstructorId,
         FamilyId, Field, FieldShape, ForeignId, FunctionId, Intrinsic, Module, Operation,
-        ProductId, RecValue, RegisterShape, Rhs, SequenceGrain, SequenceOp, Statement, StatementId,
-        SuspensionOperation, Terminator, ValueId,
+        ProductFields, ProductId, RecValue, RegisterShape, Rhs, SequenceGrain, SequenceOp,
+        Statement, StatementId, SuspensionOperation, Terminator, ValueId,
     },
     curios_abi::Namespace,
     curios_num::Rounding,
@@ -189,7 +189,7 @@ impl Reach {
             let mut rows: Vec<&[Field]> = Vec::new();
             for &product in &self.products {
                 if let Some(schema) = module.products().get(product.0 as usize) {
-                    rows.push(&schema.fields);
+                    rows.push(schema.declared_fields());
                 }
             }
             for &family in &self.families {
@@ -235,7 +235,7 @@ impl Reach {
             let Some(schema) = module.products().get(product.0 as usize) else {
                 continue;
             };
-            for field in &schema.fields {
+            for field in schema.declared_fields() {
                 let Some(name) = field.debug_name.as_deref() else {
                     continue;
                 };
@@ -269,10 +269,13 @@ impl Printer<'_, '_, '_, '_> {
             if !self.reach.products.contains(&id) {
                 continue;
             }
-            let shared = if schema.shared { " shared" } else { "" };
-            let row = match self.module.imports().products().get(&id) {
-                Some(width) => format!(" of width {width}, imported"),
-                None => format!("({})", fields(&schema.fields)),
+            let shared = if schema.is_shared() { " shared" } else { "" };
+            let row = match (self.module.imports().products().get(&id), &schema.fields) {
+                (Some(width), _) => format!(" of width {width}, imported"),
+                (None, ProductFields::Declared(listed)) => format!("({})", fields(listed)),
+                (None, ProductFields::Shared(width)) => {
+                    format!("({})", fields(&vec![Field::opaque(None); *width]))
+                }
             };
             self.line(
                 0,
@@ -741,7 +744,7 @@ impl Printer<'_, '_, '_, '_> {
             return format!("{index}");
         };
         match definition
-            .fields
+            .declared_fields()
             .get(index as usize)
             .and_then(|field| field.debug_name.as_deref())
         {

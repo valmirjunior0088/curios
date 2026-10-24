@@ -55,8 +55,7 @@ fn a_self_referential_lazy_value_verifies() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),
-        fields: vec![Field::opaque(Some("force".into()))],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::opaque(Some("force".into()))]),
     });
 
     // rec { lazy = Lazy { force: fn() = lazy } }
@@ -323,8 +322,7 @@ fn a_stepper_handed_to_a_combinator_that_stores_it_stays_dormant() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Box".into()),
-        fields: vec![Field::opaque(Some("held".into()))],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::opaque(Some("held".into()))]),
     });
     let keep = builder.reserve_function();
     let step = builder.reserve_function();
@@ -533,11 +531,10 @@ fn a_carrier_stated_on_a_field_read_verifies() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Pair".into()),
-        fields: vec![
+        fields: ProductFields::Declared(vec![
             Field::opaque(Some("a".into())),
             Field::opaque(Some("b".into())),
-        ],
-        shared: false,
+        ]),
     });
     builder.open_block();
     let one = nat_atom(&mut builder, 1);
@@ -865,8 +862,7 @@ fn a_projection_out_of_range_is_rejected() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
-        fields: vec![Field::opaque(None), Field::opaque(None)],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::opaque(None), Field::opaque(None)]),
     });
     builder.open_block();
     let zero = nat_atom(&mut builder, 0);

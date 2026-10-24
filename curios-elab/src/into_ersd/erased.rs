@@ -173,7 +173,7 @@ impl ErasedItem {
                 .product(schema)
                 .expect("a declared row's schema is its fragment's");
 
-            (held.debug_name.as_deref(), held.width(), held.shared)
+            (held.debug_name.as_deref(), held.width(), held.is_shared())
         });
 
         Some((schema, &declared.mask))

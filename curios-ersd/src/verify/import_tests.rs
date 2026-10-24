@@ -75,7 +75,7 @@ fn two_imported_constructors_stand_at_two_positions() {
 /// A fragment importing a product of width three, whose one item projects field `field` out of an imported value of it.
 fn projecting(field: u32) -> ErsdBuilder {
     let mut builder = ErsdBuilder::new();
-    let schema = builder.import_product(Some("Triple".into()), 3, false);
+    let schema = builder.import_product(Some("Triple".into()), 3);
     let product = builder.import_value(Some("triple".into()));
     builder.item_value(
         None,
@@ -92,7 +92,11 @@ fn projecting(field: u32) -> ErsdBuilder {
 /// An imported product lists no field, and is projected out of at the width its import states.
 #[test]
 fn an_imported_product_is_read_at_its_width() {
-    assert!(projecting(2).module().products()[0].fields.is_empty());
+    assert!(
+        projecting(2).module().products()[0]
+            .declared_fields()
+            .is_empty()
+    );
     assert_eq!(fault_of(&projecting(2)), None);
     assert_eq!(
         fault_of(&projecting(3)),

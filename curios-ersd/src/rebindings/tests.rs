@@ -2,20 +2,18 @@
 
 use {
     super::*,
-    crate::{Constant, ConstantId, ErsdBuilder, Field, ProductSchema, Terminator},
+    crate::{Constant, ConstantId, ErsdBuilder, Field, ProductFields, ProductSchema, Terminator},
 };
 
 fn fixture(matching: bool) -> (Rebindings, Atom, Atom) {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
-        fields: vec![Field::opaque(None)],
-        shared: true,
+        fields: ProductFields::Shared(1),
     });
     let other = builder.product(ProductSchema {
         debug_name: None,
-        fields: vec![Field::opaque(None)],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::opaque(None)]),
     });
     let unit = Atom::Constant(builder.constant(Constant::Unit));
     builder.open_block();

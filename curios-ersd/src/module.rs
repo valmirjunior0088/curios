@@ -10,9 +10,9 @@ mod tests;
 use {
     super::{
         Atom, Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, Field,
-        ForeignId, Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId,
-        RegisterShape, Remap, Rhs, Semantics, Statement, StatementId, Terminator, ValueId,
-        VariantFamily, lookup,
+        ForeignId, Function, FunctionId, ProductFields, ProductId, ProductSchema, RecGroup,
+        RecGroupId, RegisterShape, Remap, Rhs, Semantics, Statement, StatementId, Terminator,
+        ValueId, VariantFamily, lookup,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Arena,
@@ -433,16 +433,10 @@ impl Module {
     }
 
     /// Register a product schema another module declares, at its width: it lists no field.
-    pub(crate) fn import_product(
-        &mut self,
-        debug_name: Option<String>,
-        width: usize,
-        shared: bool,
-    ) -> ProductId {
+    pub(crate) fn import_product(&mut self, debug_name: Option<String>, width: usize) -> ProductId {
         let id = self.add_product(ProductSchema {
             debug_name,
-            fields: Vec::new(),
-            shared,
+            fields: ProductFields::Declared(Vec::new()),
         });
         self.imports
             .products
@@ -514,7 +508,7 @@ impl Module {
 
     /// Write the fields of a product schema registered without them — linking registers every schema's place before any schema's fields, since a field's shape names one.
     pub(crate) fn set_product_fields(&mut self, id: ProductId, fields: Vec<Field>) {
-        self.products[id.index()].fields = fields;
+        self.products[id.index()].fields = ProductFields::Declared(fields);
     }
 
     pub(crate) fn add_family(&mut self, debug_name: Option<String>) -> FamilyId {

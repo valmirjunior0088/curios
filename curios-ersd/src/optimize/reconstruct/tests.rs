@@ -3,8 +3,8 @@
 use {
     super::*,
     crate::{
-        Analysis, CellOperation, Constant, ErsdBuilder, Field, NatCase, Operation, ProductSchema,
-        VariantArm,
+        Analysis, CellOperation, Constant, ErsdBuilder, Field, NatCase, Operation, ProductFields,
+        ProductSchema, VariantArm,
     },
 };
 
@@ -21,8 +21,7 @@ fn product_fixture(order: &[u32], depth: usize) -> Module {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
-        fields: vec![Field::opaque(None); 2],
-        shared: true,
+        fields: ProductFields::Shared(2),
     });
     let function = builder.reserve_function();
     let input = builder.value(Some("input".into()));
@@ -255,8 +254,7 @@ fn recursive_unit_fixture(mixed: bool) -> Module {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
-        fields: vec![Field::opaque(None); 2],
-        shared: true,
+        fields: ProductFields::Shared(2),
     });
     let zero = Atom::Constant(builder.constant(Constant::Nat(0u32.into())));
     let one = Atom::Constant(builder.constant(Constant::Nat(1u32.into())));
@@ -362,8 +360,7 @@ fn state_work_in_a_producer_survives_forwarding_its_answer() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
-        fields: vec![Field::opaque(None); 2],
-        shared: true,
+        fields: ProductFields::Shared(2),
     });
     let unit = Atom::Constant(builder.constant(Constant::Unit));
     let function = builder.reserve_function();
@@ -435,8 +432,7 @@ fn a_computed_member_keeps_its_force_even_when_its_initializer_builds_unit() {
         let mut builder = ErsdBuilder::new();
         let schema = builder.product(ProductSchema {
             debug_name: None,
-            fields: vec![Field::opaque(None); 2],
-            shared: true,
+            fields: ProductFields::Shared(2),
         });
         let unit = Atom::Constant(builder.constant(Constant::Unit));
         let member = builder.value(None);
@@ -491,8 +487,7 @@ fn many_returns(count: usize) -> Module {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
-        fields: vec![Field::opaque(None); 2],
-        shared: true,
+        fields: ProductFields::Shared(2),
     });
     let unit = Atom::Constant(builder.constant(Constant::Unit));
     let function = builder.reserve_function();
@@ -574,8 +569,7 @@ fn a_prefix_or_another_schema_is_not_the_original_product() {
         let mut module = product_fixture(&[0, 1], 1);
         let schema = module.add_product(ProductSchema {
             debug_name: None,
-            fields: vec![Field::opaque(None); width],
-            shared: false,
+            fields: ProductFields::Declared(vec![Field::opaque(None); width]),
         });
         let (id, mut statement) = module
             .statements()

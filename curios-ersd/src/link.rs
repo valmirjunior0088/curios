@@ -22,8 +22,8 @@ pub use taken::*;
 use {
     crate::{
         Atom, BlockId, ConstantId, ConstructorId, FamilyId, Field, FieldShape, ForeignId,
-        FunctionId, Module, ProductId, ProductSchema, RecGroupId, Remap, StatementId, Tables,
-        ValueId, lookup,
+        FunctionId, Module, ProductFields, ProductId, ProductSchema, RecGroupId, Remap,
+        StatementId, Tables, ValueId, lookup,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -327,17 +327,22 @@ impl Module {
                         resolution.imports_rows,
                         "an imported row is one the program holds"
                     );
-                    self.import_product(schema.debug_name.clone(), width as usize, schema.shared)
+                    self.import_product(schema.debug_name.clone(), width as usize)
                 }
-                (None, None) => {
-                    let linked = self.add_product(ProductSchema {
+                (None, None) => match &schema.fields {
+                    ProductFields::Declared(fields) => {
+                        let linked = self.add_product(ProductSchema {
+                            debug_name: schema.debug_name.clone(),
+                            fields: ProductFields::Declared(Vec::new()),
+                        });
+                        registered.push((fields, linked));
+                        linked
+                    }
+                    ProductFields::Shared(width) => self.add_product(ProductSchema {
                         debug_name: schema.debug_name.clone(),
-                        fields: Vec::new(),
-                        shared: schema.shared,
-                    });
-                    registered.push((schema, linked));
-                    linked
-                }
+                        fields: ProductFields::Shared(*width),
+                    }),
+                },
             };
             tables.products.insert(id, linked);
         }
@@ -412,12 +417,8 @@ impl Module {
             );
             tables.constructors.insert(id, linked);
         }
-        for (schema, linked) in registered {
-            let fields = schema
-                .fields
-                .iter()
-                .map(|entry| field(entry, tables))
-                .collect();
+        for (fields, linked) in registered {
+            let fields = fields.iter().map(|entry| field(entry, tables)).collect();
             self.set_product_fields(linked, fields);
         }
     }

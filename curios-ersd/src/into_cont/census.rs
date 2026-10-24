@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Atom, Block, ConstructorId, Intrinsic, Module, ProductId, Rhs, SequenceGrain, SequenceOp,
-        Statement, Terminator, ValueId,
+        Atom, Block, ConstructorId, Intrinsic, Module, ProductId, ProductSchema, Rhs,
+        SequenceGrain, SequenceOp, Statement, Terminator, ValueId,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -247,7 +247,7 @@ pub(crate) fn sequence_census(module: &Module) -> SequenceFacts {
 
 /// Whether `schema` is the anonymous row every tuple of its width shares — the one product whose field keys name no type.
 fn shared(module: &Module, schema: ProductId) -> bool {
-    module.product(schema).is_some_and(|schema| schema.shared)
+    module.product(schema).is_some_and(ProductSchema::is_shared)
 }
 
 /// How a value fares as operand `position` of `operation`: the carrier positions of the read forms are indexing-shaped, growth and construction poison every position, and a position a list could never occupy by typing is poisoned rather than reasoned about.

@@ -281,9 +281,12 @@ impl<'a> Layout<'a> {
         &self.products[&schema]
     }
 
-    /// Whether every row of this width shares `schema` — see [`ProductSchema::shared`](crate::ProductSchema::shared).
+    /// Whether every row of this width shares `schema` — see [`ProductFields::Shared`](crate::ProductFields::Shared).
     pub(super) fn is_shared(&self, schema: ProductId) -> bool {
-        self.source.product(schema).expect("live product").shared
+        self.source
+            .product(schema)
+            .expect("live product")
+            .is_shared()
     }
 
     /// The Cont identity of a product schema, laying its row out on first use. See [`Layout::row_identity`] for why the reservation comes first.
@@ -301,8 +304,7 @@ impl<'a> Layout<'a> {
             let definition = self.source.product(schema).expect("live product");
             let debug_name = definition.debug_name.clone();
             // One writer, so every field takes a slot of its own and no carrier can widen the row: the typed layout is free by construction.
-            let shapes: Vec<FieldShape> =
-                definition.fields.iter().map(|field| field.shape).collect();
+            let shapes = definition.shapes();
             let writer: Vec<curios_cont::Slot> = shapes
                 .into_iter()
                 .map(|shape| self.slot_of(module, shape, true))

@@ -124,8 +124,7 @@ fn a_call_through_a_constructed_products_field_is_judged_as_that_field() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Dict".into()),
-        fields: vec![Field::opaque(Some("method".into()))],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::opaque(Some("method".into()))]),
     });
 
     // fn method() = method

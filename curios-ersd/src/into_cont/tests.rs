@@ -649,8 +649,7 @@ fn a_shared_tuple_field_is_never_settled() {
     let mut builder = ErsdBuilder::new();
     let pair = builder.product(ProductSchema {
         debug_name: None,
-        fields: vec![Field::opaque(None); 2],
-        shared: true,
+        fields: ProductFields::Shared(2),
     });
 
     builder.open_block();
@@ -935,11 +934,10 @@ fn a_value_only_knot_lowers_through_cells() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),
-        fields: vec![
+        fields: ProductFields::Declared(vec![
             Field::opaque(Some("force".into())),
             Field::opaque(Some("mark".into())),
-        ],
-        shared: false,
+        ]),
     });
     let lazy = builder.value(Some("lazy".into()));
     builder.open_block();
@@ -1024,11 +1022,10 @@ fn a_knot_member_read_only_by_an_item_is_kept() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),
-        fields: vec![
+        fields: ProductFields::Declared(vec![
             Field::opaque(Some("force".into())),
             Field::opaque(Some("mark".into())),
-        ],
-        shared: false,
+        ]),
     });
     let lazy = builder.value(Some("lazy".into()));
     builder.open_block();

@@ -141,8 +141,7 @@ fn pair() -> (Module, ProductId) {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Pair".into()),
-        fields: vec![Field::opaque(None), Field::opaque(None)],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::opaque(None), Field::opaque(None)]),
     });
     let one = nat(&mut builder, 1);
     builder.item_value(
@@ -268,7 +267,7 @@ fn a_row_no_fragment_declares_is_imported_at_what_its_readers_state() {
 #[test]
 fn an_imported_product_is_imported_at_its_width() {
     let mut builder = ErsdBuilder::new();
-    let schema = builder.import_product(Some("Pair".into()), 2, false);
+    let schema = builder.import_product(Some("Pair".into()), 2);
     let one = nat(&mut builder, 1);
     builder.item_value(
         None,
@@ -293,7 +292,9 @@ fn an_imported_product_is_imported_at_its_width() {
     assert_eq!(module.imports().products().get(&landed), Some(&2));
     assert_eq!(module.product_width(landed), Some(2));
     assert_eq!(
-        module.product(landed).map(|schema| schema.fields.len()),
+        module
+            .product(landed)
+            .map(|schema| schema.declared_fields().len()),
         Some(0)
     );
 }

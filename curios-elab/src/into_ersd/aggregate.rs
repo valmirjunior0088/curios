@@ -76,8 +76,7 @@ impl<'s> Lowering<'s> {
         let schema = (!ProductRow::collapses(relevant.len())).then(|| {
             self.builder.product(curios_ersd::ProductSchema {
                 debug_name: Some(name.faithful().to_string()),
-                fields: relevant,
-                shared: false,
+                fields: curios_ersd::ProductFields::Declared(relevant),
             })
         });
         let row = StructRow {
@@ -242,7 +241,7 @@ impl<'s> Lowering<'s> {
                         .product(schema)
                         .expect("a declared row's schema is its fragment's");
                     self.builder
-                        .import_product(held.debug_name.clone(), held.width(), held.shared)
+                        .import_product(held.debug_name.clone(), held.width())
                 });
                 self.environment.import_struct_row(name, schema);
                 schema
@@ -341,11 +340,10 @@ impl<'s> Lowering<'s> {
         if let Some(schema) = self.environment.tuple_schema(width) {
             return schema;
         }
-        // An anonymous tuple's row is written with no type information at hand, so every entry is the conservative shape.
+        // An anonymous tuple's row is written with no type information at hand, so it states its width and no shape.
         let schema = self.builder.product(curios_ersd::ProductSchema {
             debug_name: None,
-            fields: vec![curios_ersd::Field::opaque(None); width],
-            shared: true,
+            fields: curios_ersd::ProductFields::Shared(width),
         });
         self.environment.register_tuple_schema(width, schema);
         schema

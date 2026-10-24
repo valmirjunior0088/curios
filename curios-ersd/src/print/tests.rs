@@ -144,8 +144,10 @@ fn schemas_and_constants_print_deterministically() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Pair".into()),
-        fields: vec![Field::opaque(Some("lhs".into())), Field::opaque(None)],
-        shared: false,
+        fields: ProductFields::Declared(vec![
+            Field::opaque(Some("lhs".into())),
+            Field::opaque(None),
+        ]),
     });
     let family = builder.family(Some("Shape".into()));
     let circle = builder.constructor(
@@ -434,13 +436,11 @@ fn an_unreached_schema_or_foreign_row_is_not_declared() {
     let mut builder = ErsdBuilder::new();
     let used = builder.product(ProductSchema {
         debug_name: Some("Used".into()),
-        fields: vec![Field::opaque(Some("only".into()))],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::opaque(Some("only".into()))]),
     });
     let _unused = builder.product(ProductSchema {
         debug_name: Some("Unused".into()),
-        fields: vec![Field::opaque(Some("gone".into()))],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::opaque(Some("gone".into()))]),
     });
     let _unused_family = builder.family(Some("Unreached".into()));
     let _unused_foreign = builder.foreign(Arc::new(ForeignFunction {
@@ -481,24 +481,21 @@ fn a_reached_row_pulls_in_the_rows_its_field_shapes_name() {
     let mut builder = ErsdBuilder::new();
     let innermost = builder.product(ProductSchema {
         debug_name: Some("Innermost".into()),
-        fields: vec![Field::immediate(Some("leaf".into()))],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::immediate(Some("leaf".into()))]),
     });
     let middle = builder.product(ProductSchema {
         debug_name: Some("Middle".into()),
-        fields: vec![Field {
+        fields: ProductFields::Declared(vec![Field {
             debug_name: Some("nested".into()),
             shape: FieldShape::Product(innermost),
-        }],
-        shared: false,
+        }]),
     });
     let outer = builder.product(ProductSchema {
         debug_name: Some("Outer".into()),
-        fields: vec![Field {
+        fields: ProductFields::Declared(vec![Field {
             debug_name: Some("held".into()),
             shape: FieldShape::Product(middle),
-        }],
-        shared: false,
+        }]),
     });
 
     let one = builder.constant(nat(1));
@@ -526,13 +523,11 @@ fn a_projection_qualifies_a_field_name_two_reached_rows_share() {
     let mut builder = ErsdBuilder::new();
     let left = builder.product(ProductSchema {
         debug_name: Some("Left".into()),
-        fields: vec![Field::opaque(Some("shared".into()))],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::opaque(Some("shared".into()))]),
     });
     let right = builder.product(ProductSchema {
         debug_name: Some("Right".into()),
-        fields: vec![Field::opaque(Some("shared".into()))],
-        shared: false,
+        fields: ProductFields::Declared(vec![Field::opaque(Some("shared".into()))]),
     });
 
     let one = builder.constant(nat(1));
@@ -591,7 +586,7 @@ entry =
 #[test]
 fn an_imported_row_prints_what_its_import_states() {
     let mut builder = ErsdBuilder::new();
-    let triple = builder.import_product(Some("Triple".into()), 3, false);
+    let triple = builder.import_product(Some("Triple".into()), 3);
     let family = builder.import_family(Some("Tri".into()), 3);
     let last = builder.import_constructor(family, 2, Some("c".into()), 0);
     let product = builder.import_value(Some("triple".into()));

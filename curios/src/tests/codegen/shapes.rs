@@ -109,7 +109,7 @@ fn field_shapes(module: &Module) -> Vec<FieldShape> {
     module
         .products()
         .iter()
-        .flat_map(|schema| schema.fields.iter().map(|field| field.shape))
+        .flat_map(|schema| schema.shapes())
         .chain(
             module
                 .constructors()

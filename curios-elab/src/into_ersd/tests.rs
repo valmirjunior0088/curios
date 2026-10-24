@@ -1180,7 +1180,7 @@ entry
     let [schema] = erased.products() else {
         panic!("the fixture registers one schema");
     };
-    assert!(schema.shared);
+    assert!(schema.is_shared());
     assert_eq!(schema.width(), 2);
 }
 

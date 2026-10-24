@@ -982,7 +982,9 @@ impl<'m> Verifier<'m> {
     fn check_row_imports(&self) -> Result<(), StructuralFault> {
         let imports = self.module.imports();
         for &product in imports.products().keys() {
-            if !self.product(product)?.fields.is_empty() {
+            if !self.product(product)?.declared_fields().is_empty()
+                || self.product(product)?.is_shared()
+            {
                 return Err(fault(
                     StructuralRule::BrokenRowImport,
                     format!("imported {product} lists fields of its own"),

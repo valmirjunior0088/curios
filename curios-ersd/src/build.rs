@@ -107,13 +107,8 @@ impl ErsdBuilder {
     }
 
     /// Import a product schema another module declares, at its width — see [`Imports`](super::Imports).
-    pub fn import_product(
-        &mut self,
-        debug_name: Option<String>,
-        width: usize,
-        shared: bool,
-    ) -> ProductId {
-        self.module.import_product(debug_name, width, shared)
+    pub fn import_product(&mut self, debug_name: Option<String>, width: usize) -> ProductId {
+        self.module.import_product(debug_name, width)
     }
 
     /// Import a variant family another module declares, of `count` constructors; each this module names follows through [`import_constructor`](Self::import_constructor).

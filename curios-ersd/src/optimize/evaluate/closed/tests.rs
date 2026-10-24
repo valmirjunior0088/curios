@@ -125,11 +125,10 @@ fn a_block_candidates_copy_is_bound_at_item_level() {
 fn define_knot(builder: &mut ErsdBuilder) -> (ValueId, FunctionId, FunctionId) {
     let schema = builder.product(ProductSchema {
         debug_name: Some("Dict".into()),
-        fields: vec![
+        fields: ProductFields::Declared(vec![
             Field::opaque(Some("method".into())),
             Field::opaque(Some("mark".into())),
-        ],
-        shared: false,
+        ]),
     });
     let dict = builder.value(Some("dict".into()));
     let method = builder.reserve_function();
