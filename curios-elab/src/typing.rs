@@ -18,7 +18,7 @@ use {
     curios_core::{
         Advance, Atom, Bound, Enter, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
         Many, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Produced, Proj, Quality,
-        ReduceError, Scope, Subterm, Telescope, Term, Transient, Universes, Visit,
+        ReduceError, Scope, Subterm, Telescope, Term, Transient, Tuple, Universes, Visit,
     },
     std::{
         cell::RefCell,
@@ -255,11 +255,16 @@ fn proof_end(context: &mut Context, opened: &mut Opened, type_: &Term) -> Result
 
 /// Elaborate `term` as a type/proposition without inventing an arbitrary expected universe upper bound.
 pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort), Error> {
-    let (rebuilt, inferred) = if matches!(&**term, Subterm::Metavar(_)) {
-        let sort = context.fresh_sort("type left to inference");
-        elaborate(context, term, Mode::Check(sort))?
-    } else {
-        elaborate(context, term, Mode::Infer)?
+    let (rebuilt, inferred) = match &**term {
+        Subterm::Metavar(_) => {
+            let sort = context.fresh_sort("type left to inference");
+            elaborate(context, term, Mode::Check(sort))?
+        }
+        // `()` is checked against a type, so the tuple rule refuses it and says how the unit type is written.
+        Subterm::Tuple(Tuple { fields, .. }) if fields.is_empty() => {
+            elaborate(context, term, Mode::Check(Term::type_ground()))?
+        }
+        _ => elaborate(context, term, Mode::Infer)?,
     };
 
     match &*reduce_with(context, &inferred)? {

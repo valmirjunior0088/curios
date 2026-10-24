@@ -3,6 +3,7 @@
 use {
     crate::with_prelude,
     curios_abi::HostOp,
+    curios_core::{Bound, DefinitionKind, Global, Nominal, Term, intrinsic_former},
     curios_std::{std_directory, std_source},
     curios_text::{
         GroupItem, Module, SYNTAX, TopItem, UseGroup, prepare_prelude, sys_module, sys_source,
@@ -322,4 +323,66 @@ fn every_reader_a_row_names_spells_its_part() {
         .collect::<Vec<_>>();
 
     assert!(stale.is_empty(), "{stale:#?}");
+}
+
+/// No term the prelude holds names a type former: elaboration spells a former applied in full as its node and one short of its application as its η-form, wherever a program writes it, so a former written and a former inferred are one term (`documentation/roadmap/theory/100-an-implicit-argument-written-is-the-argument-inferred.md`). Every former either root declares is checked, nominal or intrinsic, in every definition's type and body and every nominal entry's telescopes.
+#[test]
+fn no_term_of_the_prelude_names_a_type_former() {
+    with_prelude(|prelude| {
+        let roots = prelude.iter().map(|root| root.core()).collect::<Vec<_>>();
+        let nominal = roots
+            .iter()
+            .flat_map(|module| module.formers())
+            .map(|(name, _)| name)
+            .collect::<BTreeSet<_>>();
+        assert!(!nominal.is_empty(), "the prelude declares formers");
+        let is_former = |name: &Global| {
+            nominal.contains(name)
+                || intrinsic_former(name, &[]).is_some()
+                || intrinsic_former(name, &[Term::type_ground()]).is_some()
+        };
+
+        let mut named = Vec::new();
+        for module in &roots {
+            for item in module.items.iter() {
+                for definition in item.definitions() {
+                    let mut mentioned = definition.mentions();
+                    if let DefinitionKind::Nominal(entry) = &definition.kind {
+                        mentioned.extend(entry_mentions(entry));
+                    }
+                    named.extend(mentioned.into_iter().filter(&is_former).map(|former| {
+                        format!("{} names {}", definition.name.faithful(), former.faithful())
+                    }));
+                }
+            }
+        }
+
+        assert!(named.is_empty(), "{named:#?}");
+    });
+}
+
+/// The top-level names a nominal entry's telescopes mention by name: its arity, its result sort and, for a family, its constructors' signatures.
+fn entry_mentions(entry: &Nominal) -> BTreeSet<Global> {
+    let (arity, result_sort, constructors) = match entry {
+        Nominal::Inductive(family) => (
+            &family.arity,
+            &family.result_sort,
+            family
+                .constructors
+                .iter()
+                .flat_map(|(_, constructor)| constructor.telescope.free_vars())
+                .collect::<BTreeSet<_>>(),
+        ),
+        Nominal::Struct(record) | Nominal::Concept { record, .. } => {
+            (&record.arity, &record.result_sort, BTreeSet::new())
+        }
+    };
+
+    arity
+        .free_vars()
+        .into_iter()
+        .chain(result_sort.free_vars())
+        .chain(constructors)
+        .filter_map(|free| free.as_global().copied())
+        .collect()
 }

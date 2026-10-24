@@ -487,10 +487,7 @@ fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {
         .nth(1)
         .expect("the row is printed");
 
-    assert!(
-        row.contains("refl.{Type; 0}(@/sys/Nat/Nat, @(f(n)).0)"),
-        "{row}"
-    );
+    assert!(row.contains("refl.{Type; 0}(@Nat, @(f(n)).0)"), "{row}");
     assert!(!row.contains("rec "), "{row}");
 }
 
@@ -524,10 +521,7 @@ fn a_solution_met_against_a_projection_off_a_local_definition_is_that_projection
         .nth(1)
         .expect("the row is printed");
 
-    assert!(
-        row.contains("refl.{Type; 0}(@/sys/Nat/Nat, @(p).0)"),
-        "{row}"
-    );
+    assert!(row.contains("refl.{Type; 0}(@Nat, @(p).0)"), "{row}");
     assert!(!row.contains("Nat.fold"), "{row}");
 }
 

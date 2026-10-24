@@ -20,6 +20,8 @@ enum Former {
     FuncType,
     Tuple,
     TupleType,
+    InductType,
+    StructType,
     Struct,
     Proj,
     Let,
@@ -39,6 +41,8 @@ fn former(parent: &Subterm) -> Option<Former> {
         Subterm::FuncType(_) => Some(Former::FuncType),
         Subterm::Tuple(_) => Some(Former::Tuple),
         Subterm::TupleType(_) => Some(Former::TupleType),
+        Subterm::InductType(_) => Some(Former::InductType),
+        Subterm::StructType(_) => Some(Former::StructType),
         Subterm::Struct(_) => Some(Former::Struct),
         Subterm::Proj(_) => Some(Former::Proj),
         Subterm::Let(_) => Some(Former::Let),
@@ -54,8 +58,8 @@ fn former(parent: &Subterm) -> Option<Former> {
                 Carrier::Bytes { .. } => None,
             },
         },
-        // Written as a call of its former or its constructor, which reduction rebuilds as this node: the contexts under an application are the ones that reach it.
-        Subterm::InductType(_) | Subterm::StructType(_) | Subterm::Variant(_) => None,
+        // Written as a call of its constructor, which reduction rebuilds as this node: the contexts under an application are the ones that reach it.
+        Subterm::Variant(_) => None,
         // A local recursive group and a host call: `tests::recursion` and `tests::host` hold what conversion makes of them.
         Subterm::Rec(_) | Subterm::Foreign(..) => None,
         // No term beneath it.
@@ -310,7 +314,7 @@ const TYPES: &[Context] = &[
     at(
         TYPE,
         "a family's parameter",
-        Former::Apply,
+        Former::InductType,
         "",
         "Type",
         "Option({hole})",
@@ -318,7 +322,7 @@ const TYPES: &[Context] = &[
     at(
         TYPE,
         "a struct type's parameter",
-        Former::Apply,
+        Former::StructType,
         "",
         "Type",
         "Box({hole})",
@@ -326,7 +330,7 @@ const TYPES: &[Context] = &[
     at(
         TYPE,
         "a list type's element",
-        Former::Apply,
+        Former::Intrinsic,
         "",
         "Type",
         "List({hole})",
@@ -475,7 +479,7 @@ fn children_of(term: &Term) -> Vec<Term> {
 
 #[test]
 fn every_context_places_its_hole_under_the_former_it_names() {
-    // Mutation-checked: a list type's element declared under an intrinsic is named with the application of `/sys/List/List` it landed under.
+    // Mutation-checked: a list type's element declared under an application is named with the intrinsic node it landed under.
     let contexts = TYPED
         .iter()
         .chain(ARMS)

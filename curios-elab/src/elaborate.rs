@@ -39,10 +39,11 @@ mod tests;
 use {
     super::{Context, Error, check, check_is_sort, elaborate_derive, expect},
     curios_core::{
-        Ascribed, Func, InstanceHead, Subterm, Term, Transient, foreign_operands, foreign_produced,
-        instantiate_universes_scoped,
+        Ascribed, Free, Func, FuncType, InstanceHead, Subterm, Term, Transient, Universes, Var,
+        foreign_operands, foreign_produced, former_spelling, instantiate_universes_scoped,
+        intrinsic_former,
     },
-    curios_utilities::recurse,
+    curios_utilities::{Plicity, recurse},
     std::sync::Arc,
 };
 
@@ -137,6 +138,11 @@ fn elaborate_subterm(
         return elaborate(context, &lifted, mode);
     }
 
+    // An intrinsic former written by its name and applied in full is elaborated as its node.
+    if let Some(node) = written_intrinsic_former(term) {
+        return elaborate(context, &node, mode);
+    }
+
     // Synthesizable nodes compute their type and hit the `expect` turnaround in `Check` mode; naturally-checked nodes (and the mode-propagating `Let`/`Rec`) consume `mode` directly and return early. Every arm returns the rebuilt term — binders re-closed, lambda domains solved.
     let (rebuilt, type_) = match &**term {
         Subterm::Sort(_, level) => (
@@ -204,16 +210,22 @@ fn elaborate_subterm(
         Subterm::Rec(rec) => return elaborate_rec(context, rec, mode),
         Subterm::Var(var) => match context.instantiate_assumption(var.unwrap(), term.extent())? {
             Some((type_, universes)) => {
-                let rebuilt = if universes.is_empty() {
-                    term.clone()
-                } else {
-                    // The occurrence's extent moves onto the wrapping instance: the typed head carries none.
-                    let instance = Term::instance(InstanceHead::Var(var.clone()), universes);
-                    match term.extent() {
-                        Some(extent) => instance.with_extent(extent),
-                        None => instance,
-                    }
-                };
+                let rebuilt =
+                    if let Some(former) = spelled_former(context, var, &type_, &universes)? {
+                        match term.extent() {
+                            Some(extent) => former.with_extent(extent),
+                            None => former,
+                        }
+                    } else if universes.is_empty() {
+                        term.clone()
+                    } else {
+                        // The occurrence's extent moves onto the wrapping instance: the typed head carries none.
+                        let instance = Term::instance(InstanceHead::Var(var.clone()), universes);
+                        match term.extent() {
+                            Some(extent) => instance.with_extent(extent),
+                            None => instance,
+                        }
+                    };
                 (rebuilt, type_)
             }
             None => return Err(context.unbound_variable(Term::var(var.clone()))),
@@ -252,4 +264,85 @@ fn elaborate_subterm(
     }
 
     Ok((rebuilt, type_))
+}
+
+/// An intrinsic type former written by its name and applied in full, every argument explicit, or a closed one written bare, as the node it is ([`intrinsic_former`]): what elaboration reads in its place. Read before it is elaborated, so its operands are checked against the node's own signature and no level of its name's instance is minted: `/sys/List/List.{c}(Nat)` stands at `Type c` where `ListType(Nat)` stands at its operand's level, and an instance minted and then dropped would leave its levels to close on nothing. `None` for any other term.
+fn written_intrinsic_former(term: &Term) -> Option<Term> {
+    let (head, operands) = match &**term {
+        Subterm::Var(var) => (var, Vec::new()),
+        Subterm::Apply(apply)
+            if apply
+                .arguments
+                .iter()
+                .all(|argument| argument.plicity == Plicity::Explicit) =>
+        {
+            let Subterm::Var(var) = &*apply.head else {
+                return None;
+            };
+            (var, apply.params().cloned().collect())
+        }
+        _ => return None,
+    };
+    let node = Term::intrinsic(intrinsic_former(head.as_free()?.as_global()?, &operands)?);
+
+    Some(match term.extent() {
+        Some(extent) => node.with_extent(extent),
+        None => node,
+    })
+}
+
+/// What a type former's name is elaborated to, at an occurrence instantiated at `universes` whose type is `type_`: a nominal former's body as its entry spells it ([`former_spelling`]) at those levels — its η-form, one lambda to a call, or the node where it takes nothing — and an intrinsic former that takes an operand, written bare, as the lambda over that former at the domain its name's type states. Applied over its call, either is made as what the call reduces to ([`curios_core::former_eta`]), so no elaborated term holds a former's name. `None` for a name that is no former's.
+///
+/// The entry is read where the name's type already was, and no body is: a body read is a dependency the incremental record keeps.
+fn spelled_former(
+    context: &mut Context,
+    var: &Var,
+    type_: &Term,
+    universes: &Universes,
+) -> Result<Option<Term>, Error> {
+    let Some(global) = var.as_free().and_then(Free::as_global).copied() else {
+        return Ok(None);
+    };
+    let entry = match (context.induct_decl(&global), context.struct_decl(&global)) {
+        (Some(family), _) => Some((
+            family.universe_context.clone(),
+            family.arity.clone(),
+            family.result_sort.clone(),
+            true,
+        )),
+        (None, Some(record)) => Some((
+            record.universe_context.clone(),
+            record.arity.clone(),
+            record.result_sort.clone(),
+            false,
+        )),
+        (None, None) => None,
+    };
+    if let Some((universe_context, arity, result_sort, family)) = entry {
+        let (_, body) = former_spelling(global, &universe_context, &arity, &result_sort, family);
+        return Ok(Some(match universes.is_empty() {
+            true => body,
+            false => instantiate_universes_scoped(&body, universes).map_err(Error::from)?,
+        }));
+    }
+
+    // An intrinsic former over one operand, its name's type a function of one parameter into a sort.
+    let Subterm::FuncType(FuncType { telescope, .. }) = &**type_ else {
+        return Ok(None);
+    };
+    if telescope.len() != 1 || !matches!(&**telescope.terminal(), Subterm::Sort(..)) {
+        return Ok(None);
+    }
+    let Some((hint, domain)) = telescope.cursor().entry() else {
+        return Ok(None);
+    };
+    let binder = context.fresh(hint);
+    let Some(former) = intrinsic_former(&global, &[Term::free_var(&binder)]) else {
+        return Ok(None);
+    };
+
+    Ok(Some(Term::func_marked(
+        [(Plicity::Explicit, binder, domain)],
+        Term::intrinsic(former),
+    )))
 }

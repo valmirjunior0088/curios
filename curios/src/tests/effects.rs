@@ -169,7 +169,7 @@ fn a_state_region_cannot_perform_io() {
 
     let error = typecheck(source).expect_err("a State region must refuse Io");
     assert!(
-        error.contains("no witness of /std/Monad/Lift(/std/Io, State(Nat))"),
+        error.contains("no witness of /std/Monad/Lift(/std/Io, (x) => State(Nat, x))"),
         "expected the missing Io edge, got: {error}"
     );
 }
@@ -676,7 +676,7 @@ fn a_try_sequenced_in_a_region_with_no_edge_for_it_is_told_what_is_written_inste
     .expect_err("a `Try` has no edge into `Io`");
 
     assert!(
-        error.contains("needed to sequence a Try(Io, Io/Error) action in this Io region"),
+        error.contains("needed to sequence a (x) => Try(Io, Io/Error, x) action in this Io region"),
         "expected the missing edge, got: {error}"
     );
     assert!(

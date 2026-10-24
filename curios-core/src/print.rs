@@ -14,6 +14,7 @@ use {
         cell::{Cell, RefCell},
         collections::{BTreeSet, HashMap},
         rc::Rc,
+        sync::OnceLock,
     },
 };
 
@@ -1338,6 +1339,67 @@ pub fn intrinsic_global(path: &str) -> Global {
         2 => written.with(written.last()),
         _ => written,
     })
+}
+
+/// The intrinsic type former `/sys` declares at `global`, over `operands`: `NatType` at `/sys/Nat/Nat` over none, `ListType(T)` at `/sys/List/List` over `T`. `None` where `global` names no intrinsic former, or `operands` are not as many as it takes. What a former written by its name and applied in full is, read off the path each former is written at ([`intrinsic_form`]) once for the process: elaboration asks it of every name it meets.
+pub fn intrinsic_former(global: &Global, operands: &[Term]) -> Option<Intrinsic> {
+    static FORMERS: OnceLock<HashMap<Global, IntrinsicFormer>> = OnceLock::new();
+
+    FORMERS
+        .get_or_init(|| {
+            let closed: [fn() -> Intrinsic; 7] = [
+                || Intrinsic::BoolType,
+                || Intrinsic::NatType,
+                || Intrinsic::ByteType,
+                || Intrinsic::IntType,
+                || Intrinsic::FltType,
+                || Intrinsic::BytesType,
+                || Intrinsic::HandleType,
+            ];
+            let over_one: [fn(Term) -> Intrinsic; 4] = [
+                Intrinsic::ListType,
+                Intrinsic::CellType,
+                Intrinsic::ChannelType,
+                Intrinsic::IoType,
+            ];
+
+            closed
+                .map(IntrinsicFormer::Closed)
+                .into_iter()
+                .chain(over_one.map(IntrinsicFormer::OverOne))
+                .map(|former| {
+                    let spelled = match former {
+                        IntrinsicFormer::Closed(former) => former(),
+                        IntrinsicFormer::OverOne(former) => former(Term::type_ground()),
+                    };
+                    let path = match intrinsic_form(spelled, false) {
+                        IntrinsicForm::Named(path) => path.to_owned(),
+                        IntrinsicForm::Call { path, .. } => path,
+                        _ => unreachable!("a type former is written by its name"),
+                    };
+                    (intrinsic_global(&path), former)
+                })
+                .collect()
+        })
+        .get(global)?
+        .over(operands)
+}
+
+/// An intrinsic type former as [`intrinsic_former`] builds it: closed, or over its one operand. Each is its constructor, so the table kept for the process holds no term.
+#[derive(Clone, Copy)]
+enum IntrinsicFormer {
+    Closed(fn() -> Intrinsic),
+    OverOne(fn(Term) -> Intrinsic),
+}
+
+impl IntrinsicFormer {
+    fn over(self, operands: &[Term]) -> Option<Intrinsic> {
+        match (self, operands) {
+            (IntrinsicFormer::Closed(former), []) => Some(former()),
+            (IntrinsicFormer::OverOne(former), [operand]) => Some(former(operand.clone())),
+            _ => None,
+        }
+    }
 }
 
 /// How `intrinsic` is written: see [`IntrinsicForm`]. Under `grouped` a nested concatenation stays the operand it is (axis (g)), where the splice would hide how a run is grouped.

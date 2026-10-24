@@ -195,9 +195,9 @@ fn an_ordinary_function_passed_bare_takes_an_instance_at_each_argument() {
     assert_eq!(typecheck(&through("(A, x) => const_nat(A, x)")), Ok(()));
 }
 
-// **Both checkers hold two instances of a former apart in its level to be one type.** `first`'s body is `x.0`, at `Io` over `Nat` at the level `Both` passes its family at, one above the level of the `Type` `Both` applies it to as well, which is `Both`'s caller's to choose, and its declared type is `Io(Nat)` at zero. The body's type arrives as a projection's, a spelling apart from the declared one in more than levels, so both sides are reduced, nothing is committed, and the kernel certifies the definition by unfolding `Io` on both sides.
+// **A former passed at its family's level is the node one written at zero is.** `first`'s body is `x.0`, `Io` over `Nat` where `Both` passes `Io` at the level its family stands at, one above the level of the `Type` `Both` applies it to as well, and its declared type is `Io(Nat)`. The former passed is its η-form, and its application is made the node a written `Io(Nat)` is, which holds no level, so the signature holds no instance of `Io`'s name and no level is compared for it, in either checker.
 #[test]
-fn two_instances_of_a_former_convert_where_their_spellings_differ_in_more_than_levels() {
+fn a_former_passed_at_its_familys_level_is_the_node_one_written_at_zero_is() {
     let source = r#"
         use /std/{Nat, Bool, Io};
         let small(n: Nat) -> Io(Nat) = Io/pure(n);
@@ -211,8 +211,8 @@ fn two_instances_of_a_former_convert_where_their_spellings_differ_in_more_than_l
     let signatures = signatures(source);
     let first = &signatures["/first"];
     assert!(
-        first.contains("Io.{Type; u+1}") && first.contains("Io.{Type; 0}"),
-        "the two instances no longer sit at two levels no instance makes one, so the program holds nothing: {first}",
+        first.ends_with("-> Io(Nat)") && !first.contains("Io.{"),
+        "a former's name stands in the signature: {first}",
     );
     assert_eq!(run(source), b"picked");
 }

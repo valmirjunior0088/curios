@@ -88,3 +88,86 @@ pub let f(l: List(Point), m: List(Point)) -> Nat = match every(@Point, m, small)
     let refusal = typecheck(&source).expect_err("a guard over another list proves nothing");
     assert!(refusal.contains("type mismatch"), "{refusal}");
 }
+
+/// A guard written at each kind of type former proves the statement that infers it: a family, a recursive family, an indexed family at its indices and an intrinsic former closed or over an operand, beside the structure above. The written former and the inferred one are one node.
+#[test]
+fn a_guard_at_each_kind_of_former_proves_the_statement_that_infers_it() {
+    for element in [
+        "Option(Nat)",
+        "Tree(Nat)",
+        "Vec(Nat)(2)",
+        "Nat",
+        "List(Nat)",
+        "Io({})",
+    ] {
+        let source = fill!(
+            r#"use /std/{Nat, List, Bool, Option, Io};
+use /std/Bool/{True, Holds};
+
+pub induct Tree(T: Type): Type
+| leaf()
+| node(Tree(T), T, Tree(T))
+end
+
+pub induct Vec(T: Type): (Nat) -> pub Type
+| nil(): (0)
+| cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
+end
+
+${every}
+
+let always(@T: Type, t: T) -> Bool = true;
+
+let inferred(l: List(${element}), @ok: Holds(every(l, (x) => always(x)))) -> Nat = 0;
+
+pub let f(l: List(${element})) -> Nat = match every(@${element}, l, (x) => always(x)) | true => inferred(l, @True/qed()) | false => 1 end;
+
+/std/print("held")"#,
+            every = EVERY,
+            element,
+        );
+
+        assert_eq!(typecheck(&source), Ok(()), "{element}");
+    }
+}
+
+/// A former passed unapplied to a higher-kinded parameter is applied by substitution, and the application is the node a written one is: a guard over `lift(@Option, o)` proves a statement that writes the element `Option(Nat)`, and the converse.
+#[test]
+fn a_former_applied_by_substitution_is_the_node_a_written_one_is() {
+    for (guard, statement) in [
+        (
+            "every(lift(@Option, o), l)",
+            "every(@Option(Nat), lift(@Option, o), l)",
+        ),
+        (
+            "every(@Option(Nat), lift(@Option, o), l)",
+            "every(lift(@Option, o), l)",
+        ),
+    ] {
+        let source = fill!(
+            r#"use /std/{Nat, List, Bool, Option};
+use /std/Bool/{True, Holds};
+
+pub struct Box(A: Type): Type { a: A }
+
+let every(@T: Type, b: Box(T), l: List(Nat)) -> Bool =
+    match l
+    | [] => true
+    | [_, ..t] => every(b, t)
+    end;
+
+let lift(@F: (Type) -> Type, x: F(Nat)) -> Box(F(Nat)) = Box { a = x };
+
+let checked(o: Option(Nat), l: List(Nat), @ok: Holds(${statement})) -> Nat = 0;
+
+pub let f(o: Option(Nat), l: List(Nat)) -> Nat =
+    match ${guard} | true => checked(o, l, @True/qed()) | false => 1 end;
+
+/std/print("held")"#,
+            guard,
+            statement,
+        );
+
+        assert_eq!(typecheck(&source), Ok(()), "{guard} against {statement}");
+    }
+}

@@ -316,15 +316,16 @@ fn apply_fit(
                 .any_metavar(&mut |id| context.metavar_solution(id).is_none())
         };
 
-        // A lemma whose result type is headed by one of its own parameters — `subst`'s `P(y)` — meets any goal at all once its proof slot is filled, by the imitation `P := (_) => goal`. Such a fit says nothing unless the conversion decides it outright, so an undecided one is refused below. The head is the whole application spine's: `Eq(@B)(f(x), f(y))` is headed by `Eq`, and the `@B` its first call carries is an argument like any other.
+        // A lemma whose result type is headed by one of its own parameters — `subst`'s `P(y)` — meets any goal at all once its proof slot is filled, by the imitation `P := (_) => goal`. Such a fit says nothing unless the conversion decides it outright, so an undecided one is refused below. The head is what the whole application spine is applied to, a parameter's metavariable there: a family's node, `Eq(@B)(f(x), f(y))`, is rigid, and the arguments it holds are arguments like any other.
         let mut spine = output;
         while let Subterm::Apply(Apply { head: inner, .. }) = &**spine {
             spine = inner;
         }
-        let flex_result = spine
-            .metavars()
-            .into_iter()
-            .any(|id| args.iter().any(|(arg, _)| arg.metavars().contains(&id)));
+        let flex_result = matches!(&**spine, Subterm::Metavar(_))
+            && spine
+                .metavars()
+                .into_iter()
+                .any(|id| args.iter().any(|(arg, _)| arg.metavars().contains(&id)));
 
         // The goal first: what it pins, it pins.
         let mut outcome = subsume_outcome(context, output, goal_type, None).ok()?;

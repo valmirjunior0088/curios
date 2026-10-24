@@ -890,8 +890,69 @@ impl RecItem {
     }
 }
 
+/// A nominal declaration's former spelled from its entry's parts, its type and its body: declared at its parameters, then for a family its indices, ending in its sort, and unfolding to the nominal type over them at the declaration's own levels — the lambdas over the node, one to a call, which are the former's η-form ([`former_eta`](crate::former_eta)), or the node itself where the former takes nothing. `family` says whether the arity's inner telescope is a family's indices, part of its former, or a record's fields, no part of it.
+///
+/// **The one spelling of a former from an entry**, read by the former's definition ([`Definition::former`]) and by an occurrence of the former's name, which elaboration spells as this body at the occurrence's levels.
+pub fn former_spelling(
+    name: Global,
+    universe_context: &UniverseContext,
+    arity: &Telescope<Telescope<()>>,
+    result_sort: &Term,
+    family: bool,
+) -> (Term, Term) {
+    let universes = universe_context.identity_instance();
+
+    // The entry's telescopes are closed, so any binders open them: counted from zero, under the hints the entry keeps.
+    let mut params = Vec::new();
+    let mut cursor = arity.cursor();
+    while let (Some((hint, domain)), Some(mark)) = (cursor.entry(), cursor.mark()) {
+        let binder = Free::local(params.len() as u64, hint);
+        cursor.advance(Term::free_var(&binder));
+        params.push((mark, binder, domain));
+    }
+    let within = cursor
+        .body()
+        .expect("a cursor past every entry holds its payload");
+    // A family's indices follow its parameters, each explicit; a record's fields are no part of its former.
+    let mut indices = Vec::new();
+    if family {
+        let mut cursor = within.cursor();
+        while let Some((hint, domain)) = cursor.entry() {
+            let binder = Free::local((params.len() + indices.len()) as u64, hint);
+            cursor.advance(Term::free_var(&binder));
+            indices.push((Plicity::Explicit, binder, domain));
+        }
+    }
+
+    let variables = |binders: &[(Plicity, Free, Term)]| {
+        binders
+            .iter()
+            .map(|(_, binder, _)| Term::free_var(binder))
+            .collect::<Vec<_>>()
+    };
+    let applied = match family {
+        true => Term::induct_type_at(name, universes, variables(&params), variables(&indices)),
+        false => Term::from(Subterm::StructType(StructType {
+            name,
+            universes,
+            params: variables(&params),
+        })),
+    };
+    // One call for the parameters and one for the indices, the indices innermost: `Vec : (T : Type) -> (n : Nat) -> Type`.
+    [params, indices]
+        .into_iter()
+        .filter(|group| !group.is_empty())
+        .rev()
+        .fold((result_sort.clone(), applied), |(type_, body), group| {
+            (
+                Term::func_type_marked(group.clone(), type_),
+                Term::func_marked(group, body),
+            )
+        })
+}
+
 impl Definition {
-    /// The former of the nominal declaration `name` whose entry is `nominal`, spelled from the entry: declared at its parameters, then for a family its indices, ending in its sort, and unfolding to the nominal type over them at the declaration's own levels.
+    /// The former of the nominal declaration `name` whose entry is `nominal`, spelled from the entry ([`former_spelling`]): declared at its parameters, then for a family its indices, ending in its sort, and unfolding to the nominal type over them at the declaration's own levels.
     ///
     /// **The one spelling of a former from an entry.** A former says nothing its entry does not: the lowering writes both from one telescope, and what an elaborated former holds beside its entry is measured against this (`std_former_derivation`).
     pub fn former(name: Global, island: Qualifier, nominal: Nominal) -> Self {
@@ -905,59 +966,8 @@ impl Definition {
                 (&record.universe_context, &record.arity, &record.result_sort)
             }
         };
-        let universes = universe_context.identity_instance();
-
-        // The entry's telescopes are closed, so any binders open them: counted from zero, under the hints the entry keeps.
-        let mut params = Vec::new();
-        let mut cursor = arity.cursor();
-        while let (Some((hint, domain)), Some(mark)) = (cursor.entry(), cursor.mark()) {
-            let binder = Free::local(params.len() as u64, hint);
-            cursor.advance(Term::free_var(&binder));
-            params.push((mark, binder, domain));
-        }
-        let within = cursor
-            .body()
-            .expect("a cursor past every entry holds its payload");
-        // A family's indices follow its parameters, each explicit; a record's fields are no part of its former.
-        let mut indices = Vec::new();
-        if matches!(nominal, Nominal::Inductive(_)) {
-            let mut cursor = within.cursor();
-            while let Some((hint, domain)) = cursor.entry() {
-                let binder = Free::local((params.len() + indices.len()) as u64, hint);
-                cursor.advance(Term::free_var(&binder));
-                indices.push((Plicity::Explicit, binder, domain));
-            }
-        }
-
-        let variables = |binders: &[(Plicity, Free, Term)]| {
-            binders
-                .iter()
-                .map(|(_, binder, _)| Term::free_var(binder))
-                .collect::<Vec<_>>()
-        };
-        let applied = match &nominal {
-            Nominal::Inductive(_) => {
-                Term::induct_type_at(name, universes, variables(&params), variables(&indices))
-            }
-            Nominal::Struct(_) | Nominal::Concept { .. } => {
-                Term::from(Subterm::StructType(StructType {
-                    name,
-                    universes,
-                    params: variables(&params),
-                }))
-            }
-        };
-        // One call for the parameters and one for the indices, the indices innermost: `Vec : (T : Type) -> (n : Nat) -> Type`.
-        let (type_, body) = [params, indices]
-            .into_iter()
-            .filter(|group| !group.is_empty())
-            .rev()
-            .fold((result_sort.clone(), applied), |(type_, body), group| {
-                (
-                    Term::func_type_marked(group.clone(), type_),
-                    Term::func_marked(group, body),
-                )
-            });
+        let family = matches!(nominal, Nominal::Inductive(_));
+        let (type_, body) = former_spelling(name, universe_context, arity, result_sort, family);
 
         Self {
             name,
