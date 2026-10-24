@@ -418,7 +418,7 @@ fn a_nest_of_lambdas_applied_in_turn_compiles_in_its_size() {
     assert_eq!(compiles(&grown(Growth::Lambdas, 2_000)), Ok(()));
 }
 
-/// A thousand matches, each on the `let` before it, compile: a local definition is read by value once, where it is made, its body stored with its solutions substituted, and a settlement is kept for as long as what it read stands, so no arm reads the chain before it again but a probe under it, which reduces what the arm before it reduced (`documentation/roadmap/compilation/100-a-scoped-answer-stands-for-as-long-as-what-it-read.md`).
+/// A thousand matches, each on the `let` before it, compile: a local definition is read by value once, where it is made, its body stored with its solutions substituted, and a settlement is kept for as long as what it read stands, so no arm reads the chain before it again but a probe under it, whose spellings walk the spines of the metavariables it holds, each as wide as the scope (`documentation/roadmap/compilation/100-a-probe-under-an-arm-costs-its-own-size.md`).
 #[test]
 fn a_chain_of_matches_each_on_the_let_before_it_compiles_in_its_size() {
     assert_eq!(compiles(&grown(Growth::ChainedMatches, 1_000)), Ok(()));
