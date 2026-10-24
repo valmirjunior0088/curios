@@ -2,7 +2,7 @@
 
 [Conversion is one relation in both checkers](../../design/soundness/conversion-is-one-relation-in-both-checkers.md) holds conversion to congruence, and [A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md) holds that no verdict follows how a term is spelled or the order it holds its operands in. A `Bool` match whose scrutinee conversion holds equal to a literal takes no arm unless the fold reaches the literal itself, so a law conversion decides of two `Bool` terms does not hold under a `match`.
 
-**Not refined yet.** It waits on the design of where a `Bool` match asks the readers about its scrutinee, under *Refinement*, and on [Boolean agreement is transitive and closed under substitution](100-boolean-agreement-is-transitive-and-closed-under-substitution.md), whose rung it would ask.
+**Not refined yet.** It waits on the design of where a `Bool` match asks the readers about its scrutinee, under *Refinement*.
 
 ## What is wrong
 
@@ -24,7 +24,7 @@ The fold of `&&` and `||` reads its right operand as written under a stuck left 
 - **Why conversion alone does not answer it.** [A term is one where conversion says so](../../design/arithmetic/a-term-is-one-where-conversion-says-so.md) rejects completing a fold or a lookup only where conversion compares: "A scrutinee inside reduction would still be decided by spelling." The type above is such a scrutinee: no comparison reaches it before the application is refused.
 - **Where a judgment's reduction already asks.** A judgment's reduction asks its checker at two points, an arm's equation through `curios-analysis`'s `answers` and a stuck fold taken again over its classes, and plain reduction asks nothing ("There are two reductions"). A `Bool` match asking the readers whether its scrutinee is `true` or `false` would be a third, and an equation recorded under a scrutinee is already answered through the same readers.
 - **Prior art.** Coq Modulo Theory's eliminations match modulo its theory, "matching modulo T for the weak and strong elimination rules" (Jouannaud and Strub, [*Coq without Type Casts*](https://easychair.org/publications/paper/BKQ), LPAR-21, 2017), the metatheory [The carriers' algebra stays in conversion](../../design/arithmetic/the-carriers-algebra-stays-in-conversion.md) rests on.
-- **What it would cost.** One diagram of the scrutinee a stuck match, constant where it is `true` or `false` (arithmetic 100's counts: linear on the shapes programs write), against every weak-head reduction of a stuck match on a connective, kept as a reduct is.
+- **What it would cost.** One diagram of the scrutinee a stuck match, constant where it is `true` or `false` (`curios`'s `tests::runaways` decides absorption over 256 atoms inside a million units), against every weak-head reduction of a stuck match on a connective, kept as a reduct is.
 
 ## Refinement
 
