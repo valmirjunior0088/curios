@@ -17,7 +17,10 @@ use {
         Struct, StructType, Subterm, Telescope, Term, TupleType, UniverseParam, Universes,
         Variance, Variant, universe_metas, universe_params,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet, HashSet},
+        hash::{Hash, Hasher},
+    },
 };
 
 /// What [`variance_vectors`] found: each analyzed declaration's vector, one entry per universe parameter, and the first reduction the driver refused with the declaration whose walk it was.
@@ -166,6 +169,7 @@ fn sweep<E: Env>(env: &mut E, vectors: &Vectors, parts: &[Term]) -> (Marked, Opt
         env,
         vectors,
         forcing: Vec::new(),
+        entered: HashSet::new(),
         marked: Marked::default(),
         refused: None,
     };
@@ -257,8 +261,31 @@ struct Walk<'a, E: Env> {
     vectors: &'a Vectors,
     /// The `rec` members this walk is already inside, innermost last: positivity's guard, for positivity's reason.
     forcing: Vec<(RecGroup, usize)>,
+    /// The nodes this walk has entered. A node entered again inside the same members marks what it marked and refuses what it refused, so a node a reduct shares is walked once however many paths reach it.
+    entered: HashSet<Entered>,
     marked: Marked,
     refused: Option<E::Error>,
+}
+
+/// A node as a walk entered it, inside the `rec` members of its path. Told apart by the node's address, and holding the node, so the address is the node's for as long as the walk keys by it: the walk forces and opens what it reads and drops what it made, and a node met later could take a freed one's address.
+struct Entered {
+    node: Term,
+    inside: Vec<(RecGroup, usize)>,
+}
+
+impl PartialEq for Entered {
+    fn eq(&self, other: &Self) -> bool {
+        self.node.identity() == other.node.identity() && self.inside == other.inside
+    }
+}
+
+impl Eq for Entered {}
+
+impl Hash for Entered {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.node.identity().hash(state);
+        self.inside.hash(state);
+    }
 }
 
 impl<E: Env> Walk<'_, E> {
@@ -327,6 +354,12 @@ impl<E: Env> Walk<'_, E> {
     }
 
     fn walk(&mut self, term: &Term) {
+        if !self.entered.insert(Entered {
+            node: term.clone(),
+            inside: self.forcing.clone(),
+        }) {
+            return;
+        }
         // A `rec` member this path is already inside is left folded, as positivity leaves it: forcing it again exposes the same node one level deeper.
         let member = rec_member(term);
         let cyclic = member

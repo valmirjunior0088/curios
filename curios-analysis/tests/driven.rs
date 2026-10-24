@@ -12,6 +12,7 @@ use {
         Answered, Classes, Declarations, Invert, Judge, PositivityRefusal, another_case, answers,
         answers_classed, group_totality, holds_no_type, invert_indices, one_up_to_instances,
         positivity_vectors, solve_indices, struct_reaches_itself, test_support::SYNTAX,
+        variance_vectors,
     },
     curios_cert::Kernel,
     curios_core::{
@@ -1438,18 +1439,49 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
         })
     };
 
-    let rows: Vec<(&str, bool)> = vec![(
-        "an index inverted against a target of its shape",
-        matches!(
-            invert_indices(
-                &mut kernel(),
-                &[doubled(Term::free_var(&x))],
-                &[doubled(Term::free_var(&z))],
-                slice::from_ref(&z),
+    // A family whose one payload is a tuple type of sixty levels, each holding the one below twice: what a field type read by value through a tower of `let`s is.
+    let wide = Global::Authored(Qualifier::from(["Wide"]));
+    let payload = (0..60).fold(Term::intrinsic(Intrinsic::NatType), |below, _| {
+        Term::tuple_type([
+            (Free::local(912, Some("a")), below.clone()),
+            (Free::local(913, Some("b")), below),
+        ])
+    });
+    let inducts = BTreeMap::from([(wide, single_payload(payload, Term::type_ground()))]);
+    let declared = || {
+        let mut kernel = kernel();
+        kernel
+            .declare_induct(&wide, &inducts[&wide])
+            .expect("a name is declared once");
+        kernel
+    };
+    let structs = BTreeMap::new();
+    let declarations = Declarations::of(&inducts, &structs);
+
+    let rows: Vec<(&str, bool)> = vec![
+        (
+            "an index inverted against a target of its shape",
+            matches!(
+                invert_indices(
+                    &mut kernel(),
+                    &[doubled(Term::free_var(&x))],
+                    &[doubled(Term::free_var(&z))],
+                    slice::from_ref(&z),
+                ),
+                Ok(Invert::Solved(solutions)) if solutions == [(z, Term::free_var(&x))]
             ),
-            Ok(Invert::Solved(solutions)) if solutions == [(z, Term::free_var(&x))]
         ),
-    )];
+        (
+            "positivity over a payload of its shape",
+            positivity_vectors(&mut declared(), declarations).is_ok(),
+        ),
+        (
+            "variance over a payload of its shape",
+            variance_vectors(&mut declared(), declarations)
+                .exhausted
+                .is_none(),
+        ),
+    ];
 
     for (walk, answered) in rows {
         assert!(answered, "{walk} over a doubling term did not answer");

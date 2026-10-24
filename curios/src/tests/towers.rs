@@ -44,6 +44,8 @@ pub(super) enum Shape {
     Aliases,
     /// `(T) -> T`, a top-level alias of the alias before it.
     Arrows,
+    /// `{t, t}`, a `let` of the one before it in a structure's field type, which the variance and positivity walks read by value: a field type whose tree doubles a line.
+    Fields,
     /// `(x, x)` twice, as two top-level chains built apart and claimed equal.
     TwoTowers,
     /// `g(x, x)` twice in one function's body, the second chain from a spelling that only reduces to the first's, and the two claimed equal: one spelling is not the other, so equality cannot answer and conversion compares them.
@@ -202,6 +204,16 @@ pub(super) fn tower(shape: Shape, lines: usize) -> String {
             });
             let _ = writeln!(source, "\nlet keep(x: T{lines}) -> T{lines} = x;");
         }
+        Shape::Fields => {
+            source.push_str("use /std/{Nat};\n\nstruct S: Type {\n    f: (\n");
+            chain(&mut source, "        ", "t", lines, "Nat", |t| {
+                fill!("{${t}, ${t}}", t)
+            });
+            let _ = writeln!(
+                source,
+                "        t{lines}\n    )\n}}\n\nlet keep(s: S) -> S = s;"
+            );
+        }
         Shape::TwoTowers => {
             source.push_str("use /std/{Nat, Eq};\n\n");
             chain(&mut source, "", "x", lines, "(1, 2)", |x| {
@@ -319,7 +331,7 @@ fn a_sixty_line_chain_compiles() {
     }
 }
 
-/// The towers both checkers walk in their size, at sixty lines: calls, pairs, lists, arms on a variable and arms on an expression in a function's body and in a recursive member's, lines that each call their member, pairs handed to their member, both aliases, the two towers claimed equal, and the two chains of calls built apart.
+/// The towers both checkers walk in their size, at sixty lines: calls, pairs, lists, arms on a variable and arms on an expression in a function's body and in a recursive member's, lines that each call their member, pairs handed to their member, both aliases, a structure's field type, the two towers claimed equal, and the two chains of calls built apart.
 #[test]
 fn a_sixty_line_tower_compiles() {
     for shape in [
@@ -337,6 +349,7 @@ fn a_sixty_line_tower_compiles() {
         Shape::Handed,
         Shape::Aliases,
         Shape::Arrows,
+        Shape::Fields,
         Shape::TwoTowers,
         Shape::Apart,
     ] {

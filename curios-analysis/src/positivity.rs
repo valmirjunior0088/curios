@@ -28,7 +28,10 @@ use {
         InstanceHead, Intrinsic, Polarity, RecGroup, StructDecl, StructType, Subterm, Telescope,
         Term, TupleType,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet, HashSet},
+        hash::{Hash, Hasher},
+    },
 };
 
 /// Why a declaration set was refused.
@@ -311,6 +314,7 @@ fn sweep<E: Env>(
             vectors,
             unfolded: BTreeSet::new(),
             forcing: Vec::new(),
+            entered: HashSet::new(),
             found: BTreeMap::new(),
             refused: None,
         };
@@ -438,6 +442,7 @@ fn refusal<E: Env>(
             vectors,
             unfolded: BTreeSet::new(),
             forcing: Vec::new(),
+            entered: HashSet::new(),
             found: BTreeMap::new(),
             refused: None,
         };
@@ -519,6 +524,8 @@ struct Walk<'a, E: Env> {
     ///
     /// [`Self::unfolded`] cannot serve. It keys on `Free`, and the recursive occurrence [`curios_core::RecGroup::member_body`] substitutes is an inline `rec` node with no name to key on. A stack rather than a set because it is popped on the way out: two *sibling* occurrences of one member sit on different paths and must each still force, or an occurrence that is `Strict` would read `Mixed` and the declaration holding it would be refused.
     forcing: Vec<(RecGroup, usize)>,
+    /// The nodes this traversal has entered. A node entered again at the same polarity inside the same members records what it recorded, so a node a reduct shares is walked once however many paths reach it — where [`Self::forcing`]'s sibling occurrences, on paths inside different members, are each still walked.
+    entered: HashSet<Entered>,
     found: BTreeMap<Target, Polarity>,
     /// The first reduction the driver refused on this traversal, kept for [`positivity_vectors`] to report.
     refused: Option<E::Error>,
@@ -535,6 +542,31 @@ pub(crate) fn rec_member(term: &Term) -> Option<(RecGroup, usize)> {
 
     head.as_rec_proj()
         .map(|(group, index)| (group.clone(), index))
+}
+
+/// A node as a walk entered it, at a polarity, inside the `rec` members of its path. Told apart by the node's address, and holding the node, so the address is the node's for as long as the walk keys by it: the walk forces and opens what it reads and drops what it made, and a node met later could take a freed one's address.
+struct Entered {
+    node: Term,
+    polarity: Polarity,
+    inside: Vec<(RecGroup, usize)>,
+}
+
+impl PartialEq for Entered {
+    fn eq(&self, other: &Self) -> bool {
+        self.node.identity() == other.node.identity()
+            && self.polarity == other.polarity
+            && self.inside == other.inside
+    }
+}
+
+impl Eq for Entered {}
+
+impl Hash for Entered {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.node.identity().hash(state);
+        self.polarity.hash(state);
+        self.inside.hash(state);
+    }
 }
 
 impl<E: Env> Walk<'_, E> {
@@ -636,6 +668,13 @@ impl<E: Env> Walk<'_, E> {
     fn walk(&mut self, term: &Term, polarity: Polarity) {
         // Nothing inside a position the enclosing former never inspects can occur at all — `Unused` composes to `Unused` however deep the walk would go.
         if polarity == Polarity::Unused {
+            return;
+        }
+        if !self.entered.insert(Entered {
+            node: term.clone(),
+            polarity,
+            inside: self.forcing.clone(),
+        }) {
             return;
         }
 

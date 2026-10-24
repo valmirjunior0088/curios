@@ -142,6 +142,7 @@ fn tower_measurements() {
         ("handed", Shape::Handed),
         ("aliases", Shape::Aliases),
         ("arrows", Shape::Arrows),
+        ("fields", Shape::Fields),
         ("two towers", Shape::TwoTowers),
         ("apart", Shape::Apart),
         ("bounded", Shape::Bounded),
