@@ -184,9 +184,8 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
                 }
             };
 
-            let Subterm::FuncType(FuncType { telescope, .. }) =
-                Term::unwrap_or_clone(kernel.reduce_forced(head_type.clone())?)
-            else {
+            let reduced = kernel.reduce_forced(head_type.clone())?;
+            let Subterm::FuncType(FuncType { telescope, .. }) = &*reduced else {
                 return Err(Error::NotAFunction(head_type));
             };
 
@@ -252,11 +251,9 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
             };
 
             let head_type = infer(kernel, head)?;
+            let reduced = kernel.reduce_forced(head_type.clone())?;
 
-            match (
-                Term::unwrap_or_clone(kernel.reduce_forced(head_type.clone())?),
-                field,
-            ) {
+            match (&*reduced, field) {
                 (Subterm::TupleType(TupleType { telescope }), Field::Tuple(_)) => {
                     let len = telescope.len();
                     telescope
@@ -270,8 +267,8 @@ fn infer_within(kernel: &mut Kernel, term: &Term, spine_head: bool) -> Result<Te
                         params,
                     }),
                     Field::Struct(structure, _),
-                ) if name == *structure => {
-                    let at = kernel.struct_at(&name, &universes, &params)?;
+                ) if name == structure => {
+                    let at = kernel.struct_at(name, universes, params)?;
                     at.field_type(kernel, head, field)?
                         .ok_or_else(|| out_of_range(at.field_count(kernel)))
                 }
@@ -1003,11 +1000,11 @@ fn check_rules(
     // The Σ-introduction rule stated directly: a tuple literal checks against a dependent telescope entry-wise, each component at its entry's type opened over the actual preceding components. Inference cannot reach this verdict — inferring the components independently manufactures a non-dependent tuple type whose telescope binds nothing, and no conversion can relate that to a telescope whose later entries mention its binders.
     //
     // At a Σ and at nothing else. A structure's type has one literal, the structure's own, which names it and is inferred: a tuple literal held at one would be a value no projection reads, since a slot of a structure reads that structure's literal alone (`curios_core::project_literal`). Any other expectation falls through, so the mismatch keeps its ordinary inferred-versus-expected shape.
-    if let Subterm::Tuple(Tuple { fields, .. }) = &**term
-        && let Subterm::TupleType(TupleType { telescope }) =
-            Term::unwrap_or_clone(kernel.reduce_forced(expected.clone())?)
-    {
-        return check_fields(kernel, fields, telescope);
+    if let Subterm::Tuple(Tuple { fields, .. }) = &**term {
+        let reduced = kernel.reduce_forced(expected.clone())?;
+        if let Subterm::TupleType(TupleType { telescope }) = &*reduced {
+            return check_fields(kernel, fields, telescope);
+        }
     }
 
     let inferred = infer(kernel, term)?;
@@ -1066,7 +1063,7 @@ fn check_lambda(
 fn check_fields(
     kernel: &mut Kernel,
     fields: &[Term],
-    telescope: Telescope<()>,
+    telescope: &Telescope<()>,
 ) -> Result<(), Error> {
     if telescope.len() != fields.len() {
         return Err(Error::Arity {

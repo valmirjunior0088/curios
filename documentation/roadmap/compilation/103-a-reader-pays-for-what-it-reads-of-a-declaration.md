@@ -1,18 +1,18 @@
 # A reader pays for what it reads of a declaration
 
-[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a declaration read a fact at a time — "an instantiated declaration is read by facet — its sort, its arity, one constructor, one field — and only the facet asked is instantiated" — and a compilation end in time proportional to what was written plus what the budget counted; [an item imports what it reads of another's row](../../../curios-ersd/README.md#an-item-imports-what-it-reads-of-anothers-row) so that no row is copied once for each declaration that reads it. Two readers take a row whole where they read a fact of it, so `k` readers of a row of width `w` cost `w·k`: the kernel's typing of a slot, which copies the type it reads the slot of, and every reader that asks a telescope its width, which walks it. A row is a family's constructors, a structure's or a tuple type's fields, a function type's domains, or an erased schema.
+[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a declaration read a fact at a time — "an instantiated declaration is read by facet — its sort, its arity, one constructor, one field — and only the facet asked is instantiated" — and a compilation end in time proportional to what was written plus what the budget counted; [an item imports what it reads of another's row](../../../curios-ersd/README.md#an-item-imports-what-it-reads-of-anothers-row) so that no row is copied once for each declaration that reads it. One reader takes a row whole where it reads a fact of it, so `k` readers of a row of width `w` cost `w·k`: every reader that asks a telescope its width, which walks it. A row is a family's constructors, a structure's or a tuple type's fields, a function type's domains, or an erased schema.
 
 Every stage is ready. Two readers are investigations (*What is not yet known*): a call of one method of a wide concept, and a read of a wide structure's last field.
 
 ## What is wrong
 
-Counted over the commit that publishes a closed type alias's value sort, with a release compiler built `--features profile` in a scratch copy, by the protocol under *Measuring*. A reader's cost is the difference between 16 readers and one, divided by 15, in kilobytes allocated, at a row of width 1,000 and of width 4,000.
+Counted over the commit that types a slot without copying its type, with a release compiler built `--features profile` in a scratch copy, by the protocol under *Measuring*. A reader's cost is the difference between 16 readers and one, divided by 15, in kilobytes allocated, at a row of width 1,000 and of width 4,000.
 
 | Reader of a row of width `w` | Elaboration | Kernel | Erasure |
 | --- | ---: | ---: | ---: |
-| A function's parameter typed by a closed tuple alias of `w` fields, projected at `x.0` | 93 → 100 | 133 → 420 | 20 → 20 |
-| A call of one method of a concept of `w` methods | 227 → 327 | 60 → 60 | 40 → 33 |
+| A call of one method of a concept of `w` methods | 207–227 → 287–340 | 53 → 60 | 40 → 33 |
 | A function reading the last field of a structure of `w` fields | 107 → 160 | 33 → 27 | 20 → 20 |
+| *Control:* a function's parameter typed by a closed tuple alias of `w` fields, projected at `x.0` | 93 → 100 | 33 → 27 | 20 → 20 |
 | *Control:* a function's unused parameter typed by a closed function-type alias of `w` domains | 87 → 87 | 27 → 27 | 20 → 20 |
 | *Control:* a construction of the last constructor of a family of `w` | 67 → 67 | 20 → 20 | 20 → 20 |
 | *Control:* two types of one family of `w` constructors compared | 273 → 280 | 47 → 40 | 27 → 27 |
@@ -20,20 +20,7 @@ Counted over the commit that publishes a closed type alias's value sort, with a 
 | *Control:* a match writing one arm and a catch-all over a family of `w` constructors | 140 → 133 | 33 → 40 | 33 → 33 |
 | *Control:* `Eq/refl()` of two constructions of one constructor of a parameterized family of `w` | 1,033 → 1,033 | 300 → 300 | 60 → 60 |
 
-The fold states a stage's bytes to a tenth of a megabyte, so a row moves by 7 KB a reader with nothing grown.
-
-### The kernel copies the type it reads a slot of
-
-The kernel types a projection, an application and a tuple literal checked against a type by matching on the reduct of the type whose slot it reads (`curios-cert/src/kernel/infer.rs`), and takes that reduct by value (`Term::unwrap_or_clone`). A type alias's reduct is the value its definition holds, which the definition shares, so each reader copies the alias's whole telescope to read one entry of it, where [Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a reader that matches on a reduct's shape read it by reference. A projecting reader of a tuple alias of 4,000 fields makes 8,442 allocations in the kernel against 2,440 at 1,000, two for each field. One reader's declaration allocates, counted with the figures above:
-
-| Tuple width | Elaboration, MB | Certification, MB |
-| ---: | ---: | ---: |
-| 1,000 | 0.2 | 0.2 |
-| 2,000 | 0.2 | 0.3 |
-| 4,000 | 0.2 | 0.5 |
-| 8,000 | 0.2 | 1.1 |
-
-A reader that leaves its parameter unused costs 0.2 and 0.3 at 8,000.
+The fold states a stage's bytes to a tenth of a megabyte, so a row moves by 7 KB a reader with nothing grown. A method call's elaboration allocates differently between two runs of one program, as no other probe's does, so its row gives the least and the most of four runs.
 
 ### A telescope's width is walked
 
@@ -49,12 +36,11 @@ A reader that leaves its parameter unused costs 0.2 and 0.3 at 8,000.
 
 ## What is not yet known
 
-- **What a method call pays its concept.** One call of one method of a concept of 4,000 methods costs the elaborator 327 KB and 6,856 allocations against 227 KB and 3,671 at 1,000, an allocation for each method, and the kernel and erasure the same at both widths, counted with the figures above. At `7c61c1a15` the growth stood in the allocations of `Context::standing_on` itself, a parked problem's retry, with no weak-head value filed as a key, so it is not the witness the call resolves, a structure of `w` methods. Settled by: gdb samples of the calls' elaboration at a concept of many methods, the cost attributed; a cost left is a stage here, and none left drops the item.
+- **What a method call pays its concept.** One call of one method of a concept of 4,000 methods costs the elaborator 287 to 340 KB and 6,446 to 6,999 allocations over four runs, against 207 to 227 KB and 3,458 to 3,681 at 1,000, about an allocation for each method, and the kernel and erasure the same at both widths, counted with the figures above; what it allocates differs between two runs of one program. At `7c61c1a15` the growth stood in the allocations of `Context::standing_on` itself, a parked problem's retry, with no weak-head value filed as a key, so it is not the witness the call resolves, a structure of `w` methods. Settled by: gdb samples of the calls' elaboration at a concept of many methods, the cost attributed; a cost left is a stage here, and none left drops the item.
 - **What elaboration pays a field read of a wide structure.** A function reading the last field of a structure of 4,000 fields costs the elaborator 160 KB and 1,593 allocations against 107 KB and 1,498 at 1,000, a few allocations that grow by about 18 bytes a field, and the kernel and erasure the same at both widths, counted with the figures above. Settled by: the read's elaboration attributed by spans; a cost left is a stage here, and none left drops the item.
 
 ## Stages
 
-7. **The kernel reads the type whose slot it reads by reference.** The projection, the application and the tuple literal's check (`curios-cert/src/kernel/infer.rs`) match the reduct where it stands and copy only the entry they keep, as the elaborator's do. Stored bytes: none. Check: the growth `AliasReaders`, its kernel's cost the same at every width; `/std`'s images byte-identical at one path. Size: one commit.
 8. **A telescope states its width.** The count on `Cons` and `Telescope::cons`, then the readers that walk to learn a width or one slot: `marks` read at one position, erasure's register and projection. Stored bytes: every telescope. Check: the growths `AliasReaders` and `ArrowAliasReaders`; `tests::laws`; `/std`'s verdicts and erased forms equal. Size: two commits.
 
 ## Measuring
