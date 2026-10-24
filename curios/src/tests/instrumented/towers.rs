@@ -80,52 +80,52 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 ///
 /// # What it last printed
 ///
-/// Over the checkers of `e2719c842`, every row accepted by both.
+/// Over the checkers of `868e314b2`, every row accepted by both.
 ///
 /// | tower | lines | elaborator units | elaborator looks | kernel units | kernel looks |
 /// | --- | --- | --- | --- | --- | --- |
-/// | chain | 12 | 4 055 | 13 783 | 3 059 | 8 719 |
-/// | chain | 16 | 4 055 | 14 987 | 3 059 | 9 075 |
-/// | chain, in a member | 12 | 4 055 | 18 047 | 3 059 | 9 803 |
-/// | chain, in a member | 16 | 4 055 | 19 681 | 3 059 | 10 207 |
-/// | calls | 12 | 4 055 | 15 231 | 3 059 | 9 002 |
-/// | calls | 16 | 4 055 | 16 847 | 3 059 | 9 446 |
-/// | calls, in a member | 12 | 4 055 | 19 169 | 3 059 | 9 831 |
-/// | calls, in a member | 16 | 4 055 | 21 349 | 3 059 | 10 323 |
-/// | pairs | 12 | 4 055 | 14 307 | 3 059 | 9 253 |
-/// | pairs | 16 | 4 055 | 15 759 | 3 059 | 9 781 |
-/// | pairs, in a member | 12 | 4 055 | 17 853 | 3 059 | 9 761 |
-/// | pairs, in a member | 16 | 4 055 | 20 193 | 3 059 | 10 289 |
-/// | lists | 12 | 4 055 | 30 609 | 3 059 | 11 317 |
-/// | lists | 16 | 4 055 | 37 497 | 3 059 | 12 493 |
-/// | lists, in a member | 12 | 4 055 | 34 493 | 3 059 | 11 774 |
-/// | lists, in a member | 16 | 4 055 | 42 413 | 3 059 | 12 950 |
-/// | arms | 12 | 4 055 | 22 621 | 3 059 | 12 894 |
-/// | arms | 16 | 4 055 | 27 085 | 3 059 | 16 254 |
-/// | arms, in a member | 12 | 4 055 | 27 194 | 3 059 | 14 378 |
-/// | arms, in a member | 16 | 4 055 | 32 306 | 3 059 | 17 942 |
-/// | guards | 12 | 4 055 | 26 416 | 3 059 | 10 168 |
-/// | guards | 16 | 4 055 | 31 964 | 3 059 | 10 996 |
-/// | guards, in a member | 12 | 4 055 | 31 968 | 3 059 | 12 911 |
-/// | guards, in a member | 16 | 4 055 | 38 432 | 3 059 | 14 351 |
-/// | recursions | 12 | 4 055 | 40 466 | 3 059 | 14 511 |
-/// | recursions | 16 | 4 055 | 49 774 | 3 059 | 16 523 |
-/// | handed | 12 | 4 055 | 22 696 | 3 059 | 10 521 |
-/// | handed | 16 | 4 055 | 26 548 | 3 059 | 11 189 |
-/// | aliases | 12 | 4 068 | 13 128 | 3 139 | 10 384 |
-/// | aliases | 16 | 4 068 | 14 416 | 3 159 | 11 272 |
-/// | arrows | 12 | 4 068 | 13 055 | 3 163 | 10 444 |
-/// | arrows | 16 | 4 068 | 14 319 | 3 191 | 11 352 |
-/// | fields | 12 | 4 055 | 19 761 | 3 059 | 13 936 |
-/// | fields | 16 | 4 055 | 22 965 | 3 059 | 15 928 |
-/// | two towers | 12 | 4 190 | 25 099 | 3 211 | 13 580 |
-/// | two towers | 16 | 4 214 | 31 029 | 3 247 | 15 280 |
-/// | apart | 12 | 4 055 | 25 563 | 3 059 | 14 004 |
-/// | apart | 16 | 4 055 | 29 223 | 3 059 | 15 548 |
-/// | bounded | 12 | 43 018 | 292 193 | 42 967 | 173 309 |
-/// | bounded | 16 | 56 510 | 450 553 | 56 319 | 270 343 |
+/// | chain | 12 | 4 055 | 13 840 | 3 059 | 8 719 |
+/// | chain | 16 | 4 055 | 15 056 | 3 059 | 9 075 |
+/// | chain, in a member | 12 | 4 055 | 18 107 | 3 059 | 9 803 |
+/// | chain, in a member | 16 | 4 055 | 19 753 | 3 059 | 10 207 |
+/// | calls | 12 | 4 055 | 15 294 | 3 059 | 9 002 |
+/// | calls | 16 | 4 055 | 16 922 | 3 059 | 9 446 |
+/// | calls, in a member | 12 | 4 055 | 19 235 | 3 059 | 9 831 |
+/// | calls, in a member | 16 | 4 055 | 21 427 | 3 059 | 10 323 |
+/// | pairs | 12 | 4 055 | 14 355 | 3 059 | 9 253 |
+/// | pairs | 16 | 4 055 | 15 819 | 3 059 | 9 781 |
+/// | pairs, in a member | 12 | 4 055 | 17 904 | 3 059 | 9 761 |
+/// | pairs, in a member | 16 | 4 055 | 20 256 | 3 059 | 10 289 |
+/// | lists | 12 | 4 055 | 30 657 | 3 059 | 11 317 |
+/// | lists | 16 | 4 055 | 37 557 | 3 059 | 12 493 |
+/// | lists, in a member | 12 | 4 055 | 34 544 | 3 059 | 11 774 |
+/// | lists, in a member | 16 | 4 055 | 42 476 | 3 059 | 12 950 |
+/// | arms | 12 | 4 055 | 22 780 | 3 059 | 12 894 |
+/// | arms | 16 | 4 055 | 27 292 | 3 059 | 16 254 |
+/// | arms, in a member | 12 | 4 055 | 27 356 | 3 059 | 14 378 |
+/// | arms, in a member | 16 | 4 055 | 32 516 | 3 059 | 17 942 |
+/// | guards | 12 | 4 055 | 26 731 | 3 059 | 10 168 |
+/// | guards | 16 | 4 055 | 32 375 | 3 059 | 10 996 |
+/// | guards, in a member | 12 | 4 055 | 32 286 | 3 059 | 12 911 |
+/// | guards, in a member | 16 | 4 055 | 38 846 | 3 059 | 14 351 |
+/// | recursions | 12 | 4 055 | 40 532 | 3 059 | 14 511 |
+/// | recursions | 16 | 4 055 | 49 852 | 3 059 | 16 523 |
+/// | handed | 12 | 4 055 | 22 834 | 3 059 | 10 521 |
+/// | handed | 16 | 4 055 | 26 722 | 3 059 | 11 189 |
+/// | aliases | 12 | 4 068 | 13 248 | 3 139 | 10 384 |
+/// | aliases | 16 | 4 068 | 14 572 | 3 159 | 11 272 |
+/// | arrows | 12 | 4 068 | 13 139 | 3 163 | 10 444 |
+/// | arrows | 16 | 4 068 | 14 427 | 3 191 | 11 352 |
+/// | fields | 12 | 4 055 | 19 881 | 3 059 | 13 936 |
+/// | fields | 16 | 4 055 | 23 121 | 3 059 | 15 928 |
+/// | two towers | 12 | 4 190 | 25 336 | 3 211 | 13 580 |
+/// | two towers | 16 | 4 214 | 31 338 | 3 247 | 15 280 |
+/// | apart | 12 | 4 055 | 25 664 | 3 059 | 14 000 |
+/// | apart | 16 | 4 055 | 29 348 | 3 059 | 15 544 |
+/// | bounded | 12 | 43 018 | 178 547 | 42 967 | 105 019 |
+/// | bounded | 16 | 56 510 | 248 339 | 56 319 | 150 675 |
 ///
-/// **No row multiplies.** A tower a checker walked once per path would read sixteen times the looks at sixteen lines that it reads at twelve, where a walk that visits each node once reads at most a third more. Every row but one reads at most 26 per cent more, the most the arms in the kernel, 12 894 looks and then 16 254. The bounded tower, whose proof folds comparisons over every line, reads 292 193 and then 450 553 in the elaborator and 173 309 and then 270 343 in the kernel: more than its lines add, though far short of what a walk per path reads (`documentation/roadmap/compilation/000-findings.md`). A row's units are its heaviest declaration's: they stand still across the two heights in every row but four, and in those move by under forty for the aliases, the arrows and the two towers, and by 13 492 in the elaborator and 13 352 in the kernel for the bounded tower, whose proof reduces each line's comparison.
+/// **No row multiplies.** A tower a checker walked once per path would read sixteen times the looks at sixteen lines that it reads at twelve, where a walk that visits each node once reads at most a third more. Every row but one reads at most 26 per cent more, the most the arms in the kernel, 12 894 looks and then 16 254. The bounded tower, whose proof folds comparisons over every line, reads 178 547 and then 248 339 in the elaborator and 105 019 and then 150 675 in the kernel: more than its lines add, though far short of what a walk per path reads (`documentation/roadmap/compilation/000-findings.md`). A row's units are its heaviest declaration's: they stand still across the two heights in every row but four, and in those move by under forty for the aliases, the arrows and the two towers, and by 13 492 in the elaborator and 13 352 in the kernel for the bounded tower, whose proof reduces each line's comparison.
 #[test]
 #[ignore = "measurement, counted: reports what a tower costs each checker rather than asserting"]
 fn tower_measurements() {

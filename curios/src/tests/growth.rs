@@ -39,6 +39,8 @@ pub(super) enum Growth {
     ParametersSummed,
     /// `let x{i} = n + i;` in one function's body, then a lambda adding them all, applied once: the lambda's body names every binding, and every operator in it stands under the lambda's binder.
     LetsSummed,
+    /// A function of so many parameters, each the summand of a call nested over the one before, claiming by `Eq/refl()` that the spine's product with the same spine over one more parameter commutes: two factors of one shape, parted at their innermost leaf, which the fold orders by rank.
+    ProductCommuted,
     /// An anonymous tuple of so many members.
     Tuple,
     /// A structure of so many fields, built and read.
@@ -73,7 +75,7 @@ pub(super) enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub(super) const ALL: [Growth; 27] = [
+    pub(super) const ALL: [Growth; 28] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -86,6 +88,7 @@ impl Growth {
         Growth::Parameters,
         Growth::ParametersSummed,
         Growth::LetsSummed,
+        Growth::ProductCommuted,
         Growth::Tuple,
         Growth::Fields,
         Growth::Constructors,
@@ -198,6 +201,22 @@ pub(super) fn grown(growth: Growth, size: usize) -> String {
             )
             .expect("a string takes a line");
             program(&body, "f(a)")
+        }
+        Growth::ProductCommuted => {
+            // `g(x{size} + g(… g(x1 + leaf)))`: over `x0` and over `u`, two factors of one shape.
+            let spine = |leaf: &str| {
+                (1..=size).fold(leaf.to_string(), |inner, index| {
+                    format!("g(x{index} + {inner})")
+                })
+            };
+            let (over_x0, over_u) = (spine("x0"), spine("u"));
+            program(
+                &format!(
+                    "let f(g: (Nat) -> Nat, u: Nat, {}) -> Nat =\n    let _commuted: /std/Eq()({over_x0} * {over_u}, {over_u} * {over_x0}) = /std/Eq/refl();\n    x0;\n",
+                    parameters(size + 1)
+                ),
+                &format!("f((v: Nat) => v, a, {})", repeated("a", size + 1, ", ")),
+            )
         }
         Growth::Tuple => program(
             &format!(
