@@ -15,10 +15,14 @@ use {
 const IMPORTS: &str =
     "use /std/{Nat, Int, Bool, List, Eq, Io, proved}; use /std/Bool/{Holds, True};";
 
-/// Two recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles.
+/// Three recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles. A predicate, a wrapper of it and an alias of `Nat` give the respellings of an argument no implicit takes part in.
 const DEFINITIONS: &str =
     "let count(@T: Type, l: List(T)) -> Nat = match l | [] => 0 | [_, ..t] => count(t) + 1 end;
-let whole(@T: Type, l: List(T)) -> Bool = match l | [] => true | [_, ..t] => whole(t) end;";
+let whole(@T: Type, l: List(T)) -> Bool = match l | [] => true | [_, ..t] => whole(t) end;
+let all(@T: Type, l: List(T), p: (T) -> Bool) -> Bool = match l | [] => true | [h, ..t] => match p(h) | true => all(t, p) | false => false end end;
+let small(n: Nat) -> Bool = n < 10;
+let tiny(n: Nat) -> Bool = small(n);
+let Naturals: Type = Nat;";
 
 /// The binders every cell is stated under. Two proofs of one bound, two functions and a higher-order one give the atoms that convert without being identical.
 const BINDERS: &[Binder] = &[
@@ -218,6 +222,38 @@ const GUARDS: &[Guard] = &[
         dual: None,
         refused: &[],
     },
+    // A stuck call of a recursive definition, its implicit written on one side and left out on the other: the two calls are apart in their instance, and are asked about by their arguments.
+    Guard {
+        guard: "whole(@Nat, xs)",
+        respelled: "whole(xs)",
+        dual: None,
+        refused: &[],
+    },
+    Guard {
+        guard: "whole(xs)",
+        respelled: "whole(@Nat, xs)",
+        dual: None,
+        refused: &[],
+    },
+    // Arguments respelled with no implicit taking part: through an alias, an eta expansion and a wrapper.
+    Guard {
+        guard: "whole(@Naturals, xs)",
+        respelled: "whole(xs)",
+        dual: None,
+        refused: &[],
+    },
+    Guard {
+        guard: "all(xs, (n) => small(n))",
+        respelled: "all(xs, small)",
+        dual: None,
+        refused: &[],
+    },
+    Guard {
+        guard: "all(xs, tiny)",
+        respelled: "all(xs, small)",
+        dual: None,
+        refused: &[],
+    },
     // What the filter in front of an equation still gives up: `c` stands where reduction erases it, and it is no proof.
     Guard {
         guard: "f(b) < 10",
@@ -380,6 +416,14 @@ const ATOMS: &[Atoms] = &[
     // One call written twice: two instances of a universe-polymorphic definition, which a number's readers hold one atom.
     Atoms {
         left: "count(xs)",
+        right: "count(xs)",
+        zero: "0",
+        nat: true,
+        refused: &[],
+    },
+    // The same call with its implicit written on one side: a match on it is a stuck call met whole by its equation.
+    Atoms {
+        left: "count(@Nat, xs)",
         right: "count(xs)",
         zero: "0",
         nat: true,

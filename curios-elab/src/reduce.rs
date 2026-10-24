@@ -17,8 +17,9 @@ use {
     },
     crate::{Error, classing, convert_at, is_prop, reduce_with, same_uncommitted},
     curios_analysis::{
-        Answered, Classes, Driver, Within, answers, answers_classed, atoms_within,
-        case_target_indices, could_reduce_to, pinned_instance, read_operands, refold,
+        Answered, Classes, Driver, Within, answers, answers_classed, apart_in_instance,
+        atoms_within, case_target_indices, could_reduce_to, holds_no_type, one_up_to_instances,
+        pinned_instance, read_operands, refold,
     },
     curios_core::{
         Advance, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost,
@@ -1005,7 +1006,7 @@ fn answered(
                 )?
             }
             Answered::Whole => {
-                asked_scrutinee(context, frame, probe, &unerased)?.then_some(assumed)
+                asked_scrutinee(context, frame, probe, &unerased, &assumed)?.then_some(assumed)
             }
         };
         if answer.is_some() {
@@ -1112,22 +1113,33 @@ fn asked_within(context: &mut Context, within: &mut Within) -> Result<(), Reduce
     })
 }
 
-/// Whether `term` is the scrutinee of the entry registered in `frame`, whose reduced spelling is `key`, as reduction asks conversion of two stuck forms that are no operations of the algebra: compared with that frame's refinements and every frame's inside it withheld, the view the spelling was settled under, since under its own equation the key reduces to the case value.
+/// Whether `term` is the scrutinee of the entry registered in `frame`, whose reduced spelling is `key` and whose case value is `value`, as reduction asks conversion of two stuck forms that are no operations of the algebra: compared with that frame's refinements and every frame's inside it withheld, the view the spelling was settled under, since under its own equation the key reduces to the case value.
+///
+/// **Two calls apart in their head's instance alone are asked about by their arguments** (`curios_analysis::one_up_to_instances`), as the kernel asks them. Each written call of a universe-polymorphic definition takes an instance of its own, and a comparison that commits nothing answers no to two instances still open, so two calls of a recursive one would never be one here, however their arguments stand. Where the case value may hold a type, an instance can be part of it, and a yes rests on the two being one: they are committed one, as a key's hit commits them ([`hold_at_one_instance`]), so the kernel compares them at one level.
 fn asked_scrutinee(
     context: &mut Context,
     frame: usize,
     term: &Term,
     key: &Term,
+    value: &Term,
 ) -> Result<bool, ReduceError> {
     curios_profile::profile!("reduce::asked_scrutinee");
     context.note_question();
-    context.plainly(|context| {
+    let asked = context.plainly(|context| {
         context.with_refinements_withheld_from(frame, |context| {
-            Ok(same_uncommitted(context, term, key)
-                .probed()?
-                .unwrap_or(false))
+            one_up_to_instances(term, key, &mut |this, that| {
+                Ok(same_uncommitted(context, this, that)
+                    .probed()?
+                    .unwrap_or(false))
+            })
         })
-    })
+    })?;
+    match apart_in_instance(term, key) {
+        Some((this, that)) if asked && !holds_no_type(value) => {
+            hold_at_one_instance(context, &this.head, &that.head)
+        }
+        _ => Ok(asked),
+    }
 }
 
 /// The elaborator as the conversion chain's driver where no comparison stands open, which is how a case equation's lookup reads the chain's readers from inside reduction. It substitutes the metavariables already solved, as the comparing driver does, and has no packed-literal view, since that view hands goals to a queue a lookup does not hold.

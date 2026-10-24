@@ -337,7 +337,7 @@ fn answered(
             answers_classed(kernel, term, key, value, &mut classes)?
         }
         Answered::Whole => kernel
-            .asked_scrutinee(index, term, key)?
+            .asked_scrutinee(index, term, key, value)?
             .then(|| value.clone()),
     })
 }

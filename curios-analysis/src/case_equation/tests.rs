@@ -1,7 +1,7 @@
 //! The recording rule on each kind of spelling it is asked about.
 
 use {
-    super::records_case_equation,
+    super::{holds_no_type, records_case_equation},
     curios_core::{Free, Intrinsic, Nat, Term},
     curios_utilities::Qualifier,
 };
@@ -26,6 +26,17 @@ fn a_closed_spelling_carries_none() {
         nat(3),
         nat(2)
     ))));
+}
+
+#[test]
+fn a_number_or_a_truth_value_holds_no_type_and_a_list_or_a_value_of_no_known_carrier_may() {
+    assert!(holds_no_type(&nat(0)));
+    assert!(holds_no_type(&Term::intrinsic(Intrinsic::Bool(false))));
+    assert!(!holds_no_type(&Term::intrinsic(Intrinsic::List {
+        element: Term::intrinsic(Intrinsic::NatType),
+        items: Vec::new(),
+    })));
+    assert!(!holds_no_type(&Term::free_var(&Free::local(0, Some("v")))));
 }
 
 #[test]

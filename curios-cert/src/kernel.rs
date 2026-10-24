@@ -50,7 +50,9 @@ mod whnf;
 pub(crate) use whnf::*;
 
 use {
-    crate::{Baseline, entails, erased_half, instantiate_qualities},
+    crate::{
+        Baseline, entails, erased_half, holds_no_type, instantiate_qualities, one_up_to_instances,
+    },
     curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel},
     curios_core::{
         Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
@@ -1254,20 +1256,28 @@ impl<'s> Kernel<'s> {
         answer
     }
 
-    /// Whether `term` is the scrutinee of the equation at `index`, whose reduced spelling is `key`, as reduction asks conversion of two stuck forms that are no operations of the algebra.
+    /// Whether `term` is the scrutinee of the equation at `index`, whose reduced spelling is `key` and whose case value is `value`, as reduction asks conversion of two stuck forms that are no operations of the algebra.
     ///
     /// Compared with that equation and every equation inside it withheld, which is the view the spelling was settled under ([`Kernel::settle_refinement`]): under its own equation the key reduces to the case value, and nothing would convert with it.
+    ///
+    /// **Two calls apart in their head's instance alone are asked about by their arguments** where the case value holds no type, as the elaborator asks them (`curios_analysis::one_up_to_instances`): an instance is no part of such a value. Where the value may hold a type, the elaborator committed the two instances one, and they are compared whole at the levels they closed at.
     pub(crate) fn asked_scrutinee(
         &mut self,
         index: usize,
         term: &Term,
         key: &Term,
+        value: &Term,
     ) -> Result<bool, ReduceError> {
         curios_profile::profile!("kernel::asked_scrutinee");
         self.plainly(|kernel| {
             let outer = kernel.scope.hide_refinements_from(index);
             let aside = kernel.memos.set_aside(kernel.scope.plain());
-            let same = convert::grounded(kernel, term, key);
+            let same = match holds_no_type(value) {
+                true => one_up_to_instances(term, key, &mut |this, that| {
+                    convert::grounded(kernel, this, that)
+                }),
+                false => convert::grounded(kernel, term, key),
+            };
             kernel.scope.show_refinements(outer);
             kernel.memos.hand_back(aside);
 

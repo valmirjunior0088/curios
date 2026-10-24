@@ -1324,11 +1324,8 @@ const DECLINED: [&str; 3] = [
     "/std/http/syntax/status_line",
 ];
 
-/// The `let`s of the library that are refused as a report prints them, under their reason.
-const REFUSED: [&str; 1] = [
-    // Its guard's fact proves a proof field over a recursive call, and the call written with its implicit argument, as a report prints it, holds the type its field's statement holds as a node by its name, so the guard's key meets no statement (`documentation/roadmap/theory/100-an-implicit-argument-written-is-the-argument-inferred.md`).
-    "/std/Tui/Glyph/of_cluster",
-];
+/// The `let`s of the library that are refused as a report prints them, under their reason: none.
+const REFUSED: [&str; 0] = [];
 
 /// The `let`s of the library whose printed form elaborates and is not proved to be the `let`: none.
 const UNPROVED: [&str; 0] = [];

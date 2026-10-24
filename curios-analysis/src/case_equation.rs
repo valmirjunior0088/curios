@@ -87,6 +87,23 @@ pub fn could_reduce_to(key: &Term, candidate: &Term, proofs: &[Free]) -> bool {
         .all(|name| allowed.contains(name) || proofs.contains(name))
 }
 
+/// Whether `value`, the value an arm's equation assumes of its scrutinee, is of a carrier whose values hold no type: the literal of a truth value, a number, a byte, a float or a packed sequence, a successor over a pattern among them. There a universe instance is no part of the value ([`curios_core::same_atom`]), so a stuck call met whole and the equation's reduced spelling apart in their head's instance alone are one where their arguments are ([`one_up_to_instances`](crate::one_up_to_instances)). A list's value and a constructed one may hold a type.
+pub fn holds_no_type(value: &Term) -> bool {
+    let Subterm::Intrinsic(literal) = &**value else {
+        return false;
+    };
+    let carrier = match literal {
+        Intrinsic::Bool(_) => Carrier::Boolean,
+        Intrinsic::Nat(_) => Carrier::Natural,
+        Intrinsic::Int(_) => Carrier::Integer,
+        Intrinsic::Byte(_) => Carrier::Byte,
+        Intrinsic::Flt(_) => Carrier::Float,
+        Intrinsic::Bytes(_) => Carrier::Bytes,
+        _ => return false,
+    };
+    !carrier.holds_types()
+}
+
 /// What an arm's equation says of a term.
 #[derive(Debug, PartialEq)]
 pub enum Answered {

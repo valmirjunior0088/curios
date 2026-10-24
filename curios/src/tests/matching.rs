@@ -8,4 +8,5 @@ mod motive_tests;
 mod pattern_tests;
 mod recording_tests;
 mod refinement_tests;
+mod spelling_tests;
 mod target_tests;

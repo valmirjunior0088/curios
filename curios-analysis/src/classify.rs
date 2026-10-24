@@ -29,8 +29,8 @@ use {
     crate::{Outcome, Read, read},
     curios_algebra::{Carrier, Family, Operation, declares},
     curios_core::{
-        Cost, Declaration, Free, Intrinsic, Probe, ReduceError, Reducer, Subterm, Term, Var, Visit,
-        reduce_intrinsic,
+        Apply, Cost, Declaration, Free, Intrinsic, Probe, ReduceError, Reducer, Subterm, Term, Var,
+        Visit, reduce_intrinsic,
     },
     curios_utilities::{Ordered, Persistent, recurse},
     std::{
@@ -194,7 +194,7 @@ impl Classes {
             if let Some(key) = &key {
                 for representative in self.candidates(key) {
                     self.asked = true;
-                    if one(&representative, atom, &mut same)? {
+                    if one_up_to_instances(&representative, atom, &mut same)? {
                         joined = Some(representative);
                         break;
                     }
@@ -828,26 +828,37 @@ pub(crate) fn agree(
     ))
 }
 
-/// Whether `same` holds two atoms that may be one: asked of the two whole, or of each pair of their arguments where they are two applications apart in their heads' universe instances and in nothing else of their heads.
-fn one<E>(
+/// The two applications `this` and `that` are, where they hold as many arguments and their heads are apart in a universe instance and in nothing else: the pair [`one_up_to_instances`] asks about by its arguments.
+pub fn apart_in_instance<'a>(this: &'a Term, that: &'a Term) -> Option<(&'a Apply, &'a Apply)> {
+    match (&**this, &**that) {
+        (Subterm::Apply(left), Subterm::Apply(right))
+            if left.arguments.len() == right.arguments.len()
+                && left.head != right.head
+                && left.head.erased_universes() == right.head.erased_universes() =>
+        {
+            Some((left, right))
+        }
+        _ => None,
+    }
+}
+
+/// Whether `same` holds two terms one: asked of the two whole, or of each pair of their arguments where they are two applications apart in their heads' universe instances alone ([`apart_in_instance`]).
+///
+/// **The one statement of a pair apart in an instance**, which a classing asks of two atoms and each checker of a stuck call and an equation's reduced spelling met whole. Each written call of a universe-polymorphic definition takes an instance of its own, and a checker handed the two whole compares the instances first, which the elaborator may not commit inside a question; asked by the arguments, the heads are one head already. The arguments alone decide only where an instance is no part of the value, a value of a carrier that holds no type ([`curios_core::same_atom`]): a caller reading a value that may hold one holds the two instances at one as well.
+pub fn one_up_to_instances<E>(
     this: &Term,
     that: &Term,
     same: &mut impl FnMut(&Term, &Term) -> Result<bool, E>,
 ) -> Result<bool, E> {
-    match (&**this, &**that) {
-        (Subterm::Apply(left), Subterm::Apply(right))
-            if left.head != right.head
-                && left.head.erased_universes() == right.head.erased_universes() =>
-        {
-            for (left, right) in left.params().zip(right.params()) {
-                if !same(left, right)? {
-                    return Ok(false);
-                }
-            }
-            Ok(true)
+    let Some((left, right)) = apart_in_instance(this, that) else {
+        return same(this, that);
+    };
+    for (left, right) in left.params().zip(right.params()) {
+        if !same(left, right)? {
+            return Ok(false);
         }
-        _ => same(this, that),
     }
+    Ok(true)
 }
 
 /// Whether the table declares `intrinsic` an operation and leaves an operand of it out: a quotient's proof, which its meaning does not read.

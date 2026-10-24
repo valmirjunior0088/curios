@@ -10,8 +10,8 @@ use {
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_analysis::{
         Answered, Classes, Declarations, Invert, Judge, PositivityRefusal, another_case, answers,
-        answers_classed, group_totality, invert_indices, positivity_vectors, solve_indices,
-        struct_reaches_itself, test_support::SYNTAX,
+        answers_classed, group_totality, holds_no_type, invert_indices, one_up_to_instances,
+        positivity_vectors, solve_indices, struct_reaches_itself, test_support::SYNTAX,
     },
     curios_cert::Kernel,
     curios_core::{
@@ -1934,6 +1934,38 @@ fn an_equation_answers_a_term_the_readers_hold_equal_to_its_key() {
         answers(&mut kernel, &commuted, &total, &nat(0)),
         Ok(Answered::Silent)
     );
+}
+
+/// A stuck call the readers decide nothing of is handed back whole, and where it and the key are two calls of one head apart in its universe instance alone, a checker asks about them by their arguments, by the statement a classing reads: an instance is no part of a truth value, so `f.{1}(a)` is the term of a key `f.{0}(a)` whose equation assumes `true`, and `f.{1}(b)` is not.
+#[test]
+fn a_call_apart_from_the_key_in_its_instance_alone_is_asked_about_by_its_arguments() {
+    let mut kernel = kernel();
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let [a, b] = [1, 2].map(|index| Free::local(index, None));
+    for binder in [&a, &b] {
+        kernel.assume(binder, &nat_type);
+    }
+    let called = |level: u32, argument: &Free| {
+        Term::apply(
+            Term::instance_of(&Free::local(10, Some("f")), vec![Level::constant(level)]),
+            [Term::free_var(argument)],
+        )
+    };
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+    let key = called(0, &a);
+    assert!(holds_no_type(&truth));
+
+    for (term, one) in [(called(1, &a), true), (called(1, &b), false)] {
+        assert_eq!(
+            answers(&mut kernel, &term, &key, &truth),
+            Ok(Answered::Whole)
+        );
+        let asked = one_up_to_instances(&term, &key, &mut |this, that| {
+            kernel.convert_at(&nat_type, this, that)
+        })
+        .expect("the kernel compares two locals");
+        assert_eq!(asked, one);
+    }
 }
 
 /// Past what the readers decide, the rule hands a question back and calls no judgment: the atoms of two operations of one kind, where some two may be one, and the whole pair where the two are no operations of the algebra and their heads say they may be one term. Asked again with the atoms classed, it reads the pair one spelling to a class, for the key and for the key negated. What cannot be one term is answered with silence, so a checker is asked nothing about it.
