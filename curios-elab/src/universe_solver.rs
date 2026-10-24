@@ -1299,10 +1299,14 @@ impl UniverseSolver {
         Ok((!lowers.is_empty()).then(|| Level::max(lowers)))
     }
 
-    /// The least level satisfying the *currently known* part of every `lower ≤ meta + k` bound, reading each still-open flexible level in a lower position as its least value, zero.
+    /// The least level satisfying the *currently known* part of every `lower ≤ meta + k` bound, reading each still-open flexible level in a lower position at the floor `floors` has found for it, and at its least value, zero, where it has found none.
     ///
-    /// [`Self::principal_lower_bound`] refuses to answer while any lower bound mentions an open level, because the answer could still grow. That is the right rule while propagation can still make progress, but a cycle of mutual bounds never does: every level in it is waiting for another. Weakening the open atoms to zero yields an *implied* bound — a level is monotone in its atoms, so the result is a sound floor rather than a guess — which is enough to break the tie and resume propagation.
-    fn grounded_lower_bound(&self, meta: UniverseMetaId) -> Result<Option<Level>, UniverseError> {
+    /// [`Self::principal_lower_bound`] refuses to answer while any lower bound mentions an open level, because the answer could still grow. That is the right rule while propagation can still make progress, but a cycle of mutual bounds never does: every level in it is waiting for another. Weakening the open atoms to a floor already implied yields an *implied* bound — a level is monotone in its atoms, so the result is a sound floor rather than a guess — which is enough to break the tie and resume propagation.
+    fn grounded_lower_bound(
+        &self,
+        meta: UniverseMetaId,
+        floors: &BTreeMap<UniverseMetaId, Level>,
+    ) -> Result<Option<Level>, UniverseError> {
         let head = LevelHead::Meta(meta);
         let mut lowers = Vec::new();
         for position in self.constraints.mentioning(head).collect::<Vec<_>>() {
@@ -1321,7 +1325,9 @@ impl UniverseSolver {
                     return Some(Level::zero());
                 }
                 match lower_head {
-                    LevelHead::Meta(other) if self.is_open_flexible(other) => Some(Level::zero()),
+                    LevelHead::Meta(other) if self.is_open_flexible(other) => {
+                        Some(floors.get(&other).cloned().unwrap_or_else(Level::zero))
+                    }
                     _ => None,
                 }
             })?;
@@ -1423,9 +1429,11 @@ impl UniverseSolver {
         self.check_consistent()
     }
 
-    /// Break a stalled set by closing each of its components at the grounded floor, keeping only the closures that survive a consistency check. Returns the levels whose bounds mentioned a committed one.
+    /// Break a stalled set by closing each of its components at the floors its bounds imply, each round reading the floors the round before found until none rises, keeping only the closures that survive a consistency check. Returns the levels whose bounds mentioned a committed one.
     ///
     /// A stall has two shapes, and only one of them may be closed. A *cycle* of mutual bounds — `max(1, ?u) ≤ max(1, ?v)` with its converse, which is what witness dispatch emits — has a least solution, and the floor assignment witnesses it. A *disjunction* like `1 ≤ max(?u, ?v)` has none: either level may carry the bound, so choosing one is arbitrary and would silently strip a declaration of polymorphism it is entitled to keep. Attempting the floor and rolling back on inconsistency distinguishes them without either shape having to be recognized syntactically: the disjunction's floor reduces to `1 ≤ 0` and fails, while the cycle's reduces to `1 ≤ 1` and holds.
+    ///
+    /// A cycle's floors feed one another: `1 ≤ ?v` with `?v ≤ ?u` puts `?v` at one in the first round and `?u` at one only in the next, so one round from zero would leave `?u` below `?v` and the closure refused as a disjunction's is. A consistent store's least solution is reached within as many rounds as the component has members, since a derivation of a floor repeats no member, and one that is not is refused by the check.
     ///
     /// Components are closed independently so that one unresolvable disjunction cannot veto an unrelated cycle elsewhere in the same declaration.
     fn close_stalled_components(
@@ -1442,16 +1450,26 @@ impl UniverseSolver {
                 .collect::<BTreeSet<_>>();
             remaining = remaining.difference(&component).copied().collect();
 
-            // Every floor is read from the same pre-assignment state, so the component closes simultaneously rather than each member seeing the levels committed before it.
-            let floors = component
+            // Every floor is read from the same pre-assignment state, so the component closes simultaneously rather than each member seeing the levels committed before it; the rounds end where none rises.
+            let mut floors = component
                 .iter()
-                .map(|meta| {
+                .map(|meta| (*meta, Level::zero()))
+                .collect::<BTreeMap<_, _>>();
+            for _ in 0..=component.len() {
+                let mut raised = false;
+                let mut next = BTreeMap::new();
+                for meta in &component {
                     let floor = self
-                        .grounded_lower_bound(*meta)?
+                        .grounded_lower_bound(*meta, &floors)?
                         .unwrap_or_else(Level::zero);
-                    Ok((*meta, floor))
-                })
-                .collect::<Result<Vec<_>, UniverseError>>()?;
+                    raised |= floors.get(meta) != Some(&floor);
+                    next.insert(*meta, floor);
+                }
+                floors = next;
+                if !raised {
+                    break;
+                }
+            }
             let dependents = component
                 .iter()
                 .flat_map(|meta| self.dependents_of(*meta))

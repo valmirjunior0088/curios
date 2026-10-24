@@ -425,6 +425,32 @@ fn a_mutually_bounded_cycle_closes_at_a_non_zero_floor() {
     assert_eq!(solver.solution(right), Some(&Level::constant(2)));
 }
 
+/// A cycle whose floors feed one another. `max(base, payload) ≤ payload` with `payload ≤ base` and `1 ≤ payload` has the least solution of one for both, but neither has a principal bound while the other is open, and one round of floors from zero puts `payload` at one and `base` at zero, which `payload ≤ base` refuses. Each round reads the floors the round before found, so `base` follows `payload` to one and the component closes. This is what a `!` region meets at a payload above level zero: the region's monad typed at one sort for its domain and codomain, the `Try` witness bounding the payload's level by the base's, and the payload bounding the domain from below.
+#[test]
+fn a_cycle_through_a_maximum_closes_at_its_least_solution() {
+    let mut solver = UniverseSolver::new(0);
+    let base = solver.fresh(UniverseRole::Flexible, None);
+    let payload = solver.fresh(UniverseRole::Flexible, None);
+    solver
+        .add_leq(
+            Level::max([Level::meta(base), Level::meta(payload)]),
+            Level::meta(payload),
+            origin("region monad"),
+        )
+        .unwrap();
+    solver
+        .add_leq(Level::meta(payload), Level::meta(base), origin("witness"))
+        .unwrap();
+    solver
+        .add_leq(Level::constant(1), Level::meta(payload), origin("payload"))
+        .unwrap();
+
+    solver.solve_flexible().unwrap();
+
+    assert_eq!(solver.solution(base), Some(&Level::constant(1)));
+    assert_eq!(solver.solution(payload), Some(&Level::constant(1)));
+}
+
 #[test]
 fn flexible_dependency_chain_propagates_after_defaulting_its_floor() {
     let mut solver = UniverseSolver::new(0);

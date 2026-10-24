@@ -715,3 +715,20 @@ end
         assert_eq!(typecheck(&source), Ok(()), "`{implicit}`");
     }
 }
+
+// **A body's cycle of levels closes at its least solution.** A `!` region's monad is read at one sort for its domain and codomain, the `Try` witness bounds the payload's level by the base's, and a payload above level zero bounds the domain from below: `max(u, v) ≤ v`, `v ≤ u` and `1 ≤ v`, where neither level has a principal bound while the other is open. The floors are read round after round, so the pair settles at one and `read` takes no parameter. Floored once from zero, the two were generalized as parameters nothing could choose, and the program's entry, which generalizes nothing, was refused for a level it could not close.
+#[test]
+fn a_bodys_cycle_of_levels_closes_at_its_least_solution() {
+    let source = r#"
+        use /std/{Try, Io, Str, Bool, Nat};
+        let probe() -> Try(Io, Str, Bool) = Try/pure(true);
+        pub let read() -> Try(Io, Str, {}) =
+            let _ = probe()!;
+            let _ = Try/pure(Nat)!;
+            Try/pure(());
+        read()
+        "#;
+    assert_eq!(typecheck(source), Ok(()));
+    let parameters = universe_parameters(source);
+    assert_eq!(parameters.get("/read"), Some(&0), "{parameters:?}");
+}
