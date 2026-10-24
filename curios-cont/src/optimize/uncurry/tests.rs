@@ -2,7 +2,7 @@ use {
     super::{admit_site, uncurry_returns, uncurryable},
     crate::{
         Atom, Callee, Continuation, CopyPlan, Edge, Function, FunctionId, Literal, Module, Node,
-        NodeId, ValueExpr, analyze_calls, continuation_entries, copy_bodies,
+        NodeId, ValueExpr, analyze_calls, continuation_entries, copy_bodies, prune_unreachable,
         test_support::halt_zero,
     },
     curios_num::Natural,
@@ -809,7 +809,153 @@ fn a_new_tail_edge_defers_a_class_until_its_new_members_can_agree() {
     assert!(uncurry_returns(&mut module));
     assert_eq!(widths(&module, leader, forwarder), (2, 1));
     module.verify().unwrap();
+    // As the optimizer's round closes: the retarget leaves the resume it bypassed bound and dead, and its call through the closure to the forwarder's sentinel is no way the forwarder still returns.
+    prune_unreachable(&mut module);
     assert!(uncurry_returns(&mut module));
     assert_eq!(widths(&module, leader, forwarder), (3, 2));
     module.verify().unwrap();
+}
+
+/// What a two-armed producer's second arm returns: a function reference, as its first arm does, or whatever a closure it was handed returns, by tail-calling it.
+#[derive(Clone, Copy)]
+enum Arm {
+    Function,
+    ThroughClosure,
+}
+
+/// `producer(n, through) = match n | 0 => inner | _ => <arm>`, and a caller applying what it hands back once: the shape a monadic `match` lowers to, one arm returning `Parse/pure`'s closure and the other building its action through a dictionary's `bind` and tail-calling it.
+fn two_armed(arm: Arm) -> (Module, FunctionId) {
+    let mut module = Module::default();
+    let inner = unary(&mut module, "inner");
+    let other = unary(&mut module, "other");
+
+    let n = module.add_value(Some("producer/n".into()));
+    let through = module.add_value(Some("producer/through".into()));
+    let producer = module.reserve_function();
+    let producer_ret = module.reserve_continuation();
+    let first = module.reserve_continuation();
+    let first_body = module.add_node(Node::ApplyCont(Edge {
+        target: producer_ret,
+        args: vec![Atom::Fun(inner)],
+    }));
+    module.define_continuation(
+        first,
+        Continuation {
+            debug_name: Some("first".into()),
+            params: vec![],
+            body: first_body,
+        },
+    );
+    let second = module.reserve_continuation();
+    let second_body = module.add_node(match arm {
+        Arm::Function => Node::ApplyCont(Edge {
+            target: producer_ret,
+            args: vec![Atom::Fun(other)],
+        }),
+        Arm::ThroughClosure => Node::ApplyFun {
+            callee: Callee::Closure(through),
+            args: vec![Atom::Value(n)],
+            return_to: producer_ret,
+        },
+    });
+    module.define_continuation(
+        second,
+        Continuation {
+            debug_name: Some("second".into()),
+            params: vec![],
+            body: second_body,
+        },
+    );
+    let dispatch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(n),
+        cases: [(
+            0,
+            Edge {
+                target: first,
+                args: vec![],
+            },
+        )]
+        .into(),
+        default: Some(Edge {
+            target: second,
+            args: vec![],
+        }),
+    });
+    let producer_body = module.add_node(Node::LetCont {
+        continuations: vec![first, second],
+        body: dispatch,
+    });
+    module.define_function(
+        producer,
+        Function {
+            debug_name: Some("producer".into()),
+            params: vec![n, through],
+            return_cont: producer_ret,
+            body: producer_body,
+            droppable: false,
+        },
+    );
+
+    let argument = module.add_value(Some("caller/argument".into()));
+    let caller = module.reserve_function();
+    let caller_ret = module.reserve_continuation();
+    let received = module.add_value(Some("resume/closure".into()));
+    let resume = module.reserve_continuation();
+    let apply = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(received),
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
+        return_to: caller_ret,
+    });
+    module.define_continuation(
+        resume,
+        Continuation {
+            debug_name: Some("resume".into()),
+            params: vec![received],
+            body: apply,
+        },
+    );
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(producer),
+        args: vec![Atom::Value(argument), Atom::Fun(other)],
+        return_to: resume,
+    });
+    let conts = module.add_node(Node::LetCont {
+        continuations: vec![resume],
+        body: call,
+    });
+    // Every function the caller names is introduced here, or a `Known` call to one names a function out of scope.
+    let body = module.add_node(Node::LetFun {
+        functions: vec![inner, other, producer],
+        body: conts,
+    });
+    module.define_function(
+        caller,
+        Function {
+            debug_name: Some("caller".into()),
+            params: vec![argument],
+            return_cont: caller_ret,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(caller);
+
+    module.verify().expect("the fixture is valid CPS");
+    (module, producer)
+}
+
+/// A member one of whose arms returns by tail-calling a closure forwards whatever that closure returns, which the rewrite cannot apply, so it declines: rewritten, the arm would hand back the closure its callers no longer apply, as `/std/Flt/grammar/exponent_after`'s `some` arm did beneath `Parse`'s `chain` until the read of the `Result` it was meant to return trapped. With a function reference on both arms, the same producer is rewritten.
+#[test]
+fn a_member_returning_through_a_closure_declines_uncurrying() {
+    let (mut module, producer) = two_armed(Arm::ThroughClosure);
+    assert!(
+        !uncurry_returns(&mut module),
+        "an arm the rewrite cannot reach declines the class"
+    );
+    assert_eq!(module.function(producer).unwrap().params.len(), 2);
+
+    let (mut module, producer) = two_armed(Arm::Function);
+    assert!(uncurry_returns(&mut module), "both arms return a function");
+    assert_eq!(module.function(producer).unwrap().params.len(), 3);
+    module.verify().expect("the rewrite leaves valid CPS");
 }

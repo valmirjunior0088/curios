@@ -11,7 +11,8 @@ pub(crate) use nest::*;
 use {
     crate::{
         Atom, CallAnalysis, Callee, ContinuationId, Edge, FunctionId, Module, Node, NodeId,
-        ValueId, analyze_calls, atoms, continuation_entries, function_nodes, nodes_from,
+        ValueId, analyze_calls, atoms, collect_control_targets, continuation_entries,
+        function_nodes, nodes_from,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -63,31 +64,38 @@ fn uncurryable(
 
 /// Whether `function` could be rewritten at all, on grounds that have nothing to do with what its callers do.
 ///
-/// Separated out because it has to be asked of every member of a class, including the ones no caller observes. Those take their width from the class rather than from a site of their own, and none of the three facts below is implied by that width: an escaping member reaches its callers through the arity-keyed `clsr/{arity}` supertype, which the rewrite changes; the entry is called by the host; and a member whose return edges do not all carry a function reference has an edge the rewrite cannot turn into a call, which would leave it handing back a raw value where its class-mates hand back a called one.
+/// Separated out because it has to be asked of every member of a class, including the ones no caller observes. Those take their width from the class rather than from a site of their own, and none of the three facts below is implied by that width: an escaping member reaches its callers through the arity-keyed `clsr/{arity}` supertype, which the rewrite changes; the entry is called by the host; and a member that returns some way the rewrite cannot reach would go on handing back a closure, or a raw value, where its class-mates hand back the applied answer.
 fn rewritable(module: &Module, calls: &CallAnalysis, function: FunctionId) -> bool {
     !calls.escaping.contains(&function)
         && module.entry() != Some(function)
         && returns_functions(module, function)
 }
 
-/// Whether every edge `function` returns on carries a function reference — what the rewrite turns into a tail call.
+/// Whether every way `function` returns is one the rewrite reaches: an edge carrying a function reference, which it turns into a call, or a tail call to a known function, which joins the class and is rewritten with it.
 ///
-/// Vacuously true for a function with no return edge at all, which returns only by tail-forwarding. Such a member has nothing of its own to rewrite and takes its whole answer from the class it forwards into.
+/// Anything else that hands its answer straight to the caller forwards a value the rewrite cannot apply: a tail call through a closure — a monadic `match` whose arm builds its action through a dictionary's `bind` — or a foreign call, a cell or channel operation or an intrinsic whose result is the function's own. Rewritten anyway, that path would return the closure its callers no longer apply, and the first of them to read the answer would cast a closure to it. Vacuously true for a function that returns only by tail-forwarding into its class, which has nothing of its own to rewrite.
 fn returns_functions(module: &Module, function: FunctionId) -> bool {
     let sentinel = module.function(function).unwrap().return_cont;
-    for node_id in function_nodes(module, function) {
-        let edges: Vec<&Edge> = match module.node(node_id).unwrap() {
-            Node::ApplyCont(edge) => vec![edge],
-            Node::Switch { cases, default, .. } => cases.values().chain(default.as_ref()).collect(),
-            _ => continue,
-        };
-        for edge in edges.into_iter().filter(|edge| edge.target == sentinel) {
-            if !matches!(edge.args.as_slice(), [Atom::Fun(_)]) {
-                return false;
+    let carries_function =
+        |edge: &Edge| edge.target != sentinel || matches!(edge.args.as_slice(), [Atom::Fun(_)]);
+
+    function_nodes(module, function).into_iter().all(|node_id| {
+        match module.node(node_id).unwrap() {
+            Node::ApplyCont(edge) => carries_function(edge),
+            Node::Switch { cases, default, .. } => {
+                cases.values().chain(default.as_ref()).all(carries_function)
+            }
+            Node::ApplyFun {
+                callee: Callee::Known(_),
+                ..
+            } => true,
+            node => {
+                let mut targets = BTreeSet::new();
+                collect_control_targets(node, &mut targets);
+                !targets.contains(&sentinel)
             }
         }
-    }
-    true
+    })
 }
 
 /// One call site the rewrite can absorb: what the callee takes over, and how the site resumes without the closure.

@@ -196,6 +196,23 @@ pub(super) const UNCURRY_CAPTURED: &str = r#"
     entry()
     "#;
 
+/// A parser one of whose arms returns through a call: `/std/Flt/grammar/exponent_after`'s `none` arm returns `Parse/pure`'s closure, and its `some` arm builds its action through the `Monad` dictionary's `bind` and tail-calls it. Read beneath `Parse`'s `chain`, every caller applies what it returns, which is what admits uncurrying. The program is the library's corpus reduced to what still showed it: without the map it builds and removes from, or with one entry fewer, the parse is compiled otherwise, and the text read is one that takes the `some` arm.
+pub(super) const UNCURRY_THROUGH_A_CALL: &str = r#"
+    use /std/{Flt, Nat, Str, Option, Map, print};
+
+    let read(text: Str) -> Str =
+        match Flt/of_str(text) | some(value) => Flt/to_str(value) | none() => "none" end;
+
+    let build(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =
+        match i | 0 => acc | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i))) end;
+
+    let shown() -> Str =
+        let d: Map(Str, Str) = Map/remove(build(80, Map/empty()), "80");
+        Str/concat(read("2.5e-3"), Nat/to_str(Map/len(d)));
+
+    print(Str/concat(shown(), "\n"))
+    "#;
+
 /// A capture-free closure selected and applied inside a loop — the constant-closure interning shape. Each iteration picks one of two lambdas by a runtime condition, so the call stays genuinely unknown (the parameter joins two closures, exactly [`HIGHER_ORDER`]'s conflict), but neither lambda captures anything: with the code field an ordinary `i32`, both are constant aggregates, so the loop must reference two module consts rather than construct an environment per iteration.
 pub(super) const LOOPED_PICK: &str = r#"
     use /std/{Nat, Bool, List, Process};

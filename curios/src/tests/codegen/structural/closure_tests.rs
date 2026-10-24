@@ -113,6 +113,17 @@ fn a_returned_closure_the_caller_also_captures_is_not_absorbed() {
     }
 }
 
+/// A function one of whose arms returns through a call — a tail call through a closure — keeps returning a closure: absorbing the application would leave that arm handing back the closure its callers no longer apply, and this program would trap where `Parse`'s `chain` reads the `Result` the parser was meant to return, unoptimized as well as optimized.
+#[test]
+fn a_closure_one_arm_returns_through_a_call_is_not_absorbed() {
+    assert_eq!(run_raw(UNCURRY_THROUGH_A_CALL, &[]), b"+0.002579\n", "raw");
+    assert_eq!(
+        run_binaryen(UNCURRY_THROUGH_A_CALL, &[]),
+        b"+0.002579\n",
+        "optimized"
+    );
+}
+
 /// A returned closure that every caller applies is absorbed into the callee, so nothing allocates it and nothing calls through it.
 ///
 /// All three are asserted because each alone is satisfiable the wrong way. A module that allocated nothing but still dispatched indirectly would have moved the cost rather than removed it; one that dispatched directly while still allocating would pay for a closure nothing reaches; and both hold vacuously of a module where the recursion was simply peeled away, which is what a fixture inside the inline budget produces.
