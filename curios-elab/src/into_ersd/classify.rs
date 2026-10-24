@@ -130,7 +130,8 @@ fn shape_walk(
     visited: &mut BTreeSet<Global>,
     type_: &Term,
 ) -> Result<curios_ersd::FieldShape, Error> {
-    match Term::unwrap_or_clone(context.reduce_with(type_)?) {
+    let reduced = context.reduce_with(type_)?;
+    match &*reduced {
         Subterm::Intrinsic(Intrinsic::BoolType | Intrinsic::ByteType) => {
             Ok(curios_ersd::FieldShape::Immediate)
         }

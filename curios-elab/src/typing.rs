@@ -200,7 +200,8 @@ fn erasable_end(
             return Ok(true);
         }
 
-        type_ = match Term::unwrap_or_clone(reduce_with(context, &type_)?) {
+        let reduced = reduce_with(context, &type_)?;
+        type_ = match &*reduced {
             Subterm::Sort(..) => return Ok(true),
             Subterm::Instance(instance) => instance.head.to_term(),
             Subterm::FuncType(FuncType { telescope, .. }) => {
@@ -240,7 +241,8 @@ fn proof_end(context: &mut Context, opened: &mut Opened, type_: &Term) -> Result
             return Ok(true);
         }
 
-        type_ = match Term::unwrap_or_clone(reduce_with(context, &type_)?) {
+        let reduced = reduce_with(context, &type_)?;
+        type_ = match &*reduced {
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 let mut cursor = telescope.cursor();
                 while let Some((_, domain)) = cursor.entry() {

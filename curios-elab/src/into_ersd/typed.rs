@@ -42,9 +42,8 @@ impl Lowering<'_> {
         match &**term {
             Subterm::Apply(apply) => {
                 let head_type = self.type_of(context, &apply.head)?;
-                let Subterm::FuncType(FuncType { telescope, .. }) =
-                    Term::unwrap_or_clone(context.reduce_with(&head_type)?)
-                else {
+                let reduced = context.reduce_with(&head_type)?;
+                let Subterm::FuncType(FuncType { telescope, .. }) = &*reduced else {
                     unreachable!("erase: applied a non-function");
                 };
                 let arguments = apply.params().collect::<Vec<_>>();
@@ -59,7 +58,7 @@ impl Lowering<'_> {
             // Erasure runs on an elaborated term, whose every projection is a slot: the field says how the fields before it are read.
             Subterm::Proj(Proj { head, field }) => {
                 let head_type = self.type_of(context, head)?;
-                let field_type = match Term::unwrap_or_clone(context.reduce_with(&head_type)?) {
+                let field_type = match &*context.reduce_with(&head_type)? {
                     Subterm::TupleType(TupleType { telescope }) => {
                         telescope.field_type_from(head, field)
                     }
@@ -68,7 +67,7 @@ impl Lowering<'_> {
                         universes,
                         params,
                     }) => context
-                        .struct_facet(&name, &universes, |at| at.field_type(&params, head, field))
+                        .struct_facet(name, universes, |at| at.field_type(params, head, field))
                         .expect("erase: a registered struct")?,
                     _ => unreachable!("erase: projected a non-tuple/struct"),
                 };
@@ -127,8 +126,8 @@ impl Lowering<'_> {
                 let indices = match cases {
                     Cases::Induct { .. } => {
                         let head_type = self.type_of(context, head)?;
-                        match Term::unwrap_or_clone(context.reduce_with(&head_type)?) {
-                            Subterm::InductType(InductType { indices, .. }) => indices,
+                        match &*context.reduce_with(&head_type)? {
+                            Subterm::InductType(InductType { indices, .. }) => indices.clone(),
                             _ => unreachable!(
                                 "erase: inductive match scrutinee checked by elaborate"
                             ),

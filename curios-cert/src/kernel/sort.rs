@@ -406,7 +406,7 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
             };
 
             let supplied = apply.arguments.len();
-            match Term::unwrap_or_clone(whnf(kernel, head_type)?) {
+            match &*whnf(kernel, head_type)? {
                 Subterm::FuncType(FuncType { telescope, .. }) if telescope.len() == supplied => {
                     let refs = apply.params().collect::<Vec<_>>();
                     Ok(Some(telescope.open(&refs)))
@@ -414,7 +414,7 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                 // A partially applied spine still has a type: the residual function type, with the supplied arguments substituted into the entries that remain, each still under its own mark.
                 Subterm::FuncType(func_type) if func_type.telescope.len() > supplied => {
                     let params = apply.params().cloned().collect::<Vec<_>>();
-                    let telescope = func_type.telescope.open_params(&params);
+                    let telescope = func_type.telescope.clone().open_params(&params);
                     Ok(Some(Subterm::FuncType(FuncType { telescope }).into()))
                 }
                 _ => Ok(None),
@@ -427,7 +427,7 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                 return Ok(None);
             };
 
-            match (Term::unwrap_or_clone(whnf(kernel, head_type)?), field) {
+            match (&*whnf(kernel, head_type)?, field) {
                 (Subterm::TupleType(TupleType { telescope }), Field::Tuple(_)) => {
                     Ok(telescope.field_type_from(head, field))
                 }
@@ -439,8 +439,8 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                         params,
                     }),
                     Field::Struct(structure, _),
-                ) if name == *structure => {
-                    let Ok(at) = kernel.struct_at(&name, &universes, &params) else {
+                ) if name == structure => {
+                    let Ok(at) = kernel.struct_at(name, universes, params) else {
                         return Ok(None);
                     };
 

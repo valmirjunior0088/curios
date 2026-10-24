@@ -441,7 +441,7 @@ pub(crate) fn synth_neutral(
             };
             let params = apply.params().cloned().collect::<Vec<_>>();
 
-            match Term::unwrap_or_clone(reduce(context, head_type)?) {
+            match &*reduce(context, head_type)? {
                 Subterm::FuncType(FuncType { telescope, .. })
                     if telescope.len() == params.len() =>
                 {
@@ -450,7 +450,7 @@ pub(crate) fn synth_neutral(
                 }
                 // A partially applied spine still has a type: the residual function type, with the supplied arguments substituted into the entries that remain.
                 Subterm::FuncType(func_type) if func_type.telescope.len() > params.len() => {
-                    let telescope = func_type.telescope.open_params(&params);
+                    let telescope = func_type.telescope.clone().open_params(&params);
                     Ok(Some(Subterm::FuncType(FuncType { telescope }).into()))
                 }
                 _ => Ok(None),
@@ -462,7 +462,7 @@ pub(crate) fn synth_neutral(
                 return Ok(None);
             };
 
-            match (Term::unwrap_or_clone(reduce(context, head_type)?), field) {
+            match (&*reduce(context, head_type)?, field) {
                 (Subterm::TupleType(TupleType { telescope, .. }), Field::Tuple(_)) => {
                     Ok(telescope.field_type_from(head, field))
                 }
@@ -474,15 +474,15 @@ pub(crate) fn synth_neutral(
                         params,
                     }),
                     Field::Struct(structure, _),
-                ) if name == *structure => {
+                ) if name == structure => {
                     if context
-                        .struct_decl(&name)
+                        .struct_decl(name)
                         .is_none_or(|declaration| declaration.param_count() != params.len())
                     {
                         return Ok(None);
                     }
                     context
-                        .struct_facet(&name, &universes, |at| at.field_type(&params, head, field))
+                        .struct_facet(name, universes, |at| at.field_type(params, head, field))
                         .expect("the declaration was read above")
                         .map_err(ReduceError::Universe)
                 }

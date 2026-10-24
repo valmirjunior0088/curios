@@ -803,7 +803,7 @@ impl Convert {
         type_: Term,
     ) -> Result<(Vec<Term>, Term, Term), ReduceError> {
         let (ys, body) = self.open_telescope(context, telescope)?;
-        let output_type = match Term::unwrap_or_clone(reduce(context, type_)?) {
+        let output_type = match &*reduce(context, type_)? {
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 telescope.open(&ys.iter().collect::<Vec<_>>())
             }
