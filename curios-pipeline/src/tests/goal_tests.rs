@@ -7,13 +7,13 @@ fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {
     // The typed split the CLI's exit codes rest on: a written-goal batch is incomplete development state, a type mismatch a hard failure.
     let goals = entrypoint_of("let m : /std/Nat = ?; /std/Io/pure(())");
     assert!(matches!(
-        compile_with_prelude(DEFAULT_STEP_BUDGET, &goals, &RootSource::none(), |_| {}),
+        compile_with_prelude(DEFAULT_BUDGET, &goals, &RootSource::none(), |_| {}),
         Err(CompileError::Incomplete(_))
     ));
 
     let mismatch = entrypoint_of("let bad : /std/Nat = true; /std/Io/pure(())");
     assert!(matches!(
-        compile_with_prelude(DEFAULT_STEP_BUDGET, &mismatch, &RootSource::none(), |_| {}),
+        compile_with_prelude(DEFAULT_BUDGET, &mismatch, &RootSource::none(), |_| {}),
         Err(CompileError::Failure(_))
     ));
 }
@@ -270,12 +270,7 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
 
     let entrypoint = entrypoint_of(source);
     assert!(matches!(
-        compile_with_prelude(
-            DEFAULT_STEP_BUDGET,
-            &entrypoint,
-            &RootSource::none(),
-            |_| {}
-        ),
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {}),
         Err(CompileError::Incomplete(_))
     ));
 }
@@ -299,7 +294,7 @@ fn typecheck_rejects_a_goal() {
 #[test]
 fn a_goal_beside_a_refusal_classifies_as_mixed() {
     let mixed = entrypoint_of("let bad : /std/Nat = true; let m : /std/Nat = ?; /std/Io/pure(())");
-    let Err(error) = compile_with_prelude(DEFAULT_STEP_BUDGET, &mixed, &RootSource::none(), |_| {})
+    let Err(error) = compile_with_prelude(DEFAULT_BUDGET, &mixed, &RootSource::none(), |_| {})
     else {
         panic!("a refused item compiles nothing");
     };

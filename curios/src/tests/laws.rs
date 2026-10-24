@@ -15,7 +15,7 @@
 use {
     super::typecheck,
     curios_core::{Definition, Free, Global, Item, Subterm, Term, Zonked},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::Qualifier,
     std::fmt,
@@ -121,11 +121,10 @@ fn elaborator_alone(header: &str, name: &str, rows: &[(String, String)]) -> Vec<
     let entrypoint = program(header, rows, "Eq/refl()")
         .parse::<Entrypoint>()
         .expect("the rows parse");
-    let refused =
-        match typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none()) {
-            Ok(_) => return vec![true; rows.len()],
-            Err(refused) => refused,
-        };
+    let refused = match typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none()) {
+        Ok(_) => return vec![true; rows.len()],
+        Err(refused) => refused,
+    };
     let Some(error) = refused.error.as_deref() else {
         panic!("{name}: the rows do not lower:\n{refused}");
     };
@@ -202,7 +201,7 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
     let entrypoint = format!("{header}\n{}\n{items}\nIo/pure(())", claimed())
         .parse::<Entrypoint>()
         .expect("the rows parse");
-    let mut program = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+    let mut program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
         .unwrap_or_else(|refused| panic!("a row's statement does not elaborate:\n{refused}"))
         .program;
 
@@ -249,7 +248,7 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
     );
 
     let program = Zonked::project(&program).expect("an elaborated program is zonked");
-    let verdicts = recheck_with_prelude(&program, DEFAULT_STEP_BUDGET);
+    let verdicts = recheck_with_prelude(&program, DEFAULT_BUDGET);
     // The statements are the elaborator's own, so a refusal of anything but a claim is the reader's fault and not a row's verdict.
     for verdict in &verdicts {
         assert!(

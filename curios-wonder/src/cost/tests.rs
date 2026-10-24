@@ -2,13 +2,13 @@ use {
     super::{Uncosted, cost},
     crate::{Origin, Subject},
     curios_cont::{Fate, Outcome},
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
     curios_text::Overlay,
 };
 
 /// Every declaration's fate, asked for the way the one-shot transport asks.
 fn fates_of(text: &str) -> Vec<Fate> {
-    cost(DEFAULT_STEP_BUDGET, loose(text), &Overlay::default(), None).expect("the program compiles")
+    cost(DEFAULT_BUDGET, loose(text), &Overlay::default(), None).expect("the program compiles")
 }
 
 /// `text` as a loose subject, the way the one-shot transport forms one from standard input.
@@ -27,7 +27,7 @@ fn loose(text: &str) -> Subject {
 #[test]
 fn a_module_has_no_fates_to_report() {
     let refused = cost(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         loose("let helper(x : /std/Nat) -> /std/Nat = x + 1;\n"),
         &Overlay::default(),
         None,

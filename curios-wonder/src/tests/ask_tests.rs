@@ -2,7 +2,7 @@
 
 use {
     crate::{Asked, Origin, Subject, rendered},
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
     curios_text::Overlay,
     curios_utilities::test_support::Temporary,
     std::fs,
@@ -30,7 +30,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
 
     let (same, _) = rendered(
         vec![asked("/std/print(nope)"), asked("/std/print(nope)")],
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         &Overlay::default(),
     );
     let [one] = same.as_slice() else {
@@ -40,7 +40,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
 
     let (different, _) = rendered(
         vec![asked("/std/print(nope)"), asked("/std/print(other)")],
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         &Overlay::default(),
     );
     assert_eq!(

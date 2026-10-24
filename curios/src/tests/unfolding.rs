@@ -6,7 +6,7 @@
 
 use {
     super::ersd_optm,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::{fmt::Write, time::Instant},
 };
@@ -225,14 +225,9 @@ fn conjunctions(rules: usize) -> String {
 fn compile_only(source: &str) -> (Result<(), String>, f64) {
     let entrypoint = source.parse::<Entrypoint>().expect("probe parses");
     let start = Instant::now();
-    let outcome = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .map(|_| ())
-    .map_err(|error| error.to_string());
+    let outcome = compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+        .map(|_| ())
+        .map_err(|error| error.to_string());
 
     (outcome, start.elapsed().as_secs_f64())
 }
@@ -459,7 +454,7 @@ fn a_symbolic_web_compares_against_zero_in_linear_units() {
     let units = |rules: usize| {
         let source = numerics(rules);
         let entrypoint = source.parse::<Entrypoint>().expect("the web parses");
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+        typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
             .expect("the web elaborates within the default budget")
             .consumption
             .units()

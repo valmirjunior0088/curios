@@ -10,7 +10,7 @@ use {
         Definition, Free, Global, Item, Module, Nominal, Program, RecItem, Term, Zonked,
         ZonkedRefusal,
     },
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, Examined, examine_with_prelude, recheck_with_prelude},
     curios_text::{RootSource, SYNTAX},
     curios_utilities::Report,
     std::fmt,
@@ -212,7 +212,7 @@ pub(crate) fn put_program(source: &str) -> Answer {
         Err(error) => return Answer::Unbuilt(Refusal::Text(format!("{error:?}"))),
     };
 
-    match examine_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none()) {
+    match examine_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none()) {
         Err(refused) => Answer::Unbuilt(match refused.error {
             Some(error) => Refusal::Elaborator {
                 error: *error,
@@ -249,7 +249,7 @@ fn put_module(module: Module, body: Term, type_: Term) -> Answer {
     // The walk takes a program only with the evidence that elaboration finished it, so one carrying what elaboration should have solved is refused here, by the layer the kernel judges through.
     Answer::Judged(match Zonked::project(&program) {
         Err(refusal) => vec![Refusal::Unfinished(refusal)],
-        Ok(program) => recheck_with_prelude(&program, DEFAULT_STEP_BUDGET)
+        Ok(program) => recheck_with_prelude(&program, DEFAULT_BUDGET)
             .into_iter()
             .map(Refusal::Kernel)
             .collect(),

@@ -3,7 +3,7 @@
 use {
     crate::tests::{Shape, Stands, tower},
     curios_core::{Zonked, take_looks},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude_measured, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude_measured, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -30,7 +30,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
     let entrypoint = source.parse::<Entrypoint>().expect("a tower parses");
 
     take_looks();
-    let checked = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none());
+    let checked = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none());
     let looks = take_looks();
     let Ok(checked) = checked else {
         let refused = Cost {
@@ -50,10 +50,9 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
     };
 
     let module = Zonked::project(&checked.program).expect("a checked program is zonked");
-    let (verdicts, heaviest) =
-        recheck_with_prelude_measured(&module, DEFAULT_STEP_BUDGET, |kernel| {
-            kernel.heaviest_declaration()
-        });
+    let (verdicts, heaviest) = recheck_with_prelude_measured(&module, DEFAULT_BUDGET, |kernel| {
+        kernel.heaviest_declaration()
+    });
     let kernel = Cost {
         verdict: match verdicts.is_empty() {
             true => "accepted",

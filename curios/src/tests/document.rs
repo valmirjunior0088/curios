@@ -3,7 +3,7 @@
 use {
     curios_document::Kind,
     curios_package::{Governing, order},
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
     curios_text::Overlay,
     curios_utilities::{Qualifier, test_support::Temporary},
     curios_wonder::{documentation, std_documentation},
@@ -369,7 +369,7 @@ fn a_constructor_calls_its_family_once_per_parameter_group() {
     );
     let governing = Governing::found(None, &root).expect("a governed package");
     let units = order(&governing).expect("a scope");
-    let vectors = documentation(DEFAULT_STEP_BUDGET, units, &Overlay::default(), None)
+    let vectors = documentation(DEFAULT_BUDGET, units, &Overlay::default(), None)
         .expect("the package documents");
 
     let (cons, _) = card(&vectors, "/vectors", "cons");
@@ -502,7 +502,7 @@ fn a_package_documents_its_interface_for_its_consumers() {
     let governing = Governing::found(None, &root).expect("a governed package");
     let units = order(&governing).expect("a scope");
 
-    let documentation = documentation(DEFAULT_STEP_BUDGET, units, &Overlay::default(), None)
+    let documentation = documentation(DEFAULT_BUDGET, units, &Overlay::default(), None)
         .expect("the package documents");
 
     let paths = documentation

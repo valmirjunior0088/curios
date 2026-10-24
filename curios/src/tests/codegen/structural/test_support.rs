@@ -478,7 +478,7 @@ pub(in crate::tests::codegen) fn compile_raw_program(source: &str) -> (Module, F
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |_| {},

@@ -1,7 +1,7 @@
 use {
     super::{Job, Raised, SETTLE, SETTLE_SHARE, batch, named_at, offset_of, outline, position_of},
     crate::{Diagnosed, Origin, Subject, Written},
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
     curios_text::Overlay,
     lsp_types::{DocumentSymbol, Position, SymbolKind},
     std::{
@@ -88,7 +88,7 @@ fn a_warming_batch_waits_the_cap_until_a_document_joins_it() {
 /// A check of `program`, the program standing for a document: what the server's check answers and leaves behind it.
 fn check(program: &str) -> Diagnosed {
     crate::checked(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         Subject::Entry {
             units: Vec::new(),
             origin: Origin::Text {

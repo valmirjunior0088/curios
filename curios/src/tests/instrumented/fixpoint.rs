@@ -4,7 +4,7 @@
 
 use {
     crate::tests::TOML_DRIVER,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_profile::{Destination, fold, trace},
     curios_text::{Entrypoint, RootSource},
 };
@@ -43,7 +43,7 @@ impl std::io::Write for Rows {
 ///
 /// For a reading, finish all builds and checks first, then run the command once as a warmup and seven more times sequentially, each invocation in a fresh test process. Keep the checkout, toolchain and feature set fixed, and keep other machine work idle. Cargo's test executable can be invoked directly with the same test filter and flags after the build. Retain each invocation's stdout. Discard the warmup; report the median and observed minimum–maximum of each span's aggregate time over the seven measured compilations. Record whether counted samples and allocations agree across those compilations; summarize varying allocation calls with their medians and observed spans.
 ///
-/// Parsing precedes the trace. The trace wraps `compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none(), |_| {})`, with no package cache or stage rendering. The `compile_entrypoint` span starts after prelude restoration and covers the pipeline through Wasm emission; it excludes Binaryen, Cranelift and guest execution. The stream stays in memory and is folded after compilation; printing is outside the trace.
+/// Parsing precedes the trace. The trace wraps `compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})`, with no package cache or stage rendering. The `compile_entrypoint` span starts after prelude restoration and covers the pipeline through Wasm emission; it excludes Binaryen, Cranelift and guest execution. The stream stays in memory and is folded after compilation; printing is outside the trace.
 ///
 /// The `profile` feature installs the process-wide counting allocator as well as tracing. Timings and allocation work include this observer, including its in-memory stream, and do not price the default-feature compiler. Allocation columns are cumulative work, including nested spans, rather than peak resident memory. Per-pass times and allocations are inclusive as well; nested spans cannot be added to their parent.
 ///
@@ -94,12 +94,7 @@ fn fixpoint_pass_measurements() {
     // The stream goes to a buffer and is folded back here: this test wants the aggregate, which is one consumer of the rows.
     let rows = Rows::default();
     let outcome = trace(Destination::Stream(Box::new(rows.clone())), || {
-        compile_with_prelude(
-            DEFAULT_STEP_BUDGET,
-            &entrypoint,
-            &RootSource::none(),
-            |_| {},
-        )
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
     })
     .expect("a stream destination opens");
     outcome.expect("driver compiles");

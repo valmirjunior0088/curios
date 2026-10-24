@@ -62,7 +62,7 @@ fn a_program_is_handed_the_rows_it_reaches() {
         "#,
     );
     let (_, foreigns) = crate::compile_with_prelude(
-        crate::DEFAULT_STEP_BUDGET,
+        crate::DEFAULT_BUDGET,
         &entry,
         &curios_text::RootSource::none(),
         |_| {},

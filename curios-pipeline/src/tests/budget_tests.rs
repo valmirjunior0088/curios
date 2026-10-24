@@ -113,7 +113,7 @@ fn erases(source: &str, budget: u64) -> bool {
     with_prelude(|prelude| {
         let predecessors = Predecessors::over(prelude);
         let (program, _foreigns, _records, _anchors) = elaborate_and_zonk(
-            crate::DEFAULT_STEP_BUDGET,
+            crate::DEFAULT_BUDGET,
             predecessors,
             &SYNTAX,
             &entrypoint,
@@ -162,7 +162,7 @@ fn a_program_is_taken_under_the_same_budget_whatever_its_scope_holds() {
     with_prelude(|prelude| {
         let modules = mounted("lib", &library);
         let library = compile_units(
-            crate::DEFAULT_STEP_BUDGET,
+            crate::DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &[(UnitSource::mounted(&modules), None)],

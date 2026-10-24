@@ -4,7 +4,7 @@ use {
     super::{error, run_entrypoint, tests_error},
     crate::to_compiled,
     curios_native::{ForeignBindings, MockHost, TestEnd},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Fold, TestProgram},
+    curios_pipeline::{DEFAULT_BUDGET, Fold, TestProgram},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::{Qualifier, RootKind},
 };
@@ -168,7 +168,7 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
 
     let TestProgram {
         records, compiled, ..
-    } = Fold::new(DEFAULT_STEP_BUDGET, &[unit], None)
+    } = Fold::new(DEFAULT_BUDGET, &[unit], None)
         .tests(
             &Entrypoint::trivial(),
             &RootSource::none(),

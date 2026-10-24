@@ -3,7 +3,7 @@
 use {
     super::test_support::{mounted, mounted_project, write},
     crate::{Origin, Overlaid, Severity, Subject, diagnosed, diagnostics},
-    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Earlier, EntryTail, Fold, Progress},
+    curios_pipeline::{Cache, DEFAULT_BUDGET, Earlier, EntryTail, Fold, Progress},
     curios_text::{Overlay, RootSource, UnitSource},
     curios_unit::Unit,
     curios_utilities::test_support::Temporary,
@@ -516,7 +516,7 @@ fn a_broken_declaration_over_a_baseline_is_its_own_record() {
     )]));
     let store = Verdicts::at(root.to_path_buf());
     let diagnostics = diagnostics(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         Subject::Unit {
             units: crate::overlaid(mounted(&root), &overlay),
         },
@@ -546,7 +546,7 @@ fn a_store_that_cannot_be_written_is_named_beside_the_answer() {
         let store = Verdicts::at(root.to_path_buf());
 
         diagnosed(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Subject::Unit {
                 units: crate::overlaid(mounted(root), &overlay),
             },
@@ -620,7 +620,7 @@ fn folded_through(root: &Path, overlay: &Overlay, cache: &dyn Cache) -> Vec<Stri
     let units = crate::overlaid(mounted(root), overlay);
 
     let mut events = Vec::new();
-    Fold::new(DEFAULT_STEP_BUDGET, &units, Some(cache))
+    Fold::new(DEFAULT_BUDGET, &units, Some(cache))
         .check_units(|progress| match progress {
             Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
             Progress::Recompiling(prefix) => {
@@ -640,7 +640,7 @@ fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diag
     store.reuse(session.clone());
 
     diagnostics(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         Subject::Unit {
             units: crate::overlaid(mounted(root), overlay),
         },
@@ -741,7 +741,7 @@ fn a_file_no_package_declares_is_compiled_over_what_its_session_kept() {
 
         let mut events = Vec::new();
         Fold::new(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             &units,
             Some(&Overlaid::over(&store, overlay)),
         )
@@ -782,7 +782,7 @@ fn a_program_no_package_declares_is_compiled_over_what_its_session_kept() {
         };
         let (entrypoint, loader) =
             crate::open(Origin::File(file.clone()), None, overlay).expect("the program parses");
-        Fold::new(DEFAULT_STEP_BUDGET, &[], Some(&noting))
+        Fold::new(DEFAULT_BUDGET, &[], Some(&noting))
             .check(&entrypoint, &loader, EntryTail::Program, |_| {})
             .expect("the program lowers")
             .verdict

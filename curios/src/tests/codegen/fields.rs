@@ -4,7 +4,7 @@ use {
     crate::to_compiled,
     curios_cont::{FieldGroup, Intrinsic, Node, ValueExpr},
     curios_native::{ForeignBindings, MockHost},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -35,17 +35,13 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
         "#;
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     let mut captured = None;
-    let (wasm, foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
+    let (wasm, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
             if let Stage::ContOptm(module) = stage {
                 captured = Some(module.clone());
             }
-        },
-    )
-    .expect("the runtime-dependent product compiles");
+        })
+        .expect("the runtime-dependent product compiles");
     let module = captured.expect("the pipeline observes cont-optm");
     let loop_cont = module
         .continuation_ids()

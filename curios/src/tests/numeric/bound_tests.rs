@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{run, typecheck, typecheck_within},
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
 };
 
 // The control half of a minimal pair over the unfolding rule. `f`'s base arm returns a literal, so `f(0, n)` reduces to an `Intrinsic`-headed term, `force_rec` keeps that reduct, and the decided bound discharges by reduction. Identical in every other respect to the half below, which differs only in what the base arm returns.
@@ -177,7 +177,7 @@ fn a_bound_on_a_computed_subject_evaluates_it() {
 #[test]
 fn a_bound_on_a_small_computed_subject_discharges() {
     typecheck_within(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         r#"
         use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =

@@ -24,7 +24,7 @@ fn nominal(path: &str) -> Global {
 }
 
 fn context() -> Retyping<'static> {
-    Retyping::new(DEFAULT_STEP_BUDGET, SYNTAX)
+    Retyping::new(DEFAULT_BUDGET, SYNTAX)
 }
 
 /// A top-level definition's identity, from the path a test writes — the same name [`definition`] declares it under. Fixture-only.
@@ -80,7 +80,7 @@ fn stating(program: &Program, type_: Term) -> Program {
 /// `program` erased with nothing in scope, its entry stating `type_`.
 fn try_erase(program: &Program, type_: Term) -> Result<curios_ersd::Module, Error> {
     erase_program(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         SYNTAX,
         Erasures::nothing(),
         &zonked(&stating(program, type_)),
@@ -338,7 +338,7 @@ fn identity_arena(stamp: Totality) -> ErasedProgram {
     let body = Term::apply(Term::free_var(&global("identity")), [nat_lit(4)]);
 
     erase_program(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         SYNTAX,
         Erasures::nothing(),
         &zonked(&stating(&module(items, body), nat)),
@@ -468,7 +468,7 @@ fn stepping(by: usize) -> (Zonked<Module>, ErasedUnit) {
         )
         .module,
     );
-    let erased = erase_unit(DEFAULT_STEP_BUDGET, SYNTAX, Erasures::nothing(), &unit)
+    let erased = erase_unit(DEFAULT_BUDGET, SYNTAX, Erasures::nothing(), &unit)
         .expect("the unit erases whole");
 
     (unit, erased)
@@ -503,7 +503,7 @@ fn a_value_is_computed_again_where_a_form_its_evaluation_ran_is_another() {
     let (edited, whole) = stepping(2);
 
     let (over, _) = erase_unit_over(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         SYNTAX,
         Erasures::nothing(),
         &edited,
@@ -531,7 +531,7 @@ fn a_computed_value_is_kept_where_what_it_ran_was_erased_again_to_what_it_was() 
     let (edited, _) = stepping(1);
 
     let (over, _) = erase_unit_over(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         SYNTAX,
         Erasures::nothing(),
         &edited,
@@ -639,7 +639,7 @@ fn an_erased_form_keeps_no_binder_its_erasure_opened() {
         let unit = zonked(&unit);
         let view = super::lower::projected(Erasures::nothing(), unit.as_module())
             .expect("the unit's universes are its schemes'");
-        let mut context = Retyping::over(DEFAULT_STEP_BUDGET, SYNTAX, &view);
+        let mut context = Retyping::over(DEFAULT_BUDGET, SYNTAX, &view);
         for _ in 0..opened {
             context.fresh(None);
         }
@@ -672,7 +672,7 @@ fn calling(callee: usize) -> (Zonked<Module>, ErasedUnit) {
         )
         .module,
     );
-    let erased = erase_unit(DEFAULT_STEP_BUDGET, SYNTAX, Erasures::nothing(), &unit)
+    let erased = erase_unit(DEFAULT_BUDGET, SYNTAX, Erasures::nothing(), &unit)
         .expect("the unit erases whole");
 
     (unit, erased)
@@ -704,13 +704,13 @@ fn a_unit_erased_over_a_baseline_erases_what_was_elaborated_again_and_no_other()
     };
 
     let before = unit(1, 2);
-    let baseline = erase_unit(DEFAULT_STEP_BUDGET, SYNTAX, Erasures::nothing(), &before)
+    let baseline = erase_unit(DEFAULT_BUDGET, SYNTAX, Erasures::nothing(), &before)
         .expect("the baseline erases");
     let edited = unit(3, 4);
-    let whole = erase_unit(DEFAULT_STEP_BUDGET, SYNTAX, Erasures::nothing(), &edited)
+    let whole = erase_unit(DEFAULT_BUDGET, SYNTAX, Erasures::nothing(), &edited)
         .expect("the unit erases whole");
     let (over, _) = erase_unit_over(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         SYNTAX,
         Erasures::nothing(),
         &edited,
@@ -741,7 +741,7 @@ fn an_erased_form_is_erased_again_where_a_name_it_uses_is_bound_another_way() {
     let (edited, whole) = calling(2);
 
     let (over, _) = erase_unit_over(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         SYNTAX,
         Erasures::nothing(),
         &edited,
@@ -769,7 +769,7 @@ fn an_erased_form_is_kept_where_what_it_read_came_out_as_it_was() {
     let (edited, _) = calling(1);
 
     let (over, _) = erase_unit_over(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         SYNTAX,
         Erasures::nothing(),
         &edited,
@@ -1124,7 +1124,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
     };
 
     let unit = erase_unit(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         SYNTAX,
         Erasures::nothing(),
         &zonked(&fixture.module),
@@ -1816,7 +1816,7 @@ fn chain_cost(
     grown(|| {
         let view = super::lower::projected(Erasures::nothing(), unit.as_module())
             .expect("the unit's universes are its schemes'");
-        let mut reader = Retyping::over(DEFAULT_STEP_BUDGET, SYNTAX, &view);
+        let mut reader = Retyping::over(DEFAULT_BUDGET, SYNTAX, &view);
         super::lower::erase_items(
             &mut reader,
             &view,

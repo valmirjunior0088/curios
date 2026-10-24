@@ -11,7 +11,7 @@ use {
         Match, Nat, Quality, Reducer, Subterm, Telescope, Term, Variance, Visit, Zonked,
         instantiate_qualities,
     },
-    curios_elab::{DEFAULT_STEP_BUDGET, Erasures, erase_unit},
+    curios_elab::{DEFAULT_BUDGET, Erasures, erase_unit},
     curios_std::std_directory,
     curios_text::{SYNTAX, TopItem},
     curios_unit::{Record, Uncertified, segments},
@@ -482,7 +482,7 @@ fn kernel_disagreements() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let rechecked = certify_module(
                 &zonked,
-                DEFAULT_STEP_BUDGET,
+                DEFAULT_BUDGET,
                 &certified(prelude, &certifications),
                 SYNTAX,
             );
@@ -527,15 +527,10 @@ fn kernel_memo_parity() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let cached = {
                 let globals = certified(prelude, &certifications);
-                let cached = certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+                let cached = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
                 assert_eq!(
                     cached.verdicts,
-                    recheck_module_verdicts_uncached(
-                        &zonked,
-                        DEFAULT_STEP_BUDGET,
-                        &globals,
-                        SYNTAX
-                    ),
+                    recheck_module_verdicts_uncached(&zonked, DEFAULT_BUDGET, &globals, SYNTAX),
                 );
 
                 cached
@@ -629,7 +624,7 @@ fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
             let certification = {
                 let globals = certified(prelude, &certifications);
                 let (rechecked, mut kernel) =
-                    recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+                    recheck_module_measured(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
                 assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
 
                 for definition in root.core().items.iter().flat_map(Item::definitions) {
@@ -742,7 +737,7 @@ fn stored_prelude_measurements() {
 
             let start = Instant::now();
             erase_unit(
-                DEFAULT_STEP_BUDGET,
+                DEFAULT_BUDGET,
                 SYNTAX,
                 Erasures::of(&cores, &units),
                 &zonked,
@@ -754,7 +749,7 @@ fn stored_prelude_measurements() {
                 let globals = certified(prelude, &certifications);
                 let start = Instant::now();
                 let (rechecked, kernel) =
-                    recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX);
+                    recheck_module_measured(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
 
                 (rechecked, start.elapsed(), kernel.heaviest_declaration())
             };

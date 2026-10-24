@@ -6,7 +6,7 @@ use {
     crate::run_wasm,
     curios_native::{ForeignBindings, MockHost},
     curios_package::{Entry, Selection, Spelling},
-    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold, Progress},
+    curios_pipeline::{Cache, DEFAULT_BUDGET, Fold, Progress},
     curios_text::{Entrypoint, Overlay, RootSource},
     curios_utilities::test_support::Temporary,
     curios_verdicts::Verdicts,
@@ -59,7 +59,7 @@ fn cached(directory: &Path, subject: Option<&str>, cache: Option<&dyn Cache>) ->
     let (entry, units) = resolved(directory, subject);
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
-    let (module, foreigns) = Fold::new(DEFAULT_STEP_BUDGET, &units, cache)
+    let (module, foreigns) = Fold::new(DEFAULT_BUDGET, &units, cache)
         .compile(&entrypoint, &loader, |_| {}, |_| {})
         .expect("the package compiles");
 
@@ -75,7 +75,7 @@ fn folded(directory: &Path, subject: Option<&str>, cache: &dyn Cache) -> Vec<Str
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
     let mut events = Vec::new();
-    Fold::new(DEFAULT_STEP_BUDGET, &units, Some(cache))
+    Fold::new(DEFAULT_BUDGET, &units, Some(cache))
         .compile(
             &entrypoint,
             &loader,
@@ -225,7 +225,7 @@ fn a_file_no_unit_declares_compiles_loose_inside_a_package() {
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
     assert!(
-        Fold::new(DEFAULT_STEP_BUDGET, &units, None)
+        Fold::new(DEFAULT_BUDGET, &units, None)
             .compile(&entrypoint, &loader, |_| {}, |_| {})
             .is_err(),
         "the package's library is not in a bare file's scope"
@@ -253,7 +253,7 @@ fn a_loose_program_names_std_and_is_refused_sys() {
 
     let (entry, units) = resolved(&root, Some(root.join("sys.crs").to_str().unwrap()));
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
-    let refusal = Fold::new(DEFAULT_STEP_BUDGET, &units, None)
+    let refusal = Fold::new(DEFAULT_BUDGET, &units, None)
         .compile(&entrypoint, &loader, |_| {}, |_| {})
         .map(|_| ())
         .expect_err("a loose program cannot name /sys")
@@ -295,7 +295,7 @@ fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
     );
     let (entry, units) = resolved(&orphan.join("app"), None);
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
-    let refusal = Fold::new(DEFAULT_STEP_BUDGET, &units, None)
+    let refusal = Fold::new(DEFAULT_BUDGET, &units, None)
         .compile(&entrypoint, &loader, |_| {}, |_| {})
         .map(|_| ())
         .expect_err("a package owning neither the concept nor the type declares no witness")

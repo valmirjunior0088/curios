@@ -6,7 +6,7 @@
 
 use {
     super::{compile, run},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
     std::{fmt::Write, iter},
@@ -488,7 +488,7 @@ fn elaborates(source: &str) -> Result<(), String> {
     let entrypoint = source
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
-    let checked = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+    let checked = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
         .map_err(|refused| format!("{refused:?}"))?;
     match checked.obligations.is_empty() {
         true => Ok(()),
@@ -501,12 +501,8 @@ fn emits(source: &str) -> Result<(), String> {
     let entrypoint = source
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
-    let (module, _) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )?;
+    let (module, _) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})?;
     curios_native::validate(&curios_wasm::to_bytes(&module)).map_err(|error| error.to_string())
 }
 

@@ -6,7 +6,7 @@
 
 use {
     super::*,
-    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Fold},
+    curios_pipeline::{Cache, DEFAULT_BUDGET, Fold},
     curios_text::{Entrypoint, Module},
     curios_utilities::{RootKind, fill, test_support::Temporary},
     curios_wasm::to_bytes,
@@ -87,7 +87,7 @@ fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource
         };
     }
 
-    let (module, foreigns) = Fold::new(DEFAULT_STEP_BUDGET, &scope, Some(&verdicts as &dyn Cache))
+    let (module, foreigns) = Fold::new(DEFAULT_BUDGET, &scope, Some(&verdicts as &dyn Cache))
         .compile(&entrypoint, &loader, |_| {}, |_| {})
         .expect("the package compiles");
 

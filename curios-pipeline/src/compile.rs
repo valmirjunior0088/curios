@@ -331,7 +331,7 @@ pub struct Typechecked {
     pub program: Program,
     /// The (T) and (V) obligations the elaborator decided over the program, reported rather than raised. Empty when it carries none.
     pub obligations: Vec<Obligation>,
-    /// What the heaviest declaration consumed: the units and peak depth `DEFAULT_STEP_BUDGET` is set against, and the only figures that say whether a program's cost is depth or work. A measurement's, which nothing in the compiler reads.
+    /// What the heaviest declaration consumed: the units and peak depth `DEFAULT_BUDGET` is set against, and the only figures that say whether a program's cost is depth or work. A measurement's, which nothing in the compiler reads.
     pub consumption: Consumption,
 }
 

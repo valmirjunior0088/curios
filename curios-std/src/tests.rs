@@ -11,7 +11,7 @@ use {
     crate::std_directory,
     curios::run_wasm,
     curios_native::{ForeignBindings, MockHost},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, Formatted, Overlay, RootSource},
     curios_unicode::{
         east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,
@@ -145,7 +145,7 @@ fn every_corpus_unit_lints_clean() {
         );
         wrong.extend(
             diagnostics(
-                DEFAULT_STEP_BUDGET,
+                DEFAULT_BUDGET,
                 Subject::Unit {
                     units: vec![mounted],
                 },
@@ -284,13 +284,9 @@ fn the_library_reads_every_property_as_the_database_does_at_every_run_s_edges() 
     scalars.push('\u{10FFFF}');
 
     let entrypoint: Entrypoint = PROPERTIES_PROGRAM.parse().expect("the program parses");
-    let (module, foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("the program compiles");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("the program compiles");
     let (host, io) = MockHost::builder()
         .stdin_lines(scalars.iter().map(|&scalar| u32::from(scalar).to_string()))
         .build();

@@ -3,7 +3,7 @@
 use {
     crate::to_compiled,
     curios_native::{Compiled, ForeignBindings, MockHost},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::time::Instant,
 };
@@ -19,13 +19,9 @@ pub(super) fn compiled_of(source: &str) -> Compiled {
         .parse::<Entrypoint>()
         .map_err(|error| error.format())
         .expect("the workload parses");
-    let (module, foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("the workload compiles");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("the workload compiles");
 
     to_compiled(&module, foreigns).expect("the workload compiles")
 }

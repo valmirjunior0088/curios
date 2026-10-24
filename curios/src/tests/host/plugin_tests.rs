@@ -197,7 +197,7 @@ fn run_linked(source: &str, modules: Vec<DeclaredModule>) -> Result<u8, String> 
         .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |_| {},

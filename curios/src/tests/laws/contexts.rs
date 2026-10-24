@@ -7,7 +7,7 @@
 use {
     super::{Answers, Audit, SEEDS, STRUCTURAL, asked_alone, claim, hold_to_the_table},
     curios_core::{Bound, Carrier, Cases, Free, Global, Item, Match, Subterm, Term, Visit},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::{Qualifier, recurse},
 };
@@ -510,7 +510,7 @@ fn every_context_places_its_hole_under_the_former_it_names() {
     let entrypoint = format!("{STRUCTURAL}\n{MARKED}\n{items}\nIo/pure(())")
         .parse::<Entrypoint>()
         .expect("the probes parse");
-    let program = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+    let program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
         .unwrap_or_else(|refused| {
             panic!("a context does not elaborate around its marker:\n{refused}")
         })

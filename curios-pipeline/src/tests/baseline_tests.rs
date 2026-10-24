@@ -2,9 +2,7 @@
 
 use {
     super::test_support::{compile, entrypoint_of, mounted, reuses_body, unit_of},
-    crate::{
-        After, Cache, DEFAULT_STEP_BUDGET, Earlier, Progress, compile_entrypoint, compile_units,
-    },
+    crate::{After, Cache, DEFAULT_BUDGET, Earlier, Progress, compile_entrypoint, compile_units},
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
@@ -75,7 +73,7 @@ fn folded_offered(
 
     with_prelude(|prelude| {
         compile_units(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &sources,
@@ -199,7 +197,7 @@ fn program_through(source: &str, cache: &dyn Cache) -> String {
 
     with_prelude(|prelude| {
         compile_entrypoint(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &UnitSource::entry(&entrypoint, &RootSource::none()),
@@ -275,7 +273,7 @@ let wrong: Nat = \"a\";
 
     let refusal = with_prelude(|prelude| {
         compile_entrypoint(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &UnitSource::entry(&entrypoint, &RootSource::none()),

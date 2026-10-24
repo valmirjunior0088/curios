@@ -20,7 +20,7 @@ fn reads_back(source: &str) -> Result<(), String> {
 /// `source` with each goal's reported solution written over the goal's own span.
 fn pasted(source: &str) -> Result<String, String> {
     let reports = match compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         &entrypoint_of(source),
         &RootSource::none(),
         |_| {},
@@ -56,7 +56,7 @@ fn pasted(source: &str) -> Result<String, String> {
 /// Whether every goal `source` writes is reported with a term shown as the compiler holds it: a report declines a term no program writes where its reader stands, and says so.
 fn declined(source: &str) -> bool {
     let Err(CompileError::Incomplete(reports)) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         &entrypoint_of(source),
         &RootSource::none(),
         |_| {},
@@ -595,7 +595,7 @@ fn a_built_in_operation_reads_back() {
 /// Every public declaration of `/std` the entry root can reach, each by the shortest absolute path reaching it — one per declaration, whichever re-export that is.
 fn standard_declarations() -> Vec<Qualifier> {
     let standard = Qualifier::from(["std"]);
-    Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+    Fold::new(DEFAULT_BUDGET, &[], None)
         .units(
             |_| {},
             |prelude, _| {

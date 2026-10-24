@@ -27,7 +27,7 @@ fn erased(source: &str) -> Module {
     let entrypoint = source.parse::<Entrypoint>().expect("source parses");
     let mut ersd = None;
     compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| {

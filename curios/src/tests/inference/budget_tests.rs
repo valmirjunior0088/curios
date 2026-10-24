@@ -4,7 +4,7 @@
 
 use {
     crate::tests::{error, run, typecheck_within},
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
 };
 
 // A `rec` that never reduces (`go : Bool = go`) forces forever when demanded in type position — same infinite-spin behavior as a top-level `rec` — so a step budget stops it with an error rather than hanging.
@@ -144,8 +144,8 @@ fn acceptance_is_upward_closed_in_the_budget() {
     ];
 
     let ladder = std::iter::successors(Some(1024u64), |budget| budget.checked_mul(2))
-        .take_while(|budget| *budget < DEFAULT_STEP_BUDGET)
-        .chain([DEFAULT_STEP_BUDGET])
+        .take_while(|budget| *budget < DEFAULT_BUDGET)
+        .chain([DEFAULT_BUDGET])
         .collect::<Vec<_>>();
 
     for (label, source) in programs {

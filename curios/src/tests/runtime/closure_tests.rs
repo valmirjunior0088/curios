@@ -137,7 +137,7 @@ fn folds_constant_arg_through_let_function() {
 
     let mut optimized = None;
     compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| {

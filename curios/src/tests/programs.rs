@@ -1,7 +1,7 @@
 //! The programs this tree ships lint clean and are written as `curios format` writes them: every instrument under `programs/`, loose as `curios lint` places a file no unit declares. A lint is exact and always on, so a finding here is fixed in the program rather than excused.
 
 use {
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
     curios_text::{Formatted, Overlay},
     curios_wonder::{Origin, Severity, Subject, diagnostics},
     std::{
@@ -34,7 +34,7 @@ fn programs(directory: &Path) -> Vec<PathBuf> {
 
 /// The lints `subject` reports, rendered; an error is a lint here too, since a program that does not compile cannot be said to lint clean.
 fn findings(subject: Subject) -> Vec<String> {
-    diagnostics(DEFAULT_STEP_BUDGET, subject, &Overlay::default(), None)
+    diagnostics(DEFAULT_BUDGET, subject, &Overlay::default(), None)
         .into_iter()
         .filter(|diagnostic| matches!(diagnostic.severity, Severity::Lint | Severity::Error))
         .map(|diagnostic| diagnostic.render())

@@ -6,7 +6,7 @@ use {
     super::test_support::*,
     crate::tests::{compile, run, run_text, typecheck, typecheck_within},
     curios_native::MockHost,
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
     curios_utilities::fill,
 };
 
@@ -400,7 +400,7 @@ fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
 
     // Past the bound the proof has no inhabitant, so the literal is refused where it is written.
     assert!(
-        typecheck_within(DEFAULT_STEP_BUDGET, "use /std/{Nat}; Nat/to_byte(256)").is_err(),
+        typecheck_within(DEFAULT_BUDGET, "use /std/{Nat}; Nat/to_byte(256)").is_err(),
         "an out-of-range conversion typechecks nowhere"
     );
 }

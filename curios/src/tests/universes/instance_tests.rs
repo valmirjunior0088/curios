@@ -5,7 +5,7 @@ use {
         definition_variances, family_variances, signatures, universe_parameters,
     },
     crate::tests::{error, run, typecheck, typecheck_within},
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
     curios_utilities::fill,
 };
 
@@ -87,7 +87,7 @@ fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
 // `use_call`'s two spellings of `zip` are two instances of one recursive group, related only by `u ≤ x1`, `v ≤ z1` if left apart, which the kernel would refuse. The elaborator identifies the two instances where they meet, so the declared type's `zip` is spelled at the levels the body already carries and the kernel accepts the program by identity. Nothing merges: the signature keeps the two levels its writer chose, `A`'s and `B`'s, and the two of the instance of `zip` its result names, which is what the count pins — the identification chose one spelling for one occurrence rather than making two parameters one. Two calls of a recursive definition are compared at every level, so that instance's levels stand where conversion compares them and are the signature's callers' to choose. Every other level is an occurrence's at a position its family is irrelevant in, and finalization settles each at the level its argument or its floor gives it (`UniverseSolver::finalize`): `List(A)` at `A`'s, `Eq()(List/len(b), n)` at zero, which is why the count is four.
 #[test]
 fn a_signature_instantiating_one_recursive_definition_twice_certifies_with_its_levels_identified() {
-    typecheck_within(DEFAULT_STEP_BUDGET, TWO_INSTANCES_OF_ZIP)
+    typecheck_within(DEFAULT_BUDGET, TWO_INSTANCES_OF_ZIP)
         .expect("both checkers accept the program");
 
     let parameters = universe_parameters(TWO_INSTANCES_OF_ZIP);

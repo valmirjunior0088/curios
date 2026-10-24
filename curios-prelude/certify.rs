@@ -5,7 +5,7 @@
 use {
     curios_cert::{Globals, Rechecked, certify_module},
     curios_core::{Certification, Zonked},
-    curios_elab::DEFAULT_STEP_BUDGET,
+    curios_elab::DEFAULT_BUDGET,
     curios_text::SYNTAX,
     curios_unit::reads_filed,
     std::{fs, path::Path},
@@ -39,7 +39,7 @@ pub(crate) fn certify(out: &Path) {
                     &vec![false; certifications.len()],
                 );
 
-                certify_module(&zonked, DEFAULT_STEP_BUDGET, &globals, SYNTAX)
+                certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX)
             };
 
             if let Some(verdict) = refusals.first() {

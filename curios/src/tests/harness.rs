@@ -9,7 +9,7 @@ use {
         tests_error,
     },
     curios_native::MockHost,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Fold},
+    curios_pipeline::{DEFAULT_BUDGET, Fold},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::{Qualifier, RootKind},
 };
@@ -384,7 +384,7 @@ fn a_selection_schedules_the_tests_at_or_under_any_of_its_prefixes() {
     .parse::<Entrypoint>()
     .expect("fixture parses");
     let selected = |under: &[&[&str]]| {
-        let program = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+        let program = Fold::new(DEFAULT_BUDGET, &[], None)
             .tests(
                 &entrypoint,
                 &RootSource::none().tested(),
@@ -453,7 +453,7 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
         "#
     .parse::<Entrypoint>()
     .expect("fixture parses");
-    let records = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+    let records = Fold::new(DEFAULT_BUDGET, &[], None)
         .tests(
             &entrypoint,
             &RootSource::none().tested(),
@@ -494,7 +494,7 @@ fn a_test_program_schedules_only_the_tested_units_tests() {
         unit
     };
     let scheduled = |units: &[RootSource], entrypoint: &Entrypoint, loader: &RootSource| {
-        let records = Fold::new(DEFAULT_STEP_BUDGET, units, None)
+        let records = Fold::new(DEFAULT_BUDGET, units, None)
             .tests(entrypoint, loader, vec![Qualifier::empty()], |_| {}, |_| {})
             .expect("the test program compiles")
             .records;

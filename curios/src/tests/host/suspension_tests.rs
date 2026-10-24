@@ -4,7 +4,7 @@ use {
     crate::run_wasm,
     curios_abi::ForeignStore,
     curios_native::{ForeignBindings, HostOps, MockHost, OsHost, blocking},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
 };
@@ -14,13 +14,8 @@ fn compiled(source: &str) -> (curios_wasm::Module, ForeignStore) {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source");
-    compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded")
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+        .expect("compile succeeded")
 }
 
 /// The status a compiled program ended with under `host`, `bindings` answering its own rows.

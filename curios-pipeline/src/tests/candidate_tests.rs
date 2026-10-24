@@ -2,7 +2,7 @@
 
 use {
     super::test_support::{Store, assert_stored_alike, mounted, recompile_over, unit_of},
-    crate::{DEFAULT_STEP_BUDGET, compile_unit_over},
+    crate::{DEFAULT_BUDGET, compile_unit_over},
     curios_core::{Global, ItemRun},
     curios_elab::{declaration_input, lowered_digest},
     curios_prelude::with_prelude,
@@ -17,7 +17,7 @@ fn recompile_from(source: &str, baseline: &Unit, store: &Store) -> Unit {
 
     with_prelude(|prelude| {
         compile_unit_over(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &UnitSource::mounted(&modules),

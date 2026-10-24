@@ -3,13 +3,13 @@
 use {
     super::test_support::{mounted, mounted_project, write},
     crate::{Origin, Severity, Subject, diagnostics},
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
     curios_text::Overlay,
 };
 
 fn of(text: &str) -> Vec<crate::Diagnosis> {
     diagnostics(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         Subject::Entry {
             units: Vec::new(),
             declares: None,
@@ -191,7 +191,7 @@ fn a_library_reports_its_own_lints() {
         "use /std/{Nat, Bool};\n\npub let one : Nat = 1;\n",
     );
     let diagnostics = diagnostics(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         Subject::Unit {
             units: mounted(&root),
         },
@@ -221,7 +221,7 @@ fn a_library_reports_an_ill_typed_test_without_compiling_a_tail() {
         "use /std/{Test};\n\ntest broken =\n    Test/assert(\"no\");\n",
     );
     let diagnostics = diagnostics(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         Subject::Unit {
             units: mounted(&root),
         },

@@ -307,7 +307,7 @@ fn an_embedder_ends_the_program_through_a_row_that_does_not_return() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &source,
         &RootSource::none(),
         |_| {},
@@ -339,7 +339,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &source,
         &RootSource::none(),
         |_| {},
@@ -372,7 +372,7 @@ fn a_foreign_byte_crosses_as_its_word_in_both_directions() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &source,
         &RootSource::none(),
         |_| {},
@@ -408,7 +408,7 @@ fn a_foreign_flt_crosses_raw_in_both_directions() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &source,
         &RootSource::none(),
         |_| {},
@@ -442,7 +442,7 @@ fn a_foreign_flt_may_stand_before_another_result() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &source,
         &RootSource::none(),
         |_| {},
@@ -481,7 +481,7 @@ fn a_foreign_record_may_answer_references_in_any_slot() {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |_| {},
@@ -523,7 +523,7 @@ fn a_list_of_scalars_crosses_flat_in_both_directions() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &source,
         &RootSource::none(),
         |_| {},
@@ -573,7 +573,7 @@ fn an_option_crosses_both_ways() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &source,
         &RootSource::none(),
         |_| {},
@@ -608,7 +608,7 @@ fn a_list_element_past_the_wire_is_refused() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &source,
         &RootSource::none(),
         |_| {},

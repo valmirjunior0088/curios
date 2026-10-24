@@ -42,7 +42,7 @@ fn print_partial_evaluation_reduces_residual() {
     let mut cont_optm = None;
 
     let (wasm_module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| {
@@ -93,7 +93,7 @@ fn print_runtime_args_specializes_spine() {
     let mut ersd_optm = None;
 
     let (wasm_module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| {
@@ -153,7 +153,7 @@ fn print_constant_args_collapses_at_ersd() {
     let mut cont_optm = None;
 
     let (wasm_module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| match stage {
@@ -210,7 +210,7 @@ fn a_constant_prints_descriptions_are_copied_within_the_evaluators_cap() {
 
     let mut linked = None;
     compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| {

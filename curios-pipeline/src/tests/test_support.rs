@@ -5,7 +5,7 @@
 use {
     crate::*,
     curios_core::{Item, Module, Sharing, Variance},
-    curios_elab::{DEFAULT_STEP_BUDGET, Erasures, TraceTable, Traces, erase_program},
+    curios_elab::{DEFAULT_BUDGET, Erasures, TraceTable, Traces, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
     curios_unit::{Pack, Predecessors, Unit, packed},
@@ -57,14 +57,9 @@ pub(super) fn entrypoint_of(source: &str) -> Entrypoint {
 pub(super) fn compile(source: &str) -> Result<curios_wasm::Module, String> {
     let entrypoint = entrypoint_of(source);
 
-    compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .map(|(module, _foreigns)| module)
-    .map_err(String::from)
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+        .map(|(module, _foreigns)| module)
+        .map_err(String::from)
 }
 
 pub(super) fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
@@ -73,7 +68,7 @@ pub(super) fn compile_printed_stages(source: &str) -> Result<(String, String), S
     let mut cont = String::new();
 
     compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| match stage {
@@ -100,7 +95,7 @@ pub(super) fn typecheck(source: &str) -> Result<(), String> {
     let entrypoint = entrypoint_of(source);
     with_prelude(|prelude| {
         crate::elaborate_and_zonk(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &entrypoint,
@@ -120,7 +115,7 @@ pub(super) fn erase_to_ersd(source: &str) -> curios_ersd::Module {
     let entrypoint = entrypoint_of(source);
     let (program, _foreigns, _records, _anchors) = with_prelude(|prelude| {
         crate::elaborate_and_zonk(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &entrypoint,
@@ -134,7 +129,7 @@ pub(super) fn erase_to_ersd(source: &str) -> curios_ersd::Module {
     with_prelude(|prelude| {
         let predecessors = Predecessors::over(prelude);
         erase_program(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             SYNTAX,
             Erasures::of(&predecessors.cores(), &predecessors.erased()),
             &program,
@@ -175,7 +170,7 @@ pub(crate) fn compile_with_units(
             .map(|modules| (curios_text::UnitSource::mounted(modules), None))
             .collect::<Vec<_>>();
         let produced = compile_units(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &sources,
@@ -189,7 +184,7 @@ pub(crate) fn compile_with_units(
             .collect::<Vec<_>>();
 
         compile_entrypoint(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(&predecessors),
             &SYNTAX,
             &UnitSource::entry(&entry, &RootSource::none()),
@@ -302,8 +297,8 @@ fn elaborated(
     let fixed = predecessors.fixed();
     let established = curios_elab::Established::placed(&placed).fixed(&fixed);
     let mut context = match wholesale {
-        true => curios_elab::Context::wholesale(DEFAULT_STEP_BUDGET, SYNTAX),
-        false => curios_elab::Context::new(DEFAULT_STEP_BUDGET, SYNTAX),
+        true => curios_elab::Context::wholesale(DEFAULT_BUDGET, SYNTAX),
+        false => curios_elab::Context::new(DEFAULT_BUDGET, SYNTAX),
     };
     context.set_imports(lowered.imports().clone());
     curios_elab::elaborate_and_zonk_unit(&mut context, &established, lowered.core(), &minted)
@@ -334,7 +329,7 @@ pub(super) fn unit_after(prefix: &str, source: &str, units: &[&Unit]) -> Unit {
         let scope = prelude.iter().chain(units).copied().collect::<Vec<_>>();
 
         compile_unit(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(&scope),
             &SYNTAX,
             &UnitSource::mounted(&modules),
@@ -363,7 +358,7 @@ pub(super) fn recompile_after(
             .collect::<Vec<_>>();
 
         compile_unit_over(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(&scope),
             &SYNTAX,
             &UnitSource::mounted(&modules),
@@ -380,7 +375,7 @@ pub(super) fn recompile_after(
 pub(super) fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
     with_prelude(|prelude| {
         compile_units(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &[(UnitSource::mounted(modules), None)],
@@ -401,7 +396,7 @@ pub(super) fn compile_in_order(sources: &[&RootSource]) -> Vec<Unit> {
 pub(super) fn compile_each(sources: &[&RootSource]) -> Result<Vec<Unit>, String> {
     with_prelude(|prelude| {
         compile_units(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &sources
@@ -419,7 +414,7 @@ pub(super) fn compile_each(sources: &[&RootSource]) -> Result<Vec<Unit>, String>
 pub(super) fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result<Unit, String> {
     with_prelude(|prelude| {
         compile_unit_over(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             Predecessors::over(prelude),
             &SYNTAX,
             &UnitSource::mounted(modules),

@@ -5,7 +5,7 @@ use {
     crate::{optimize, tests::ersd_optm},
     curios_ersd::{FieldShape, Module},
     curios_native::Compiled,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,
 };
@@ -122,13 +122,9 @@ fn field_shapes(module: &Module) -> Vec<FieldShape> {
 /// The Binaryen-optimized WAT of `source` — the module a user actually runs, which is what the static cast counts must be taken over (the raw module's counts include what Binaryen deletes).
 fn optimized_wat(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("the workload parses");
-    let (module, _foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("the workload compiles");
+    let (module, _foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("the workload compiles");
 
     let mut printed = String::new();
     optimize(&module, true, |stage| {

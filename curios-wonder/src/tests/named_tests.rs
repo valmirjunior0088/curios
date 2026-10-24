@@ -3,7 +3,7 @@
 use {
     crate::{Declaration, Named, Origin, Subject, Written},
     curios_core::Declared,
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
     curios_text::{Overlay, RootSource},
     std::path::Path,
 };
@@ -11,7 +11,7 @@ use {
 /// Every text of `program`, asked the way the one-shot transport asks of standard input, reading through `overlay`.
 fn asked(program: &str, overlay: &Overlay) -> Vec<Written> {
     crate::written(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         Subject::Entry {
             units: Vec::new(),
             origin: Origin::Text {
@@ -204,7 +204,7 @@ fn a_library_is_asked_through_one_of_its_files() {
         .expect("the text is written as a module");
 
     let texts = crate::written(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         Subject::Unit {
             units: vec![library],
         },

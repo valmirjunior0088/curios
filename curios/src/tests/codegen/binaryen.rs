@@ -1,6 +1,6 @@
 use {
     curios_binaryen::optimize,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::{Module, to_bytes},
 };
@@ -22,13 +22,9 @@ fn optimizes_to_a_smaller_valid_module() {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    let (module, _foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("expected wasm module");
+    let (module, _foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("expected wasm module");
 
     let bytes = to_bytes(&module);
     // `optimize` validates the result internally (asserting on an invalid module).
@@ -73,13 +69,9 @@ fn dumping_emits_the_optimized_module_as_text() {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    let (module, _foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("expected wasm module");
+    let (module, _foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("expected wasm module");
 
     let mut text = None;
 

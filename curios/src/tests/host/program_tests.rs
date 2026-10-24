@@ -3,7 +3,7 @@
 use {
     crate::{run_wasm, tests::typecheck},
     curios_native::{ForeignBindings, MockHost, MockHostBuilder},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
 };
@@ -13,13 +13,9 @@ fn ended_under(source: &str, host: MockHostBuilder) -> (u8, Vec<u8>, Vec<u8>) {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source");
-    let (module, foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("compile succeeded");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("compile succeeded");
 
     let (system, io) = host.build();
     let code =

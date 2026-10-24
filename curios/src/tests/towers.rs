@@ -6,7 +6,7 @@
 
 use {
     super::core_elab,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
     std::fmt::Write,
@@ -313,14 +313,9 @@ fn function(source: &mut String, stands: Stands, lines: usize, body: &Body) {
 fn compiles(source: &str) -> Result<(), String> {
     let entrypoint = source.parse::<Entrypoint>().expect("a tower parses");
 
-    compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .map(|_| ())
-    .map_err(|error| error.to_string())
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 /// The chain every tower is read against: sixty lines each naming the one before it once, in a function's body and in a recursive member's.

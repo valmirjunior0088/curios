@@ -3,7 +3,7 @@
 use {
     super::{granted, withheld},
     crate::{
-        Cache, DEFAULT_STEP_BUDGET, Earlier, Fold, Over, compile_unit, compile_unit_over,
+        Cache, DEFAULT_BUDGET, Earlier, Fold, Over, compile_unit, compile_unit_over,
         complete_records, recheck_over,
         tests::test_support::{
             Store, assert_stored_alike, compile_with_units, elaborated_above, elaborated_wholesale,
@@ -95,7 +95,7 @@ fn elaborated_over(
     relowered: &BTreeSet<Global>,
 ) -> Result<Recompiled, Error> {
     let established = Established::placed(&predecessors.placed()).keeping(std.core(), std.places());
-    let mut context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
+    let mut context = Context::new(DEFAULT_BUDGET, SYNTAX);
     context.set_imports(lowered.imports().clone());
     context.set_broken(lowered.broken_names());
     // A unit lowered whole drops what the archived unit's lowering declares and it does not.
@@ -162,7 +162,7 @@ fn std_recompile_census() {
             let elaborated_in = start.elapsed();
             let start = Instant::now();
             compile_unit_over(
-                DEFAULT_STEP_BUDGET,
+                DEFAULT_BUDGET,
                 predecessors,
                 &SYNTAX,
                 &unit,
@@ -209,7 +209,7 @@ fn std_unit_reproduction() {
             let source = std_from_its_tree();
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
-            compile_unit(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit)
+            compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &unit)
                 .expect("the library compiles")
         };
         let (first, second) = (compiled(), compiled());
@@ -345,10 +345,10 @@ fn std_recompile_reproduction() {
             let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
             let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
-            let whole = compile_unit(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit)
+            let whole = compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &unit)
                 .expect("the edited library compiles");
             let over = compile_unit_over(
-                DEFAULT_STEP_BUDGET,
+                DEFAULT_BUDGET,
                 predecessors,
                 &SYNTAX,
                 &unit,
@@ -382,7 +382,7 @@ fn std_undo_reproduction() {
         let predecessors = Predecessors::over(&roots);
         let source = std_from_its_tree();
         let first = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
-        let original = compile_unit(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &first)
+        let original = compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &first)
             .expect("the library compiles");
 
         println!("\n=== /std with an edit undone over the store ===");
@@ -394,7 +394,7 @@ fn std_undo_reproduction() {
             let edited = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
             let unit = UnitSource::mounted(&edited).seeing(vec![Qualifier::from(["sys"])]);
             let edited = compile_unit_over(
-                DEFAULT_STEP_BUDGET,
+                DEFAULT_BUDGET,
                 predecessors,
                 &SYNTAX,
                 &unit,
@@ -406,7 +406,7 @@ fn std_undo_reproduction() {
             store.file(&edited);
 
             let undone = compile_unit_over(
-                DEFAULT_STEP_BUDGET,
+                DEFAULT_BUDGET,
                 predecessors,
                 &SYNTAX,
                 &first,
@@ -442,13 +442,8 @@ fn std_part_digest_census() {
         let roots = [*sys];
         let source = std_from_its_tree();
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
-        let held = compile_unit(
-            DEFAULT_STEP_BUDGET,
-            Predecessors::over(&roots),
-            &SYNTAX,
-            &unit,
-        )
-        .expect("the library compiles");
+        let held = compile_unit(DEFAULT_BUDGET, Predecessors::over(&roots), &SYNTAX, &unit)
+            .expect("the library compiles");
         let stored = restored(&held);
         let digests = |unit: &Unit| part_digests(unit.core(), unit.places(), unit.erased());
         let (now, then) = (digests(&held), digests(&stored));
@@ -765,9 +760,9 @@ fn std_vocabulary_reach_reproduction() {
         let source = std_from_its_tree().with_overlay(Overlay::of([(path, text)]));
         let unit = UnitSource::mounted(&source).seeing(vec![Qualifier::from(["sys"])]);
 
-        let whole = compile_unit(DEFAULT_STEP_BUDGET, predecessors, &SYNTAX, &unit);
+        let whole = compile_unit(DEFAULT_BUDGET, predecessors, &SYNTAX, &unit);
         let over = compile_unit_over(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             predecessors,
             &SYNTAX,
             &unit,
@@ -1208,7 +1203,7 @@ fn the_withheld_root_is_offered_to_the_unit_taking_its_place() {
     for (claim, offered) in [("std", true), ("other", false)] {
         let units = [supplied(claim)];
         let recording = Recording(RefCell::new(Vec::new()));
-        let _ = Fold::new(DEFAULT_STEP_BUDGET, &units, Some(&recording)).check_units(|_| {});
+        let _ = Fold::new(DEFAULT_BUDGET, &units, Some(&recording)).check_units(|_| {});
 
         assert_eq!(*recording.0.borrow(), [offered], "a unit claiming /{claim}");
     }
@@ -1629,7 +1624,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         let judged = recheck_over(
             &finished,
             &places,
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             predecessors,
             Over {
                 baseline: std,

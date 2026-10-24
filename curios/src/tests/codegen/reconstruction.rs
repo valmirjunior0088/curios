@@ -4,7 +4,7 @@ use {
     super::functions,
     curios_abi::ForeignStore,
     curios_native::{Compiled, ForeignBindings, MockHost},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
     curios_wasm::to_bytes,
@@ -53,7 +53,7 @@ fn compile(source: &str) -> Fixture {
     let mut erased = None;
     let mut cont = None;
     let (wasm, foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| match stage {

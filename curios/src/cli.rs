@@ -56,7 +56,7 @@ pub(crate) struct ManifestFlag {
 pub(crate) struct Elaboration {
     #[arg(
         long,
-        default_value_t = curios_pipeline::DEFAULT_STEP_BUDGET,
+        default_value_t = curios_pipeline::DEFAULT_BUDGET,
         value_name = "UNITS",
         help = "Units of reduction work each declaration may spend while type checking"
     )]

@@ -6,7 +6,7 @@ use {
         tests::{error, run},
     },
     curios_native::{Compiled, ForeignBindings, MockHost},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
 };
@@ -14,13 +14,9 @@ use {
 /// Run `source` expecting failure, as [`error`] does, with the wasm name section kept through Binaryen: what a trap's report names its frames by, and what a shipped build drops.
 fn named_error(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
-    let (module, foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .expect("the fixture compiles");
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+            .expect("the fixture compiles");
     let code =
         curios_cranelift::compile(&optimize(&module, true, |_| {})).expect("the module compiles");
     let (system, _io) = MockHost::builder().build();

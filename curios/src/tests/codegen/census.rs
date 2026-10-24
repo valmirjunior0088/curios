@@ -10,7 +10,7 @@ use {
         Atom, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Literal, Module, Node, NodeId,
         ValueExpr, ValueId,
     },
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::ArenaId,
     std::collections::{BTreeMap, BTreeSet},
@@ -122,16 +122,11 @@ fn cont_optm_module(source: &str) -> Module {
     let entrypoint = source.parse::<Entrypoint>().expect("corpus program parses");
 
     let mut captured = None;
-    compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
-            if let Stage::ContOptm(module) = stage {
-                captured = Some(module.clone());
-            }
-        },
-    )
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+        if let Stage::ContOptm(module) = stage {
+            captured = Some(module.clone());
+        }
+    })
     .expect("corpus program compiles");
 
     captured.expect("the pipeline observes cont-optm")

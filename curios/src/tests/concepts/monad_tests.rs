@@ -3,7 +3,7 @@
 use {
     crate::tests::run,
     curios_core::Zonked,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
 };
@@ -320,7 +320,7 @@ impl Region {
 // What the two checkers say of a cell, asked without erasing or emitting it: the elaborator's refusal as a compilation prints it, or what the kernel refuses of the program the elaborator built. A cell is about its levels, which both have judged by then, and compiled whole the matrix costs a minute a test.
 fn judged(source: &str) -> Result<Vec<String>, String> {
     let entrypoint = source.parse::<Entrypoint>().expect("the cell parses");
-    let checked = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+    let checked = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
         .map_err(|refused| refused.to_string())?;
     assert!(
         checked.obligations.is_empty(),
@@ -328,7 +328,7 @@ fn judged(source: &str) -> Result<Vec<String>, String> {
     );
     let program = Zonked::project(&checked.program).expect("an elaborated program is zonked");
 
-    Ok(recheck_with_prelude(&program, DEFAULT_STEP_BUDGET)
+    Ok(recheck_with_prelude(&program, DEFAULT_BUDGET)
         .iter()
         .map(|verdict| format!("{verdict:?}"))
         .collect())

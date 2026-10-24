@@ -1,6 +1,6 @@
 //! The boundary between compiler options, the optional subject and opaque program arguments.
 
-use {super::*, curios_pipeline::DEFAULT_STEP_BUDGET, std::iter};
+use {super::*, curios_pipeline::DEFAULT_BUDGET, std::iter};
 
 fn run(words: &[&str]) -> (Option<String>, Vec<OsString>, Elaboration) {
     let cli = Cli::try_parse_from(iter::once("curios").chain(words.iter().copied())).unwrap();
@@ -110,7 +110,7 @@ fn the_subject_and_program_arguments_follow_one_boundary() {
             arguments.iter().map(OsString::from).collect::<Vec<_>>(),
             "{words:?}"
         );
-        assert_eq!(elaboration.budget, DEFAULT_STEP_BUDGET);
+        assert_eq!(elaboration.budget, DEFAULT_BUDGET);
         assert!(elaboration.manifest.manifest.is_none());
     }
 }

@@ -2,7 +2,7 @@
 
 use {
     curios_core::{Item, Program, Variance},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, typecheck_with_prelude},
     curios_text::{Entrypoint, RootSource},
     std::collections::BTreeMap,
 };
@@ -10,10 +10,9 @@ use {
 /// Every definition's finalized universe parameter count, keyed by the name its item describes itself with.
 pub(super) fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
-    let program: Program =
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
-            .expect("the fixture type-checks")
-            .program;
+    let program: Program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+        .expect("the fixture type-checks")
+        .program;
 
     program
         .module
@@ -34,10 +33,9 @@ pub(super) fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
 /// How many sorts every definition leaves to its caller, keyed as [`universe_parameters`] keys it.
 pub(super) fn sort_parameters(source: &str) -> BTreeMap<String, usize> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
-    let program: Program =
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
-            .expect("the fixture type-checks")
-            .program;
+    let program: Program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+        .expect("the fixture type-checks")
+        .program;
 
     program
         .module
@@ -55,10 +53,9 @@ pub(super) fn sort_parameters(source: &str) -> BTreeMap<String, usize> {
 /// Every inductive family's variance vector as its unit carries it, keyed by the family's name: `*` for an irrelevant level and `=` for an invariant one.
 pub(super) fn family_variances(source: &str) -> BTreeMap<String, String> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
-    let program: Program =
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
-            .expect("the fixture type-checks")
-            .program;
+    let program: Program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+        .expect("the fixture type-checks")
+        .program;
 
     program
         .module
@@ -81,10 +78,9 @@ pub(super) fn family_variances(source: &str) -> BTreeMap<String, String> {
 /// Every definition's finalized type as it prints, universe instances included, keyed as [`universe_parameters`] keys it.
 pub(super) fn signatures(source: &str) -> BTreeMap<String, String> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
-    let program: Program =
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
-            .expect("the fixture type-checks")
-            .program;
+    let program: Program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+        .expect("the fixture type-checks")
+        .program;
 
     program
         .module
@@ -102,10 +98,9 @@ pub(super) fn signatures(source: &str) -> BTreeMap<String, String> {
 /// Every non-recursive definition's variance vector as its unit carries it, keyed as [`universe_parameters`] keys it: `*` for an irrelevant level and `=` for an invariant one, empty for a definition that takes none.
 pub(super) fn definition_variances(source: &str) -> BTreeMap<String, String> {
     let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
-    let program: Program =
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
-            .expect("the fixture type-checks")
-            .program;
+    let program: Program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+        .expect("the fixture type-checks")
+        .program;
 
     program
         .module

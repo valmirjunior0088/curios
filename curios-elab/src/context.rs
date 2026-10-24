@@ -115,7 +115,7 @@ use {
 /// **A single oversized construction is still affordable, and no default the prelude can build under would refuse it.** `Nat/shl(1, 400000000)` prices at 6 250 004 units and builds fifty megabytes; refusing it outright needs a default of six million, which leaves the prelude's own floor a fraction of the margin the constant keeps. What the charge buys is a ceiling — the same term at a larger numeral refuses instead of taking the machine — not one low enough to call fifty megabytes unreasonable. Squeezing both ends onto one number is the one weighted limit `documentation/design/soundness/a-reduction-step-costs-what-it-builds.md` chooses, and these are its numbers.
 ///
 /// **A `Str` literal's ceiling is this constant divided by a per-character price the closed machine sets in transitions, not frames**: on the machine, guarded depth is flat in the length, so the frame row does not enter the price. The current price and ceiling are `curios`' `str_literal_cost_measurements`', and `a_str_literal_costs_transitions_rather_than_frames` holds the shape. Raising this constant raises the ceiling proportionally, and the trade it would make is the one stated above rather than anything about strings.
-pub const DEFAULT_STEP_BUDGET: u64 = 30_000_000;
+pub const DEFAULT_BUDGET: u64 = 30_000_000;
 
 /// The identity spine over a [`BirthTelescope`] — one `Var::free` per binder — shared with the scope as the telescope is.
 type SharedSpine = MetavarSpine;
@@ -204,9 +204,9 @@ pub(crate) struct EmbeddingSite {
 }
 
 impl<'s> Context<'s> {
-    /// A fresh, empty context at [`DEFAULT_STEP_BUDGET`] — what every caller that is not threading a user-supplied budget wants.
+    /// A fresh, empty context at [`DEFAULT_BUDGET`] — what every caller that is not threading a user-supplied budget wants.
     pub fn with_default_budget(syntax: SyntaxRegistry) -> Self {
-        Self::new(DEFAULT_STEP_BUDGET, syntax)
+        Self::new(DEFAULT_BUDGET, syntax)
     }
 
     /// A fresh, empty context in which each declaration may spend `budget` reduction steps, synthesizing the names `syntax` registers. Declarations, definitions, and the metavariable floor arrive later, seeded by `elaborate_module_suffix` as it walks the lowered module.

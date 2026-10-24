@@ -77,7 +77,7 @@ fn exit_halts_with_code() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |_| {},
@@ -120,7 +120,7 @@ fn exit_in_local_binding_halts() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |_| {},
@@ -155,7 +155,7 @@ fn an_exit_ends_a_region_of_any_type() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |_| {},
@@ -180,7 +180,7 @@ fn an_exit_alone_in_the_tail_carries_its_code() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        curios_pipeline::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |_| {},

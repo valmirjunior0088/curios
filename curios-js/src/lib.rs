@@ -1,7 +1,7 @@
 //! The Curios compiler in the browser, for a browser build (`cargo xtask bundle build`: `cargo build` for wasm32, then `--target web` bindings — no `wasm-pack`): a wasm-bindgen export of the pure compile pipeline, [`compile`]. Running what it compiles is `curios-browser`'s, whose `run` the same bundle exports, and the rows `compile` hands back are rendered by it, so the playground's two calls agree on one description of a program.
 
 use {
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::to_bytes,
     js_sys::{JSON, Object, Reflect, Uint8Array},
@@ -12,7 +12,7 @@ use {
 pub use curios_browser::run;
 
 /// The same budget the native compiler uses, so a program that compiles in the playground compiles at the command line and the reverse. A wall-clock bound could not promise that: the tab and the terminal are different machines.
-const BUDGET: u64 = DEFAULT_STEP_BUDGET;
+const BUDGET: u64 = DEFAULT_BUDGET;
 
 fn set(target: &Object, key: &str, value: &JsValue) {
     Reflect::set(target, &JsValue::from_str(key), value).expect("Reflect::set on a plain object");

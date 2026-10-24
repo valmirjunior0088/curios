@@ -6,7 +6,7 @@ use {
         tests::{Growth, grown},
     },
     curios_core::take_looks,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, Stage, compile_with_prelude},
     curios_profile::{Instructions, allocated_bytes, allocation_count},
     curios_text::{Entrypoint, RootSource},
 };
@@ -100,11 +100,8 @@ fn counted(source: &str, counters: &Counters) -> [Count; 11] {
     counts[0] = count;
 
     let mut mark = Some(mark);
-    let (module, _) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
+    let (module, _) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
             let index = match stage {
                 Stage::Text(_) => 1,
                 Stage::Core(_) => 2,
@@ -122,9 +119,8 @@ fn counted(source: &str, counters: &Counters) -> [Count; 11] {
                 .since(counters, index);
             counts[index] = count;
             mark = Some(next);
-        },
-    )
-    .expect("a growth compiles");
+        })
+        .expect("a growth compiles");
     let mark = mark.expect("the last stage left a mark");
 
     let bytes = optimize(&module, false, |_| {});

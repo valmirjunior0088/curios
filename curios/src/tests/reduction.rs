@@ -12,8 +12,7 @@ use {
     super::{Consumed, predicates, typecheck_within},
     curios_core::{Consumption, Cost},
     curios_pipeline::{
-        DEFAULT_STEP_BUDGET, recheck_with_prelude, recheck_with_prelude_measured,
-        typecheck_with_prelude,
+        DEFAULT_BUDGET, recheck_with_prelude, recheck_with_prelude_measured, typecheck_with_prelude,
     },
     curios_text::{Entrypoint, RootSource},
     curios_utilities::fill,
@@ -118,12 +117,12 @@ fn list_growing(n: usize) -> String {
 ///
 /// The budget is per declaration and restored at every item boundary, so this reports the *heaviest declaration's* spend rather than a total — which is the quantity a budget default has to clear. A power of two rather than a bisection because the question is whether the count grows linearly in the iteration count, and a factor of two answers that; the failing probes abort as soon as the budget is spent, so only the succeeding one costs full price.
 ///
-/// The `Err` payload is the largest budget *tried*, not [`DEFAULT_STEP_BUDGET`]: the sweep stops at the last power of two below the default, so a program needing more than that but less than the default elaborates fine while every probe here fails. Reporting the default in that case would claim the program does not elaborate, which is the opposite of true.
+/// The `Err` payload is the largest budget *tried*, not [`DEFAULT_BUDGET`]: the sweep stops at the last power of two below the default, so a program needing more than that but less than the default elaborates fine while every probe here fails. Reporting the default in that case would claim the program does not elaborate, which is the opposite of true.
 fn floor(mut accepts: impl FnMut(u64) -> bool) -> Result<u64, u64> {
     let mut largest = 0;
 
     for budget in std::iter::successors(Some(1024u64), |budget| budget.checked_mul(2))
-        .take_while(|budget| *budget <= DEFAULT_STEP_BUDGET)
+        .take_while(|budget| *budget <= DEFAULT_BUDGET)
     {
         largest = budget;
         if accepts(budget) {
@@ -148,7 +147,7 @@ fn elaborator_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
 ///
 /// Elaborating once at the default budget and re-certifying the result is what separates the two counters: the module does not change with the budget the kernel is then given, so the sweep measures the kernel's own spend rather than a compile that fails earlier.
 fn kernel_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
-    let module = typecheck_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, &RootSource::none())
+    let module = typecheck_with_prelude(DEFAULT_BUDGET, entrypoint, &RootSource::none())
         .expect("the arm elaborates within the default budget")
         .program;
 
@@ -167,7 +166,7 @@ fn floor_cell(floor: Result<u64, u64>) -> String {
 /// Elaborate `source` at the default budget, returning how long it took.
 fn elaboration_time(source: &str) -> Duration {
     let start = Instant::now();
-    let outcome = typecheck_within(DEFAULT_STEP_BUDGET, source);
+    let outcome = typecheck_within(DEFAULT_BUDGET, source);
     let elapsed = start.elapsed();
 
     outcome.expect("the arm elaborates within the default budget");
@@ -182,7 +181,7 @@ fn elaboration_time(source: &str) -> Duration {
 #[test]
 fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
     for source in [bytes_growing(2000), list_growing(2000)] {
-        typecheck_within(DEFAULT_STEP_BUDGET, &source)
+        typecheck_within(DEFAULT_BUDGET, &source)
             .expect("an accumulation and a window over it fit the ordinary budget");
     }
 }
@@ -387,15 +386,14 @@ fn bytes_literal(n: usize) -> String {
 /// Reported rather than bisected. A budget floor found from outside costs one whole compile per probe, reports only the larger of the two checkers, and cannot separate depth from the rest at all — which is the separation that matters, because depth is the one row whose size is set by the reduction *strategy* rather than by the term.
 fn declaration_cost(source: &str) -> (Consumption, Consumption) {
     let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
-    let checked = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+    let checked = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
         .expect("the program elaborates within the default budget");
     let elaborator = checked.consumption;
     let module =
         curios_core::Zonked::project(&checked.program).expect("the checked module is zonked");
-    let (verdicts, heaviest) =
-        recheck_with_prelude_measured(&module, DEFAULT_STEP_BUDGET, |kernel| {
-            kernel.heaviest_declaration()
-        });
+    let (verdicts, heaviest) = recheck_with_prelude_measured(&module, DEFAULT_BUDGET, |kernel| {
+        kernel.heaviest_declaration()
+    });
 
     assert!(verdicts.is_empty(), "the kernel accepts it: {verdicts:?}");
 
@@ -474,9 +472,9 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
             .map(|checked| (checked.program, checked.consumption.units()))
     };
     let (alone_module, alone_units) =
-        elaborated(&alone, DEFAULT_STEP_BUDGET).expect("`_b` elaborates alone");
+        elaborated(&alone, DEFAULT_BUDGET).expect("`_b` elaborates alone");
     let (after_module, after_units) =
-        elaborated(&after, DEFAULT_STEP_BUDGET).expect("`_b` elaborates after `_a`");
+        elaborated(&after, DEFAULT_BUDGET).expect("`_b` elaborates after `_a`");
 
     assert_eq!(
         after_units, alone_units,
@@ -497,9 +495,9 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
             recheck_with_prelude_measured(&module, budget, |kernel| kernel.heaviest_declaration());
         (verdicts.is_empty(), heaviest.units())
     };
-    let (accepted, alone_units) = certified(&alone_module, DEFAULT_STEP_BUDGET);
+    let (accepted, alone_units) = certified(&alone_module, DEFAULT_BUDGET);
     assert!(accepted, "the kernel accepts `_b` alone");
-    let (accepted, after_units) = certified(&after_module, DEFAULT_STEP_BUDGET);
+    let (accepted, after_units) = certified(&after_module, DEFAULT_BUDGET);
     assert!(accepted, "the kernel accepts `_b` after `_a`");
 
     assert_eq!(
@@ -658,7 +656,7 @@ fn a_str_literal_costs_transitions_rather_than_frames() {
     assert!(
         per_character < frame / 4,
         "a character costs {per_character} units against a {frame}-unit frame, so the ceiling is about {} characters",
-        DEFAULT_STEP_BUDGET / per_character.max(1),
+        DEFAULT_BUDGET / per_character.max(1),
     );
 
     // The two checkers run the same machine on the same closed terms, so agreement here is structural; the factor-two slack covers what each checker's own strategy spends around the machine.
@@ -740,14 +738,14 @@ fn an_oversized_construction_is_refused_before_it_is_allocated() {
         )
     };
 
-    let refusal = typecheck_within(DEFAULT_STEP_BUDGET, &shift(1 << 40))
+    let refusal = typecheck_within(DEFAULT_BUDGET, &shift(1 << 40))
         .expect_err("a shift whose result no budget affords is refused");
     assert!(
         refusal.contains("ran out"),
         "expected a spent-budget refusal, got: {refusal}"
     );
 
-    typecheck_within(DEFAULT_STEP_BUDGET, &shift(3))
+    typecheck_within(DEFAULT_BUDGET, &shift(3))
         .expect("the same operation at an affordable size still folds");
 }
 
@@ -823,7 +821,7 @@ fn a_recursive_call_read_twice_is_evaluated_once() {
     let units = |width: usize, paired: bool| {
         let source = paired_fold(width, paired);
         let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+        typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
             .expect("the fold elaborates within the default budget")
             .consumption
             .units()
@@ -978,7 +976,7 @@ fn an_equation_costs_what_its_decision_costs() {
 fn a_published_binder_states_whether_it_binds_a_proof() {
     let source = "use /std/{Nat, Eq};\nuse /std/Bool/{Holds};\n\nlet through(A: Type, n: Nat, h: Holds(0 <= n), x: A) -> Nat =\n    let twice = n + n;\n    let same: Eq()(n, n) = Eq/refl();\n    twice;\n\n/std/print(\"ok\")\n";
     let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
-    let program = typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+    let program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
         .expect("the program elaborates within the default budget")
         .program;
     let through = program

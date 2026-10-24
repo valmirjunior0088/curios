@@ -74,7 +74,7 @@ mod wasm_conformance;
 use {
     crate::{run_wasm, to_compiled},
     curios_native::{Compiled, ForeignBindings, HostOps, MockHost, TestEnd},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Fold, Stage, TestProgram, compile_with_prelude},
+    curios_pipeline::{DEFAULT_BUDGET, Fold, Stage, TestProgram, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::Qualifier,
 };
@@ -87,7 +87,7 @@ fn run_entrypoint<H: HostOps + Send + Sync + 'static>(
     loader: &RootSource,
     host: H,
 ) -> Result<(), String> {
-    let (module, foreigns) = compile_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, loader, |_| {})?;
+    let (module, foreigns) = compile_with_prelude(DEFAULT_BUDGET, entrypoint, loader, |_| {})?;
 
     run_wasm(&module, foreigns, host, ForeignBindings::empty()).map(|_| ())
 }
@@ -112,19 +112,15 @@ fn compile(source: &str) -> Result<Compiled, String> {
     let entrypoint = source
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
-    let (module, foreigns) = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )?;
+    let (module, foreigns) =
+        compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})?;
 
     to_compiled(&module, foreigns)
 }
 
 /// Compile-only, for the programs whose point is that they are refused.
 fn typecheck(source: &str) -> Result<(), String> {
-    typecheck_within(DEFAULT_STEP_BUDGET, source)
+    typecheck_within(DEFAULT_BUDGET, source)
 }
 
 /// [`typecheck`] under a stated work budget, for a program whose point is that elaboration *evaluates* something.
@@ -152,7 +148,7 @@ fn error(source: &str) -> String {
 /// Compile `source` as its own test program, expecting a refusal, and return its report: [`error`] for a fixture whose refusal is in a test, which only a test program holds.
 fn tests_error(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
-    Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+    Fold::new(DEFAULT_BUDGET, &[], None)
         .tests(
             &entrypoint,
             &RootSource::none().tested(),
@@ -168,7 +164,7 @@ fn tests_error(source: &str) -> String {
 /// Compile `source` as its own test program over every test it declares — the synthesized `Test/main` tail over them in place of the authored one.
 fn test_program(source: &str) -> TestProgram {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
-    Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+    Fold::new(DEFAULT_BUDGET, &[], None)
         .tests(
             &entrypoint,
             &RootSource::none().tested(),
@@ -202,7 +198,7 @@ fn ersd_optm_tests(source: &str) -> curios_ersd::Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut captured = None;
-    Fold::new(DEFAULT_STEP_BUDGET, &[], None)
+    Fold::new(DEFAULT_BUDGET, &[], None)
         .tests(
             &entrypoint,
             &RootSource::none().tested(),
@@ -224,16 +220,11 @@ fn ersd_optm(source: &str) -> curios_ersd::Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut captured = None;
-    compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
-            if let Stage::ErsdOptm(module) = stage {
-                captured = Some(module.clone());
-            }
-        },
-    )
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+        if let Stage::ErsdOptm(module) = stage {
+            captured = Some(module.clone());
+        }
+    })
     .expect("fixture compiles");
 
     captured.expect("the pipeline emits the optimized Ersd stage")
@@ -254,16 +245,11 @@ fn core(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut printed = None;
-    let _ = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
-            if let Stage::Core(module) = stage {
-                printed = Some(module.to_string());
-            }
-        },
-    );
+    let _ = compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+        if let Stage::Core(module) = stage {
+            printed = Some(module.to_string());
+        }
+    });
 
     printed.expect("the pipeline emits the lowered Core stage")
 }
@@ -273,16 +259,11 @@ fn core_elab(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut printed = None;
-    let _ = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
-            if let Stage::CoreElab(module) = stage {
-                printed = Some(module.to_string());
-            }
-        },
-    );
+    let _ = compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+        if let Stage::CoreElab(module) = stage {
+            printed = Some(module.to_string());
+        }
+    });
 
     printed.expect("the pipeline emits the elaborated Core stage")
 }
@@ -294,16 +275,11 @@ fn cont_optm_module(source: &str) -> curios_cont::Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut captured = None;
-    compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| {
-            if let Stage::ContOptm(module) = stage {
-                captured = Some(module.clone());
-            }
-        },
-    )
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+        if let Stage::ContOptm(module) = stage {
+            captured = Some(module.clone());
+        }
+    })
     .expect("fixture compiles");
 
     captured.expect("the pipeline observes cont-optm")

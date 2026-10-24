@@ -2,7 +2,7 @@
 
 use {
     super::test_support::{entrypoint_of, recompile_over, reuses_body, unit_of},
-    crate::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
+    crate::{DEFAULT_BUDGET, Stage, compile_with_prelude},
     curios_core::{Enter, Free, Global, Reads, Subterm, Term, Totality},
     curios_prelude::with_prelude,
     curios_text::RootSource,
@@ -256,7 +256,7 @@ let subject : /std/Nat = double(2) + spin(0);
 ";
     let mut functions = Vec::new();
     compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         &entrypoint_of(source),
         &RootSource::none(),
         |stage| {

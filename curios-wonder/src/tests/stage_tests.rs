@@ -2,7 +2,7 @@
 
 use {
     crate::{Origin, Subject},
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::DEFAULT_BUDGET,
     curios_text::{Overlay, RootSource},
     std::path::Path,
 };
@@ -11,7 +11,7 @@ use {
 fn rung(name: &str, text: &str) -> Result<(String, crate::Rendering), crate::Refusal> {
     let mut handed = String::new();
     let reached = crate::stage(
-        DEFAULT_STEP_BUDGET,
+        DEFAULT_BUDGET,
         Subject::Entry {
             units: Vec::new(),
             origin: Origin::Text {
@@ -80,7 +80,7 @@ fn a_library_is_reprinted_at_a_units_rungs_and_no_other() {
         let mut handed = String::new();
 
         crate::unit_stage(
-            DEFAULT_STEP_BUDGET,
+            DEFAULT_BUDGET,
             vec![library],
             file,
             &overlay,

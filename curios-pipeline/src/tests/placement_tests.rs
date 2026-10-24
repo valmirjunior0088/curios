@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    crate::{DEFAULT_BUDGET, compile_with_prelude},
     curios_text::RootSource,
     curios_utilities::Report,
 };
@@ -10,14 +10,9 @@ use {
 /// What `source` is refused with, as a compilation reports it.
 fn refusal(source: &str) -> Vec<Report> {
     let entrypoint = entrypoint_of(source);
-    let refused = compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |_| {},
-    )
-    .map(|_| ())
-    .expect_err("the fixture is refused");
+    let refused = compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
+        .map(|_| ())
+        .expect_err("the fixture is refused");
 
     refused.reports().to_vec()
 }

@@ -26,12 +26,9 @@ fn every_stage_is_observed_once_in_names_order() {
     );
     let mut seen = Vec::new();
 
-    compile_with_prelude(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        &RootSource::none(),
-        |stage| seen.push(stage.name()),
-    )
+    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
+        seen.push(stage.name())
+    })
     .unwrap();
 
     // Every name but the last: `wasm-optm` is the downstream-emitted observation `Stage::WasmOptm`'s rustdoc records — the pure pipeline has no Binaryen, so its absence here is the deliberate deviation, pinned rather than allowed.
