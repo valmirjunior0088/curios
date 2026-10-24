@@ -1,15 +1,18 @@
-//! What both checkers share about an arm's case equation: which spellings of a scrutinee carry one, which value of a scrutinee is another case than an arm's, how far a dispatch is opened to resolve its spelling, which recorded equation a probe could reach, and which terms an equation answers.
+//! What both checkers share about an arm's case equation and the scrutinee it is recorded under: which spellings of a scrutinee carry one, which value of a scrutinee is another case than an arm's, what an elimination reads a stuck scrutinee as, how far a dispatch is opened to resolve its spelling, which recorded equation a probe could reach, and which terms an equation answers.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::{
-        Classes, Driver, Invert, Judge, atoms_of, classable, classed, intrinsics_agree,
-        invert_indices,
+        Classes, Driver, Invert, Judge, atoms_in, atoms_of, classable, classed, classed_in,
+        intrinsics_agree, invert_indices,
     },
     curios_algebra::{Carrier, Operation},
-    curios_core::{Cost, Declaration, Free, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term},
+    curios_core::{
+        Cases, Cost, Declaration, Free, Intrinsic, Nat, ReduceError, Reducer, Subterm, Term,
+        bool_value, is_bool_connective,
+    },
     curios_utilities::SyntaxRegistry,
     std::{mem, slice},
 };
@@ -62,6 +65,72 @@ fn stands_as_a_case(term: &Term) -> bool {
         Subterm::Intrinsic(Intrinsic::Nat(_)) => Nat::is_zero(&Nat::decompose(term).1),
         _ => false,
     }
+}
+
+/// What [`read_scrutinee`] came to.
+pub enum ScrutineeRead {
+    /// The value the elimination takes apart: a literal, or a successor.
+    Value(Term),
+    /// Nothing decided, which leaves the elimination where it stood.
+    Silent,
+    /// Nothing decided, and some two of the scrutinee's atoms may be one: the checker classes them and asks [`read_scrutinee_classed`].
+    Atoms(Vec<Term>),
+}
+
+/// What the elimination `cases` reads its scrutinee as, `forced` being the scrutinee as reduction forced it, where the carriers' algebra decides more of it than the fold did: a `Bool` connective as the literal its decision diagram is ([`bool_value`]), and a structural `Nat` with no floor as the successor its products of two symbolic sums distribute to ([`Nat::normalize`]). Conversion holds the scrutinee equal to that value and is a congruence, so it holds the match equal to that value's arm; read here, reduction reaches the arm too.
+///
+/// **A value only where the elimination then takes an arm**, a literal or a successor, so no stuck form is respelled; and never a disequality, a diagram that is no constant saying nothing. A literal switch reads a literal, which no distribution of a symbolic product makes, and a match of any other kind reads nothing here.
+///
+/// **Both checkers call it, in both reductions**, since the diagram and the distribution ask no judgment, as a fold asks none. Where the diagram decides nothing and some two of the connective's atoms may be one, they are handed back for a judgment's reduction to class; where none may, the readers class the connective's nodes and it is read again, as [`connectives_agree`](crate::connectives_agree) reads a pair.
+pub fn read_scrutinee(
+    reducer: &mut impl Reducer,
+    cases: &Cases,
+    forced: &Term,
+) -> Result<ScrutineeRead, ReduceError> {
+    match cases {
+        Cases::Bool { .. } if is_bool_connective(forced) => {
+            curios_profile::profile!("read_scrutinee");
+            if let Some(value) = bool_value(reducer, forced)? {
+                return Ok(ScrutineeRead::Value(Term::intrinsic(Intrinsic::Bool(
+                    value,
+                ))));
+            }
+            let atoms = atoms_in(reducer, forced)?;
+            if classable(&atoms) {
+                return Ok(ScrutineeRead::Atoms(atoms));
+            }
+            Ok(
+                match read_scrutinee_classed(reducer, forced, &mut Classes::default())? {
+                    Some(value) => ScrutineeRead::Value(value),
+                    None => ScrutineeRead::Silent,
+                },
+            )
+        }
+        Cases::FreeMonoid {
+            carrier: curios_core::Carrier::Nat { .. },
+        } if Nat::decompose(forced).0.is_zero() && Nat::has_stuck_product(forced) => {
+            curios_profile::profile!("read_scrutinee");
+            let distributed = Nat::normalize(reducer, forced.clone())?;
+            Ok(match Nat::decompose(&distributed).0.is_zero() {
+                true => ScrutineeRead::Silent,
+                false => ScrutineeRead::Value(distributed),
+            })
+        }
+        _ => Ok(ScrutineeRead::Silent),
+    }
+}
+
+/// [`read_scrutinee`]'s connective read again as its partition spells it, each opaque atom as its class's representative and each node as the first node its readers hold it one with: the literal it is then, or `None`, which says nothing.
+pub fn read_scrutinee_classed(
+    reducer: &mut impl Reducer,
+    forced: &Term,
+    classes: &mut Classes,
+) -> Result<Option<Term>, ReduceError> {
+    let classed = classed_in(reducer, forced, classes)?;
+    if classed == *forced {
+        return Ok(None);
+    }
+    Ok(bool_value(reducer, &classed)?.map(|value| Term::intrinsic(Intrinsic::Bool(value))))
 }
 
 /// Whether `candidate` could be the term `key` reduces to, as conversion reads a term — tested without reducing anything. `proofs` is the binders `candidate` names that are themselves proofs.

@@ -2,7 +2,7 @@
 //!
 //! The fold beside each connective takes the laws one node can see — a unit, an absorber, a repeated operand, an operand beside its own negation — and the peel compares two `&&` trees, or two `||` trees, as sets of leaves. Neither reaches a law that relates *different* connectives: De Morgan, absorption, distribution. Those have no local statement, and a normal form that would make them structural is a rewriting one, refused twice over — a guard's refinement is keyed on its written spelling (`documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`), and a fold that normalizes a tree whole pays for the whole tree at every leaf.
 //!
-//! So the decision is made where two terms are *compared*, asked for by name in both converters as [`super::normalize_bool`] and [`super::align_comparisons`] are, and it changes no spelling. Both sides are read as formulas over their atoms — every leaf that is not itself a connective or a literal, forced first, since the fold leaves a stuck connective's right operand as written — and compared by a reduced ordered decision diagram over those atoms (`curios-algebra`'s `Agreement`), which agrees exactly where the two agree at every assignment of them. A leaf is known as `Bool` knows its atoms (`crate::atoms`): a comparison by what it states, so `x + 1 <= y` is the atom `x < y` is, and `y < x + 1` that atom negated.
+//! So the decision is made where two terms are *compared*, asked for by name in both converters as [`super::normalize_bool`] and [`super::align_comparisons`] are, and where one is taken apart, an elimination asking which literal its scrutinee is ([`bool_value`]); it changes no spelling. Both sides are read as formulas over their atoms — every leaf that is not itself a connective or a literal, forced first, since the fold leaves a stuck connective's right operand as written — and compared by a reduced ordered decision diagram over those atoms (`curios-algebra`'s `Agreement`), which agrees exactly where the two agree at every assignment of them. A leaf is known as `Bool` knows its atoms (`crate::atoms`): a comparison by what it states, so `x + 1 <= y` is the atom `x < y` is, and `y < x + 1` that atom negated.
 //!
 //! **Agreement everywhere is equality; anything else is nothing.** Treating the atoms as independent *over*-approximates the values they can take together: `x < y` and `x < y + 1` are two atoms that are not independent at all, and the diagram still reads every combination the real values can reach, so two formulas that agree at every assignment agree at the real ones. For the same reason a disagreement proves nothing — the assignment it happens at may be one no value reaches — so this never answers a disequality, and inversion is handed no impossibility.
 //!
@@ -118,6 +118,24 @@ pub fn decide_bool(
     loop {
         if let Some(agree) = agreement.step(|units| reducer.spend(Cost::decision(units)))? {
             return Ok(agree);
+        }
+    }
+}
+
+/// The literal a `Bool` term is at every assignment of its atoms, where it is one: `None` is undecided and never a third value. The term is read once, as [`decide_bool`] reads two, and its diagram built and charged as theirs is; a literal adds no atom to a pair, so a term agrees with `false` or with `true` exactly where its own diagram is that constant, and one read answers both. What an elimination asks of a connective it takes apart. A term headed by no connective is its own literal or none.
+pub fn bool_value(reducer: &mut impl Reducer, term: &Term) -> Result<Option<bool>, ReduceError> {
+    if !is_bool_connective(term) {
+        return Ok(term.as_bool());
+    }
+    curios_profile::profile!("truth::bool_value");
+
+    let mut table = Table::default();
+    let root = table.read(reducer, term.clone())?;
+
+    let mut valuation = table.formula.valuation(root);
+    loop {
+        if let Some(value) = valuation.step(|units| reducer.spend(Cost::decision(units)))? {
+            return Ok(value);
         }
     }
 }

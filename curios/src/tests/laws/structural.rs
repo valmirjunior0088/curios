@@ -147,6 +147,53 @@ pub(super) const SEEDS: &[Seeds] = &[
             ),
         ],
     },
+    // Iota modulo the theory: a scrutinee the carriers' algebra holds equal to a literal or a successor where the fold leaves it standing — a connective's right operand as written under a stuck left, a product of two symbolic sums undistributed — is that value where a match takes it apart. Each near miss is a scrutinee the theory leaves open.
+    Seeds {
+        type_: "(Nat) -> Nat",
+        binders: "g: (Nat) -> Nat, k: (Nat) -> Nat, b: Bool, c: Bool, x: Nat, y: Nat",
+        compound: Some(Compound {
+            binder: "g: (Nat) -> Nat",
+            term: "(z: Nat) => k(z + 1)",
+            binders: "",
+        }),
+        seeds: &[
+            held(
+                "iota at Bool over a contradiction",
+                "match b && Bool/not(b): (_) => (Nat) -> Nat | true => k | false => g end",
+                "g",
+            ),
+            held(
+                "iota at Bool over a contradiction across connectives",
+                "match (b || c) && Bool/not(b) && Bool/not(c): (_) => (Nat) -> Nat | true => k | false => g end",
+                "g",
+            ),
+            held(
+                "iota at Bool over a tautology",
+                "match b || Bool/not(b): (_) => (Nat) -> Nat | true => g | false => k end",
+                "g",
+            ),
+            held(
+                "iota at Bool over comparisons by what they state",
+                "match (x < y) && (y <= x): (_) => (Nat) -> Nat | true => k | false => g end",
+                "g",
+            ),
+            miss(
+                "iota at Bool over a connective the theory leaves open",
+                "match b && c: (_) => (Nat) -> Nat | true => k | false => g end",
+                "g",
+            ),
+            held(
+                "iota at Nat over a product of two sums",
+                "match (x + y + 1) * (y + x + 1): (_) => (Nat) -> Nat | 0 => k | m + 1 => g end",
+                "g",
+            ),
+            miss(
+                "iota at Nat over a product of two sums with no floor",
+                "match (x + y) * (y + x): (_) => (Nat) -> Nat | 0 => k | m + 1 => g end",
+                "g",
+            ),
+        ],
+    },
     Seeds {
         type_: "{Nat, Nat}",
         binders: "p: {Nat, Nat}",

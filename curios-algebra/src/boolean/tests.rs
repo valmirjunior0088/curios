@@ -189,6 +189,44 @@ fn a_pair_is_decided_alike_under_every_numbering_of_its_atoms() {
     }
 }
 
+// A formula's own diagram is the literal it agrees with: over formulas drawn at every size up to eight atoms, the valuation is `false` or `true` exactly where the comparison against that literal agrees, and it costs what that one comparison does, so one diagram answers both literals. The draws reach both literals.
+#[test]
+fn a_formula_is_valued_as_the_literal_it_agrees_with() {
+    let mut draws = Draws::new();
+    let mut constants = [0, 0];
+    for _ in 0..4000 {
+        let atoms = 1 + draws.below(8);
+        let mut formula = over(atoms);
+        let (root, _) = draws.pair(&mut formula, atoms);
+        let falsity = formula.push(Node::Literal(false));
+        let truth = formula.push(Node::Literal(true));
+        let value = valued(&formula, root);
+        assert_eq!(
+            value == Some(false),
+            diagrammed(&formula, root, falsity),
+            "{:?} at {root}",
+            formula.nodes
+        );
+        assert_eq!(
+            value == Some(true),
+            diagrammed(&formula, root, truth),
+            "{:?} at {root}",
+            formula.nodes
+        );
+        assert_eq!(
+            valuation_charged(&formula, root),
+            charged(&formula, root, falsity)
+        );
+        if let Some(value) = value {
+            constants[usize::from(value)] += 1;
+        }
+    }
+    assert!(
+        constants.iter().all(|&count| count > 0),
+        "the draws reach {constants:?} contradictions and tautologies"
+    );
+}
+
 /// `(a0 || … || ak) && ¬a0 && … && ¬ak` over the `count` atoms from `first`, a contradiction: appended, its root's position.
 fn contradiction(formula: &mut Formula, first: usize, count: usize) -> usize {
     let atom = |formula: &mut Formula, index, negated| formula.push(Node::Atom { index, negated });

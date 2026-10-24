@@ -139,3 +139,19 @@ fn a_residual_keeps_the_terms_it_was_read_from() {
         "and the right one is `c · c` as written"
     );
 }
+
+// A product of two sums distributed under a sum is merged into it: `(a + w + 1) * (w + a + 1) + y` normalizes to one sum of six monomials over the product's floor, so the successor the product holds is the whole sum's, which a structural elimination reads.
+#[test]
+fn a_product_distributed_under_a_sum_is_merged_into_it() {
+    let (a, w, y) = (sym(0, "a"), sym(1, "w"), sym(2, "y"));
+    let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+    let sum = |first: &Term, second: &Term| add(add(first.clone(), second.clone()), one.clone());
+    let product = Term::intrinsic(Intrinsic::nat_mul(sum(&a, &w), sum(&w, &a)));
+
+    let normalized =
+        Nat::normalize(&mut crate::Folding, add(product, y.clone())).expect("normalizes");
+    let (floor, inner) = Nat::decompose(&normalized);
+    assert_eq!(floor, Natural::from(1usize), "{normalized}");
+    assert_eq!(Nat::summands(&inner).len(), 6, "{normalized}");
+    assert_eq!(occurrences(&inner, &y), 1);
+}

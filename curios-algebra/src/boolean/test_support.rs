@@ -30,6 +30,31 @@ pub(super) fn diagrammed(formula: &Formula, left: usize, right: usize) -> bool {
     }
 }
 
+/// The literal the diagram values the formula rooted at `root` as, where it is one.
+pub(super) fn valued(formula: &Formula, root: usize) -> Option<bool> {
+    let mut valuation = formula.valuation(root);
+    loop {
+        if let Ok(Some(value)) = valuation.step(|_| Ok::<(), ()>(())) {
+            return value;
+        }
+    }
+}
+
+/// What the diagram charges for valuing the formula rooted at `root`, in its units.
+pub(super) fn valuation_charged(formula: &Formula, root: usize) -> u64 {
+    let mut valuation = formula.valuation(root);
+    let mut spent = 0u64;
+    loop {
+        let step = valuation.step(|units| {
+            spent = spent.saturating_add(units);
+            Ok::<(), ()>(())
+        });
+        if let Ok(Some(_)) = step {
+            return spent;
+        }
+    }
+}
+
 /// What the diagram charges for deciding the formulas rooted at `left` and `right`, in its units.
 pub(super) fn charged(formula: &Formula, left: usize, right: usize) -> u64 {
     let mut agreement = formula.agreement(left, right);

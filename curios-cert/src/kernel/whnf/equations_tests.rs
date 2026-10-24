@@ -1367,3 +1367,60 @@ fn a_fold_inside_a_question_is_not_taken_again() {
     );
     assert_eq!(whnf(&mut kernel, nested).expect("reduces").as_bool(), None);
 }
+
+/// A stuck elimination takes the arm the carriers' algebra reads its scrutinee as, in both reductions: a `Bool` match on `(a < b && c < b) && ¬(a < b)`, a contradiction across connectives no fold sees, is its false arm, and a structural `Nat` match on `(a + b + 1) * (b + a + 1)`, whose distribution has a floor, is its successor arm. Plain reduction takes both, the theory asking no judgment. The controls are a connective the decision diagram leaves open and a product with no floor, whose matches stand. `curios-elab`'s `reduce::reduction_tests` holds this proposition under this name.
+#[test]
+fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
+    let mut kernel = kernel();
+    let asked = Asked::over(&mut kernel);
+    let [a, b, c] = [&asked.a, &asked.b, &asked.c].map(Term::free_var);
+    let less =
+        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::nat_lt(left.clone(), right.clone()));
+    let and = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolAnd(left, right));
+    let not = |term: Term| {
+        Term::intrinsic(Intrinsic::BoolXor(
+            term,
+            Term::intrinsic(Intrinsic::Bool(true)),
+        ))
+    };
+    let add = |left: &Term, right: &Term| {
+        Term::intrinsic(Intrinsic::nat_add(left.clone(), right.clone()))
+    };
+    let product = |floor: usize| {
+        Term::intrinsic(Intrinsic::nat_mul(
+            Term::intrinsic(Intrinsic::nat_add(add(&a, &b), nat(floor))),
+            Term::intrinsic(Intrinsic::nat_add(add(&b, &a), nat(floor))),
+        ))
+    };
+    let on_bool = |scrutinee: Term| Term::bool_match(scrutinee, None, nat_type(), nat(2), nat(1));
+    let on_nat = |scrutinee: Term| {
+        Term::nat_match(
+            scrutinee,
+            None,
+            nat_type(),
+            nat(10),
+            &binder(20, "pred"),
+            &binder(21, "hypothesis"),
+            nat(20),
+        )
+    };
+
+    let contradiction = on_bool(and(and(less(&a, &b), less(&c, &b)), not(less(&a, &b))));
+    let successor = on_nat(product(1));
+    for decided in [&contradiction, &successor] {
+        let arm = whnf(&mut kernel, decided.clone()).expect("reduces");
+        assert!(arm.as_nat().is_some(), "{decided} stands as {arm}");
+        assert_eq!(
+            Env::force(&mut kernel, decided),
+            Ok(arm),
+            "plain reduction takes the arm too"
+        );
+    }
+    assert_eq!(whnf(&mut kernel, contradiction), Ok(nat(2)));
+    assert_eq!(whnf(&mut kernel, successor), Ok(nat(20)));
+
+    for open in [on_bool(and(less(&a, &b), less(&c, &b))), on_nat(product(0))] {
+        let stuck = whnf(&mut kernel, open.clone()).expect("reduces");
+        assert!(stuck.as_nat().is_none(), "{open} takes an arm: {stuck}");
+    }
+}

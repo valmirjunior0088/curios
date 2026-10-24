@@ -573,7 +573,7 @@ impl Nat {
         Self::rebuild(floor, Self::chained(None, &summands))
     }
 
-    /// A weak-head `Nat` with every product of two symbolic sums distributed, and the result re-merged — the one normalization the fold does not perform on its own, asked for by name where a comparison needs the value: `compare_nat`, the converters' rule for two symbolic `Nat`s. See `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
+    /// A weak-head `Nat` with every product of two symbolic sums distributed, and the result re-merged — the one normalization the fold does not perform on its own, asked for by name where a comparison needs the value: `compare_nat`, the converters' rule for two symbolic `Nat`s, and a structural elimination's stuck scrutinee (`curios-analysis`'s `read_scrutinee`). See `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
     ///
     /// The fold keeps every sum merged and every difference cancelled, so this walks only into products and the sums that hold them; a term with no stuck product comes back untouched. A memo keyed on node identity keeps a shared operand distributed once and holds each input alive beside its answer, since an identity is an address; the descent re-enters [`recurse`] per level. A product it distributes is charged as the fold charges one, by what distribution writes (`product_bound`), and a monomial the fold already wrote is handed back as it stands.
     ///
@@ -624,12 +624,19 @@ impl Nat {
                         .iter()
                         .map(|summand| Self::normalize_within(reducer, summand.clone(), memo))
                         .collect::<Result<Vec<_>, _>>()?;
-                    // A sum no product changed stands as the fold left it; one that changed is written back, and charged as a sum is.
+                    // A sum no product changed stands as the fold left it; one that changed is written back, and charged as a sum is. A summand a product distributed into is a sum of its own, so its floor and its summands are merged into this sum's: the floor is then all the sum holds past its symbolic summands, which a successor's elimination reads.
                     match summands == read {
                         true => reduced.clone(),
                         false => {
-                            reducer.spend(sum_bound(summands.len()))?;
-                            Self::sum_over_floor(summands, floor)
+                            let mut floor = floor;
+                            let mut merged = Vec::with_capacity(summands.len());
+                            for summand in &summands {
+                                let (inner_floor, inner) = Self::decompose(summand);
+                                floor += inner_floor;
+                                merged.extend(Self::summands(&inner));
+                            }
+                            reducer.spend(sum_bound(merged.len()))?;
+                            Self::sum_over_floor(merged, floor)
                         }
                     }
                 }

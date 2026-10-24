@@ -1,6 +1,6 @@
-//! The two-element Boolean algebra: the identities its connectives satisfy, agreement of two leaf sets, and agreement of two formulas over their atoms, decided by a reduced ordered decision diagram built for one comparison.
+//! The two-element Boolean algebra: the identities its connectives satisfy, agreement of two leaf sets, and agreement of two formulas over their atoms, or the literal one formula is at all of them, decided by a reduced ordered decision diagram built for one question.
 //!
-//! **Agreement everywhere is equality; anything else is nothing.** A diagram treats its atoms as independent, which *over*-approximates the values they can take together — `x < y` and `x < y + 1` are two atoms that are not independent at all — so every combination the real values reach is among those it reads, and two formulas that agree at every assignment agree at the real ones. For the same reason a disagreement proves nothing: the assignment it happens at may be one no value reaches. So [`Agreement`] answers equality or nothing, never a disequality, and inversion is handed no impossibility.
+//! **Agreement everywhere is equality; anything else is nothing.** A diagram treats its atoms as independent, which *over*-approximates the values they can take together — `x < y` and `x < y + 1` are two atoms that are not independent at all — so every combination the real values reach is among those it reads, and two formulas that agree at every assignment agree at the real ones. For the same reason a disagreement proves nothing: the assignment it happens at may be one no value reaches. So [`Agreement`] answers equality or nothing, never a disequality, and [`Valuation`] a literal or nothing, never that a formula's value varies, and inversion is handed no impossibility.
 //!
 //! **The price is the theory's, and it is paid a step at a time.** Deciding two formulas equivalent is co-NP-complete, so no procedure is cheap on every pair, and a limit on the atoms a pair holds breaks transitivity and closure under substitution at any value it takes: two contradictions over more than half of it each agree with `false` and not with each other. So [`Agreement`] declines nothing. It reports each step's charge before it takes it — a unit a step, and the logical size of each node and memo entry it stores — its caller spends that from the reduction budget, and a pair the budget cannot finish exhausts it, which a larger budget does not. The units are a function of the two formulas as read, their graph and the order their atoms were met in, and of no host, so one pair costs the same on every target.
 //!
@@ -49,16 +49,17 @@ impl Formula {
     /// The comparison of the formulas rooted at `left` and `right`: a machine its caller steps, spending each step's charge before the step is taken.
     pub fn agreement(&self, left: usize, right: usize) -> Agreement<'_> {
         Agreement {
-            formula: self,
+            diagram: Diagram::of(self),
             left,
             right,
-            nodes: Vec::new(),
-            unique: HashMap::new(),
-            computed: HashMap::new(),
-            built: Vec::with_capacity(self.nodes.len()),
-            frames: Vec::new(),
-            results: Vec::new(),
-            set_up: false,
+        }
+    }
+
+    /// The literal the formula rooted at `root` is at every assignment of its atoms, where it is one: a machine stepped and charged as [`Formula::agreement`]'s is. A literal adds no atom to a comparison, so a formula agrees with `false` or with `true` exactly where its own diagram is that constant, and one diagram answers both.
+    pub fn valuation(&self, root: usize) -> Valuation<'_> {
+        Valuation {
+            diagram: Diagram::of(self),
+            root,
         }
     }
 }
@@ -119,11 +120,52 @@ enum Frame {
     Join(Gate, Id, Id, usize),
 }
 
-/// Two formulas compared by a reduced ordered decision diagram, one step at a time: each side's diagram is built over one unique table, in the order of the formula's postorder and with its atoms at the levels of their indices, and the two agree where their roots are one node. A formula node met again is the diagram it was built into, so what is built is the formula's graph and never its tree.
+/// Two formulas compared by a reduced ordered decision diagram, one step at a time: the two agree where their roots are one node.
 pub struct Agreement<'a> {
-    formula: &'a Formula,
+    diagram: Diagram<'a>,
     left: usize,
     right: usize,
+}
+
+impl Agreement<'_> {
+    /// Takes one step, `charge`d its units before it stores anything, and answers once the two diagrams stand: `Some(true)` where the formulas agree at every assignment of their atoms, `Some(false)` where they do not, which is undecided and never a disequality. A failed charge is handed back with nothing taken.
+    pub fn step<E>(
+        &mut self,
+        charge: impl FnOnce(u64) -> Result<(), E>,
+    ) -> Result<Option<bool>, E> {
+        Ok(self
+            .diagram
+            .step(charge)?
+            .then(|| self.diagram.built[self.left] == self.diagram.built[self.right]))
+    }
+}
+
+/// A formula valued by a reduced ordered decision diagram, one step at a time: it is a literal at every assignment of its atoms where its root is that constant.
+pub struct Valuation<'a> {
+    diagram: Diagram<'a>,
+    root: usize,
+}
+
+impl Valuation<'_> {
+    /// Takes one step, `charge`d as [`Agreement::step`] is, and answers once the diagram stands: `Some(Some(value))` where the formula is `value` at every assignment of its atoms, and `Some(None)` where it is no one literal, which is undecided and never a third value.
+    pub fn step<E>(
+        &mut self,
+        charge: impl FnOnce(u64) -> Result<(), E>,
+    ) -> Result<Option<Option<bool>>, E> {
+        Ok(self
+            .diagram
+            .step(charge)?
+            .then(|| match self.diagram.built[self.root] {
+                FALSE => Some(false),
+                TRUE => Some(true),
+                _ => None,
+            }))
+    }
+}
+
+/// The diagrams of a formula's nodes, built one step at a time over one unique table, in the order of the formula's postorder and with its atoms at the levels of their indices. A formula node met again is the diagram it was built into, so what is built is the formula's graph and never its tree.
+struct Diagram<'a> {
+    formula: &'a Formula,
     /// Each node past the two constants: its variable's level, its low branch and its high branch.
     nodes: Vec<(usize, Id, Id)>,
     unique: HashMap<(usize, Id, Id), Id>,
@@ -138,12 +180,22 @@ pub struct Agreement<'a> {
     set_up: bool,
 }
 
-impl Agreement<'_> {
-    /// Takes one step, `charge`d its units before it stores anything, and answers once the two diagrams stand: `Some(true)` where the formulas agree at every assignment of their atoms, `Some(false)` where they do not, which is undecided and never a disequality. A failed charge is handed back with nothing taken.
-    pub fn step<E>(
-        &mut self,
-        charge: impl FnOnce(u64) -> Result<(), E>,
-    ) -> Result<Option<bool>, E> {
+impl<'a> Diagram<'a> {
+    fn of(formula: &'a Formula) -> Self {
+        Diagram {
+            formula,
+            nodes: Vec::new(),
+            unique: HashMap::new(),
+            computed: HashMap::new(),
+            built: Vec::with_capacity(formula.nodes.len()),
+            frames: Vec::new(),
+            results: Vec::new(),
+            set_up: false,
+        }
+    }
+
+    /// Takes one step, `charge`d its units before it stores anything, and answers `true` once every formula node's diagram stands. A failed charge is handed back with nothing taken.
+    fn step<E>(&mut self, charge: impl FnOnce(u64) -> Result<(), E>) -> Result<bool, E> {
         if !self.set_up {
             let levels = self.formula.atoms as u64;
             charge(
@@ -152,7 +204,7 @@ impl Agreement<'_> {
                 ),
             )?;
             self.set_up = true;
-            return Ok(None);
+            return Ok(false);
         }
         match self.frames.pop() {
             Some(Frame::Enter(gate, u, v)) => self.enter(gate, u, v, charge)?,
@@ -166,7 +218,7 @@ impl Agreement<'_> {
             None => {
                 let position = self.built.len();
                 let Some(&node) = self.formula.nodes.get(position) else {
-                    return Ok(Some(self.built[self.left] == self.built[self.right]));
+                    return Ok(true);
                 };
                 match node {
                     Node::Literal(value) => {
@@ -191,7 +243,7 @@ impl Agreement<'_> {
                 }
             }
         }
-        Ok(None)
+        Ok(false)
     }
 
     /// A connective's application to the diagrams two earlier formula nodes were built into, as its first step.

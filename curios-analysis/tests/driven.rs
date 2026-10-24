@@ -9,10 +9,10 @@
 use {
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_analysis::{
-        Answered, Classes, Declarations, Invert, Judge, PositivityRefusal, another_case, answers,
-        answers_classed, group_totality, holds_no_type, invert_indices, one_up_to_instances,
-        positivity_vectors, solve_indices, struct_reaches_itself, test_support::SYNTAX,
-        variance_vectors,
+        Answered, Classes, Declarations, Invert, Judge, PositivityRefusal, ScrutineeRead,
+        another_case, answers, answers_classed, group_totality, holds_no_type, invert_indices,
+        one_up_to_instances, positivity_vectors, read_scrutinee, solve_indices,
+        struct_reaches_itself, test_support::SYNTAX, variance_vectors,
     },
     curios_cert::Kernel,
     curios_core::{
@@ -1966,6 +1966,92 @@ fn an_equation_answers_a_term_the_readers_hold_equal_to_its_key() {
         answers(&mut kernel, &commuted, &total, &nat(0)),
         Ok(Answered::Silent)
     );
+}
+
+/// One rule says what an elimination reads a stuck scrutinee as, and both reducers ask it: a `Bool` connective as the literal its decision diagram is at every assignment of its atoms — a contradiction across connectives `false`, a tautology `true` — and a structural `Nat` with no floor as the successor its products of two sums distribute to.
+///
+/// The controls are what the rule must not answer: a connective the diagram leaves open, a product whose distribution has no floor, the same product under a literal switch, and a connective under a match of another kind.
+#[test]
+fn an_elimination_reads_its_scrutinee_as_the_algebra_decides_it() {
+    let mut kernel = kernel();
+    let [b, c, x, y] = [1, 2, 3, 4].map(|index| Free::local(index, None));
+    for binder in [&b, &c] {
+        kernel.assume(binder, &Term::intrinsic(Intrinsic::BoolType));
+    }
+    for binder in [&x, &y] {
+        kernel.assume(binder, &Term::intrinsic(Intrinsic::NatType));
+    }
+    let [b, c, x, y] = [b, c, x, y].map(|binder| Term::free_var(&binder));
+    let truth = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+    let nat = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
+    let and = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolAnd(left, right));
+    let or = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolOr(left, right));
+    let not = |term: Term| Term::intrinsic(Intrinsic::BoolXor(term, truth(true)));
+    let add = |left: Term, right: Term| Term::intrinsic(Intrinsic::nat_add(left, right));
+    let product = |floor: usize| {
+        let sum = |first: &Term, second: &Term| add(add(first.clone(), second.clone()), nat(floor));
+        Term::intrinsic(Intrinsic::nat_mul(sum(&x, &y), sum(&y, &x)))
+    };
+    let cases_of = |matched: Term| match &*matched {
+        Subterm::Match(Match { cases, .. }) => cases.clone(),
+        _ => unreachable!("a match"),
+    };
+    let nat_type = || Term::intrinsic(Intrinsic::NatType);
+    let bools = cases_of(Term::bool_match(
+        truth(true),
+        None,
+        nat_type(),
+        nat(2),
+        nat(1),
+    ));
+    let naturals = cases_of(Term::nat_match(
+        nat(0),
+        None,
+        nat_type(),
+        nat(10),
+        &Free::local(5, Some("pred")),
+        &Free::local(6, Some("hypothesis")),
+        nat(20),
+    ));
+    let switch = Cases::Switch {
+        cases: vec![(Natural::from(0usize), nat(10))],
+        default: nat(20),
+    };
+    // The scrutinee as the kernel forces it, and what the rule reads it as.
+    let mut read = |cases: &Cases, scrutinee: Term| {
+        let forced = kernel
+            .reduce_forced(scrutinee)
+            .expect("the kernel forces it");
+        match read_scrutinee(&mut kernel, cases, &forced).expect("the kernel reads it") {
+            ScrutineeRead::Value(value) => Some(value),
+            ScrutineeRead::Silent | ScrutineeRead::Atoms(_) => None,
+        }
+    };
+
+    assert_eq!(
+        read(&bools, and(and(b.clone(), c.clone()), not(b.clone()))),
+        Some(truth(false)),
+        "a contradiction across connectives"
+    );
+    assert_eq!(
+        read(&bools, or(b.clone(), not(and(b.clone(), c.clone())))),
+        Some(truth(true)),
+        "a tautology across connectives"
+    );
+    assert!(
+        read(&naturals, product(1)).is_some_and(|value| !Nat::decompose(&value).0.is_zero()),
+        "a product of two sums with a floor is a successor"
+    );
+    assert!(
+        read(&naturals, add(product(1), x.clone()))
+            .is_some_and(|value| !Nat::decompose(&value).0.is_zero()),
+        "and so is a sum that holds one"
+    );
+
+    assert_eq!(read(&bools, and(b.clone(), c.clone())), None);
+    assert_eq!(read(&naturals, product(0)), None);
+    assert_eq!(read(&switch, product(1)), None);
+    assert_eq!(read(&naturals, and(and(b.clone(), c), not(b))), None);
 }
 
 /// A stuck call the readers decide nothing of is handed back whole, and where it and the key are two calls of one head apart in its universe instance alone, a checker asks about them by their arguments, by the statement a classing reads: an instance is no part of a truth value, so `f.{1}(a)` is the term of a key `f.{0}(a)` whose equation assumes `true`, and `f.{1}(b)` is not.

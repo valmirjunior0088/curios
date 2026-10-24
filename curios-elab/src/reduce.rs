@@ -17,9 +17,9 @@ use {
     },
     crate::{Error, classing, convert_at, is_prop, reduce_with, same_uncommitted},
     curios_analysis::{
-        Answered, Classes, Driver, Within, answers, answers_classed, apart_in_instance,
-        atoms_within, case_target_indices, could_reduce_to, holds_no_type, one_up_to_instances,
-        pinned_instance, read_operands, refold,
+        Answered, Classes, Driver, ScrutineeRead, Within, answers, answers_classed,
+        apart_in_instance, atoms_within, case_target_indices, could_reduce_to, holds_no_type,
+        one_up_to_instances, pinned_instance, read_operands, read_scrutinee, refold,
     },
     curios_core::{
         Advance, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost,
@@ -619,6 +619,14 @@ fn unread_payload(
     };
 
     Ok(Some(fires.then_some(payload)))
+}
+
+/// The scrutinee `forced` as the elimination `cases` reads it, where the carriers' algebra decides more of it than the fold did (`curios_analysis::read_scrutinee`): a `Bool` connective as the literal its decision diagram is, a structural `Nat` as the successor its stuck products distribute to, and `forced` itself where the algebra decides nothing. The kernel's `scrutinee_read`, at the kernel's point. Both reductions take it, the diagram and the distribution asking no judgment.
+fn scrutinee_read(context: &mut Context, cases: &Cases, forced: Term) -> Result<Term, ReduceError> {
+    Ok(match read_scrutinee(context, cases, &forced)? {
+        ScrutineeRead::Value(value) => value,
+        ScrutineeRead::Silent | ScrutineeRead::Atoms(_) => forced,
+    })
 }
 
 /// Dispatch a `match` over its scrutinee's already-reduced-and-forced value, where `forced` is what `reduce_forced` produced for it.
@@ -1429,8 +1437,13 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                         Some(step) => step,
                         None => {
                             let value = reduce(context, m.head)?;
+                            let forced = force_rec(context, value)?;
 
-                            reduce_match(force_rec(context, value)?, m.result, m.cases)
+                            reduce_match(
+                                scrutinee_read(context, &m.cases, forced)?,
+                                m.result,
+                                m.cases,
+                            )
                         }
                     }
                 }

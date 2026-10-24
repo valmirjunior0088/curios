@@ -1922,6 +1922,68 @@ fn a_fold_inside_a_question_is_not_taken_again() {
     );
 }
 
+/// A stuck elimination takes the arm the carriers' algebra reads its scrutinee as, in both reductions: a `Bool` match on `(a < b && c < b) && ¬(a < b)` is its false arm and a structural `Nat` match on `(a + b + 1) * (b + a + 1)` its successor arm, and plain reduction takes both. The controls are a connective the decision diagram leaves open and a product with no floor, whose matches stand. The kernel's `whnf::equations_tests` holds this proposition under this name.
+#[test]
+fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
+    let mut context = context();
+    let asked = Asked::over(&mut context);
+    let [a, b, c] = [&asked.a, &asked.b, &asked.c].map(Term::free_var);
+    let less =
+        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::nat_lt(left.clone(), right.clone()));
+    let and = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolAnd(left, right));
+    let not = |term: Term| {
+        Term::intrinsic(Intrinsic::BoolXor(
+            term,
+            Term::intrinsic(Intrinsic::Bool(true)),
+        ))
+    };
+    let add = |left: &Term, right: &Term| {
+        Term::intrinsic(Intrinsic::nat_add(left.clone(), right.clone()))
+    };
+    let product = |floor: usize| {
+        Term::intrinsic(Intrinsic::nat_mul(
+            Term::intrinsic(Intrinsic::nat_add(add(&a, &b), nat(floor))),
+            Term::intrinsic(Intrinsic::nat_add(add(&b, &a), nat(floor))),
+        ))
+    };
+    let nat_type = || Term::intrinsic(Intrinsic::NatType);
+    let on_bool = |scrutinee: Term| Term::bool_match(scrutinee, None, nat_type(), nat(2), nat(1));
+    let (pred, hypothesis) = (
+        context.fresh(Some("pred")),
+        context.fresh(Some("hypothesis")),
+    );
+    let on_nat = |scrutinee: Term| {
+        Term::nat_match(
+            scrutinee,
+            None,
+            nat_type(),
+            nat(10),
+            &pred,
+            &hypothesis,
+            nat(20),
+        )
+    };
+
+    let contradiction = on_bool(and(and(less(&a, &b), less(&c, &b)), not(less(&a, &b))));
+    let successor = on_nat(product(1));
+    for decided in [&contradiction, &successor] {
+        let arm = reduce(&mut context, decided.clone()).expect("reduces");
+        assert!(arm.as_nat().is_some(), "{decided} stands as {arm}");
+        assert_eq!(
+            curios_analysis::Env::force(&mut context, decided).ok(),
+            Some(arm),
+            "plain reduction takes the arm too"
+        );
+    }
+    assert_eq!(reduce(&mut context, contradiction), Ok(nat(2)));
+    assert_eq!(reduce(&mut context, successor), Ok(nat(20)));
+
+    for open in [on_bool(and(less(&a, &b), less(&c, &b))), on_nat(product(0))] {
+        let stuck = reduce(&mut context, open.clone()).expect("reduces");
+        assert!(stuck.as_nat().is_none(), "{open} takes an arm: {stuck}");
+    }
+}
+
 /// An equation in force follows the solution an arm is checked under: under the guard `f(n) < 5`, an arm that refines `n` to `0` holds `f(0) < 5`, the recorded spelling stepping aside for that instance, and gives both back when it is left. The kernel's `whnf::equations_tests` holds this proposition under this name, by substituting the solution through the arm; here the variable stays spelled, so a term of the arm that still names it — the guard as written, or `f(n + 0) < 5`, which is no key — is read as the arm spells it.
 ///
 /// Mutation-checked four ways. With `Context::refine` restating nothing the instance stays stuck inside the arm. With the recorded equation left answering beside its instance, the recorded key still answers there. With a key spelled as it is written, the guard and its instance are two keys in the arm. With a stuck form put to the reduced spellings as it is written, `f(n + 0) < 5` is put to no equation, the instance naming no `n`. `context::tests` holds an instance that names no local withheld.

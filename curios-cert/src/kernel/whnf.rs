@@ -23,9 +23,9 @@ use {
     super::{Kernel, asked_classes, asked_within, stated_payload, unread_payload},
     crate::{
         accelerable, answers, answers_classed, atoms_within, instantiate_universes_scoped,
-        probe_spellings, read_operands, reduce_closed, reduce_intrinsic, refold,
+        probe_spellings, read_operands, read_scrutinee, reduce_closed, reduce_intrinsic, refold,
     },
-    curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS},
+    curios_analysis::{Answered, RESOLVED_SPELLING_LAYERS, ScrutineeRead},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
         FreeMonoid, Func, Instance, InstanceHead, Intrinsic, Layer, Let, Match, MatchResult, Nat,
@@ -218,8 +218,9 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                     }))),
                     None => {
                         let value = whnf(kernel, head)?;
+                        let forced = force(kernel, value)?;
 
-                        step_match(force(kernel, value)?, result, cases)
+                        step_match(scrutinee_read(kernel, &cases, forced)?, result, cases)
                     }
                 }
             }
@@ -618,6 +619,16 @@ fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, Reduce
         ),
         None => instantiate_universes_scoped(&reduct, &universes).map_err(ReduceError::Universe)?,
     }))
+}
+
+/// The scrutinee `forced` as the elimination `cases` reads it, where the carriers' algebra decides more of it than the fold did (`curios_analysis::read_scrutinee`): a `Bool` connective as the literal its decision diagram is, a structural `Nat` as the successor its stuck products distribute to, and `forced` itself where the algebra decides nothing.
+///
+/// **An elimination reads its scrutinee as conversion does.** Conversion holds the scrutinee equal to that value and is a congruence, so it holds the match equal to the value's arm, and a match left stuck there would be refused against its arm where two steps of conversion hold the two one. Both reductions take it, the diagram and the distribution asking no judgment, as a fold asks none. The elaborator's reducer reads at the same point by the same rule.
+fn scrutinee_read(kernel: &mut Kernel, cases: &Cases, forced: Term) -> Result<Term, ReduceError> {
+    Ok(match read_scrutinee(kernel, cases, &forced)? {
+        ScrutineeRead::Value(value) => value,
+        ScrutineeRead::Silent | ScrutineeRead::Atoms(_) => forced,
+    })
 }
 
 /// Iota: dispatch a `match` on the value `forced` its scrutinee reduced to.

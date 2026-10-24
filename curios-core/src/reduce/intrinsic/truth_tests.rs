@@ -1,7 +1,7 @@
 //! The decision diagram over two `Bool` terms' atoms: what it decides equal, what it leaves alone, and what it is charged; and a connective's leaves as the converters flatten them.
 
 use {
-    super::{decide_bool, normalize_bool, test_support::*},
+    super::{bool_value, decide_bool, normalize_bool, test_support::*},
     crate::{Exhaustion, Intrinsic, Nat, Subterm, Term},
 };
 
@@ -203,3 +203,24 @@ fn a_connective_is_flattened_once_per_subterm() {
     assert_eq!(conjuncts(&flattened), 21);
 }
 
+// A connective is valued as the literal it is at every assignment of its atoms, which no fold sees across connectives: `(b && c) && ¬b` is `false` and `b || ¬(b && c)` is `true`, and `b && c` is no one literal, which is undecided. A literal is itself and an atom none. A web is read once per subterm, so twenty levels of it are valued inside a budget its paths would spend many times over.
+#[test]
+fn a_connective_is_valued_as_the_literal_it_is_everywhere() {
+    let (b, c) = (sym(0, "b"), sym(1, "c"));
+    let valued = |term: &Term| bool_value(&mut Folding, term).expect("reduces");
+
+    assert_eq!(
+        valued(&and(and(b.clone(), c.clone()), not(b.clone()))),
+        Some(false)
+    );
+    assert_eq!(
+        valued(&or(b.clone(), not(and(b.clone(), c.clone())))),
+        Some(true)
+    );
+    assert_eq!(valued(&and(b.clone(), c)), None);
+    assert_eq!(valued(&Term::intrinsic(Intrinsic::Bool(true))), Some(true));
+    assert_eq!(valued(&b), None);
+
+    let mut reducer = Budgeted { remaining: 100_000 };
+    assert_eq!(bool_value(&mut reducer, &web(20)), Ok(None));
+}
