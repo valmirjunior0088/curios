@@ -5,6 +5,7 @@ mod choose_tests;
 mod instance_tests;
 mod matrix_tests;
 mod motive_tests;
+mod order_tests;
 mod pattern_tests;
 mod recording_tests;
 mod refinement_tests;

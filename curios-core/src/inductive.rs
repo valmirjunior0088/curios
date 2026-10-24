@@ -308,7 +308,19 @@ impl<'d> InductInstance<'d> {
         )
     }
 
-    /// Every facet at these universes: what a reader of every constructor — a match, an elimination, a derivation — takes.
+    /// `tag`'s payload at `params`, at these universes ([`InductDecl::instantiate`]), or `None` where `tag` is no case of the declaration.
+    pub fn payload(
+        &self,
+        tag: &Atom,
+        params: &[Term],
+    ) -> Option<Result<Telescope<Vec<Term>>, UniverseError>> {
+        Some(
+            self.constructor(tag)?
+                .map(|constructor| constructor.telescope.open_params(params)),
+        )
+    }
+
+    /// Every facet at these universes: what a reader of every constructor, as a derivation is, takes. A match reads the constructors its arms name, each by [`Self::payload`].
     pub fn whole(&self) -> Result<InductDecl, UniverseError> {
         let mut instantiated = self.declaration.clone();
         instantiated.arity = self.arity()?;

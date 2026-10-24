@@ -17,6 +17,7 @@ use {
     },
     curios_num::{Binary, Natural},
     curios_utilities::Plicity,
+    std::collections::{HashMap, HashSet},
 };
 
 /// A match's scrutinee, elaborated once before any arm is: rebuilt, beside its type reduced — what every eliminator reads its carrier off.
@@ -943,12 +944,21 @@ fn elaborate_bool_match(
 }
 
 /// Whether a proposition may be matched into data: it declares one constructor, and that constructor's index targets pin every payload binder (matching a value against a target recovers the binder, as `Eq`'s `refl(z) : (z, z)` recovers `z`), decided by the walk both checkers share. Occurrence is not determination: `blur(a)` mentions `a` and pins nothing, since `blur` need not be injective. A payload that is a proof is not excused, since the arm would be handed the proof the match was given; and a second constructor the scrutinee's indices rule out is one the kernel counts all the same.
-fn singleton_eliminable(context: &mut Context, induct_decl: &InductDecl, params: &[Term]) -> bool {
-    let [(tag, _)] = induct_decl.constructors.as_slice() else {
-        return false;
+fn singleton_eliminable(
+    context: &mut Context,
+    name: &Global,
+    universes: &Universes,
+    params: &[Term],
+) -> Result<bool, Error> {
+    let payload = match context.induct_decl(name) {
+        Some(family) => match family.constructors.as_slice() {
+            [(tag, _)] => family.at(universes).payload(tag, params),
+            _ => None,
+        },
+        None => None,
     };
-    let Some(payload) = induct_decl.instantiate(tag, params) else {
-        return false;
+    let Some(payload) = payload.transpose()? else {
+        return Ok(false);
     };
 
     // Open the payload telescope under fresh binders; the terminal's indices are the constructor's targets.
@@ -959,7 +969,7 @@ fn singleton_eliminable(context: &mut Context, induct_decl: &InductDecl, params:
     }
     let terminal = cursor.body().expect("a cursor past every entry");
 
-    wholly_pinned(&binders, &terminal)
+    Ok(wholly_pinned(&binders, &terminal))
 }
 
 /// A nominal elimination with its scrutinee and its result resolved: the family the scrutinee's type is an instance of, at its parameters and its indices, and the result each arm is typed at a case of.
@@ -975,8 +985,6 @@ pub(super) struct NominalSplit {
     params: Vec<Term>,
     /// The scrutinee's indices, each reduced where the match stands.
     actual_indices: Vec<Term>,
-    /// The family's declaration at the scrutinee's universe levels.
-    induct_decl: InductDecl,
     result: MatchResult,
     /// The match's own type: the result at the scrutinee's actual indices and the scrutinee itself.
     result_type: Term,
@@ -1022,16 +1030,20 @@ impl NominalSplit {
             .map(|index| reduce_with(context, index))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let Some(induct_decl) = context.induct_decl(&name).cloned() else {
+        let Some(family) = context.induct_decl(&name) else {
             return Err(Error::unknown_declaration(name));
         };
-        let induct_decl = context.instantiate_induct_decl_at(&induct_decl, &universes)?;
+        let (rep_public, module) = (family.rep_public, family.module);
+        // The family's constraints instantiated where the scrutinee stands, once, with the facet the motive reads: every later read of the family is of the constructors the arms name, at these universes.
+        let indices = context
+            .induct_facet(&name, &universes, |at| at.indices_at(&params))
+            .expect("a family the registry holds is read at an occurrence's universes")?;
 
         // Opacity covers every eliminator, including defaults and vacuous or inversion-discharged matches. Check before motives, coverage, or index refinement can reveal representation facts.
-        if !induct_decl.rep_public
+        if !rep_public
             && context
                 .island()
-                .is_some_and(|island| !island.is_within(&induct_decl.module))
+                .is_some_and(|island| !island.is_within(&module))
         {
             return Err(Error::private_representation(name));
         }
@@ -1041,7 +1053,7 @@ impl NominalSplit {
             name: &name,
             universes: &universes,
             params: &params,
-            indices: induct_decl.indices_at(&params),
+            indices,
         };
 
         // An elided motive checked against an expected type takes that type as its *ambient* result: each arm is checked against the expected type with the scrutinee and its variable indices standing for the arm's case, and the match's result is the expected type itself. That is what a hand-written convoy arranges, with no convoy: the ambient form needs no family to close, so a hypothesis whose type mentions the scrutinee rides along unchanged — see `MatchResult::Ambient`. An expression scrutinee takes it too, its syntactic occurrences standing for the case and the arm's refinement reducing the rest, for the reason `resolve_intrinsic_result` gives. A written motive, and inference mode, are a family, checked or solved.
@@ -1061,7 +1073,7 @@ impl NominalSplit {
         }
 
         let proposition = is_prop(context, &head_type)?;
-        let pinned = proposition && singleton_eliminable(context, &induct_decl, &params);
+        let pinned = proposition && singleton_eliminable(context, &name, &universes, &params)?;
 
         Ok(Self {
             head,
@@ -1070,7 +1082,6 @@ impl NominalSplit {
             universes,
             params,
             actual_indices,
-            induct_decl,
             result,
             result_type,
             proposition,
@@ -1114,19 +1125,19 @@ impl NominalSplit {
     /// Every written arm must name a constructor: the refusal of the first of `tags` that names none. Coverage is decided per constructor — a missing arm is legal iff inversion proves it impossible ([`NominalSplit::ruled_out`]).
     pub(super) fn declared<'t>(
         &self,
+        context: &Context,
         tags: impl IntoIterator<Item = &'t Atom>,
     ) -> Result<(), Error> {
-        let Some(tag) = tags.into_iter().find(|tag| !self.induct_decl.declares(tag)) else {
+        let family = self.family(context);
+        let Some(tag) = tags.into_iter().find(|tag| !family.declares(tag)) else {
             return Ok(());
         };
 
         // Each constructor as a pattern writes it, one placeholder per plain payload — a hidden one is left out — so the report shows what the arm could have named.
-        let constructors = self
-            .induct_decl
+        let constructors = family
             .constructor_order()
             .map(|constructor| {
-                let payload = self
-                    .induct_decl
+                let payload = family
                     .payload_plicities(constructor)
                     .unwrap_or_default()
                     .iter()
@@ -1145,9 +1156,61 @@ impl NominalSplit {
         ))
     }
 
-    /// The family's constructors in the order it declares them, which is the order a match's arms are elaborated and stored in however they are written: two matches differing only in how their arms were written produce the same term.
-    pub(super) fn constructors(&self) -> impl Iterator<Item = &Atom> {
-        self.induct_decl.constructor_order()
+    /// The scrutinee's family as the registry holds it, read by reference: what is instantiated of it is read where it is needed, at the scrutinee's universes, whose constraints [`NominalSplit::resolve`] instantiated.
+    fn family<'c>(&self, context: &'c Context) -> &'c InductDecl {
+        context
+            .induct_decl(&self.name)
+            .expect("a resolved scrutinee's family is registered")
+    }
+
+    /// The constructors a match's arms are elaborated at, in the order the family declares them, which is the order its arms are stored in however they are written: two matches differing only in how their arms were written produce the same term. Where a catch-all stands, the ones `written` names, each once, the default taking the rest, so nothing else is read of the family; otherwise every one, each a written arm or a missing one to rule out. A tag the family does not declare is none of them ([`NominalSplit::declared`] refuses it).
+    pub(super) fn cases<'t>(
+        &self,
+        context: &Context,
+        written: impl IntoIterator<Item = &'t Atom>,
+        defaulted: bool,
+    ) -> Vec<Atom> {
+        let family = self.family(context);
+        match defaulted {
+            true => {
+                let mut named = written
+                    .into_iter()
+                    .filter_map(|tag| Some((family.constructor_index(tag)?, tag)))
+                    .collect::<Vec<_>>();
+                named.sort_unstable_by_key(|&(position, _)| position);
+                named.dedup_by_key(|&mut (position, _)| position);
+                named.into_iter().map(|(_, tag)| tag.clone()).collect()
+            }
+            false => family.constructor_order().cloned().collect(),
+        }
+    }
+
+    /// Whether a constructor no arm names is left possible, past the ones the arms `named`: what a row that writes a binder is the arm of. An unindexed family leaves one where it declares more than the arms name, which is read off the names alone; an indexed one where inversion rules out not every one of the rest.
+    pub(super) fn leaves_unnamed<'t>(
+        &self,
+        context: &mut Context,
+        named: impl IntoIterator<Item = &'t Atom>,
+    ) -> Result<bool, Error> {
+        let family = self.family(context);
+        let named = named
+            .into_iter()
+            .filter(|tag| family.declares(tag))
+            .collect::<HashSet<_>>();
+        if !self.indexed() {
+            return Ok(named.len() < family.constructors.len());
+        }
+        let unnamed = family
+            .constructor_order()
+            .filter(|tag| !named.contains(tag))
+            .cloned()
+            .collect::<Vec<_>>();
+        for tag in &unnamed {
+            if !self.ruled_out(context, tag)? {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
     }
 
     /// Whether the arm for `tag` may be left out.
@@ -1159,7 +1222,7 @@ impl NominalSplit {
             return Ok(false);
         }
 
-        let payload = self.payload(tag);
+        let payload = self.payload(context, tag)?;
         let labels = (0..payload.len())
             .map(|_| context.fresh(None))
             .collect::<Vec<_>>();
@@ -1186,11 +1249,17 @@ impl NominalSplit {
         }
     }
 
-    /// The payload of `tag`'s case, at the scrutinee's parameters.
-    pub(super) fn payload(&self, tag: &Atom) -> Telescope<Vec<Term>> {
-        self.induct_decl
-            .instantiate(tag, &self.params)
+    /// The payload of `tag`'s case, at the scrutinee's parameters and universes: that one constructor of the family instantiated.
+    pub(super) fn payload(
+        &self,
+        context: &Context,
+        tag: &Atom,
+    ) -> Result<Telescope<Vec<Term>>, Error> {
+        self.family(context)
+            .at(&self.universes)
+            .payload(tag, &self.params)
             .expect("constructor instantiates at its inductive's parameters")
+            .map_err(Error::from)
     }
 
     /// The case of `tag`, whose `payload` is opened under `labels`, one for each of its binders, each assumed at its declared (dependent) type: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm, which is closed over every payload.
@@ -1293,7 +1362,7 @@ impl NominalSplit {
         context.with_frame(|context| body(context, self.result_type.clone()))
     }
 
-    /// The match over `cases`, in the order [`NominalSplit::constructors`] gives, and the catch-all where one is written. `undecided` is what [`NominalSplit::admit`] answered, and `term` the match a sort decided here is reported with.
+    /// The match over `cases`, in the order [`NominalSplit::cases`] gives, and the catch-all where one is written. `undecided` is what [`NominalSplit::admit`] answered, and `term` the match a sort decided here is reported with.
     pub(super) fn rebuild(
         &self,
         context: &mut Context,
@@ -1383,21 +1452,27 @@ fn elaborate_induct_match(
     let vacuous = cases.is_empty() && default.is_none();
     let split = NominalSplit::resolve(context, scrutinee, motive, (term, &mode), vacuous)?;
     let undecided = split.admit(context, cases.is_empty(), default.is_some())?;
-    split.declared(cases.iter().map(|(tag, _)| tag))?;
+    split.declared(context, cases.iter().map(|(tag, _)| tag))?;
 
-    // Built by walking the *declaration* order, not the written order, so the elaborated arm sequence is canonical: two matches differing only in how their arms were written produce the same term.
+    // Each written arm by its tag, the first written of a tag standing for it.
+    let written = cases
+        .iter()
+        .rev()
+        .map(|(tag, scope)| (tag, scope))
+        .collect::<HashMap<_, _>>();
+    // Built in the *declaration* order, not the written order, so the elaborated arm sequence is canonical. A catch-all default covers every un-enumerated constructor, so with one only the written arms are walked, and a missing arm needs neither the unindexed-completeness check nor index inversion — the default is checked once, below.
     let mut cases_elaborated = Vec::new();
-    for tag in split.constructors() {
-        let Some((_, scope)) = cases.iter().find(|(candidate, _)| candidate == tag) else {
-            // A catch-all default covers every un-enumerated constructor, so a missing arm needs neither the unindexed-completeness check nor index inversion — the default is checked once, below.
-            if default.is_some() || split.ruled_out(context, tag)? {
+    for tag in split.cases(context, cases.iter().map(|(tag, _)| tag), default.is_some()) {
+        let tag = &tag;
+        let Some(&scope) = written.get(tag) else {
+            if split.ruled_out(context, tag)? {
                 continue;
             }
 
             return Err(split.missing(tag));
         };
 
-        let payload = split.payload(tag);
+        let payload = split.payload(context, tag)?;
         let fills = payload_fills(tag, &payload, scope.plicities())?;
 
         // Open the telescope with fresh names, one per payload: a written binder's under its own label, each binder assumed at its declared (dependent) type.

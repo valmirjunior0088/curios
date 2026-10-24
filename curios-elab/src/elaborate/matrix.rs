@@ -613,29 +613,23 @@ impl<'m> Compiler<'m> {
                 )
             });
 
-            // The constructors no row names that inversion leaves possible: what the rows that write a binder are the one arm of. With no such row each is asked as its turn comes, as a match written one level deep asks.
-            let mut unnamed = Vec::new();
-            if !binders.is_empty() {
-                for tag in split.constructors() {
-                    if !groups.contains_key(&tag.as_string()) && !split.ruled_out(context, tag)? {
-                        unnamed.push(tag.clone());
-                    }
-                }
-            }
-            let defaulted = !unnamed.is_empty();
+            // Whether a constructor no row names is left possible, which the rows that write a binder are the one arm of. With no such row each is asked as its turn comes, as a match written one level deep asks.
+            let defaulted = !binders.is_empty() && split.leaves_unnamed(context, tags.values())?;
             let undecided = split.admit(context, groups.is_empty(), defaulted)?;
-            split.declared(tags.values())?;
+            split.declared(context, tags.values())?;
 
+            // Where a row writes a binder it takes every case no row names, so only the named ones are walked.
             let mut arms = Vec::with_capacity(groups.len());
-            for tag in split.constructors() {
+            for tag in split.cases(context, tags.values(), !binders.is_empty()) {
+                let tag = &tag;
                 let Some(group) = groups.remove(&tag.as_string()) else {
-                    // An arm may be left out where a row that writes a binder takes its case, or where inversion rules the case out.
-                    if !binders.is_empty() || split.ruled_out(context, tag)? {
+                    // An arm may be left out where inversion rules the case out.
+                    if split.ruled_out(context, tag)? {
                         continue;
                     }
 
                     let plain = split
-                        .payload(tag)
+                        .payload(context, tag)?
                         .marks()
                         .iter()
                         .filter(|mark| **mark == Plicity::Explicit)
@@ -674,7 +668,7 @@ impl<'m> Compiler<'m> {
         column: &Column,
         rest: &[Column],
     ) -> Result<(Atom, InductArm), Error> {
-        let payload = split.payload(tag);
+        let payload = split.payload(context, tag)?;
         let marks = payload.marks();
         let places = self.parts(marks.len());
 
@@ -1587,7 +1581,7 @@ impl<'m> Compiler<'m> {
                         )?)
                     }
                 };
-                let payload = split.payload(tag);
+                let payload = split.payload(context, tag)?;
                 let cells = payload_cells(tag, &payload, args, place)?;
                 let (binders, slots) = self.alone(context, &mut line, cells);
                 let mut payloads = slots
