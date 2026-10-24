@@ -73,41 +73,83 @@ fn an_unparsable_library_header_is_mounted_for_discovery_to_refuse() {
     assert!(source.is_some(), "the header is there to be read");
 }
 
-/// One stem space: an executable beside a module of the same name is a refusal naming both.
+/// The package's own program and its library both read their modules beside the manifest, and the package is one unit apiece where their chains reach different files.
 #[test]
-fn a_stem_claimed_twice_is_refused() {
+fn a_program_beside_the_manifest_reads_its_modules_beside_it() {
     let directory = package(
-        "layout-stem-clash",
+        "layout-program-beside",
+        "compiler = \"0.0.0\"\nname = \"json\"\n",
+        &[
+            ("lib.crs", "pub mod parse;"),
+            ("parse.crs", ""),
+            ("exe.crs", "mod util;\n/std/print(util/greeting)\n"),
+            ("util.crs", "pub let greeting: /std/Str = \"hello\\n\";"),
+        ],
+    );
+
+    package_at(&directory).expect("two units, each with files of its own");
+}
+
+/// A module two units' chains reach would be compiled into each as two unrelated modules: refused naming both, with the library as where it lives and the path the program reaches it by.
+#[test]
+fn a_module_two_units_declare_is_refused() {
+    let directory = package(
+        "layout-shared-module",
+        "compiler = \"0.0.0\"\nname = \"json\"\n",
+        &[
+            ("lib.crs", "pub mod parse;"),
+            ("exe.crs", "mod parse;\n/std/print(\"\")\n"),
+            ("parse.crs", ""),
+        ],
+    );
+
+    let refusal = package_at(&directory)
+        .map(|_| ())
+        .expect_err("a module two units declare");
+    assert!(
+        refusal.contains(
+            "`parse.crs` is a module of the library and of the package's own executable \"json\""
+        ),
+        "{refusal}"
+    );
+    assert!(
+        refusal.contains("reach it from the other through `/json/parse`"),
+        "{refusal}"
+    );
+}
+
+/// An executable compiled from a file the library declares as a module is a program and a module at once.
+#[test]
+fn a_program_the_library_declares_as_a_module_is_refused() {
+    let directory = package(
+        "layout-program-named-as-module",
         "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"parse\"\n",
         &[("lib.crs", "pub mod parse;"), ("parse.crs", "")],
     );
 
     let refusal = package_at(&directory)
         .map(|_| ())
-        .expect_err("a stem claimed twice");
+        .expect_err("a program and a module at once");
     assert!(
-        refusal.contains("claims the stem `parse` twice"),
+        refusal.contains("the executable \"parse\" is compiled from `parse.crs`, which the library also declares as the module `/json/parse`"),
         "{refusal}"
     );
-    assert!(refusal.contains("mod parse"), "{refusal}");
-    assert!(refusal.contains("the executable \"parse\""), "{refusal}");
 }
 
-/// The stem space is the package root's, not the library's: a package of nothing but programs has one too.
+/// Two programs compiled from one file are refused whether or not there is a library: a package of nothing but programs has units sharing its directory too.
 ///
-/// Checked only inside the library's own branch, a row aliasing the discovered `exe.crs` — two names for one file, two payload slots, two emitted binaries — would be refused in a package with a library and accepted in one without, so adding or deleting a header would turn the rule on and off for a manifest that had not changed.
+/// Checked only where there is a library, a row aliasing the discovered `exe.crs` — two names for one file, two payload slots, two emitted binaries — would be refused in a package with a library and accepted in one without, so adding or deleting a header would turn the rule on and off for a manifest that had not changed.
 #[test]
-fn a_stem_claimed_twice_is_refused_without_a_library() {
+fn two_programs_compiled_from_one_file_are_refused_without_a_library() {
     let directory = package(
-        "layout-stem-clash-programs",
+        "layout-one-file-two-programs",
         "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n",
         &[("exe.crs", "")],
     );
 
     let refusal = package_at(&directory)
         .map(|_| ())
-        .expect_err("a stem claimed twice, library or no library");
-    assert!(refusal.contains("claims the stem `exe` twice"), "{refusal}");
+        .expect_err("two programs from one file, library or no library");
     assert!(refusal.contains("the executable \"foo\""), "{refusal}");
     // The second claimant is one the manifest never wrote, so the refusal says what wrote it.
     assert!(
@@ -116,33 +158,45 @@ fn a_stem_claimed_twice_is_refused_without_a_library() {
         ),
         "{refusal}"
     );
+    assert!(
+        refusal.contains("are both compiled from `exe.crs`"),
+        "{refusal}"
+    );
 }
 
 /// A header that does not parse is discovery's refusal to report, and what the executables claim does not wait on it.
 #[test]
 fn an_unparseable_header_still_leaves_the_executables_checked() {
     let directory = package(
-        "layout-stem-clash-unparseable",
+        "layout-one-file-unparseable",
         "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n",
         &[("lib.crs", "pub let ="), ("exe.crs", "")],
     );
 
     let refusal = package_at(&directory)
         .map(|_| ())
-        .expect_err("a stem claimed twice");
-    assert!(refusal.contains("claims the stem `exe` twice"), "{refusal}");
+        .expect_err("two programs from one file");
+    assert!(
+        refusal.contains("are both compiled from `exe.crs`"),
+        "{refusal}"
+    );
 }
 
-/// An executable whose path leaves the package root claims its stem somewhere else, so it does not collide here.
+/// An executable below the package root reads its modules from where its entry sits, and a library module spelled like it is another file.
 #[test]
-fn an_executable_outside_the_root_claims_no_stem_in_it() {
+fn an_executable_below_the_root_reads_its_modules_where_it_sits() {
     let directory = package(
-        "layout-stem-elsewhere",
+        "layout-program-below",
         "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"parse\"\npath = \"tools/parse.crs\"\n",
-        &[("lib.crs", "pub mod parse;"), ("parse.crs", "")],
+        &[
+            ("lib.crs", "pub mod parse;"),
+            ("parse.crs", ""),
+            ("tools/parse.crs", "mod helper;\n/std/print(\"\")\n"),
+            ("tools/helper.crs", ""),
+        ],
     );
 
-    package_at(&directory).expect("an executable outside the package root");
+    package_at(&directory).expect("an executable below the package root");
 }
 
 /// A row may point below the root, into a module's namespace directory, and a `mod` there may reach the same file. The refusal names the row and the module, where the module loader alone would report a parse error at the program's first token.

@@ -156,7 +156,7 @@ impl Subject {
 
 /// Where the program a question is about comes from: a file, or text standing in for one.
 ///
-/// Text carries a label because a diagnostic names its source in the `--> label:line:column` header exactly as it names a path, and `<stdin>` is what a program piped in is called. A file an editor holds unsaved is not text — it is [`Origin::File`] with its path in the overlay, so its `mod` declarations still resolve from its stem directory.
+/// Text carries a label because a diagnostic names its source in the `--> label:line:column` header exactly as it names a path, and `<stdin>` is what a program piped in is called. A file an editor holds unsaved is not text — it is [`Origin::File`] with its path in the overlay, so its `mod` declarations still resolve where the saved file's would.
 pub enum Origin {
     File(PathBuf),
     Text { label: String, text: String },

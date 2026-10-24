@@ -207,7 +207,7 @@ fn a_build_and_a_test_run_name_what_the_files_form_is_declared_by() {
     let root = project("unlinked-forms");
     write(&root, "items.crs", "pub let w : /std/Str = \"a\";\n");
     write(&root, "scratch.crs", "/std/print(\"on its own\")\n");
-    let module = "declare it with `mod items;` in lib.crs";
+    let module = "declare it with `mod items;` in lib.crs, or with `mod items;` in app.crs";
     let program = "an `[[executables]]` row in its manifest declares it";
     let stderr =
         |arguments: &[&str]| String::from_utf8_lossy(&curios(&root, arguments).stderr).into_owned();

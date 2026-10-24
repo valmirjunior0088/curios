@@ -81,7 +81,7 @@ const ROWS: &[(&str, Option<&str>)] = &[
     ("work/app", Some("absent")),
     ("work/app", Some("-")),
     ("work/app", Some("serve.crs")),
-    ("work/app", Some("serve/helper.crs")),
+    ("work/app", Some("helper.crs")),
     ("work/app", Some("bench.crs")),
     ("work/app", Some("lib.crs")),
     ("work/app", Some("util.crs")),
@@ -91,13 +91,13 @@ const ROWS: &[(&str, Option<&str>)] = &[
     ("work/app", Some("missing.crs")),
     ("work", None),
     ("work", Some("serve")),
-    ("work/app/serve", None),
-    ("work/app/serve", Some("bench")),
+    ("work/app/helper", None),
+    ("work/app/helper", Some("bench")),
     ("work/app/nested", None),
     (".", None),
 ];
 
-/// An umbrella enumerating one package, and beside the umbrella a file no manifest governs. The package declares a library with a module, two executables — the `default` one with a module its entry declares — and holds a file nothing declares and a package nothing enumerates.
+/// An umbrella enumerating one package, and beside the umbrella a file no manifest governs. The package declares a library with a module, two executables — the `default` one with a module its entry declares beside it, which declares one of its own in its stem directory — and holds a file nothing declares and a package nothing enumerates.
 fn tree() -> Temporary {
     let root = Temporary::new("contract", "table");
 
@@ -114,7 +114,8 @@ fn tree() -> Temporary {
         ("work/app/util.crs", ""),
         ("work/app/stray.crs", ""),
         ("work/app/serve.crs", "mod helper;\n/std/print(\"\")\n"),
-        ("work/app/serve/helper.crs", ""),
+        ("work/app/helper.crs", "mod deep;\n"),
+        ("work/app/helper/deep.crs", ""),
         ("work/app/bench.crs", "/std/print(\"\")\n"),
         (
             "work/app/nested/curios.toml",
@@ -371,7 +372,7 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, l
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → refused: `run` takes a program's own file, and <root>/work/app/serve/helper.crs is a module of `serve`: name `serve` instead
+  work/app: helper.crs → refused: `run` takes a program's own file, and <root>/work/app/helper.crs is a module of `serve`: name `serve` instead
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: `run` takes a program, and a library is not one: name an executable or a program file
   work/app: util.crs → refused: `run` takes a program, and a library is not one: name an executable or a program file
@@ -381,8 +382,8 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, l
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → program serve
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → program serve
+  work/app/helper: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 compile SUBJECT — Program (its own file), store Write, leaves Executable, options --target --output --budget --manifest
@@ -391,7 +392,7 @@ compile SUBJECT — Program (its own file), store Write, leaves Executable, opti
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → refused: `compile` files what it builds under the package that declares it, and standard input has none: say where, as in `curios compile - --output program`
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → refused: `compile` takes a program's own file, and <root>/work/app/serve/helper.crs is a module of `serve`: name `serve` instead
+  work/app: helper.crs → refused: `compile` takes a program's own file, and <root>/work/app/helper.crs is a module of `serve`: name `serve` instead
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
   work/app: util.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
@@ -401,8 +402,8 @@ compile SUBJECT — Program (its own file), store Write, leaves Executable, opti
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → program serve
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → program serve
+  work/app/helper: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 compile SUBJECT --output out — Program (its own file), store Write, leaves Executable, options --target --output --budget --manifest
@@ -411,7 +412,7 @@ compile SUBJECT --output out — Program (its own file), store Write, leaves Exe
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → refused: `compile` takes a program's own file, and <root>/work/app/serve/helper.crs is a module of `serve`: name `serve` instead
+  work/app: helper.crs → refused: `compile` takes a program's own file, and <root>/work/app/helper.crs is a module of `serve`: name `serve` instead
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
   work/app: util.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
@@ -421,8 +422,8 @@ compile SUBJECT --output out — Program (its own file), store Write, leaves Exe
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → program serve
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → program serve
+  work/app/helper: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 document SUBJECT — Library, store Write, leaves Pages, options --std --output --budget --manifest
@@ -431,7 +432,7 @@ document SUBJECT — Library, store Write, leaves Pages, options --std --output 
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → refused: `document` takes a library, and a program is not one
   work/app: serve.crs → refused: `document` takes a library, and a program is not one
-  work/app: serve/helper.crs → refused: `document` takes a library, and a program is not one
+  work/app: helper.crs → refused: `document` takes a library, and a program is not one
   work/app: bench.crs → refused: `document` takes a library, and a program is not one
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
@@ -441,8 +442,8 @@ document SUBJECT — Library, store Write, leaves Pages, options --std --output 
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → library app
-  work/app/serve: bench → refused: `document` takes a library, and a program is not one
+  work/app/helper: (none) → library app
+  work/app/helper: bench → refused: `document` takes a library, and a program is not one
   work/app/nested: (none) → library nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 document --std site — Nothing, store None, leaves Pages, options --std --output --budget --manifest
@@ -453,7 +454,7 @@ test SUBJECT — Any, store Write, leaves Nothing, options --filter --budget --m
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: helper.crs → program serve through helper.crs
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
@@ -463,14 +464,14 @@ test SUBJECT — Any, store Write, leaves Nothing, options --filter --budget --m
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → entire app
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → entire app
+  work/app/helper: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 curate — Entire, store None, leaves Sources, options --manifest
   work/app: (none) → entire app
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → entire app
+  work/app/helper: (none) → entire app
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 pin foreign probe --target native --path probe.wasm — Nothing, store None, leaves Manifest, options --target --path --url --refresh --check --manifest
@@ -495,7 +496,7 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: helper.crs → program serve through helper.crs
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
@@ -505,17 +506,17 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → entire app
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → entire app
+  work/app/helper: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 format SUBJECT — Files, store None, leaves Rewritten, options --check --manifest
-  work/app: (none) → files lib.crs util.crs serve.crs serve/helper.crs bench.crs
-  work/app: serve → files serve.crs serve/helper.crs
+  work/app: (none) → files lib.crs util.crs serve.crs helper.crs helper/deep.crs bench.crs
+  work/app: serve → files serve.crs helper.crs helper/deep.crs
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → standard input
   work/app: serve.crs → files serve.crs
-  work/app: serve/helper.crs → files serve/helper.crs
+  work/app: helper.crs → files helper.crs
   work/app: bench.crs → files bench.crs
   work/app: lib.crs → files lib.crs
   work/app: util.crs → files util.crs
@@ -525,8 +526,8 @@ format SUBJECT — Files, store None, leaves Rewritten, options --check --manife
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → files <root>/work/app/lib.crs <root>/work/app/util.crs <root>/work/app/serve.crs helper.crs <root>/work/app/bench.crs
-  work/app/serve: bench → files <root>/work/app/bench.crs
+  work/app/helper: (none) → files <root>/work/app/lib.crs <root>/work/app/util.crs <root>/work/app/serve.crs <root>/work/app/helper.crs deep.crs <root>/work/app/bench.crs
+  work/app/helper: bench → files <root>/work/app/bench.crs
   work/app/nested: (none) → files lib.crs
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 wonder diagnostics SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
@@ -535,7 +536,7 @@ wonder diagnostics SUBJECT — Any, store Write, leaves Nothing, options --budge
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: helper.crs → program serve through helper.crs
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
@@ -545,8 +546,8 @@ wonder diagnostics SUBJECT — Any, store Write, leaves Nothing, options --budge
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → entire app
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → entire app
+  work/app/helper: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 wonder tests SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
@@ -555,7 +556,7 @@ wonder tests SUBJECT — Any, store Write, leaves Nothing, options --budget --ma
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: helper.crs → program serve through helper.crs
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
@@ -565,8 +566,8 @@ wonder tests SUBJECT — Any, store Write, leaves Nothing, options --budget --ma
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → entire app
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → entire app
+  work/app/helper: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 wonder cost SUBJECT — Program, store Write, leaves Nothing, options --budget --manifest
@@ -575,7 +576,7 @@ wonder cost SUBJECT — Program, store Write, leaves Nothing, options --budget -
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: helper.crs → program serve through helper.crs
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: `wonder cost` takes a program, and a library is not one: name an executable or a program file
   work/app: util.crs → refused: `wonder cost` takes a program, and a library is not one: name an executable or a program file
@@ -585,8 +586,8 @@ wonder cost SUBJECT — Program, store Write, leaves Nothing, options --budget -
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → program serve
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → program serve
+  work/app/helper: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 wonder stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --budget --manifest
@@ -595,7 +596,7 @@ wonder stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, opt
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: helper.crs → program serve through helper.crs
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
@@ -605,8 +606,8 @@ wonder stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, opt
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → program serve
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → program serve
+  work/app/helper: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 wonder stage ersd SUBJECT — Program, store Write, leaves Nothing, options --budget --manifest
@@ -615,7 +616,7 @@ wonder stage ersd SUBJECT — Program, store Write, leaves Nothing, options --bu
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: helper.crs → program serve through helper.crs
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: `wonder stage` takes a program, and a library is not one: name an executable or a program file
   work/app: util.crs → refused: `wonder stage` takes a program, and a library is not one: name an executable or a program file
@@ -625,8 +626,8 @@ wonder stage ersd SUBJECT — Program, store Write, leaves Nothing, options --bu
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → program serve
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → program serve
+  work/app/helper: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 wonder at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --budget --manifest
@@ -635,7 +636,7 @@ wonder at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: helper.crs → program serve through helper.crs
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
@@ -645,8 +646,8 @@ wonder at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → program serve
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → program serve
+  work/app/helper: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 wonder declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --budget --manifest
@@ -655,7 +656,7 @@ wonder declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, o
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
   work/app: - → loose -
   work/app: serve.crs → program serve
-  work/app: serve/helper.crs → program serve through serve/helper.crs
+  work/app: helper.crs → program serve through helper.crs
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
@@ -665,8 +666,8 @@ wonder declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, o
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/serve: (none) → program serve
-  work/app/serve: bench → program bench
+  work/app/helper: (none) → program serve
+  work/app/helper: bench → program bench
   work/app/nested: (none) → refused: "nested" declares no executable: add `exe.crs`, or declare one with `[[executables]]`
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 wonder server — Nothing, store Write, leaves Nothing, options --budget --manifest

@@ -1,8 +1,8 @@
 //! How a package on disk becomes the unit the compiler lowers.
 //!
-//! [`curios_text::RootSource`] states the layout rule every header obeys — a header's namespace directory is its stem directory. **This module owns its one exception:** a package's library header sits beside the manifest, and its namespace directory is the manifest's, not `lib/`. That is forced by law 2, because directory names are semantics-free and so no stem on disk could mark the package root; the manifest is what names that namespace, so the manifest is what anchors it. `lib` therefore enters no qualified name, and `/json/parse/lexer` is `parse/lexer.crs` inside the package directory — a qualified name's tail and its path are the same string, and only the head maps to the manifest instead of to a spelled directory.
+//! [`curios_text::RootSource`] states the layout rule every header obeys: a unit's root reads its modules from the directory it sits in, and a module below it from its stem directory. A package's library header sits beside the manifest, so its namespace is the manifest's directory: `lib` enters no qualified name, and `/json/parse/lexer` is `parse/lexer.crs` inside the package directory, a qualified name's tail and its path the same string and only the head mapped to the manifest, which is what names that namespace (law 2).
 //!
-//! The consequence enforced below is that **the package root has one stem space**: the library header holds a stem in it, so does every module that header enumerates, and so does every executable compiled from a file directly inside it. A stem claimed twice is a refusal naming both claimants (law 4).
+//! The consequence enforced below is that **a file is one unit's**: the library and every executable beside the manifest read their modules from the package's directory alike, and a row may point anywhere below it, so a file two units' `mod` chains reach is a refusal naming both (law 4).
 //!
 //! **A package has a library when `lib.crs` sits beside its manifest, and its own executable when `exe.crs` does.** These are the two places location decides rather than declaration, and both are deliberate: neither is an artifact a package opts into, they are the two things a package *is*, and a manifest entry admitting to either would be ceremony. `[[executables]]` remains for everything else — a second program, or one compiled from a path of its own — and a row always wins over the file.
 //!
@@ -13,11 +13,12 @@ mod tests;
 
 use {
     crate::{EXTENSION, LIBRARY, MANIFEST, Manifest, Package, require_compiler, umbrella_over},
-    curios_text::{Module, RootSource, TopItem},
+    curios_text::{Entrypoint, RootSource},
     curios_utilities::{Qualifier, RootKind, is_identifier},
     std::{
         collections::BTreeMap,
-        path::{Component, Path},
+        iter,
+        path::{Component, Path, PathBuf},
     },
 };
 
@@ -78,9 +79,9 @@ pub(crate) fn module_of(package: &Package, directory: &Path, file: &Path) -> Opt
         .then(|| Qualifier::from(segments))
 }
 
-/// The module `file` would be under an entry whose stem directory is `stem`, by the layout rule every header obeys: `helper/deep.crs` is `/helper/deep` below the entry's own mount. `None` when the spelling is no module's.
-pub(crate) fn stem_module_of(stem: &Path, file: &Path) -> Option<Qualifier> {
-    spelled_segments(file.strip_prefix(stem).ok()?).map(Qualifier::from)
+/// The module `file` would be under a root whose namespace directory is `namespace`, by the layout rule every header obeys: `helper/deep.crs` is `/helper/deep` below the root's own mount. `None` when the spelling is no module's.
+pub(crate) fn module_below(namespace: &Path, file: &Path) -> Option<Qualifier> {
+    spelled_segments(file.strip_prefix(namespace).ok()?).map(Qualifier::from)
 }
 
 /// The segments `relative` spells as a module path — `parse/lexer.crs` is `parse`, `lexer` — or `None` for another extension or a segment no identifier.
@@ -106,7 +107,7 @@ fn spelled_segments(relative: &Path) -> Option<Vec<String>> {
 
 /// The resolver `package`'s library is lowered from, its header beside the manifest in `directory`, or `None` when there is no header there.
 ///
-/// The header is read here and read again when discovery asks for it. That is deliberate: the stem refusal below has to fire before elaboration, and a refusal arriving as an unbound name would say nothing of the stem. It is parsed once all the same where the two read one text, both reads going through the thread's parse memo (`curios_text::Module::from_path`). Read from disk here; a source overlay reaches discovery's read and not this one, so a stem collision is judged on what is saved, which is the only thing a collision can be between.
+/// Every unit's `mod` chain is read here and read again when discovery asks for it. That is deliberate: the refusal of a file two units reach has to fire before elaboration, and one arriving as a module compiled twice, or as a program parsed as a module, would say nothing of the two claims. It is parsed once all the same where the two read one text, both reads going through the thread's parse memo (`curios_text::Module::from_path`). Read from disk here; a source overlay reaches discovery's read and not this one, so a claim is judged on what is saved, which is the only thing two claims can be between.
 pub fn package_source(package: &Package, directory: &Path) -> Result<Option<RootSource>, String> {
     let umbrella = umbrella_over(directory)?;
     require_compiler(
@@ -117,32 +118,15 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
             .map(|(umbrella, root)| (umbrella, root.as_path())),
     )?;
     let header = directory.join(LIBRARY);
-    let present = header.is_file();
 
-    // A package of nothing but programs has no body, and no vestigial file to write saying so. Only absence is an answer: a header that fails to *parse* is still a refusal, but discovery's — it reads the same file through the unit's own loader and reports the failure as a located diagnostic, where a refusal raised here would be text with a snippet in it. What the header contributes to the stem space simply has nothing to contribute until it parses.
-    let library = present.then(|| Module::from_path(&header).ok()).flatten();
-
-    // Asked whether or not there is a header, because the stem space is the package root's and not the library's: executables claim stems in it with nothing else there to collide with, and two that collide are the same refusal either way. Gating this on the header would mean adding or deleting one silently turned the rule on and off for a manifest that did not change.
-    stems(package, library.as_ref())?;
-
-    if !present {
-        // A module answers declarations of its package's library, so with no library there is none for a row's exports to answer — and no unit to hold the claim to.
-        if let Some(foreign) = package
-            .foreign
-            .iter()
-            .find(|foreign| !foreign.answers.is_empty())
-        {
-            return Err(format!(
-                "the foreign row {:?} of {} names declarations its exports answer, and the package has no `{LIBRARY}` to declare them in: a module answers its own package's declarations",
-                foreign.name, package.name
-            ));
-        }
-
-        return Ok(None);
-    }
-
-    // The library is what a package documents, described as the manifest describes it, and what its modules answer: each claim travels with the unit, which is where it is held to a declaration.
-    let source = RootSource::mounted(&package.name, RootKind::Ordinary, header, directory)
+    // A package of nothing but programs has no body, and no vestigial file to write saying so. Only absence is an answer: a header that fails to *parse* is still mounted, and its refusal is discovery's — it reads the same file through the unit's own loader and reports the failure as a located diagnostic, where a refusal raised here would be text with a snippet in it. The library is what a package documents, described as the manifest describes it, and what its modules answer: each claim travels with the unit, which is where it is held to a declaration.
+    let source = header.is_file().then(|| {
+        RootSource::mounted(
+            &package.name,
+            RootKind::Ordinary,
+            &header,
+            RootSource::namespace_of(&header),
+        )
         .declaring(declared(package))
         .documented(&package.name, package.description.as_deref())
         .answering(package.foreign.iter().flat_map(|foreign| {
@@ -150,82 +134,137 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
                 .answers
                 .keys()
                 .map(|declaration| (declaration.clone(), foreign.name.clone()))
-        }));
+        }))
+    });
 
-    apart(package, directory, &source)?;
+    // Asked whether or not there is a header, because the units sharing the package's directory are its programs as well as its library: two programs compiled from one file are the same refusal either way, and gating this on the header would turn the rule on and off for a manifest that did not change.
+    one_unit_each(package, directory, source.as_ref())?;
 
-    Ok(Some(source))
-}
-
-/// Refuse an executable compiled from a file the library also reaches through a chain of `mod` declarations.
-///
-/// The root stem space is [`stems`]'s, and it is one space because everything in it is spelled from one directory. A row may point below the root, where its file sits in the namespace directory of some module — and nothing stops a `mod` in that module from declaring the same file. The file is then a program and a module at once, and without this check the reader would see the module loader failing to parse a program as a module: a parse error at the executable's first token, naming neither the row nor the `mod` (law 4). The question is the one the language server asks of a file it is shown, and it is asked of the same resolver.
-///
-/// A header the walk cannot read is not this refusal: the compilation reports that on its own account, so the question is taken as answered `false` rather than answered twice.
-fn apart(package: &Package, directory: &Path, source: &RootSource) -> Result<(), String> {
-    for executable in &package.executables {
-        let Some(module) = module_of(package, directory, &directory.join(&executable.path)) else {
-            continue;
-        };
-
-        if matches!(source.declares_module(&module), Ok(true)) {
-            return Err(format!(
-                "{} is compiled from {}, which the library also declares as the module `{}`: a file is a program or a module, never both",
-                package.describe(executable),
-                executable.path.display(),
-                module.join()
-            ));
-        }
+    // A module answers declarations of its package's library, so with no library there is none for a row's exports to answer — and no unit to hold the claim to.
+    if source.is_none()
+        && let Some(foreign) = package
+            .foreign
+            .iter()
+            .find(|foreign| !foreign.answers.is_empty())
+    {
+        return Err(format!(
+            "the foreign row {:?} of {} names declarations its exports answer, and the package has no `{LIBRARY}` to declare them in: a module answers its own package's declarations",
+            foreign.name, package.name
+        ));
     }
 
-    Ok(())
+    Ok(source)
 }
 
-/// Refuse a stem claimed twice in the package root: the library header when there is one, every module that header enumerates, and every executable compiled from a file directly inside it.
+/// One unit's claim on a file: who claims it, and whether as the program compiled from it or as a module its `mod` chain reaches.
+struct Claim {
+    claimant: String,
+    entry: bool,
+}
+
+/// Who claims the library's files.
+const LIBRARY_CLAIMANT: &str = "the library";
+
+/// Refuse a file two units reach: the library through the `mod` chain from its header, and each executable through its entry, which is a file of its own unit, and the chain from it.
 ///
-/// `library` is `None` for a package with no header, and for one whose header does not parse — neither has modules to enumerate, and neither holds the `lib` stem in a way worth naming a claimant for. The executables are checked in both cases, because what they claim does not depend on any of that.
-fn stems(package: &Package, library: Option<&Module>) -> Result<(), String> {
-    let modules = library
-        .into_iter()
-        .flat_map(|library| library.items.iter())
-        .filter_map(|item| match item {
-            TopItem::Mod(declaration) => Some((
-                declaration.label.to_string(),
-                format!("`mod {}` in `{LIBRARY}`", declaration.label),
-            )),
-            _ => None,
-        });
-
-    // An executable whose path leaves the package root claims a stem somewhere else, and somewhere else is not this stem space.
-    let executables = package
-        .executables
-        .iter()
-        .filter(|executable| executable.path.parent() == Some(Path::new("")))
-        .map(|executable| (stem(&executable.path), package.describe(executable)));
-
-    let mut claimed = BTreeMap::new();
-    if library.is_some() {
-        claimed.insert(
-            stem(Path::new(LIBRARY)),
-            format!("the library header `{LIBRARY}`"),
-        );
+/// Roots share the directory they sit in, so the library and every executable beside the manifest read their modules from one directory, and a row may point below it, into a module's namespace directory. A file both reach would be compiled into two units as two unrelated modules, or be a program and a module at once, where the module loader would report a parse error at the program's first token naming neither claim. A file that does not read is still claimed, and ends its branch: the compilation reports it on its own account, and a program declared as a module is one such file. A package with no executable is one unit, and its chain is not walked here.
+fn one_unit_each(
+    package: &Package,
+    directory: &Path,
+    library: Option<&RootSource>,
+) -> Result<(), String> {
+    if package.executables.is_empty() {
+        return Ok(());
     }
 
-    for (stem, claimant) in modules.chain(executables) {
-        if let Some(earlier) = claimed.insert(stem.clone(), claimant.clone()) {
-            return Err(format!(
-                "the package root claims the stem `{stem}` twice: {earlier} and {claimant}"
-            ));
-        }
-    }
-
-    Ok(())
-}
-
-/// The stem `path` spells, which is what it claims in the directory it sits in.
-fn stem(path: &Path) -> String {
-    path.file_stem()
+    let library_files = library
+        .map(RootSource::reached_files)
         .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned()
+        .into_iter()
+        .map(|file| {
+            let claim = Claim {
+                claimant: LIBRARY_CLAIMANT.to_string(),
+                entry: false,
+            };
+            (file, claim)
+        });
+    let executable_files = package.executables.iter().flat_map(|executable| {
+        let entry = directory.join(&executable.path);
+        let modules = Entrypoint::opened(&entry)
+            .map(|(entrypoint, loader, _)| loader.entry_reached_files(&entrypoint.module.items))
+            .unwrap_or_default();
+
+        iter::once((entry, true))
+            .chain(modules.into_iter().map(|file| (file, false)))
+            .map(|(file, entry)| {
+                let claim = Claim {
+                    claimant: package.describe(executable),
+                    entry,
+                };
+                (file, claim)
+            })
+    });
+
+    let mut claimed = BTreeMap::<PathBuf, Claim>::new();
+    for (file, claim) in library_files.chain(executable_files) {
+        match claimed.get(&file) {
+            None => {
+                claimed.insert(file, claim);
+            }
+            Some(earlier) => return Err(refusal(package, directory, &file, earlier, &claim)),
+        }
+    }
+
+    Ok(())
+}
+
+/// Why `file` cannot be in the units of `earlier` and `later` both, and what would put it in one.
+fn refusal(
+    package: &Package,
+    directory: &Path,
+    file: &Path,
+    earlier: &Claim,
+    later: &Claim,
+) -> String {
+    let spelled = file.strip_prefix(directory).unwrap_or(file).display();
+
+    match (earlier.entry, later.entry) {
+        (true, true) => format!(
+            "{} and {} are both compiled from `{spelled}`: a file is one program's",
+            earlier.claimant, later.claimant
+        ),
+        (true, false) | (false, true) => {
+            let (program, module) = match earlier.entry {
+                true => (earlier, later),
+                false => (later, earlier),
+            };
+            // The library's modules are named by the package, so its claim can say which module the file is.
+            let named = match module.claimant == LIBRARY_CLAIMANT {
+                true => module_of(package, directory, file)
+                    .map(|module| format!("the module `{}`", module.join())),
+                false => None,
+            }
+            .unwrap_or_else(|| "a module".to_string());
+            format!(
+                "{} is compiled from `{spelled}`, which {} also declares as {named}: a file is a program or a module, never both",
+                program.claimant, module.claimant
+            )
+        }
+        (false, false) => {
+            // An executable reaches its own package's library, never another executable, so the library is where a module two units want lives.
+            let reach = module_of(package, directory, file)
+                .map(|module| format!(" through `{}`", module.join()))
+                .unwrap_or_default();
+            let remedy = match earlier.claimant == LIBRARY_CLAIMANT {
+                true => {
+                    format!("declare it in the library alone, and reach it from the other{reach}")
+                }
+                false => format!("declare it in the library, and reach it from both{reach}"),
+            };
+            format!(
+                "`{spelled}` is a module of {} and of {}: a file is one unit's, so {remedy}",
+                earlier.claimant, later.claimant
+            )
+        }
+    }
 }

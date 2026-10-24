@@ -182,14 +182,18 @@ fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
         .expect("the package holds it, and says why it is in no unit");
     assert_eq!(unlinked.file, root.join("scratch.crs"));
     assert_eq!(unlinked.package, "app");
-    assert_eq!(unlinked.remedy, "declare it with `mod scratch;` in lib.crs");
+    // The library and the program beside it both read their modules from the package's directory, so either could declare it.
+    assert_eq!(
+        unlinked.remedy,
+        "declare it with `mod scratch;` in lib.crs, or with `mod scratch;` in serve.crs"
+    );
 
     // What declares it follows the form it is written in, whatever the command did with it.
     let file = root.join("scratch.crs");
     assert_eq!(
         unlinked.note("was checked", Form::Module),
         format!(
-            "{} is in no unit of `/app`, so it was checked on its own against `/std`: declare it with `mod scratch;` in lib.crs",
+            "{} is in no unit of `/app`, so it was checked on its own against `/std`: declare it with `mod scratch;` in lib.crs, or with `mod scratch;` in serve.crs",
             file.display()
         )
     );
@@ -486,7 +490,7 @@ fn a_declared_library_module_selects_the_library_through_it() {
     assert_eq!(library.units.len(), 1);
 }
 
-/// An executable's entry is its program, a module the entry's `mod` chain reaches is the same program selected through that module, and a file under the entry's stem directory that no `mod` reaches is loose — told the line that would declare it.
+/// An executable's entry is its program, a module the entry's `mod` chain reaches is the same program selected through that module, and a file beside the entry that no `mod` reaches is loose — told the line that would declare it.
 #[test]
 fn a_module_an_entry_declares_selects_its_program_and_one_it_does_not_is_loose() {
     let root = tree(
@@ -497,22 +501,19 @@ fn a_module_an_entry_declares_selects_its_program_and_one_it_does_not_is_loose()
                 "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("serve.crs", "mod helper;\n/std/print(\"\")\n"),
-            ("serve/helper.crs", ""),
-            ("serve/other.crs", ""),
+            ("helper.crs", ""),
+            ("other.crs", ""),
         ],
     );
 
     let entry = selected(Some("serve.crs"), &root).expect("the entry");
     assert_eq!(entry.through(), None);
 
-    let module = selected(Some("serve/helper.crs"), &root).expect("a declared module");
+    let module = selected(Some("helper.crs"), &root).expect("a declared module");
     assert_eq!(module.entry(), &Entry::File(root.join("serve.crs")));
-    assert_eq!(
-        module.through(),
-        Some(root.join("serve/helper.crs").as_path())
-    );
+    assert_eq!(module.through(), Some(root.join("helper.crs").as_path()));
 
-    let other = selected(Some("serve/other.crs"), &root).expect("an undeclared module");
+    let other = selected(Some("other.crs"), &root).expect("an undeclared module");
     assert!(other.home().is_none());
     assert_eq!(
         other.unlinked().expect("the package holds it").remedy,
@@ -520,7 +521,7 @@ fn a_module_an_entry_declares_selects_its_program_and_one_it_does_not_is_loose()
     );
 }
 
-/// What would put an unlinked file in a unit: the `mod` line in the header of the module above it, nothing for a spelling no module has, and a library to write it in for a package that has none.
+/// What would put an unlinked file in a unit: the `mod` line in the header of the module above it, every missing link of the chain where that module is undeclared too, nothing for a spelling no module has, and a library to write it in for a package that has none.
 #[test]
 fn an_unlinked_file_is_told_what_would_declare_it() {
     let root = tree(
@@ -530,6 +531,7 @@ fn an_unlinked_file_is_told_what_would_declare_it() {
             ("lib.crs", "pub mod parse;\n"),
             ("parse.crs", ""),
             ("parse/lexer.crs", ""),
+            ("deep/inner.crs", ""),
             ("notes.txt", ""),
             ("odd-name.crs", ""),
         ],
@@ -539,6 +541,10 @@ fn an_unlinked_file_is_told_what_would_declare_it() {
         (
             "parse/lexer.crs",
             "declare it with `mod lexer;` in parse.crs",
+        ),
+        (
+            "deep/inner.crs",
+            "declare it with `mod deep;` in lib.crs and `mod inner;` in deep.crs",
         ),
         (
             "./notes.txt",
@@ -557,15 +563,47 @@ fn an_unlinked_file_is_told_what_would_declare_it() {
         assert_eq!(written, remedy, "{file}");
     }
 
+    // A program beside the manifest reads its modules beside itself, so it could declare a file there; one whose directory holds no root's modules has only a library to be declared in.
     let programs = tree(
         "unlinked-no-library",
         &[
-            ("curios.toml", "compiler = \"0.0.0\"\nname = \"tool\"\n"),
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nname = \"tool\"\n\n[[executables]]\nname = \"serve\"\npath = \"tools/serve.crs\"\n",
+            ),
             ("exe.crs", "/std/print(\"\")\n"),
+            ("tools/serve.crs", "/std/print(\"\")\n"),
+            ("stray.crs", ""),
+            ("notes/stray.crs", ""),
+        ],
+    );
+    for (file, expected) in [
+        ("stray.crs", "declare it with `mod stray;` in exe.crs"),
+        (
+            "notes/stray.crs",
+            "declare it with `mod notes;` in exe.crs and `mod stray;` in notes.crs",
+        ),
+    ] {
+        let remedy = selected(Some(file), &programs)
+            .expect("a loose file")
+            .unlinked()
+            .map(|unlinked| unlinked.remedy.clone())
+            .expect("the package holds it");
+        assert_eq!(remedy, expected, "{file}");
+    }
+
+    let headless = tree(
+        "unlinked-headless",
+        &[
+            (
+                "curios.toml",
+                "compiler = \"0.0.0\"\nname = \"tool\"\n\n[[executables]]\nname = \"serve\"\npath = \"tools/serve.crs\"\n",
+            ),
+            ("tools/serve.crs", "/std/print(\"\")\n"),
             ("stray.crs", ""),
         ],
     );
-    let remedy = selected(Some("stray.crs"), &programs)
+    let remedy = selected(Some("stray.crs"), &headless)
         .expect("a loose file")
         .unlinked()
         .map(|unlinked| unlinked.remedy.clone())

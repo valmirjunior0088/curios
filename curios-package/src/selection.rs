@@ -14,7 +14,7 @@ mod tests;
 use {
     crate::{
         EXECUTABLE, EXTENSION, Executable, Governing, LIBRARY, MANIFEST, Manifest, Package, Store,
-        Target, module_of, nearest_manifest, order, reachable, stem_module_of,
+        Target, module_below, module_of, nearest_manifest, order, reachable,
     },
     curios_text::{Entrypoint, Form, Overlay, RootSource, identity},
     curios_utilities::{Qualifier, RootKind},
@@ -379,75 +379,93 @@ fn placed(file: PathBuf, manifest: Option<&Path>, overlay: &Overlay) -> Result<S
     };
     let directory = identity(&governing.directory);
 
-    // An executable's own entry, or a file under its stem directory, which only a `mod` chain from that entry can reach: a row's stem is its own, as the layout rule gives a header's stem directory to that header.
+    // A file is a unit's when its `mod` chain reaches it, and roots that sit in one directory share it: the package's directory holds the library's modules and those of every executable beside the manifest alike. Where a file sits says which roots may declare it, and only their chains say which does; the package's reading has already refused a file two of them reach.
+    let mut remedies = Vec::new();
+    let mut unspelled = false;
     for executable in &governing.package.executables {
         let entry = identity(&governing.directory.join(&executable.path));
         if spelled == entry {
             return Ok(Selection::Program(program(&governing, executable)?));
         }
 
-        let stem = entry.with_extension("");
-        if !spelled.starts_with(&stem) {
+        let namespace = RootSource::namespace_of(&entry);
+        if !spelled.starts_with(&namespace) {
             continue;
         }
-
-        let Some(module) = stem_module_of(&stem, &spelled) else {
-            return Ok(unlinked(file, &governing, UNSPELLED.to_string()));
+        let Some(module) = module_below(&namespace, &spelled) else {
+            unspelled = true;
+            continue;
         };
-        if !entry_declares(&entry, &module, overlay) {
-            let remedy = declaration(module.segments(), &entry, &stem, &directory);
-            return Ok(unlinked(file, &governing, remedy));
+        if entry_declares(&entry, &module, overlay) {
+            return Ok(Selection::Program(
+                program(&governing, executable)?.selected_through(file),
+            ));
         }
-
-        return Ok(Selection::Program(
-            program(&governing, executable)?.selected_through(file),
+        remedies.push(declaration(
+            module.segments(),
+            &entry,
+            &directory,
+            |below| entry_declares(&entry, &Qualifier::from(below.to_vec()), overlay),
         ));
     }
 
-    // Everything else the package's directory holds is its library's to declare.
-    if !governing.directory.join(LIBRARY).is_file() {
-        let remedy = format!(
+    // Everything else the package's directory holds is its library's to declare, when it has one.
+    let header = directory.join(LIBRARY);
+    if header.is_file() {
+        let Some(module) = module_of(&governing.package, &directory, &spelled) else {
+            return Ok(unlinked(file, &governing, UNSPELLED.to_string()));
+        };
+
+        // Placement reads only the module chain: an unlinked file inherits neither this package's dependencies nor its compiler requirement.
+        let library = RootSource::mounted(
+            &governing.package.name,
+            RootKind::Ordinary,
+            &header,
+            RootSource::namespace_of(&header),
+        )
+        .with_overlay(overlay.clone());
+        // A header on the chain that cannot be read places the file in the library anyway: the compilation reports that fault on its own account.
+        if library.declares_module(&module).unwrap_or(true) {
+            let mut units = order(&governing)?;
+            let library = units
+                .pop()
+                .expect("a package with a library compiles it last")
+                .with_overlay(overlay.clone());
+            units.push(library);
+
+            return Ok(Selection::Library(Library {
+                package: governing.package.name.clone(),
+                root: governing.root.clone(),
+                manifest: governing.manifest.clone(),
+                units,
+                through: Some(file),
+            }));
+        }
+
+        // The library is the package's own namespace, so it leads what could declare the file.
+        let package = governing.package.name.clone();
+        remedies.insert(
+            0,
+            declaration(&module.segments()[1..], &header, &directory, |below| {
+                let mut segments = vec![package.clone()];
+                segments.extend(below.iter().cloned());
+                library
+                    .declares_module(&Qualifier::from(segments))
+                    .unwrap_or(true)
+            }),
+        );
+    }
+
+    let remedy = match (remedies.is_empty(), unspelled) {
+        (false, _) => format!("declare it {}", remedies.join(", or ")),
+        (true, true) => UNSPELLED.to_string(),
+        (true, false) => format!(
             "`/{}` has no library to declare it in",
             governing.package.name
-        );
-        return Ok(unlinked(file, &governing, remedy));
-    }
-    let Some(module) = module_of(&governing.package, &directory, &spelled) else {
-        return Ok(unlinked(file, &governing, UNSPELLED.to_string()));
+        ),
     };
 
-    // Placement reads only the module chain: an unlinked file inherits neither this package's dependencies nor its compiler requirement.
-    let library = RootSource::mounted(
-        &governing.package.name,
-        RootKind::Ordinary,
-        directory.join(LIBRARY),
-        &directory,
-    )
-    .with_overlay(overlay.clone());
-    // A header on the chain that cannot be read places the file in the library anyway: the compilation reports that fault on its own account.
-    if !library.declares_module(&module).unwrap_or(true) {
-        let remedy = declaration(
-            &module.segments()[1..],
-            &directory.join(LIBRARY),
-            &directory,
-            &directory,
-        );
-        return Ok(unlinked(file, &governing, remedy));
-    }
-    let mut units = order(&governing)?;
-    let library = units
-        .pop()
-        .expect("a package with a library compiles it last")
-        .with_overlay(overlay.clone());
-    units.push(library);
-
-    Ok(Selection::Library(Library {
-        package: governing.package.name.clone(),
-        root: governing.root.clone(),
-        manifest: governing.manifest.clone(),
-        units,
-        through: Some(file),
-    }))
+    Ok(unlinked(file, &governing, remedy))
 }
 
 /// `file`, loose, with no package to say anything about it.
@@ -466,23 +484,37 @@ fn unlinked(file: PathBuf, governing: &Governing, remedy: String) -> Selection {
     Selection::Program(Program::loose(Entry::File(file), Some(unlinked)))
 }
 
-/// The `mod` line that declares a module `below` a header's root, and the file it goes in: `header` itself for a child of the root, and otherwise the file its parent module is read from under `namespace` — named from `package`, the directory its reader works in.
-fn declaration(below: &[String], header: &Path, namespace: &Path, package: &Path) -> String {
-    let (label, parents) = below
-        .split_last()
-        .expect("a module below the root it is declared from");
-    let file = match parents.split_last() {
-        None => header.to_path_buf(),
-        Some((parent, above)) => above
-            .iter()
-            .fold(namespace.to_path_buf(), |path, segment| path.join(segment))
-            .join(format!("{parent}.{EXTENSION}")),
-    };
+/// The `mod` lines that would declare the module `below` a root's mount from `header`: one for each link of the chain past the deepest module `declared` says the chain already reaches, each in the file its parent module is read from, the root's own links in `header`, named from `package`, the directory its reader works in — `with `mod tests;` in lib.crs and `mod io;` in tests.crs`.
+fn declaration(
+    below: &[String],
+    header: &Path,
+    package: &Path,
+    declared: impl Fn(&[String]) -> bool,
+) -> String {
+    let namespace = RootSource::namespace_of(header);
+    let reached = (1..below.len())
+        .rev()
+        .find(|depth| declared(&below[..*depth]))
+        .unwrap_or(0);
 
-    format!(
-        "declare it with `mod {label};` in {}",
-        file.strip_prefix(package).unwrap_or(&file).display()
-    )
+    let links = (reached..below.len())
+        .map(|depth| {
+            let file = match depth {
+                0 => header.to_path_buf(),
+                _ => below[..depth - 1]
+                    .iter()
+                    .fold(namespace.clone(), |path, segment| path.join(segment))
+                    .join(format!("{}.{EXTENSION}", below[depth - 1])),
+            };
+            format!(
+                "`mod {};` in {}",
+                below[depth],
+                file.strip_prefix(package).unwrap_or(&file).display()
+            )
+        })
+        .collect::<Vec<_>>();
+
+    format!("with {}", links.join(" and "))
 }
 
 /// Whether a `mod` chain from `entry` reaches `module`, reading `overlay`'s text before the disk. An entry that cannot be read or parsed places the file in its program anyway: the compilation reports that fault on its own account, and a file that only looks unlinked because its entry is broken is no finding.

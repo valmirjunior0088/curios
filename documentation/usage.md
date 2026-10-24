@@ -38,16 +38,16 @@ name = "hello"
 compiler = "0.16.9"
 ```
 
-Neither stem enters a qualified name — `lib` and `exe` are spellings nothing can refer to, exactly so a package's own name never means two things at once. `lib.crs`'s modules load from the manifest's directory (`pub mod parse;` reads `parse.crs`), which is the one place a header's namespace is not its stem directory.
+Neither stem enters a qualified name — `lib` and `exe` are spellings nothing can refer to, exactly so a package's own name never means two things at once. Each is its unit's root, so each loads its modules from the manifest's directory, as every root loads from the directory it sits in ([Modules](syntax.md#modules)): `pub mod parse;` in `lib.crs` reads `parse.crs`, and `mod util;` in `exe.crs` reads `util.crs`.
 
 One name is reserved: a package named `std` is the standard library. Compiled first, it takes the archived `/std`'s place — compiled over it, with everything the edit did not reach reused — and everything after it is compiled against it; anywhere else in a compilation it collides with the archived root as any other claim on `/std` does. It is how the standard library is worked on, not a way to swap one under a dependency, which means what it means against the `/std` it was compiled after.
 
 Everything else is declared, in the rows [the manifest](#the-manifest) states. A declared row always wins over the found file, so `[[executables]] name = "hello"` with a `path` overrides the `exe.crs` convention for the package's own program; and with more than one executable and no `default`, a bare `curios run` refuses rather than guessing.
 
-**The package root has one stem space.** `lib.crs`, every module it enumerates, and every executable compiled from a file directly beside the manifest all claim a stem there, and a stem claimed twice is refused naming both claimants:
+**A file is one unit's.** The library and every executable beside the manifest load their modules from one directory, and a row may point anywhere below it, so a file two units' `mod` chains reach is refused before anything is compiled, naming both: a module both declare would be compiled twice as two unrelated modules, and a program's file declared as a module would be both. A module the library and a program both want lives in the library, which every executable of the package reaches by the package's name:
 
 ```
-the package root claims the stem `hello` twice: `mod hello` in `lib.crs` and the executable "hello"
+`parse.crs` is a module of the library and of the executable "tool": a file is one unit's, so declare it in the library alone, and reach it from the other through `/hello/parse`
 ```
 
 ## Subjects
@@ -384,7 +384,7 @@ name = "serve"
 path = "tools/serve.crs"  # unless the row says otherwise
 ```
 
-An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..` or leading `/`, since the stem-space checks compare it as written.
+An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..` or leading `/`, since the checks that keep a file in one unit compare it as written. Its own modules load from the directory it sits in, so a program with modules of its own and a directory to itself is `path = "tools/serve/serve.crs"` beside `tools/serve/*.crs`.
 
 `compiler` states a minimum, not a range or an exact toolchain pin: `compiler = "0.16.9"` accepts that version and newer, using SemVer precedence and ignoring build metadata. An older compiler is refused before compilation or cached execution, naming the manifest, the required minimum and the running version. Every dependency is checked against its own effective requirement too. A standalone package must state one: there is no implicit minimum, so a manifest without `compiler` is refused, naming the line that would satisfy the running compiler, and `curios new` writes that line when it starts a package. Loose programs and standard input have no manifest requirement.
 
@@ -502,7 +502,7 @@ It is loose in the same sense a file no unit declares is, and answers before any
 
 Standard input is asked for rather than assumed. A bare `curios run` already means the governing package's default executable, so reading a pipe when one happens to be attached would decide between the two by whether a terminal is present — making one command line mean different things in a shell and in a pipeline, and leaving `curios run < input.txt` compiling the input it was meant to be fed. The spelling costs one character and removes the question.
 
-One thing follows from the program being anonymous, and it is a refusal rather than a guess: **it resolves no file-backed modules.** `mod util;` looks in the header's stem directory, and there is no header on disk to take a stem from, so it fails as an unfound module. Inline modules — `mod util … end` — work normally, so a program on standard input can still be structured, just not spread across files.
+One thing follows from the program being anonymous, and it is a refusal rather than a guess: **it resolves no file-backed modules.** `mod util;` looks in the directory its root sits in, and text on standard input sits in none, so it fails as an unfound module. Inline modules — `mod util … end` — work normally, so a program on standard input can still be structured, just not spread across files.
 
 Text written as a module — items with no final term — is checked as one, as a file written as a module is: `wonder diagnostics`, `wonder tests`, `lint` and `test` answer it as a unit of its own mounted at `/stdin`, since standard input has no stem to mount it at, and `run`, `compile`, `wonder stage` and `wonder cost`, which need a program, refuse it as written as a module.
 

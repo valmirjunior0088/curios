@@ -849,9 +849,7 @@ pub mod Internal
 end
 ```
 
-A header's file-backed modules live in its **stem directory**. `mod Nat;` written in `foo.crs` loads `foo/Nat.crs`, and `Nat`'s own file-backed modules load from `foo/Nat/`. One rule governs every file in the language, so the file handed to `curios run` is a header like any other: `mod Nat;` in `main.crs` loads `main/Nat.crs`. `main.crs` is not special; it is only the file you pointed at.
-
-A package's library header is the single exception, and it is a fact about package layout rather than about the language — see [What a package is made of](usage.md#what-a-package-is-made-of). A stem is never part of a name: neither `exe` nor `lib` can be written in a path.
+A unit's **root** — the file handed to `curios run`, a package's `lib.crs` or `exe.crs`, a file checked as a module of its own — loads its file-backed modules from the directory it sits in, and every module below it from its **stem directory**: `mod Nat;` in `main.crs` loads `Nat.crs` beside it, and `Nat`'s own file-backed modules load from `Nat/`. Below the root a qualified name's tail and its path are one string, so `/Nat/Lt` is `Nat/Lt.crs`. A stem is never part of a name: `main`, `exe` and `lib` cannot be written in a path. Roots in one directory share it, and a file two units both declare is refused — see [What a package is made of](usage.md#what-a-package-is-made-of).
 
 ### Imports and re-exports
 

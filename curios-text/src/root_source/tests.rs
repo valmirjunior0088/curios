@@ -14,9 +14,9 @@ fn an_entry_declares_what_its_mod_chain_reaches() {
         "entry-declares",
         &[
             ("serve.crs", "mod helper;\n/std/print(\"\")\n"),
-            ("serve/helper.crs", "mod deep;\n"),
-            ("serve/helper/deep.crs", ""),
-            ("serve/stray.crs", ""),
+            ("helper.crs", "mod deep;\n"),
+            ("helper/deep.crs", ""),
+            ("stray.crs", ""),
         ],
     );
     let (entrypoint, loader, _) =
@@ -43,7 +43,7 @@ fn the_declared_files_are_what_the_mod_chains_reach() {
             ("parse/lexer.crs", ""),
             ("stray.crs", ""),
             ("serve.crs", "mod helper;\n/std/print(\"\")\n"),
-            ("serve/helper.crs", ""),
+            ("helper.crs", ""),
         ],
     );
 
@@ -68,7 +68,7 @@ fn the_declared_files_are_what_the_mod_chains_reach() {
         loader
             .entry_declared_files(&entrypoint.module.items)
             .expect("every header reads"),
-        vec![root.join("serve/helper.crs")]
+        vec![root.join("helper.crs")]
     );
 }
 

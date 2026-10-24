@@ -1,8 +1,8 @@
 //! Where a unit's module bodies come from.
 //!
-//! **The layout rule:** `mod x` declared in a namespace's header resolves to `x.crs` in that namespace's directory, and a header's namespace directory is its stem directory. `mod util` in `<dir>/main.crs` reads `<dir>/main/util.crs`, and `util`'s own children read from `<dir>/main/util/`. One rule governs every file in the language, so the file handed to `run` is a header like any other and declaring a file never changes what its `mod`s mean.
+//! **The layout rule:** `mod x` declared in a namespace's header resolves to `x.crs` in that namespace's directory. A unit's root — a library's `lib.crs`, a program's entry, a file checked as a module of its own — has the directory it sits in as its namespace's, and every other module its stem directory: `mod util` in `<dir>/main.crs` reads `<dir>/util.crs`, and `util`'s own children read from `<dir>/util/`. Below the root a qualified name's tail and its path are one string, which is how the library's `/json/parse/lexer` is `parse/lexer.crs` beside its manifest ([`RootSource::namespace_of`]).
 //!
-//! A stem is never part of a name. `<dir>` and `main` are spelling, and `/util` is the qualifier — which is why [`RootSource::mounted`] takes the header and the directory as two arguments rather than deriving one from the other: a package's library header sits beside its manifest while its namespace *is* the manifest's directory, and that exception is the manifest's to state, not this crate's to guess. See `curios-package`'s `layout` module.
+//! A stem is never part of a name. `<dir>` and `main` are spelling, and `/util` is the qualifier.
 //!
 //! Every file a source reads passes through one of two doors, [`RootSource::read`] for its text and [`RootSource::load`] for its tree, which hold one source for each distinct text of a file per thread and parse it at most once: see [`parsed`].
 
@@ -38,8 +38,13 @@ pub struct RootSource {
     ///
     /// Interior mutability because resolution is a `&self` operation everywhere above this, and recording what was read is not a reason to thread `&mut` through the lowering. Nothing here is `Send` — a surface module is an `Rc` tree — so this costs no bound that was not already spent.
     reads: RefCell<BTreeMap<PathBuf, Arc<Source>>>,
-    /// The file an entry was opened from, by canonical path: the one file of its unit that lies outside the directory its modules are read from. See [`RootSource::opened`].
-    opened: Option<PathBuf>,
+}
+
+/// What a walk of `mod` chains does at a file it cannot read: refuse the walk, as a listing of a unit's files that is relied on does, or end that branch there, as a claim on files made before anything has read them does.
+#[derive(Clone, Copy)]
+enum Unreadable {
+    Refuses,
+    EndsBranch,
 }
 
 /// Where one mount's modules are.
@@ -59,7 +64,7 @@ impl RootSource {
         Self::over(vec![(entry_mount(), Base::Supplied(BTreeMap::new()))])
     }
 
-    /// The entry program written in `header`, its own modules under that header's stem directory: `mod util` in `<dir>/main.crs` reads `<dir>/main/util.crs`.
+    /// The entry program written in `header`, its own modules beside it: `mod util` in `<dir>/main.crs` reads `<dir>/util.crs`.
     ///
     /// `header` is never read — the entry's own body is its [`Entrypoint`](crate::Entrypoint), which the caller already has — so the path is here for the directory it names, and an entrypoint parsed from a string can still be given one.
     pub fn entry(header: &Path) -> Self {
@@ -67,12 +72,14 @@ impl RootSource {
             entry_mount(),
             Base::Disk {
                 header: None,
-                directory: header
-                    .parent()
-                    .unwrap_or(Path::new("."))
-                    .join(header.file_stem().unwrap_or_default()),
+                directory: Self::namespace_of(header),
             },
         )])
+    }
+
+    /// The directory a unit's root reads its modules from: the one `header` sits in, so `mod util` in `<dir>/main.crs` reads `<dir>/util.crs`. A module below the root reads its own from its stem directory, which the qualifier spells below this one.
+    pub fn namespace_of(header: &Path) -> PathBuf {
+        header.parent().unwrap_or(Path::new(".")).to_path_buf()
     }
 
     /// [`entry`](Self::entry) for an entry whose text is in hand: `source` is what was parsed from `header`, and is logged as read.
@@ -82,18 +89,13 @@ impl RootSource {
         let opened = header
             .canonicalize()
             .unwrap_or_else(|_| header.to_path_buf());
-        let unit = Self {
-            opened: Some(opened.clone()),
-            ..Self::entry(header)
-        };
+        let unit = Self::entry(header);
         unit.reads.borrow_mut().insert(opened, Arc::clone(source));
 
         unit
     }
 
-    /// A unit mounted at `prefix`, declared in `header` and holding its modules under `directory`.
-    ///
-    /// The two paths are separate because the layout rule relates them rather than deriving one from the other: a package's library header sits beside its manifest while its namespace *is* the manifest's directory, and every other header's namespace is its stem directory.
+    /// A unit mounted at `prefix`, declared in `header` and holding its modules under `directory`: a root's is [`namespace_of`](Self::namespace_of) its header.
     pub fn mounted(
         prefix: &str,
         kind: RootKind,
@@ -122,10 +124,10 @@ impl RootSource {
         let stem = path.file_stem()?.to_str()?;
 
         is_identifier(stem)
-            .then(|| Self::mounted(stem, RootKind::Ordinary, path, path.with_extension("")))
+            .then(|| Self::mounted(stem, RootKind::Ordinary, path, Self::namespace_of(path)))
     }
 
-    /// `text` supplied as a unit of its own at `prefix`, when it is written as a module: how a module that arrived as text rather than as a file — on standard input — is checked item by item, as [`loose_module`](Self::loose_module) checks a file. `label` names it in diagnostics where a path would go. Text has no stem directory, so its modules are supplied rather than read and a file-backed `mod` in it is unfound, as it is in a program supplied the same way.
+    /// `text` supplied as a unit of its own at `prefix`, when it is written as a module: how a module that arrived as text rather than as a file — on standard input — is checked item by item, as [`loose_module`](Self::loose_module) checks a file. `label` names it in diagnostics where a path would go. Text sits in no directory, so its modules are supplied rather than read and a file-backed `mod` in it is unfound, as it is in a program supplied the same way.
     pub fn labelled_module(prefix: &str, label: &str, text: &str) -> Option<Self> {
         if Form::of(Path::new(label), text) != Form::Module {
             return None;
@@ -152,7 +154,6 @@ impl RootSource {
             answers: Vec::new(),
             overlay: Overlay::default(),
             reads: RefCell::new(BTreeMap::new()),
-            opened: None,
         }
     }
 
@@ -264,7 +265,7 @@ impl RootSource {
             .collect()
     }
 
-    /// Where this source reads from: the directory each mount's modules are under, and the file an entry was opened from, which lies beside its directory and not in it. Every file the source logs as read lies under one of them.
+    /// Where this source reads from: the directory each mount's modules are under, an entry's own file among them since a root sits in its namespace's directory. Every file the source logs as read lies under one of them.
     ///
     /// Empty for a source supplied already parsed: there is nothing on disk, which is why the fixed prelude has an archive of its own.
     pub fn directories(&self) -> Vec<&Path> {
@@ -274,7 +275,6 @@ impl RootSource {
                 Base::Disk { directory, .. } => Some(directory.as_path()),
                 Base::Supplied(_) => None,
             })
-            .chain(self.opened.as_deref())
             .collect()
     }
 
@@ -368,7 +368,7 @@ impl RootSource {
 
     /// [`declares_module`](Self::declares_module) for the one header this source never reads: whether a `mod` chain from the entry program whose items are `items` reaches `qualifier`, a module under the entry's own mount.
     ///
-    /// An entry's header ends in a term, so no module loader could parse it; whoever opened the entry parsed it once as the program it is, and hands its items over. Everything below them is read through this source, so a module under the entry's stem directory is loaded exactly as the compilation would load it.
+    /// An entry's header ends in a term, so no module loader could parse it; whoever opened the entry parsed it once as the program it is, and hands its items over. Everything below them is read through this source, so a module beside the entry is loaded exactly as the compilation would load it.
     pub fn entry_declares(&self, items: &[TopItem], qualifier: &Qualifier) -> Result<bool, Error> {
         self.declared_below(items.to_vec(), &Qualifier::empty(), qualifier)
     }
@@ -425,7 +425,7 @@ impl RootSource {
 
             files.push(header.clone());
             let items = self.load(&mount.prefix)?.items;
-            self.files_below(items, &mount.prefix, &mut files)?;
+            self.files_below(items, &mount.prefix, &mut files, Unreadable::Refuses)?;
         }
 
         Ok(files)
@@ -434,17 +434,63 @@ impl RootSource {
     /// [`declared_files`](Self::declared_files) for the entry program whose items are `items`: every file its `mod` chain reaches, the header itself not among them.
     pub fn entry_declared_files(&self, items: &[TopItem]) -> Result<Vec<PathBuf>, Error> {
         let mut files = Vec::new();
-        self.files_below(items.to_vec(), &Qualifier::empty(), &mut files)?;
+        self.files_below(
+            items.to_vec(),
+            &Qualifier::empty(),
+            &mut files,
+            Unreadable::Refuses,
+        )?;
 
         Ok(files)
     }
 
-    /// The files below `items`, the header of `prefix`, appended to `files`: a file module's own file before the files below it, and an inline module walked as the body it carries.
+    /// Every file a `mod` chain from this source's headers reaches, as [`declared_files`](Self::declared_files) lists them, a file that does not read ending its own branch rather than the walk: what a unit claims before anything has said whether each of its files reads, a program declared as a module among them.
+    pub fn reached_files(&self) -> Vec<PathBuf> {
+        let mut files = Vec::new();
+
+        for (mount, base) in &self.bases {
+            let Base::Disk {
+                header: Some(header),
+                ..
+            } = base
+            else {
+                continue;
+            };
+
+            files.push(header.clone());
+            if let Ok(module) = self.load(&mount.prefix) {
+                let _ = self.files_below(
+                    module.items,
+                    &mount.prefix,
+                    &mut files,
+                    Unreadable::EndsBranch,
+                );
+            }
+        }
+
+        files
+    }
+
+    /// [`reached_files`](Self::reached_files) for the entry program whose items are `items`, the header itself not among them.
+    pub fn entry_reached_files(&self, items: &[TopItem]) -> Vec<PathBuf> {
+        let mut files = Vec::new();
+        let _ = self.files_below(
+            items.to_vec(),
+            &Qualifier::empty(),
+            &mut files,
+            Unreadable::EndsBranch,
+        );
+
+        files
+    }
+
+    /// The files below `items`, the header of `prefix`, appended to `files`: a file module's own file before the files below it, and an inline module walked as the body it carries. A file that does not read refuses the walk or ends its branch, as `unreadable` says.
     fn files_below(
         &self,
         items: Vec<TopItem>,
         prefix: &Qualifier,
         files: &mut Vec<PathBuf>,
+        unreadable: Unreadable,
     ) -> Result<(), Error> {
         for item in items {
             let TopItem::Mod(declaration) = item else {
@@ -453,13 +499,18 @@ impl RootSource {
             let path = prefix.with(&declaration.label.to_string());
 
             match declaration.module {
-                Some(module) => self.files_below(module.items, &path, files)?,
+                Some(module) => self.files_below(module.items, &path, files, unreadable)?,
                 None => {
                     if let Some((mount, Base::Disk { directory, .. })) = self.owning(&path) {
                         files.push(file(directory, &path, mount.prefix.segments().len()));
                     }
-                    let items = self.load(&path)?.items;
-                    self.files_below(items, &path, files)?;
+                    match (self.load(&path), unreadable) {
+                        (Ok(module), _) => {
+                            self.files_below(module.items, &path, files, unreadable)?
+                        }
+                        (Err(_), Unreadable::EndsBranch) => {}
+                        (Err(error), Unreadable::Refuses) => return Err(error),
+                    }
                 }
             }
         }

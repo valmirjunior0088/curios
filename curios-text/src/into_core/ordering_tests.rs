@@ -57,21 +57,23 @@ fn a_declared_group_binds_its_members_in_one_item() {
     );
 }
 
-/// The entry is a header like any other, so its own modules live in its stem directory: `main.crs` declaring `mod A` reads `main/A.crs`, never a sibling `A.crs`.
+/// The entry is its unit's root, so its own modules sit beside it, and a module's own children in its stem directory: `main.crs` declaring `mod A` reads `A.crs`, and `A` declaring `mod C` reads `A/C.crs`, never a stem directory of the entry's.
 #[test]
-fn the_entry_reads_its_modules_from_its_stem_directory() {
-    let base = temp_dir("stem-directory");
+fn an_entry_reads_its_modules_beside_it_and_a_module_from_its_stem_directory() {
+    let base = temp_dir("root-directory");
     write_module(
         &base,
-        "main/A.crs",
+        "A.crs",
         r#"
+            pub mod C;
             use /B/{x};
-            pub let y : Type = x;
+            pub let y : Type = C/z;
         "#,
     );
-    write_module(&base, "main/B.crs", "pub let x : Type = Type;");
-    // A sibling of the entry, which nothing may resolve to, since one rule governs every file.
-    write_module(&base, "A.crs", "pub let wrong : Type = Type;");
+    write_module(&base, "A/C.crs", "pub let z : Type = Type;");
+    write_module(&base, "B.crs", "pub let x : Type = Type;");
+    // What a stem directory of the entry's would hold, which nothing may resolve to.
+    write_module(&base, "main/A.crs", "pub let wrong : Type = Type;");
 
     let entrypoint = r#"
             pub mod A;

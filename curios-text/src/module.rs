@@ -627,7 +627,7 @@ impl Entrypoint {
             .map_err(LoadError::Parse)
     }
 
-    /// Reads `path` as an entrypoint, paired with the [`RootSource`] its own stem directory anchors and the text that was parsed — a bare file is a header like any other, so `mod util` in `main.crs` reads `main/util.crs`.
+    /// Reads `path` as an entrypoint, paired with the [`RootSource`] the directory it sits in anchors and the text that was parsed — the file is the root of its unit, so `mod util` in `main.crs` reads `util.crs` beside it.
     ///
     /// The pairing is the point: [`from_path`](Self::from_path) leaves a parsed entrypoint's file-backed `mod` declarations unresolved, and every caller that opens a file then has to know which `RootSource` goes with it. That is one answer, not a caller's choice, so it lives beside the two calls it makes.
     ///
@@ -656,7 +656,7 @@ impl Entrypoint {
 
     /// Parses `text` as an entrypoint, paired with the [`RootSource`] that resolves nothing — the counterpart of [`opened`](Self::opened) for a program that arrived as text rather than as a file. `label` names it in diagnostics, where a file's path would go.
     ///
-    /// **Nothing resolves because there is nowhere to resolve from.** A header's file-backed modules live in its stem directory, and text has no stem, so `mod util;` fails here as an unfound module rather than reading a directory somebody upstream had to invent. Inline modules are untouched, which leaves a supplied program able to declare everything it uses — it just cannot spread itself over files it has no name for.
+    /// **Nothing resolves because there is nowhere to resolve from.** A root's file-backed modules live in the directory it sits in, and text sits in none, so `mod util;` fails here as an unfound module rather than reading a directory somebody upstream had to invent. Inline modules are untouched, which leaves a supplied program able to declare everything it uses — it just cannot spread itself over files it has no name for.
     ///
     /// The pairing lives here for the reason [`opened`](Self::opened)'s does: which `RootSource` goes with an entrypoint is one answer, not a caller's choice. The source comes back for the same reason too, though nothing verifies a supplied program against it — text that was never on disk cannot go stale, so what a caller has here is the third element of one shape rather than a second one to handle.
     pub fn supplied(
@@ -671,7 +671,7 @@ impl Entrypoint {
 }
 
 impl Entrypoint {
-    /// [`opened`](Self::opened) with `text` standing in for what `path` holds — an editor's unsaved buffer — paired with the same [`RootSource`] the file would get, so its file-backed `mod` declarations resolve from its stem directory exactly as if it had been saved. The source names `path`, so a diagnostic about it reads as one about the file.
+    /// [`opened`](Self::opened) with `text` standing in for what `path` holds — an editor's unsaved buffer — paired with the same [`RootSource`] the file would get, so its file-backed `mod` declarations resolve where the saved file's would. The source names `path`, so a diagnostic about it reads as one about the file.
     ///
     /// The overlay for the *rest* of the unit is the loader's to carry (`RootSource::with_overlay`); this is the one file the loader never reads, supplied the one way it can be.
     pub fn overlaid(

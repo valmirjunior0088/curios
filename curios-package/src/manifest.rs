@@ -840,7 +840,7 @@ impl ExecutableRow {
             ));
         }
 
-        // The package root has one stem space, and the library header holds a stem in it.
+        // The library header is the library's root, so no program is compiled from it.
         if path == Path::new(LIBRARY) {
             return Err(format!(
                 "the executable {name:?} is compiled from `{LIBRARY}`, which is the package's library header"

@@ -137,7 +137,7 @@ fn write(root: &Path, path: &str, contents: &str) {
 
 /// A package declaring one executable, whose entry reads its library.
 ///
-/// The entry's own modules are the other half of what a payload's record covers, and they mount at the *empty* prefix: `mod greeting` in `app.crs` reads `app/greeting.crs` and is spelled `/greeting`. [`ENTRY_WITH_MODULE`] is the form that has one.
+/// The entry's own modules are the other half of what a payload's record covers, and they mount at the *empty* prefix: `mod greeting` in `app.crs` reads `greeting.crs` beside it and is spelled `/greeting`. [`ENTRY_WITH_MODULE`] is the form that has one.
 fn project(name: &str) -> Temporary {
     let root = temporary(name);
 
@@ -234,11 +234,11 @@ fn an_edited_module_of_the_entry_is_not_reused() {
     let root = project("edited-module");
 
     write(&root, "app.crs", ENTRY_WITH_MODULE);
-    write(&root, "app/greeting.crs", &greeting("hello"));
+    write(&root, "greeting.crs", &greeting("hello"));
     run(&root);
     assert!(run(&root).reused, "filed by the first invocation");
 
-    write(&root, "app/greeting.crs", &greeting("goodbye"));
+    write(&root, "greeting.crs", &greeting("goodbye"));
     assert!(
         !run(&root).reused,
         "and refused once a file its loader read differs"
