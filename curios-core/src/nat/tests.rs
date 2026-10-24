@@ -155,3 +155,47 @@ fn a_product_distributed_under_a_sum_is_merged_into_it() {
     assert_eq!(Nat::summands(&inner).len(), 6, "{normalized}");
     assert_eq!(occurrences(&inner, &y), 1);
 }
+
+// The fold distributes a product unless both operands are symbolic sums: a literal, a monomial or one summand over a floor on either side is distributed in the fold, and a product of two symbolic sums is the one shape the fold leaves stuck and `Nat::normalize` distributes on demand — one line, stated once and read by both.
+#[test]
+fn a_product_is_stuck_only_between_two_symbolic_sums() {
+    let (a, w) = (sym(0, "a"), sym(1, "w"));
+    let two = Term::intrinsic(Intrinsic::Nat(Nat::new(2usize)));
+    let product = |left: &Term, right: &Term| {
+        Term::intrinsic(Intrinsic::nat_mul(left.clone(), right.clone()))
+    };
+    let sum = add(a.clone(), w.clone());
+    let floored = Nat::rebuild(Natural::from(1usize), a.clone());
+
+    assert!(Nat::distributes(&a, &w), "two atoms are a monomial");
+    assert!(
+        Nat::distributes(&two, &sum),
+        "a literal distributes over a sum"
+    );
+    assert!(
+        Nat::distributes(&floored, &sum),
+        "one summand over a floor distributes over a sum"
+    );
+    assert!(
+        !Nat::distributes(&sum, &add(w.clone(), a.clone())),
+        "two symbolic sums stay stuck"
+    );
+
+    assert!(Nat::stuck_product(&product(&sum, &sum)));
+    assert!(!Nat::stuck_product(&product(&a, &w)));
+    assert!(
+        !Nat::has_stuck_product(&product(&product(&a, &w), &two)),
+        "a monomial holds no stuck product"
+    );
+    assert!(
+        Nat::has_stuck_product(&product(&product(&sum, &sum), &a)),
+        "a stuck factor is found under a product"
+    );
+    assert!(
+        Nat::has_stuck_product(&Nat::rebuild(
+            Natural::from(1usize),
+            add(product(&sum, &sum), a)
+        )),
+        "and under a floored sum"
+    );
+}

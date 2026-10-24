@@ -96,6 +96,7 @@ fn a_product_distributes_only_past_a_single_monomial() {
         int_has_stuck_product(&stuck),
         "`(i + j) · (j + k)` stays a stuck product until a comparison asks"
     );
+    assert!(int_stuck_product(&stuck) && !int_stuck_product(&distributed));
 }
 
 // Cancellation moves every term to whichever side keeps its coefficient positive, so `i + 2 · j - k` against `j` becomes `i + j` against `k`, and a pair that differs in nothing becomes `0` against `0`.

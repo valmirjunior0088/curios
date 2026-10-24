@@ -555,7 +555,7 @@ pub fn reduce_intrinsic(
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
             // **A product of two symbolic sums is its own weak-head form.** Distribution is the one quadratic step in the `Nat` normal form — every summand of one operand against every summand of the other — and a web of definitions each naming the one before it twice made it build 1 222 222 monomials to keep 25 412, to answer a comparison a head clash settles. A product with a literal or a single symbolic summand on either side distributes here as it always did, in O(summands); only sum × sum stays stuck, and `Nat::normalize` distributes it where a value is asked for by name — see `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`.
-            if nat_summands(&left) > 1 && nat_summands(&right) > 1 {
+            if !Nat::distributes(&left, &right) {
                 return Ok(Subterm::Intrinsic(Intrinsic::nat_mul(left, right)));
             }
             reducer.spend(operand_bound(

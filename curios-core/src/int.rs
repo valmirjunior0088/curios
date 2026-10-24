@@ -599,6 +599,14 @@ pub fn int_has_stuck_product(term: &Term) -> bool {
     false
 }
 
+/// Whether a reduced `Int` is the one product the fold leaves stuck, as `Nat::stuck_product` reads a `Nat`: a product of two symbolic sums (`int_distributes`).
+pub fn int_stuck_product(term: &Term) -> bool {
+    matches!(
+        &**term,
+        Subterm::Intrinsic(Intrinsic::IntMul(left, right)) if !int_distributes(left, right)
+    )
+}
+
 /// A weak-head `Int` with every product of two symbolic sums distributed and the result re-merged — asked for by name where a comparison needs the value, as `Nat::normalize` is. A term with no stuck product comes back untouched.
 pub fn int_normalize(reducer: &mut impl Reducer, term: Term) -> Result<Term, ReduceError> {
     let mut memo: HashMap<usize, (Term, Term)> = HashMap::new();

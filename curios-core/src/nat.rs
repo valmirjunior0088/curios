@@ -267,10 +267,18 @@ impl Nat {
         terms
     }
 
-    /// Whether a reduced `Nat` is one summand, a literal or a monomial over no floor: read off its sum alone, no product taken apart, so asking it of every node of a monomial costs the monomial once.
-    fn single(term: &Term) -> bool {
-        let (floor, inner) = Self::decompose(term);
-        Self::summands(&inner).len() + usize::from(!floor.is_zero()) <= 1
+    /// Whether the fold distributes the product of two reduced `Nat`s: where either holds at most one symbolic summand, its floor counted as none — a literal, a monomial, or one summand over a floor. A product of two symbolic sums is the one the fold leaves stuck and [`Nat::normalize`] distributes on demand, so this is the line both read, stated once; `int_distributes` draws `Int`'s. Read off each sum alone, no product taken apart, so asking it of every node of a monomial costs the monomial once.
+    pub fn distributes(left: &Term, right: &Term) -> bool {
+        let symbolic = |operand: &Term| Self::summands(&Self::decompose(operand).1).len();
+        symbolic(left) <= 1 || symbolic(right) <= 1
+    }
+
+    /// Whether a reduced `Nat` is the one product the fold leaves stuck: a product of two symbolic sums ([`Nat::distributes`]).
+    pub fn stuck_product(term: &Term) -> bool {
+        matches!(
+            &**term,
+            Subterm::Intrinsic(Intrinsic::NatMul(left, right)) if !Self::distributes(left, right)
+        )
     }
 
     /// A reduced `Nat`'s footprint, counted before a fold writes it back: its summands with the floor one of them, their factors, and the bits of their coefficients.
@@ -600,11 +608,9 @@ impl Nat {
                     let read = (left.clone(), right.clone());
                     let left = Self::normalize_within(reducer, left.clone(), memo)?;
                     let right = Self::normalize_within(reducer, right.clone(), memo)?;
-                    // A product of two single summands neither of which changed is the monomial the fold wrote, and stands as it left it; any other is distributed here, and charged as the fold charges one.
-                    let standing = read.0 == left
-                        && read.1 == right
-                        && Self::single(&left)
-                        && Self::single(&right);
+                    // A product neither operand of which changed, and which the fold distributes, is what the fold wrote and stands as it left it; a product of two symbolic sums is distributed here, and charged as the fold charges one.
+                    let standing =
+                        read.0 == left && read.1 == right && Self::distributes(&left, &right);
                     match standing {
                         true => reduced.clone(),
                         false => {
@@ -647,12 +653,18 @@ impl Nat {
         })
     }
 
-    /// Whether a weak-head `Nat` holds a product of two symbolic sums somewhere under its sums — the one shape [`Nat::normalize`] changes.
+    /// Whether a weak-head `Nat` holds a product of two symbolic sums somewhere under its sums and products — the one shape [`Nat::normalize`] changes.
     pub fn has_stuck_product(term: &Term) -> bool {
         let mut pending = vec![term.clone()];
         while let Some(term) = pending.pop() {
             match &*term {
-                Subterm::Intrinsic(Intrinsic::NatMul(..)) => return true,
+                Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => {
+                    if !Self::distributes(left, right) {
+                        return true;
+                    }
+                    pending.push(left.clone());
+                    pending.push(right.clone());
+                }
                 Subterm::Intrinsic(Intrinsic::NatAdd(l, r)) => {
                     pending.push(l.clone());
                     pending.push(r.clone());
