@@ -4,8 +4,8 @@
 
 use curios_num::{Natural, Rounding};
 
-/// The carrier an operation is over.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// The carrier an operation is over. Ordered as declared, as an operation is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Carrier {
     /// ℕ, with truncated subtraction.
     Natural,
@@ -30,8 +30,8 @@ impl Carrier {
     }
 }
 
-/// An operation this crate's reasoning gives a meaning to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// An operation this crate's reasoning gives a meaning to. Ordered as declared, for a tie between two views that states one before another.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Operation {
     Sum,
     /// Truncated at `Nat`, the group's at `Int`.

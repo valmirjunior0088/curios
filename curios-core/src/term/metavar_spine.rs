@@ -1,6 +1,6 @@
 //! A metavariable's spine: what each binder it was born under stands for at one occurrence, in binding order — the delayed substitution its solution is read through ([`Metavar::spine`](super::Metavar)).
 //!
-//! **Persistent, and carrying its facts.** The entries are a persistent vector, shared between every occurrence born under one scope and with the scope that holds them, so a birth costs nothing more than the one before it and an entry added for a binder costs a logarithm of the scope. Beside the entries the spine keeps what a node derives from its children — the hash, the reach, the containment flags and the free names, each entry counted once — so a node holding a spine derives its own without reading it, and two spines are told apart by their hashes before their entries.
+//! **Persistent, and carrying its facts.** The entries are a persistent vector, shared between every occurrence born under one scope and with the scope that holds them, so a birth costs nothing more than the one before it and an entry added for a binder costs a logarithm of the scope. Beside the entries the spine keeps what a node derives from its children — the hash, the reach, the containment flags, the free names and the rank's summary, each entry counted once at its rank — so a node holding a spine derives its own without reading it, and two spines are told apart by their hashes before their entries.
 //!
 //! **The identity is known as such.** A spine a metavariable is born with names each of its birth binders as itself, and a reader that would apply or invert it reads it as the identity without walking it ([`MetavarSpine::is_identity`]). Any spine a walk rewrote, or one built from a list, is not known to be one, which is the cautious answer: it is read entry by entry.
 //!
@@ -10,7 +10,10 @@
 mod tests;
 
 use {
-    super::{Bound, Free, Frees, Names, Term},
+    super::{
+        Bound, Free, Frees, Names, Term,
+        rank::{Ranked, SpineRanked},
+    },
     curios_utilities::{Ordered, Sorted, Summary},
     std::{
         borrow::Borrow,
@@ -143,6 +146,8 @@ pub struct MetavarSpine {
     entries: Ordered<Term, Reaches>,
     facts: Facts,
     held: Held,
+    /// The rank's summary of the entries, each placed at its rank: what a metavariable's node is ranked by beside its own identity.
+    ranked: SpineRanked,
     /// Whether each entry is known to be its own birth binder: so for the spine a metavariable is born with, and an empty one; not for one a walk rewrote or one built from a list.
     identity: bool,
 }
@@ -167,6 +172,7 @@ impl MetavarSpine {
         let rank = self.entries.len() as i64;
         self.facts.add(Facts::of(rank, &entry));
         self.held.add(&entry);
+        self.ranked.changed(rank, entry.ranked(), true);
         self.entries.insert(rank, entry);
     }
 
@@ -221,6 +227,7 @@ impl MetavarSpine {
             entries,
             facts: self.facts,
             held: self.held.clone(),
+            ranked: self.ranked.clone(),
             identity: false,
         };
         for (rank, old, new) in replaced {
@@ -228,9 +235,16 @@ impl MetavarSpine {
             spine.facts.add(Facts::of(rank, &new));
             spine.held.remove(&old);
             spine.held.add(&new);
+            spine.ranked.changed(rank, old.ranked(), false);
+            spine.ranked.changed(rank, new.ranked(), true);
         }
 
         Some(spine)
+    }
+
+    /// The rank's summary of the entries, kept as the spine is built and rewritten: what a metavariable's node is ranked by, read without reading an entry.
+    pub(crate) fn ranked(&self) -> &Ranked {
+        self.ranked.ranked()
     }
 
     pub(crate) fn reach(&self) -> usize {

@@ -278,6 +278,7 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
             "hashing",
             term.structural_hash() == doubled(base.clone(), 60).structural_hash(),
         ),
+        ("ranking", term.rank() == doubled(base.clone(), 60).rank()),
         ("free variables", term.free_vars().contains(&x)),
         (
             "a telescope's free variables",

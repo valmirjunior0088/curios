@@ -1,32 +1,34 @@
 //! Atoms and the monomials over them.
 
-use std::{cmp::Ordering, hash, rc::Rc};
+#[cfg(test)]
+mod tests;
 
-/// What an atom is ordered by: numbers compared in turn, the first the caller's coarse key and each after it what breaks a tie the ones before it leave.
+use std::{any::Any, cmp::Ordering, fmt, hash, rc::Rc};
+
+/// What breaks a tie between two ranks of one key, in the caller's hands: the caller states what orders two of its atoms whose keys are one, and this crate asks it nothing else.
+pub trait Tie: fmt::Debug {
+    /// This against `other`, which the caller reads back as one of its own through [`Tie::as_any`]; `Equal` where it is none, which costs the order two atoms are put in and never a merge.
+    fn tie(&self, other: &dyn Tie) -> Ordering;
+
+    fn as_any(&self) -> &dyn Any;
+}
+
+/// What an atom is ordered by: a key compared first, and where two keys are one, a tie the caller breaks.
 ///
-/// **A rank is compared, never read.** This crate puts atoms in one order by it and asks nothing else of it, so a caller is free to state in it anything that orders — a hash of what an atom is known by, then whatever breaks that hash's ties — and nothing here can come to depend on what the numbers are beyond their order.
+/// **A rank is compared, never read.** This crate puts atoms in one order by it and hashes it by its key, and asks nothing else of it, so a caller is free to state in it anything that orders — a hash of what an atom is known by, then whatever breaks that hash's ties — and nothing here can come to depend on what the key is beyond its order.
 #[derive(Clone, Debug)]
 pub enum Rank {
     /// One key, the rank of nearly every atom: held in place, since an atom is handed out at every reading.
     One(u64),
-    /// Several keys, in the order they are compared.
-    Many(Rc<[u64]>),
+    /// A key beside what breaks a tie between two ranks of that key.
+    Tied(u64, Rc<dyn Tie>),
 }
 
 impl Rank {
-    /// The rank whose keys are `keys`, in the order they are compared.
-    pub fn of(keys: &[u64]) -> Self {
-        match keys {
-            [key] => Rank::One(*key),
-            _ => Rank::Many(Rc::from(keys)),
-        }
-    }
-
-    /// The keys, in the order they are compared.
-    pub fn keys(&self) -> &[u64] {
+    /// The key compared first, and hashed.
+    pub fn key(&self) -> u64 {
         match self {
-            Rank::One(key) => std::slice::from_ref(key),
-            Rank::Many(keys) => keys,
+            Rank::One(key) | Rank::Tied(key, _) => *key,
         }
     }
 }
@@ -39,7 +41,7 @@ impl From<u64> for Rank {
 
 impl PartialEq for Rank {
     fn eq(&self, other: &Self) -> bool {
-        self.keys() == other.keys()
+        self.cmp(other) == Ordering::Equal
     }
 }
 
@@ -53,13 +55,19 @@ impl PartialOrd for Rank {
 
 impl Ord for Rank {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.keys().cmp(other.keys())
+        self.key()
+            .cmp(&other.key())
+            .then_with(|| match (self, other) {
+                (Rank::Tied(_, this), Rank::Tied(_, that)) => this.tie(&**that),
+                _ => Ordering::Equal,
+            })
     }
 }
 
+/// By the key alone, so two ranks one order holds equal hash alike whatever their ties.
 impl hash::Hash for Rank {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.keys().hash(state);
+        state.write_u64(self.key());
     }
 }
 

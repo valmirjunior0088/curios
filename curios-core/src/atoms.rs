@@ -1,6 +1,6 @@
 //! The atoms of one algebraic operation: the terms `curios-algebra` reasons over, each handed to it as a handle.
 //!
-//! **Atom identity is the carrier's, and it is stated here, once.** `curios-algebra` never asks whether two handles might denote one value, so what "the same atom" means at a carrier is exactly which terms [`same_atom`] holds one: the terms a table maps to one handle ([`Atoms::handle`]), and the operands a reader that keeps no table compares directly. The rank each handle carries is the order it is put in: the term's shape, then the age of each identity it holds ([`Term::rank`]), so the order reads no count of what was minted before.
+//! **Atom identity is the carrier's, and it is stated here, once.** `curios-algebra` never asks whether two handles might denote one value, so what "the same atom" means at a carrier is exactly which terms [`same_atom`] holds one: the terms a table maps to one handle ([`Atoms::handle`]), and the operands a reader that keeps no table compares directly. The rank each handle carries is the order it is put in: the term's shape, then its identities by age, each by the positions it holds ([`Term::rank`]), so the order reads no count of what was minted before.
 //!
 //! **An atom of a carrier whose values hold no type is the same up to universe instances** ([`Carrier::holds_types`]). Two occurrences of one polymorphic name are instantiated independently, and Core offers no elimination from a type or a level into a number, a truth value, a byte, a float or a packed sequence of them, so a level is never part of the answer to "are these the same value": `len(xs)` written twice is one atom, which is what lets a bound over it cancel against itself, and `even(t)` written twice is one leaf of a conjunction. The projection is those carriers' licence and nothing wider: it does not make terms equal in general, it is not how a refinement is keyed, and an element of a list is known by its term as written, a list holding values of any type.
 //!
@@ -17,10 +17,14 @@ mod tests;
 
 use {
     super::{Aligned, LinearViews, Subterm, Term},
-    curios_algebra::{Atom, Carrier, LinearForm, Operation, Rank},
+    curios_algebra::{Atom, Carrier, LinearForm, Operation, Rank, Tie},
+    curios_num::Integer,
     std::{
+        any::Any,
+        cmp::Ordering,
         collections::{HashMap, hash_map::DefaultHasher},
         hash::{Hash, Hasher},
+        rc::Rc,
     },
 };
 
@@ -138,15 +142,60 @@ impl Atoms {
     }
 }
 
-/// A view's rank, read off what it states through its atoms' ranks and never through the order its reader handed them out in: one hash, the same in every run.
+/// A view's rank, read off what it states through its atoms' ranks and never through the order its reader handed them out in: a key over the relation, the polarity, the constant, the coefficients and the atoms' keys, and a tie over the same in the view's order, the atoms by their ranks, so two views of one key are ordered as their atoms are.
 fn view_rank(relation: Operation, form: &LinearForm, negated: bool) -> Rank {
     let mut hasher = DefaultHasher::new();
     (relation, negated, &form.constant).hash(&mut hasher);
-    for (coefficient, monomial) in &form.terms {
-        coefficient.hash(&mut hasher);
-        for atom in monomial.atoms() {
-            atom.rank().hash(&mut hasher);
-        }
+    let terms = form
+        .terms
+        .iter()
+        .map(|(coefficient, monomial)| {
+            coefficient.hash(&mut hasher);
+            let ranks = monomial
+                .atoms()
+                .iter()
+                .map(|atom| {
+                    hasher.write_u64(atom.rank().key());
+                    atom.rank().clone()
+                })
+                .collect::<Vec<_>>();
+            (coefficient.clone(), ranks)
+        })
+        .collect::<Vec<_>>();
+    Rank::Tied(
+        hasher.finish(),
+        Rc::new(ViewTie {
+            relation,
+            negated,
+            constant: form.constant.clone(),
+            terms,
+        }),
+    )
+}
+
+/// What breaks a tie between two views of one key: the view's parts compared in order, its atoms by their ranks.
+#[derive(Debug)]
+struct ViewTie {
+    relation: Operation,
+    negated: bool,
+    constant: Integer,
+    terms: Vec<(Integer, Vec<Rank>)>,
+}
+
+impl Tie for ViewTie {
+    fn tie(&self, other: &dyn Tie) -> Ordering {
+        let Some(other) = other.as_any().downcast_ref::<ViewTie>() else {
+            return Ordering::Equal;
+        };
+        (self.relation, self.negated, &self.constant, &self.terms).cmp(&(
+            other.relation,
+            other.negated,
+            &other.constant,
+            &other.terms,
+        ))
     }
-    Rank::from(hasher.finish())
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }

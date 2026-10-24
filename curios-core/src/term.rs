@@ -92,9 +92,9 @@ struct Node {
     /// The node's universe-erased projection, filled on first demand and only for a node that carries universe data — a node that carries none projects to itself and stores nothing. What the elaborator's reduction cache keys on beside the exact term, so that two spellings of one term differing in nothing but their levels — the one checking wrote with metavariables and the one totality reads with them solved — reach one entry.
     #[archived_with(curios_archive::Skip)]
     erased: std::cell::OnceCell<Term>,
-    /// The node's rank among the atoms of a reading, filled on first demand and only for a node that holds a minted identity — a node that holds none is ranked by its structural hash, which the scalars keep. Boxed, since a minority of nodes are ever ranked.
+    /// What the node is ranked by among the atoms of a reading, made of its children's and filled on first demand for the node and every node beneath it (`term/rank.rs`); a node that holds no minted identity is ranked by its structural hash, which the scalars keep, and summarized as that hash where an atom above it asks. Behind a pointer, since a minority of nodes are ever ranked and a rank hands the summary out as its tie.
     #[archived_with(curios_archive::Skip)]
-    rank: std::cell::OnceCell<Box<Rank>>,
+    ranked: std::cell::OnceCell<Rc<rank::Ranked>>,
     subterm: Subterm,
 }
 
@@ -104,7 +104,7 @@ impl Node {
             scalars: ScalarCache::default(),
             frees: FreeCache::default(),
             erased: std::cell::OnceCell::new(),
-            rank: std::cell::OnceCell::new(),
+            ranked: std::cell::OnceCell::new(),
             subterm,
         }
     }
@@ -163,16 +163,63 @@ impl Term {
         self.get_or_init_hash()
     }
 
-    /// What this term is ordered by among the atoms of one reading, and among the factors a fold puts in order: its shape, then the age of each identity it holds, compared and never read as a value (`term/rank.rs`). A term that holds no binder, metavariable or universe metavariable is ranked by its structural hash; any other's rank is memoized on its node.
+    /// What this term is ordered by among the atoms of one reading, and among the factors a fold puts in order: its shape as the key, then its identities by age, each by the positions it holds, as the tie, compared and never read as a value (`term/rank.rs`). A term that holds no binder, metavariable or universe metavariable is ranked by its structural hash; any other's summary is memoized on its node and handed out as its own tie.
     pub(crate) fn rank(&self) -> Rank {
         if !self.has_local_free() && !self.has_metavar() && !self.has_universe_meta() {
             return Rank::from(self.structural_hash());
         }
+        let ranked = Rc::clone(self.ranked());
+        Rank::Tied(ranked.shape(), ranked)
+    }
+
+    /// Fill the memoized summary bottom-up on a post-order [`Term::walk`], as [`Term::warm_frees`] fills the free-variable set: each node's is its children's joined with its own identities, a node holding none is its structural hash, and a metavariable's is its spine's, which the spine keeps as it is built, so its entries go unvisited.
+    fn warm_ranked(&self) {
+        if self.inner.ranked.get().is_some() {
+            return;
+        }
+        self.walk(
+            &mut (),
+            |_, term| {
+                if term.inner.ranked.get().is_some() {
+                    return Enter::Skip(());
+                }
+                if !term.has_local_free() && !term.has_metavar() && !term.has_universe_meta() {
+                    let _ = term
+                        .inner
+                        .ranked
+                        .set(Rc::new(rank::Ranked::closed(term.structural_hash())));
+                    return Enter::Skip(());
+                }
+                if let Subterm::Metavar(metavar) = term.look() {
+                    let _ = term
+                        .inner
+                        .ranked
+                        .set(Rc::new(rank::Ranked::of_metavar(metavar)));
+                    return Enter::Skip(());
+                }
+                Enter::Descend
+            },
+            |_, term, _| {
+                let _ = term
+                    .inner
+                    .ranked
+                    .set(Rc::new(rank::Ranked::of(term.look())));
+            },
+        );
+    }
+
+    /// This term's summary, warming the whole subtree on first demand.
+    pub(crate) fn ranked(&self) -> &Rc<rank::Ranked> {
+        self.warm_ranked();
+        self.ranked_filled()
+    }
+
+    /// This node's summary, which a walk has filled: what a parent reads of each child at its own fill.
+    fn ranked_filled(&self) -> &Rc<rank::Ranked> {
         self.inner
-            .rank
-            .get_or_init(|| Box::new(rank::ranked(self)))
-            .as_ref()
-            .clone()
+            .ranked
+            .get()
+            .expect("warm_ranked fills the summary")
     }
 
     /// Whether any *free* variable in this term is a binder some scope opened ([`Free::Local`]) rather than a top-level definition — the cached spelling of `Subterm::has_local_free`, which records why this is a discriminant test and not a spelling probe. Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
