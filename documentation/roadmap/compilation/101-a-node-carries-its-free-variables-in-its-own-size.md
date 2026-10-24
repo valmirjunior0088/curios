@@ -1,13 +1,13 @@
 # A node carries its free variables in its own size
 
-[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a read visit a node once, or pass over a subterm a fact its node carries proves it has nothing to find in, and reads a node's facts off its spine's, never off its entries. A node's free-variable set shares its largest carrying child's and takes in the others' names, and a metavariable's is its spine's, so a node pays for what it adds. What is left is the rule held where it was broken: the lambda probe as a growth, which waits on the probe's last other square.
+[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a read visit a node once, or pass over a subterm a fact its node carries proves it has nothing to find in, and reads a node's facts off its spine's, never off its entries. A node's free-variable set shares its largest carrying child's and takes in the others' names, and a metavariable's is its spine's, so a node pays for what it adds. What is left is the rule held where it was broken: the lambda probe as a growth.
 
-**Next step: blocked.** The growth waits on the parked-wake entry of [compilation's findings](000-findings.md).
+**Next step: delivery.** Stage 1 is ready.
 
 ## What is wrong
 
 
-Counted at `0fc2fc1bd` in a scratch copy holding the treap and the scalar-first substitution as this spec landed them, release with the profile feature, `wonder diagnostics -` over `n` bindings `let x{i} = a + i;` in one function, then `let g = (n: Nat) => n + x0 + … + x{n-1};` and `g(1)`: 2.68, 6.37 and 17.53 G instructions and 2.04, 3.90 and 7.62 M allocations at 1 000, 2 000 and 4 000 bindings, ×2.37 and ×2.75 a doubling in instructions and ×1.91 and ×1.95 in allocations; what remained of the square was the spine capture, since made a path through the spine, and the parked wakes of [compilation's findings](000-findings.md).
+Counted at `0fc2fc1bd` in a scratch copy holding the treap and the scalar-first substitution as this spec landed them, release with the profile feature, `wonder diagnostics -` over `n` bindings `let x{i} = a + i;` in one function, then `let g = (n: Nat) => n + x0 + … + x{n-1};` and `g(1)`: 2.68, 6.37 and 17.53 G instructions and 2.04, 3.90 and 7.62 M allocations at 1 000, 2 000 and 4 000 bindings, ×2.37 and ×2.75 a doubling in instructions and ×1.91 and ×1.95 in allocations; what remained of the square was the spine capture and the parked wakes, each since made to read what it changes.
 
 ## What is known
 

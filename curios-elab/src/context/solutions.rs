@@ -14,7 +14,7 @@ use {
     curios_utilities::Entropy,
     std::{
         cmp::Reverse,
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         mem,
         rc::Rc,
     },
@@ -139,10 +139,104 @@ pub(crate) struct ParkedProblem {
     pub watching: BTreeSet<MetavarId>,
 }
 
-/// A parked conversion as a completing term reads it ([`Solutions::conversions_awaited_by`]): where it stands in the store, the problem, the term it was parked for and the frames it holds.
+/// The parked problems, each under the serial it was parked at and read in that order, beside the problems each metavariable wakes and the checks each placeholder stands for: a wake reads the problems its solutions name and leaves the rest where they stand.
+#[derive(Debug, Default)]
+struct Parked {
+    problems: BTreeMap<u64, ParkedProblem>,
+    serials: u64,
+    watchers: HashMap<MetavarId, BTreeSet<u64>>,
+    checks: HashMap<MetavarId, BTreeSet<u64>>,
+}
+
+impl Parked {
+    fn park(&mut self, parked: ParkedProblem) {
+        let serial = self.serials;
+        self.serials += 1;
+        for id in &parked.watching {
+            self.watchers.entry(*id).or_default().insert(serial);
+        }
+        if let ParkedWork::Checking { placeholder, .. } = &parked.work {
+            self.checks.entry(*placeholder).or_default().insert(serial);
+        }
+        self.problems.insert(serial, parked);
+    }
+
+    fn take(&mut self, serial: u64) -> Option<ParkedProblem> {
+        let parked = self.problems.remove(&serial)?;
+        for id in &parked.watching {
+            unindex(&mut self.watchers, id, serial);
+        }
+        if let ParkedWork::Checking { placeholder, .. } = &parked.work {
+            unindex(&mut self.checks, placeholder, serial);
+        }
+        Some(parked)
+    }
+
+    fn get(&self, serial: u64) -> Option<&ParkedProblem> {
+        self.problems.get(&serial)
+    }
+
+    fn len(&self) -> usize {
+        self.problems.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.problems.is_empty()
+    }
+
+    /// Every problem in the order it was parked.
+    fn problems(&self) -> impl Iterator<Item = &ParkedProblem> {
+        self.problems.values()
+    }
+
+    /// Every problem with its serial, in the order it was parked.
+    fn serials(&self) -> impl Iterator<Item = (u64, &ParkedProblem)> {
+        self.problems
+            .iter()
+            .map(|(serial, parked)| (*serial, parked))
+    }
+
+    /// Take the problems watching any of `solved`, in the order they were parked.
+    fn woken_by(&mut self, solved: &BTreeSet<MetavarId>) -> Vec<ParkedProblem> {
+        let woken = solved
+            .iter()
+            .filter_map(|id| self.watchers.get(id))
+            .flatten()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        woken
+            .into_iter()
+            .filter_map(|serial| self.take(serial))
+            .collect()
+    }
+
+    fn take_all(&mut self) -> Vec<ParkedProblem> {
+        self.watchers.clear();
+        self.checks.clear();
+        mem::take(&mut self.problems).into_values().collect()
+    }
+
+    /// The first check parked behind `placeholder`.
+    fn take_checking(&mut self, placeholder: MetavarId) -> Option<ParkedProblem> {
+        let serial = *self.checks.get(&placeholder)?.first()?;
+        self.take(serial)
+    }
+}
+
+/// `serial` out of what `index` holds under `key`, and the key with it where nothing else stands under it.
+fn unindex(index: &mut HashMap<MetavarId, BTreeSet<u64>>, key: &MetavarId, serial: u64) {
+    if let Some(serials) = index.get_mut(key) {
+        serials.remove(&serial);
+        if serials.is_empty() {
+            index.remove(key);
+        }
+    }
+}
+
+/// A parked conversion as a completing term reads it ([`Solutions::conversions_awaited_by`]): the serial it stands at in the store, the problem, the term it was parked for and the frames it holds.
 #[derive(Debug)]
 pub(crate) struct ParkedConversion {
-    pub at: usize,
+    pub at: u64,
     pub problem: Problem,
     pub origin: Term,
     pub frames: HeldFrames,
@@ -229,7 +323,7 @@ pub(crate) struct Solutions {
     /// The next metavariable id this store may mint (implicit-argument insertion). Seeded by `elaborate_module_suffix` with the lowering's count, so core-minted ids sit strictly above `into_core`'s.
     next_metavar: Entropy<MetavarId>,
     /// Parked conversion constraints — frame-independent, like the entries.
-    parked: Vec<ParkedProblem>,
+    parked: Parked,
     /// Ids solved since the last `wake_parked` sweep: the wake signal.
     newly_solved: Vec<MetavarId>,
     /// Journal of every committed solution id, in commit order — never consumed, only marked and rolled back. The watermark/rollback pair lets re-validation unwind solutions that landed while validating a candidate it then rejected.
@@ -259,7 +353,7 @@ impl Solutions {
         Self {
             entries: Vec::new(),
             next_metavar: Entropy::<MetavarId>::new(),
-            parked: Vec::new(),
+            parked: Parked::default(),
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
             serials: 0,
@@ -386,13 +480,13 @@ impl Solutions {
         };
         let choices = self
             .parked
-            .iter()
+            .problems()
             .filter(awaited)
             .filter_map(ParkedProblem::as_choice)
             .collect();
         let links = self
             .parked
-            .iter()
+            .problems()
             .filter(awaited)
             .filter(|parked| matches!(parked.work, ParkedWork::Conversion(_)))
             .map(|parked| parked.watching.clone())
@@ -404,8 +498,7 @@ impl Solutions {
     /// The conversions `term` awaits, in the order they were parked: what a completing term may hold to spines that agree ([`Choice::Spines`]). `None` asks for what no standing term awaits, which is the item's.
     pub(crate) fn conversions_awaited_by(&self, term: Option<AwaitId>) -> Vec<ParkedConversion> {
         self.parked
-            .iter()
-            .enumerate()
+            .serials()
             .filter(|(_, parked)| {
                 let unsolved = parked
                     .watching
@@ -426,21 +519,23 @@ impl Solutions {
             .collect()
     }
 
-    /// Drop the conversions that stand at `at`, each one a completing term has decided by holding its spines. The places are those [`Solutions::conversions_awaited_by`] answered, read with nothing parked or taken since.
-    pub(crate) fn drop_conversions(&mut self, at: &BTreeSet<usize>) {
-        let mut place = 0;
-        self.parked.retain(|parked| {
-            let held = at.contains(&place) && matches!(parked.work, ParkedWork::Conversion(_));
-            place += 1;
-
-            !held
-        });
+    /// Drop the conversions that stand at `at`, each one a completing term has decided by holding its spines. The serials are those [`Solutions::conversions_awaited_by`] answered.
+    pub(crate) fn drop_conversions(&mut self, at: &BTreeSet<u64>) {
+        for serial in at {
+            if self
+                .parked
+                .get(*serial)
+                .is_some_and(|parked| matches!(parked.work, ParkedWork::Conversion(_)))
+            {
+                self.parked.take(*serial);
+            }
+        }
     }
 
     /// The `use` slots nothing has solved whose goals `term` awaits, in the order the goals were parked. `None` asks for what no standing term awaits, which is the item's.
     pub(crate) fn witnesses_awaited_by(&self, term: Option<AwaitId>) -> Vec<MetavarId> {
         self.parked
-            .iter()
+            .problems()
             .filter_map(|parked| match &parked.work {
                 ParkedWork::Witness { slot, .. } if self.solution(*slot).is_none() => {
                     let unsolved = parked
@@ -457,17 +552,17 @@ impl Solutions {
 
     /// Take the goal parked for the `use` slot `slot`, where it still waits: what a completing term answers itself.
     pub(crate) fn take_witness(&mut self, slot: MetavarId) -> Option<ParkedProblem> {
-        let index = self.parked.iter().position(|parked| {
+        let (serial, _) = self.parked.serials().find(|(_, parked)| {
             matches!(&parked.work, ParkedWork::Witness { slot: held, .. } if *held == slot)
         })?;
 
-        Some(self.parked.remove(index))
+        self.parked.take(serial)
     }
 
     /// The check with a choice of its own parked on the bare metavariable `id`, where one is: the field a part of a shape holds while the shape is being given.
     pub(crate) fn choice_waiting_on(&self, id: MetavarId) -> Option<ParkedChoice> {
         self.parked
-            .iter()
+            .problems()
             .filter_map(ParkedProblem::as_choice)
             .find(
                 |parked| matches!(&*parked.expected, Subterm::Metavar(metavar) if metavar.id == id),
@@ -771,7 +866,7 @@ impl Solutions {
         // A parked problem holds together what it watches: a solution for one may come by another.
         self.link(watching.iter().copied());
 
-        self.parked.push(ParkedProblem {
+        self.parked.park(ParkedProblem {
             work,
             origin,
             frames,
@@ -805,7 +900,7 @@ impl Solutions {
     /// The numerals parked on each bare metavariable, by the metavariable they wait on now: what a report made before their term completes shows that metavariable as ([`numeral_default`](crate::numeral_default)).
     pub(crate) fn waiting_numerals(&self) -> BTreeMap<MetavarId, Vec<NumLit>> {
         let mut waiting = BTreeMap::<MetavarId, Vec<NumLit>>::new();
-        for parked in &self.parked {
+        for parked in self.parked.problems() {
             if let ParkedWork::Checking { term, expected, .. } = &parked.work
                 && let Subterm::Transient(Transient::NumLit(literal)) = &**term
                 && matches!(&**expected, Subterm::Metavar(_))
@@ -828,27 +923,17 @@ impl Solutions {
 
         let solved = self.newly_solved.drain(..).collect::<BTreeSet<_>>();
 
-        let (woken, kept) = mem::take(&mut self.parked)
-            .into_iter()
-            .partition(|parked| parked.watching.iter().any(|id| solved.contains(id)));
-
-        self.parked = kept;
-
-        woken
+        self.parked.woken_by(&solved)
     }
 
     /// Take every parked goal — the drain's final sweep.
     pub(crate) fn take_parked(&mut self) -> Vec<ParkedProblem> {
-        mem::take(&mut self.parked)
+        self.parked.take_all()
     }
 
     /// Take the checking problem parked behind `placeholder`, where it still waits: what a completing term runs itself, out of reach of the wakes its own check sets off.
     pub(crate) fn take_checking(&mut self, placeholder: MetavarId) -> Option<ParkedProblem> {
-        let index = self.parked.iter().position(|parked| {
-            matches!(&parked.work, ParkedWork::Checking { placeholder: held, .. } if *held == placeholder)
-        })?;
-
-        Some(self.parked.remove(index))
+        self.parked.take_checking(placeholder)
     }
 
     pub(crate) fn parked_len(&self) -> usize {

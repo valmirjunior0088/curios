@@ -3280,7 +3280,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Solutions::drop_conversions`].
-    pub(crate) fn drop_conversions(&mut self, at: &BTreeSet<usize>) {
+    pub(crate) fn drop_conversions(&mut self, at: &BTreeSet<u64>) {
         self.underway.attempt.solutions.drop_conversions(at);
     }
 
