@@ -507,3 +507,101 @@ fn a_walk_deeper_than_its_inline_stack_reads_every_entry() {
             .eq(7_000..20_000)
     );
 }
+
+/// The greatest value of a subtree: the summary the tests below keep.
+#[derive(Clone, Debug, PartialEq)]
+struct Greatest(u64);
+
+impl Summary<u64> for Greatest {
+    fn of(value: &u64) -> Self {
+        Greatest(*value)
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        Greatest(self.0.max(other.0))
+    }
+}
+
+/// Whether every node under `link` keeps the summary its subtree's values make, answering that summary.
+fn summaries_hold(link: Option<&Node<u64, u64, Greatest>>) -> Option<u64> {
+    let node = link?;
+    let mut greatest = node.payload;
+    for child in [node.left.as_deref(), node.right.as_deref()] {
+        if child.is_some() {
+            greatest = greatest.max(summaries_hold(child)?);
+        }
+    }
+    (node.summary == Greatest(greatest)).then_some(greatest)
+}
+
+/// A summarized map keeps on every node the summary of its subtree, through inserts, replacements and removals in any order, and every version keeps its own.
+#[test]
+fn an_ordered_maps_summaries_are_its_subtrees_values() {
+    for seed in 0..8 {
+        let mut draws = Draws(seed);
+        let mut ordered = Ordered::<u64, Greatest>::default();
+        let mut standard = BTreeMap::new();
+        let mut versions = Vec::new();
+        for step in 0..2_000 {
+            let position = draws.next(300) as i64;
+            match draws.next(4) {
+                0 => assert_eq!(ordered.remove(position), standard.remove(&position)),
+                _ => {
+                    let value = draws.next(10_000);
+                    ordered.insert(position, value);
+                    standard.insert(position, value);
+                }
+            }
+            if step % 400 == 0 {
+                versions.push((ordered.clone(), standard.values().max().copied()));
+            }
+        }
+        for (version, greatest) in versions
+            .iter()
+            .chain([&(ordered.clone(), standard.values().max().copied())])
+        {
+            assert_eq!(
+                version.summary().map(|summary| summary.0),
+                *greatest,
+                "seed {seed}"
+            );
+            if version.is_empty() {
+                continue;
+            }
+            assert!(
+                summaries_hold(version.tree.root.as_deref()).is_some(),
+                "seed {seed}: a node's summary is its subtree's"
+            );
+        }
+    }
+}
+
+/// A rewrite passes over every subtree and value its summaries rule out, copies the paths to what it changes, and hands back nothing where it changes nothing.
+#[test]
+fn an_ordered_rewrite_visits_what_its_summaries_do_not_rule_out() {
+    let mut ordered = Ordered::<u64, Greatest>::default();
+    for position in 0..1_000 {
+        let value = match position % 250 {
+            7 => 5_000 + position as u64,
+            _ => position as u64 % 100,
+        };
+        ordered.insert(position, value);
+    }
+
+    let mut visited = Vec::new();
+    let rewritten = ordered
+        .rewritten_where(
+            |Greatest(greatest)| *greatest < 1_000,
+            |position, value| {
+                visited.push(position);
+                Some(value + 1)
+            },
+        )
+        .expect("the large values are rewritten");
+    assert_eq!(visited, [7, 257, 507, 757]);
+    assert_eq!(rewritten.get(257), Some(&5_258));
+    assert_eq!(rewritten.get(256), Some(&56));
+    assert_eq!(rewritten.summary(), Some(&Greatest(5_758)));
+    assert!(summaries_hold(rewritten.tree.root.as_deref()).is_some());
+    assert!(ordered.rewritten_where(|_| false, |_, _| None).is_none());
+}

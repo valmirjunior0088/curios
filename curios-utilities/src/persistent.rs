@@ -4,6 +4,8 @@
 //!
 //! **A tree's shape is a function of the keys it holds.** A node's priority is its key mixed (splitmix64's finalizer), a [`Sorted`] key's hash mixed, so two versions that hold one set of keys are one tree whatever order the keys arrived in, and a run of consecutive positions is balanced as keys drawn at random are.
 //!
+//! **A subtree can carry a summary.** A node keeps the [`Summary`] of its subtree's values beside its own, made again on every path a write copies, so a walk can pass over a subtree its summary rules out ([`Ordered::rewritten_where`]); the unit summarizes nothing, and every map but a summarized [`Ordered`] keeps it.
+//!
 //! **A hash is drawn as every table's is.** [`Persistent`] hashes a key with a `RandomState` the map draws where it is made and carries into every version, so which keys stand side by side follows the process, as the standard maps' do, and no answer reads that order: iteration is for a reader that takes every entry. Keys of one hash are held together and told apart by `Eq`.
 
 #[cfg(test)]
@@ -15,29 +17,57 @@ use std::{
     rc::Rc,
 };
 
-/// A node of the treap: its key, its priority, what it holds, and the two subtrees it orders.
+/// What a tree keeps of each subtree beside its values: the summary of one value, joined over a subtree in the order of its keys. Kept on every node and made again on each path a write copies, it is what a walk reads to pass over a subtree whole.
+pub trait Summary<T>: Clone {
+    fn of(value: &T) -> Self;
+    fn join(&self, other: &Self) -> Self;
+}
+
+/// The summary of nothing, which every map that reads none keeps at no cost.
+impl<T> Summary<T> for () {
+    fn of(_: &T) -> Self {}
+
+    fn join(&self, _: &Self) -> Self {}
+}
+
+/// A node of the treap: its key, its priority, what it holds, the summary of its subtree, and the two subtrees it orders.
 #[derive(Clone)]
-struct Node<K, T> {
+struct Node<K, T, S = ()> {
     key: K,
     priority: u64,
     payload: T,
-    left: Option<Rc<Node<K, T>>>,
-    right: Option<Rc<Node<K, T>>>,
+    summary: S,
+    left: Option<Rc<Node<K, T, S>>>,
+    right: Option<Rc<Node<K, T, S>>>,
+}
+
+impl<K, T, S: Summary<T>> Node<K, T, S> {
+    /// The summary made again of the node's value and its subtrees', after either changed.
+    fn resummarize(&mut self) {
+        let mut summary = S::of(&self.payload);
+        if let Some(left) = &self.left {
+            summary = left.summary.join(&summary);
+        }
+        if let Some(right) = &self.right {
+            summary = summary.join(&right.summary);
+        }
+        self.summary = summary;
+    }
 }
 
 /// A treap by key, every node shared between the versions that hold it.
 #[derive(Clone)]
-struct Tree<K, T> {
-    root: Option<Rc<Node<K, T>>>,
+struct Tree<K, T, S = ()> {
+    root: Option<Rc<Node<K, T, S>>>,
 }
 
-impl<K, T> Tree<K, T> {
+impl<K, T, S> Tree<K, T, S> {
     const fn new() -> Self {
         Self { root: None }
     }
 
     /// Every entry, in the order of its key.
-    fn iter(&self) -> InOrder<'_, K, T> {
+    fn iter(&self) -> InOrder<'_, K, T, S> {
         let mut walk = InOrder::new();
         walk.descend(self.root.as_deref());
         walk
@@ -62,7 +92,7 @@ impl<K, T> Tree<K, T> {
     }
 }
 
-impl<K: Ord, T> Tree<K, T> {
+impl<K: Ord, T, S> Tree<K, T, S> {
     /// What `key` holds.
     fn get(&self, key: &K) -> Option<&T> {
         let mut node = self.root.as_deref();
@@ -92,7 +122,7 @@ impl<K: Ord, T> Tree<K, T> {
     }
 
     /// Every entry from the least key at or above `key`, in the order of its key: the walk [`Tree::iter`] would be past every entry below it, found on the path to `key` alone.
-    fn iter_from(&self, key: &K) -> InOrder<'_, K, T> {
+    fn iter_from(&self, key: &K) -> InOrder<'_, K, T, S> {
         let mut walk = InOrder::new();
         let mut node = self.root.as_deref();
         while let Some(current) = node {
@@ -123,7 +153,7 @@ impl<K: Ord, T> Tree<K, T> {
     }
 }
 
-impl<K: Ord + Clone, T: Clone> Tree<K, T> {
+impl<K: Ord + Clone, T: Clone, S: Summary<T>> Tree<K, T, S> {
     /// `key`'s payload changed by `update`, which is handed the payload `key` holds and answers the payload to place where it held none, a node of `priority`; `true` where `key` held none.
     fn upsert(
         &mut self,
@@ -142,13 +172,13 @@ impl<K: Ord + Clone, T: Clone> Tree<K, T> {
 }
 
 /// One step of a walk that compares two trees in key order: a subtree still to be taken apart, or a node whose own entry comes next.
-enum Pending<'t, K, T> {
-    Subtree(&'t Node<K, T>),
-    Entry(&'t Node<K, T>),
+enum Pending<'t, K, T, S> {
+    Subtree(&'t Node<K, T, S>),
+    Entry(&'t Node<K, T, S>),
 }
 
 /// The top of a walk, a subtree taken apart into its left subtree, its own entry and its right subtree, the left on top.
-fn take_apart<'t, K, T>(stack: &mut Vec<Pending<'t, K, T>>) {
+fn take_apart<'t, K, T, S>(stack: &mut Vec<Pending<'t, K, T, S>>) {
     let Some(Pending::Subtree(node)) = stack.pop() else {
         unreachable!("a subtree is taken apart where one is on top");
     };
@@ -161,9 +191,9 @@ fn take_apart<'t, K, T>(stack: &mut Vec<Pending<'t, K, T>>) {
     }
 }
 
-impl<K: Ord, T> Tree<K, T> {
+impl<K: Ord, T, S> Tree<K, T, S> {
     /// A walk that compares this tree with another, standing at its root.
-    fn pending(&self) -> Vec<Pending<'_, K, T>> {
+    fn pending(&self) -> Vec<Pending<'_, K, T, S>> {
         self.root
             .as_deref()
             .map(Pending::Subtree)
@@ -176,7 +206,7 @@ impl<K: Ord, T> Tree<K, T> {
     /// **The higher subtree is taken apart first.** Where the two walks stand at subtrees that are not one, the one whose root stands higher, by priority, is taken apart, so a subtree shared below it is met whole rather than taken apart from the other side. Which is taken apart decides what the walk costs and never what it reports: entries are compared in key order either way.
     fn diff(
         &self,
-        earlier: &Tree<K, T>,
+        earlier: &Tree<K, T, S>,
         same: impl Fn(&T, &T) -> bool,
         mut report: impl FnMut(&K, Option<&T>, Option<&T>),
     ) {
@@ -238,8 +268,8 @@ fn priority(key: u64) -> u64 {
     mixed ^ (mixed >> 31)
 }
 
-fn upsert<K: Ord + Clone, T: Clone>(
-    link: &mut Option<Rc<Node<K, T>>>,
+fn upsert<K: Ord + Clone, T: Clone, S: Summary<T>>(
+    link: &mut Option<Rc<Node<K, T, S>>>,
     key: K,
     priority: u64,
     update: impl FnOnce(Option<&mut T>) -> Option<T>,
@@ -249,6 +279,7 @@ fn upsert<K: Ord + Clone, T: Clone>(
             *link = Some(Rc::new(Node {
                 key,
                 priority,
+                summary: S::of(&payload),
                 payload,
                 left: None,
                 right: None,
@@ -261,10 +292,12 @@ fn upsert<K: Ord + Clone, T: Clone>(
     match key.cmp(&node.key) {
         std::cmp::Ordering::Equal => {
             update(Some(&mut node.payload));
+            node.resummarize();
             false
         }
         std::cmp::Ordering::Less => {
             let placed = upsert(&mut node.left, key, priority, update);
+            node.resummarize();
             if node
                 .left
                 .as_ref()
@@ -276,6 +309,7 @@ fn upsert<K: Ord + Clone, T: Clone>(
         }
         std::cmp::Ordering::Greater => {
             let placed = upsert(&mut node.right, key, priority, update);
+            node.resummarize();
             if node
                 .right
                 .as_ref()
@@ -289,11 +323,22 @@ fn upsert<K: Ord + Clone, T: Clone>(
 }
 
 /// The payload at `key`, taken out of the tree under `link`, its node's two subtrees merged where it stood.
-fn remove<K: Ord + Clone, T: Clone>(link: &mut Option<Rc<Node<K, T>>>, key: &K) -> Option<T> {
+fn remove<K: Ord + Clone, T: Clone, S: Summary<T>>(
+    link: &mut Option<Rc<Node<K, T, S>>>,
+    key: &K,
+) -> Option<T> {
     let node = Rc::make_mut(link.as_mut()?);
     match key.cmp(&node.key) {
-        std::cmp::Ordering::Less => remove(&mut node.left, key),
-        std::cmp::Ordering::Greater => remove(&mut node.right, key),
+        std::cmp::Ordering::Less => {
+            let removed = remove(&mut node.left, key);
+            node.resummarize();
+            removed
+        }
+        std::cmp::Ordering::Greater => {
+            let removed = remove(&mut node.right, key);
+            node.resummarize();
+            removed
+        }
         std::cmp::Ordering::Equal => {
             let merged = merge(node.left.take(), node.right.take());
             let removed = link.take().expect("the node being removed");
@@ -304,10 +349,10 @@ fn remove<K: Ord + Clone, T: Clone>(link: &mut Option<Rc<Node<K, T>>>, key: &K) 
 }
 
 /// Two subtrees, every key of `left` below every key of `right`, as one: the root of higher priority stands over the merge of the rest.
-fn merge<K: Clone, T: Clone>(
-    left: Option<Rc<Node<K, T>>>,
-    right: Option<Rc<Node<K, T>>>,
-) -> Option<Rc<Node<K, T>>> {
+fn merge<K: Clone, T: Clone, S: Summary<T>>(
+    left: Option<Rc<Node<K, T, S>>>,
+    right: Option<Rc<Node<K, T, S>>>,
+) -> Option<Rc<Node<K, T, S>>> {
     match (left, right) {
         (None, right) => right,
         (left, None) => left,
@@ -315,11 +360,13 @@ fn merge<K: Clone, T: Clone>(
             true => {
                 let node = Rc::make_mut(&mut left);
                 node.right = merge(node.right.take(), Some(right));
+                node.resummarize();
                 Some(left)
             }
             false => {
                 let node = Rc::make_mut(&mut right);
                 node.left = merge(Some(left), node.left.take());
+                node.resummarize();
                 Some(right)
             }
         },
@@ -327,40 +374,81 @@ fn merge<K: Clone, T: Clone>(
 }
 
 /// The node at `link` under its left child, which takes its place.
-fn rotate_right<K: Clone, T: Clone>(link: &mut Option<Rc<Node<K, T>>>) {
+fn rotate_right<K: Clone, T: Clone, S: Summary<T>>(link: &mut Option<Rc<Node<K, T, S>>>) {
     let mut node = link.take().expect("a node to rotate");
     let mut left = Rc::make_mut(&mut node)
         .left
         .take()
         .expect("a left child to rotate up");
-    Rc::make_mut(&mut node).left = Rc::make_mut(&mut left).right.take();
-    Rc::make_mut(&mut left).right = Some(node);
+    let lowered = Rc::make_mut(&mut node);
+    lowered.left = Rc::make_mut(&mut left).right.take();
+    lowered.resummarize();
+    let raised = Rc::make_mut(&mut left);
+    raised.right = Some(node);
+    raised.resummarize();
     *link = Some(left);
 }
 
 /// The node at `link` under its right child, which takes its place.
-fn rotate_left<K: Clone, T: Clone>(link: &mut Option<Rc<Node<K, T>>>) {
+fn rotate_left<K: Clone, T: Clone, S: Summary<T>>(link: &mut Option<Rc<Node<K, T, S>>>) {
     let mut node = link.take().expect("a node to rotate");
     let mut right = Rc::make_mut(&mut node)
         .right
         .take()
         .expect("a right child to rotate up");
-    Rc::make_mut(&mut node).right = Rc::make_mut(&mut right).left.take();
-    Rc::make_mut(&mut right).left = Some(node);
+    let lowered = Rc::make_mut(&mut node);
+    lowered.right = Rc::make_mut(&mut right).left.take();
+    lowered.resummarize();
+    let raised = Rc::make_mut(&mut right);
+    raised.left = Some(node);
+    raised.resummarize();
     *link = Some(right);
+}
+
+/// The subtree at `link` with each value `visit` makes something new of replaced, its paths copied and their summaries made again, or `None` where `visit` made nothing new: a subtree, or a value, whose summary `passes` holds is passed over unvisited. Visited in the order of the keys.
+fn rewritten<K: Clone, T: Clone, S: Summary<T>>(
+    link: &Option<Rc<Node<K, T, S>>>,
+    passes: &impl Fn(&S) -> bool,
+    visit: &mut impl FnMut(&K, &T) -> Option<T>,
+) -> Option<Option<Rc<Node<K, T, S>>>> {
+    let node = link.as_deref()?;
+    if passes(&node.summary) {
+        return None;
+    }
+    let left = rewritten(&node.left, passes, visit);
+    let own = match passes(&S::of(&node.payload)) {
+        true => None,
+        false => visit(&node.key, &node.payload),
+    };
+    let right = rewritten(&node.right, passes, visit);
+    if left.is_none() && own.is_none() && right.is_none() {
+        return None;
+    }
+    let mut copy = node.clone();
+    if let Some(left) = left {
+        copy.left = left;
+    }
+    if let Some(own) = own {
+        copy.payload = own;
+    }
+    if let Some(right) = right {
+        copy.right = right;
+    }
+    copy.resummarize();
+    Some(Some(Rc::new(copy)))
 }
 
 /// How many nodes a walk's stack holds in place before it takes an allocation: a path as long as a treap of tens of thousands of keys is expected to have, so a walk of a small map, which a node's free-variable set is, allocates nothing.
 const INLINE_DEPTH: usize = 32;
 
 /// A walk of a tree in key order, on a stack of the nodes whose right subtrees are still to come: the first `INLINE_DEPTH` of them in place, the rest spilled past it.
-pub struct InOrder<'t, K, T> {
-    inline: [Option<&'t Node<K, T>>; INLINE_DEPTH],
+pub struct InOrder<'t, K, T, S = ()> {
+    inline: [Option<&'t Node<K, T, S>>; INLINE_DEPTH],
     depth: usize,
-    spilled: Vec<&'t Node<K, T>>,
+    spilled: Vec<&'t Node<K, T, S>>,
 }
 
-impl<K, T> Clone for InOrder<'_, K, T> {
+impl<K, T, S> Clone for InOrder<'_, K, T, S> {
     fn clone(&self) -> Self {
         Self {
             inline: self.inline,
@@ -370,7 +458,7 @@ impl<K, T> Clone for InOrder<'_, K, T> {
     }
 }
 
-impl<'t, K, T> InOrder<'t, K, T> {
+impl<'t, K, T, S> InOrder<'t, K, T, S> {
     fn new() -> Self {
         Self {
             inline: [None; INLINE_DEPTH],
@@ -380,7 +468,7 @@ impl<'t, K, T> InOrder<'t, K, T> {
     }
 
     /// The newest node on top: in place while there is room, spilled once there is not, so the spilled nodes are always the newest.
-    fn push(&mut self, node: &'t Node<K, T>) {
+    fn push(&mut self, node: &'t Node<K, T, S>) {
         match self.depth < INLINE_DEPTH {
             true => {
                 self.inline[self.depth] = Some(node);
@@ -390,7 +478,7 @@ impl<'t, K, T> InOrder<'t, K, T> {
         }
     }
 
-    fn pop(&mut self) -> Option<&'t Node<K, T>> {
+    fn pop(&mut self) -> Option<&'t Node<K, T, S>> {
         if let Some(node) = self.spilled.pop() {
             return Some(node);
         }
@@ -398,7 +486,7 @@ impl<'t, K, T> InOrder<'t, K, T> {
         self.inline[self.depth].take()
     }
 
-    fn descend(&mut self, mut node: Option<&'t Node<K, T>>) {
+    fn descend(&mut self, mut node: Option<&'t Node<K, T, S>>) {
         while let Some(current) = node {
             self.push(current);
             node = current.left.as_deref();
@@ -406,7 +494,7 @@ impl<'t, K, T> InOrder<'t, K, T> {
     }
 }
 
-impl<'t, K, T> Iterator for InOrder<'t, K, T> {
+impl<'t, K, T, S> Iterator for InOrder<'t, K, T, S> {
     type Item = (&'t K, &'t T);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -520,14 +608,14 @@ impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for Persistent<K, V
     }
 }
 
-/// Values at `i64` positions, persistent as [`Persistent`] is, read back in the order of their positions.
+/// Values at `i64` positions, persistent as [`Persistent`] is, read back in the order of their positions, each subtree keeping the [`Summary`] `S` of its values.
 #[derive(Clone)]
-pub struct Ordered<V> {
-    tree: Tree<u64, V>,
+pub struct Ordered<V, S = ()> {
+    tree: Tree<u64, V, S>,
     len: usize,
 }
 
-impl<V> Default for Ordered<V> {
+impl<V, S> Default for Ordered<V, S> {
     fn default() -> Self {
         Self {
             tree: Tree::new(),
@@ -547,10 +635,13 @@ fn position_of(key: u64) -> i64 {
 }
 
 impl<V: Clone> Ordered<V> {
+    /// A map that summarizes nothing; a summarized one is made by `default`.
     pub fn new() -> Self {
         Self::default()
     }
+}
 
+impl<V: Clone, S: Summary<V>> Ordered<V, S> {
     pub fn len(&self) -> usize {
         self.len
     }
@@ -614,7 +705,7 @@ impl<V: Clone> Ordered<V> {
     /// Every position at which this map and `earlier` differ, the least first, each `report`ed with what `earlier` holds there and what this map does, `None` where one holds nothing: a position both hold is reported where `same` says the two values differ. What two versions of one map share is passed over unread, so comparing them costs what they do not share.
     pub fn diff(
         &self,
-        earlier: &Ordered<V>,
+        earlier: &Ordered<V, S>,
         same: impl Fn(&V, &V) -> bool,
         mut report: impl FnMut(i64, Option<&V>, Option<&V>),
     ) {
@@ -622,14 +713,34 @@ impl<V: Clone> Ordered<V> {
             report(position_of(*key), then, now);
         });
     }
+
+    /// The summary of every value, `None` where the map holds none.
+    pub fn summary(&self) -> Option<&S> {
+        self.tree.root.as_deref().map(|root| &root.summary)
+    }
+
+    /// The map with each value `visit` makes something new of replaced, or `None` where it makes nothing new of any. A subtree, or a value, whose summary `passes` holds is passed over unvisited, and only the paths to the values replaced are copied, so a rewrite costs the subtrees its summaries do not rule out. Values are visited in the order of their positions.
+    pub fn rewritten_where(
+        &self,
+        passes: impl Fn(&S) -> bool,
+        mut visit: impl FnMut(i64, &V) -> Option<V>,
+    ) -> Option<Self> {
+        let root = rewritten(&self.tree.root, &passes, &mut |key: &u64, value: &V| {
+            visit(position_of(*key), value)
+        })?;
+        Some(Self {
+            tree: Tree { root },
+            len: self.len,
+        })
+    }
 }
 
 /// Every value of a position-keyed tree with its position, the least first.
-fn positioned<V>(tree: &Tree<u64, V>) -> impl Iterator<Item = (i64, &V)> + Clone {
+fn positioned<V, S>(tree: &Tree<u64, V, S>) -> impl Iterator<Item = (i64, &V)> + Clone {
     tree.iter().map(|(key, value)| (position_of(*key), value))
 }
 
-impl<V: std::fmt::Debug> std::fmt::Debug for Ordered<V> {
+impl<V: std::fmt::Debug, S> std::fmt::Debug for Ordered<V, S> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_map()
