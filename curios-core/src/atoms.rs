@@ -6,7 +6,9 @@
 //!
 //! **A product's factors are atoms as written** ([`Atoms::exact`]), ranked as the terms they are: distribution builds each product's spine from its factors in that order, so two spellings of one factor must stay two factors or the rebuilt spine would change which one it spells. The sum those products are merged into then keys them by the carrier, as every sum is.
 //!
-//! **A collision never merges.** Both identities key on a term compared by equality, so two terms whose hashes collide are told apart: a collision costs a probe, and at most the order two atoms of one rank are put in.
+//! **A truth value that is a comparison is known by what it states.** A `Nat` or `Int` comparison is an atom of `Bool` known by its linear view ([`crate::LinearViews`]), aligned and read at a polarity (`curios-algebra`'s `LinearForm::polarized`), which is how conversion reads two comparisons: `x < y`, `x + 1 <= y` and `Nat/to_int(x) < Nat/to_int(y)` state one proposition, and `y <= x` and `y < x + 1` its negation. So [`same_atom`] holds two comparisons one where their aligned views agree, a table hands out one handle a proposition ([`Atoms::handle`]), a proposition and its negation being two, and one handle a polarized view with the polarity beside it ([`Atoms::signed`]), what a reader asks whose formulas hold a negation as a node of their own. Every reader of a `Bool` atom reads it through these, so none knows a comparison by how it is spelled. A view with no monomial left is decided by its constant, which the fold answers, and is known as its term.
+//!
+//! **A collision never merges.** Every identity keys on a term or a view compared by equality, so two keys whose hashes collide are told apart: a collision costs a probe, and at most the order two atoms of one rank are put in.
 //!
 //! A table lives as long as the operation that made it, and its handles mean nothing outside that operation.
 
@@ -14,35 +16,92 @@
 mod tests;
 
 use {
-    super::Term,
-    curios_algebra::{Atom, Carrier},
-    std::collections::HashMap,
+    super::{Aligned, LinearViews, Subterm, Term},
+    curios_algebra::{Atom, Carrier, LinearForm, Operation, Rank},
+    std::{
+        collections::{HashMap, hash_map::DefaultHasher},
+        hash::{Hash, Hasher},
+    },
 };
 
-/// Whether `this` and `that` are one atom of `carrier`: one term, or, where the carrier's values hold no type, one term up to universe instances.
+/// Whether `this` and `that` are one atom of `carrier`: one term, or, where the carrier's values hold no type, one term up to universe instances, and at `Bool` two comparisons that state one proposition.
 pub fn same_atom(carrier: Carrier, this: &Term, that: &Term) -> bool {
-    this == that || (!carrier.holds_types() && this.erased_universes() == that.erased_universes())
+    this == that
+        || (!carrier.holds_types() && this.erased_universes() == that.erased_universes())
+        || (carrier == Carrier::Boolean && one_proposition(this, that))
+}
+
+/// Whether two terms are `Nat` or `Int` comparisons whose views, read by one reader, agree once aligned.
+fn one_proposition(this: &Term, that: &Term) -> bool {
+    let (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) = (&**this, &**that) else {
+        return false;
+    };
+    matches!(
+        LinearViews::default().align(this, that),
+        Some(Aligned::Same)
+    )
+}
+
+/// What a table keys a handle by: a term, as its carrier knows one, or what a truth value that is a comparison states.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum Key {
+    Term(Term),
+    /// A comparison's polarized view, and whether the comparison states its negation.
+    View {
+        relation: Operation,
+        form: LinearForm,
+        negated: bool,
+    },
 }
 
 /// The handles one operation has handed out, keyed by the carrier's identity, with the first term each stood for.
 #[derive(Default)]
 pub(crate) struct Atoms {
-    index: HashMap<Term, Atom>,
+    index: HashMap<Key, Atom>,
     terms: Vec<Term>,
+    /// The reader every comparison this table keys is viewed by, so the atoms of two views are one reader's handles and the views compare.
+    views: Option<Box<LinearViews>>,
 }
 
 impl Atoms {
     /// The handle for `term` as an atom of `carrier`: one handle for the terms [`same_atom`] holds one, ranked as what they are known by, so the rank is as blind to instances as the identity is.
     pub(crate) fn handle(&mut self, carrier: Carrier, term: &Term) -> Atom {
+        if carrier == Carrier::Boolean
+            && let Some((relation, form, negated)) = self.polarized(term)
+        {
+            return self.keyed(
+                Key::View {
+                    relation,
+                    form,
+                    negated,
+                },
+                term,
+            );
+        }
         match carrier.holds_types() {
-            true => self.keyed(term.clone(), term),
-            false => self.keyed(term.erased_universes(), term),
+            true => self.keyed(Key::Term(term.clone()), term),
+            false => self.keyed(Key::Term(term.erased_universes()), term),
+        }
+    }
+
+    /// The handle for `term` as an atom of `Bool` read at a polarity, beside whether `term` is that handle's negation: a comparison and its negation, however each is spelled, are one handle at two polarities, and any other term is [`Atoms::handle`]'s, read positive.
+    pub(crate) fn signed(&mut self, term: &Term) -> (Atom, bool) {
+        match self.polarized(term) {
+            Some((relation, form, negated)) => {
+                let key = Key::View {
+                    relation,
+                    form,
+                    negated: false,
+                };
+                (self.keyed(key, term), negated)
+            }
+            None => (self.handle(Carrier::Boolean, term), false),
         }
     }
 
     /// The handle for `term` as written: one handle per term, ranked as itself.
     pub(crate) fn exact(&mut self, term: &Term) -> Atom {
-        self.keyed(term.clone(), term)
+        self.keyed(Key::Term(term.clone()), term)
     }
 
     /// The first term `atom` was handed out for.
@@ -50,13 +109,44 @@ impl Atoms {
         &self.terms[atom.index() as usize]
     }
 
-    fn keyed(&mut self, key: Term, term: &Term) -> Atom {
+    /// `term`'s view read at its polarity by this table's reader, where `term` is a comparison whose view keeps a monomial.
+    fn polarized(&mut self, term: &Term) -> Option<(Operation, LinearForm, bool)> {
+        let Subterm::Intrinsic(comparison) = &**term else {
+            return None;
+        };
+        self.views
+            .get_or_insert_with(Box::default)
+            .polarized(comparison)
+    }
+
+    fn keyed(&mut self, key: Key, term: &Term) -> Atom {
         if let Some(atom) = self.index.get(&key) {
             return atom.clone();
         }
-        let atom = Atom::new(self.terms.len() as u32, key.rank());
+        let rank = match &key {
+            Key::Term(known) => known.rank(),
+            Key::View {
+                relation,
+                form,
+                negated,
+            } => view_rank(*relation, form, *negated),
+        };
+        let atom = Atom::new(self.terms.len() as u32, rank);
         self.index.insert(key, atom.clone());
         self.terms.push(term.clone());
         atom
     }
+}
+
+/// A view's rank, read off what it states through its atoms' ranks and never through the order its reader handed them out in: one hash, the same in every run.
+fn view_rank(relation: Operation, form: &LinearForm, negated: bool) -> Rank {
+    let mut hasher = DefaultHasher::new();
+    (relation, negated, &form.constant).hash(&mut hasher);
+    for (coefficient, monomial) in &form.terms {
+        coefficient.hash(&mut hasher);
+        for atom in monomial.atoms() {
+            atom.rank().hash(&mut hasher);
+        }
+    }
+    Rank::from(hasher.finish())
 }

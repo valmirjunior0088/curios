@@ -326,6 +326,225 @@ fn every_law_holds_over_atoms_spelled_two_ways() {
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
 }
 
+/// Every law at `Bool` with each variable a comparison written one way on the claim's left and another on its right, and each negation of a variable written as a spelling of the comparison's dual: across the `<`/`<=` seam at `Nat` and at `Int`, a sum of naturals against zero, a comparison of widened naturals against its preimage, and an equality either way round. A comparison is the atom of what it states, so the row holds only where every reader of a `Bool` atom knows it so — the truth table, the leaf sets, the commutative pairing and the fold's complement law. It is stated at several orders of its binders.
+#[test]
+fn every_law_holds_at_comparisons_spelled_by_what_they_state() {
+    const ORDERS: usize = 3;
+    let mut instances = Vec::new();
+    for spellings in [
+        seam_spellings as fn(usize) -> Option<Stated>,
+        preimage_spellings,
+    ] {
+        for row in rows(&declared())
+            .iter()
+            .filter(|row| row.carrier == Carrier::Boolean)
+        {
+            let law = Law {
+                left: by_what_it_states(&row.law.left, spellings, true),
+                right: by_what_it_states(&row.law.right, spellings, false),
+                ..row.law.clone()
+            };
+            let (binders, claim) = spell(&law);
+            let binders = top_level(&binders)
+                .into_iter()
+                .map(|part| {
+                    let (name, type_) = part
+                        .split_once(": ")
+                        .expect("a binder is a name and a type");
+                    (name.to_owned(), type_.to_owned())
+                })
+                .collect::<Vec<_>>();
+            let binders = binders
+                .iter()
+                .map(|(name, type_)| Binder {
+                    name,
+                    type_,
+                    needs: &[],
+                })
+                .collect::<Vec<_>>();
+            for telescope in orders(&binders, ORDERS) {
+                instances.push((telescope, claim.clone()));
+            }
+        }
+    }
+    assert!(!instances.is_empty());
+    if let Err(failures) = closes(IMPORTS, &instances) {
+        panic!("{}", failures.join("\n"));
+    }
+}
+
+/// One proposition over fresh numbers in two spellings, and its negation in a third: what a truth value's variable is written as on each side of a claim, and wherever the law negates it.
+struct Stated {
+    left: Expr,
+    right: Expr,
+    negation: Expr,
+}
+
+/// `expr` with each truth-valued variable written as the comparison `spellings` gives its position, on the claim's left or right, and each negation of one as the spelling of the comparison's dual.
+fn by_what_it_states(expr: &Expr, spellings: fn(usize) -> Option<Stated>, left: bool) -> Expr {
+    let stated = |index: usize| spellings(index).expect("a spelling for every variable of a law");
+    match expr {
+        Expr::Apply {
+            carrier: Carrier::Boolean,
+            operation: Operation::Xor,
+            operands,
+        } if matches!(
+            operands.as_slice(),
+            [
+                Expr::Var {
+                    carrier: Carrier::Boolean,
+                    ..
+                },
+                Expr::Constant {
+                    value: Constant::True,
+                    ..
+                }
+            ]
+        ) =>
+        {
+            let Expr::Var { index, .. } = &operands[0] else {
+                unreachable!("a negated variable")
+            };
+            stated(*index).negation
+        }
+        Expr::Var {
+            index,
+            carrier: Carrier::Boolean,
+        } => match left {
+            true => stated(*index).left,
+            false => stated(*index).right,
+        },
+        Expr::Var { .. } | Expr::Constant { .. } => expr.clone(),
+        Expr::Apply {
+            carrier,
+            operation,
+            operands,
+        } => Expr::Apply {
+            carrier: *carrier,
+            operation: *operation,
+            operands: operands
+                .iter()
+                .map(|operand| by_what_it_states(operand, spellings, left))
+                .collect(),
+        },
+    }
+}
+
+/// Across the `<`/`<=` seam at `Nat` for a law's first variable and at `Int` for its second, and a natural against zero for its third: `x < y` against `x + 1 <= y`, negated as `y < x + 1`, and `z == 0` against `z <= 0`, negated as `0 < z`.
+fn seam_spellings(index: usize) -> Option<Stated> {
+    let seam = |carrier: Carrier| Stated {
+        left: compared(
+            carrier,
+            Operation::Less,
+            fresh(0, carrier),
+            fresh(1, carrier),
+        ),
+        right: compared(
+            carrier,
+            Operation::AtMost,
+            successor(carrier, 0),
+            fresh(1, carrier),
+        ),
+        negation: compared(
+            carrier,
+            Operation::Less,
+            fresh(1, carrier),
+            successor(carrier, 0),
+        ),
+    };
+    let natural = Carrier::Natural;
+    Some(match index {
+        0 => seam(natural),
+        1 => seam(Carrier::Integer),
+        2 => Stated {
+            left: compared(natural, Operation::Equal, fresh(2, natural), zero(natural)),
+            right: compared(natural, Operation::AtMost, fresh(2, natural), zero(natural)),
+            negation: compared(natural, Operation::Less, zero(natural), fresh(2, natural)),
+        },
+        _ => return None,
+    })
+}
+
+/// A comparison of widened naturals against its preimage for a law's first variable, an equality either way round for its second, and a natural's inequality against zero for its third: `Nat/to_int(a) < Nat/to_int(w)` against `a < w`, negated as `w <= a`; `k == l` against `l == k`, negated as `l != k`; and `z != 0` against `0 < z`, negated as `z == 0`.
+fn preimage_spellings(index: usize) -> Option<Stated> {
+    let (natural, integer) = (Carrier::Natural, Carrier::Integer);
+    let widened = |index: usize| Expr::Apply {
+        carrier: integer,
+        operation: Operation::Conversion { from: natural },
+        operands: vec![fresh(index, natural)],
+    };
+    Some(match index {
+        0 => Stated {
+            left: compared(integer, Operation::Less, widened(3), widened(4)),
+            right: compared(
+                natural,
+                Operation::Less,
+                fresh(3, natural),
+                fresh(4, natural),
+            ),
+            negation: compared(
+                natural,
+                Operation::AtMost,
+                fresh(4, natural),
+                fresh(3, natural),
+            ),
+        },
+        1 => Stated {
+            left: compared(
+                integer,
+                Operation::Equal,
+                fresh(2, integer),
+                fresh(3, integer),
+            ),
+            right: compared(
+                integer,
+                Operation::Equal,
+                fresh(3, integer),
+                fresh(2, integer),
+            ),
+            negation: compared(
+                integer,
+                Operation::Unequal,
+                fresh(3, integer),
+                fresh(2, integer),
+            ),
+        },
+        2 => Stated {
+            left: compared(
+                natural,
+                Operation::Unequal,
+                fresh(2, natural),
+                zero(natural),
+            ),
+            right: compared(natural, Operation::Less, zero(natural), fresh(2, natural)),
+            negation: compared(natural, Operation::Equal, fresh(2, natural), zero(natural)),
+        },
+        _ => return None,
+    })
+}
+
+/// The comparison `operation` of two operands at `carrier`.
+fn compared(carrier: Carrier, operation: Operation, left: Expr, right: Expr) -> Expr {
+    Expr::Apply {
+        carrier,
+        operation,
+        operands: vec![left, right],
+    }
+}
+
+/// The variable of `carrier` at `index`.
+fn fresh(index: usize, carrier: Carrier) -> Expr {
+    Expr::Var { index, carrier }
+}
+
+/// Zero at `carrier`.
+fn zero(carrier: Carrier) -> Expr {
+    Expr::Constant {
+        value: Constant::Zero,
+        carrier,
+    }
+}
+
 /// A fresh variable of `carrier` and one: `a + 1`.
 fn successor(carrier: Carrier, fresh: usize) -> Expr {
     Expr::Apply {

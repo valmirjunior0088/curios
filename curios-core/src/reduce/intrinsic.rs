@@ -189,7 +189,7 @@ fn dual_of_negated(
 
 /// The comparison that is true exactly when `comparison` is false, on a total order: `a < b` against `b <= a`, `a == b` against `a != b`, and on `Bool` an equality against the `xor` its inequality lowers to. `None` for anything else — a `Flt` comparison, whose negation against a NaN is not the mirror, or a `xor` with a literal operand, which is a negation and not a comparison.
 ///
-/// Its readers: [`align_comparisons`], which spells a negated probe as its dual; the Boolean laws and the truth table, which read a comparison beside its dual as one value and its negation; and both reducers' refinement probes, through [`probe_spellings`], which ask a case equation recorded on a guard's written spelling under the guard's dual as well — the false arm of `n < m` is the fact `m <= n`, read the other way.
+/// Its readers: [`align_comparisons`], which spells a negated probe as its dual; the Boolean laws, which read a comparison beside its dual, up to what `Bool`'s atoms are known by ([`same_atom`]), as one value and its negation; and both reducers' refinement probes, through [`probe_spellings`], which ask a case equation recorded on a guard's written spelling under the guard's dual as well — the false arm of `n < m` is the fact `m <= n`, read the other way.
 ///
 /// Read through `curios-algebra`'s `Operation::negation`, the operands swapped where it says so. A `Bool` comparison with a literal operand is left out: a `xor` with a literal is a negation itself and not a comparison, and an equality against a literal the fold has already answered.
 pub fn dual_comparison(comparison: &Intrinsic) -> Option<Intrinsic> {

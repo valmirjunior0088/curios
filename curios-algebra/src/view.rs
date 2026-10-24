@@ -11,7 +11,7 @@ use {
 };
 
 /// The difference of a comparison's two sides over ℤ: its constant, its monomials in canonical order each with its coefficient, and the atoms known to be non-negative — every atom of a `Nat` side, and every atom an `Int` side read through the embedding of ℕ.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LinearForm {
     pub constant: Integer,
     pub terms: Vec<(Integer, Monomial)>,
@@ -110,6 +110,31 @@ impl LinearForm {
         }
     }
 
+    /// This form under `relation`, read at the polarity that gives a proposition and its negation one reading: the alignment's reading of the comparison or of its negation, whichever leads with a positive coefficient, beside whether it is the negation. Over ℤ the `<=` of `L` is negated by the `<=` of `-L + 1`, and an equality by the inequality of its oriented difference, so `a < b`, `a + 1 <= b` and the negation of `b < a + 1` have one reading. A form with no monomial is decided by its constant and comes back aligned, read positive.
+    pub fn polarized(self, relation: Operation) -> (Operation, Self, bool) {
+        let (relation, form) = self.aligned(relation);
+        let zero = Integer::from(0);
+        match relation {
+            Operation::AtMost => match form.terms.first() {
+                Some((coefficient, _)) if *coefficient < zero => {
+                    (Operation::AtMost, form.negated_at_most(), true)
+                }
+                _ => (Operation::AtMost, form, false),
+            },
+            Operation::Unequal => (Operation::Equal, form, true),
+            _ => (relation, form, false),
+        }
+    }
+
+    /// The form whose `<=` is the negation of this form's over ℤ: `L <= 0` fails exactly where `1 <= L`, which is `-L + 1 <= 0`.
+    fn negated_at_most(mut self) -> Self {
+        self.constant = Integer::from(1) - self.constant;
+        for (coefficient, _) in &mut self.terms {
+            *coefficient = -coefficient.clone();
+        }
+        self
+    }
+
     /// Whether the form is a sum that is at least zero by its shape alone: no constant, and every monomial a positive multiple of non-negative atoms.
     fn is_a_sum_of_naturals(&self) -> bool {
         let zero = Integer::from(0);
@@ -169,3 +194,6 @@ fn canonical(left: &Monomial, right: &Monomial) -> Ordering {
         .find(|ordering| ordering.is_ne())
         .unwrap_or_else(|| left.atoms().len().cmp(&right.atoms().len()))
 }
+
+#[cfg(test)]
+mod tests;

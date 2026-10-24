@@ -872,6 +872,31 @@ const CARRIERS: &[Carrier] = &[
         refused: &["Eq()(a0 || (a0 && a1 && a2 && a3 && a4 && a5 && a6 && a7 && a8), a0)"],
     },
     Carrier {
+        name: "Bool, comparisons by what they state",
+        binders: "x: Nat, y: Nat, n: Nat, m: Nat, i: Int, j: Int, c: Bool, d: Bool",
+        // A comparison is the atom of what it states, so two spellings of one proposition are one atom and a spelling of its negation is that atom negated: across the `<`/`<=` seam, an equality either way round, a sum of naturals against zero, and a comparison of widened naturals.
+        held: &[
+            "Eq()((x < y) && (y < x + 1), (x < y) && (y <= x))",
+            "Eq()((x < y) || ((x + 1 <= y) && c), x < y)",
+            "Eq()((i < j) || ((i + 1 <= j) && c), i < j)",
+            "Eq()((x < y) && (y < x + 1), false)",
+            "Eq()((x < y) || (y < x + 1), true)",
+            "Eq()((i < j) && (j < i + 1), false)",
+            "Eq()((i == j) && (j != i), false)",
+            "Eq()((x == y) || (y != x), true)",
+            "Eq()((n == 0) || (0 < n), true)",
+            "Eq()((n != 0) && Bool/not(0 < n), false)",
+            "Eq()((m < n) && (Nat/to_int(n) <= Nat/to_int(m)), false)",
+            "Eq()(Bool/xor(x < y, x + 1 <= y), false)",
+            "Eq()((x + 1 <= y) && c && d, d && c && (x < y))",
+        ],
+        // Controls: a comparison beside its dual read at one polarity, and a comparison beside one that states no negation of it, `y < x + 2` holding with `x < y` at `y = x + 1`.
+        refused: &[
+            "Eq()((x < y) && c, (y <= x) && c)",
+            "Eq()((x < y) && (y < x + 2), false)",
+        ],
+    },
+    Carrier {
         name: "List, the free monoid",
         binders: "xs: List(Nat), ys: List(Nat), zs: List(Nat), a: Nat, f: (Nat) -> Nat, s: Nat, l: Nat, ok: Holds(s + l <= List/len(xs)), at: Holds(s < List/len(xs)), head: Holds(0 < List/len(ys)), into: Holds(s < List/len(ys)), fits: Holds(l <= List/len(ys)), z: Nat, g: (Nat, Nat) -> Nat, h: (Nat) -> Nat",
         held: &[

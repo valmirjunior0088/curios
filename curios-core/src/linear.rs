@@ -103,6 +103,15 @@ impl LinearViews {
         ))))
     }
 
+    /// What a truth value that is `comparison` is known by, beside whether `comparison` is its negation: its view read at the polarity [`LinearForm::polarized`] chooses, over this reader's atoms, so `x < y` and `x + 1 <= y` are one reading at one polarity and `y < x + 1` that reading at the other. `None` where `comparison` is no `Nat` or `Int` comparison, or where its view is decided by its constant, which the fold answers.
+    pub fn polarized(&mut self, comparison: &Intrinsic) -> Option<(Operation, LinearForm, bool)> {
+        let view = self.view(comparison)?;
+        if view.form.terms.is_empty() {
+            return None;
+        }
+        Some(view.form.polarized(view.relation))
+    }
+
     /// The first term `atom` was handed out for by this reader: how a caller spells an atom of a view it read.
     pub fn term(&self, atom: &Atom) -> &Term {
         self.atoms.term(atom)

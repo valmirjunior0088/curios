@@ -2,7 +2,7 @@
 
 use {
     super::{decide_bool, test_support::*},
-    crate::{Intrinsic, Term},
+    crate::{Intrinsic, Nat, Term},
     curios_algebra::BOOL_ATOM_CAP,
 };
 
@@ -71,6 +71,49 @@ fn a_comparison_and_its_dual_are_one_atom_at_two_polarities() {
     assert!(
         !decided(&and(less, c.clone()), &and(not_less, c)),
         "`x < y && c` is not `y <= x && c`"
+    );
+}
+
+// A comparison is the atom of what it states, however it is spelled: `y < x + 1` states the negation of `x < y`, `x + 1 <= y` states `x < y`, and `n == 0` the negation of `0 < n`. The control is the soundness half: `y < x + 2` states no negation of `x < y`, so the two are not a contradiction.
+#[test]
+fn a_comparison_is_the_atom_of_what_it_states() {
+    let (x, y, c, n) = (sym(0, "x"), sym(1, "y"), sym(2, "c"), sym(3, "n"));
+    let less = Term::intrinsic(Intrinsic::nat_lt(x.clone(), y.clone()));
+    let successor = Term::intrinsic(Intrinsic::nat_lte(
+        Nat::rebuild(1u32.into(), x.clone()),
+        y.clone(),
+    ));
+    let negation = Term::intrinsic(Intrinsic::nat_lt(
+        y.clone(),
+        Nat::rebuild(1u32.into(), x.clone()),
+    ));
+    let further = Term::intrinsic(Intrinsic::nat_lt(y, Nat::rebuild(2u32.into(), x)));
+    let (falsity, truth) = (
+        Term::intrinsic(Intrinsic::Bool(false)),
+        Term::intrinsic(Intrinsic::Bool(true)),
+    );
+
+    assert!(
+        decided(&and(less.clone(), negation), &falsity),
+        "`x < y` and `y < x + 1` cannot both hold"
+    );
+    assert!(
+        decided(&or(less.clone(), and(successor, c)), &less),
+        "absorption, its inner leaf spelled across the seam"
+    );
+    assert!(
+        decided(
+            &or(
+                Term::intrinsic(Intrinsic::nat_eql(n.clone(), lit(0))),
+                Term::intrinsic(Intrinsic::nat_lt(lit(0), n))
+            ),
+            &truth
+        ),
+        "a natural is zero or above it"
+    );
+    assert!(
+        !decided(&and(less, further), &falsity),
+        "`x < y` and `y < x + 2` hold together at `y = x + 1`"
     );
 }
 

@@ -2,7 +2,7 @@
 //!
 //! The fold beside each connective takes the laws one node can see — a unit, an absorber, a repeated operand, an operand beside its own negation — and the peel compares two `&&` trees, or two `||` trees, as sets of leaves. Neither reaches a law that relates *different* connectives: De Morgan, absorption, distribution. Those have no local statement, and a normal form that would make them structural is a rewriting one, refused twice over — a guard's refinement is keyed on its written spelling (`documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`), and a fold that normalizes a tree whole pays for the whole tree at every leaf.
 //!
-//! So the decision is made where two terms are *compared*, asked for by name in both converters as [`super::normalize_bool`] and [`super::align_comparisons`] are, and it changes no spelling. Both sides are read as formulas over their atoms — every leaf that is not itself a connective or a literal, forced first, since the fold leaves a stuck connective's right operand as written — and evaluated at every assignment of those atoms.
+//! So the decision is made where two terms are *compared*, asked for by name in both converters as [`super::normalize_bool`] and [`super::align_comparisons`] are, and it changes no spelling. Both sides are read as formulas over their atoms — every leaf that is not itself a connective or a literal, forced first, since the fold leaves a stuck connective's right operand as written — and evaluated at every assignment of those atoms. A leaf is known as `Bool` knows its atoms (`crate::atoms`): a comparison by what it states, so `x + 1 <= y` is the atom `x < y` is, and `y < x + 1` that atom negated.
 //!
 //! **Agreement everywhere is equality; anything else is nothing.** Treating the atoms as independent *over*-approximates the values they can take together: `x < y` and `x < y + 1` are two atoms that are not independent at all, and the table still visits every combination the real values can reach, so two formulas that agree at every assignment agree at the real ones. For the same reason a disagreement proves nothing — the assignment it happens at may be one no value reaches — so this never answers a disequality, and inversion is handed no impossibility.
 //!
@@ -11,17 +11,17 @@
 //! **The cap is the theory's.** A table doubles with every atom, so past `curios-algebra`'s `BOOL_ATOM_CAP` the question is declined rather than priced out of the budget by accident, and what is evaluated is charged before the first assignment. The cap is a constant of the language, not of the host: the same two terms are decided, or not, on every target.
 
 use {
-    super::dual_comparison,
-    crate::{Cost, Intrinsic, Probe, ReduceError, Reducer, Subterm, Term, same_atom},
-    curios_algebra::{Carrier, Formula, Node},
+    crate::{Atoms, Cost, Intrinsic, Probe, ReduceError, Reducer, Subterm, Term},
+    curios_algebra::{Formula, Node},
     curios_utilities::recurse,
     std::collections::HashMap,
 };
 
-/// Two formulas being read, over one shared list of atoms: the terms each atom stands for, the formula `curios-algebra` evaluates, and where each term read so far stands in it.
+/// Two formulas being read, over one shared list of atoms: the handles the leaves were known by, how many of them the formula holds, the formula `curios-algebra` evaluates, and where each term read so far stands in it.
 #[derive(Default)]
 struct Table {
-    atoms: Vec<Term>,
+    atoms: Atoms,
+    read: usize,
     formula: Formula,
     /// The position of every term read, as written and as forced. A term met again is the node it was read into, so the formula is its terms' graph and never their tree: a shared operand is forced once, read once and charged once.
     positions: HashMap<Term, usize>,
@@ -83,35 +83,15 @@ impl Table {
         })
     }
 
-    /// The atom `leaf` is: one already met, at the polarity it was met at or — where `leaf` is a comparison on a total order — as the negation of its dual, the table `dual_comparison` keeps; otherwise a new one, or `None` past the cap. A `Bool` atom is known as its carrier's atoms are ([`same_atom`]), so two calls apart in a universe instance are one atom.
+    /// The atom `leaf` is, at the polarity it is read at: a `Bool` atom is known as its carrier's atoms are ([`Atoms::signed`]), so two calls apart in a universe instance are one atom and a comparison is known by what it states, its negation however spelled being the same atom negated. A handle met for the first time is a new atom of the formula, or `None` past the cap.
     fn atom(&mut self, leaf: &Term) -> Option<Node> {
-        let dual = match &**leaf {
-            Subterm::Intrinsic(comparison) => dual_comparison(comparison).map(Term::intrinsic),
-            _ => None,
-        };
-        for (index, atom) in self.atoms.iter().enumerate() {
-            if same_atom(Carrier::Boolean, atom, leaf) {
-                return Some(Node::Atom {
-                    index,
-                    negated: false,
-                });
-            }
-            if dual
-                .as_ref()
-                .is_some_and(|dual| same_atom(Carrier::Boolean, dual, atom))
-            {
-                return Some(Node::Atom {
-                    index,
-                    negated: true,
-                });
-            }
+        let (atom, negated) = self.atoms.signed(leaf);
+        let index = atom.index() as usize;
+        if index == self.read {
+            self.formula.new_atom()?;
+            self.read += 1;
         }
-        let index = self.formula.new_atom()?;
-        self.atoms.push(leaf.clone());
-        Some(Node::Atom {
-            index,
-            negated: false,
-        })
+        Some(Node::Atom { index, negated })
     }
 }
 

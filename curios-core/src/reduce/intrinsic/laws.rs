@@ -104,7 +104,7 @@ fn inner(left: &Term, right: &Term, nested: Nested) -> Term {
     }
 }
 
-/// Whether two reduced operands are one value and its negation: `not` is `xor(_, true)` once unfolded, and a comparison's negation is its dual, `not(a < b)` being `b <= a` — the table `dual_comparison` keeps, which is the total order's and so leaves `Flt` out. Read either way round, so a law asks once. A connective's leaf the fold left as written is missed here and met by the converters, which force every leaf of a tree before they compare it; an equality reads both operands and meets it at the fold.
+/// Whether two reduced operands are one value and its negation: `not` is `xor(_, true)` once unfolded, and a comparison's negation is its dual, `not(a < b)` being `b <= a` — the table `dual_comparison` keeps, which is the total order's and so leaves `Flt` out — read as `Bool`'s atoms are ([`same_atom`]), so `b < a + 1`, which states what `b <= a` states, is the negation too. Read either way round, so a law asks once. A connective's leaf the fold left as written is missed here and met by the converters, which force every leaf of a tree before they compare it; an equality reads both operands and meets it at the fold.
 fn complementary(left: &Term, right: &Term) -> bool {
     let negation = |term: &Term| match &**term {
         Subterm::Intrinsic(Intrinsic::BoolXor(a, b)) if b.as_bool() == Some(true) => {
