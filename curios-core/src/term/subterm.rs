@@ -844,19 +844,26 @@ impl Bound for Subterm {
             }
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
             // The spine is ordinary term content: visiting it is what keeps the delayed substitution aligned through `close`/`open`. Spines are wide (one entry per birth binder) and overwhelmingly identity (bare variables a visit does not touch), so an untouched entry is kept as it stands and an entirely untouched spine is the spine itself, identity and all.
-            Subterm::Metavar(Metavar { id, spine, origin }) => Subterm::Metavar(Metavar {
-                id: *id,
-                spine: spine
-                    .rewritten(|entry| match &**entry {
-                        Subterm::Var(var) => visit.call(var).map(Term::from),
-                        _ => {
-                            let rebuilt = visit.visit_subterm(entry);
-                            (rebuilt != *entry).then_some(rebuilt)
-                        }
-                    })
-                    .unwrap_or_else(|| spine.clone()),
-                origin: origin.clone(),
-            }),
+            // A run of entries the visit would leave as they are is passed over by what the spine keeps of it, as a term is by its scalars ([`Visit::passes_over`]): a capture of the binders just opened reads the entries holding them.
+            Subterm::Metavar(Metavar { id, spine, origin }) => {
+                let pass_over = visit.pass_over();
+                Subterm::Metavar(Metavar {
+                    id: *id,
+                    spine: spine
+                        .rewritten(
+                            |reach, newest_local| pass_over.passes(reach, newest_local),
+                            |entry| match &**entry {
+                                Subterm::Var(var) => visit.call(var).map(Term::from),
+                                _ => {
+                                    let rebuilt = visit.visit_subterm(entry);
+                                    (rebuilt != *entry).then_some(rebuilt)
+                                }
+                            },
+                        )
+                        .unwrap_or_else(|| spine.clone()),
+                    origin: origin.clone(),
+                })
+            }
         }
     }
 

@@ -35,10 +35,14 @@ fn a_spine_holds_the_facts_of_its_entries() {
 
     // Rewriting the one entry that reached past the spine and the newest local leaves the older local the newest.
     let rewritten = spine
-        .rewritten(|entry| {
-            (entry.newest_local() == Some(4) || entry.reach() > 0)
-                .then(|| Term::free_var(&Free::Global(Global::Authored(Qualifier::from(["g"])))))
-        })
+        .rewritten(
+            |_, _| false,
+            |entry| {
+                (entry.newest_local() == Some(4) || entry.reach() > 0).then(|| {
+                    Term::free_var(&Free::Global(Global::Authored(Qualifier::from(["g"]))))
+                })
+            },
+        )
         .expect("two entries were rewritten");
     assert_eq!(rewritten.reach(), 0);
     assert_eq!(rewritten.newest_local(), Some(1));
@@ -70,9 +74,12 @@ fn only_a_walk_that_rewrites_an_entry_loses_the_identity() {
     let names = [local(0, "a"), local(1, "b")];
     let identity = MetavarSpine::identity_over(&names);
 
-    assert!(identity.rewritten(|_| None).is_none());
+    assert!(identity.rewritten(|_, _| false, |_| None).is_none());
     let rewritten = identity
-        .rewritten(|entry| (*entry == Term::free_var(&names[1])).then(|| Term::var(Var::bound(0))))
+        .rewritten(
+            |_, _| false,
+            |entry| (*entry == Term::free_var(&names[1])).then(|| Term::var(Var::bound(0))),
+        )
         .expect("one entry was rewritten");
     assert!(!rewritten.is_identity());
     assert_eq!(identity.len(), 2);
@@ -94,12 +101,18 @@ fn a_spine_holds_the_names_of_its_entries() {
     assert_eq!(names(&spine), [g, a, b]);
 
     let rewritten = spine
-        .rewritten(|entry| (*entry == Term::free_var(&a)).then(|| Term::var(Var::bound(0))))
+        .rewritten(
+            |_, _| false,
+            |entry| (*entry == Term::free_var(&a)).then(|| Term::var(Var::bound(0))),
+        )
         .expect("an entry was rewritten");
     assert_eq!(names(&rewritten), [g, a, b]);
 
     let rewritten = rewritten
-        .rewritten(|entry| (*entry == Term::free_var(&b)).then(|| Term::var(Var::bound(1))))
+        .rewritten(
+            |_, _| false,
+            |entry| (*entry == Term::free_var(&b)).then(|| Term::var(Var::bound(1))),
+        )
         .expect("an entry was rewritten");
     assert_eq!(names(&rewritten), [g, a]);
     assert!(rewritten.mentions_any(&Names::new([a, b])));
@@ -118,4 +131,30 @@ fn a_metavariables_set_is_its_spines() {
             .free_vars()
             .shares(&spine.free_vars())
     );
+}
+
+/// A capture of the newest binder reads the entry holding it and passes over every run of older ones, so a spine as wide as a long scope costs the capture a path through it rather than its width.
+#[test]
+fn a_rewrite_passes_over_the_runs_it_cannot_change() {
+    let names = (0..10_000)
+        .map(|index| local(index, "x"))
+        .collect::<Vec<_>>();
+    let spine = MetavarSpine::identity_over(&names);
+    let newest = Term::free_var(&names[9_999]);
+
+    let mut visited = 0;
+    let captured = spine
+        .rewritten(
+            |reach, newest_local| reach == 0 && newest_local.is_none_or(|index| index < 9_999),
+            |entry| {
+                visited += 1;
+                (*entry == newest).then(|| Term::var(Var::bound(0)))
+            },
+        )
+        .expect("the newest entry is captured");
+
+    assert_eq!(visited, 1);
+    assert_eq!(captured.reach(), 1);
+    assert_eq!(captured.newest_local(), Some(9_998));
+    assert_eq!(captured.free_vars().len(), 9_999);
 }

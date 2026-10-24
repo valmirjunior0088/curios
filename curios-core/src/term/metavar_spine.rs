@@ -11,7 +11,7 @@ mod tests;
 
 use {
     super::{Bound, Free, Frees, Names, Term},
-    curios_utilities::{Ordered, Sorted},
+    curios_utilities::{Ordered, Sorted, Summary},
     std::{
         borrow::Borrow,
         fmt,
@@ -19,12 +19,33 @@ use {
     },
 };
 
-/// What a node reads of its children, kept for a spine's entries together: the hash of each entry at its rank, combined so an entry added or removed moves it by that entry alone, the deepest reach, and how many entries hold each containment.
+/// The deepest reach and the newest local of a run of a spine's entries, kept on each subtree of the entries: what the spine's own reach and newest local are, read off the whole, and what a rewrite reads to pass over a run whole ([`MetavarSpine::rewritten`]).
+#[derive(Clone, Copy, Default)]
+struct Reaches {
+    reach: usize,
+    newest_local: Option<u64>,
+}
+
+impl Summary<Term> for Reaches {
+    fn of(entry: &Term) -> Self {
+        Self {
+            reach: entry.reach(),
+            newest_local: entry.newest_local(),
+        }
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        Self {
+            reach: self.reach.max(other.reach),
+            newest_local: self.newest_local.max(other.newest_local),
+        }
+    }
+}
+
+/// What a node reads of its children beside what [`Reaches`] keeps, kept for a spine's entries together: the hash of each entry at its rank, combined so an entry added or removed moves it by that entry alone, and how many entries hold each containment.
 #[derive(Clone, Copy, Default)]
 struct Facts {
     hash: u64,
-    reach: usize,
-    newest_local: Option<u64>,
     metavar: usize,
     transient: usize,
     universe_meta: usize,
@@ -37,8 +58,6 @@ impl Facts {
     fn of(rank: i64, entry: &Term) -> Self {
         Self {
             hash: placed_hash(rank, entry.get_or_init_hash()),
-            reach: entry.reach(),
-            newest_local: entry.newest_local(),
             metavar: usize::from(entry.has_metavar()),
             transient: usize::from(entry.has_transient()),
             universe_meta: usize::from(entry.has_universe_meta()),
@@ -49,8 +68,6 @@ impl Facts {
 
     fn add(&mut self, share: Self) {
         self.hash = self.hash.wrapping_add(share.hash);
-        self.reach = self.reach.max(share.reach);
-        self.newest_local = self.newest_local.max(share.newest_local);
         self.metavar += share.metavar;
         self.transient += share.transient;
         self.universe_meta += share.universe_meta;
@@ -58,7 +75,7 @@ impl Facts {
         self.group += share.group;
     }
 
-    /// Take `share` out, `reach` and the newest local excepted: a maximum cannot be taken back, so a rewrite reads both off the entries again ([`MetavarSpine::rewritten`]).
+    /// Take `share` out.
     fn remove(&mut self, share: Self) {
         self.hash = self.hash.wrapping_sub(share.hash);
         self.metavar -= share.metavar;
@@ -123,7 +140,7 @@ impl Held {
 /// A metavariable's spine. See the module documentation.
 #[derive(Clone, Default)]
 pub struct MetavarSpine {
-    entries: Ordered<Term>,
+    entries: Ordered<Term, Reaches>,
     facts: Facts,
     held: Held,
     /// Whether each entry is known to be its own birth binder: so for the spine a metavariable is born with, and an empty one; not for one a walk rewrote or one built from a list.
@@ -185,40 +202,46 @@ impl MetavarSpine {
         self.entries.iter().map(|(_, entry)| entry)
     }
 
-    /// The spine with each entry replaced by what `visit` makes of it, or `None` where it makes nothing new of any: a walk keeps a spine it leaves alone, identity and all.
-    pub(crate) fn rewritten(&self, mut visit: impl FnMut(&Term) -> Option<Term>) -> Option<Self> {
-        let mut rewritten = None::<Self>;
-        for (rank, entry) in self.entries.iter() {
-            let Some(new) = visit(entry) else {
-                continue;
-            };
-            let spine = rewritten.get_or_insert_with(|| Self {
-                identity: false,
-                ..self.clone()
-            });
-            spine.facts.remove(Facts::of(rank, entry));
+    /// The spine with each entry replaced by what `visit` makes of it, or `None` where it makes nothing new of any: a walk keeps a spine it leaves alone, identity and all. A run of entries whose deepest reach and newest local `passes` holds is passed over unvisited, so a capture of the binders just opened reads the entries that hold them and not the whole scope the metavariable was born in.
+    pub(crate) fn rewritten(
+        &self,
+        passes: impl Fn(usize, Option<u64>) -> bool,
+        mut visit: impl FnMut(&Term) -> Option<Term>,
+    ) -> Option<Self> {
+        let mut replaced = Vec::new();
+        let entries = self.entries.rewritten_where(
+            |reaches| passes(reaches.reach, reaches.newest_local),
+            |rank, entry| {
+                let new = visit(entry)?;
+                replaced.push((rank, entry.clone(), new.clone()));
+                Some(new)
+            },
+        )?;
+        let mut spine = Self {
+            entries,
+            facts: self.facts,
+            held: self.held.clone(),
+            identity: false,
+        };
+        for (rank, old, new) in replaced {
+            spine.facts.remove(Facts::of(rank, &old));
             spine.facts.add(Facts::of(rank, &new));
-            spine.held.remove(entry);
+            spine.held.remove(&old);
             spine.held.add(&new);
-            spine.entries.insert(rank, new);
         }
-        let mut rewritten = rewritten?;
-        let (reach, newest_local) = rewritten.iter().fold((0, None), |(reach, newest), entry| {
-            (reach.max(entry.reach()), newest.max(entry.newest_local()))
-        });
-        rewritten.facts.reach = reach;
-        rewritten.facts.newest_local = newest_local;
 
-        Some(rewritten)
+        Some(spine)
     }
 
     pub(crate) fn reach(&self) -> usize {
-        self.facts.reach
+        self.entries.summary().map_or(0, |reaches| reaches.reach)
     }
 
     /// The newest binder an entry holds free, by its index.
     pub(crate) fn newest_local(&self) -> Option<u64> {
-        self.facts.newest_local
+        self.entries
+            .summary()
+            .and_then(|reaches| reaches.newest_local)
     }
 
     /// The free names its entries hold, kept as the spine is built and rewritten: a metavariable's free variables, read without reading an entry.
@@ -232,7 +255,7 @@ impl MetavarSpine {
             return false;
         }
         if let Some(oldest) = names.oldest_local()
-            && self.facts.newest_local.is_none_or(|newest| newest < oldest)
+            && self.newest_local().is_none_or(|newest| newest < oldest)
         {
             return false;
         }

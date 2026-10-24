@@ -1042,6 +1042,31 @@ impl NodeMemo {
 /// A closed set, stated as a sum rather than as independent fields — a `prune` flag, optional hooks, more flags — of which only the combinations below mean anything, and which every consumer would test one at a time to learn which combination it was looking at.
 ///
 /// Naming the combinations makes adding one a change the compiler checks: every `match` below stops compiling until the new case has been decided. Closed on purpose — a traversal mode is compiler-internal vocabulary, and all of its construction sites live in this crate.
+/// What a visit leaves as it is, read off a term's reach and newest local alone ([`Visit::pass_over`]).
+#[derive(Clone, Copy)]
+pub(crate) enum PassOver {
+    Nothing,
+    /// A pruning visit's: whatever reaches no index past its depth.
+    Within(usize),
+    /// A capture's: whatever reaches no index past its depth and holds no local as new as its oldest binder.
+    Older {
+        depth: usize,
+        oldest: u64,
+    },
+}
+
+impl PassOver {
+    pub(crate) fn passes(self, reach: usize, newest_local: Option<u64>) -> bool {
+        match self {
+            PassOver::Nothing => false,
+            PassOver::Within(depth) => reach <= depth,
+            PassOver::Older { depth, oldest } => {
+                reach <= depth && newest_local.is_none_or(|newest| newest < oldest)
+            }
+        }
+    }
+}
+
 enum Mode {
     /// Rebuild every node, rewriting variables only.
     Plain,
@@ -1431,13 +1456,18 @@ where
 
     /// Whether this visit leaves `term` exactly as it is, which it may then hand back without a look inside: a pruning visit touches nothing below a term whose `reach` is within the depth it stands at, and a capture of local binders nothing in a term that has no local free besides.
     pub(crate) fn passes_over(&self, term: &Term) -> bool {
+        self.pass_over().passes(term.reach(), term.newest_local())
+    }
+
+    /// The rule [`Visit::passes_over`] reads, at the depth the visit stands at, as a value: what a spine asks of a run of its entries while the visit rewrites them.
+    pub(crate) fn pass_over(&self) -> PassOver {
         match self.mode {
-            Mode::Pruning => term.reach() <= self.term_depth,
-            Mode::Capturing { oldest } => {
-                term.reach() <= self.term_depth
-                    && term.newest_local().is_none_or(|newest| newest < oldest)
-            }
-            _ => false,
+            Mode::Pruning => PassOver::Within(self.term_depth),
+            Mode::Capturing { oldest } => PassOver::Older {
+                depth: self.term_depth,
+                oldest,
+            },
+            _ => PassOver::Nothing,
         }
     }
 
