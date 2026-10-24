@@ -6,7 +6,7 @@
 //!
 //! One bracket narrows what a lookup reads: withholding hides a settlement's own frame and every frame inside it.
 //!
-//! **A settlement is kept for as long as what it read stands.** While one is under way, every lookup that answers from a frame counts that frame's depth ([`Frames::begin_reads`]): a binding and a definition the frame they were made in, a question put to the refinements in view the innermost frame in view that registers one, and a read of the whole scope the innermost frame. What it remembered is kept by the frame whose refinements it read under, the nearest one beneath its entry that registers any, or the base frame, for the next settlement made under the same refinements, wherever its entry stands; it answers while the deepest frame it read still stands. A chain of matches, each on the `let` before it, is settled once a link that way, where kept by the entry's own frame it was settled again from its start at every link.
+//! **A settlement is kept for as long as what it read stands.** While one is under way, every lookup that answers from a frame counts that frame's depth ([`Frames::begin_reads`]): a binding and a definition the frame they were made in, a question put to the refinements in view the innermost frame in view that registers one, and a read of the whole scope the innermost frame. What it remembered is kept by the frame whose refinements it read under, the nearest one beneath its entry that registers any, or the base frame, for the next settlement made under the same refinements, wherever its entry stands; it answers while the deepest frame it read still stands, of the frames that stand where it ends: one it opened and left itself holds nothing it kept. A chain of matches, each on the `let` before it, is settled once a link that way, where kept by the entry's own frame it was settled again from its start at every link.
 //!
 //! **A frame is shared, and copied for a writer.** What waits takes the frames above the base as they stand ([`HeldFrames`]), a parked problem where it parks and a metavariable where it is born, and a write to a frame something holds copies the frame first, so a holder has what stood and nothing written since. A judgment made away from the live context stands on the frames held ([`Frames::stand_on`]), a retry on its problem's and what is judged of a metavariable on its birth's: the live ones above the base are set aside, the held ones stand in their place, and nothing is assumed, defined or registered again, so the frame an entry stands in is the frame it was registered in.
 
@@ -77,10 +77,11 @@ impl<'s> Frames<'s> {
         self.reads.borrow_mut().push(from);
     }
 
-    /// Stop counting for the settlement [`Frames::begin_reads`] began last, answering the deepest frame it read: what it remembered rests on that frame and the frames beneath it. A settlement made inside another counts for the other too.
+    /// Stop counting for the settlement [`Frames::begin_reads`] began last, answering the deepest frame it read that still stands: what it remembered rests on that frame and the frames beneath it. A frame the settlement opened and has left is none of it: what read the frame's refinements went at its exit, and what read its bindings names its locals, which nothing asks again. A settlement made inside another counts for the other too.
     pub(crate) fn end_reads(&self) -> usize {
         let mut reads = self.reads.borrow_mut();
-        let deepest = reads.pop().expect("a settlement's reads were begun");
+        let read = reads.pop().expect("a settlement's reads were begun");
+        let deepest = read.min(self.top.as_ref().map_or(0, |top| top.depth));
         if let Some(outer) = reads.last_mut() {
             *outer = (*outer).max(deepest);
         }
