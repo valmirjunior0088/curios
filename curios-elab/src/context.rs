@@ -62,6 +62,8 @@ mod held_tests;
 #[cfg(test)]
 mod restriction_tests;
 #[cfg(test)]
+mod spelling_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod window_tests;
@@ -72,8 +74,9 @@ use {
         UniverseSolver, UniverseStateToken, Witness, zonk_universe_levels_scoped,
     },
     crate::{
-        Published, Refusal, Sort, ZonkPass, hold_at_one_instance, key_spelling, metavar_spines,
-        read_by_value, shallow_scrutinee, zonk, zonk_solved_term_metas,
+        Published, Refusal, Sort, ZonkPass, hold_at_one_instance, key_spelling,
+        locals_outside_spines, metavar_spines, read_by_value, read_outside_spines,
+        shallow_scrutinee, zonk, zonk_solved_term_metas,
     },
     curios_analysis::{Classification, reads_solved, records_case_equation},
     curios_core::{
@@ -1578,7 +1581,7 @@ impl<'s> Context<'s> {
         self.typing.frames.define(name, entry);
     }
 
-    /// `term` by value: each local definition it names replaced by what that definition is by value, which it was read as where it was defined ([`ByValue`]). One substitution over what `term` holds, as the kernel reads a term through the values its `let`s were bound to (`curios-cert`'s `Scope::by_value`), where unfolding each definition in turn would read a chain of them again at every spelling.
+    /// `term` by value: each local definition it names outside a metavariable's occurrence replaced by what that definition is by value, which it was read as where it was defined ([`ByValue`]), and each occurrence kept as it stands, as conversion reads a block's locals ([`read_outside_spines`]): a spine is the scope its occurrence was born in, which no reading here changes, so reading into it would cost each spelling the scope. One substitution over what `term` holds, as the kernel reads a term through the values its `let`s were bound to (`curios-cert`'s `Scope::by_value`), where unfolding each definition in turn would read a chain of them again at every spelling.
     pub(crate) fn by_value(&self, term: &Term) -> Term {
         self.substituted_by_value(term, |by_value| &by_value.term)
     }
@@ -1588,25 +1591,20 @@ impl<'s> Context<'s> {
         self.substituted_by_value(&project_erased_universes(term), |by_value| &by_value.erased)
     }
 
-    /// `term` with each local definition it names replaced by `value` of what the definition is by value.
+    /// `term` with each local definition it names outside a metavariable's occurrence replaced by `value` of what the definition is by value.
     fn substituted_by_value(&self, term: &Term, value: fn(&ByValue) -> &Term) -> Term {
         if !term.has_local_free() {
             return term.clone();
         }
-        let values = term
-            .free_vars_shared()
-            .iter()
-            .filter(|name| name.is_local())
+        let values = locals_outside_spines(term)
+            .into_iter()
             .filter_map(|name| {
-                let entry = self.typing.frames.definition(name)?;
+                let entry = self.typing.frames.definition(&name)?;
                 entry.reduct()?;
-                Some((*name, value(entry.by_value()?).clone()))
+                Some((name, value(entry.by_value()?).clone()))
             })
             .collect::<Vec<_>>();
-        match values.is_empty() {
-            true => term.clone(),
-            false => term.substitute(&values),
-        }
+        read_outside_spines(term, &values)
     }
 
     /// Define `name`. `kind` is the declaring module item's [`DefinitionKind`], or `None` for a local binding no item declared.
@@ -1708,18 +1706,17 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// `term` with every variable an arm in force refined spelled as the value it was refined to: how the kernel, which substitutes a case's solution through the arm it checks, spells a term of that arm. A refinement's value may name a variable an arm inside refined in turn, so the substitution is taken until the term names no refined variable.
+    /// `term` with every variable an arm in force refined spelled as the value it was refined to, outside a metavariable's occurrence, which is kept as it stands as [`Context::by_value`] keeps it: how the kernel, which substitutes a case's solution through the arm it checks, spells a term of that arm. A refinement's value may name a variable an arm inside refined in turn, so the substitution is taken until the term names no refined variable outside an occurrence.
     ///
-    /// A term that names none is returned as it is, for a walk over its free variables: this is read at every probe of a refined head and at every stuck form put to the reduced spellings.
+    /// A term that names none is returned as it is, for a walk over its free variables outside its occurrences: this is read at every probe of a refined head and at every stuck form put to the reduced spellings.
     pub(crate) fn spelled_as_refined(&self, term: &Term) -> Term {
         if !term.has_local_free() || !self.typing.frames.refines_a_variable() {
             return term.clone();
         }
         let refined_in = |spelled: &Term| {
-            spelled
-                .free_vars_shared()
-                .iter()
-                .filter_map(|name| Some((*name, self.typing.frames.refinement_of(name)?.clone())))
+            locals_outside_spines(spelled)
+                .into_iter()
+                .filter_map(|name| Some((name, self.typing.frames.refinement_of(&name)?.clone())))
                 .collect::<Vec<_>>()
         };
         let mut refined = refined_in(term);
@@ -1729,7 +1726,7 @@ impl<'s> Context<'s> {
         let mut spelled = term.clone();
         // Each round substitutes at least one refined variable away, so a chain of them is no longer than the variables refined.
         for _ in 0..self.typing.frames.refined_variables().len() {
-            spelled = spelled.substitute(&refined);
+            spelled = read_outside_spines(&spelled, &refined);
             refined = refined_in(&spelled);
             if refined.is_empty() {
                 break;
@@ -1740,7 +1737,7 @@ impl<'s> Context<'s> {
 
     /// `term` as the kernel is handed it under the arms in force: its solved metavariables materialized, its local definitions substituted by value ([`Context::by_value`]), and every variable an arm refined spelled as the value it was refined to. The kernel substitutes a case's solution through the arm it checks, where the elaborator records it and keeps the variable spelled, so this is the reading a rule shared with the kernel is judged on.
     ///
-    /// A solved metavariable is materialized first because it stands over a spine of the locals in scope where it was born, and would read as naming them: a guard written through a concept holds its witness as one, and names no local of its own once the witness is the global it resolved to. A definition's value was materialized where it was defined, and is again here for what has been solved since.
+    /// A solved metavariable is materialized first because it stands over a spine of the locals in scope where it was born, and would read as naming them: a guard written through a concept holds its witness as one, and names no local of its own once the witness is the global it resolved to. A definition's value was materialized where it was defined, and is again here for what has been solved since. An unsolved one is kept as it stands, its spine the scope it was born in: the kernel is handed none.
     pub(crate) fn kernel_spelling(&self, term: &Term) -> Term {
         let by_value = self.by_value(&zonk_solved_term_metas(self, term));
         self.spelled_as_refined(&zonk_solved_term_metas(self, &by_value))

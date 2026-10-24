@@ -16,13 +16,13 @@ use {
         solve_indices,
     },
     curios_core::{
-        Advance, Atom, Bound, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin, Many,
-        Metavar, MetavarId, MetavarOrigin, MetavarSpine, Produced, Proj, Quality, ReduceError,
-        Scope, Subterm, Telescope, Term, Transient, Universes, Visit,
+        Advance, Atom, Bound, Enter, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
+        Many, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Produced, Proj, Quality,
+        ReduceError, Scope, Subterm, Telescope, Term, Transient, Universes, Visit,
     },
     std::{
         cell::RefCell,
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashSet},
         rc::Rc,
         slice,
     },
@@ -1190,6 +1190,39 @@ pub(crate) fn read_outside_spines(term: &Term, values: &[(Free, Term)]) -> Term 
         }),
     );
     term.traverse(&mut visit)
+}
+
+/// The locals `term` names outside its metavariables' occurrences: those [`read_outside_spines`] reads, so a reader gathering values for it gathers none it would leave standing in a spine, which is as wide as the scope the occurrence was born in. Read off the term's free set where it holds no metavariable, and otherwise by a walk that visits each node once, passes over every occurrence and every subterm that names no local, and reads a subterm that holds no metavariable off its free set.
+pub(crate) fn locals_outside_spines(term: &Term) -> BTreeSet<Free> {
+    let locals = |term: &Term| {
+        term.free_vars_shared()
+            .iter()
+            .filter(|name| name.is_local())
+            .copied()
+            .collect::<Vec<_>>()
+    };
+    if !term.has_metavar() {
+        return locals(term).into_iter().collect();
+    }
+    let mut state = (HashSet::new(), BTreeSet::new());
+    term.walk(
+        &mut state,
+        |(seen, found), node| {
+            if !seen.insert(node.identity())
+                || !node.has_local_free()
+                || matches!(&**node, Subterm::Metavar(_))
+            {
+                return Enter::Skip(());
+            }
+            if !node.has_metavar() {
+                found.extend(locals(node));
+                return Enter::Skip(());
+            }
+            Enter::Descend
+        },
+        |_, _, _| (),
+    );
+    state.1
 }
 
 fn retry_one(context: &mut Context, parked: ParkedProblem) -> Result<(), Error> {

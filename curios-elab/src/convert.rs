@@ -39,8 +39,8 @@ use {
         Context, applied_head, check, infer, reduce, reduce_forced, unfold_rec, unfold_rec_apply,
     },
     crate::{
-        Declined, Error, Occurrence, Scoped, metavar_origins, metavar_spines, named_members,
-        read_outside_spines, zonk_solved_term_metas,
+        Declined, Error, Occurrence, Scoped, locals_outside_spines, metavar_origins,
+        metavar_spines, named_members, read_outside_spines, zonk_solved_term_metas,
     },
     curios_analysis::{Classes, foreign_congruence},
     curios_core::{
@@ -382,18 +382,17 @@ fn by_value(context: &Context, metavar: &Metavar, mut candidate: Term) -> Term {
         None => named.contains(name),
     };
 
-    // A value names only the bindings before its own, so each round reads the latest away, and the rounds end where one reads nothing: a local that only an embedded metavariable's spine names stands there ([`read_outside_spines`]), and that metavariable is restricted to the occurrence's context or holds the candidate back.
+    // A value names only the bindings before its own, so each round reads the latest away, and the rounds end where one reads nothing: a local that only an embedded metavariable's spine names is not gathered, since it stands there ([`read_outside_spines`]), and that metavariable is restricted to the occurrence's context or holds the candidate back.
     loop {
-        let values = candidate
-            .free_vars_shared()
-            .iter()
+        let values = locals_outside_spines(&candidate)
+            .into_iter()
             // A block's local is a binder, and the test asks nothing of a declaration: `Context::is_top_level` would note a question in the trace for every declaration a candidate names.
-            .filter(|name| matches!(name, Free::Local(_)) && !names(name))
+            .filter(|name| !names(name))
             .filter_map(|name| {
-                let value = context.definition_body(name)?;
+                let value = context.definition_body(&name)?;
                 let member = value.as_rec_proj().is_some()
                     || matches!(&**value, Subterm::Metavar(slot) if context.is_rec_slot(slot.id));
-                (!member).then(|| (*name, value.clone()))
+                (!member).then(|| (name, value.clone()))
             })
             .collect::<Vec<_>>();
         let read = zonk_solved_term_metas(context, &read_outside_spines(&candidate, &values));
