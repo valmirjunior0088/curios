@@ -111,8 +111,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
     },
     entailment: EntailmentSyntax {
-        holds_of_eq: name(&["std", "Bool", "holds_of_eq"]),
-        refl: name(&["std", "Eq", "Eq", "refl"]),
         equality: name(&["std", "Eq", "Eq"]),
         sym: name(&["std", "Eq", "sym"]),
         range: name(&["std", "Nat", "le", "of_in_range"]),

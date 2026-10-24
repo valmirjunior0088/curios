@@ -41,7 +41,7 @@ const fn body(binders: &'static str, result: &'static str, body: &'static str) -
 }
 
 const ROWS: &[Row] = &[
-    // A tautology conversion decides and reduction does not.
+    // A tautology no fold decides: `Holds` of it is `True` all the same, an elimination reading its connective as conversion does.
     claim("b: Bool", "Holds(b || Bool/not(b))"),
     claim("b: Bool", "Holds(Bool/not(b && Bool/not(b)))"),
     // A decision a fact in scope states outright, which is the proof whatever the decision is: an opaque `Bool`, a call the view reads nothing in, and a proof field one level down.

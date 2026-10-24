@@ -357,10 +357,6 @@ impl ProofSyntax {
 /// The names the procedure that proves a bound from the facts in scope writes into its proofs — `curios-elab`'s `entailment`. A proof form is written only where every name it applies is assumed in the context. Inside `/std`, where the vocabulary is elaborated beside its users, `curios-elab`'s walk elaborates the vocabulary first, with every declaration it reads, and offers it to the rest of the unit from then on ([`EntailmentSyntax::targets`]), since any item may omit a bound and no item says so ahead of elaboration.
 #[derive(Debug, Clone, Copy)]
 pub struct EntailmentSyntax {
-    /// A decision conversion equates with `true` holds: the proof of a tautology conversion decides and reduction does not.
-    pub holds_of_eq: SyntaxName,
-    /// The constructor of propositional equality, which such a tautology is closed by.
-    pub refl: SyntaxName,
     /// Propositional equality itself, which a hypothesis states an equation in.
     pub equality: SyntaxName,
     /// An equation read the other way round, for its second bound.
@@ -387,8 +383,6 @@ impl EntailmentSyntax {
     /// Every name the procedure writes or reads.
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
         let Self {
-            holds_of_eq,
-            refl,
             equality,
             sym,
             range,
@@ -401,21 +395,12 @@ impl EntailmentSyntax {
             integer,
         } = self;
 
-        [
-            holds_of_eq,
-            refl,
-            equality,
-            sym,
-            range,
-            in_range,
-            and_first,
-            and_second,
-        ]
-        .into_iter()
-        .chain(nat.targets())
-        .chain(int.targets())
-        .chain(natural.targets())
-        .chain(integer.targets())
+        [equality, sym, range, in_range, and_first, and_second]
+            .into_iter()
+            .chain(nat.targets())
+            .chain(int.targets())
+            .chain(natural.targets())
+            .chain(integer.targets())
     }
 }
 

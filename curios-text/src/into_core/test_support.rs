@@ -118,8 +118,6 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         },
     },
     entailment: EntailmentSyntax {
-        holds_of_eq: registry_name(&["std", "Bool", "holds_of_eq"]),
-        refl: registry_name(&["std", "Eq", "refl"]),
         equality: registry_name(&["std", "Eq", "Eq"]),
         sym: registry_name(&["std", "Eq", "sym"]),
         range: registry_name(&["std", "Nat", "le", "of_in_range"]),

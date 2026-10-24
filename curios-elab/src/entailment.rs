@@ -6,7 +6,6 @@
 //!
 //! **What it proves.**
 //!
-//! - A decision conversion equates with `true` and reduction does not, `b || Bool/not(b)`: [`tautology`].
 //! - A proposition a fact in scope states outright — a hypothesis, or a proof field one level down, whose statement converts with the bound with nothing solved: [`stated_by_a_fact`]. The fact is the proof, whatever the proposition is: a decision the linear view reads nothing in, or an inductive proposition the procedure never opens, such as an equation.
 //! - A `Nat` or `Int` comparison that follows from the facts in scope ([`Reader`]) by linear arithmetic over the rationals, a strict integer fact strengthened to its successor, within the search's cap ([`refute`]): a `<` or a `<=` as it stands, a disequality through the equation its negation is, and an equality through the two cases its negation makes ([`negated`]). A consequence that holds only over the integers and needs a cut is refused, as `linarith` and `omega` without its dark and grey shadows refuse it.
 //! - Over `Nat`, through the operations whose definitions are linear facts: a quotient or remainder through the quotient's bounds, a truncated subtraction through the case split `omega` makes, a `min` or a `max` through the split on its operands' order and an `Int`'s `abs` or `sign` through the splits on its operand's sign, each opened only where the search needs it ([`plan`]) — a subtraction, a `min` and a `max` being asked first through what both of their cases state, so a sum of them that turns on no case opens none — and a power of a base conversion holds at least one, as the `pow(2, m)` a shift by a symbolic count multiplies by is, through its being at least one.
@@ -112,12 +111,6 @@ pub(crate) fn entail(
     let stated = held(context, bound)?;
 
     let entailed = context.with_entailing(|context| {
-        if let Some(Goal::Decision(decision)) = &goal
-            && let Some(candidate) = tautology(context, stated.as_ref().unwrap_or(decision))
-            && let Some(proof) = check(context, &candidate, bound)?
-        {
-            return Ok(Entailed::Proved(proof));
-        }
         if let Some(proof) = stated_by_a_fact(context, bound)? {
             return Ok(Entailed::Proved(proof));
         }
@@ -333,19 +326,6 @@ fn arms_of(facts: &Facts) -> Vec<Arms> {
             fails: forms_of(&split.fails),
         })
         .collect()
-}
-
-/// `Bool/holds_of_eq(decision, Eq/refl())`: the decision holds because it is `true`, which conversion's probe-side decisions settle where reduction does not — `b || Bool/not(b)`. `None` where the two names are not in scope.
-fn tautology(context: &Context, decision: &Term) -> Option<Term> {
-    let entailment = context.syntax().entailment;
-    if !in_scope(context, &[entailment.holds_of_eq, entailment.refl]) {
-        return None;
-    }
-    let refl = Term::apply(global(entailment.refl), Vec::<Term>::new());
-    Some(Term::apply(
-        global(entailment.holds_of_eq),
-        [decision.clone(), refl],
-    ))
 }
 
 /// Elaborate `candidate` against `bound` as written code is, under the refinements live now, keeping what it solved when it checks and undoing it when it does not.
