@@ -171,7 +171,7 @@ fn base(growth: Growth) -> usize {
         | Growth::ChainedMatches => 100,
         Growth::Matches => 200,
         Growth::Lists | Growth::ListOpen | Growth::Parameters => 400,
-        Growth::Calls | Growth::RightPlus | Growth::LeftPlus => 250,
+        Growth::Calls | Growth::RightPlus | Growth::LeftPlus | Growth::LetsSummed => 250,
         Growth::Definitions
         | Growth::Functions
         | Growth::Strings
@@ -217,6 +217,7 @@ const HELD_FRONT: &[Growth] = &[
     Growth::LeftPlus,
     Growth::Matches,
     Growth::Lists,
+    Growth::LetsSummed,
 ];
 
 /// The steepest slope a held growth's stage may show: two is linear and four quadratic, so three tells them apart with room on both sides — for a logarithm's factor, and for the instructions a run's drawn hash keys move in a stage that grows little.
@@ -265,7 +266,7 @@ const HELD_SLOPE: f64 = 3.0;
 /// | Arrow | 1000 | 1.99 erase | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
 /// | StringLiteral | 2000 | 2.00 elaborate | 2.00 erase | 2.00 erase | 2.00 elaborate |
 ///
-/// **Fifteen growths are held in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements, nested lambdas and matches each on the `let` before it, the ones [`HELD`] lists. **Eleven more are held through emission**, the ones [`HELD_FRONT`] lists. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cont` do, and as matches each on the `let` before it do in `elaborate`'s bytes, where a node rebuilt over a metavariable copies its spine's free-variable set (`documentation/roadmap/compilation/101-a-node-carries-its-free-variables-in-its-own-size.md`).
+/// **Fifteen growths are held in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements, nested lambdas and matches each on the `let` before it, the ones [`HELD`] lists. **Twelve more are held through emission**, the ones [`HELD_FRONT`] lists. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cont` do, and as matches each on the `let` before it do in `elaborate`'s bytes, where a node rebuilt over a metavariable copies its spine's free-variable set (`documentation/roadmap/compilation/101-a-node-carries-its-free-variables-in-its-own-size.md`).
 #[test]
 #[ignore = "measurement, counted: run by hand, alone in its invocation"]
 fn growth_slopes() {

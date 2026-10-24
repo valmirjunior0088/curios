@@ -37,6 +37,8 @@ pub(super) enum Growth {
     Parameters,
     /// A function of so many parameters, adding them all: every operator stands under every parameter.
     ParametersSummed,
+    /// `let x{i} = n + i;` in one function's body, then a lambda adding them all, applied once: the lambda's body names every binding, and every operator in it stands under the lambda's binder.
+    LetsSummed,
     /// An anonymous tuple of so many members.
     Tuple,
     /// A structure of so many fields, built and read.
@@ -71,7 +73,7 @@ pub(super) enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub(super) const ALL: [Growth; 26] = [
+    pub(super) const ALL: [Growth; 27] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -83,6 +85,7 @@ impl Growth {
         Growth::Arms,
         Growth::Parameters,
         Growth::ParametersSummed,
+        Growth::LetsSummed,
         Growth::Tuple,
         Growth::Fields,
         Growth::Constructors,
@@ -183,6 +186,19 @@ pub(super) fn grown(growth: Growth, size: usize) -> String {
             ),
             &format!("f({})", repeated("a", size, ", ")),
         ),
+        Growth::LetsSummed => {
+            let mut body = "let f(n: Nat) -> Nat =\n".to_string();
+            for index in 0..size {
+                writeln!(body, "    let x{index} = n + {index};").expect("a string takes a line");
+            }
+            writeln!(
+                body,
+                "    let g = (m: Nat) => m + {};\n    g(1);",
+                joined((0..size).map(|index| format!("x{index}")), " + ")
+            )
+            .expect("a string takes a line");
+            program(&body, "f(a)")
+        }
         Growth::Tuple => program(
             &format!(
                 "let f(a: Nat) -> Nat =\n    let t = ({});\n    a;\n",
@@ -387,7 +403,7 @@ fn deep_expressions_elaborate_in_their_size() {
     }
 }
 
-/// Elaboration takes a scope in its size: a `let` chain of six thousand bindings, each operator minting its metavariables under every binding before it; an `Io` block of two thousand statements, each a frame over the last; a function summing a thousand parameters; and two thousand nested lambdas. A judgment reads its scope through the frames' persistent maps, and a metavariable is born over its scope's telescope and identity spine, shared, so none pays the binders above it; and a close or a materialization passes over what it cannot change, so none pays the statements or the lambdas within it.
+/// Elaboration takes a scope in its size: a `let` chain of six thousand bindings, each operator minting its metavariables under every binding before it; an `Io` block of two thousand statements, each a frame over the last; a function summing a thousand parameters; two thousand nested lambdas; and a lambda summing two thousand bindings before it. A judgment reads its scope through the frames' persistent maps, and a metavariable is born over its scope's telescope and identity spine, shared, so none pays the binders above it; a close or a materialization passes over what it cannot change, so none pays the statements or the lambdas within it, and a close of the summing lambda reads the spine entries that hold its binder; and a node's free variables share its children's, so a sum naming one more binding a level pays for that one.
 #[test]
 fn a_wide_scope_elaborates_in_its_size() {
     for (growth, size) in [
@@ -395,6 +411,7 @@ fn a_wide_scope_elaborates_in_its_size() {
         (Growth::Statements, 2_000),
         (Growth::ParametersSummed, 1_000),
         (Growth::Lambdas, 2_000),
+        (Growth::LetsSummed, 2_000),
     ] {
         assert_eq!(elaborates(&grown(growth, size)), Ok(()), "{growth:?}");
     }
