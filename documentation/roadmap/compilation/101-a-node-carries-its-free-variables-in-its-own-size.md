@@ -1,15 +1,14 @@
 # A node carries its free variables in its own size
 
-[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a read visit a node once, or pass over a subterm a fact its node carries proves it has nothing to find in. The fact a node carries of its free variables is a set copied from its children, so a node pays for every variable beneath it rather than for what it adds: a term whose every level names one more local costs the square of its depth, and a metavariable's set is rebuilt from every entry of its spine.
+[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a read visit a node once, or pass over a subterm a fact its node carries proves it has nothing to find in, and reads a node's facts off its spine's, never off its entries. A node's free-variable set shares its largest carrying child's and takes in the others' names, so a node pays for what it adds; a metavariable's is still rebuilt from every entry of its spine, the whole scope it was born in.
 
-**Next step: delivery.** Stages 1 and 2 are ready, in order; stage 3 waits on the spine-capture and parked-wake entries of [compilation's findings](000-findings.md), the probe's other two squares.
+**Next step: delivery.** Stage 1 is ready; stage 2 waits on the spine-capture and parked-wake entries of [compilation's findings](000-findings.md), the probe's other two squares.
 
 ## What is wrong
 
-- **The fill copies.** `Subterm::free_vars_from_children` (`curios-core/src/term/subterm.rs`) fills a node's `FreeCache` (`term/frees.rs`) with the one child set it can share, or else a copy of the first carrying child's `BTreeSet<Free>` extended with the others'. So `((n + x0) + x1) + … + x{k}`, each level naming one more local, holds sets of one, two and up to k members, each copied whole from the one below.
 - **A metavariable's set is rebuilt from its spine.** `Subterm::any_child_term` hands a metavariable's every spine entry to the fill, so a metavariable's set is the union of every entry's, rebuilt at every metavariable whose set is asked, where [the design rule](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) reads "a node's facts are read off its spine's, never off its entries" and `warm_scalars` reads them so; and `curios-elab/src/convert.rs`, `context.rs` and `elaborate/binding.rs` union or probe a spine's entries one by one.
 
-Counted at `0fc2fc1bd` in a scratch copy holding this spec's first stage, which reads the scalars first, release with the profile feature, `wonder diagnostics -` over `n` bindings `let x{i} = a + i;` in one function, then `let g = (n: Nat) => n + x0 + … + x{n-1};` and `g(1)`: 3.69, 10.64 and 35.55 G instructions and 2.34, 5.16 and 12.78 M allocations at 1 000, 2 000 and 4 000 bindings, ×2.88 and ×3.34 a doubling, where the same bindings summed with no lambda grow ×1.87 and ×1.95. From 1 000 to 2 000 bindings the fill copies 2.02 M and then 8.03 M members.
+Counted at `0fc2fc1bd` in a scratch copy holding the treap and the scalar-first substitution as this spec landed them, release with the profile feature, `wonder diagnostics -` over `n` bindings `let x{i} = a + i;` in one function, then `let g = (n: Nat) => n + x0 + … + x{n-1};` and `g(1)`: 2.68, 6.37 and 17.53 G instructions and 2.04, 3.90 and 7.62 M allocations at 1 000, 2 000 and 4 000 bindings, ×2.37 and ×2.75 a doubling in instructions and ×1.91 and ×1.95 in allocations; what remains of the square is the spine capture and the parked wakes of [compilation's findings](000-findings.md).
 
 ## What is known
 
@@ -27,7 +26,7 @@ Counted at `0fc2fc1bd` in a scratch copy holding this spec's first stage, which 
   | the treap at every size | 338.7 G, 317.3 M, 303.0 MiB | 89.66 G, 80.33 M, 154.4 MiB |
   | a sorted slice to 32 members, the treap past it | 337.1 G, 316.1 M, 296.5 MiB | 89.25 G, 79.86 M, 147.8 MiB |
 
-  Over the lambda probe both new representations count alike: 17.53 G instructions and 7.62 M allocations at 4 000 bindings, where today's set leaves 35.55 G and 12.78 M, and the code before the first stage 59.53 G and 93.14 M.
+  Over the lambda probe both new representations count alike: 17.53 G instructions and 7.62 M allocations at 4 000 bindings, where today's set leaves 35.55 G and 12.78 M, and the code before the first stage 58.53 G and 93.14 M.
 - **Arithmetic 101 needs the same merge.** [An atom is ranked from its children's ranks](../arithmetic/101-an-atom-is-ranked-from-its-childrens-ranks.md) builds each node's summary over Maziarz et al.'s variable maps, merged smaller into larger, with the union a node's set is built with, `curios-utilities`' `Sorted::union_with`.
 
 ## Settled
@@ -40,10 +39,9 @@ Counted at `0fc2fc1bd` in a scratch copy holding this spec's first stage, which 
 
 ## Stages
 
-1. **The node's set.** `Frees` holds a `Sorted` set, filled by sharing the largest carrying child's and taking in the others' by the union. Check: the fill's members taken in and nodes built, counted over the probe at 1 000, 2 000, 4 000 and 8 000 bindings, ×2.0 and about ×2.2 a doubling; the image unchanged at one path; both halves no worse than today's in allocations, bytes and peak, and their instructions read against the table above, counted.
-2. **A spine's set.** `MetavarSpine` keeps its names counted and their set beside its facts, a metavariable's fill reads it, and the readers that walked a spine's entries for their names read it. Check: a spine's set after pushes, rewrites and captures equal to a recount over its entries; a metavariable's fill visits no entry; the image unchanged at one path.
-3. **The growth.** The lambda probe joins `curios/src/tests/growth.rs` as a growth held through emission (`HELD_FRONT`, `curios/src/tests/instrumented/growth.rs`). Check: `growth_slopes` holds it under `HELD_SLOPE`.
+1. **A spine's set.** `MetavarSpine` keeps its names counted and their set beside its facts, a metavariable's fill reads it, and the readers that walked a spine's entries for their names read it. Check: a spine's set after pushes, rewrites and captures equal to a recount over its entries; a metavariable's fill visits no entry; the image unchanged at one path.
+2. **The growth.** The lambda probe joins `curios/src/tests/growth.rs` as a growth held through emission (`HELD_FRONT`, `curios/src/tests/instrumented/growth.rs`). Check: `growth_slopes` holds it under `HELD_SLOPE`.
 
 ## Verification and retirement
 
-The spec retires with stage 3. What a node's fill costs and what a reader may ask go to `Frees`' and `Term::free_vars`' rustdoc, the union's contract to `Sorted`'s and to [`curios-utilities`' README](../../../curios-utilities/README.md#a-persistent-maps-shape-is-a-function-of-the-keys-it-holds), a spine's set to `MetavarSpine`'s, and the bound, with its logarithm, to the design rule's paragraph on what holds it, beside `every_walk_answers_a_doubling_term_in_its_own_size`.
+The spec retires with stage 2. What a node's fill costs and what a reader may ask go to `Frees`' and `Term::free_vars`' rustdoc, the union's contract to `Sorted`'s and to [`curios-utilities`' README](../../../curios-utilities/README.md#a-persistent-maps-shape-is-a-function-of-the-keys-it-holds), a spine's set to `MetavarSpine`'s, and the bound, with its logarithm, to the design rule's paragraph on what holds it, beside `every_walk_answers_a_doubling_term_in_its_own_size`.

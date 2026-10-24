@@ -4,30 +4,30 @@
 
 use {
     super::Free,
-    std::{
-        cell::OnceCell,
-        collections::{BTreeSet, btree_set},
-        fmt,
-        rc::Rc,
-    },
+    curios_utilities::{InOrder, Sorted},
+    std::{cell::OnceCell, fmt, rc::Rc},
 };
 
-/// A term's free-variable identities: one set, which every node holding the same names through one child shares, handed out as a pointer's clone. Read in `Free`'s order, ascending: the globals first, then the locals by mint.
+/// A term's free-variable identities, handed out as a pointer's clone. Read in `Free`'s order, ascending: the globals first, then the locals by mint.
+///
+/// **A node pays for what it adds.** The set is `curios-utilities`' persistent treap ([`Sorted`]), whose shape is a function of the names it holds, and a node's is its largest carrying child's with the others' names put into it, the smaller into the larger ([`Sorted::union_with`]): it shares every node of the larger and copies the paths to the names it adds, so a chain whose every level names one more local holds a set per level at a path apiece, and a node whose children add nothing to the largest holds the largest itself.
 #[derive(Clone)]
-pub struct Frees(Rc<BTreeSet<Free>>);
+pub struct Frees(Rc<Sorted<Free, ()>>);
 
 impl Frees {
     /// The set of no name: one allocation every empty set shares, since most nodes of a closed data spine hold none. Thread-local because `Rc` is `!Send`.
     pub fn empty() -> Self {
         thread_local! {
-            static EMPTY: Frees = Frees(Rc::new(BTreeSet::new()));
+            static EMPTY: Frees = Frees(Rc::new(Sorted::new()));
         }
         EMPTY.with(Frees::clone)
     }
 
     /// The set of `name` alone.
     pub(crate) fn single(name: Free) -> Self {
-        Self(Rc::new(BTreeSet::from([name])))
+        let mut set = Sorted::new();
+        set.insert(name, ());
+        Self(Rc::new(set))
     }
 
     /// The union of `sets` ([`Union`]).
@@ -48,22 +48,22 @@ impl Frees {
     }
 
     pub fn contains(&self, name: &Free) -> bool {
-        self.0.contains(name)
+        self.0.contains_key(name)
     }
 
     /// Every name, ascending.
     pub fn iter(&self) -> FreesIter<'_> {
-        FreesIter(self.0.range::<Free, _>(..))
+        FreesIter(self.0.iter())
     }
 
     /// The locals alone, ascending by mint: the names past the globals, read from the least local without passing the globals.
     pub fn locals(&self) -> FreesIter<'_> {
-        FreesIter(self.0.range(Free::local(0, None)..))
+        FreesIter(self.0.iter_from(&Free::local(0, None)))
     }
 
-    /// Whether the two are one set, shared: so where a node's set is its child's.
+    /// Whether the two are one version of one set, sharing every node: so where a node's set is its child's.
     pub(crate) fn shares(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
+        self.0.same_version(&other.0)
     }
 }
 
@@ -73,14 +73,14 @@ impl fmt::Debug for Frees {
     }
 }
 
-/// A walk of a [`Frees`] in its order.
-pub struct FreesIter<'a>(btree_set::Range<'a, Free>);
+/// A walk of a [`Frees`] in its order, which allocates nothing for a set of the sizes a node holds.
+pub struct FreesIter<'a>(InOrder<'a, Free, ()>);
 
 impl<'a> Iterator for FreesIter<'a> {
     type Item = &'a Free;
 
     fn next(&mut self) -> Option<&'a Free> {
-        self.0.next()
+        self.0.next().map(|(name, ())| name)
     }
 }
 
@@ -93,11 +93,10 @@ impl<'a> IntoIterator for &'a Frees {
     }
 }
 
-/// The union of sets taken one at a time: the one set holding any name where only one does, shared as it stands — the chain-shaped common case, where every link above the one free occurrence would otherwise copy the same set — and otherwise a set built of them all.
+/// The union of sets taken one at a time, each the smaller put into the larger ([`Sorted::union_with`]): the one set holding any name where only one does, shared as it stands — the chain-shaped common case, where every link above the one free occurrence would otherwise copy the same set — and otherwise the larger of the two with the smaller's names it lacks, so the union so far is the largest operand's set itself wherever the others add nothing to it.
 #[derive(Default)]
 pub(crate) struct Union {
-    carrier: Option<Frees>,
-    merged: Option<BTreeSet<Free>>,
+    union: Option<Frees>,
 }
 
 impl Union {
@@ -105,25 +104,24 @@ impl Union {
         if set.is_empty() {
             return;
         }
-        match (&self.carrier, &mut self.merged) {
-            (None, _) => self.carrier = Some(set.clone()),
-            // The carrier again, as both operands of `f(x, x)` hold it, adds nothing.
-            (Some(first), _) if first.shares(set) => {}
-            (Some(first), None) => {
-                let mut merged = (*first.0).clone();
-                merged.extend(set.iter().copied());
-                self.merged = Some(merged);
-            }
-            (Some(_), Some(merged)) => merged.extend(set.iter().copied()),
+        let Some(union) = &mut self.union else {
+            self.union = Some(set.clone());
+            return;
+        };
+        // The same set again, as both operands of `f(x, x)` hold it, adds nothing.
+        if union.shares(set) {
+            return;
+        }
+        let merged = union.0.union_with(&set.0, |_, (), ()| None);
+        if merged.same_version(&set.0) {
+            *union = set.clone();
+        } else if !merged.same_version(&union.0) {
+            *union = Frees(Rc::new(merged));
         }
     }
 
     pub(crate) fn finish(self) -> Frees {
-        match (self.carrier, self.merged) {
-            (_, Some(merged)) => Frees(Rc::new(merged)),
-            (Some(shared), None) => shared,
-            (None, None) => Frees::empty(),
-        }
+        self.union.unwrap_or_else(Frees::empty)
     }
 }
 

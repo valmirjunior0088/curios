@@ -29,6 +29,23 @@ fn a_union_of_two_carriers_holds_both_in_order() {
     );
 }
 
+/// A union whose smaller operands add nothing to the largest is the largest itself, in whichever order they come, and one that adds a name holds every name of both.
+#[test]
+fn a_union_keeps_the_largest_where_the_others_add_nothing() {
+    let names = (0..10)
+        .map(|index| Free::local(index, None))
+        .collect::<Vec<_>>();
+    let largest = Frees::union(names.iter().map(|name| Frees::single(*name)));
+    let within = Frees::union([Frees::single(names[3]), Frees::single(names[7])]);
+
+    assert!(Frees::union([within.clone(), largest.clone()]).shares(&largest));
+    assert!(Frees::union([largest.clone(), within]).shares(&largest));
+
+    let grown = Frees::union([largest.clone(), Frees::single(Free::local(42, None))]);
+    assert_eq!(grown.len(), 11);
+    assert!(!grown.shares(&largest));
+}
+
 /// The locals are read from the least of them, past every global.
 #[test]
 fn locals_are_read_past_the_globals() {

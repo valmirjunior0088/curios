@@ -595,9 +595,7 @@ impl Subterm {
         }
     }
 
-    /// This subterm's free-variable set as its own identity (if it is a free `Var`) unioned with its children's already-memoized sets — the child-combining spelling that lets [`Term::get_or_init_free_vars`] fill a deep spine bottom-up in O(children) per node instead of re-walking the subtree. Equivalent to the whole-subtree `Bound::free_vars` walk, since a free name occurs free in exactly the nodes whose subtrees contain it.
-    ///
-    /// A node that adds no identity of its own and whose free variables all arrive through one child shares that child's allocation ([`FreeVars::Shared`]) instead of copying it: on a chain-shaped term every link above the one free occurrence carries the same set, and copying it per link would cost O(set) where the pass-through costs O(1). The union only materializes once a second carrying child appears.
+    /// This subterm's free-variable set, read off what its children have filled: a free `Var`'s is its own name, a metavariable's is its spine's, and any other node's is its children's merged smaller into larger ([`Union`]), so a node whose children add nothing to its largest child's set holds that set itself. [`Term::get_or_init_free_vars`] fills a deep spine with it bottom-up, each node paying for the names it adds.
     pub(super) fn free_vars_from_children(&self) -> Frees {
         // An instance's variable head is this node's own identity exactly as a bare `Var`'s is, and in both shapes a variable head means there are no child terms to union.
         if let Subterm::Var(var)
