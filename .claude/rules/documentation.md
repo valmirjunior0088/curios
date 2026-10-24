@@ -15,7 +15,7 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 | `documentation/syntax.md` | The surface language, complete |
 | `documentation/roadmap/**` | Pending work: an area's findings and specifications, each owning its status |
 | `documentation/design/**` | One cross-cutting decision per file, in a directory per subject, or at the root for the workspace as a whole; a decision scoped to one crate is its `README.md`'s |
-| `xboard/src/<part>.rs` | The soundness board: one part of the judgment per file, with a ticket for every proof of `False` found in it; the claim and its boundaries are `documentation/design/soundness/the-soundness-board.md`'s |
+| `xboard/src/<part>/` | The soundness board: one part of the judgment per directory, indexed by `<part>.rs`, with a file for every proof of `False` found in it; the claim and its boundaries are `documentation/design/soundness/the-soundness-board.md`'s |
 | Crate `README.md` | The crate's mission and its crate-scoped decisions |
 | Rustdoc | Local architecture, algorithms, invariants and API contracts |
 | `Cargo.toml` `description` | The crate's purpose in one line |

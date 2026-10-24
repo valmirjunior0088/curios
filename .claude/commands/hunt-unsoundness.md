@@ -6,7 +6,7 @@ allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(gi
 
 Find a proof of `False`: a closed term the checkers admit at `/std/Bool/False`.
 
-`$ARGUMENTS` names a part of the board, its file `xboard/src/<part>.rs`, and may name a rule in it by the decision that designs it. With none given, choose a rule and say why. One invocation is one rule; iteration lives outside, under `/loop`, and what one run hands the next is the tree as committed: the board, the findings files and the tests.
+`$ARGUMENTS` names a part of the board, its index `xboard/src/<part>.rs`, and may name a rule in it by the decision that designs it. With none given, choose a rule and say why. One invocation is one rule; iteration lives outside, under `/loop`, and what one run hands the next is the tree as committed: the board, the findings files and the tests.
 
 ## Authority
 
@@ -24,7 +24,7 @@ A program the elaborator admits and the kernel refuses is refused: a compilation
 
 ## Read first
 
-`xboard/README.md` states what a part, a ticket and a witness are, and `documentation/design/soundness/the-soundness-board.md` the claim, the trusted base, and the boundaries no rule covers. The part's board file holds every proof of `False` already found in it, each with its witnesses, and a rule's decision — under `documentation/design/soundness/` or `documentation/design/theory/`, or in its crate's README — states what the rule assumes. `curios-cert`'s README and `curios-analysis`'s crate documentation are the roster of what the kernel decides and what both checkers share. Read those there. This file restates none of them.
+`xboard/README.md` states what a part, a ticket and a witness are, and `documentation/design/soundness/the-soundness-board.md` the claim, the trusted base, and the boundaries no rule covers. The part's directory holds every proof of `False` already found in it, a file a ticket, each with its witnesses, and a rule's decision — under `documentation/design/soundness/` or `documentation/design/theory/`, or in its crate's README — states what the rule assumes. `curios-cert`'s README and `curios-analysis`'s crate documentation are the roster of what the kernel decides and what both checkers share. Read those there. This file restates none of them.
 
 ## Probing
 
@@ -57,7 +57,7 @@ Each premise that held leaves a test: the attack that came nearest, in the crate
 
 A proof of `False` is two commits, and the first is the ticket alone.
 
-**The open ticket.** File the ticket under its part with `Status::Open`, the day, and its witnesses: each expects a refusal the checkers do not yet make, by the checker that should make it, with the error left unnamed where it does not exist yet. `cargo xboard report` must then show the ticket `OPEN` and its witness admitted, which is the demonstration. Its check is `cargo xtask workspace format --check`, `cargo xtask workspace lint` and `cargo xboard report`. Commit it by itself, changing no checker.
+**The open ticket.** File the ticket as a file of its part's directory named for its title, `xboard/src/<part>/<ticket>.rs` exporting `TICKET`, with its `mod` line and its entry in the part's index; give it `Status::Open`, the day, and its witnesses: each expects a refusal the checkers do not yet make, by the checker that should make it, with the error left unnamed where it does not exist yet. `cargo xboard report` must then show the ticket `OPEN` and its witness admitted, which is the demonstration. Its check is `cargo xtask workspace format --check`, `cargo xtask workspace lint` and `cargo xboard report`. Commit it by itself, changing no checker.
 
 **The fix.** The next commit changes the checker and turns the ticket to `Status::Fixed`, naming in each witness the error that now refuses it. It is this run's where it follows — it brings the checker to the rule its entry states and leaves standing everything else the tree states — and the user's where it sets: where it would pick a shape later code relies on, move a rule a document states, or widen what the kernel admits. Before changing the checker, weigh what the rule's entry and the code's own documentation state it relies on three times over: a fix that closes this hole by breaking what the rule's argument rests on opens another. The board forces the two together: with the proof refused and the ticket still open, the run fails. So the commit that refuses it is the one git blames for its status line, and nothing else records it. Its check is the open ticket's — `cargo xtask workspace format --check`, `cargo xtask workspace lint` and `cargo xboard report` — plus `cargo xtask workspace test`, the whole suite, since what the checkers decide reaches every stage after them, and one judgment none of them can make: the diff is additive or corrective only — no deleted witness, loosened expectation or weakened assertion.
 

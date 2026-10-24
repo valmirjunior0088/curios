@@ -8,23 +8,13 @@ mod tests;
 mod support;
 use support::*;
 
+// Each part exports one `PART`, and each ticket file one `TICKET`, so a part's name and a ticket's file are what tell them apart.
 mod admission;
-use admission::*;
-
 mod conversion;
-use conversion::*;
-
 mod elimination;
-use elimination::*;
-
 mod formation;
-use formation::*;
-
 mod introduction;
-use introduction::*;
-
 mod totality;
-use totality::*;
 
 use {
     clap::{Parser, Subcommand},
@@ -37,13 +27,13 @@ use {
 };
 
 /// The board itself: every part of the judgment, each with the tickets filed under it.
-const BOARD: &[&Part] = &[
-    &FORMATION,
-    &INTRODUCTION,
-    &ELIMINATION,
-    &CONVERSION,
-    &TOTALITY,
-    &ADMISSION,
+const PARTS: &[&Part] = &[
+    &formation::PART,
+    &introduction::PART,
+    &elimination::PART,
+    &conversion::PART,
+    &totality::PART,
+    &admission::PART,
 ];
 
 #[derive(Debug, Parser)]
@@ -85,7 +75,7 @@ enum Board {
 fn main() -> ExitCode {
     match Cli::parse().command {
         Board::Report => {
-            let report = Report::run(BOARD);
+            let report = Report::run(PARTS);
 
             print!("{report}");
 

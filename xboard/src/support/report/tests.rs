@@ -292,9 +292,9 @@ static EXAMPLE: Part = Part {
 
 #[test]
 fn a_run_puts_every_witness_and_says_where_its_ticket_stands() {
-    static BOARD: &[&Part] = &[&EXAMPLE];
+    static PARTS: &[&Part] = &[&EXAMPLE];
 
-    let report = Report::run(BOARD);
+    let report = Report::run(PARTS);
 
     assert!(!report.fails());
     assert_eq!(report.rows[0].standing, Standing::Holds);
