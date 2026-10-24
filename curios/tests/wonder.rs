@@ -1051,7 +1051,7 @@ fn the_server_logs_once_that_the_store_takes_nothing() {
     );
 }
 
-/// The server files what it compiled whole from the disk, and nothing for a keystroke: an opened document holding its file's text leaves its library in the store, an edit leaves the store as it was, and a build afterwards starts from what the server filed.
+/// The server files what it compiled whole from the disk, and nothing for a keystroke: an opened document holding its file's text leaves its library in the store, an edit leaves the store as it was, and a test run afterwards, which compiles the library tested as the server does, starts from what the server filed.
 #[test]
 fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     let root = project("server-files");
@@ -1095,8 +1095,8 @@ fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let built = curios(&root, &["run", "app"], "");
-    let narrated = String::from_utf8_lossy(&built.stderr);
+    let tested = curios(&root, &["test"], "");
+    let narrated = String::from_utf8_lossy(&tested.stderr);
     assert!(narrated.contains("/app; reused"), "{narrated}");
 }
 

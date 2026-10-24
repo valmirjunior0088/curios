@@ -819,7 +819,7 @@ A top-level definition is in scope of its own body, and definitions that referen
 
 ### Test declarations
 
-A `test` declaration names a check: a description of type `/std/Test({})`, built from that module's combinators, collected per unit in declaration order and run by `curios test`, which owns [what it reports](usage.md#test).
+A `test` declaration names a check: a description of type `/std/Test({})`, built from that module's combinators, collected per unit in declaration order and run by `curios test`, which owns [what it reports](usage.md#test). It is compiled only there: a unit compiled for a program, or for the units compiled after it, holds none of its tests.
 
 ```crs
 use /std/{Nat, Eq, Test};

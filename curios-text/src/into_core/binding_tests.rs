@@ -224,6 +224,36 @@ fn a_test_takes_its_name_among_its_modules_declarations() {
 }
 
 #[test]
+fn a_built_unit_holds_no_test_and_a_tested_one_holds_each() {
+    // A build passes every test as if it were not written, nested ones included: none is registered and none lowers to an item. The same source tested holds each, in declaration order.
+    let entrypoint = "test outer = Type;\nmod Inner\ntest inner = Type;\nend\n()"
+        .parse::<crate::Entrypoint>()
+        .unwrap();
+    let lowered = |loader: &crate::RootSource| {
+        super::into_core_unit(
+            &super::UnitSource::entry(&entrypoint, loader),
+            &[],
+            syntax(),
+        )
+        .unwrap()
+        .core()
+        .clone()
+    };
+    let is_test = |item: &curios_core::Item| matches!(item, curios_core::Item::Let(def) if def.kind == curios_core::DefinitionKind::Test);
+
+    let built = lowered(&crate::RootSource::none());
+    assert!(built.tests.is_empty());
+    assert!(!built.items.iter().any(is_test));
+
+    let tested = lowered(&fixture_loader());
+    assert_eq!(
+        tested.tests,
+        vec![global_name("outer"), global_name("Inner/inner")]
+    );
+    assert_eq!(tested.items.iter().filter(|item| is_test(item)).count(), 2);
+}
+
+#[test]
 fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
     // A test takes no parameters, but it is still a `() -> Test({})` in Core: `Test/main` holds the whole schedule and forces only the one it selected, so the body cannot be a bare value, and the empty telescope is the thunk.
     let module = lowered_module("test t = Type;\n()");

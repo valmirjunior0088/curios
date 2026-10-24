@@ -1,10 +1,10 @@
 //! What a run reports when more than one declaration is refused: every independent refusal, nothing from a declaration that reaches a refused one, and both erasure obligations when both fail.
 
 use {
-    super::{error, run_entrypoint},
+    super::{error, run_entrypoint, tests_error},
     crate::to_compiled,
     curios_native::{ForeignBindings, MockHost, TestEnd},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, Fold},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::RootKind,
 };
@@ -15,22 +15,6 @@ fn supplied_error(source: &str) -> String {
         Entrypoint::supplied("<stdin>", source).expect("the program parses, holes and all");
     let (system, _io) = MockHost::builder().build();
     run_entrypoint(&entrypoint, &loader, system).expect_err("the fixture is refused")
-}
-
-/// Compile `source` as its own test program, expecting a refusal, and return its report.
-fn tests_error(source: &str) -> String {
-    let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
-    Fold::new(DEFAULT_STEP_BUDGET, &[], None)
-        .tests(
-            &entrypoint,
-            &RootSource::none(),
-            EntryTail::Test { last_unit: false },
-            |_| {},
-            |_| {},
-        )
-        .map(|_| ())
-        .expect_err("the fixture is refused")
-        .to_string()
 }
 
 #[test]
@@ -173,7 +157,7 @@ fn a_test_of_a_refused_declaration_is_left_out_of_the_synthesized_tail() {
 /// The boundary of that omission: a unit's tests are scheduled into the tail of the program compiled after it, whose own module declares none of them and refuses nothing, so every test the unit declares is in the tail and runs. A filter over the entry module's survivors would drop them all, and each test would exit without a word.
 #[test]
 fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
-    let mut unit = RootSource::supplied();
+    let mut unit = RootSource::supplied().tested();
     unit.insert_root(
         "lib",
         RootKind::Ordinary,
@@ -183,13 +167,7 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
     );
 
     let (module, foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[unit], None)
-        .tests(
-            &Entrypoint::trivial(),
-            &RootSource::none(),
-            EntryTail::Test { last_unit: true },
-            |_| {},
-            |_| {},
-        )
+        .tests(&Entrypoint::trivial(), &RootSource::none(), |_| {}, |_| {})
         .expect("the unit's test program compiles");
     let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
     assert_eq!(records.len(), 1);

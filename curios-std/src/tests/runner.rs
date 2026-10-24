@@ -4,7 +4,7 @@ use {
     crate::std_directory,
     curios::to_compiled,
     curios_native::{ForeignBindings, MockHost, TestEnd},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, Fold},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::RootKind,
     std::path::PathBuf,
@@ -39,14 +39,8 @@ pub(super) fn outcomes(unit: &str, mounted: RootSource) -> (usize, String) {
     let loader = RootSource::none();
 
     // No cache: a test must not file payloads into a project store.
-    let (module, foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[mounted], None)
-        .tests(
-            &entrypoint,
-            &loader,
-            EntryTail::Test { last_unit: true },
-            |_| {},
-            |_| {},
-        )
+    let (module, foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[mounted.tested()], None)
+        .tests(&entrypoint, &loader, |_| {}, |_| {})
         .unwrap_or_else(|error| panic!("`{unit}` failed to compile:\n{error}"));
     let compiled = to_compiled(&module, foreigns).expect("the test program compiles");
 

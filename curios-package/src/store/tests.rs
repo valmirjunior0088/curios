@@ -101,22 +101,27 @@ fn every_part_of_a_slot_changes_it() {
     let mounts = [Mount::new(Qualifier::from(["json"]), RootKind::Ordinary)];
     let other = [Mount::new(Qualifier::from(["yaml"]), RootKind::Ordinary)];
 
-    let slot = unit_slot("compiler", &mounts, None);
+    let slot = unit_slot("compiler", &mounts, None, Compiled::Built);
 
     assert_eq!(
         slot,
-        unit_slot("compiler", &mounts, None),
+        unit_slot("compiler", &mounts, None, Compiled::Built),
         "and it is a function"
     );
     assert_ne!(
         slot,
-        unit_slot("another", &mounts, None),
+        unit_slot("another", &mounts, None, Compiled::Built),
         "the compiler is in it"
     );
     assert_ne!(
         slot,
-        unit_slot("compiler", &other, None),
+        unit_slot("compiler", &other, None, Compiled::Built),
         "the mounts are in it"
+    );
+    assert_ne!(
+        slot,
+        unit_slot("compiler", &mounts, None, Compiled::Tested),
+        "and what the unit is compiled for"
     );
 }
 
@@ -126,9 +131,9 @@ fn a_units_declared_dependencies_are_part_of_its_slot() {
     let mounts = [Mount::new(Qualifier::from(["app"]), RootKind::Ordinary)];
     let json = [Qualifier::from(["json"])];
 
-    let undeclared = unit_slot("compiler", &mounts, None);
-    let none = unit_slot("compiler", &mounts, Some(&[]));
-    let one = unit_slot("compiler", &mounts, Some(&json));
+    let undeclared = unit_slot("compiler", &mounts, None, Compiled::Built);
+    let none = unit_slot("compiler", &mounts, Some(&[]), Compiled::Built);
+    let one = unit_slot("compiler", &mounts, Some(&json), Compiled::Built);
 
     assert_ne!(undeclared, none);
     assert_ne!(none, one);
@@ -141,8 +146,8 @@ fn a_slot_does_not_move_when_its_source_changes() {
     let mounts = [Mount::new(Qualifier::from(["json"]), RootKind::Ordinary)];
 
     assert_eq!(
-        unit_slot("compiler", &mounts, None),
-        unit_slot("compiler", &mounts, None)
+        unit_slot("compiler", &mounts, None, Compiled::Built),
+        unit_slot("compiler", &mounts, None, Compiled::Built)
     );
     assert_ne!(
         digest(b"one"),
@@ -157,8 +162,8 @@ fn a_moved_boundary_is_a_different_slot() {
     let mounts = [Mount::new(Qualifier::from(["c"]), RootKind::Ordinary)];
 
     assert_ne!(
-        unit_slot("1", &mounts, None),
-        unit_slot("", &mounts, Some(&[])),
+        unit_slot("1", &mounts, None, Compiled::Built),
+        unit_slot("", &mounts, Some(&[]), Compiled::Built),
         "a length ahead of each part, so no part's bytes are read as another's"
     );
     assert_ne!(

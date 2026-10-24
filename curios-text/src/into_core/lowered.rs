@@ -10,7 +10,8 @@
 
 use {
     super::{
-        Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Step, Table,
+        Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Step,
+        TESTED_ONLY, Table,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
     curios_utilities::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Report, Sorted},
@@ -832,7 +833,7 @@ fn keep_entries(
         curios_core::DefinitionKind::Witness => {
             lowered.witnesses.insert(name);
         }
-        curios_core::DefinitionKind::Test => lowered.tests.push(name),
+        curios_core::DefinitionKind::Test => lowered.tests.as_mut().expect(TESTED_ONLY).push(name),
         _ => {}
     }
 }

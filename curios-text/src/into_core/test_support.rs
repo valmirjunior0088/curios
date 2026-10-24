@@ -189,10 +189,15 @@ pub(super) fn global_name(path: &str) -> curios_core::Global {
     curios_core::Global::Authored(Qualifier::from(path.trim_start_matches('/').split('/')))
 }
 
+/// What a fixture's entry resolves through: no filesystem, and the entry tested, so its tests are lowered as a question lowers a subject's. What a build passes over is held by a test of its own.
+pub(super) fn fixture_loader() -> RootSource {
+    RootSource::none().tested()
+}
+
 pub(super) fn run(src: &str) -> curios_core::Term {
     let (program, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
-        &RootSource::none(),
+        &fixture_loader(),
         syntax(),
     )
     .unwrap();
@@ -203,7 +208,7 @@ pub(super) fn run(src: &str) -> curios_core::Term {
 pub(super) fn lowered_module(src: &str) -> curios_core::Module {
     let (program, _, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
-        &RootSource::none(),
+        &fixture_loader(),
         syntax(),
     )
     .unwrap();
@@ -222,7 +227,7 @@ fn elaborate_program(
 ) -> curios_core::Program {
     let (program, minted, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
-        &RootSource::none(),
+        &fixture_loader(),
         syntax(),
     )
     .unwrap();
@@ -254,7 +259,7 @@ pub(super) fn elaborate_source(src: &str) -> curios_core::Module {
 pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core::Program) {
     let (lowered, minted, _) = super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
-        &RootSource::none(),
+        &fixture_loader(),
         syntax(),
     )
     .unwrap();
@@ -282,7 +287,7 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Program, curios_core
 /// The lints of `src` lowered alone, each as `kind: message`.
 pub(super) fn lints(src: &str) -> Vec<String> {
     let entrypoint = src.parse::<Entrypoint>().unwrap();
-    let loader = RootSource::none();
+    let loader = fixture_loader();
     super::into_core_unit(
         &super::UnitSource::entry(&entrypoint, &loader),
         &[],
@@ -298,7 +303,7 @@ pub(super) fn lints(src: &str) -> Vec<String> {
 /// What stops `src` compiling, as its lowering knows it: the refusal it raised, or, where it raised none, every name it filed as resolving to nothing, each as elaboration reports it of the declaration that wrote it. A name written in a declaration refuses that declaration and not the lowering, so a fixture about a name reads both.
 pub(super) fn run_err(src: &str) -> String {
     let entrypoint = src.parse::<Entrypoint>().unwrap();
-    let loader = RootSource::none();
+    let loader = fixture_loader();
 
     match super::into_core_unit(
         &super::UnitSource::entry(&entrypoint, &loader),
@@ -332,7 +337,7 @@ fn unresolved(minted: &curios_core::Minted) -> Result<(), String> {
 pub(super) fn run_err_report(src: &str) -> String {
     super::into_core(
         &src.parse::<Entrypoint>().unwrap(),
-        &RootSource::none(),
+        &fixture_loader(),
         syntax(),
     )
     .unwrap_err()
@@ -346,7 +351,7 @@ pub(super) fn lower_with_prelude(src: &str) -> Result<(), String> {
         super::prepare_prelude(&modules, &[], syntax()).map_err(|error| error.to_string())?;
     let lowered = super::into_core_with_prelude(
         &src.parse::<Entrypoint>().unwrap(),
-        &RootSource::none(),
+        &fixture_loader(),
         std::slice::from_ref(&&prepared),
         syntax(),
     )
@@ -410,7 +415,7 @@ pub(super) fn lower_declaring(declared: &[&str], src: &str) -> Result<(), String
     let prepared =
         super::prepare_prelude(&modules, &[], syntax()).map_err(|error| error.to_string())?;
     let entrypoint = src.parse::<Entrypoint>().unwrap();
-    let loader = RootSource::none();
+    let loader = fixture_loader();
 
     let unit = super::into_core_unit(
         &super::UnitSource::entry(&entrypoint, &loader).seeing(

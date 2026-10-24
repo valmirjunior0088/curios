@@ -14,7 +14,7 @@ use {
     curios_abi::ForeignStore,
     curios_native::{Compiled, OsHost, TestEnd},
     curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, order},
-    curios_pipeline::{Cache, CompileError, EntryTail, Fold, TestRecord},
+    curios_pipeline::{Cache, CompileError, Fold, TestRecord},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_utilities::Source,
     curios_verdicts::{Program, Verdicts},
@@ -86,13 +86,14 @@ pub(crate) fn run_tests(
                 root: &governing.root,
                 manifest: &governing.manifest,
             };
-            // The same scope for every subject: the dependency graph, with the governing package's own library last — the order `wonder` walks and `run` compiles.
-            let units = order(&governing).map_err(CompileError::failure)?;
+            // The same scope for every subject: the dependency graph, with the governing package's own library last — the order `wonder` walks and `run` compiles. The library is tested in its own run and built in every executable's, so each run reads the graph for itself.
+            let units = || order(&governing).map_err(CompileError::failure);
 
             // The library first, when there is one, then every executable in declaration order — each a test program of its own, scheduling only its own unit's tests.
             if governing.directory.join(LIBRARY).is_file() {
-                run.library(&units, &declared)?;
+                run.library(units()?, &declared)?;
             }
+            let units = units()?;
             for executable in &governing.package.executables {
                 let entry = governing.directory.join(&executable.path);
                 run.executable(&units, &entry, &executable.name, &declared)?;
@@ -104,7 +105,7 @@ pub(crate) fn run_tests(
                 root: &library.root,
                 manifest: &library.manifest,
             };
-            run.library(&library.units, &declared)?;
+            run.library(library.units, &declared)?;
         }
         Selection::Program(program) => match program.home() {
             Some(home) => {
@@ -155,14 +156,13 @@ struct Declared<'a> {
     manifest: &'a Path,
 }
 
-/// One subject's test program as it is compiled: the units it stands on, its entry with the loader that entry's `mod` lines resolve through, the text the entry was parsed from and the file it is, and the tail that schedules the tests.
+/// One subject's test program as it is compiled: the units it stands on, its entry with the loader that entry's `mod` lines resolve through, the text the entry was parsed from and the file it is. The subject is the one unit marked tested among them, the entry's own or the last of `units` ([`RootSource::tested`]), whose tests the program schedules.
 struct Tests<'a> {
     units: &'a [RootSource],
     entrypoint: &'a Entrypoint,
     loader: &'a RootSource,
     text: &'a str,
     entry: &'a Path,
-    tail: EntryTail,
 }
 
 /// Where a subject's test payload is filed and whom its compilation is reported under: the store, the package and the name reserved in it for the payload, the subject a progress line names and the manifest a report names.
@@ -263,12 +263,15 @@ struct Run<'a> {
 }
 
 impl Run<'_> {
-    /// A library's tests. It has no written entry, so it is compiled through the trivial one: the subject is the scope's final unit, and `EntryTail::Test { last_unit: true }` replaces that entry with the tail scheduling the unit's tests. `LIBRARY_KEY` stands in for the entry text the payload is keyed on — a built entry has none, and the library's own content rides in through the unit chain regardless.
+    /// A library's tests. It has no written entry, so it is compiled through the trivial one: the subject is the scope's final unit, compiled tested, and the tail replacing that entry schedules its tests. `LIBRARY_KEY` stands in for the entry text the payload is keyed on — a built entry has none, and the library's own content rides in through the unit chain regardless.
     fn library(
         &mut self,
-        units: &[RootSource],
+        mut units: Vec<RootSource>,
         declared: &Declared<'_>,
     ) -> Result<(), CompileError> {
+        if let Some(library) = units.pop() {
+            units.push(library.tested());
+        }
         let library = declared.manifest.with_file_name(LIBRARY);
         let subject = Subject::package(declared.package);
         // One store handle per subject, as `run` holds one per invocation: a handle's placed chain is one compilation's, and a second fold on the same handle would carry the first's placements into the chain the second payload is filed against — one entry too long, which the store withholds without a word.
@@ -276,12 +279,11 @@ impl Run<'_> {
         let (records, cwasm, foreigns) = tests_payload(
             self.budget,
             Tests {
-                units,
+                units: &units,
                 entrypoint: &Entrypoint::trivial(),
                 loader: &RootSource::none(),
                 text: LIBRARY_KEY,
                 entry: &library,
-                tail: EntryTail::Test { last_unit: true },
             },
             Filing {
                 store: store.as_ref(),
@@ -303,7 +305,7 @@ impl Run<'_> {
         )
     }
 
-    /// An executable's tests: its entry, compiled with the tail scheduling its own unit's tests.
+    /// An executable's tests: its entry, its own declarations compiled tested, with the tail scheduling their tests.
     fn executable(
         &mut self,
         units: &[RootSource],
@@ -323,10 +325,9 @@ impl Run<'_> {
             Tests {
                 units,
                 entrypoint: &entrypoint,
-                loader: &loader,
+                loader: &loader.tested(),
                 text: &source.text,
                 entry,
-                tail: EntryTail::Test { last_unit: false },
             },
             Filing {
                 store: store.as_ref(),
@@ -358,12 +359,11 @@ impl Run<'_> {
         let (records, cwasm, foreigns) = tests_payload(
             self.budget,
             Tests {
-                units: &[unit],
+                units: &[unit.tested()],
                 entrypoint: &Entrypoint::trivial(),
                 loader: &RootSource::none(),
                 text: LIBRARY_KEY,
                 entry: invoked,
-                tail: EntryTail::Test { last_unit: true },
             },
             Filing::nowhere(subject),
         )?;
@@ -384,10 +384,9 @@ impl Run<'_> {
             Tests {
                 units: &[],
                 entrypoint: &entrypoint,
-                loader: &loader,
+                loader: &loader.tested(),
                 text: &source.text,
                 entry: invoked,
-                tail: EntryTail::Test { last_unit: false },
             },
             Filing::nowhere(subject),
         )?;
@@ -513,7 +512,6 @@ fn tests_payload(
         loader,
         text,
         entry,
-        tail,
     } = tests;
     let Filing {
         store,
@@ -550,7 +548,6 @@ fn tests_payload(
         .tests(
             entrypoint,
             loader,
-            tail,
             |_| {},
             |progress| {
                 report(&mut steps, subject, progress);

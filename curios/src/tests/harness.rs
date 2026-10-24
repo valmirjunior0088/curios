@@ -4,10 +4,11 @@ mod resource_tests;
 mod sequence_tests;
 
 use {
-    super::{error, ersd_optm, ersd_optm_tests, run, run_tests_program, run_text},
+    super::{error, ersd_optm, ersd_optm_tests, run, run_tests_program, run_text, tests_error},
     curios_native::MockHost,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, EntryTail, Fold},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, Fold},
     curios_text::{Entrypoint, RootSource},
+    curios_utilities::RootKind,
 };
 
 #[test]
@@ -290,7 +291,7 @@ fn a_test_declaration_compiles_beside_the_entry() {
 #[test]
 fn a_test_body_is_checked_against_the_description_type() {
     // The declared type is `() -> /std/Test({})` whatever the body: a `Nat` body is a type error at the declaration, not a value the runner later chokes on.
-    let error = error(
+    let error = tests_error(
         r#"
         use /std/{Nat, Str, Io, Test};
         test nope =
@@ -356,8 +357,8 @@ fn a_unit_with_no_tests_runs_nothing() {
 }
 
 #[test]
-fn the_ordinary_program_prunes_what_the_test_program_keeps() {
-    // The same unit compiles to two programs: the ordinary one neither reaches nor runs its tests, so the prune drops them; the test program's tail references every one, which is what keeps them.
+fn the_ordinary_program_holds_no_test_the_test_program_keeps() {
+    // The same unit compiles to two programs: the ordinary one is built and holds none of its tests, and the test program's is tested and its tail references every one, which is what keeps them.
     let source = r#"
         use /std/{Nat, Str, Io, Test};
         test the_answer_holds = Test/assert(42 == 42);
@@ -389,13 +390,7 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
     .parse::<Entrypoint>()
     .expect("fixture parses");
     let (_module, _foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, &[], None)
-        .tests(
-            &entrypoint,
-            &RootSource::none(),
-            EntryTail::Test { last_unit: false },
-            |_| {},
-            |_| {},
-        )
+        .tests(&entrypoint, &RootSource::none().tested(), |_| {}, |_| {})
         .expect("fixture compiles as a test program");
 
     assert_eq!(
@@ -410,5 +405,52 @@ fn a_body_written_as_a_whole_term_form_is_recorded() {
             "Test/assert(Io/pure(true)!)",
             "let x = Test/pure(2)!;\n            Test/assert(x == 2)",
         ]
+    );
+}
+
+/// A test program schedules the tests of the one unit compiled tested and of none it stands on, wherever the fold places that unit: a unit built for the ones after it holds no test, so a dependency's never reach a dependent's schedule.
+#[test]
+fn a_test_program_schedules_only_the_tested_units_tests() {
+    let unit = |prefix: &str, test: &str| {
+        let mut unit = RootSource::supplied();
+        unit.insert_root(
+            prefix,
+            RootKind::Ordinary,
+            format!("use /std/{{Test}};\n\ntest {test} =\n    Test/assert(true);\n")
+                .parse()
+                .expect("the unit parses"),
+        );
+        unit
+    };
+    let scheduled = |units: &[RootSource], entrypoint: &Entrypoint, loader: &RootSource| {
+        let (_module, _foreigns, records) = Fold::new(DEFAULT_STEP_BUDGET, units, None)
+            .tests(entrypoint, loader, |_| {}, |_| {})
+            .expect("the test program compiles");
+
+        records
+            .into_iter()
+            .map(|record| record.path)
+            .collect::<Vec<_>>()
+    };
+
+    let library = [
+        unit("dependency", "the_dependency_holds"),
+        unit("library", "the_library_holds").tested(),
+    ];
+    assert_eq!(
+        scheduled(&library, &Entrypoint::trivial(), &RootSource::none()),
+        ["/library/the_library_holds"]
+    );
+
+    let program = "use /std/{Test};\ntest the_program_holds = Test/assert(true);\n()"
+        .parse::<Entrypoint>()
+        .expect("the program parses");
+    let built = [
+        unit("dependency", "the_dependency_holds"),
+        unit("library", "the_library_holds"),
+    ];
+    assert_eq!(
+        scheduled(&built, &program, &RootSource::none().tested()),
+        ["/the_program_holds"]
     );
 }

@@ -166,7 +166,7 @@ pub enum Origin {
 ///
 /// **A library is asked through the fold alone.** It has no written program, and none is synthesized for it: the subject is the fold's last unit, and what the fold decided about it is the answer — its refusal, or its lints. A loose file written as a module is asked the same way, as a unit of its own. An entry is asked under its written tail alone.
 ///
-/// `curios test` compiles the same unit under a synthesized `Test/main([...])` over its tests, and a question does not, because that tail raises nothing of its own: a test's body is an item checked at `/std/Test` like any other, so a fault in one is the unit's refusal, and a tail over tests that were accepted is one that is accepted. Compiling it anyway would cost every question about a library the tail's elaboration, its kernel recheck, and its erasure over the unit's whole arena, which is most of what a check of a small library costs.
+/// **The subject is asked as `curios test` compiles it**, tested, so its tests are checked and a declaration only they read is reached; every unit it stands on is built. `curios test` also puts the unit under a synthesized `Test/main([...])` over its tests, and a question does not, because that tail raises nothing of its own: a test's body is an item checked at `/std/Test` like any other, so a fault in one is the unit's refusal, and a tail over tests that were accepted is one that is accepted. Compiling it anyway would cost every question about a library the tail's elaboration, its kernel recheck, and its erasure over the unit's whole arena, which is most of what a check of a small library costs.
 ///
 /// **Every refused declaration is reported, and a declaration reaching a refused one is not.** Elaboration recovers per item, so a file with three mistakes answers with three records in one check, each classified on its own — a refusal beside a goal batch keeps the goal records at their goals — and nothing for a dependent, whose record could only restate the refusal (the rule is `curios-elab`'s README's). A parse failure in one declaration is that declaration's record — the parser resynchronizes at the next item, and the rest of the file is read, elaborated and reported as if the broken one were a refused one — while a failure the item grammar never committed to still ends the file where it stopped, since past that point nothing says what an item is.
 ///
@@ -243,7 +243,7 @@ fn diagnosed_reading(
 
     let mut diagnosed = match subject.formed(overlay) {
         Subject::Unit { units } => {
-            let units = overlaid(units, overlay);
+            let units = tested_last(overlaid(units, overlay));
             let found = fold(&units).units(
                 |_| {},
                 |_, produced| {
@@ -266,7 +266,8 @@ fn diagnosed_reading(
         } => match open(origin, declares, overlay) {
             Ok((entrypoint, loader)) => {
                 let units = overlaid(units, overlay);
-                let checked = fold(&units).check(&entrypoint, &loader, EntryTail::Program, |_| {});
+                let checked =
+                    fold(&units).check(&entrypoint, &loader.tested(), EntryTail::Program, |_| {});
                 answered(checked)
             }
             Err(refusal) => Diagnosed {
@@ -386,6 +387,15 @@ pub(crate) fn overlaid(units: Vec<RootSource>, overlay: &Overlay) -> Vec<RootSou
         .into_iter()
         .map(|unit| unit.with_overlay(overlay.clone()))
         .collect()
+}
+
+/// `units` with the last, a question's subject, compiled tested: a question is answered of the unit as `curios test` compiles it, its tests and what they read included, and of every unit it stands on as built.
+pub(crate) fn tested_last(mut units: Vec<RootSource>) -> Vec<RootSource> {
+    if let Some(subject) = units.pop() {
+        units.push(subject.tested());
+    }
+
+    units
 }
 
 /// The store as a question reaches it: read through the editor's documents, and filed into where the disk holds what was compiled.

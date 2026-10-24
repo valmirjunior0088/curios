@@ -385,7 +385,7 @@ fn state(entry: &mut curios_core::Entrypoint, tail: EntryTail, syntax: &SyntaxRe
 
             entry.type_ = Some(Term::free_var(&Free::from(&empty)));
         }
-        EntryTail::Test { .. } => {}
+        EntryTail::Test => {}
     }
 }
 
@@ -465,12 +465,12 @@ pub enum EntryTail {
     Program,
     /// The authored entrypoint as an alleged proof of the empty proposition, judged at `/sys/Bool/False`: how the soundness board puts a witness, through [`examine_entrypoint`].
     False,
-    /// The synthesized `Test/main([...])` over the entry unit's own registered tests, replacing an executable's authored tail, or, where `last_unit` is set, over the last mounted unit's — the library-under-test case, where the entry is an empty program and the subject is the last predecessor. A unit with no tests gets `Test/main([])`, which runs nothing and answers that every test held.
-    Test { last_unit: bool },
+    /// The synthesized `Test/main([...])` over every test in scope, replacing an executable's authored tail, or a library's absence of one, where the entry is an empty program. Only the unit compiled tested holds tests ([`curios_text::RootSource::tested`]), so they are that unit's, wherever it stands in the fold. A scope with no tests gets `Test/main([])`, which runs nothing and answers that every test held.
+    Test,
 }
 
 impl EntryTail {
-    /// Which tests the tail schedules: those of `own`, the entry's unit, or, for a library under test, those of the last unit in `scope`; a program and an entry at `False` schedule none.
+    /// Which tests the tail schedules: every one `own`, the entry's unit, and `scope` hold, in the fold's order and each unit's declaration order; a program and an entry at `False` schedule none.
     ///
     /// A test program's tail is synthesized by the elaborator, in Core, once the unit's items are defined — it schedules those definitions and chooses each test's discharge from their elaborated form, so it cannot exist before them. What is decided here is only *which* tests it schedules. The records for the runner are read off the same lowered definitions the tail schedules, so the two cannot disagree about what the tests are.
     fn scheduled(
@@ -478,16 +478,15 @@ impl EntryTail {
         own: &curios_core::Module,
         scope: &[&curios_core::Module],
     ) -> Vec<curios_elab::ScheduledTest> {
-        let module = match self {
-            EntryTail::Program | EntryTail::False => return Vec::new(),
-            EntryTail::Test { last_unit: false } => own,
-            EntryTail::Test { last_unit: true } => match scope.last() {
-                Some(last) => last,
-                None => return Vec::new(),
-            },
-        };
-
-        scheduled_tests(&module.tests, &module.items)
+        match self {
+            EntryTail::Program | EntryTail::False => Vec::new(),
+            EntryTail::Test => scope
+                .iter()
+                .copied()
+                .chain([own])
+                .flat_map(|module| scheduled_tests(&module.tests, &module.items))
+                .collect(),
+        }
     }
 
     /// What the elaborator closes the program with: the authored `entry`, or the test tail over `scheduled`, which the elaborator synthesizes and states the type of.
@@ -498,7 +497,7 @@ impl EntryTail {
     ) -> Tail<'t> {
         match self {
             EntryTail::Program | EntryTail::False => Tail::Entry(entry),
-            EntryTail::Test { .. } => Tail::Tests(scheduled),
+            EntryTail::Test => Tail::Tests(scheduled),
         }
     }
 }
@@ -1654,35 +1653,6 @@ where
         },
     )
     .map(|(module, foreigns, _records)| (module, foreigns))
-}
-
-/// [`compile_entrypoint`] with the unit compiled as a test program: the authored tail — or a module's absence of one — is replaced by the synthesized `Test/main([...])` over the registered tests `tail` selects, and everything else is the ordinary pipeline, kernel judgment included. No file is written and nothing about the surface changes; which tail a unit compiles under is the caller's question alone. Beside the program, the caller gets one [`TestRecord`] per scheduled test, in schedule order — the report metadata execution alone cannot recover.
-pub fn compile_unit_as_tests<O>(
-    budget: u64,
-    predecessors: Predecessors<'_>,
-    syntax: &SyntaxRegistry,
-    source: &UnitSource<'_>,
-    cache: Option<&dyn Cache>,
-    tail: EntryTail,
-    observe: O,
-) -> Result<(curios_wasm::Module, ForeignStore, Vec<TestRecord>), CompileError>
-where
-    O: FnMut(Stage<'_>),
-{
-    let mut observe = observe;
-
-    compile_with_tail(
-        budget,
-        predecessors,
-        syntax,
-        source,
-        cache,
-        tail,
-        Told {
-            observe: &mut observe,
-            read: None,
-        },
-    )
 }
 
 /// What a caller is told of a program's compile as it goes: each rung it produced ([`Stage`]), and its lowering, as soon as it is made ([`ReadLowering`]).

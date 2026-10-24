@@ -9,7 +9,7 @@
 //! **One name stands at an offset** ([`Named::at`]): the narrowest that holds it. The rule is stated here, over the records, since both transports ask it and a server asks it of records alone.
 
 use {
-    crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid},
+    crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid, tested_last},
     curios_core::{Anchors, Declared, Global},
     curios_pipeline::{Cache, Fold},
     curios_text::{Heading, Overlay, PreparedText, heading, identity},
@@ -111,7 +111,7 @@ pub fn written(
 
     match subject.formed(overlay) {
         Subject::Unit { units } => {
-            let units = overlaid(units, overlay);
+            let units = tested_last(overlaid(units, overlay));
 
             Fold::new(budget, &units, through)
                 .lowered_unit(|_| {}, |scope, text| reading.read(scope, text, None))
@@ -127,7 +127,7 @@ pub fn written(
 
             Fold::new(budget, &units, through).lowered(
                 &entrypoint,
-                &loader,
+                &loader.tested(),
                 |_| {},
                 |scope, text, entry| reading.read(scope, text, Some(entry)),
             )

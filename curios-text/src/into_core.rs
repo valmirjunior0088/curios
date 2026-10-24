@@ -60,9 +60,9 @@ use reachability::*;
 
 use {
     crate::{
-        Apply, Argument, Entrypoint, Error, FuncTypeParam, GroupItem, Label, LetSignature, Lint,
-        LintedBinder, Module, Name, RootSource, StructLit, StructLitEntry, Subterm, Term, TopItem,
-        TupleField, UseGroup, func_sugar_type_params, ordered, tree_of,
+        Apply, Argument, Compiled, Entrypoint, Error, FuncTypeParam, GroupItem, Label,
+        LetSignature, Lint, LintedBinder, Module, Name, RootSource, StructLit, StructLitEntry,
+        Subterm, Term, TopItem, TupleField, UseGroup, func_sugar_type_params, ordered, tree_of,
     },
     curios_abi::{ForeignFunction, ForeignStore},
     curios_archive::Bytes,
@@ -609,6 +609,8 @@ struct Resolved<'a> {
 #[curios_archive::archived]
 pub struct PreparedText {
     mounts: Vec<Mount>,
+    /// What the unit was lowered for ([`UnitSource::compiled`]). A lowering for the other over it enters every module, since a module passed unentered is the baseline's whole, its tests with it or none of them.
+    compiled: Compiled,
     /// The `foreign` rows this unit declares. Collected by the same walk that lowers its items, and carried here rather than dropped: a unit that declares one has to reach the link, and the prelude declaring none is a fact about the prelude, not about the shape.
     foreigns: ForeignStore,
     #[archived_with(curios_utilities::InSharedKeyOrder)]
@@ -1340,6 +1342,9 @@ fn anchored(head: &Head, context: &Context) -> Option<curios_core::Anchored> {
     }
 }
 
+/// Why a walk that reaches a test, lowering it or keeping it, holds a list to put it in: one with no list passes every test before anything of it is lowered or kept.
+const TESTED_ONLY: &str = "a test is reached only by a walk that collects tests";
+
 /// What a unit's declarations lower to, as the walk over its modules gathers it.
 ///
 /// This unit's own, never the predecessors' extended in place. What a predecessor declares stays its own, and the one pass that asks about one — the public-exposure audit, whose alias walk may land on a predecessor's type — takes them to query rather than to own.
@@ -1354,7 +1359,8 @@ struct Lowering<'a> {
     struct_decls: BTreeMap<curios_core::Global, curios_core::StructDecl>,
     concepts: BTreeMap<curios_core::Global, curios_core::ConceptDecl>,
     witnesses: BTreeSet<curios_core::Global>,
-    tests: Vec<curios_core::Global>,
+    /// The tests lowered, in the walk's order — `None` where the unit is built ([`UnitSource::compiled`]), and the walk passes every `test` declaration as if it were not written.
+    tests: Option<Vec<curios_core::Global>>,
     foreigns: ForeignStore,
     broken: Vec<BrokenItem>,
     /// What the `use` declarations of each module body read, by the module ([`BaselineHalf::uses`]): over a baseline, the baseline's, with each body whose scope does not stand recorded again.
@@ -1494,6 +1500,10 @@ fn process_items(
     }
 
     for (index, headed) in heads.iter().enumerate() {
+        // A build holds no test: nothing of one is begun, anchored or asked of a baseline.
+        if matches!(headed.head, Head::Test(_)) && lowered.tests.is_none() {
+            continue;
+        }
         // A source declaration mints in a space of its own, shared by every item it lowers to; a nested module's declarations each take theirs.
         let declares = !matches!(headed.head, Head::Mod { .. });
         let lowered_from = lowered.items.len();
@@ -1666,7 +1676,7 @@ fn process_items(
                     None => body,
                 };
                 let name = curios_core::Global::Authored(context.prefixed(&test.label));
-                lowered.tests.push(name);
+                lowered.tests.as_mut().expect(TESTED_ONLY).push(name);
                 lowered.items.push(FlatItem::Let(FlatLet {
                     kind: curios_core::DefinitionKind::Test,
                     span: test.label.span().cloned(),
@@ -2568,6 +2578,11 @@ impl<'a> UnitSource<'a> {
         self.visible.as_deref()
     }
 
+    /// What this unit is compiled for ([`RootSource::tested`]). A built unit and a tested one are two lowerings of one source, so a store addresses them apart, as it does two units that declared differently.
+    pub fn compiled(&self) -> Compiled {
+        self.source.compiled()
+    }
+
     /// The `foreign` declarations this unit's package says a module answers, each beside the manifest row that says so ([`RootSource::answering`]).
     pub fn answered(&self) -> &[(String, String)] {
         self.source.answered()
@@ -2822,12 +2837,20 @@ fn into_core_unit_within(
         .map(|(baseline, revised)| Moved::found(baseline, revised));
     let baseline = baseline.map(|baseline| Baseline::of(baseline).moving(moved));
     let mut lowered = Lowering {
-        entered: baseline.as_ref().and_then(Baseline::entered),
+        // Over a baseline of the other kind, a module no edit reached still holds tests to lower or to drop.
+        entered: baseline
+            .as_ref()
+            .filter(|baseline| baseline.unit().compiled == source.compiled())
+            .and_then(Baseline::entered),
         baseline: baseline.as_ref(),
         uses: baseline
             .as_ref()
             .map(|baseline| baseline.unit().half().uses.clone())
             .unwrap_or_default(),
+        tests: match source.compiled() {
+            Compiled::Built => None,
+            Compiled::Tested => Some(Vec::new()),
+        },
         ..Lowering::default()
     };
 
@@ -3460,18 +3483,22 @@ fn into_core_unit_within(
             let places = places
                 .get()
                 .expect("a version holds where it places each name");
-            let mut tested = earlier
-                .tests
-                .iter()
-                .filter(|name| !gone_names.contains(*name))
-                .copied()
-                .chain(tests)
-                .collect::<BTreeSet<_>>()
-                .into_iter()
-                .filter_map(|name| Some((places.place(&name)?.item(), name)))
-                .collect::<Vec<_>>();
-            tested.sort_by_key(|(place, _)| *place);
-            (held, tested.into_iter().map(|(_, name)| name).collect())
+            // A built unit holds no test, whatever the baseline it was lowered over held.
+            let tested = tests.map(|tests| {
+                let mut tested = earlier
+                    .tests
+                    .iter()
+                    .filter(|name| !gone_names.contains(*name))
+                    .copied()
+                    .chain(tests)
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .filter_map(|name| Some((places.place(&name)?.item(), name)))
+                    .collect::<Vec<_>>();
+                tested.sort_by_key(|(place, _)| *place);
+                tested.into_iter().map(|(_, name)| name).collect()
+            });
+            (held, tested)
         }
         None => (witnesses, tests),
     };
@@ -3617,6 +3644,7 @@ fn into_core_unit_within(
 
     let unit = PreparedText {
         mounts: own.clone(),
+        compiled: source.compiled(),
         foreigns,
         table: table.into_own(),
         public: public.into_own(),
@@ -3633,7 +3661,7 @@ fn into_core_unit_within(
             items,
             mounts: own,
             witnesses,
-            tests,
+            tests: tests.unwrap_or_default(),
         },
         minted: Rc::new({
             let mut minted = shared.minted.into_inner();

@@ -17,7 +17,7 @@ use {
     crate::{Packs, opened, replace},
     curios_package::{Store, compiler, entry_slot, unit_slot},
     curios_pipeline::{After, Cache, Earlier, complete_records},
-    curios_text::{Overlay, UnitSource},
+    curios_text::{Compiled, Overlay, UnitSource},
     curios_unit::{Indexed, Record, Unit, digested, read_within},
     curios_utilities::{Candidates, Qualifier, digest},
     std::{
@@ -50,8 +50,8 @@ pub struct Session {
     units: Rc<RefCell<BTreeMap<Identity, Kept>>>,
 }
 
-/// Which unit a source is, whatever scope it is compiled in: the prefixes it claims, and the directories it reads from.
-type Identity = (Vec<String>, Vec<PathBuf>);
+/// Which unit a source is, whatever scope it is compiled in: the prefixes it claims, the directories it reads from, and what it is compiled for, a source built and tested being two units.
+type Identity = (Vec<String>, Vec<PathBuf>, Compiled);
 
 /// The [`Identity`] of `source`.
 fn identity(source: &UnitSource<'_>) -> Identity {
@@ -66,6 +66,7 @@ fn identity(source: &UnitSource<'_>) -> Identity {
             .into_iter()
             .map(Path::to_path_buf)
             .collect(),
+        source.compiled(),
     )
 }
 
@@ -381,10 +382,21 @@ impl Verdicts {
         if source.is_entry() {
             let (package, executable) = self.executable.as_ref()?;
 
-            return Some(entry_slot(compiler, package, executable, source.declared()));
+            return Some(entry_slot(
+                compiler,
+                package,
+                executable,
+                source.declared(),
+                source.compiled(),
+            ));
         }
 
-        Some(unit_slot(compiler, &source.claims(), source.declared()))
+        Some(unit_slot(
+            compiler,
+            &source.claims(),
+            source.declared(),
+            source.compiled(),
+        ))
     }
 
     /// The packs of `slot`'s address, opened the first time this handle asks for them. `None` for a handle with no store.

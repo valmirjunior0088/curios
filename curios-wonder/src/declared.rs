@@ -1,7 +1,7 @@
 //! The `tests` query: every test a subject declares, as `{ path }` records — read off `Module::tests` by the compilation that would build the subject, executing nothing. A rung is a constructor the body builds at run time, so a record deliberately does not name one.
 
 use {
-    crate::{DeclaredTest, Overlaid, Subject, open, overlaid},
+    crate::{DeclaredTest, Overlaid, Subject, open, overlaid, tested_last},
     curios_pipeline::{Cache, CompileError, EntryTail, Fold, declared_test_paths},
     curios_text::Overlay,
     curios_verdicts::Verdicts,
@@ -19,7 +19,7 @@ pub fn declared_tests(
 
     let paths = match subject.formed(overlay) {
         Subject::Unit { units } => {
-            let units = overlaid(units, overlay);
+            let units = tested_last(overlaid(units, overlay));
             Fold::new(budget, &units, cache).test_paths(|_| {})?
         }
         Subject::Entry {
@@ -39,7 +39,7 @@ pub fn declared_tests(
             })?;
             let units = overlaid(units, overlay);
             let program = Fold::new(budget, &units, cache)
-                .check(&entrypoint, &loader, EntryTail::Program, |_| {})?
+                .check(&entrypoint, &loader.tested(), EntryTail::Program, |_| {})?
                 .verdict?;
 
             declared_test_paths(&program.module)

@@ -1,6 +1,6 @@
 //! Successful payloads, declared embeddings and first-failure sequencing.
 
-use super::super::{error, run, run_tests_program};
+use super::super::{error, run, run_tests_program, tests_error};
 
 /// A written function reads its Test monad from the result, and Io embeds through its declared edge.
 #[test]
@@ -62,7 +62,7 @@ fn one_try_embedding_serves_io_and_test_bases() {
 
 #[test]
 fn a_test_declaration_requires_a_terminal_unit_payload() {
-    let refusal = error(
+    let refusal = tests_error(
         r#"
         use /std/{Nat, Test};
         test not_terminal = Test/pure(42);

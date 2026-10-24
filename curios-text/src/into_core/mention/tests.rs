@@ -3,8 +3,11 @@
 //! The program is written with a mark around each name the lowering does not resolve, `«name»`, and is read with the marks taken out. Every path it writes is then held to what its text mentions: one that ends in a declaration's name, and stands in no mark, is one mention of that declaration over the whole path, and every other is none.
 
 use {
-    super::super::{UnitSource, into_core_entry, test_support::syntax},
-    crate::{Entrypoint, PreparedText, RootSource},
+    super::super::{
+        UnitSource, into_core_entry,
+        test_support::{fixture_loader, syntax},
+    },
+    crate::{Entrypoint, PreparedText},
     std::{collections::BTreeMap, ops::Range},
 };
 
@@ -110,7 +113,7 @@ fn paths(text: &str) -> Vec<(usize, &str)> {
 fn answers(marked: &str, baseline: Option<&PreparedText>) -> PreparedText {
     let (text, silent) = unmarked(marked);
     let entrypoint = text.parse::<Entrypoint>().unwrap();
-    let loader = RootSource::none();
+    let loader = fixture_loader();
     let (unit, entry) = into_core_entry(
         &UnitSource::entry(&entrypoint, &loader),
         &[],
@@ -216,7 +219,7 @@ fn a_declaration_kept_from_an_earlier_text_answers_where_it_now_stands() {
 fn a_witness_is_declared_by_its_head_and_a_member_by_its_name() {
     let (text, _) = unmarked(PROGRAM);
     let entrypoint = text.parse::<Entrypoint>().unwrap();
-    let loader = RootSource::none();
+    let loader = fixture_loader();
     let (unit, entry) = into_core_entry(
         &UnitSource::entry(&entrypoint, &loader),
         &[],

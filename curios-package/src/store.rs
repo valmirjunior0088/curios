@@ -30,6 +30,7 @@ mod tests;
 
 use {
     crate::{FileHash, Target, TreeHash},
+    curios_text::Compiled,
     curios_utilities::{Fingerprint, Mount, Qualifier},
     std::path::PathBuf,
 };
@@ -148,14 +149,19 @@ const SCHEMA: &str = "u68";
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
 const PAYLOAD_SCHEMA: &str = "p9";
 
-/// The slot a unit compiled by `compiler`, claiming `mounts` and declaring `declared`, is filed under.
+/// The slot a unit compiled by `compiler`, claiming `mounts`, declaring `declared` and `compiled` built or tested, is filed under.
 ///
 /// **No file contents here, deliberately.** This names a *place*, not a version of what lives in it: "the unit for these mounts, declaring these dependencies, by this compiler". What was compiled is checked when the slot is opened, against the record of what was read, so a source edit changes the verification and not the address. That is what bounds the store — a project has as many slots as it has units, forever, rather than one per compile, as an address hashed over the unit's source directory, which contains this store, would give.
 ///
-/// **Three parts, and each is load-bearing.** The compiler is who judged it — see [`compiler`](crate::compiler()), and note that a key naming no compiler would be believed on behalf of any. The mounts are how the unit's names are spelled, which the lowering depends on and no read of its files reveals. The third is what the unit declared it could see: a declared dependency answers "may these names reach that root" per unit, and it is the answer the lowering consults — the same source declaring different prefixes resolves different names and is a different unit. `None` is its own value, not an empty list: it means the caller declared nothing, which is every open prefix in scope, where an empty list means a unit that asked for none of them.
+/// **Four parts, and each is load-bearing.** The compiler is who judged it — see [`compiler`](crate::compiler()), and note that a key naming no compiler would be believed on behalf of any. The mounts are how the unit's names are spelled, which the lowering depends on and no read of its files reveals. The third is what the unit declared it could see: a declared dependency answers "may these names reach that root" per unit, and it is the answer the lowering consults — the same source declaring different prefixes resolves different names and is a different unit. `None` is its own value, not an empty list: it means the caller declared nothing, which is every open prefix in scope, where an empty list means a unit that asked for none of them. The fourth is what the unit is compiled for: a tested unit holds its tests and a built one none, so the same source is two units.
 ///
 /// **No unit before it.** What a unit read of the units before it is verified, as its own source is: its record names what each unit it could have read contained, and a slot whose record no longer agrees is the baseline its unit is compiled over. So a unit two folds reach after different others is filed once, and an edit to a unit it cannot read moves neither its address nor its record.
-pub fn unit_slot(compiler: &str, mounts: &[Mount], declared: Option<&[Qualifier]>) -> String {
+pub fn unit_slot(
+    compiler: &str,
+    mounts: &[Mount],
+    declared: Option<&[Qualifier]>,
+    compiled: Compiled,
+) -> String {
     let mut fingerprint = Fingerprint::new();
 
     fingerprint.feed(SCHEMA);
@@ -165,11 +171,12 @@ pub fn unit_slot(compiler: &str, mounts: &[Mount], declared: Option<&[Qualifier]
         fingerprint.feed(mount.prefix.join());
     }
     feed_declared(&mut fingerprint, declared);
+    feed_compiled(&mut fingerprint, compiled);
 
     fingerprint.hex()
 }
 
-/// The slot the unit of an entry's own declarations is filed under: `package`'s `executable`, compiled by `compiler` and declaring `declared`.
+/// The slot the unit of an entry's own declarations is filed under: `package`'s `executable`, compiled by `compiler`, declaring `declared` and `compiled` built or tested.
 ///
 /// **An entry claims the empty prefix, as every entry does**, so [`unit_slot`] would file every program of a project in one place, each overwriting the last. What tells two entries apart is what tells their payloads apart ([`payload_slot`]): the package's name and the executable's, the one identity in a compilation that cannot collide. A program no package declares has none, and its unit is filed nowhere.
 ///
@@ -179,6 +186,7 @@ pub fn entry_slot(
     package: &str,
     executable: &str,
     declared: Option<&[Qualifier]>,
+    compiled: Compiled,
 ) -> String {
     let mut fingerprint = Fingerprint::new();
 
@@ -189,8 +197,17 @@ pub fn entry_slot(
     fingerprint.feed(package);
     fingerprint.feed(executable);
     feed_declared(&mut fingerprint, declared);
+    feed_compiled(&mut fingerprint, compiled);
 
     fingerprint.hex()
+}
+
+/// What a unit is compiled for, as a slot states it: one word either way, so neither address is a prefix of the other's.
+fn feed_compiled(fingerprint: &mut Fingerprint, compiled: Compiled) {
+    fingerprint.feed(match compiled {
+        Compiled::Built => "built",
+        Compiled::Tested => "tested",
+    });
 }
 
 /// What a unit declared it could see, as a slot states it.

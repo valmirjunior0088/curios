@@ -32,12 +32,22 @@ pub struct RootSource {
     declares: Option<Vec<Qualifier>>,
     /// The `foreign` declarations a module of this unit's package answers, each by its qualified name beside the manifest row that says so. See [`RootSource::answering`].
     answers: Vec<(String, String)>,
+    /// Whether the unit is built or tested. See [`RootSource::tested`].
+    compiled: Compiled,
     /// Text consulted before the disk for every file this source would read. See [`Overlay`].
     overlay: Overlay,
     /// Every file this source has read, by the canonical path it was read from. See [`RootSource::reads`].
     ///
     /// Interior mutability because resolution is a `&self` operation everywhere above this, and recording what was read is not a reason to thread `&mut` through the lowering. Nothing here is `Send` — a surface module is an `Rc` tree — so this costs no bound that was not already spent.
     reads: RefCell<BTreeMap<PathBuf, Arc<Source>>>,
+}
+
+/// What a unit is compiled for: built, for a program or a unit compiled after it, or tested, as the subject of a test compilation. A tested unit holds its `test` declarations and a built one none, so the same source is two units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[curios_archive::archived]
+pub enum Compiled {
+    Built,
+    Tested,
 }
 
 /// What a walk of `mod` chains does at a file it cannot read: refuse the walk, as a listing of a unit's files that is relied on does, or end that branch there, as a claim on files made before anything has read them does.
@@ -152,6 +162,7 @@ impl RootSource {
             documented: None,
             declares: None,
             answers: Vec::new(),
+            compiled: Compiled::Built,
             overlay: Overlay::default(),
             reads: RefCell::new(BTreeMap::new()),
         }
@@ -205,6 +216,21 @@ impl RootSource {
     /// The declarations this source's package says a module answers, as [`RootSource::answering`] was handed them.
     pub fn answered(&self) -> &[(String, String)] {
         &self.answers
+    }
+
+    /// This source compiled with its tests: every `test` declaration its modules hold is lowered and registered, where a build of the same source lowers none.
+    ///
+    /// **Marked on a test compilation's subject alone.** `curios test` marks what it tests and `wonder` what it answers about, and nothing either stands on is marked, so a unit in scope holds tests only where it is the subject, and the tail a test program closes with schedules every test in scope.
+    pub fn tested(self) -> Self {
+        Self {
+            compiled: Compiled::Tested,
+            ..self
+        }
+    }
+
+    /// What this source is compiled for ([`RootSource::tested`]).
+    pub(crate) fn compiled(&self) -> Compiled {
+        self.compiled
     }
 
     /// This source with `overlay` consulted before the disk on every read.

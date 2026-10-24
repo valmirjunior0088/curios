@@ -101,12 +101,11 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// [`Fold::compile`] with the entry compiled as a test program — the synthesized `Test/main([...])` tail over the registered tests `tail` selects, in place of the authored one; see [`compile_unit_as_tests`](crate::compile_unit_as_tests).
+    /// [`Fold::compile`] with the entry compiled as a test program: the authored tail, or a library's absence of one, replaced by the synthesized `Test/main([...])` over every test in scope ([`EntryTail::Test`]) — which are the tests of the one unit marked tested, the entry's own where `loader` is ([`RootSource::tested`]). Everything else is the ordinary pipeline, kernel judgment included. Beside the program come one [`TestRecord`] per scheduled test, in schedule order — the report metadata execution alone cannot recover.
     pub fn tests<O, P>(
         self,
         entrypoint: &curios_text::Entrypoint,
         loader: &RootSource,
-        tail: EntryTail,
         observe: O,
         progress: P,
     ) -> Result<(curios_wasm::Module, ForeignStore, Vec<TestRecord>), CompileError>
@@ -123,7 +122,7 @@ impl<'a> Fold<'a> {
                 &SYNTAX,
                 &UnitSource::entry(entrypoint, loader),
                 self.cache,
-                tail,
+                EntryTail::Test,
                 Told {
                     observe: &mut observe,
                     read: self.read,
@@ -164,7 +163,7 @@ impl<'a> Fold<'a> {
         self.scoped(progress, |_, _, _, _| Ok(()))
     }
 
-    /// The declaration-ordered test paths of the last unit — what `wonder tests` answers for a library. The same fold [`Fold::check_units`] runs, read for its `Module::tests` instead of its verdicts; nothing executes.
+    /// The declaration-ordered test paths of the last unit — what `wonder tests` answers for a library, whose last unit it marks tested, since a built one holds none. The same fold [`Fold::check_units`] runs, read for its `Module::tests` instead of its verdicts; nothing executes.
     pub fn test_paths<P>(self, progress: P) -> Result<Vec<String>, CompileError>
     where
         P: FnMut(Progress<'_>),
