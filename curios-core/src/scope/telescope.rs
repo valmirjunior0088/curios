@@ -10,6 +10,7 @@ use {
         collections::{BTreeSet, HashMap},
         fmt,
         hash::Hash,
+        iter,
     },
 };
 
@@ -230,6 +231,18 @@ impl<B: Bound> Telescope<B> {
             .into_iter()
             .map(Option::unwrap_or_default)
             .collect()
+    }
+
+    /// Each member's mark and binder hint, in order, read off the spine where it stands: what a reader that looks for one member walks, where listing them all would cost every member.
+    pub fn members(&self) -> impl Iterator<Item = (Plicity, Option<&'static str>)> + '_ {
+        let mut current = self;
+        iter::from_fn(move || match current {
+            Telescope::Cons(mark, _, rest, ..) => {
+                current = &rest.body;
+                Some((*mark, rest.first_hint()))
+            }
+            Telescope::Done(_) => None,
+        })
     }
 
     /// The binder hint at each position, `None` where the binder has no name.

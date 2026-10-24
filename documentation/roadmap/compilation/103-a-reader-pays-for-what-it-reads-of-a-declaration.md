@@ -1,6 +1,6 @@
 # A reader pays for what it reads of a declaration
 
-[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a declaration read a fact at a time — "an instantiated declaration is read by facet — its sort, its arity, one constructor, one field — and only the facet asked is instantiated" — and a compilation end in time proportional to what was written plus what the budget counted; [an item imports what it reads of another's row](../../../curios-ersd/README.md#an-item-imports-what-it-reads-of-anothers-row) so that no row is copied once for each declaration that reads it. Two readers may still take a row whole where they read a fact of it, so that `k` readers of a row of width `w` cost `w·k`, and each is an investigation (*What is not yet known*): a call of one method of a wide concept, and a read of a wide structure's last field. A row is a family's constructors, a structure's or a tuple type's fields, a function type's domains, or an erased schema.
+[Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a declaration read a fact at a time — "an instantiated declaration is read by facet — its sort, its arity, one constructor, one field — and only the facet asked is instantiated" — and a compilation end in time proportional to what was written plus what the budget counted; [an item imports what it reads of another's row](../../../curios-ersd/README.md#an-item-imports-what-it-reads-of-anothers-row) so that no row is copied once for each declaration that reads it. One reader may still take a row whole where it reads a fact of it, so that `k` readers of a row of width `w` cost `w·k`, and it is an investigation (*What is not yet known*): a call of one method of a wide concept. A row is a family's constructors, a structure's or a tuple type's fields, a function type's domains, or an erased schema.
 
 ## What is wrong
 
@@ -9,7 +9,6 @@ Counted over the commit that types a slot without copying its type, with a relea
 | Reader of a row of width `w` | Elaboration | Kernel | Erasure |
 | --- | ---: | ---: | ---: |
 | A call of one method of a concept of `w` methods | 207–227 → 287–340 | 53 → 60 | 40 → 33 |
-| A function reading the last field of a structure of `w` fields | 107 → 160 | 33 → 27 | 20 → 20 |
 | *Control:* a function's parameter typed by a closed tuple alias of `w` fields, projected at `x.0` | 93 → 100 | 33 → 27 | 20 → 20 |
 | *Control:* a function's unused parameter typed by a closed function-type alias of `w` domains | 87 → 87 | 27 → 27 | 20 → 20 |
 | *Control:* a construction of the last constructor of a family of `w` | 67 → 67 | 20 → 20 | 20 → 20 |
@@ -27,7 +26,6 @@ The fold states a stage's bytes to a tenth of a megabyte, so a row moves by 7 KB
 ## What is not yet known
 
 - **What a method call pays its concept.** One call of one method of a concept of 4,000 methods costs the elaborator 287 to 340 KB and 6,446 to 6,999 allocations over four runs, against 207 to 227 KB and 3,458 to 3,681 at 1,000, about an allocation for each method, and the kernel and erasure the same at both widths, counted with the figures above; what it allocates differs between two runs of one program. At `7c61c1a15` the growth stood in the allocations of `Context::standing_on` itself, a parked problem's retry, with no weak-head value filed as a key, so it is not the witness the call resolves, a structure of `w` methods. Settled by: gdb samples of the calls' elaboration at a concept of many methods, the cost attributed; a cost left is a stage here, and none left drops the item.
-- **What elaboration pays a field read of a wide structure.** A function reading the last field of a structure of 4,000 fields costs the elaborator 160 KB and 1,593 allocations against 107 KB and 1,498 at 1,000, a few allocations that grow by about 18 bytes a field, and the kernel and erasure the same at both widths, counted with the figures above. Settled by: the read's elaboration attributed by spans; a cost left is a stage here, and none left drops the item.
 
 ## Stages
 
@@ -39,4 +37,4 @@ Each probe is a program on standard input. A reader probe declares the row and `
 
 ## Verification and retirement
 
-Each stage holds its own growth shape under `growth_slopes`, whose every slope stays under three where the shape grows a row's width and its readers together. A stage that moves stored bytes states them and holds verdicts, erased results and executable artifacts equal; one that moves none holds `/std`'s images byte-identical at one path. A landed stage moves its contract to its owner, and this specification keeps the rest. Retire it once both investigations are settled and nothing references this file.
+Each stage holds its own growth shape under `growth_slopes`, whose every slope stays under three where the shape grows a row's width and its readers together. A stage that moves stored bytes states them and holds verdicts, erased results and executable artifacts equal; one that moves none holds `/std`'s images byte-identical at one path. A landed stage moves its contract to its owner, and this specification keeps the rest. Retire it once the investigation is settled and nothing references this file.

@@ -225,33 +225,35 @@ fn slot(telescope: &Telescope<()>, field: &Field) -> Result<usize, Error> {
     let index = match field {
         Field::Tuple(index) | Field::Struct(_, index) => *index,
         Field::Position(position) => {
-            let marks = telescope.marks();
-            let mut plain = marks
-                .iter()
+            let mut plain = telescope
+                .members()
                 .enumerate()
-                .filter(|(_, mark)| **mark == Plicity::Explicit)
+                .filter(|(_, (mark, _))| *mark == Plicity::Explicit)
                 .map(|(slot, _)| slot);
             match plain.nth(*position) {
                 Some(slot) => slot,
                 // Out of the plain fields, which are the ones a reader counts.
                 None => {
-                    let plain = marks
-                        .iter()
-                        .filter(|mark| **mark == Plicity::Explicit)
+                    let plain = telescope
+                        .members()
+                        .filter(|(mark, _)| *mark == Plicity::Explicit)
                         .count();
                     return Err(Error::tuple_index_out_of_bounds(*position, plain));
                 }
             }
         }
         Field::Label(label) => {
-            let labels = telescope.labels();
-            match labels.iter().position(|l| l == label) {
+            match telescope
+                .members()
+                .position(|(_, hint)| hint.unwrap_or_default() == label)
+            {
                 Some(index) => index,
                 None => {
                     // The fields a program can name: a positional field and a concept's superclass edge have no label.
                     return Err(Error::unknown_tuple_label(
                         label.clone(),
-                        labels
+                        telescope
+                            .labels()
                             .iter()
                             .filter(|label| !label.is_empty())
                             .map(|label| label.to_string())
