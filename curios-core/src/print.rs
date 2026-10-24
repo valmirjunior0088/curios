@@ -474,7 +474,7 @@ pub struct DisplayNames {
 impl DisplayNames {
     /// Add `term` to what the report renders.
     pub fn add(&mut self, term: &Term) {
-        self.free.extend(term.free_vars());
+        self.free.extend(term.free_vars().iter().copied());
         self.terms.push(term.clone());
     }
 }

@@ -179,11 +179,8 @@ impl FlatLet {
 
     /// Whether this definition's type or body names the definition itself — what makes a lone `let` the recursive group of one the kernel needs it to be.
     pub(super) fn mentions_itself(&self) -> bool {
-        self.type_
-            .free_vars_shared()
-            .iter()
-            .chain(self.body.free_vars_shared())
-            .any(|free| free.as_global() == Some(&self.name))
+        let name = curios_core::Free::Global(self.name);
+        self.type_.mentions_free(&name) || self.body.mentions_free(&name)
     }
 }
 

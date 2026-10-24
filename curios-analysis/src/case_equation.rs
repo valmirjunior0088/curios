@@ -78,12 +78,11 @@ fn stands_as_a_case(term: &Term) -> bool {
 ///
 /// Relaxing it to admit everything refuses nothing that holds, and admits the respellings named above — what it costs is `curios`' `scrutinee_refinement_measurements`, from flat back to the exponential this whole key exists to remove. Tightening it does change verdicts, silently, by dropping refinements; `curios-cert`'s `whnf::equations_tests::a_reduct_that_drops_a_local_is_still_reached` is the guard on that direction.
 pub fn could_reduce_to(key: &Term, candidate: &Term, proofs: &[Free]) -> bool {
-    let allowed = key.free_vars_shared();
+    let allowed = key.free_vars();
 
     candidate
-        .free_vars_shared()
-        .iter()
-        .filter(|name| name.is_local())
+        .free_vars()
+        .locals()
         .all(|name| allowed.contains(name) || proofs.contains(name))
 }
 

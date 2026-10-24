@@ -8,10 +8,11 @@
 
 use {
     super::{
-        Atom, Bound, ConceptDecl, Enter, Free, FuncType, Global, InductDecl, Items, Lexicon, Many,
-        Marks, Members, Place, Places, Polarity, ReadEntry, ReadTable, RecGroup, RecMemberScopes,
-        Scope, Sharing, Spelling, StructDecl, StructType, Subterm, Symbols, Telescope, Term,
-        UniverseContext, UniverseError, Variance, WitnessId, WitnessKey, build_shorten,
+        Atom, Bound, ConceptDecl, Enter, Free, Frees, FuncType, Global, InductDecl, Items, Lexicon,
+        Many, Marks, Members, Place, Places, Polarity, ReadEntry, ReadTable, RecGroup,
+        RecMemberScopes, Scope, Sharing, Spelling, StructDecl, StructType, Subterm, Symbols,
+        Telescope, Term, UniverseContext, UniverseError, Variance, WitnessId, WitnessKey,
+        build_shorten,
     },
     curios_utilities::{
         Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
@@ -986,11 +987,10 @@ impl Definition {
 
     /// Every top-level name this definition mentions, by free variable.
     pub fn mentions(&self) -> BTreeSet<Global> {
-        self.body
-            .free_vars()
-            .into_iter()
-            .chain(self.type_.free_vars())
-            .filter_map(|free| free.as_global().cloned())
+        let (body, type_) = (self.body.free_vars(), self.type_.free_vars());
+        body.iter()
+            .chain(&type_)
+            .filter_map(|free| free.as_global().copied())
             .collect()
     }
 
@@ -1557,10 +1557,13 @@ impl Term {
 impl Entrypoint {
     /// Every free local the entry's body or stated type mentions — what a walk judging the entry beside its module refuses, as [`free_locals_of`] is for the module.
     pub fn free_locals(&self) -> BTreeSet<Free> {
-        std::iter::once(&self.body)
-            .chain(&self.type_)
-            .flat_map(Term::free_vars)
-            .filter(Free::is_local)
+        let (body, type_) = (
+            self.body.free_vars(),
+            self.type_.as_ref().map(Term::free_vars),
+        );
+        body.locals()
+            .chain(type_.iter().flat_map(Frees::locals))
+            .copied()
             .collect()
     }
 
@@ -1621,8 +1624,8 @@ impl ConceptDecl {
 fn term_reaches(term: &Term) -> BTreeSet<Global> {
     let mut names = term
         .free_vars()
-        .into_iter()
-        .filter_map(|free| free.as_global().cloned())
+        .iter()
+        .filter_map(|free| free.as_global().copied())
         .collect::<BTreeSet<_>>();
     names.extend(construction_heads(term));
 
@@ -1740,13 +1743,13 @@ impl<B: Bound + Terms> Terms for Telescope<B> {
 ///
 /// A [`Bound`] behind a trait object rather than a generic parameter, so [`item_positions`] can offer one list of positions to more than one collector. Three reads: the two identities findable by looking at a term, which are the local binder indices it mentions and whether a metavariable node survives in it, and the terms themselves, for a read that asks where each was written.
 trait Carried {
-    fn free_vars(&self) -> BTreeSet<Free>;
+    fn free_vars(&self) -> Frees;
     fn has_metavar(&self) -> bool;
     fn terms(&self, visit: &mut dyn FnMut(&Term));
 }
 
 impl<B: Bound + Terms> Carried for B {
-    fn free_vars(&self) -> BTreeSet<Free> {
+    fn free_vars(&self) -> Frees {
         Bound::free_vars(self)
     }
 
@@ -1874,7 +1877,7 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
 
         if let Some(index) = carried
             .free_vars()
-            .into_iter()
+            .locals()
             .find_map(|free| free.local_index())
         {
             found = Some(Positional::FreeLocal {
@@ -1917,9 +1920,8 @@ pub fn free_locals_of<'a>(
         found.extend(
             carried
                 .free_vars()
-                .into_iter()
-                .filter(Free::is_local)
-                .map(|local| (owner.copied(), local)),
+                .locals()
+                .map(|local| (owner.copied(), *local)),
         );
     };
     for item in items {

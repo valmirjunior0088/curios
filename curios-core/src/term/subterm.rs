@@ -3,7 +3,7 @@
 //! [`Term`] is the reference-counted handle and [`Subterm`] is what it points at, which is why the two are separate files rather than separate concepts. Everything that asks *what a term is* — its head, its children, whether it is a value — is answered here, and so is [`Bound`], the traversal that opens and closes every binder in the language exactly once per shape.
 
 use {
-    super::FreeVars,
+    super::{Frees, Union},
     crate::{
         Apply, Argument, Bound, Carrier, Cases, Free, Func, FuncType, Global, InductType, Instance,
         InstanceHead, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Metavar, Mint, Nat,
@@ -164,7 +164,7 @@ impl Subterm {
     }
 
     /// The free-variable identities occurring in this subterm — the inherent-method spelling of [`Bound::free_vars`], callable without importing the trait.
-    pub fn free_vars(&self) -> BTreeSet<Free> {
+    pub fn free_vars(&self) -> Frees {
         <Subterm as Bound>::free_vars(self)
     }
 
@@ -598,7 +598,7 @@ impl Subterm {
     /// This subterm's free-variable set as its own identity (if it is a free `Var`) unioned with its children's already-memoized sets — the child-combining spelling that lets [`Term::get_or_init_free_vars`] fill a deep spine bottom-up in O(children) per node instead of re-walking the subtree. Equivalent to the whole-subtree `Bound::free_vars` walk, since a free name occurs free in exactly the nodes whose subtrees contain it.
     ///
     /// A node that adds no identity of its own and whose free variables all arrive through one child shares that child's allocation ([`FreeVars::Shared`]) instead of copying it: on a chain-shaped term every link above the one free occurrence carries the same set, and copying it per link would cost O(set) where the pass-through costs O(1). The union only materializes once a second carrying child appears.
-    pub(super) fn free_vars_from_children(&self) -> FreeVars {
+    pub(super) fn free_vars_from_children(&self) -> Frees {
         // An instance's variable head is this node's own identity exactly as a bare `Var`'s is, and in both shapes a variable head means there are no child terms to union.
         if let Subterm::Var(var)
         | Subterm::Instance(Instance {
@@ -607,31 +607,14 @@ impl Subterm {
         }) = self
             && let Some(name) = var.as_free()
         {
-            return FreeVars::Owned(BTreeSet::from([*name]));
+            return Frees::single(*name);
         }
-        let mut carrier: Option<Rc<BTreeSet<Free>>> = None;
-        let mut union: Option<BTreeSet<Free>> = None;
+        let mut union = Union::default();
         self.any_child_term(&mut |child| {
-            let frees = child.get_or_init_free_vars();
-            if frees.is_empty() {
-                return false;
-            }
-            match (&carrier, &mut union) {
-                (None, _) => carrier = Some(Rc::clone(frees)),
-                (Some(first), None) => {
-                    let mut merged = (**first).clone();
-                    merged.extend(frees.iter().cloned());
-                    union = Some(merged);
-                }
-                (Some(_), Some(merged)) => merged.extend(frees.iter().cloned()),
-            }
+            union.add(child.get_or_init_free_vars());
             false
         });
-        match (carrier, union) {
-            (_, Some(merged)) => FreeVars::Owned(merged),
-            (Some(shared), None) => FreeVars::Shared(shared),
-            (None, None) => FreeVars::Owned(BTreeSet::new()),
-        }
+        union.finish()
     }
 }
 
@@ -982,11 +965,8 @@ impl Bound for Subterm {
         Subterm::has_universe_meta(self)
     }
 
-    fn free_vars(&self) -> BTreeSet<Free> {
-        match self.free_vars_from_children() {
-            FreeVars::Shared(shared) => (*shared).clone(),
-            FreeVars::Owned(owned) => owned,
-        }
+    fn free_vars(&self) -> Frees {
+        self.free_vars_from_children()
     }
 }
 

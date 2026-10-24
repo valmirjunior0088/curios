@@ -11,7 +11,7 @@ use {
     crate::{Judge, locals_beneath},
     curios_algebra::Deduction,
     curios_core::{
-        Free, Instance, InstanceHead, Quality, Subterm, Telescope, Term, peel_intrinsic,
+        Free, Instance, InstanceHead, Names, Quality, Subterm, Telescope, Term, peel_intrinsic,
     },
     std::collections::{BTreeSet, HashMap},
 };
@@ -303,11 +303,7 @@ impl<'f> Unifier<'f> {
                 return Ok(Step::Refuse);
             }
             // The forced value must be *rigid*: a key-shaped actual that index refinement already refined reduces back into this very arm's binders, and aliasing a binder to a term mentioning the arm's binders (itself included — `m := m`) would tie a reduction cycle.
-            if actual
-                .free_vars()
-                .iter()
-                .any(|free| flex.iter().any(|bound| bound == free))
-            {
+            if actual.mentions_any(&Names::new(flex.iter().copied())) {
                 return Ok(Step::Refuse);
             }
 

@@ -4,7 +4,7 @@
 
 use {
     super::{
-        Extent, Free, Global, Level, LevelHead, Quality, Subterm, Term, UniverseError,
+        Extent, Free, Frees, Global, Level, LevelHead, Quality, Subterm, Term, UniverseError,
         UniverseMetaId, UniverseParam, Universes,
     },
     curios_utilities::{Keyed, Symbol},
@@ -217,8 +217,8 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
         }))
     }
 
-    /// The free-variable identities this value holds: the union of its terms' memoized sets ([`Term::free_vars_shared`]), so a value is read in the size of those sets and never by a walk of its tree, which a value whose terms share their nodes holds once for every path.
-    fn free_vars(&self) -> BTreeSet<Free>;
+    /// The free-variable identities this value holds: the union of its terms' memoized sets ([`Term::free_vars`]), so a value is read in the size of those sets and never by a walk of its tree, which a value whose terms share their nodes holds once for every path.
+    fn free_vars(&self) -> Frees;
 }
 
 /// A constructor's index targets, which is all its signature's terminal carries: the family and its parameters are fixed by the declaration, so nothing else in a terminal is information.
@@ -234,10 +234,8 @@ impl Bound for Vec<Term> {
         self.iter().map(Bound::reach).max().unwrap_or(0)
     }
 
-    fn free_vars(&self) -> BTreeSet<Free> {
-        self.iter()
-            .flat_map(|target| target.free_vars_shared().iter().copied())
-            .collect()
+    fn free_vars(&self) -> Frees {
+        Frees::union(self.iter().map(Term::free_vars))
     }
 
     fn has_metavar(&self) -> bool {
@@ -264,8 +262,8 @@ impl Bound for () {
         0
     }
 
-    fn free_vars(&self) -> BTreeSet<Free> {
-        BTreeSet::new()
+    fn free_vars(&self) -> Frees {
+        Frees::empty()
     }
 
     fn has_metavar(&self) -> bool {

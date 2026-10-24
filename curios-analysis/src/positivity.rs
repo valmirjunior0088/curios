@@ -201,7 +201,7 @@ pub fn struct_reaches_itself<E: Env>(env: &E, name: &Global) -> bool {
 fn globals_named(type_: &Term, named: &mut BTreeSet<Global>) {
     named.extend(
         type_
-            .free_vars_shared()
+            .free_vars()
             .iter()
             .filter_map(Free::as_global)
             .copied(),
@@ -653,7 +653,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// Walk the body of every definition `term` names, at `Mixed`. `unfolded` keeps a definition that is mentioned many times, or that mentions itself, from being followed twice.
     fn definitions(&mut self, term: &Term) {
-        for name in term.free_vars() {
+        for name in term.free_vars().iter().copied() {
             if !self.unfolded.insert(name) {
                 continue;
             }

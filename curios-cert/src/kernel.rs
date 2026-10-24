@@ -1174,7 +1174,7 @@ impl<'s> Kernel<'s> {
     /// **Each binder is asked once**, where a stuck form naming it first reaches the equations in force, and remembered with the binder. It is asked by plain reduction, which no question interrupts, and counted not a proof while it is being asked, so a type whose classification comes back to its own binder ends there, toward refusal. A failure that is no exhaustion of the budget is that the binder is not known to be a proof.
     pub(crate) fn proofs_named(&mut self, term: &Term) -> Result<Vec<Free>, ReduceError> {
         let mut proofs = Vec::new();
-        for name in term.free_vars_shared().iter() {
+        for name in term.free_vars().iter() {
             let proof = match self.scope.classified(name) {
                 Some(proof) => proof,
                 None => {

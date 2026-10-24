@@ -1,34 +1,54 @@
 use {super::*, crate::Term, curios_utilities::Qualifier};
 
+/// Every empty set is one allocation, however it was come to.
 #[test]
-fn empty_fills_share_one_canonical_set() {
-    let first = FreeCache::default();
-    let second = FreeCache::default();
-    first.fill(FreeVars::Owned(BTreeSet::new()));
-    second.fill(FreeVars::Owned(BTreeSet::new()));
+fn empty_sets_share_one_canonical_set() {
+    assert!(Frees::empty().shares(&Frees::union([])));
+    assert!(Frees::union([Frees::empty(), Frees::empty()]).shares(&Frees::empty()));
+}
 
-    assert!(Rc::ptr_eq(first.get().unwrap(), second.get().unwrap()));
+/// A union with one carrying operand is that operand, shared: what lets a chain of links above one free occurrence hold one set.
+#[test]
+fn a_union_of_one_carrier_shares_it() {
+    let carrier = Frees::single(Free::local(0, Some("x")));
+
+    assert!(Frees::union([Frees::empty(), carrier.clone(), Frees::empty()]).shares(&carrier));
 }
 
 #[test]
-fn nonempty_fills_keep_their_own_set() {
+fn a_union_of_two_carriers_holds_both_in_order() {
+    let x = Free::local(0, Some("x"));
+    let y = Free::local(1, Some("y"));
+
+    assert_eq!(
+        Frees::union([Frees::single(y), Frees::single(x)])
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        [x, y],
+    );
+}
+
+/// The locals are read from the least of them, past every global.
+#[test]
+fn locals_are_read_past_the_globals() {
+    let global = Free::global(Qualifier::from(["g"]));
+    let local = Free::local(7, Some("l"));
+    let set = Frees::union([Frees::single(local), Frees::single(global)]);
+
+    assert_eq!(set.iter().copied().collect::<Vec<_>>(), [global, local]);
+    assert_eq!(set.locals().copied().collect::<Vec<_>>(), [local]);
+}
+
+#[test]
+fn a_filled_cache_answers_membership() {
     let name = Free::local(0, Some("x"));
     let cache = FreeCache::default();
-    cache.fill(FreeVars::Owned(BTreeSet::from([name])));
+    cache.fill(Frees::single(name));
 
     assert!(cache.is_filled());
     assert!(cache.contains(&name));
     assert_eq!(cache.get().unwrap().len(), 1);
-}
-
-#[test]
-fn shared_fills_keep_the_carrier_allocation() {
-    let name = Free::local(0, Some("x"));
-    let carrier = Rc::new(BTreeSet::from([name]));
-    let cache = FreeCache::default();
-    cache.fill(FreeVars::Shared(Rc::clone(&carrier)));
-
-    assert!(Rc::ptr_eq(cache.get().unwrap(), &carrier));
 }
 
 /// A local is answered by the newest local a term keeps wherever that decides — none held newer, or it the newest — and by the set otherwise, a newest local past its packed width included.

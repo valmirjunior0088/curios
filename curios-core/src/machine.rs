@@ -682,7 +682,7 @@ impl Machine {
                             })
                             && binders
                                 .iter()
-                                .all(|binder| !head.free_vars().contains(binder)) =>
+                                .all(|binder| !head.mentions_free(binder)) =>
                     {
                         Ok(Step::Eval(head, demand))
                     }

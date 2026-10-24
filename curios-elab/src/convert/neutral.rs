@@ -321,7 +321,7 @@ impl Opened {
         if self.binders.is_empty() || !term.has_local_free() {
             return false;
         }
-        let frees = term.free_vars_shared();
+        let frees = term.free_vars();
 
         match frees.len() < self.binders.len() {
             true => frees.iter().any(|name| self.binds(name)),

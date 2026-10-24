@@ -13,7 +13,7 @@ mod tests;
 
 use {
     crate::Env,
-    curios_core::{Free, Subterm, Term},
+    curios_core::{Free, Names, Subterm, Term},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -22,7 +22,8 @@ use {
 /// Memoized for one use, because a scope's terms share their `let`s. A name is recorded before its definition is read, so a definition that mentions itself — which the elaborator's scope holds — is read once rather than without end.
 pub struct Unfolding<'a, E> {
     env: &'a E,
-    solutions: &'a [(Free, Term)],
+    /// The names the solutions solve, asked of each definition at once.
+    solved: Names,
     expansions: BTreeMap<Free, Option<Term>>,
 }
 
@@ -31,7 +32,7 @@ impl<'a, E: Env> Unfolding<'a, E> {
     pub fn toward(env: &'a E, solutions: &'a [(Free, Term)]) -> Self {
         Self {
             env,
-            solutions,
+            solved: Names::new(solutions.iter().map(|(solved, _)| *solved)),
             expansions: BTreeMap::new(),
         }
     }
@@ -39,7 +40,7 @@ impl<'a, E: Env> Unfolding<'a, E> {
     /// `term` with every local definition it mentions that this unfolding reaches replaced by that definition, unfolded in turn.
     pub fn term(&mut self, term: &Term) -> Term {
         let expansions = term
-            .free_vars_shared()
+            .free_vars()
             .iter()
             .filter_map(|name| Some((*name, self.expansion(name)?)))
             .collect::<Vec<_>>();
@@ -58,11 +59,7 @@ impl<'a, E: Env> Unfolding<'a, E> {
             false => return None,
         };
         let unfolded = self.term(&definition);
-        let expansion = self
-            .solutions
-            .iter()
-            .any(|(solved, _)| unfolded.mentions_free(solved))
-            .then_some(unfolded);
+        let expansion = unfolded.mentions_any(&self.solved).then_some(unfolded);
 
         self.expansions.insert(*name, expansion.clone());
         expansion
@@ -94,17 +91,17 @@ pub fn beneath<'a, E: Env>(env: &'a E, term: &'a Term) -> Option<&'a Free> {
 pub fn locals_beneath<E: Env>(env: &E, terms: &[Term]) -> Vec<Free> {
     let mut locals = Vec::new();
     let mut seen = BTreeSet::new();
-    let mut pending = terms
-        .iter()
-        .flat_map(|term| term.free_vars())
-        .collect::<Vec<_>>();
+    let mut pending = Vec::new();
+    for term in terms {
+        pending.extend(term.free_vars().iter().copied());
+    }
 
     while let Some(name) = pending.pop() {
         if !seen.insert(name) || !env.is_local(&name) {
             continue;
         }
         match env.unfold(&name) {
-            Some(definition) => pending.extend(definition.free_vars()),
+            Some(definition) => pending.extend(definition.free_vars().iter().copied()),
             None => locals.push(name),
         }
     }

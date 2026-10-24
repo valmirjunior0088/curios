@@ -9,7 +9,7 @@ use {
     },
     curios_core::{
         Advance, Bang, Bound, CalleeId, Extent, Field, Free, Func, Global, HeadKey, Infix,
-        Intrinsic, Let, MetavarId, Nat, NumLit, Probe, Proj, Rec, Subterm, Telescope, Term,
+        Intrinsic, Let, MetavarId, Names, Nat, NumLit, Probe, Proj, Rec, Subterm, Telescope, Term,
         WitnessKey, WitnessOrigin,
     },
     curios_num::{Floating, Integer, Rounding},
@@ -211,7 +211,7 @@ pub(super) fn elaborate_rec(
 ///
 /// A label the type itself names is read as its value, and so is one in the solution of a metavariable the type holds, which is read as that solution first. One in the spine of an unsolved metavariable is the argument a later solution is read through, which a problem parked in the block may still give: the metavariable is restricted to the binders that remain ([`Context::block_restriction`]). Whatever still names a label, a hole something else fills among it, is read by value where it stands, its spine with it.
 fn leaving(context: &mut Context, type_: Term, values: &[(Free, Term)]) -> Term {
-    if !values.iter().any(|(label, _)| type_.mentions_free(label)) {
+    if !type_.mentions_any(&Names::new(values.iter().map(|(label, _)| *label))) {
         return type_;
     }
 
@@ -234,6 +234,7 @@ fn restriction_leaving(
         return None;
     }
 
+    let labels = Names::new(values.iter().map(|(label, _)| *label));
     let mut found = BTreeMap::new();
     let mut terms = vec![type_.clone()];
     while let Some(term) = terms.pop() {
@@ -243,11 +244,9 @@ fn restriction_leaving(
                 continue;
             }
             let spines = metavar_spines(&term, id);
-            let named = spines.iter().any(|spine| {
-                spine
-                    .iter()
-                    .any(|entry| values.iter().any(|(label, _)| entry.mentions_free(label)))
-            });
+            let named = spines
+                .iter()
+                .any(|spine| spine.iter().any(|entry| entry.mentions_any(&labels)));
             let (true, Some(provenance), Some(entry)) =
                 (named, origins.get(&id), context.metavar_entry(id))
             else {

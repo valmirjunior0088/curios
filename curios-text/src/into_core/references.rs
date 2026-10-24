@@ -54,7 +54,7 @@ impl LoweredItem {
                 .map(|let_| Declared {
                     label: let_.span.as_ref().and_then(&placed),
                     signature: match written_under_its_name(let_) {
-                        true => globals(let_.type_.free_vars()).collect(),
+                        true => globals(&let_.type_.free_vars()),
                         false => Vec::new(),
                     },
                     alias: alias_of(let_),
@@ -73,16 +73,17 @@ fn written_under_its_name(let_: &FlatLet) -> bool {
 
 /// Every definition `term` names: the globals it refers to, and the head of every construction in it. A construction's head is no variable — a structure literal, a variant and a type former's normal form hold their name in the node (`Subterm::construction_names`) — so a term that *builds* a structure names it without referring to it. The edges of the `unused-declaration` lint are these, from an item's terms and from the entrypoint's alike.
 pub(super) fn named(term: &curios_core::Term) -> impl Iterator<Item = curios_core::Global> {
-    globals(term.free_vars()).chain(term.construction_names())
+    globals(&term.free_vars())
+        .into_iter()
+        .chain(term.construction_names())
 }
 
 /// The top-level definitions among `names`. A binder is nobody's dependency: it is introduced and discharged inside the very signature being read.
-pub(super) fn globals(
-    names: impl IntoIterator<Item = curios_core::Free>,
-) -> impl Iterator<Item = curios_core::Global> {
+pub(super) fn globals(names: &curios_core::Frees) -> Vec<curios_core::Global> {
     names
-        .into_iter()
-        .filter_map(|name| name.as_global().cloned())
+        .iter()
+        .filter_map(|name| name.as_global().copied())
+        .collect()
 }
 
 /// The full set of names one node's declaration references: its own free vars, plus (for a declared inductive/struct) its registry entry's free vars. An inductive's declaration is wider than its items: the registry entry's constructor payload and target types are elaborated alongside the type-binding group (`curios_elab::elaborate_module_rec` rebuilds the registry telescopes there), so a node declaring a registered name references everything its registry entry does — those names live nowhere in the type binding's own `type_`/`body`. Struct field types live in the registry too.
@@ -174,27 +175,21 @@ pub(super) fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_co
 
 /// The external references of an inductive registry entry: every free var of its telescopes. Binder names (parameters, payload binders) are captured by `Telescope::build` and never appear here; the index types' references also live in the type binding's own signature, but are included for robustness.
 fn induct_free_vars(induct_decl: &curios_core::InductDecl) -> HashSet<curios_core::Global> {
-    induct_decl
-        .arity
-        .free_vars()
+    globals(&induct_decl.arity.free_vars())
         .into_iter()
         .chain(
             induct_decl
                 .constructors
                 .iter()
-                .flat_map(|(_, param)| param.telescope.free_vars()),
+                .flat_map(|(_, param)| globals(&param.telescope.free_vars())),
         )
-        .filter_map(|name| name.as_global().cloned())
         .collect()
 }
 
 /// The external references of a struct registry entry: every free var of its arity — its parameter domains and the field telescope they terminate in. Like `induct_free_vars`, this is what makes a struct's type-former node depend on the (e.g. intrinsic) types its fields mention — they live nowhere in the type-former's own body, which is just the `StructType` normal form.
 fn struct_free_vars(struct_decl: &curios_core::StructDecl) -> HashSet<curios_core::Global> {
-    struct_decl
-        .arity
-        .free_vars()
+    globals(&struct_decl.arity.free_vars())
         .into_iter()
-        .filter_map(|name| name.as_global().cloned())
         .collect()
 }
 
@@ -216,7 +211,7 @@ fn alias_of(let_: &FlatLet) -> Option<AliasEdge> {
 
     Some(AliasEdge {
         target,
-        dependencies: direct.map(|_| globals(let_.body.free_vars()).collect()),
+        dependencies: direct.map(|_| globals(&let_.body.free_vars())),
     })
 }
 

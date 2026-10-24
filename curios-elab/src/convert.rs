@@ -371,11 +371,13 @@ fn by_value(context: &Context, metavar: &Metavar, mut candidate: Term) -> Term {
         .map(|entry| entry.frames.clone());
     let named = match birth {
         Some(_) => HashSet::new(),
-        None => metavar
-            .spine
-            .iter()
-            .flat_map(|entry| entry.free_vars())
-            .collect::<HashSet<_>>(),
+        None => {
+            let mut named = HashSet::new();
+            for entry in metavar.spine.iter() {
+                named.extend(entry.free_vars().iter().copied());
+            }
+            named
+        }
     };
     let names = |name: &Free| match &birth {
         Some(frames) => frames.binds_locally(name),
@@ -1937,8 +1939,8 @@ impl Convert {
 
         // An identity spine over a telescope its birth frames bind names each birth binder as itself: the candidate is in birth names as it stands, no entry is a subject, and the round trip is the candidate. What is left is the scope check, each free name a binder those frames bind or a declaration's, and an inversion that reads the spine would cost every solve the scope the metavariable was born in.
         let inverted = if metavar.spine.is_identity() && scoped == Scoped::Held {
-            for name in t.free_vars() {
-                if born.binds_locally(&name) || context.is_top_level(&name) {
+            for name in &t.free_vars() {
+                if born.binds_locally(name) || context.is_top_level(name) {
                     continue;
                 }
                 curios_profile::note!(
@@ -2027,18 +2029,16 @@ impl Convert {
                 .map(|(name, _)| *name)
                 .chain(subjects.iter().map(|(_, birth)| *birth))
                 .collect::<HashSet<_>>();
-            for name in abstracted.free_vars() {
-                if allowed.contains(&name) {
+            for name in &abstracted.free_vars() {
+                if allowed.contains(name) {
                     continue;
                 }
                 // A top-level definition is a global constant, in scope everywhere and absent from Γ's spine by construction (Γ holds only local binders); a solution may mention it freely. This is what lets an item elaborate independently of the ambient prelude.
-                if context.is_top_level(&name) {
+                if context.is_top_level(name) {
                     continue;
                 }
-                let mentioned = entries.is_empty()
-                    || entries
-                        .iter()
-                        .any(|entry| entry.free_vars().contains(&name));
+                let mentioned =
+                    entries.is_empty() || entries.iter().any(|entry| entry.mentions_free(name));
                 curios_profile::note!(
                     target: "curios_elab::solve",
                     meta = id.0,

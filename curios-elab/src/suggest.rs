@@ -209,9 +209,9 @@ fn module_pool(
 
     let mut referenced = BTreeSet::new();
     let mut collect = |term: &Term| {
-        for free in term.free_vars() {
+        for free in &term.free_vars() {
             if let Free::Global(global) = free {
-                referenced.insert(global);
+                referenced.insert(*global);
             }
         }
     };

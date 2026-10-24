@@ -840,9 +840,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item,
     // A witness may resolve through its own table entry — the registration above exists to let it — and a body that does names itself. Cross-definition value recursion is unexpressible outside a `rec` item by construction, so such a witness becomes a single-member group below, and its self-references are bound by that group's binder rather than free.
     let recursive_witness = context.is_witness_declaration(&def.name) && {
         // Read the *zonked* body: the self-reference arrives as a witness metavariable that resolution solved, so an unzonked body does not mention the name yet. `finalize_definition` zonks again, which costs nothing and keeps that its own business.
-        zonk_solved_term_metas(context, &body)
-            .free_vars()
-            .contains(&name)
+        zonk_solved_term_metas(context, &body).mentions_free(&name)
     };
     let self_reference = match recursive_witness {
         true => SelfReference::Bound,

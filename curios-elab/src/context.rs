@@ -83,7 +83,7 @@ use {
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Declarations, Definition,
         DefinitionKind, Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
         InductDecl, InductInstance, Item, Level, Metavar, MetavarId, MetavarOrigin, MetavarSpine,
-        Minted, Mints, NumLit, ParameterField, Quality, RecGroup, ReduceError, StructDecl,
+        Minted, Mints, Names, NumLit, ParameterField, Quality, RecGroup, ReduceError, StructDecl,
         StructInstance, Subterm, Term, Totality, Trace, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         Universes, Variance, WitnessKey, WitnessOrigin, instantiate_universes_scoped,
@@ -2655,7 +2655,7 @@ impl<'s> Context<'s> {
             }
         }
         let spelled = |term: &Term| {
-            term.free_vars_shared()
+            term.free_vars()
                 .iter()
                 .all(|name| births.contains_key(name) || self.is_top_level(name))
         };
@@ -2686,12 +2686,10 @@ impl<'s> Context<'s> {
             .filter(|(_, kept)| **kept)
             .map(|(binder, _)| binder.clone())
             .collect::<Vec<_>>();
-        if telescope.iter().any(|(_, type_)| {
-            type_
-                .free_vars_shared()
-                .iter()
-                .any(|name| dropped.contains(name))
-        }) {
+        if telescope
+            .iter()
+            .any(|(_, type_)| type_.free_vars().iter().any(|name| dropped.contains(name)))
+        {
             return None;
         }
 
@@ -2710,7 +2708,8 @@ impl<'s> Context<'s> {
         // `inner`'s type, spelled over the stand-in's binders: every birth name it mentions is one of the arguments.
         let mut mentioned = Vec::new();
         let mut binders = Vec::new();
-        for name in inner_entry.result.free_vars_shared() {
+        let named = inner_entry.result.free_vars();
+        for name in &named {
             if self.is_top_level(name) {
                 continue;
             }
@@ -2793,13 +2792,12 @@ impl<'s> Context<'s> {
 
     /// Whether `term` holds an unsolved metavariable whose spine names one of the labels `values` pairs with a value: what a block's end restricts before it reads the rest by value ([`Context::block_restriction`]).
     pub(crate) fn names_in_unsolved_spine(&self, term: &Term, values: &[(Free, Term)]) -> bool {
+        let labels = Names::new(values.iter().map(|(label, _)| *label));
         term.metavars().iter().any(|id| {
             self.metavar_solution(*id).is_none()
-                && metavar_spines(term, *id).iter().any(|spine| {
-                    spine
-                        .iter()
-                        .any(|entry| values.iter().any(|(label, _)| entry.mentions_free(label)))
-                })
+                && metavar_spines(term, *id)
+                    .iter()
+                    .any(|spine| spine.iter().any(|entry| entry.mentions_any(&labels)))
         })
     }
 

@@ -58,7 +58,7 @@ pub(super) fn elaborate_func_type_sized(
                     .iter()
                     .map(|(_, _, later)| later)
                     .chain([&output])
-                    .any(|later| later.free_vars().contains(name))
+                    .any(|later| later.mentions_free(name))
             };
             if *mark != Plicity::Implicit || mentioned() {
                 continue;

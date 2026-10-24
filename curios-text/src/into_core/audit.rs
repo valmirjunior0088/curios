@@ -296,7 +296,7 @@ pub(super) fn audit_public_exposures(
             }
 
             if let Some(induct_decl) = scope.induct(&nominal) {
-                let nominal_dependencies = globals(induct_decl.arity.free_vars());
+                let nominal_dependencies = globals(&induct_decl.arity.free_vars());
                 audit_dependencies(audiences, sources, &exposure, &item, nominal_dependencies)
                     .map_err(exposed)?;
 
@@ -306,12 +306,10 @@ pub(super) fn audit_public_exposures(
                         sources,
                         &exposure,
                         &item,
-                        globals(
-                            induct_decl
-                                .constructors
-                                .iter()
-                                .flat_map(|(_, case)| case.telescope.free_vars()),
-                        ),
+                        induct_decl
+                            .constructors
+                            .iter()
+                            .flat_map(|(_, case)| globals(&case.telescope.free_vars())),
                     )
                     .map_err(exposed)?;
                 }
@@ -320,17 +318,11 @@ pub(super) fn audit_public_exposures(
                 let mut walk = &struct_decl.arity;
                 let mut param_dependencies = Vec::new();
                 while let curios_core::Telescope::Cons(_, domain, rest) = walk {
-                    param_dependencies.extend(domain.free_vars());
+                    param_dependencies.extend(globals(&domain.free_vars()));
                     walk = rest.body();
                 }
-                audit_dependencies(
-                    audiences,
-                    sources,
-                    &exposure,
-                    &item,
-                    globals(param_dependencies),
-                )
-                .map_err(exposed)?;
+                audit_dependencies(audiences, sources, &exposure, &item, param_dependencies)
+                    .map_err(exposed)?;
 
                 if struct_decl.rep_public {
                     audit_dependencies(
@@ -338,7 +330,7 @@ pub(super) fn audit_public_exposures(
                         sources,
                         &exposure,
                         &item,
-                        globals(struct_decl.fields().free_vars()),
+                        globals(&struct_decl.fields().free_vars()),
                     )
                     .map_err(exposed)?;
                 }

@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::*,
     curios_utilities::{Plicity, Qualifier},
-    std::{collections::BTreeSet, rc::Rc},
+    std::collections::BTreeSet,
 };
 
 #[test]
@@ -24,7 +24,10 @@ fn collect_ignores_index_names() {
         ]),
     );
 
-    assert_eq!(term.free_vars(), BTreeSet::from([w, z]));
+    assert_eq!(
+        term.free_vars().iter().copied().collect::<BTreeSet<_>>(),
+        BTreeSet::from([w, z])
+    );
 }
 
 /// A chain-shaped term shares its single carrier child's memoized set upward instead of copying it once per link.
@@ -40,10 +43,14 @@ fn free_vars_share_the_single_carrier_child_allocation() {
     let Subterm::Proj(middle) = outer.head.as_ref() else {
         panic!("chain changed shape");
     };
-    assert!(Rc::ptr_eq(
-        chain.inner.frees.get().unwrap(),
-        middle.head.inner.frees.get().unwrap(),
-    ));
+    assert!(
+        chain
+            .inner
+            .frees
+            .get()
+            .unwrap()
+            .shares(middle.head.inner.frees.get().unwrap())
+    );
 }
 
 #[test]

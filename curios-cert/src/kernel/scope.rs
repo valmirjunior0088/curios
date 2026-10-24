@@ -156,7 +156,7 @@ impl Scope {
             return term.clone();
         }
         let values = term
-            .free_vars_shared()
+            .free_vars()
             .iter()
             .filter_map(|name| Some((*name, self.local(name)?.value.as_ref()?.term.clone())))
             .collect::<Vec<_>>();
@@ -173,7 +173,7 @@ impl Scope {
     pub(super) fn names_partial(&self, term: &Term) -> bool {
         self.bound != 0
             && term.has_local_free()
-            && term.free_vars_shared().iter().any(|name| {
+            && term.free_vars().iter().any(|name| {
                 self.local(name)
                     .and_then(|local| local.value.as_ref())
                     .is_some_and(|value| value.encloses_partial)

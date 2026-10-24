@@ -113,9 +113,8 @@ fn definitions(module: &Module) -> impl Iterator<Item = Definition> + '_ {
 
 /// Record every definition this term names.
 fn mark(term: &Term, seeds: &mut BTreeSet<Global>) {
-    // Borrowed, not owned: this runs once per position, and (T) seeds one for every type position the program writes. Taking the owned set would deep-copy every `Free` — each global carrying its qualifier's segments — to read it once and drop it.
     seeds.extend(
-        term.free_vars_shared()
+        term.free_vars()
             .iter()
             .filter_map(|free| free.as_global())
             .cloned(),

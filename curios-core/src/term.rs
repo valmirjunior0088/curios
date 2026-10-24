@@ -18,8 +18,8 @@ mod scalars;
 use scalars::*;
 
 mod frees;
-pub use frees::Names;
 use frees::*;
+pub use frees::{Frees, FreesIter, Names};
 
 mod rank;
 
@@ -86,7 +86,7 @@ struct Node {
     /// The eager derivations — hash, `reach`, and the containment flags — packed behind one filled bit; see [`ScalarCache`].
     #[archived_with(curios_archive::Skip)]
     scalars: ScalarCache,
-    /// The one derivation left lazy. A `BTreeSet<Free>` per node would dominate the archive it is stored in, and unlike the scalars it is wanted by a minority of nodes on a given compilation.
+    /// The one derivation left lazy. A free-variable set per node would dominate the archive it is stored in, and unlike the scalars it is wanted by a minority of nodes on a given compilation.
     #[archived_with(curios_archive::Skip)]
     frees: FreeCache,
     /// The node's universe-erased projection, filled on first demand and only for a node that carries universe data — a node that carries none projects to itself and stores nothing. What the elaborator's reduction cache keys on beside the exact term, so that two spellings of one term differing in nothing but their levels — the one checking wrote with metavariables and the one totality reads with them solved — reach one entry.
@@ -2491,9 +2491,9 @@ impl Bound for Term {
         Term::has_universe_meta(self)
     }
 
-    /// Cached alongside `hash`/`reach`: a closed subterm that `traverse`'s pruning short-circuit (above) hands back via `Rc::clone` keeps this same cell across every later traversal, so a term shared across many conversion goals — e.g. a `rec` group's own unchanging members, re-enqueued each round an unfolding cycle revisits them — pays this O(size) walk once rather than once per goal. Uniform in every term, not specific to recursive ones; see `Convert::history_key`.
-    fn free_vars(&self) -> BTreeSet<Free> {
-        self.get_or_init_free_vars().as_ref().clone()
+    /// Cached alongside `hash`/`reach`: a closed subterm that `traverse`'s pruning short-circuit (above) hands back via `Rc::clone` keeps this same cell across every later traversal, so a term shared across many conversion goals — e.g. a `rec` group's own unchanging members, re-enqueued each round an unfolding cycle revisits them — fills its set once rather than once per goal. Uniform in every term, not specific to recursive ones; see `Convert::history_key`.
+    fn free_vars(&self) -> Frees {
+        Term::free_vars(self)
     }
 }
 
@@ -2714,14 +2714,7 @@ impl Term {
         );
     }
 
-    /// The cached free-variable set, borrowed.
-    ///
-    /// [`Bound::free_vars`] hands back an owned clone, which is what a caller that mutates or stores the set wants. A caller that only *reads* it — extending another set, testing membership — pays a deep copy of every [`Free`] for nothing, and a `Free::Global` drags a [`Qualifier`](curios_utilities::Qualifier) of owned segments behind it. The set is already behind an `Rc` precisely so it need not be copied; this is the accessor that keeps that promise.
-    pub fn free_vars_shared(&self) -> &BTreeSet<Free> {
-        self.get_or_init_free_vars()
-    }
-
-    fn get_or_init_free_vars(&self) -> &Rc<BTreeSet<Free>> {
+    fn get_or_init_free_vars(&self) -> &Frees {
         self.warm_frees();
         self.inner
             .frees
@@ -2756,7 +2749,7 @@ impl Term {
         if let Some(only) = names.only() {
             return self.mentions_free(only);
         }
-        let frees = self.free_vars_shared();
+        let frees = self.get_or_init_free_vars();
         match frees.len() < names.len() {
             true => frees.iter().any(|name| names.contains(name)),
             false => names.iter().any(|name| frees.contains(name)),
@@ -2803,7 +2796,7 @@ impl Term {
     /// `picked` is asked of each name the term holds free, in the set's order, so a caller that records what it asked records the same questions whatever is found. Where it chooses one name, that name is the answer and no node is walked; otherwise a walk in written order meets each node once and passes over a subterm that holds none of the chosen names.
     pub fn first_free(&self, mut picked: impl FnMut(&Free) -> bool) -> Option<Free> {
         let chosen = self
-            .free_vars_shared()
+            .get_or_init_free_vars()
             .iter()
             .filter(|name| picked(name))
             .copied()
@@ -2879,7 +2872,7 @@ impl Term {
 
         // Sorted stably by name, so a name solved twice finds its first solution at the first place it sorts to, as a search in the given order would.
         let mut solutions = solutions.to_vec();
-        solutions.sort_by(|(this, _), (that, _)| this.cmp(that));
+        solutions.sort_by_key(|(solved, _)| *solved);
         let names = Names::new(solutions.iter().map(|(solved, _)| *solved));
         let mut visit = Visit::rewriting_shared(
             |_, _| None,
@@ -2905,9 +2898,9 @@ impl Term {
         self.traverse(&mut visit)
     }
 
-    /// The free-variable identities of this term. Inherent so a `term.free_vars()` call routes through the memoized, iteratively-filled set (this and the [`Bound`] impl agree) rather than deref-ing to the uncached, recursive [`Subterm::free_vars`] when the `Bound` trait is out of scope.
-    pub fn free_vars(&self) -> BTreeSet<Free> {
-        self.get_or_init_free_vars().as_ref().clone()
+    /// The free-variable identities of this term: its node's memoized set, filled from its children's where first asked, and handed out as a pointer's clone. Inherent so a `term.free_vars()` call routes through the memoized set (this and the [`Bound`] impl agree) rather than deref-ing to [`Subterm::free_vars`], which builds a node's set afresh, when the `Bound` trait is out of scope.
+    pub fn free_vars(&self) -> Frees {
+        self.get_or_init_free_vars().clone()
     }
 
     /// The ids of every metavariable in this term. Inherent, and gated on the memoized `has_metavar`: a ground term (every data spine) short-circuits without walking, so the enumeration only ever recurses through metavariable-bearing structure, whose depth is bounded by the written program.

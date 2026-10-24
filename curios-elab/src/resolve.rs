@@ -313,10 +313,9 @@ fn declared_result(context: &mut Context, action: &Term) -> Option<Term> {
         }
         result = cursor.body().expect("a cursor past every entry");
     }
-    let mentioned = result.free_vars();
     binders
         .iter()
-        .all(|binder| !mentioned.contains(binder))
+        .all(|binder| !result.mentions_free(binder))
         .then_some(result)
 }
 
@@ -1123,7 +1122,7 @@ pub(crate) fn register_witness(
             return Err(Error::non_regular_witness_premise(premise.clone()));
         }
         let bound = premise_args.iter().all(|arg| {
-            arg.free_vars_shared()
+            arg.free_vars()
                 .iter()
                 .all(|free| matches!(free, Free::Global(_)) || binder_names.contains(free))
         });

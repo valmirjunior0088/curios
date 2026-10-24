@@ -553,7 +553,7 @@ fn step_func(kernel: &mut Kernel, func: Func) -> Result<Step, ReduceError> {
                 && arguments.iter().enumerate().all(|(i, argument)| {
                     matches!(argument.term.as_ref(), Subterm::Var(var) if var.unwrap() == &binders[i])
                 })
-                && binders.iter().all(|binder| !head.free_vars().contains(binder)) =>
+                && binders.iter().all(|binder| !head.mentions_free(binder)) =>
         {
             Step::Continue(head)
         }

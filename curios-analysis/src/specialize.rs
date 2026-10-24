@@ -15,7 +15,7 @@ mod tests;
 
 use {
     crate::{Env, Unfolding, beneath},
-    curios_core::{Free, Term},
+    curios_core::{Free, Names, Term},
     std::collections::HashSet,
 };
 
@@ -40,7 +40,8 @@ pub fn retyped<E: Env>(
         return Vec::new();
     }
 
-    let solved = |term: &Term| solutions.iter().any(|(name, _)| term.mentions_free(name));
+    let names = Names::new(solutions.iter().map(|(name, _)| *name));
+    let solved = |term: &Term| term.mentions_any(&names);
     let mut unfolding = Unfolding::toward(env, solutions);
 
     locals
@@ -67,7 +68,7 @@ pub fn reads_solved(
         return false;
     }
     let mut seen = HashSet::new();
-    let mut pending = term.free_vars_shared().iter().copied().collect::<Vec<_>>();
+    let mut pending = term.free_vars().iter().copied().collect::<Vec<_>>();
     while let Some(name) = pending.pop() {
         if !seen.insert(name) {
             continue;
@@ -76,7 +77,7 @@ pub fn reads_solved(
             return true;
         }
         for read in reads(&name) {
-            pending.extend(read.free_vars_shared().iter().copied());
+            pending.extend(read.free_vars().iter().copied());
         }
     }
 

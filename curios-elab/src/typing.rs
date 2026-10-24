@@ -1179,7 +1179,7 @@ pub(crate) fn read_outside_spines(term: &Term, values: &[(Free, Term)]) -> Term 
 
     // Sorted stably by name, so a name read twice finds its first value at the first place it sorts to, as a search in the given order would.
     let mut values = values.to_vec();
-    values.sort_by(|(this, _), (that, _)| this.cmp(that));
+    values.sort_by_key(|(read, _)| *read);
     let names = Names::new(values.iter().map(|(read, _)| *read));
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
@@ -1204,13 +1204,7 @@ pub(crate) fn read_outside_spines(term: &Term, values: &[(Free, Term)]) -> Term 
 
 /// The locals `term` names outside its metavariables' occurrences: those [`read_outside_spines`] reads, so a reader gathering values for it gathers none it would leave standing in a spine, which is as wide as the scope the occurrence was born in. Read off the term's free set where it holds no metavariable, and otherwise by a walk that visits each node once, passes over every occurrence and every subterm that names no local, and reads a subterm that holds no metavariable off its free set.
 pub(crate) fn locals_outside_spines(term: &Term) -> BTreeSet<Free> {
-    let locals = |term: &Term| {
-        term.free_vars_shared()
-            .iter()
-            .filter(|name| name.is_local())
-            .copied()
-            .collect::<Vec<_>>()
-    };
+    let locals = |term: &Term| term.free_vars().locals().copied().collect::<Vec<_>>();
     if !term.has_metavar() {
         return locals(term).into_iter().collect();
     }

@@ -18,7 +18,7 @@ use {
     super::{Context, ErasedSite, Error, ZonkPass, proof_position},
     curios_analysis::{group_totality, yields_a_sort},
     curios_core::{
-        Definition, Enter, Entrypoint, Extent, Global, Item, Module, Rec, RecGroup, RecItem,
+        Definition, Enter, Entrypoint, Extent, Free, Global, Item, Module, Rec, RecGroup, RecItem,
         Sharing, Subterm, Term, Totality,
     },
     std::{
@@ -252,14 +252,7 @@ fn faults(
     for name in named {
         let position = positions
             .iter()
-            .find(|position| {
-                position
-                    .term
-                    .free_vars()
-                    .iter()
-                    .filter_map(|free| free.as_global())
-                    .any(|global| *global == name)
-            })
+            .find(|position| position.term.mentions_free(&Free::Global(name)))
             .expect("a seed is a name some position writes");
         faults.push((
             ErasedSite::clone(&position.site),

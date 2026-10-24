@@ -132,7 +132,7 @@ pub(super) enum RegionFrame {
 
 impl RegionFrame {
     fn mentions(&self, id: &curios_core::Free) -> bool {
-        let mentions = |term: &curios_core::Term| term.free_vars_shared().contains(id);
+        let mentions = |term: &curios_core::Term| term.mentions_free(id);
         match self {
             Self::Bang { action, .. } => mentions(action),
             Self::Let { type_, value, .. } => mentions(type_) || mentions(value),
@@ -830,7 +830,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             types
                 .iter()
                 .chain(&values)
-                .any(|term| term.free_vars_shared().contains(id))
+                .any(|term| term.mentions_free(id))
                 || contexts.iter().flatten().any(|frame| frame.mentions(id))
         });
         if group.members.len() == 1 && !mentioned {
@@ -1095,9 +1095,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .iter()
             .rev()
             .try_fold(annotation, |tail, (fields, synthetic, leaves)| {
-                let free = tail.free_vars();
                 // A leaf is mentioned iff one of the identities this chain binds occurs free — an exact test, where matching by spelling could only ever approximate one.
-                match leaves.iter().any(|(_, id)| free.contains(id)) {
+                match leaves.iter().any(|(_, id)| tail.mentions_free(id)) {
                     true => self.lower_pattern_fields(fields, synthetic, leaves, tail),
                     false => Ok(tail),
                 }

@@ -507,7 +507,7 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
                 && arguments.iter().enumerate().all(
                     |(i, a)| matches!(a.term.as_ref(), Subterm::Var(v) if v.unwrap() == &freshs[i]),
                 )
-                && freshs.iter().all(|f| !head.free_vars().contains(f)) =>
+                && freshs.iter().all(|f| !head.mentions_free(f)) =>
         {
             Ok(Reduce::Continue(head))
         }
@@ -1055,11 +1055,7 @@ fn could_settle(
 /// Each binder is asked once and remembered for the declaration, by plain reduction, and counted not a proof while it is being asked. One whose type still holds an unsolved metavariable is not known to be a proof and is asked again, since a solution may make it one.
 fn proofs_named(context: &mut Context, probe: &Term) -> Result<Vec<Free>, ReduceError> {
     let mut proofs = Vec::new();
-    for name in probe
-        .free_vars_shared()
-        .iter()
-        .filter(|name| name.is_local())
-    {
+    for name in probe.free_vars().locals() {
         let proof = match context.cached_proof(name) {
             Some(proof) => proof,
             None => {

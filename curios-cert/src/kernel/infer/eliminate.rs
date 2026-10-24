@@ -35,8 +35,8 @@ use {
     },
     curios_analysis::Invert,
     curios_core::{
-        Atom, Bound, Exhaustion, Free, InductArm, InductType, MatchResult, Probe, ReduceError,
-        Reducer, Subterm, Telescope, Term, Variant,
+        Atom, Bound, Exhaustion, Free, InductArm, InductType, MatchResult, Names, Probe,
+        ReduceError, Reducer, Subterm, Telescope, Term, Variant,
     },
 };
 
@@ -308,6 +308,7 @@ pub(super) fn shadow(kernel: &mut Kernel, solutions: &[(Free, Term)]) {
             kernel.assume(name, type_);
         }
     }
+    let solved = Names::new(solutions.iter().map(|(solved, _)| *solved));
     for local in &bound {
         // The innermost of the name's re-typings, which is the one a lookup finds.
         let specialized = retyped
@@ -315,9 +316,7 @@ pub(super) fn shadow(kernel: &mut Kernel, solutions: &[(Free, Term)]) {
             .rev()
             .find(|(name, _)| *name == local.name)
             .map(|(_, type_)| type_);
-        let moved = solutions
-            .iter()
-            .any(|(solved, _)| local.value.mentions_free(solved));
+        let moved = local.value.mentions_any(&solved);
 
         if moved || specialized.is_some() {
             kernel.bind(

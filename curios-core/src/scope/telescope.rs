@@ -2,8 +2,8 @@
 
 use {
     crate::{
-        Bound, Field, Free, Global, Label, MetavarId, One, Proj, Scope, Subterm, Term, Var, Visit,
-        capture_placed, oldest_local,
+        Bound, Field, Free, Frees, Global, Label, MetavarId, One, Proj, Scope, Subterm, Term, Var,
+        Visit, capture_placed, oldest_local,
     },
     curios_utilities::Plicity,
     std::{
@@ -869,18 +869,18 @@ impl<B: Bound> Bound for Telescope<B> {
         }
     }
 
-    fn free_vars(&self) -> BTreeSet<Free> {
-        let mut vars = BTreeSet::new();
+    fn free_vars(&self) -> Frees {
+        let mut sets = Vec::new();
         let mut current = self;
         loop {
             match current {
                 Telescope::Cons(_, ty, rest) => {
-                    vars.extend(ty.free_vars_shared().iter().copied());
+                    sets.push(ty.free_vars());
                     current = rest.body();
                 }
                 Telescope::Done(body) => {
-                    vars.extend(body.free_vars());
-                    return vars;
+                    sets.push(body.free_vars());
+                    return Frees::union(sets);
                 }
             }
         }
