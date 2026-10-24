@@ -49,6 +49,8 @@ pub(super) enum Growth {
     StructReaders,
     /// An inductive type of so many constructors, matched once.
     Constructors,
+    /// An inductive type of so many constructors and so many top-level values, each one of its constructors: each value is evaluated where its unit is erased.
+    Values,
     /// A concept of so many methods, each a wrapper of its own, satisfied once and called once.
     Methods,
     /// Calls of an identity function, each the argument of the next.
@@ -77,7 +79,7 @@ pub(super) enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub(super) const ALL: [Growth; 29] = [
+    pub(super) const ALL: [Growth; 30] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -95,6 +97,7 @@ impl Growth {
         Growth::Fields,
         Growth::StructReaders,
         Growth::Constructors,
+        Growth::Values,
         Growth::Methods,
         Growth::Calls,
         Growth::Parentheses,
@@ -267,6 +270,18 @@ pub(super) fn grown(growth: Growth, size: usize) -> String {
                     "induct K: Type\n{constructors}end\n\nlet f(k: K) -> Nat =\n    match k: (_) => Nat\n{arms}    end;\n"
                 ),
                 &format!("f(K/k{last}()) + a"),
+            )
+        }
+        Growth::Values => {
+            let constructors = (0..size)
+                .map(|index| format!("| k{index}()\n"))
+                .collect::<String>();
+            let values = (0..size)
+                .map(|index| format!("let v{index}: K = K/k{index}();\n"))
+                .collect::<String>();
+            program(
+                &format!("induct K: Type\n{constructors}end\n\n{values}"),
+                &format!("match v{last} | k0() => 0 | _ => a end"),
             )
         }
         Growth::Methods => {

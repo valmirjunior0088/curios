@@ -7,6 +7,8 @@
 //! **The order is the scope's.** Units in dependency order, each one's items in the order it stores them, then the program's own and its entry: every item after the items it imports from, which is the order their statements evaluate in.
 //!
 //! **A schema is its declaration's.** The item that declares a structure or an inductive registers its row, and a fragment that imports the row is linked after that item's rows are, its schema resolved to the one the item registered. Only the rows: a declaration a program constructs or matches values of, and names nowhere else, contributes its schemas and none of what its own item erased to ([`curios_ersd::Module::link_rows`]). An anonymous row is declared by no item: the first fragment linked that holds one of a width registers it, and every later one is resolved to it.
+//!
+//! **An evaluation holds a row as its readers do.** An item evaluated where it is erased runs in a module of what it reaches ([`super::evaluate`]), whose evaluator reads no row, so that module links no declaration's rows: a row a fragment imports and no linked item declares is the module's import, at the count or width the fragment's import states and with the constructors the fragments name ([`curios_ersd::Resolution::imports_rows`]), and an evaluation pays for what its fragments name of a row, never for the row.
 
 use {
     super::{Binding, ErasedItem, ErasedNames, ErasedProgram, ErasedUnit, Erasures},
@@ -28,19 +30,30 @@ pub(super) struct Linking {
     pub(super) structs: BTreeMap<Global, curios_ersd::ProductId>,
     pub(super) families: BTreeMap<Global, curios_ersd::FamilyId>,
     pub(super) tuples: BTreeMap<usize, curios_ersd::ProductId>,
+    /// Whether a row a fragment imports and no linked item declares is the module's import, where a program links every row it names from its declaration: an evaluation's.
+    imports_rows: bool,
 }
 
 impl Linking {
-    /// Append what `reached` takes of `units`, in the order of the units and, of each, in the order it stores its items, which puts a declaration ahead of whatever imports its rows.
+    /// A linking whose module holds each row a fragment imports and no linked item declares as an import: an evaluation's, which reads no row.
+    pub(super) fn importing_rows() -> Self {
+        Self {
+            imports_rows: true,
+            ..Self::default()
+        }
+    }
+
+    /// Append what `reached` takes of `units`, in the order of the units and, of each, in the order it stores its items, which puts a declaration ahead of whatever imports its rows. A declaration reached for its rows alone is linked only where the module does not import them.
     pub(super) fn add_reached(&mut self, units: &[&ErasedUnit], reached: &Reached) {
         for (unit, (items, rows)) in units.iter().zip(reached.items.iter().zip(&reached.rows)) {
             for &place in items.union(rows) {
                 let erased = unit.item(place);
-                match items.contains(&place) {
-                    true => {
+                match (items.contains(&place), self.imports_rows) {
+                    (true, _) => {
                         self.add(erased);
                     }
-                    false => self.add_rows(erased),
+                    (false, true) => {}
+                    (false, false) => self.add_rows(erased),
                 }
             }
         }
@@ -105,7 +118,7 @@ impl Linking {
         self.hold(erased, &linked);
     }
 
-    /// Which of `erased`'s schemas the program already holds, each with where: a row by the declaration it is the row of, an anonymous one by its width.
+    /// Which of `erased`'s schemas the program already holds, each with where: a row by the declaration it is the row of, an anonymous one by its width. A module that imports rows holds one no linked item declares as an import, which linking registers.
     fn held(&self, erased: &ErasedItem) -> curios_ersd::Resolution {
         let environment = erased.environment();
         for name in environment.imported_rows() {
@@ -115,13 +128,16 @@ impl Linking {
                 None => self.families.contains_key(name),
             };
             assert!(
-                held,
+                held || self.imports_rows,
                 "the row of {} is imported before the rows of the item that declares it are linked",
                 name.faithful()
             );
         }
 
-        let mut resolution = curios_ersd::Resolution::default();
+        let mut resolution = curios_ersd::Resolution {
+            imports_rows: self.imports_rows,
+            ..Default::default()
+        };
         for (name, schema) in environment.struct_schemas() {
             if let Some(&held) = self.structs.get(name) {
                 resolution.products.insert(schema, held);

@@ -58,7 +58,7 @@ pub(super) fn evaluate(
         reached.items.iter().map(|items| items.len()).sum::<usize>()
     );
 
-    let mut linking = Linking::default();
+    let mut linking = Linking::importing_rows();
     linking.add_reached(&units, &reached);
     let mark = linking.module.mark();
     let landed = linking.add(erased);
