@@ -179,6 +179,7 @@ fn base(growth: Growth) -> usize {
         | Growth::Arms
         | Growth::Tuple
         | Growth::Fields
+        | Growth::StructReaders
         | Growth::Constructors
         | Growth::Methods => 250,
         Growth::List | Growth::Parentheses | Growth::Arrow => 1000,

@@ -45,6 +45,8 @@ pub(super) enum Growth {
     Tuple,
     /// A structure of so many fields, built and read.
     Fields,
+    /// A structure of so many fields and so many functions, each reading the last field of the one it takes.
+    StructReaders,
     /// An inductive type of so many constructors, matched once.
     Constructors,
     /// A concept of so many methods, each a wrapper of its own, satisfied once and called once.
@@ -75,7 +77,7 @@ pub(super) enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub(super) const ALL: [Growth; 28] = [
+    pub(super) const ALL: [Growth; 29] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -91,6 +93,7 @@ impl Growth {
         Growth::ProductCommuted,
         Growth::Tuple,
         Growth::Fields,
+        Growth::StructReaders,
         Growth::Constructors,
         Growth::Methods,
         Growth::Calls,
@@ -236,6 +239,20 @@ pub(super) fn grown(growth: Growth, size: usize) -> String {
                     last,
                 ),
                 "f(a)",
+            )
+        }
+        Growth::StructReaders => {
+            let fields = joined((0..size).map(|index| format!("f{index}: Nat")), ", ");
+            let readers = (0..size)
+                .map(|index| format!("let g{index}(s: S) -> Nat = s.f{last};\n"))
+                .collect::<String>();
+            program(
+                &fill!(
+                    "struct S: Type { ${fields} }\n\n${readers}",
+                    fields,
+                    readers
+                ),
+                "a",
             )
         }
         Growth::Constructors => {

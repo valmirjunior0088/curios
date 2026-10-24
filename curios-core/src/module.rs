@@ -911,12 +911,12 @@ pub fn former_spelling(
         cursor.advance(Term::free_var(&binder));
         params.push((mark, binder, domain));
     }
-    let within = cursor
-        .body()
-        .expect("a cursor past every entry holds its payload");
-    // A family's indices follow its parameters, each explicit; a record's fields are no part of its former.
+    // A family's indices follow its parameters, each explicit; a record's fields are no part of its former, so its field telescope is never opened.
     let mut indices = Vec::new();
     if family {
+        let within = cursor
+            .body()
+            .expect("a cursor past every entry holds its payload");
         let mut cursor = within.cursor();
         while let Some((hint, domain)) = cursor.entry() {
             let binder = Free::local((params.len() + indices.len()) as u64, hint);

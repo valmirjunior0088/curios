@@ -303,23 +303,25 @@ fn spelled_former(
     let Some(global) = var.as_free().and_then(Free::as_global).copied() else {
         return Ok(None);
     };
-    let entry = match (context.induct_decl(&global), context.struct_decl(&global)) {
-        (Some(family), _) => Some((
-            family.universe_context.clone(),
-            family.arity.clone(),
-            family.result_sort.clone(),
+    // Spelled where the entry stands, and nothing of it copied: a record's entry holds its fields, which its former does not read.
+    let spelled = match (context.induct_decl(&global), context.struct_decl(&global)) {
+        (Some(family), _) => Some(former_spelling(
+            global,
+            &family.universe_context,
+            &family.arity,
+            &family.result_sort,
             true,
         )),
-        (None, Some(record)) => Some((
-            record.universe_context.clone(),
-            record.arity.clone(),
-            record.result_sort.clone(),
+        (None, Some(record)) => Some(former_spelling(
+            global,
+            &record.universe_context,
+            &record.arity,
+            &record.result_sort,
             false,
         )),
         (None, None) => None,
     };
-    if let Some((universe_context, arity, result_sort, family)) = entry {
-        let (_, body) = former_spelling(global, &universe_context, &arity, &result_sort, family);
+    if let Some((_, body)) = spelled {
         return Ok(Some(match universes.is_empty() {
             true => body,
             false => instantiate_universes_scoped(&body, universes).map_err(Error::from)?,
