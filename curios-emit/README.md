@@ -108,6 +108,14 @@ The Curios WebAssembly emission: `into_wasm` takes the CPS graph `curios-ersd` b
 
 **Rejected.** An explicit worklist of the pieces still to be visited, which grows with the rope's depth — every right child of a lean of appends — and is allocated by every flattening however little it copies. A worklist the halving bounds, which still allocates itself and the offsets beside it at every flattening. Recursing into every child, as deep as the rope.
 
+### A window is a view of its base, whatever its length
+
+**Decision.** `$<carrier>/slice` cuts every window but the empty and the whole one as a view over its flat base, however short it is against that base, so a window keeps the whole payload it was cut from alive, room included, for as long as the window lives.
+
+**Rationale.** A cut is O(1), so a loop may cut from one base at every step: `/std/Str`'s `split`, `lines`, `replace` and `escape` cut each remainder from the text they were handed, not from the remainder before it. A rule that copies a window shorter than a fraction of its base copies Θ(n) at each of the Θ(n) cuts such a loop makes, its time growing with the square of the text, and bounding what a window keeps at a multiple of its own length needs exactly that rule: only the collector, which is the engine's, could release a base its windows still name.
+
+**Rejected.** Copying a window shorter than a quarter of its base's payload, which keeps a window from holding more than four times itself and makes each of the loops above quadratic. Copying every window, as Java's `substring` has since 7u6, which makes a peel copy its remainder at every step. Copying a window under a fixed length, as V8 copies a slice under thirteen characters, which keeps a cut O(1) but releases a base only under its shortest windows, where the windows a program keeps — a line, a field — are longer. Copying where a producer knows its windows outlive their base, which every producer has to remember and a program's own windows escape.
+
 ### Locals are allocated by liveness
 
 **Decision.** Once a module is emitted, each function's locals are folded onto the fewest its values' live ranges allow, one value type to a local (`allocate_locals`). A value lives from its first write to the last instruction naming it, and through the end of every loop it is named in that began after that write; one the walk cannot show to be written before a read keeps a local of its own from the function's start, and the default it reads. Every local alike, a continuation's value or an emitter's scratch; parameters keep their places.

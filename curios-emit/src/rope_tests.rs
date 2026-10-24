@@ -16,6 +16,17 @@ fn bytes_slice_calls_the_shared_slice_helper() {
     assert_contains(&wat, "(func $bytes/slice (type $bytes/slice)");
 }
 
+/// A cut copies nothing of its base, however short the window: a window is a view, so a loop that cuts from one base at every step pays O(1) a cut.
+#[test]
+fn a_cut_copies_nothing_of_its_base() {
+    let wat = wat(&intrinsic_main(
+        curios_cont::Intrinsic::BytesSlice,
+        vec![bytes_lit(vec![1, 2, 3]), nat(0), nat(2)],
+    ));
+
+    assert_absent(func(&wat, "$bytes/slice"), "array.copy");
+}
+
 #[test]
 fn bytes_read_calls_the_read_helper_and_forces_its_input() {
     let wat = wat(&intrinsic_main(
