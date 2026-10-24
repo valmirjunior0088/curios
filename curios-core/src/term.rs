@@ -18,6 +18,7 @@ mod scalars;
 use scalars::*;
 
 mod frees;
+pub use frees::Names;
 use frees::*;
 
 mod rank;
@@ -2728,10 +2729,38 @@ impl Term {
             .expect("warm_frees fills the free-variable cache")
     }
 
-    /// Whether `name` occurs free in this term, through the same memoized set [`Bound::free_vars`] fills — but as a membership probe instead of a set clone (`FreeCache::contains`): `define`'s selective reduction-cache invalidation probes every cached WHNF, and cloning each entry's set there would swamp the walk it avoids.
+    /// Whether `name` occurs free in this term. A local is answered by the newest local the node keeps where that decides — none newer than it, or it the newest — and any other name by the memoized set [`Bound::free_vars`] fills, as a membership probe instead of a set clone (`FreeCache::contains`): `define`'s selective reduction-cache invalidation probes every cached WHNF, and cloning each entry's set there would swamp the walk it avoids.
     pub fn mentions_free(&self, name: &Free) -> bool {
+        if let Some(index) = name.local_index() {
+            match self.newest_local() {
+                None => return false,
+                Some(newest) if newest < index => return false,
+                Some(newest) if newest == index => return true,
+                Some(_) => {}
+            }
+        }
         self.warm_frees();
         self.inner.frees.contains(name)
+    }
+
+    /// Whether any of `names` occurs free in this term: none does where every name is a local newer than the newest local the node keeps, and otherwise the smaller of the two sets probes the other.
+    pub fn mentions_any(&self, names: &Names) -> bool {
+        if names.is_empty() {
+            return false;
+        }
+        if let Some(oldest) = names.oldest_local()
+            && self.newest_local().is_none_or(|newest| newest < oldest)
+        {
+            return false;
+        }
+        if let Some(only) = names.only() {
+            return self.mentions_free(only);
+        }
+        let frees = self.free_vars_shared();
+        match frees.len() < names.len() {
+            true => frees.iter().any(|name| names.contains(name)),
+            false => names.iter().any(|name| frees.contains(name)),
+        }
     }
 
     /// Whether `needle` occurs in this term as a subterm, at any depth and under any binder — a syntactic occurrence, decided by term equality. A bound variable never equals a free one, so a needle that is a free variable is found exactly where `mentions_free` finds it; a compound needle is found where its spelling stands whole, which is also the only place a case equation recorded against that spelling can fire.
@@ -2848,21 +2877,25 @@ impl Term {
             assert!(value.closed(), "substitution value carries a loose index");
         }
 
-        let solutions = solutions.to_vec();
+        // Sorted stably by name, so a name solved twice finds its first solution at the first place it sorts to, as a search in the given order would.
+        let mut solutions = solutions.to_vec();
+        solutions.sort_by(|(this, _), (that, _)| this.cmp(that));
+        let names = Names::new(solutions.iter().map(|(solved, _)| *solved));
         let mut visit = Visit::rewriting_shared(
             |_, _| None,
             Box::new(move |_, term| {
                 if let Subterm::Var(var) = &**term
                     && let Some(name) = var.as_free()
-                    && let Some((_, value)) = solutions.iter().find(|(solved, _)| solved == name)
                 {
-                    return Some(value.clone());
+                    let at = solutions.partition_point(|(solved, _)| solved < name);
+                    if let Some((solved, value)) = solutions.get(at)
+                        && solved == name
+                    {
+                        return Some(value.clone());
+                    }
                 }
 
-                match solutions
-                    .iter()
-                    .any(|(solved, _)| term.mentions_free(solved))
-                {
+                match term.mentions_any(&names) {
                     true => None,
                     false => Some(term.clone()),
                 }

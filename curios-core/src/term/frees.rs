@@ -7,6 +7,62 @@ use {
     std::{cell::OnceCell, collections::BTreeSet, rc::Rc},
 };
 
+/// Names a reader asks a term for at once, prepared once: sorted, so one is found by its place, with the oldest local among them where every one is a local, so a term whose newest local is older holds none of them ([`Term::mentions_any`](super::Term::mentions_any)).
+#[derive(Debug, Clone, Default)]
+pub struct Names {
+    sorted: Vec<Free>,
+    oldest_local: Option<u64>,
+}
+
+impl Names {
+    pub fn new(names: impl IntoIterator<Item = Free>) -> Self {
+        let mut sorted = names.into_iter().collect::<Vec<_>>();
+        sorted.sort_unstable();
+        sorted.dedup();
+        let oldest_local = match sorted.first() {
+            None => None,
+            Some(_) => sorted.iter().try_fold(u64::MAX, |oldest, name| {
+                name.local_index().map(|index| oldest.min(index))
+            }),
+        };
+
+        Self {
+            sorted,
+            oldest_local,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.sorted.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.sorted.is_empty()
+    }
+
+    pub fn contains(&self, name: &Free) -> bool {
+        self.sorted.binary_search(name).is_ok()
+    }
+
+    /// The names, ascending in `Free`'s order.
+    pub fn iter(&self) -> impl Iterator<Item = &Free> {
+        self.sorted.iter()
+    }
+
+    /// The oldest local among the names, where every one is a local.
+    pub(crate) fn oldest_local(&self) -> Option<u64> {
+        self.oldest_local
+    }
+
+    /// The one name, where there is one.
+    pub(crate) fn only(&self) -> Option<&Free> {
+        match self.sorted.as_slice() {
+            [only] => Some(only),
+            _ => None,
+        }
+    }
+}
+
 /// One node's computed free-variable set, in the sharing state the computation discovered: `Shared` hands a single carrier child's `Rc` through unchanged — the chain-shaped common case, where every link above the one free occurrence would otherwise copy the same set — and `Owned` is a freshly built union.
 pub(crate) enum FreeVars {
     Shared(Rc<BTreeSet<Free>>),

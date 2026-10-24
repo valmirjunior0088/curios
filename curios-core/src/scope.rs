@@ -157,7 +157,7 @@ impl Var {
 
 // === Bound ===================================================================
 
-/// A syntactic category the de Bruijn machinery can operate on: anything that can rebuild itself under a variable-visiting [`Visit`] and report its `reach`. Implemented by `Term`/`Subterm` (the big structural match lives in `term.rs`), [`Telescope`], and `()` (a Σ-telescope's trailing payload); everything else here — `shift`, `capture`, `release`, `free_vars` — is derived from `traverse` alone.
+/// A syntactic category the de Bruijn machinery can operate on: anything that can rebuild itself under a variable-visiting [`Visit`] and report its `reach`. Implemented by `Term`/`Subterm` (the big structural match lives in `term.rs`), [`Telescope`], and `()` (a Σ-telescope's trailing payload); `shift`, `capture` and `release` are derived from `traverse` alone, and `free_vars` is each carrier's own, read off its terms' memoized sets.
 pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     /// Rebuild the term, invoking the visit callback at every variable with the binder depth it sits under; a `Some(replacement)` substitutes that variable. The single intrinsic the rest of the trait is defined from — implementations must route subterms through `Visit::visit_subterm`/`visit_scope` so depth tracking, pruning, and the rewrite hook fire.
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
@@ -217,17 +217,8 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
         }))
     }
 
-    /// The set of free-variable identities occurring anywhere in the term. A pure observation ridden on `traverse` (the callback rewrites nothing), so it must never be pruned — every node has to be seen.
-    fn free_vars(&self) -> BTreeSet<Free> {
-        let mut vars = BTreeSet::new();
-        self.traverse(&mut Visit::new(|_, var| {
-            if let Some(name) = var.as_free() {
-                vars.insert(*name);
-            }
-            None
-        }));
-        vars
-    }
+    /// The free-variable identities this value holds: the union of its terms' memoized sets ([`Term::free_vars_shared`]), so a value is read in the size of those sets and never by a walk of its tree, which a value whose terms share their nodes holds once for every path.
+    fn free_vars(&self) -> BTreeSet<Free>;
 }
 
 /// A constructor's index targets, which is all its signature's terminal carries: the family and its parameters are fixed by the declaration, so nothing else in a terminal is information.
@@ -241,6 +232,12 @@ impl Bound for Vec<Term> {
 
     fn reach(&self) -> usize {
         self.iter().map(Bound::reach).max().unwrap_or(0)
+    }
+
+    fn free_vars(&self) -> BTreeSet<Free> {
+        self.iter()
+            .flat_map(|target| target.free_vars_shared().iter().copied())
+            .collect()
     }
 
     fn has_metavar(&self) -> bool {
@@ -265,6 +262,10 @@ impl Bound for () {
 
     fn reach(&self) -> usize {
         0
+    }
+
+    fn free_vars(&self) -> BTreeSet<Free> {
+        BTreeSet::new()
     }
 
     fn has_metavar(&self) -> bool {
@@ -1087,16 +1088,6 @@ impl<F> Visit<F>
 where
     F: FnMut(usize, &Var) -> Option<Subterm>,
 {
-    pub(crate) fn new(visit: F) -> Self {
-        Self {
-            term_depth: 0,
-            universe_depth: 0,
-            visit,
-            mode: Mode::Plain,
-            memo: Memo::None,
-        }
-    }
-
     /// `capture`'s visit: memoized on node identity and binder depth together, since its effect depends on the depth and a depth-blind memo would hand a second occurrence the wrong indices — see [`Memo`] for when that is legal. `oldest` is the oldest binder being captured where every one is a local, which is what lets it pass over a subterm that holds only older locals.
     fn capturing(oldest: Option<u64>, visit: F) -> Self {
         Self {

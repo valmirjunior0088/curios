@@ -279,6 +279,12 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
             term.structural_hash() == doubled(base.clone(), 60).structural_hash(),
         ),
         ("free variables", term.free_vars().contains(&x)),
+        (
+            "a telescope's free variables",
+            Telescope::build([(Free::local(2, Some("t")), term.clone())], term.clone())
+                .free_vars()
+                .contains(&x),
+        ),
         ("universe metavariables", term.universe_metas().len() == 1),
         ("a needle sought", term.mentions_term(&base)),
         (

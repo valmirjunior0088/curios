@@ -17,7 +17,7 @@ use {
     },
     curios_core::{
         Advance, Atom, Bound, Enter, Extent, Field, Free, Func, FuncType, Global, ImplicitOrigin,
-        Many, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Produced, Proj, Quality,
+        Many, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Names, Produced, Proj, Quality,
         ReduceError, Scope, Subterm, Telescope, Term, Transient, Tuple, Universes, Visit,
     },
     std::{
@@ -1177,17 +1177,23 @@ pub(crate) fn read_outside_spines(term: &Term, values: &[(Free, Term)]) -> Term 
         );
     }
 
-    let values = values.to_vec();
+    // Sorted stably by name, so a name read twice finds its first value at the first place it sorts to, as a search in the given order would.
+    let mut values = values.to_vec();
+    values.sort_by(|(this, _), (that, _)| this.cmp(that));
+    let names = Names::new(values.iter().map(|(read, _)| *read));
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term: &Term| match &**term {
             Subterm::Metavar(_) => Some(term.clone()),
             Subterm::Var(var) => Some(
                 var.as_free()
-                    .and_then(|name| values.iter().find(|(read, _)| read == name))
+                    .and_then(|name| {
+                        let at = values.partition_point(|(read, _)| read < name);
+                        values.get(at).filter(|(read, _)| read == name)
+                    })
                     .map_or_else(|| term.clone(), |(_, value)| value.clone()),
             ),
-            _ => match values.iter().any(|(read, _)| term.mentions_free(read)) {
+            _ => match term.mentions_any(&names) {
                 true => None,
                 false => Some(term.clone()),
             },

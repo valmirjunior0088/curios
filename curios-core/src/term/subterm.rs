@@ -981,6 +981,13 @@ impl Bound for Subterm {
     fn has_universe_meta(&self) -> bool {
         Subterm::has_universe_meta(self)
     }
+
+    fn free_vars(&self) -> BTreeSet<Free> {
+        match self.free_vars_from_children() {
+            FreeVars::Shared(shared) => (*shared).clone(),
+            FreeVars::Owned(owned) => owned,
+        }
+    }
 }
 
 fn max_reach<'a>(terms: impl IntoIterator<Item = &'a Term>) -> usize {

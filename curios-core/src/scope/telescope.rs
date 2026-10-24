@@ -869,6 +869,23 @@ impl<B: Bound> Bound for Telescope<B> {
         }
     }
 
+    fn free_vars(&self) -> BTreeSet<Free> {
+        let mut vars = BTreeSet::new();
+        let mut current = self;
+        loop {
+            match current {
+                Telescope::Cons(_, ty, rest) => {
+                    vars.extend(ty.free_vars_shared().iter().copied());
+                    current = rest.body();
+                }
+                Telescope::Done(body) => {
+                    vars.extend(body.free_vars());
+                    return vars;
+                }
+            }
+        }
+    }
+
     fn has_metavar(&self) -> bool {
         let mut current = self;
         loop {
