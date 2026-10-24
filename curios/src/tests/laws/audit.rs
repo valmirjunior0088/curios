@@ -60,7 +60,7 @@ fn every_law_holds_at_compound_terms() {
     held_at(successor_of_a_fresh_variable);
 }
 
-/// Every law at a numeric carrier with its first variable replaced by a product of two sums, `x := (a + 1) * (w + 1)`: the one shape a fold leaves standing where it distributes every other product, so a law whose rule reads its operand's shape meets it here as written and, at the successor above, as a fold has left it.
+/// Every law at a numeric carrier with its first variable replaced by a product of two sums, `x := (a + w + 1) * (w + a + 1)`: two symbolic summands a factor, the one shape a fold leaves standing where it distributes every other product, so a law whose rule reads its operand's shape meets it here as written. A factor of one symbolic summand and a floor is distributed at `Nat`, so a product of two successors is no such shape.
 #[test]
 fn every_law_holds_at_a_product_of_two_sums() {
     held_at(product_of_two_sums);
@@ -660,17 +660,22 @@ fn successor_of_a_fresh_variable(law: &Law) -> Option<(Expr, Expr)> {
     Some((var, compound))
 }
 
-/// The product of two fresh variables' successors a law's first variable is replaced by, where its carrier is numeric.
+/// The product a law's first variable is replaced by, where its carrier is numeric: two sums of both fresh variables and one, `(a + w + 1) * (w + a + 1)`.
 fn product_of_two_sums(law: &Law) -> Option<(Expr, Expr)> {
     let var = first_var(&law.left)?;
     let Expr::Var { carrier, .. } = var else {
         unreachable!("a variable")
     };
+    let sum = |first: usize, second: usize| Expr::Apply {
+        carrier,
+        operation: Operation::Sum,
+        operands: vec![fresh(first, carrier), successor(carrier, second)],
+    };
     let compound = match carrier {
         Carrier::Natural | Carrier::Integer => Expr::Apply {
             carrier,
             operation: Operation::Product,
-            operands: vec![successor(carrier, 3), successor(carrier, 4)],
+            operands: vec![sum(3, 4), sum(4, 3)],
         },
         _ => return None,
     };
