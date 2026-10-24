@@ -264,7 +264,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         Core::Func(curios_core::Func { telescope }) => {
             let marks = telescope.marks();
             // A type-former lambda reads as the former it eta-expands, where a program writes that former.
-            if let Some(former) = curios_core::former_eta(&telescope, &marks)
+            if let Some(former) = curios_core::former_eta(&telescope)
                 && writable_former(&former, telescope.terminal())
             {
                 return written_former(former, frame);
@@ -822,16 +822,20 @@ fn nominal_arguments(
     hidden_run(members, frame)
 }
 
-/// Whether a program writes the former a lambda eta-expands: its bare name, where the binders took every argument, or an indexed family at its parameters, which takes its indices in a call of their own. A family at some of its parameters is no call the grammar has — `Result(Error)` for `(A) => Result(Error, A)` — and the lambda is written as it stands.
+/// Whether a program writes the former a lambda eta-expands: its bare name, where the binders took every argument, or an indexed family at its parameters, which takes its indices in a call of their own. A family at some of its parameters is no call the grammar has — `Result(Error)` for `(A) => Result(Error, A)` — and the lambda is written as it stands. `terminal` is the lambda's body, read through the lambdas a family's other call nests in it.
 fn writable_former(former: &curios_core::FormerEta, terminal: &curios_core::Term) -> bool {
+    let mut terminal = terminal;
+    while let curios_core::Subterm::Func(curios_core::Func { telescope }) = &**terminal {
+        terminal = telescope.terminal();
+    }
     match former {
         curios_core::FormerEta::Intrinsic(_) => true,
         curios_core::FormerEta::Nominal(_, prefix, _) => {
             prefix.is_empty()
                 || matches!(
                     &**terminal,
-                    curios_core::Subterm::InductType(curios_core::InductType { indices, .. })
-                        if !indices.is_empty()
+                    curios_core::Subterm::InductType(curios_core::InductType { params, indices, .. })
+                        if !indices.is_empty() && prefix.len() == params.len()
                 )
         }
     }

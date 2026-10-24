@@ -1,10 +1,10 @@
 use {
     super::{
         Apply, Argument, Arity, Ascribed, Atom, Bang, Bind, Bound, Carrier, Cases, Cursor, Field,
-        Free, Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label, Let, Match,
-        MatchResult, Matrix, Nat, NumLit, Pattern, Proj, Quality, Rec, Row, Scope, Spellings,
-        Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two,
-        Universes, Var, Variant,
+        FormerEta, Free, Func, FuncType, Global, InductArm, InductType, Infix, Intrinsic, Label,
+        Let, Match, MatchResult, Matrix, Nat, NumLit, Pattern, Proj, Quality, Rec, Row, Scope,
+        Spellings, Struct, StructType, Subterm, Term, Three, Transient, Tuple, TupleType, Two,
+        Universes, Var, Variant, former_eta,
     },
     curios_abi::stdio,
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
@@ -1172,61 +1172,6 @@ fn print_infix(symbol: &'static str, left: Term, right: Term, frame: Frame) -> P
     ])
 }
 
-/// A recognized type-former eta shape: the former's identity, the arguments left once its binders are stripped, and the former's whole arity, against which those arguments' declared marks are read.
-pub enum FormerEta {
-    Nominal(Global, Vec<Term>, usize),
-    Intrinsic(&'static str),
-}
-
-/// Recognize a type-former eta shape on the *unopened* telescope. Two shapes contract. `(x) => T(…, x)`: one binder, whose sole occurrence is the final argument of a saturated former body — a nominal type with no indices, or a unary intrinsic carrier. And `(x₁, …, xₖ) => F(p…)(x₁, …, xₖ)`: one binder per index of an indexed family, in order — the family at its parameters, which is a function of its own because the family takes its indices in a call of their own. The binders' plicities are deliberately not inspected: the eta-lambdas this contracts are imitation solutions, which copy their plicities from the former's birth type, so the binders already mirror the declaration. The arguments left must be closed under the binders (`reach() == 0`), which is what guarantees the binders occur nowhere else.
-pub fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<FormerEta> {
-    let binders = telescope.len();
-    if binders == 0 || plicities.len() != binders {
-        return None;
-    }
-
-    let bound = |term: &Term, index: usize| matches!(&**term, Subterm::Var(var) if var.as_bound() == Some(index));
-    let closed = |terms: &[Term]| terms.iter().all(|term| term.reach() == 0);
-    // Outermost binder first: under `binders` binders the first index is bound at `binders - 1` and the last at `0`.
-    let binds_in_order = |terms: &[Term]| {
-        terms.len() == binders
-            && terms
-                .iter()
-                .enumerate()
-                .all(|(position, term)| bound(term, binders - 1 - position))
-    };
-
-    match &**telescope.terminal() {
-        Subterm::InductType(InductType {
-            name,
-            params,
-            indices,
-            ..
-        }) if !indices.is_empty() => (binds_in_order(indices) && closed(params))
-            .then(|| FormerEta::Nominal(*name, params.clone(), params.len() + indices.len())),
-        _ if binders != 1 => None,
-        Subterm::InductType(InductType { name, params, .. })
-        | Subterm::StructType(StructType { name, params, .. }) => {
-            let (last, prefix) = params.split_last()?;
-            (bound(last, 0) && closed(prefix))
-                .then(|| FormerEta::Nominal(*name, prefix.to_vec(), params.len()))
-        }
-        Subterm::Intrinsic(Intrinsic::IoType(payload)) => {
-            bound(payload, 0).then_some(FormerEta::Intrinsic("Io"))
-        }
-        Subterm::Intrinsic(Intrinsic::ListType(payload)) => {
-            bound(payload, 0).then_some(FormerEta::Intrinsic("List"))
-        }
-        Subterm::Intrinsic(Intrinsic::ChannelType(payload)) => {
-            bound(payload, 0).then_some(FormerEta::Intrinsic("Channel"))
-        }
-        Subterm::Intrinsic(Intrinsic::CellType(payload)) => {
-            bound(payload, 0).then_some(FormerEta::Intrinsic("Cell"))
-        }
-        _ => None,
-    }
-}
-
 /// Print a recognized former: the name alone when the binders took every argument, the application to what they left otherwise, each argument marked as the declaration marks it — routed through a synthetic term so qualification and spelling stay uniform with every other reference.
 fn former_doc(former: FormerEta, frame: Frame) -> Printer {
     match former {
@@ -2091,8 +2036,8 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
         }
         Subterm::Func(Func { telescope }) => {
             let plicities = telescope.marks();
-            // A type-former lambda `(x) => T(…, x)`, or one over exactly an indexed family's indices — the shapes witness keying and goal displays materialize for a higher-kinded parameter — prints as the former itself: bare `T` when the binders took every argument, the application to what they left otherwise (`Accessible(@A, R)`). Recognition demands the exact eta shape (the binders are the final arguments and occur nowhere else), so the display never renames anything, it only hides the lambda the reader would mentally contract anyway.
-            if let Some(former) = former_eta(&telescope, &plicities) {
+            // A type former's η-form — the lambdas a former short of its application is spelled by, one to a call, and an imitation's `(x) => T(…, x)` — prints as the former itself: bare `T` when the binders took every argument, the application to what they left otherwise (`Accessible(@A, R)`). Recognition demands the exact eta shape (the binders are the final arguments and occur nowhere else), so the display never renames anything, it only hides the lambda the reader would mentally contract anyway.
+            if let Some(former) = former_eta(&telescope) {
                 return former_doc(former, frame);
             }
             // Each binder carries its written/canonical mark (`@x` = implicit, `use x` = witness), matching the `FuncType` printer above. A parameter position cannot be elided, so an unnameable binder nothing references prints the way source spells it: `_`.
@@ -2106,7 +2051,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             // A lambda applied where it stands is written in parentheses: bare, its body would take the arguments, and `(x) => f(x)(a)` reads back as a lambda. One printed as the type former it eta-expands is no lambda on the page.
             let lambda = matches!(
                 &*head,
-                Subterm::Func(Func { telescope }) if former_eta(telescope, &telescope.marks()).is_none()
+                Subterm::Func(Func { telescope }) if former_eta(telescope).is_none()
             );
             let callee = match lambda {
                 true => flat([pure("("), sub(head, frame), pure(")")]),

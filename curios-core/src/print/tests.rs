@@ -1,6 +1,6 @@
 use {
     super::*,
-    crate::Level,
+    crate::{Level, Telescope},
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     std::sync::Arc,
 };

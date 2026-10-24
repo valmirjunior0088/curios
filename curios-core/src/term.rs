@@ -25,6 +25,10 @@ mod rank;
 mod shape;
 pub use shape::*;
 
+mod former;
+use former::built;
+pub use former::*;
+
 mod metavar_spine;
 pub use metavar_spine::*;
 
@@ -2402,11 +2406,12 @@ impl Deref for Term {
     }
 }
 
+/// A term made of `term`, a former's η-form ([`former_eta`]) applied over its whole parameter list made as the node it applies.
 impl From<Subterm> for Term {
     fn from(term: Subterm) -> Self {
         Self {
             extent: None,
-            inner: Rc::new(Node::new(term)),
+            inner: Rc::new(Node::new(built(term))),
         }
     }
 }
@@ -2548,12 +2553,13 @@ impl Term {
 
     /// This term carrying `subterm` — **the node itself when `subterm` is what it already held.**
     ///
-    /// The one place a traversal or a reduction turns a payload back into a `Term`, so the sharing rule is stated once rather than at each reconstruction. A reduction that leaves a node as it was — a type former over an argument that reduced to itself — hands back the allocation it was given, so a value reduced again is that allocation, and a table keyed by it meets the allocation it holds rather than an equal one compared node by node. Every child is compared by [`Term::eq`], whose first act is `Rc::ptr_eq`, so an untouched child settles in one pointer comparison and an untouched subtree of any size settles at its root: the check cascades, because unchanged leaves are what make a parent unchanged.
+    /// The one place a traversal or a reduction turns a payload back into a `Term`, so the sharing rule is stated once rather than at each reconstruction, and so is the β-step that makes a former's η-form ([`former_eta`]) applied over its whole parameter list the node it applies. A reduction that leaves a node as it was — a type former over an argument that reduced to itself — hands back the allocation it was given, so a value reduced again is that allocation, and a table keyed by it meets the allocation it holds rather than an equal one compared node by node. Every child is compared by [`Term::eq`], whose first act is `Rc::ptr_eq`, so an untouched child settles in one pointer comparison and an untouched subtree of any size settles at its root: the check cascades, because unchanged leaves are what make a parent unchanged.
     ///
     /// The alternative is a fresh `Rc` whose caches start empty, discarding every `hash`, `frees` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case: `project_erased_universes` hands back an equal term on nearly every call over a web of definitions each naming the one before it twice.
     ///
     /// No caller can tell the difference, because two of them already receive the original node: `Visit::universes_only` and `Visit::passes_over` both short-circuit to `self.clone()`. An extent lives on this wrapper rather than on the node, so sharing one node across occurrences is representable. A consing visit is the one that can tell, and does not come here (`Term::consed`): the node handed back holds the children it had, where consing is the replacing of them.
     pub fn rebuilt(&self, subterm: Subterm) -> Self {
+        let subterm = built(subterm);
         if subterm == **self {
             return self.clone();
         }
