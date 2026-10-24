@@ -2,7 +2,7 @@
 
 [Every stage but reduction costs the graph it is handed](../../design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md) has a read visit a node once, or pass over a subterm a fact its node carries proves it has nothing to find in. The fact a node carries of its free variables is a set copied from its children, so a node pays for every variable beneath it rather than for what it adds: a term whose every level names one more local costs the square of its depth, and a metavariable's set is rebuilt from every entry of its spine.
 
-**Next step: delivery.** Stages 1 to 3 are ready, in order; stage 4 waits on the spine-capture and parked-wake entries of [compilation's findings](000-findings.md), the probe's other two squares.
+**Next step: delivery.** Stages 1 and 2 are ready, in order; stage 3 waits on the spine-capture and parked-wake entries of [compilation's findings](000-findings.md), the probe's other two squares.
 
 ## What is wrong
 
@@ -27,8 +27,8 @@ Counted at `0fc2fc1bd` in a scratch copy holding this spec's first stage, which 
   | the treap at every size | 338.7 G, 317.3 M, 303.0 MiB | 89.66 G, 80.33 M, 154.4 MiB |
   | a sorted slice to 32 members, the treap past it | 337.1 G, 316.1 M, 296.5 MiB | 89.25 G, 79.86 M, 147.8 MiB |
 
-  Over the lambda probe both new representations count alike: 17.53 G instructions and 7.62 M allocations at 4 000 bindings, where today's set leaves 35.55 G and 12.78 M, and the code before the first stage 60.53 G and 93.14 M.
-- **Arithmetic 101 needs the same merge.** [An atom is ranked from its children's ranks](../arithmetic/101-an-atom-is-ranked-from-its-childrens-ranks.md) builds each node's summary over Maziarz et al.'s variable maps, merged smaller into larger, with the union stage 1 adds.
+  Over the lambda probe both new representations count alike: 17.53 G instructions and 7.62 M allocations at 4 000 bindings, where today's set leaves 35.55 G and 12.78 M, and the code before the first stage 59.53 G and 93.14 M.
+- **Arithmetic 101 needs the same merge.** [An atom is ranked from its children's ranks](../arithmetic/101-an-atom-is-ranked-from-its-childrens-ranks.md) builds each node's summary over Maziarz et al.'s variable maps, merged smaller into larger, with the union a node's set is built with, `curios-utilities`' `Sorted::union_with`.
 
 ## Settled
 
@@ -40,11 +40,10 @@ Counted at `0fc2fc1bd` in a scratch copy holding this spec's first stage, which 
 
 ## Stages
 
-1. **A union, in `curios-utilities`.** `Sorted` gains the union above, with a combiner for a map's payloads (arithmetic 101's), and its in-order walk keeps its stack inline to a depth it states. Check: unit tests of the union's laws, of its shape as a function of its keys, of an operand handed back where nothing is added and of a walk past the inline depth; the members a union inserts and the nodes it copies counted over chained and balanced shapes.
-2. **The node's set.** `Frees` holds a `Sorted` set, filled by sharing the largest carrying child's and taking in the others' by the union. Check: the fill's members taken in and nodes built, counted over the probe at 1 000, 2 000, 4 000 and 8 000 bindings, ×2.0 and about ×2.2 a doubling; the image unchanged at one path; both halves no worse than today's in allocations, bytes and peak, and their instructions read against the table above, counted.
-3. **A spine's set.** `MetavarSpine` keeps its names counted and their set beside its facts, a metavariable's fill reads it, and the readers that walked a spine's entries for their names read it. Check: a spine's set after pushes, rewrites and captures equal to a recount over its entries; a metavariable's fill visits no entry; the image unchanged at one path.
-4. **The growth.** The lambda probe joins `curios/src/tests/growth.rs` as a growth held through emission (`HELD_FRONT`, `curios/src/tests/instrumented/growth.rs`). Check: `growth_slopes` holds it under `HELD_SLOPE`.
+1. **The node's set.** `Frees` holds a `Sorted` set, filled by sharing the largest carrying child's and taking in the others' by the union. Check: the fill's members taken in and nodes built, counted over the probe at 1 000, 2 000, 4 000 and 8 000 bindings, ×2.0 and about ×2.2 a doubling; the image unchanged at one path; both halves no worse than today's in allocations, bytes and peak, and their instructions read against the table above, counted.
+2. **A spine's set.** `MetavarSpine` keeps its names counted and their set beside its facts, a metavariable's fill reads it, and the readers that walked a spine's entries for their names read it. Check: a spine's set after pushes, rewrites and captures equal to a recount over its entries; a metavariable's fill visits no entry; the image unchanged at one path.
+3. **The growth.** The lambda probe joins `curios/src/tests/growth.rs` as a growth held through emission (`HELD_FRONT`, `curios/src/tests/instrumented/growth.rs`). Check: `growth_slopes` holds it under `HELD_SLOPE`.
 
 ## Verification and retirement
 
-The spec retires with stage 4. What a node's fill costs and what a reader may ask go to `Frees`' and `Term::free_vars`' rustdoc, the union's contract to `Sorted`'s and to [`curios-utilities`' README](../../../curios-utilities/README.md#a-persistent-maps-shape-is-a-function-of-the-keys-it-holds), a spine's set to `MetavarSpine`'s, and the bound, with its logarithm, to the design rule's paragraph on what holds it, beside `every_walk_answers_a_doubling_term_in_its_own_size`.
+The spec retires with stage 3. What a node's fill costs and what a reader may ask go to `Frees`' and `Term::free_vars`' rustdoc, the union's contract to `Sorted`'s and to [`curios-utilities`' README](../../../curios-utilities/README.md#a-persistent-maps-shape-is-a-function-of-the-keys-it-holds), a spine's set to `MetavarSpine`'s, and the bound, with its logarithm, to the design rule's paragraph on what holds it, beside `every_walk_answers_a_doubling_term_in_its_own_size`.

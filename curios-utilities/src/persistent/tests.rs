@@ -370,3 +370,140 @@ fn a_diff_reads_only_what_two_versions_do_not_share() {
     assert_eq!(reported, [5_000]);
     assert!(compared.get() < 100, "{} values compared", compared.get());
 }
+
+/// The keys of a tree in the order a walk from its root meets them: its shape, which two trees holding one set of keys share.
+fn shape<K: Clone, T>(tree: &Tree<K, T>) -> Vec<K> {
+    let mut keys = Vec::new();
+    let mut pending = tree.root.as_deref().into_iter().collect::<Vec<_>>();
+    while let Some(node) = pending.pop() {
+        keys.push(node.key.clone());
+        pending.extend(node.right.as_deref());
+        pending.extend(node.left.as_deref());
+    }
+    keys
+}
+
+/// The longest path from a tree's root.
+fn depth<K, T>(link: Option<&Node<K, T>>) -> usize {
+    link.map_or(0, |node| {
+        1 + depth(node.left.as_deref()).max(depth(node.right.as_deref()))
+    })
+}
+
+/// A union holds every entry either map holds, an entry both hold at what the combiner makes of the two in the union's own order, and is the tree inserting those entries builds, whichever map was the larger.
+#[test]
+fn a_sorted_union_answers_as_a_merge_of_btree_maps_does() {
+    for seed in 0..8 {
+        let mut draws = Draws(seed);
+        let (mut left, mut right) = (Sorted::new(), Sorted::new());
+        let (mut left_standard, mut right_standard) = (BTreeMap::new(), BTreeMap::new());
+        for _ in 0..draws.next(200) {
+            let key = draws.next(300);
+            let value = draws.next(1_000);
+            left.insert(key, value);
+            left_standard.insert(key, value);
+        }
+        for _ in 0..draws.next(200) {
+            let key = draws.next(300);
+            let value = draws.next(1_000);
+            right.insert(key, value);
+            right_standard.insert(key, value);
+        }
+
+        let union = left.union_with(&right, |_, ours, theirs| Some(ours * 1_000 + theirs));
+        let mut merged = left_standard.clone();
+        for (key, value) in &right_standard {
+            merged
+                .entry(*key)
+                .and_modify(|held| *held = *held * 1_000 + value)
+                .or_insert(*value);
+        }
+        assert!(union.iter().eq(merged.iter()), "seed {seed}: the entries");
+        assert_eq!(union.len(), merged.len(), "seed {seed}: the length");
+
+        let mut inserted = Sorted::new();
+        for (key, value) in &merged {
+            inserted.insert(*key, *value);
+        }
+        assert_eq!(
+            shape(&union.tree),
+            shape(&inserted.tree),
+            "seed {seed}: the shape"
+        );
+    }
+}
+
+/// A union that adds nothing to the larger map is the larger map, shared whole, and a map's union with itself is itself.
+#[test]
+fn a_sorted_union_hands_back_the_larger_where_it_adds_nothing() {
+    let mut larger = Sorted::new();
+    for key in 0..100 {
+        larger.insert(key, ());
+    }
+    let mut smaller = Sorted::new();
+    for key in [3, 50, 97] {
+        smaller.insert(key, ());
+    }
+
+    assert!(
+        larger
+            .union_with(&smaller, |_, _, _| None)
+            .same_version(&larger)
+    );
+    assert!(
+        smaller
+            .union_with(&larger, |_, _, _| None)
+            .same_version(&larger)
+    );
+    assert!(
+        larger
+            .union_with(&larger.clone(), |_, _, _| None)
+            .same_version(&larger)
+    );
+    assert!(
+        larger
+            .union_with(&Sorted::new(), |_, _, _| None)
+            .same_version(&larger)
+    );
+    assert!(
+        !larger
+            .union_with(&smaller, |_, _, _| Some(()))
+            .same_version(&larger)
+    );
+}
+
+/// A walk from a key reads the entries at and above it, as a range of a standard map does.
+#[test]
+fn a_sorted_walk_from_a_key_reads_the_entries_from_it() {
+    let mut sorted = Sorted::new();
+    let mut standard = BTreeMap::new();
+    for key in (0..400).step_by(3) {
+        sorted.insert(key, key * 2);
+        standard.insert(key, key * 2);
+    }
+
+    for from in [0, 1, 3, 200, 397, 399, 1_000] {
+        assert!(
+            sorted.iter_from(&from).eq(standard.range(from..)),
+            "from {from}"
+        );
+    }
+}
+
+/// A walk deeper than its stack holds in place spills the rest and still reads every entry in order.
+#[test]
+fn a_walk_deeper_than_its_inline_stack_reads_every_entry() {
+    let mut sorted = Sorted::new();
+    for key in 0..20_000u64 {
+        sorted.insert(key, ());
+    }
+
+    assert!(depth(sorted.tree.root.as_deref()) > INLINE_DEPTH);
+    assert!(sorted.iter().map(|(key, ())| *key).eq(0..20_000));
+    assert!(
+        sorted
+            .iter_from(&7_000)
+            .map(|(key, ())| *key)
+            .eq(7_000..20_000)
+    );
+}

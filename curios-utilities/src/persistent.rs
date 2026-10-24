@@ -38,11 +38,18 @@ impl<K, T> Tree<K, T> {
 
     /// Every entry, in the order of its key.
     fn iter(&self) -> InOrder<'_, K, T> {
-        let mut walk = InOrder {
-            pending: Vec::new(),
-        };
+        let mut walk = InOrder::new();
         walk.descend(self.root.as_deref());
         walk
+    }
+
+    /// Whether the two are one version, sharing every node.
+    fn same_version(&self, other: &Self) -> bool {
+        match (&self.root, &other.root) {
+            (Some(ours), Some(theirs)) => Rc::ptr_eq(ours, theirs),
+            (None, None) => true,
+            _ => false,
+        }
     }
 
     /// The entry of the greatest key.
@@ -82,6 +89,22 @@ impl<K: Ord, T> Tree<K, T> {
             };
         }
         found
+    }
+
+    /// Every entry from the least key at or above `key`, in the order of its key: the walk [`Tree::iter`] would be past every entry below it, found on the path to `key` alone.
+    fn iter_from(&self, key: &K) -> InOrder<'_, K, T> {
+        let mut walk = InOrder::new();
+        let mut node = self.root.as_deref();
+        while let Some(current) = node {
+            node = match current.key < *key {
+                true => current.right.as_deref(),
+                false => {
+                    walk.push(current);
+                    current.left.as_deref()
+                }
+            };
+        }
+        walk
     }
 
     /// The entry of the least key above `key`.
@@ -327,23 +350,57 @@ fn rotate_left<K: Clone, T: Clone>(link: &mut Option<Rc<Node<K, T>>>) {
     *link = Some(right);
 }
 
-/// A walk of a tree in key order, on a stack of the nodes whose right subtrees are still to come.
-struct InOrder<'t, K, T> {
-    pending: Vec<&'t Node<K, T>>,
+/// How many nodes a walk's stack holds in place before it takes an allocation: a path as long as a treap of tens of thousands of keys is expected to have, so a walk of a small map, which a node's free-variable set is, allocates nothing.
+const INLINE_DEPTH: usize = 32;
+
+/// A walk of a tree in key order, on a stack of the nodes whose right subtrees are still to come: the first `INLINE_DEPTH` of them in place, the rest spilled past it.
+pub struct InOrder<'t, K, T> {
+    inline: [Option<&'t Node<K, T>>; INLINE_DEPTH],
+    depth: usize,
+    spilled: Vec<&'t Node<K, T>>,
 }
 
 impl<K, T> Clone for InOrder<'_, K, T> {
     fn clone(&self) -> Self {
         Self {
-            pending: self.pending.clone(),
+            inline: self.inline,
+            depth: self.depth,
+            spilled: self.spilled.clone(),
         }
     }
 }
 
 impl<'t, K, T> InOrder<'t, K, T> {
+    fn new() -> Self {
+        Self {
+            inline: [None; INLINE_DEPTH],
+            depth: 0,
+            spilled: Vec::new(),
+        }
+    }
+
+    /// The newest node on top: in place while there is room, spilled once there is not, so the spilled nodes are always the newest.
+    fn push(&mut self, node: &'t Node<K, T>) {
+        match self.depth < INLINE_DEPTH {
+            true => {
+                self.inline[self.depth] = Some(node);
+                self.depth += 1;
+            }
+            false => self.spilled.push(node),
+        }
+    }
+
+    fn pop(&mut self) -> Option<&'t Node<K, T>> {
+        if let Some(node) = self.spilled.pop() {
+            return Some(node);
+        }
+        self.depth = self.depth.checked_sub(1)?;
+        self.inline[self.depth].take()
+    }
+
     fn descend(&mut self, mut node: Option<&'t Node<K, T>>) {
         while let Some(current) = node {
-            self.pending.push(current);
+            self.push(current);
             node = current.left.as_deref();
         }
     }
@@ -353,7 +410,7 @@ impl<'t, K, T> Iterator for InOrder<'t, K, T> {
     type Item = (&'t K, &'t T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let node = self.pending.pop()?;
+        let node = self.pop()?;
         self.descend(node.right.as_deref());
         Some((&node.key, &node.payload))
     }
@@ -674,8 +731,49 @@ impl<K: Ord + Hash + Clone, V: Clone> Sorted<K, V> {
     }
 
     /// Every entry, the least key first.
-    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+    pub fn iter(&self) -> InOrder<'_, K, V> {
         self.tree.iter()
+    }
+
+    /// Every entry from the least key at or above `key`, the least first.
+    pub fn iter_from(&self, key: &K) -> InOrder<'_, K, V> {
+        self.tree.iter_from(key)
+    }
+
+    /// Whether the two are one version, sharing every node: so for a version and its clone until either is written. Two versions may hold the same entries and not be one.
+    pub fn same_version(&self, other: &Self) -> bool {
+        self.tree.same_version(&other.tree)
+    }
+
+    /// Every entry either map holds, an entry both hold at what `combine` makes of the two values, `self`'s first, where it answers one, and at the larger map's where it answers none.
+    ///
+    /// **The smaller into the larger.** The larger map is taken as it stands and each entry of the smaller is put into it, so a union copies the paths to the keys it adds or changes and shares every other node with the larger: O(m log n) for maps of m ≤ n entries, the larger itself where nothing is added, and either where the two are one version. Its shape is a function of its keys, as every version's is.
+    pub fn union_with(
+        &self,
+        other: &Self,
+        mut combine: impl FnMut(&K, &V, &V) -> Option<V>,
+    ) -> Self {
+        if self.same_version(other) {
+            return self.clone();
+        }
+        let (larger, smaller, self_larger) = match self.len >= other.len {
+            true => (self, other, true),
+            false => (other, self, false),
+        };
+        let mut union = larger.clone();
+        for (key, value) in smaller.iter() {
+            let placed = match union.get(key) {
+                None => Some(value.clone()),
+                Some(held) => match self_larger {
+                    true => combine(key, held, value),
+                    false => combine(key, value, held),
+                },
+            };
+            if let Some(placed) = placed {
+                union.insert(key.clone(), placed);
+            }
+        }
+        union
     }
 }
 
