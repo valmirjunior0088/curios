@@ -216,6 +216,39 @@ fn bytes_concat_joins_two_immediates_by_arithmetic_ahead_of_the_node() {
     assert_eq!(count(&triple, "block $bytes_concat_rope"), 2);
 }
 
+/// A packed operand a lowering reads more than once is boxed once, since a box of an immediate is a fresh leaf: a concatenation's rope arm boxes each operand once for its empty tests, its length sum and its node, a pointwise combiner its left operand once for its force and its two lengths, and a suffix its carrier once for its window and its length.
+#[test]
+fn a_packed_operand_is_boxed_once_however_often_it_is_read() {
+    let boxes = |op: curios_cont::Intrinsic, args| {
+        count(
+            func(&wat(&intrinsic_main(op, args)), "$func/main"),
+            "call $bytes/box",
+        )
+    };
+
+    assert_eq!(
+        boxes(
+            curios_cont::Intrinsic::BytesConcat(2),
+            vec![bytes_lit(vec![1, 2]), bytes_lit(vec![3, 4])]
+        ),
+        2
+    );
+    assert_eq!(
+        boxes(
+            curios_cont::Intrinsic::BytesAnd,
+            vec![bytes_lit(vec![1, 2]), bytes_lit(vec![3, 4])]
+        ),
+        2
+    );
+    assert_eq!(
+        boxes(
+            curios_cont::Intrinsic::BytesRest,
+            vec![bytes_lit(vec![1, 2]), nat(1)]
+        ),
+        1
+    );
+}
+
 #[test]
 fn list_read_calls_the_list_read_helper() {
     assert_contains(&wat(&list_read()), "call $list/read");

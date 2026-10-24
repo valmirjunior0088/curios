@@ -1,8 +1,8 @@
 use {
     super::{
         BigHelper, Bitwise, Context, EmissionCode, EmissionValueName, FltHelper, ImmediateLayout,
-        LoadAs, RopeData, Table, block, box_instrs, br, br_if, call, either, get, rounding_code,
-        set, tee, when,
+        LoadAs, RopeData, Table, block, box_instrs, br, br_if, call, concrete_val, either, get,
+        rounding_code, set, tee, when,
     },
     curios_num::Rounding,
 };
@@ -967,6 +967,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     }
 
     /// Concatenate two loaded ropes into `dest`: answer the other side when one is empty (the runtime identity shortcuts keep chains of empty seeds from deepening), else one O(1) node.
+    ///
+    /// **Each operand is loaded once**, into a local every read takes it from. A packed operand's load boxes an immediate into a fresh leaf, and the empty tests, the length sum and the node would otherwise each box it again, a leaf apiece, the node keeping the last.
     fn concat_pair_instrs(
         &mut self,
         lhs: Vec<curios_wasm::Instr>,
@@ -974,52 +976,41 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         dest: &curios_wasm::LocalName,
         rope: &RopeData,
     ) -> Vec<curios_wasm::Instr> {
-        let set_dest = curios_wasm::Instr::LocalSet {
-            local_name: dest.clone(),
+        let left = self
+            .context
+            .push_local("concat_left", concrete_val(rope.base.clone(), false));
+        let right = self
+            .context
+            .push_local("concat_right", concrete_val(rope.base.clone(), false));
+        let len = |operand: &curios_wasm::LocalName| {
+            vec![get(operand), Self::rope_get(rope, &rope.len_field)]
         };
 
         let mut node = vec![curios_wasm::Instr::I32Const { value: 1 }];
-        let left_len = lhs
-            .iter()
-            .cloned()
-            .chain([Self::rope_get(rope, &rope.len_field)])
-            .collect();
-        let right_len = rhs
-            .iter()
-            .cloned()
-            .chain([Self::rope_get(rope, &rope.len_field)])
-            .collect();
-        node.extend(self.context.length_sum_instrs(left_len, right_len));
-        node.extend(lhs.clone());
-        node.extend(rhs.clone());
+        node.extend(self.context.length_sum_instrs(len(&left), len(&right)));
+        node.extend([get(&left), get(&right)]);
         node.extend(Self::node_instrs(rope));
-        node.push(set_dest.clone());
+        node.push(set(dest));
 
-        let mut rhs_empty_check = rhs.clone();
-        rhs_empty_check.push(Self::rope_get(rope, &rope.len_field));
+        let mut rhs_empty_check = len(&right);
         rhs_empty_check.push(curios_wasm::Instr::I32Eqz);
         rhs_empty_check.push(curios_wasm::Instr::If {
             label_name: self.context.table().special_label(),
             block_type: curios_wasm::BlockType::Empty,
-            then_instructions: {
-                let mut then = lhs.clone();
-                then.push(set_dest.clone());
-                then
-            },
+            then_instructions: vec![get(&left), set(dest)],
             else_instructions: node,
         });
 
         let mut instrs = lhs;
-        instrs.push(Self::rope_get(rope, &rope.len_field));
+        instrs.push(set(&left));
+        instrs.extend(rhs);
+        instrs.push(set(&right));
+        instrs.extend(len(&left));
         instrs.push(curios_wasm::Instr::I32Eqz);
         instrs.push(curios_wasm::Instr::If {
             label_name: self.context.table().special_label(),
             block_type: curios_wasm::BlockType::Empty,
-            then_instructions: {
-                let mut then = rhs;
-                then.push(set_dest);
-                then
-            },
+            then_instructions: vec![get(&right), set(dest)],
             else_instructions: rhs_empty_check,
         });
 
@@ -1167,10 +1158,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         rope: &RopeData,
         funcs: WindowFuncs,
     ) {
-        self.emit_instrs(self.context.load_value_instrs(carrier, load.clone()));
-        self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
+        // Loaded once: a packed carrier's load boxes an immediate, and the length would box it again.
+        let loaded = self
+            .context
+            .push_local("rest_carrier", concrete_val(rope.base.clone(), false));
         self.emit_instrs(self.context.load_value_instrs(carrier, load));
-        self.emit_instr(Self::rope_get(rope, &rope.len_field));
+        self.emit_instrs([tee(&loaded)]);
+        self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
+        self.emit_instrs([get(&loaded), Self::rope_get(rope, &rope.len_field)]);
         self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
         self.emit_instr(curios_wasm::Instr::I32Sub);
         self.emit_instr(curios_wasm::Instr::Call {
@@ -1382,24 +1377,21 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let norm = self.context.table().bytes_norm_func();
         let rope = self.context.table().bytes_rope();
 
-        let left_instrs = self.context.load_value_instrs(left, LoadAs::Bytes);
-        let right_instrs = self.context.load_value_instrs(right, LoadAs::Bytes);
-        let length_instrs: Vec<_> = self
+        // The left operand is loaded once: its load boxes an immediate, and the length and the count would box it again.
+        let loaded = self
             .context
-            .load_value_instrs(left, LoadAs::Bytes)
-            .into_iter()
-            .chain([Self::rope_get(&rope, &rope.len_field)])
-            .collect();
-        let count_instrs = length_instrs.clone();
+            .push_local("pointwise_left", concrete_val(rope.base.clone(), false));
+        let left_len = [get(&loaded), Self::rope_get(&rope, &rope.len_field)];
 
-        self.emit_instrs(left_instrs);
+        self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Bytes));
+        self.emit_instrs([tee(&loaded)]);
         self.emit_instr(curios_wasm::Instr::Call {
             func_name: force.clone(),
         });
-        self.emit_instrs(right_instrs);
+        self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Bytes));
         self.emit_instr(curios_wasm::Instr::Call { func_name: force });
-        self.emit_instrs(length_instrs);
-        self.emit_instrs(count_instrs);
+        self.emit_instrs(left_len.clone());
+        self.emit_instrs(left_len);
         self.emit_instr(curios_wasm::Instr::Call { func_name: combine });
         // Back to canonical form. Every other packed producer norms — `BytesConcat` and `BytesSlice` through their own lowering, `BytesChunk` by building the immediate outright — so a short run left as a rope is a shape nothing else in the program hands out, and the equality fast path is entitled to have assumed it away.
         self.emit_instr(curios_wasm::Instr::Call { func_name: norm });
