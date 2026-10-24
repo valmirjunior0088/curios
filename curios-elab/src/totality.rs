@@ -78,16 +78,16 @@ fn occurrence(term: &Term, name: &Global) -> Option<Extent> {
     }
 }
 
-/// The first global `term` names by spelling whose recorded totality is not total — the syntactic reading behind [`check_written_type_totality`], shared with the bound site that re-reports an exhausted discharge by the same name.
+/// The first global `term` names by spelling whose recorded totality is not total, first as written ([`Term::first_free`]) — the syntactic reading behind [`check_written_type_totality`], shared with the bound site that re-reports an exhausted discharge by the same name.
 pub(crate) fn partial_offender(context: &Context, term: &Term) -> Option<Global> {
-    term.free_vars()
-        .into_iter()
-        .filter_map(|free| free.as_global().cloned())
-        .find(|name| {
+    term.first_free(|free| {
+        free.as_global().is_some_and(|name| {
             context
                 .definition_totality(name)
                 .is_some_and(|totality| !totality.is_total())
         })
+    })
+    .and_then(|free| free.as_global().copied())
 }
 
 /// An exhausted discharge of `proposition`, re-reported by the partial definition it names when it names one, and the exhaustion itself otherwise. A bound whose subject does not terminate would otherwise spend the budget and report that, where the same subject in a declared type is refused by name before anything is reduced; the check still runs — a subject that terminates discharges, whatever the analysis classified it — and only a spent budget is re-read for a name. The obligation is `documentation/design/soundness/totality-of-the-erased-program.md`'s.

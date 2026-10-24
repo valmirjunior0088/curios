@@ -2769,6 +2769,54 @@ impl Term {
         .is_break()
     }
 
+    /// The first free name `picked` chooses, in the order the term holds its names, which is the order they are written in. A refusal that blames one name of several names this one, so the name it blames moves with the program and never with how names spell.
+    ///
+    /// `picked` is asked of each name the term holds free, in the set's order, so a caller that records what it asked records the same questions whatever is found. Where it chooses one name, that name is the answer and no node is walked; otherwise a walk in written order meets each node once and passes over a subterm that holds none of the chosen names.
+    pub fn first_free(&self, mut picked: impl FnMut(&Free) -> bool) -> Option<Free> {
+        let chosen = self
+            .free_vars_shared()
+            .iter()
+            .filter(|name| picked(name))
+            .copied()
+            .collect::<Vec<_>>();
+        match chosen.as_slice() {
+            [] => return None,
+            [only] => return Some(*only),
+            _ => {}
+        }
+
+        let found = self.try_walk(
+            &mut HashSet::<*const Node>::new(),
+            |seen, term| {
+                if !seen.insert(Rc::as_ptr(&term.inner)) {
+                    return ControlFlow::Continue(Enter::Skip(()));
+                }
+                let named = match &**term {
+                    Subterm::Var(var) => var.as_free(),
+                    Subterm::Instance(instance) => instance.head.head_name(),
+                    _ => None,
+                };
+                if let Some(name) = named
+                    && chosen.contains(name)
+                {
+                    return ControlFlow::Break(*name);
+                }
+                match chosen.iter().any(|name| term.mentions_free(name)) {
+                    true => ControlFlow::Continue(Enter::Descend),
+                    false => ControlFlow::Continue(Enter::Skip(())),
+                }
+            },
+            |_, _, _| (),
+        );
+
+        match found {
+            ControlFlow::Break(name) => Some(name),
+            ControlFlow::Continue(()) => {
+                unreachable!("a name the term holds free is met by a walk of it")
+            }
+        }
+    }
+
     /// This term with every syntactic occurrence of `needle` replaced by `replacement`, at any depth and under any binder; an outer occurrence wins and is not descended into. `replacement` must carry no loose index, since it is inserted verbatim at every depth.
     pub fn replace_term(&self, needle: &Term, replacement: &Term) -> Term {
         if self == needle {

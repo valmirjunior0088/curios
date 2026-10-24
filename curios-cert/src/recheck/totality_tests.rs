@@ -155,3 +155,27 @@ fn a_record_that_does_not_cover_its_unit_is_not_read() {
         "a record not covering its unit must not be read, and the proof must be refused: {carried:?}",
     );
 }
+
+/// A proof reaching two partial definitions is refused by the one written first, whichever spells first, as the elaborator refuses a type reaching two.
+#[test]
+fn a_proof_reaching_two_partial_definitions_names_the_first_written() {
+    for (first, second) in [("zeta", "alpha"), ("alpha", "zeta")] {
+        let verdicts = fixture_verdicts(
+            &two_sinks_module(first, second),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX,
+        );
+
+        assert!(
+            verdicts.iter().any(|verdict| matches!(
+                &verdict.error,
+                Error::NotTotal {
+                    erased: Erased::Proof,
+                    reached: Some(name),
+                } if *name == Global::Authored(Qualifier::from([first]))
+            )),
+            "a proof reaching `{first}` and then `{second}` was not refused by `{first}`: {verdicts:?}",
+        );
+    }
+}

@@ -543,3 +543,29 @@ fn universe_params_are_read_at_the_depth_of_the_binders_above_them() {
         BTreeSet::from([UniverseParam(1), UniverseParam(3)]),
     );
 }
+
+/// Of two names a reader picks, the first written is the one found, whichever spells first: `F(zeta(Type), alpha(Type))` finds `zeta`, and `F(alpha(Type), zeta(Type))` `alpha`.
+#[test]
+fn the_first_picked_name_is_the_first_written() {
+    let zeta = Free::global(Qualifier::from(["zeta"]));
+    let alpha = Free::global(Qualifier::from(["alpha"]));
+    let f = Free::global(Qualifier::from(["F"]));
+    let applied = |first: &Free, second: &Free| {
+        Term::apply(
+            Term::free_var(&f),
+            [
+                Term::apply(Term::free_var(first), [Term::type_ground()]),
+                Term::apply(Term::free_var(second), [Term::type_ground()]),
+            ],
+        )
+    };
+    let partial = |name: &Free| *name == zeta || *name == alpha;
+
+    assert_eq!(applied(&zeta, &alpha).first_free(partial), Some(zeta));
+    assert_eq!(applied(&alpha, &zeta).first_free(partial), Some(alpha));
+    assert_eq!(
+        applied(&zeta, &alpha).first_free(|name| *name == alpha),
+        Some(alpha)
+    );
+    assert_eq!(applied(&zeta, &alpha).first_free(|_| false), None);
+}

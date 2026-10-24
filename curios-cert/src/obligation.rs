@@ -202,14 +202,15 @@ pub(crate) fn check_positions(
     for position in positions {
         if let Some(reached) = position
             .term
-            .free_vars()
-            .iter()
-            .filter_map(|free| free.as_global())
-            .find(|name| totals.partial(kernel, name))
+            .first_free(|free| {
+                free.as_global()
+                    .is_some_and(|name| totals.partial(kernel, name))
+            })
+            .and_then(|free| free.as_global().copied())
         {
             return Err(Error::NotTotal {
                 erased: position.erased,
-                reached: Some(*reached),
+                reached: Some(reached),
             });
         }
         if position.encloses_partial

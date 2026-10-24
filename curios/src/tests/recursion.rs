@@ -2,7 +2,10 @@
 //!
 //! The refusals carry the rule's weight. A cycle the source did not declare is refused by name with the way out, by the elaborator, which asks for each declaration when it is read and so is the one place that sees a cycle through a name, a registry entry or a witness alike; a value that reads itself while it is being computed is refused where the erased program is verified, since only there can a read be told from a knot forced by need; and a local binding that names itself must be a plain, typed name — which is what turns the shadowing idiom `let n = n + 1;` into an error that says so, since the new binding is in scope of its own value.
 
-use crate::tests::{error, run};
+use {
+    crate::tests::{error, run},
+    curios_utilities::fill,
+};
 
 #[test]
 fn a_declared_group_of_definitions_is_mutually_recursive() {
@@ -441,6 +444,27 @@ fn a_call_through_a_local_definition_that_does_not_descend_is_refused() {
         "#;
 
     assert!(error(source).contains("not known to terminate"));
+}
+
+/// A type reaching two partial definitions is refused by the one written first, whichever spells first: renaming either moves nothing.
+#[test]
+fn a_type_reaching_two_partial_definitions_names_the_first_written() {
+    let refusal = |arguments: &str| {
+        error(&fill!(
+            r#"
+            use /std/{Nat, Io};
+            pub let zeta(n: Nat) -> Nat = zeta(n);
+            pub let alpha(n: Nat) -> Nat = alpha(n);
+            pub let F(_a: Nat, _b: Nat) -> Type = Nat;
+            pub let x: F(${arguments}) = 0;
+            Io/pure(())
+            "#,
+            arguments,
+        ))
+    };
+
+    assert!(refusal("zeta(0), alpha(0)").contains("reaches 'zeta'"));
+    assert!(refusal("alpha(0), zeta(0)").contains("reaches 'alpha'"));
 }
 
 // Two definitions that write one recursion two ways are one function to both checkers, called and bare: their groups are compared as the binders they are, and neither is unfolded against the other.

@@ -1532,6 +1532,11 @@ pub(super) fn rec_apply_module() -> Module {
 
 /// `sink : (Nat) -> Nat`, honestly stamped `Partial`: its body projects `rec f : (Nat) -> Nat = (n) => f(n)`, which does not descend.
 pub(super) fn diverging_sink() -> Item {
+    diverging("sink")
+}
+
+/// [`diverging_sink`] under another name.
+pub(super) fn diverging(name: &str) -> Item {
     let f = Free::local(920, Some("f"));
     let n = Free::local(921, Some("n"));
     let nat = Term::intrinsic(Intrinsic::NatType);
@@ -1553,9 +1558,50 @@ pub(super) fn diverging_sink() -> Item {
     }]);
 
     authored_partial(
-        &Global::Authored(Qualifier::from(["sink"])),
+        &Global::Authored(Qualifier::from([name])),
         Term::func_type([(Free::local(922, Some("n")), nat.clone())], nat),
         Term::rec_proj(group, 0),
+    )
+}
+
+/// `held : Vouched = ((g : (Nat) -> Nat, h : (Nat) -> Nat) => Vouched/qed(()))(first, second)` beside the two diverging definitions it names, in that order.
+pub(super) fn two_sinks_module(first: &str, second: &str) -> Module {
+    let (vouched_name, declaration) = vouched_declaration();
+    let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let function = || Term::func_type([(Free::local(928, Some("n")), nat.clone())], nat.clone());
+    let named =
+        |name: &str| Term::free_var(&Free::from(&Global::Authored(Qualifier::from([name]))));
+    let held = authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        vouched,
+        Term::apply(
+            Term::func(
+                [
+                    (Free::local(929, Some("g")), function()),
+                    (Free::local(930, Some("h")), function()),
+                ],
+                Term::variant(
+                    vouched_name,
+                    Vec::<Term>::new(),
+                    "qed",
+                    [Term::tuple(Vec::<Term>::new())],
+                ),
+            ),
+            [named(first), named(second)],
+        ),
+    );
+
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![diverging(first), diverging(second), held].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(vouched_name, declaration)]),
+        [],
+        [],
     )
 }
 
