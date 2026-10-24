@@ -49,7 +49,7 @@ use {
         ffi::OsString,
         fs, io, iter,
         path::{Path, PathBuf},
-        process::{self, ExitCode},
+        process::ExitCode,
         time::Instant,
     },
 };
@@ -73,10 +73,21 @@ fn install_profiling(path: PathBuf) {
     }
 }
 
-/// The process-level failure split: a written-goal batch is incomplete development state (exit 2), everything else a hard error (exit 1). A running program's own exit code passes through untouched, so 0 always means "compiled, ran, and exited 0".
+/// The process-level failure split: a written-goal batch is incomplete development state (exit 2), everything else a hard error (exit 1). A command that could not get to its end hands `main` the report of why; one that got there and found something failed has said so itself, and hands over only how the process ends ([`Concluded`]).
 enum Failure {
     Incomplete(String),
     Error(String),
+    Concluded(Concluded),
+}
+
+/// How a command that ran to its end ends the process where something it found failed, having reported what itself: a test run its failing tests, `lint` its findings, `pin --check` what it would write. A running program's own exit code passes through untouched, so 0 always means "compiled, ran, and exited 0".
+enum Concluded {
+    /// Exit 2: written goals and nothing worse, as `lint` finds them.
+    Incomplete,
+    /// Exit 1: a test that did not pass, a lint, a row `pin --check` would change.
+    Failed,
+    /// The program's own exit code.
+    Exited(u8),
 }
 
 impl From<String> for Failure {
@@ -229,7 +240,7 @@ fn dispatch() -> Result<(), Failure> {
             )?;
 
             if code != 0 {
-                process::exit(i32::from(code));
+                return Err(Failure::Concluded(Concluded::Exited(code)));
             }
         }
         // Exit 1 on any failing, trapping or exiting test, exactly as a failing compile exits 1 and a goal batch exits 2 — 0 means every selected test passed.
@@ -241,7 +252,7 @@ fn dispatch() -> Result<(), Failure> {
             let selection = contract.admit_any(subject, manifest, &here()?)?;
 
             if !run_tests(elaboration.budget, selection, contract.access, &filter)? {
-                process::exit(1);
+                return Err(Failure::Concluded(Concluded::Failed));
             }
         }
         // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
@@ -251,8 +262,8 @@ fn dispatch() -> Result<(), Failure> {
             unfiled,
         )? {
             Linted::Clean => {}
-            Linted::Goals => process::exit(2),
-            Linted::Findings => process::exit(1),
+            Linted::Goals => return Err(Failure::Concluded(Concluded::Incomplete)),
+            Linted::Findings => return Err(Failure::Concluded(Concluded::Failed)),
         },
         Mode::Compile {
             target: TargetValue(target),
@@ -461,7 +472,7 @@ fn dispatch() -> Result<(), Failure> {
 
             // `--check` is the question, and its answer is the exit code — `format --check`'s contract, for the same reason.
             if check && pinned.would_write() {
-                process::exit(1);
+                return Err(Failure::Concluded(Concluded::Failed));
             }
         }
         Mode::Format {
@@ -588,6 +599,7 @@ fn dispatch() -> Result<(), Failure> {
     Ok(())
 }
 
+/// The one place the process exits: the report of a command that could not get to its end, and every [`Failure`]'s code.
 fn main() -> ExitCode {
     match dispatch() {
         Ok(()) => ExitCode::SUCCESS,
@@ -596,10 +608,13 @@ fn main() -> ExitCode {
 
             ExitCode::from(2)
         }
-        Err(Failure::Error(error)) => {
-            eprintln!("{error}");
+        Err(Failure::Error(report)) => {
+            eprintln!("{report}");
 
             ExitCode::FAILURE
         }
+        Err(Failure::Concluded(Concluded::Incomplete)) => ExitCode::from(2),
+        Err(Failure::Concluded(Concluded::Failed)) => ExitCode::FAILURE,
+        Err(Failure::Concluded(Concluded::Exited(code))) => ExitCode::from(code),
     }
 }
