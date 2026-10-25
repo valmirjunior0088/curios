@@ -310,7 +310,10 @@ fn an_equation_between_two_types_one_former_builds_teaches_an_arm_nothing_of_the
     kernel
         .declare(
             &opaque,
-            &Term::func_type([(binder(31, "x"), Term::type_ground())], Term::type_ground()),
+            &Term::func_type(
+                [(binder(31, "x"), Term::type_ground())],
+                Term::type_ground(),
+            ),
             &UniverseContext::default(),
         )
         .expect("a name is declared once");
@@ -320,7 +323,9 @@ fn an_equation_between_two_types_one_former_builds_teaches_an_arm_nothing_of_the
         ("a declared family", &|t| {
             Term::induct_type(declared, Vec::<Term>::new(), [t])
         }),
-        ("an opaque global", &|t| Term::apply(Term::free_var(&opaque), [t])),
+        ("an opaque global", &|t| {
+            Term::apply(Term::free_var(&opaque), [t])
+        }),
         ("a function type", &|t| {
             Term::func_type([(binder(32, "x"), t)], nat_type())
         }),

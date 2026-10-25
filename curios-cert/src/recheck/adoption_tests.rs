@@ -287,8 +287,11 @@ fn a_schemes_constraint_strengthened_reaches_the_declaration_that_instantiated_i
     let over = walked_over(&edited, &baseline, &certification);
 
     assert!(
-        whole.verdicts.iter().any(|verdict| verdict.name == Some(global("user"))
-            && matches!(verdict.error, Error::UniverseInstance { .. })),
+        whole
+            .verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(global("user"))
+                && matches!(verdict.error, Error::UniverseInstance { .. })),
         "the control stopped refusing: `user`'s instance does not discharge `u + 2 <= v`: {:?}",
         whole.verdicts
     );

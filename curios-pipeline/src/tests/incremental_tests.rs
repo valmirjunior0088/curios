@@ -5,8 +5,7 @@
 use {
     super::test_support::{
         assert_modules_agree, assert_stored_alike, carried_variances, compile_modules,
-        keeps_lowered, mounted, read_from, recompile_after, recompile_modules,
-        recompile_over,
+        keeps_lowered, mounted, read_from, recompile_after, recompile_modules, recompile_over,
         restored, reuses_body, unit_after, unit_of, unused_binders, written, written_files,
     },
     curios_core::{Enter, Item, Module, Variance, Zonked},
