@@ -1772,7 +1772,7 @@ impl<B: Bound + Terms> Carried for B {
     }
 }
 
-/// Every position of `item` that can hold a bound value, offered to `visit` with the top-level name owning it, skipping whatever `in_scope` already answers for: each definition's type and body, a recursive group's opened against its members' names, then what the entry of each former it declares carries.
+/// Every position of `item` that can hold a bound value, offered to `visit` with the top-level name owning it, skipping whatever `in_scope` already answers for: each definition's type, body and the sort it states its value at, a recursive group's opened against its members' names, then what the entry of each former it declares carries.
 ///
 /// One list, read by every walk that asks what a module or one item of it carries — the kernel's free-local refusal below it, the storage refusal beside that, and the read of an item's terms as they were written ([`Item::each_term`]). A second copy is how a position quietly stops being covered, which is the failure the enumeration exists to prevent, so a new question about an item's contents is a new `visit` and never a new walk.
 fn item_positions(
@@ -1785,6 +1785,9 @@ fn item_positions(
         for definition in item.definitions() {
             visit(Some(&definition.name), &definition.type_);
             visit(Some(&definition.name), &definition.body);
+            if let Some(sort) = &definition.value_sort {
+                visit(Some(&definition.name), sort);
+            }
         }
     }
 
@@ -2100,10 +2103,14 @@ fn unfinished_bound<B: Bound>(value: &B) -> bool {
     value.has_metavar() || value.has_transient() || value.has_universe_meta()
 }
 
-/// Whether elaboration-only syntax survives in a definition's type or body of `item`.
+/// Whether elaboration-only syntax survives in a definition's type, body or stated value sort of `item`.
 fn unfinished_item(item: &Item) -> bool {
     match item {
-        Item::Let(definition) => unfinished(&definition.type_) || unfinished(&definition.body),
+        Item::Let(definition) => {
+            unfinished(&definition.type_)
+                || unfinished(&definition.body)
+                || definition.value_sort.as_ref().is_some_and(unfinished)
+        }
         Item::Rec(rec) => rec
             .group
             .iter()

@@ -279,6 +279,16 @@ pub fn recheck_program_measured<'s>(
 }
 
 /// The first metavariable an `induct` registry entry carries, in the order the entry stores its parts.
+/// The metavariable a definition's stated value sort holds, which no judgment meets: the walk converts the stated sort with the value's and never types it, so one that reduction discards would stand unrefused.
+fn stated_sort_metavar(sort: &Term) -> Option<MetavarId> {
+    let mut found = None;
+    sort.any_metavar(&mut |id: MetavarId| {
+        found = Some(id);
+        true
+    });
+    found
+}
+
 fn induct_metavar(declaration: &InductDecl) -> Option<MetavarId> {
     let mut found = None;
     let mut note = |id: MetavarId| {
@@ -595,10 +605,18 @@ fn verdicts_within<'s>(
         for definition in item.definitions() {
             let count = definition.universe_context.parameter_count;
             let sorts = definition.universe_context.quality_count;
+            let stated = definition.value_sort.as_ref();
             if let Some(error) = universe_residue(&definition.type_, sorts)
                 .or_else(|| universe_residue(&definition.body, sorts))
                 .or_else(|| universe_escape(&definition.type_, count))
                 .or_else(|| universe_escape(&definition.body, count))
+                .or_else(|| {
+                    stated
+                        .and_then(stated_sort_metavar)
+                        .map(|id| Error::NotCore(Term::hole(id)))
+                })
+                .or_else(|| stated.and_then(|sort| universe_residue(sort, sorts)))
+                .or_else(|| stated.and_then(|sort| universe_escape(sort, count)))
             {
                 verdicts.push(Verdict {
                     name: Some(definition.name),

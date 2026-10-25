@@ -57,6 +57,68 @@ fn a_definition_mentioning_a_free_local_is_refused() {
     }
 }
 
+/// The sort a definition states its value inhabits is a position of the definition, held to the boundary its type and body are: a stray local there is refused, at every index the kernel could mint.
+#[test]
+fn a_stated_value_sort_mentioning_a_free_local_is_refused() {
+    for index in COLLIDING {
+        let stray = Free::local(index, Some("stray"));
+        let stated = Term::apply(
+            Term::func(
+                [(Free::local(9_002, Some("y")), nat())],
+                Term::type_ground(),
+            ),
+            [Term::free_var(&stray)],
+        );
+        let item = match authored(&held(), Term::type_ground(), nat()) {
+            curios_core::Item::Let(definition) => {
+                curios_core::Item::Let(Box::new(curios_core::Definition {
+                    value_sort: Some(stated),
+                    ..*definition
+                }))
+            }
+            item => item,
+        };
+        let module = holding(vec![item]);
+
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        assert!(
+            verdicts.iter().any(|verdict| verdict.name == Some(held())
+                && matches!(&verdict.error, Error::Unbound(found) if *found == stray)),
+            "a value sort mentioning free local {index} was not refused for it: {verdicts:?}",
+        );
+    }
+}
+
+/// The stated value sort is held to the boundary that refuses elaboration's residue in a type or a body: an unsolved metavariable there is refused, even where reducing the sort discards it.
+#[test]
+fn a_stated_value_sort_holding_a_metavariable_is_refused() {
+    let stated = Term::apply(
+        Term::func(
+            [(Free::local(9_002, Some("y")), nat())],
+            Term::type_ground(),
+        ),
+        [Term::hole(7_usize)],
+    );
+    let item = match authored(&held(), Term::type_ground(), nat()) {
+        curios_core::Item::Let(definition) => {
+            curios_core::Item::Let(Box::new(curios_core::Definition {
+                value_sort: Some(stated),
+                ..*definition
+            }))
+        }
+        item => item,
+    };
+    let module = holding(vec![item]);
+
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::NotCore(_))),
+        "a value sort holding a metavariable was not refused for it: {verdicts:?}",
+    );
+}
+
 /// A stray local that would decide the stated sort where a reader meets it is refused where the sort is held: the walk holds the statement to the value's sort in a scope that opens no binder, where the local decides nothing, so a sort that reads `Prop` under a binder the kernel later mints at the stray's index is no sort the value reaches.
 #[test]
 fn a_stated_value_sort_a_stray_local_decides_is_refused_where_it_is_held() {
