@@ -517,7 +517,7 @@ The program's own standard input is spent on reading the source, so a read of it
 
 ## Where things go
 
-Everything generated lands under `.curios/`, beside the governing manifest, in eight entries, a product's named for the target it is built for and every other for what it holds:
+Everything generated lands under `.curios/`, beside the governing manifest, in nine entries, a product's named for the target it is built for and every other for what it holds:
 
 | Entry | Holds | Where |
 | --- | --- | --- |
@@ -527,6 +527,7 @@ Everything generated lands under `.curios/`, beside the governing manifest, in e
 | `sources/<scheme>/<digest>` | materialized dependency sources, keyed by the hash they were accepted against | shared |
 | `foreign/<scheme>/<digest>` | fetched foreign modules, keyed the same way | shared |
 | `verdicts/<slot>` | judged units, one slot per unit: a library, or an executable's own declarations | shared |
+| `objects/<slot>/<pack>` | what each verdict slot names, in packs beside it named by what they hold | shared |
 | `payloads/<target>/<slot>` | precompiled payloads, one slot per executable and target, each target's in a directory of its own | shared |
 | `compiler` | this machine's memo of the digest of the compiler running now, against a stamp of its binary | shared |
 
