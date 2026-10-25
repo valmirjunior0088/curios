@@ -176,7 +176,7 @@ fn func_is_alpha_equivalent() {
 }
 
 #[test]
-fn func_type_distinguishes_plicity() {
+fn plicity_distinguishes_two_function_types() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));

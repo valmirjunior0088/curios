@@ -2297,3 +2297,61 @@ pub(super) const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r
 
         /std/print(Nat/to_str(1))
         "#;
+
+pub(super) const A_FUNCTION_TYPE_ALIASED_UNDER_ITS_OWN_MARK: &str = r#"
+        use /std/{Nat, Bool};
+
+        let F(b: Bool) -> Type =
+            match b
+            | true => (@x: Nat) -> Nat
+            | false => (x: Nat) -> Nat
+            end;
+        let pass(@T: Type, t: T) -> T = t;
+        let f: F(true) = (@x) => x;
+        let g: F(true) = pass(@F(true), f);
+        /std/print(Nat/to_str(g(@3)))
+        "#;
+
+pub(super) const A_FUNCTION_TYPE_ALIASED_ACROSS_A_MARK: &str = r#"
+        use /std/{Nat, Bool};
+
+        let F(b: Bool) -> Type =
+            match b
+            | true => (@x: Nat) -> Nat
+            | false => (x: Nat) -> Nat
+            end;
+        let pass(@T: Type, t: T) -> T = t;
+        let f: F(true) = (@x) => x;
+        let g: F(false) = pass(@F(true), f);
+        /std/print("FORGED")
+        "#;
+
+pub(super) const A_HIDDEN_MEMBER_REDUCES_AT_ITS_OWN_POSITION: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{True, Holds};
+
+        induct Tagged: Type
+        | tag(a: Nat, @size: Nat, k: Nat)
+        end
+        struct Sized: Type { a: Nat, @len: Nat, items: Nat }
+        let f: (a: Nat, @b: Nat, c: Nat) -> Nat = (x, z) => z;
+        let read(t: Tagged) -> Nat = match t | tag(x, z) => z end;
+        let s: Sized = Sized { a = 1, @len = 2, items = 3 };
+        let fact: Holds(f(1, @2, 3) + read(Tagged/tag(1, @2, 3)) + s.1 == 9) = True/qed();
+        /std/print(Nat/to_str(f(1, @2, 3) + read(Tagged/tag(1, @2, 3)) + s.1))
+        "#;
+
+pub(super) const A_HIDDEN_MEMBER_CLAIMED_AT_ANOTHER_POSITION: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{True, Holds};
+
+        induct Tagged: Type
+        | tag(a: Nat, @size: Nat, k: Nat)
+        end
+        struct Sized: Type { a: Nat, @len: Nat, items: Nat }
+        let f: (a: Nat, @b: Nat, c: Nat) -> Nat = (x, z) => z;
+        let read(t: Tagged) -> Nat = match t | tag(x, z) => z end;
+        let s: Sized = Sized { a = 1, @len = 2, items = 3 };
+        let lie: Holds(f(1, @2, 3) + read(Tagged/tag(1, @2, 3)) + s.1 == 6) = True/qed();
+        /std/print("FORGED")
+        "#;

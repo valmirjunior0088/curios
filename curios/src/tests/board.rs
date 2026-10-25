@@ -14,6 +14,7 @@ mod fold_tests;
 mod index_tests;
 mod metavariable_tests;
 mod mutation_tests;
+mod plicity_tests;
 mod proposition_tests;
 mod spine_tests;
 mod subsumption_tests;

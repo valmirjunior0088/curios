@@ -4,6 +4,7 @@ use {
     super::{subsumes, test_support::*},
     crate::infer,
     curios_core::Term,
+    curios_utilities::Plicity,
 };
 
 /// The subsumption fork, which the soundness board records as having no fixture in either direction.
@@ -153,4 +154,30 @@ fn a_lambda_in_argument_position_reaches_the_pi_rule() {
     );
 
     assert_eq!(infer(&mut kernel, &call), Ok(Term::tuple_type_unit()));
+}
+
+/// The codomain rule reaches no function type across a mark: subsumption is cumulative under a binder only where the two telescopes state one calling convention, and a pair apart in a mark goes on as the equation it is, which refuses it. Read past the mark, `(@x: Nat) -> Type 0` would stand where `(x: Nat) -> Type 1` is wanted. The control is the same pair under one mark, which the codomain rule accepts.
+#[test]
+fn a_function_type_is_below_none_of_other_marks() {
+    let mut kernel = kernel();
+    let x = binder(902, "x");
+    let pi =
+        |mark: Plicity, codomain: Term| Term::func_type_marked([(mark, x, nat_type())], codomain);
+
+    assert_eq!(
+        subsumes(
+            &mut kernel,
+            &pi(Plicity::Implicit, Term::type_ground()),
+            &pi(Plicity::Implicit, Term::type_at(one()))
+        ),
+        Ok(true),
+    );
+    assert_eq!(
+        subsumes(
+            &mut kernel,
+            &pi(Plicity::Implicit, Term::type_ground()),
+            &pi(Plicity::Explicit, Term::type_at(one()))
+        ),
+        Ok(false),
+    );
 }

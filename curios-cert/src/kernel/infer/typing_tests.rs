@@ -5,6 +5,7 @@ use {
     crate::{Counted, Error, Kernel, check, infer},
     curios_analysis::test_support::SYNTAX,
     curios_core::{Intrinsic, Nat, Subterm, Term},
+    curios_utilities::Plicity,
 };
 
 #[test]
@@ -429,4 +430,22 @@ fn a_refused_walk_takes_back_the_positions_it_recorded() {
     let mut scoped = kernel();
     assert!(scoped.scoped(refused).is_err());
     assert!(judged(&mut scoped) > alone);
+}
+
+/// A lambda is checked against a function type under that type's marks: one whose binder is `@` where the slot is plain takes no Π-introduction there, and inferred instead it inhabits a function type of other marks, which the expectation refuses. The control is the same lambda under the slot's own mark.
+#[test]
+fn a_lambda_of_other_marks_does_not_check_against_a_function_type() {
+    let mut kernel = kernel();
+    let n = binder(0, "n");
+    let expected = Term::func_type([(binder(1, "m"), nat_type())], nat_type());
+    let lambda = |mark: Plicity| Term::func_marked([(mark, n, nat_type())], Term::free_var(&n));
+
+    assert_eq!(
+        check(&mut kernel, &lambda(Plicity::Explicit), &expected),
+        Ok(())
+    );
+    assert!(matches!(
+        check(&mut kernel, &lambda(Plicity::Implicit), &expected),
+        Err(Error::Mismatch { .. })
+    ));
 }
