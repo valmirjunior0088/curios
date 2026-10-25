@@ -57,6 +57,38 @@ fn a_definition_mentioning_a_free_local_is_refused() {
     }
 }
 
+/// A stray local that would decide the stated sort where a reader meets it is refused where the sort is held: the walk holds the statement to the value's sort in a scope that opens no binder, where the local decides nothing, so a sort that reads `Prop` under a binder the kernel later mints at the stray's index is no sort the value reaches.
+#[test]
+fn a_stated_value_sort_a_stray_local_decides_is_refused_where_it_is_held() {
+    for index in COLLIDING {
+        let stray = Free::local(index, Some("stray"));
+        let stated = Term::bool_match(
+            Term::free_var(&stray),
+            None,
+            Term::type_ground(),
+            Term::prop(),
+            Term::type_ground(),
+        );
+        let item = match authored(&held(), Term::type_ground(), nat()) {
+            curios_core::Item::Let(definition) => {
+                curios_core::Item::Let(Box::new(curios_core::Definition {
+                    value_sort: Some(stated),
+                    ..*definition
+                }))
+            }
+            item => item,
+        };
+        let module = holding(vec![item]);
+
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+        assert!(
+            verdicts.iter().any(|verdict| verdict.name == Some(held())
+                && matches!(&verdict.error, Error::ValueSort { .. })),
+            "a value sort decided by free local {index} was not refused where it is held: {verdicts:?}",
+        );
+    }
+}
+
 /// The entry is held to the same boundary as the module's items, since it is judged in the same walk by the same counter. Mutation-checked as above.
 #[test]
 fn an_entry_mentioning_a_free_local_is_refused() {

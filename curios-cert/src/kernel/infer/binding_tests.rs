@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::{infer, whnf},
+    crate::{Error, infer, whnf},
     curios_core::{Intrinsic, Rec, Reducer, Subterm, Term, Totality},
 };
 
@@ -498,4 +498,35 @@ fn a_remembered_reduct_does_not_rest_on_a_lets_binding() {
         assert_eq!(inside.ok(), kernel.reduce_forced(at(3)).ok());
         assert_eq!(outside.ok(), kernel.reduce_forced(at(2)).ok());
     });
+}
+
+/// What an arm binds a moved `let` to is the arm's alone: `c` stands for `b`, so where `b` is `false` it is `false` again, whichever arm the walk takes first. Each split states `family(c)` at a value that fits its arm in one arm and the other case in the other, so a binding that outlived the arm it was made in would type the second at the first's case.
+#[test]
+fn a_let_an_arm_moves_stands_for_its_value_in_the_sibling_arm() {
+    let b = binder(0, "b");
+    let c = binder(1, "c");
+    let z = binder(2, "z");
+    let at = |value: Term| Term::let_(&z, family(Term::free_var(&c)), value, nat(0));
+    let split = |false_arm: Term, true_arm: Term| {
+        Term::func(
+            [(b, bool_type())],
+            Term::let_(
+                &c,
+                bool_type(),
+                Term::free_var(&b),
+                Term::bool_match(Term::free_var(&b), None, nat_type(), false_arm, true_arm),
+            ),
+        )
+    };
+    let boolean = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+
+    assert!(infer(&mut kernel(), &split(at(boolean(false)), at(nat(3)))).is_ok());
+    assert!(matches!(
+        infer(&mut kernel(), &split(at(nat(3)), at(nat(3)))),
+        Err(Error::Mismatch { inferred, .. }) if *inferred == nat_type()
+    ));
+    assert!(matches!(
+        infer(&mut kernel(), &split(at(boolean(false)), at(boolean(false)))),
+        Err(Error::Mismatch { inferred, .. }) if *inferred == bool_type()
+    ));
 }
