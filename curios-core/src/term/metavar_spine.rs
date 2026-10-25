@@ -203,6 +203,11 @@ impl MetavarSpine {
         self.entries.same_version(&other.entries)
     }
 
+    /// The version of the entries this is ([`Ordered::version`]): what a visit remembers its rewrite of a spine by, the metavariables born under one scope sharing one.
+    pub(crate) fn version(&self) -> usize {
+        self.entries.version()
+    }
+
     /// The entries in binding order.
     pub fn iter(&self) -> impl Iterator<Item = &Term> + Clone {
         self.entries.iter().map(|(_, entry)| entry)

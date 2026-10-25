@@ -4,8 +4,8 @@
 
 use {
     super::{
-        Extent, Free, Frees, Global, Level, LevelHead, Quality, Subterm, Term, UniverseError,
-        UniverseMetaId, UniverseParam, Universes,
+        Extent, Free, Frees, Global, Level, LevelHead, MetavarSpine, Quality, Subterm, Term,
+        UniverseError, UniverseMetaId, UniverseParam, Universes,
     },
     curios_utilities::{Keyed, Symbol},
     std::{
@@ -963,6 +963,8 @@ pub struct Visit<F> {
     visit: F,
     mode: Mode,
     memo: Memo,
+    /// The spines this visit rewrote, where it remembers them, by their entries' version and the depths it stood at, each held beside its rewrite since a version is an address: every metavariable born under one scope shares that scope's spine, and a codomain holding an operator a parameter mints a metavariable each, so a capture of it would otherwise rewrite the one spine once for each.
+    spines: HashMap<(usize, usize, usize), (MetavarSpine, Option<MetavarSpine>)>,
 }
 
 /// What one node of [`Term::level_differences`]'s walk stood down: its children and its own levels, each with the universe-binder depth it sits at below the node, and its own sorts where the walk stands them down too, in traversal order.
@@ -1122,6 +1124,7 @@ where
                 None => Mode::Plain,
             },
             memo: Memo::ByNodeAndDepth(HashMap::new()),
+            spines: HashMap::new(),
         }
     }
 
@@ -1134,6 +1137,7 @@ where
             mode: Mode::Pruning,
             // `shift` and `release` are pure in the node and the depth, and the read `Scope::uses` rides on them latches, so a depth-keyed memo is legal. A closed subterm never reaches it — `reach` answers that one first — so it is asked only over an *open* shared term: a body under its binders that holds one node twice, which each walked once per path without it.
             memo: Memo::SharedByNodeAndDepth(HashMap::new()),
+            spines: HashMap::new(),
         }
     }
 
@@ -1146,6 +1150,7 @@ where
             mode: Mode::Rewriting(rewrite),
             // The unmemoized rewrite. Four of its callers serve operands by position and one pushes into a `Vec`, so their answers differ per occurrence — see [`Memo`].
             memo: Memo::None,
+            spines: HashMap::new(),
         }
     }
 
@@ -1162,6 +1167,7 @@ where
             },
             // Masking never descends past one level, so there is nothing to revisit.
             memo: Memo::None,
+            spines: HashMap::new(),
         }
     }
 
@@ -1177,6 +1183,7 @@ where
                 labels: Some(Vec::new()),
             },
             memo: Memo::None,
+            spines: HashMap::new(),
         }
     }
 
@@ -1192,6 +1199,7 @@ where
             visit,
             mode: Mode::Rewriting(rewrite),
             memo: Memo::ByNode(HashMap::new()),
+            spines: HashMap::new(),
         }
     }
 
@@ -1203,6 +1211,7 @@ where
             visit,
             mode: Mode::RewritingUniverses(rewrite),
             memo: Memo::ByNode(HashMap::new()),
+            spines: HashMap::new(),
         }
     }
 
@@ -1214,6 +1223,7 @@ where
             visit,
             mode: Mode::RewritingLevels(rewrite, Qualities::Kept),
             memo: Memo::ByNodeAndDepth(HashMap::new()),
+            spines: HashMap::new(),
         }
     }
 
@@ -1229,6 +1239,7 @@ where
             visit,
             mode: Mode::RewritingLevels(levels, qualities),
             memo: Memo::ByNodeAndDepth(HashMap::new()),
+            spines: HashMap::new(),
         }
     }
 
@@ -1246,6 +1257,7 @@ where
             },
             // Masking never descends past one level, so there is nothing to revisit.
             memo: Memo::None,
+            spines: HashMap::new(),
         }
     }
 
@@ -1257,6 +1269,7 @@ where
             mode: Mode::ErasingUniverses,
             // A comparison projects both operands through this at every `Nat` comparison, and the projection walks the whole term: unmemoized it would be `2^n` in the operand's width while the unit budget read linear.
             memo: Memo::ByNode(HashMap::new()),
+            spines: HashMap::new(),
         }
     }
 
@@ -1273,6 +1286,7 @@ where
                 crossed: Vec::new(),
             },
             memo: Memo::None,
+            spines: HashMap::new(),
         }
     }
 }
@@ -1482,6 +1496,33 @@ where
         }?;
 
         Some(remembered.for_occurrence(at))
+    }
+
+    /// Whether this visit remembers the spines it rewrote: where it remembers every node it rebuilt, a capture among them, and not for [`Memo::SharedByNodeAndDepth`], whose `shift` and `release` run at every β step over terms a few nodes large.
+    fn remembers_spines(&self) -> bool {
+        matches!(self.memo, Memo::ByNode(_) | Memo::ByNodeAndDepth(_))
+    }
+
+    /// The rewrite of `spine` this visit already made at the depths it stands at, where it remembers spines ([`Visit::remembers_spines`]): `Some(None)` for a spine it left as it stood.
+    pub(crate) fn spine_get(&self, spine: &MetavarSpine) -> Option<Option<MetavarSpine>> {
+        if !self.remembers_spines() {
+            return None;
+        }
+        let (_, rewritten) =
+            self.spines
+                .get(&(spine.version(), self.term_depth, self.universe_depth))?;
+
+        Some(rewritten.clone())
+    }
+
+    /// Remember `rewritten` as what this visit made of `spine` at the depths it stands at, where it remembers spines, under the same law as its memo of nodes: the visit is pure in the node and the depth, and one version of a spine is one list of entries.
+    pub(crate) fn spine_put(&mut self, spine: &MetavarSpine, rewritten: Option<MetavarSpine>) {
+        if self.remembers_spines() {
+            self.spines.insert(
+                (spine.version(), self.term_depth, self.universe_depth),
+                (spine.clone(), rewritten),
+            );
+        }
     }
 
     /// Remember `rebuilt` as the rebuild of the input node at `key`, filled by the occurrence `at`.

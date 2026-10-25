@@ -37,6 +37,8 @@ pub(super) enum Growth {
     Parameters,
     /// A function of so many parameters, adding them all: every operator stands under every parameter.
     ParametersSummed,
+    /// A function of so many parameters whose codomain claims their sum equal to itself: every operator's metavariables are born under every parameter, sharing one spine, and closing the parameters over the codomain captures it.
+    CodomainSummed,
     /// `let x{i} = n + i;` in one function's body, then a lambda adding them all, applied once: the lambda's body names every binding, and every operator in it stands under the lambda's binder.
     LetsSummed,
     /// A function of so many parameters, each the summand of a call nested over the one before, claiming by `Eq/refl()` that the spine's product with the same spine over one more parameter commutes: two factors of one shape, parted at their innermost leaf, which the fold orders by rank.
@@ -87,7 +89,7 @@ pub(super) enum Growth {
 
 impl Growth {
     /// Every growth, in the order a table lists them.
-    pub(super) const ALL: [Growth; 34] = [
+    pub(super) const ALL: [Growth; 35] = [
         Growth::LetPlus,
         Growth::LetCall,
         Growth::Statements,
@@ -99,6 +101,7 @@ impl Growth {
         Growth::Arms,
         Growth::Parameters,
         Growth::ParametersSummed,
+        Growth::CodomainSummed,
         Growth::LetsSummed,
         Growth::ProductCommuted,
         Growth::Tuple,
@@ -207,6 +210,16 @@ pub(super) fn grown(growth: Growth, size: usize) -> String {
             ),
             &format!("f({})", repeated("a", size, ", ")),
         ),
+        Growth::CodomainSummed => {
+            let sum = joined((0..size).map(|index| format!("x{index}")), " + ");
+            program(
+                &format!(
+                    "let _claim({}) -> /std/Eq()({sum}, {sum}) = /std/Eq/refl();\n",
+                    parameters(size)
+                ),
+                "a",
+            )
+        }
         Growth::LetsSummed => {
             let mut body = "let f(n: Nat) -> Nat =\n".to_string();
             for index in 0..size {
@@ -518,13 +531,14 @@ fn deep_expressions_elaborate_in_their_size() {
     }
 }
 
-/// Elaboration takes a scope in its size: a `let` chain of six thousand bindings, each operator minting its metavariables under every binding before it; an `Io` block of two thousand statements, each a frame over the last; a function summing a thousand parameters; two thousand nested lambdas; and a lambda summing two thousand bindings before it. A judgment reads its scope through the frames' persistent maps, and a metavariable is born over its scope's telescope and identity spine, shared, so none pays the binders above it; a close or a materialization passes over what it cannot change, so none pays the statements or the lambdas within it, and a close of the summing lambda reads the spine entries that hold its binder; and a node's free variables share its children's, so a sum naming one more binding a level pays for that one.
+/// Elaboration takes a scope in its size: a `let` chain of six thousand bindings, each operator minting its metavariables under every binding before it; an `Io` block of two thousand statements, each a frame over the last; a function summing a thousand parameters, and one claiming that sum in its codomain; two thousand nested lambdas; and a lambda summing two thousand bindings before it. A judgment reads its scope through the frames' persistent maps, and a metavariable is born over its scope's telescope and identity spine, shared, so none pays the binders above it; a close or a materialization passes over what it cannot change, so none pays the statements or the lambdas within it, a close of the summing lambda reads the spine entries that hold its binder, and a close of the codomain rewrites the spine its metavariables share once for all of them; and a node's free variables share its children's, so a sum naming one more binding a level pays for that one.
 #[test]
 fn a_wide_scope_elaborates_in_its_size() {
     for (growth, size) in [
         (Growth::LetPlus, 6_000),
         (Growth::Statements, 2_000),
         (Growth::ParametersSummed, 1_000),
+        (Growth::CodomainSummed, 1_000),
         (Growth::Lambdas, 2_000),
         (Growth::LetsSummed, 2_000),
     ] {

@@ -845,12 +845,13 @@ impl Bound for Subterm {
             Subterm::Var(var) => visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone())),
             // The spine is ordinary term content: visiting it is what keeps the delayed substitution aligned through `close`/`open`. Spines are wide (one entry per birth binder) and overwhelmingly identity (bare variables a visit does not touch), so an untouched entry is kept as it stands and an entirely untouched spine is the spine itself, identity and all.
             // A run of entries the visit would leave as they are is passed over by what the spine keeps of it, as a term is by its scalars ([`Visit::passes_over`]): a capture of the binders just opened reads the entries holding them.
+            // The metavariables born under one scope share its spine, so a spine already rewritten at this depth is not rewritten again ([`Visit::spine_get`]).
             Subterm::Metavar(Metavar { id, spine, origin }) => {
-                let pass_over = visit.pass_over();
-                Subterm::Metavar(Metavar {
-                    id: *id,
-                    spine: spine
-                        .rewritten(
+                let rewritten = match visit.spine_get(spine) {
+                    Some(remembered) => remembered,
+                    None => {
+                        let pass_over = visit.pass_over();
+                        let rewritten = spine.rewritten(
                             |reach, newest_local| pass_over.passes(reach, newest_local),
                             |entry| match &**entry {
                                 Subterm::Var(var) => visit.call(var).map(Term::from),
@@ -859,8 +860,14 @@ impl Bound for Subterm {
                                     (rebuilt != *entry).then_some(rebuilt)
                                 }
                             },
-                        )
-                        .unwrap_or_else(|| spine.clone()),
+                        );
+                        visit.spine_put(spine, rewritten.clone());
+                        rewritten
+                    }
+                };
+                Subterm::Metavar(Metavar {
+                    id: *id,
+                    spine: rewritten.unwrap_or_else(|| spine.clone()),
                     origin: origin.clone(),
                 })
             }

@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::{Global, Intrinsic, MetavarId, MetavarOrigin, Nat, Var},
+    crate::{Global, Intrinsic, MetavarId, MetavarOrigin, Nat, Subterm, Var},
     curios_utilities::Qualifier,
     std::hash::DefaultHasher,
 };
@@ -157,4 +157,35 @@ fn a_rewrite_passes_over_the_runs_it_cannot_change() {
     assert_eq!(captured.reach(), 1);
     assert_eq!(captured.newest_local(), Some(9_998));
     assert_eq!(captured.free_vars().len(), 9_999);
+}
+
+/// The metavariables born under one scope share its spine, and a capture over that scope's binders rewrites it once for all of them: a codomain holding an operator a parameter would otherwise rewrite the whole scope at each of the operator's metavariables.
+#[test]
+fn a_capture_rewrites_a_shared_spine_once() {
+    let names = (0..64).map(|index| local(index, "x")).collect::<Vec<_>>();
+    let spine = MetavarSpine::identity_over(&names);
+    let holes = (0..3)
+        .map(|id| Term::metavar_birthed(MetavarId(id), MetavarOrigin::Hole, spine.clone()))
+        .collect::<Vec<_>>();
+    let binders = names.iter().collect::<Vec<_>>();
+
+    let captured = Term::tuple(holes).capture(&binders);
+
+    let Subterm::Tuple(tuple) = &*captured else {
+        panic!("a tuple captures to a tuple");
+    };
+    let spines = tuple
+        .fields
+        .iter()
+        .map(|field| match &**field {
+            Subterm::Metavar(metavar) => metavar.spine.clone(),
+            _ => panic!("a hole captures to a hole"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(spines[0].reach(), 64);
+    assert!(
+        spines
+            .iter()
+            .all(|captured| captured.same_version(&spines[0]))
+    );
 }

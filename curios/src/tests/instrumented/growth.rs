@@ -162,6 +162,7 @@ fn base(growth: Growth) -> usize {
         Growth::LetPlus | Growth::LetCall => 25,
         Growth::Statements
         | Growth::ParametersSummed
+        | Growth::CodomainSummed
         | Growth::Lambdas
         | Growth::Lets
         | Growth::ChainedMatches => 100,

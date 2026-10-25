@@ -693,6 +693,14 @@ impl<V: Clone, S: Summary<V>> Ordered<V, S> {
         positioned(&self.tree)
     }
 
+    /// The version this is, as an address: one for a version and every clone of it until either is written, as [`Ordered::same_version`] tells two apart, and so a key a walk may remember what it made of one by for as long as it holds the version.
+    pub fn version(&self) -> usize {
+        self.tree
+            .root
+            .as_ref()
+            .map_or(0, |root| Rc::as_ptr(root) as usize)
+    }
+
     /// Whether the two are one version, sharing every node: so for a version and its clone until either is written. Two versions may hold the same values and not be one.
     pub fn same_version(&self, other: &Self) -> bool {
         match (&self.tree.root, &other.tree.root) {
