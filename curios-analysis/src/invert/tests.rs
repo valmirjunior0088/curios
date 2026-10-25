@@ -1,6 +1,6 @@
 //! Which payload binders an index target set determines, and the position a value of the family carries each one at — the answer erasure reads a pinned payload back from once the constructor itself is gone.
 
-use super::*;
+use {super::*, curios_core::Global, curios_utilities::Qualifier};
 
 fn binder(index: u32, hint: &str) -> Free {
     Free::local(u64::from(index), Some(hint))
@@ -87,4 +87,20 @@ fn a_binder_no_index_pins_builds_no_instance() {
     let instance = pinned_instance(&[x, below], &[Term::free_var(&x)], &[Term::free_var(&n)]);
 
     assert_eq!(instance, None);
+}
+
+/// `mk(@a) : (Tag/t(a))` holds its binder under a constructor, and the walk does not descend into one: at a proposition `Tag/t(0)` and `Tag/t(7)` are one value, so the target recovers nothing, and a pinned `a` would be a payload a program reads out of what irrelevance identified. `curios`'s `tests::board::large_elimination_tests::a_payload_under_a_propositions_constructor_is_not_pinned` holds the `False` that reading reaches.
+#[test]
+fn a_binder_under_a_constructor_is_not_pinned() {
+    let a = binder(1, "a");
+    let tag = Global::Authored(Qualifier::from(["Tag"]));
+
+    let pinned = pinned_by_targets(&[Term::variant(
+        tag,
+        Vec::<Term>::new(),
+        "t",
+        [Term::free_var(&a)],
+    )]);
+
+    assert!(!pinned.contains(&a));
 }

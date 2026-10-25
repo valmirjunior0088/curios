@@ -100,3 +100,25 @@ fn a_hypothesis_about_a_folds_scrutinee_rides_in_its_motive() {
         b"3"
     );
 }
+
+// The fold's rule reached through a proposition: under `e : Eq()(n, 2)`, an identity arm typed with `n` at `0` would see `e` at `Eq()(0, 2)` and refute it by a match with no arm, and at `2` the fold takes that arm at its last tail with `e` the proof it was handed. The arm is typed at the motive alone, so `e` keeps its type there and its match with no arm rules out nothing.
+#[test]
+fn a_folds_identity_arm_refutes_no_proof_about_its_scrutinee() {
+    rejected_by(
+        r#"
+        use /std/{Nat, Eq};
+        use /std/Bool/{False};
+
+        let f(n: Nat, e: Eq()(n, 2)) -> False =
+            match n: (m) => False
+            | 0 => match e end
+            | k + 1; ih => ih
+            end;
+
+        let _forged: False = f(2, Eq/refl());
+
+        /std/print("unreachable")
+        "#,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}

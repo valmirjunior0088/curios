@@ -23,6 +23,8 @@ mod ambient_tests;
 #[cfg(test)]
 mod fold_tests;
 #[cfg(test)]
+mod proof_match_tests;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod tests;

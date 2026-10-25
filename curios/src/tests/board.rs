@@ -12,6 +12,7 @@ mod effect_tests;
 mod eta_tests;
 mod fold_tests;
 mod index_tests;
+mod large_elimination_tests;
 mod metavariable_tests;
 mod mutation_tests;
 mod plicity_tests;
