@@ -79,6 +79,28 @@ pub(super) const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_INFORMATIVE_METHODS: &str =
         /std/Io/pure(())
         "#;
 
+/// A hidden field takes no position among the fields a literal writes, and is held as a written one is: two values apart in `n` alone would be one value, and `read` would tell them apart.
+pub(super) const A_PROPOSITION_MAY_NOT_CARRY_A_HIDDEN_INFORMATIVE_FIELD: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{Holds};
+
+        struct Hid : pub Prop { @n : Nat, Holds(n == n) }
+
+        let read(h : Hid) -> Nat = h.n;
+
+        /std/Io/pure(())
+        "#;
+
+pub(super) const A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_AN_INFORMATIVE_SUPERCLASS: &str = r#"
+        use /std/{Show};
+
+        concept Carry(A : Type) : pub Prop {
+            use Show(A),
+        }
+
+        /std/Io/pure(())
+        "#;
+
 pub(super) const AN_ELIMINATION_MUST_ENUMERATE_ITS_CONSTRUCTORS: &str = r#"
         use /std/{Nat, Option};
 

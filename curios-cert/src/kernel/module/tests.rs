@@ -2,8 +2,8 @@ use {
     crate::{Error, Kernel, check_definition, check_induct_decl, check_struct_decl},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Nat, StructDecl, Telescope,
-        Term, UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Nat, StructDecl, StructType,
+        Subterm, Telescope, Term, UniverseContext, Universes,
     },
     curios_utilities::{Plicity, Qualifier},
 };
@@ -327,6 +327,73 @@ fn a_proposition_may_carry_a_proof() {
     let declaration = proposition_with_field(&mut kernel, held);
 
     assert!(check_struct_decl(&mut kernel, &declaration).is_ok());
+}
+
+/// A field's mark changes nothing of what it holds: a hidden field at `Nat`, and a concept's superclass edge at a relevant record, are each refused as a written field is. The elaborator refuses both sources before the kernel is asked (`curios`'s `tests::board::proposition_tests`), so this is the kernel's copy of the rule under each mark a generated record entry carries.
+#[test]
+fn a_proposition_may_not_carry_an_informative_field_under_a_mark() {
+    let dictionary = Global::Authored(Qualifier::from(["Dict"]));
+    let marked = |kernel: &mut Kernel, mark: Plicity, field_type: Term| {
+        let name = Global::Authored(Qualifier::from(["Bad"]));
+        let declaration = StructDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::done(Telescope::build_marked(
+                [(mark, Free::local(0, Some("value")), field_type)],
+                (),
+            )),
+            result_sort: Term::prop(),
+            module: Qualifier::default(),
+            rep_public: true,
+            polarities: Vec::new(),
+            variances: Vec::new(),
+        };
+        kernel
+            .declare_struct(&name, &declaration)
+            .expect("a name is declared once");
+
+        check_struct_decl(kernel, &declaration)
+    };
+
+    let mut hidden = kernel();
+    assert!(matches!(
+        marked(
+            &mut hidden,
+            Plicity::Implicit,
+            Term::intrinsic(Intrinsic::NatType),
+        ),
+        Err(Error::Informative { .. })
+    ));
+
+    // A relevant record standing for a data concept's dictionary.
+    let mut superclass = kernel();
+    let counted = StructDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build(
+            [(
+                Free::local(1, Some("count")),
+                Term::intrinsic(Intrinsic::NatType),
+            )],
+            (),
+        )),
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    superclass
+        .declare_struct(&dictionary, &counted)
+        .expect("a name is declared once");
+    let dictionary_type: Term = Subterm::StructType(StructType {
+        name: dictionary,
+        universes: Universes::default(),
+        params: Vec::new(),
+    })
+    .into();
+    assert!(matches!(
+        marked(&mut superclass, Plicity::Witness, dictionary_type),
+        Err(Error::Informative { .. })
+    ));
 }
 
 /// A `Prop`-sorted family with no constructors, so that a field typed by it is a genuine proof rather than a proposition held as data.

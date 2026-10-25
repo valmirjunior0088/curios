@@ -365,6 +365,54 @@ fn a_type_that_is_a_proposition_in_one_case_is_at_no_sort_left_to_a_caller() {
     );
 }
 
+// The same fact through a codomain the argument computes rather than a `Sort` left to a caller: `F(c) : S(c)` is a proposition at `true` and a type at `false`, so `F` is admitted, and what keeps a type one sort under every case is that `F(c)` is no type while `c` is open. At `true` two values are one by irrelevance, read off `F`'s declaration at the argument, and at `false` they stay apart. `curios-cert`'s `kernel::convert::irrelevance_tests` puts the two comparisons to the kernel under this name.
+#[test]
+fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argument_decides_one() {
+    let one = r#"
+        use /std/{Nat, Bool, Eq, print};
+        use /std/Bool/{True};
+
+        let S(c: Bool) -> Type = match c | true => Prop | false => Type end;
+        let F(c: Bool) -> S(c) = match c: (d) => S(d) | true => True | false => Nat end;
+
+        let one(x: F(true), y: F(true)) -> Eq()(x, y) = Eq/refl();
+        print("ok")
+        "#;
+    assert_eq!(run(one), b"ok");
+
+    let two = r#"
+        use /std/{Nat, Bool, Eq, print};
+        use /std/Bool/{True};
+
+        let S(c: Bool) -> Type = match c | true => Prop | false => Type end;
+        let F(c: Bool) -> S(c) = match c: (d) => S(d) | true => True | false => Nat end;
+
+        let two(x: F(false), y: F(false)) -> Eq()(x, y) = Eq/refl();
+        print("")
+        "#;
+    let apart = error(two);
+    assert!(
+        apart.contains("inferred: Eq(@Nat)(x, x)") && apart.contains("expected: Eq(@Nat)(x, y)"),
+        "{apart}"
+    );
+
+    let open = r#"
+        use /std/{Nat, Bool, print};
+        use /std/Bool/{True};
+
+        let S(c: Bool) -> Type = match c | true => Prop | false => Type end;
+        let F(c: Bool) -> S(c) = match c: (d) => S(d) | true => True | false => Nat end;
+
+        let either(c: Bool, x: F(c)) -> Bool = c;
+        print("")
+        "#;
+    let unformed = error(open);
+    assert!(
+        unformed.contains("inferred: S(c)") && unformed.contains("expected: Type"),
+        "{unformed}"
+    );
+}
+
 // A definition generic in a sort stands at `Type` at one use, where matching a proposition of two constructors into it would tell its proofs apart. The elaborator refuses the definition for deciding its sort; the kernel, handed it all the same, refuses it at the assignment that states `Type`.
 #[test]
 fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {

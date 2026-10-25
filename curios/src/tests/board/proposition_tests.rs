@@ -94,13 +94,15 @@ fn an_arm_that_names_a_pinned_payload_reads_the_index() {
     );
 }
 
-// `Prop` non-informativeness, which is what makes proof irrelevance safe: a proposition whose inhabitants differ observably is not a subsingleton, so identifying them would identify the data they carry.
+// `Prop` non-informativeness, which is what makes proof irrelevance safe: a proposition whose inhabitants differ observably is not a subsingleton, so identifying them would identify the data they carry. A hidden field is a field like any other, whatever position a literal gives it.
 #[test]
 fn a_proposition_may_not_carry_informative_fields() {
-    rejected_by(
+    for source in [
         A_PROPOSITION_MAY_NOT_CARRY_INFORMATIVE_FIELDS,
-        "is informative",
-    );
+        A_PROPOSITION_MAY_NOT_CARRY_A_HIDDEN_INFORMATIVE_FIELD,
+    ] {
+        rejected_by(source, "is informative");
+    }
 }
 
 // A concept is a structure, so the same rule must reach a `Prop`-sorted concept whose method returns data. Worth its own fixture: the concept path generates its record entry rather than declaring it, so it could regress independently.
@@ -108,6 +110,15 @@ fn a_proposition_may_not_carry_informative_fields() {
 fn a_proposition_concept_may_not_carry_informative_methods() {
     rejected_by(
         A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_INFORMATIVE_METHODS,
+        "is informative",
+    );
+}
+
+// A superclass edge is a field of the generated record too, one no method wrapper names: two witnesses of a `Prop` concept over a data concept would be one value by irrelevance and hold two dictionaries a projection tells apart.
+#[test]
+fn a_proposition_concept_may_not_carry_an_informative_superclass() {
+    rejected_by(
+        A_PROPOSITION_CONCEPT_MAY_NOT_CARRY_AN_INFORMATIVE_SUPERCLASS,
         "is informative",
     );
 }

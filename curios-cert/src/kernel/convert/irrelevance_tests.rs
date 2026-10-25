@@ -703,6 +703,80 @@ fn does_not_leak_into_a_relevant_type() {
     );
 }
 
+/// A declaration whose codomain is a sort its argument computes lands in `Prop` where the argument decides one and nowhere else. `F(c) : S(c)`, with `S(true)` the propositions and `S(false)` the types, is known for a proposition at `true` by its declaration, before `F(true)` is reduced, and at `false` its two values stay apart: what the declaration says of an application is read at the arguments the application states. `curios`'s `tests::board::subsumption_tests` holds the program under this name, where a binder at `F(c)` with `c` open is no type at all.
+#[test]
+fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argument_decides_one() {
+    let mut kernel = kernel();
+    let proposition = declare(&mut kernel, "P", Term::prop());
+    let bool_type = || Term::intrinsic(Intrinsic::BoolType);
+    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+    let one = Level::zero().succ().expect("level zero has a successor");
+
+    // S(c) = match c | false => Type | true => Prop end
+    let sorts = binder(70, "S");
+    let c = binder(71, "c");
+    kernel
+        .define(
+            &sorts,
+            &Term::func_type([(binder(72, "c"), bool_type())], Term::type_at(one.clone())),
+            &Term::func(
+                [(c, bool_type())],
+                Term::bool_match(
+                    Term::free_var(&c),
+                    None,
+                    Term::type_at(one),
+                    Term::type_ground(),
+                    Term::prop(),
+                ),
+            ),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
+    let sort_at = |argument: Term| Term::apply(Term::free_var(&sorts), [argument]);
+
+    // F(c) = match c : (d) => S(d) | false => Nat | true => P end
+    let family = binder(73, "F");
+    let (c, d, stated) = (binder(74, "c"), binder(75, "d"), binder(76, "c"));
+    kernel
+        .define(
+            &family,
+            &Term::func_type([(stated, bool_type())], sort_at(Term::free_var(&stated))),
+            &Term::func(
+                [(c, bool_type())],
+                Term::bool_match(
+                    Term::free_var(&c),
+                    Some(&d),
+                    sort_at(Term::free_var(&d)),
+                    nat_type(),
+                    proposition.clone(),
+                ),
+            ),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
+    let family_at = |argument: Term| Term::apply(Term::free_var(&family), [argument]);
+
+    let (p, q) = (binder(77, "p"), binder(78, "q"));
+    kernel.assume(&p, &family_at(literal(true)));
+    kernel.assume(&q, &family_at(literal(true)));
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &family_at(literal(true)),
+            &Term::free_var(&p),
+            &Term::free_var(&q),
+        ),
+        Ok(true),
+        "two proofs at the argument that decides a proposition stayed apart",
+    );
+
+    assert_eq!(
+        convert(&mut kernel, &family_at(literal(false)), &nat(0), &nat(1)),
+        Ok(false),
+        "two numbers were identified at the argument that decides a type",
+    );
+}
+
 /// A struct literal's fields compare at the declaration's field telescope, so a field at a proposition is discharged without being read: two literals differing only in a proof are one value. Comparing every field at `Type` would refuse it, and `Str/concat` would associate for the elaborator and not for the kernel.
 #[test]
 fn a_struct_field_at_a_proposition_is_not_read() {

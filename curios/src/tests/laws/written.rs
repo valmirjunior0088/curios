@@ -1179,8 +1179,9 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(a - a, 0.0)",
             // An infinity, a NaN, or a negative `a`'s sign.
             "Eq()(a * 0.0, 0.0)",
-            // A NaN.
+            // A NaN, which no order relates to itself.
             "Eq()(a == a, true)",
+            "Eq()(a <= a, true)",
             // A NaN on either side.
             "Eq()(a < b, Bool/not(a >= b))",
             // A signaling NaN is quieted, so `min` is not idempotent.
