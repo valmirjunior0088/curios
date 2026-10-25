@@ -176,7 +176,7 @@ impl ReadBy {
 pub struct Concluded {
     /// The identity of the item judged ([`ItemRun::identity`](crate::ItemRun::identity)).
     pub input: Digest,
-    /// The digest of what each signature read read, in the order of the reads: `None` where nothing is recorded of it, it being a fixed unit's, and otherwise the digest, `None` within where no unit holds the name.
+    /// The digest of what each signature read read, in the order of the reads: `None` where nothing is recorded of it — a fixed unit's, of which no read is recorded, or a name no unit holds — and otherwise the digest, `None` within where the recorded digest does not decode.
     pub signatures: Vec<Option<Option<[u8; 32]>>>,
     /// The same, of each body read.
     pub bodies: Vec<Option<Option<[u8; 32]>>>,
