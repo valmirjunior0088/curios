@@ -1,1 +1,3 @@
-/std/print("Hello, Curios!\n")
+use /std/{print};
+
+print("Hello, Curios!\n")

@@ -1,19 +1,19 @@
 -- The middle point between `parse_digits.crs` and `parse_manual.crs`: the same `Str/fold` over the same codepoints, so the UTF-8 scan is held constant, with `let n = acc!` written out as an explicit match so no `/std/Monad/bind` is generated. The fold's step function is still a closure invoked per character.
 -- So the three programs separate what one gap could not: against `parse_digits.crs` this isolates the bind, and against `parse_manual.crs` it isolates the closure plus the scan.
 -- N is read from the command line so the loop survives constant folding; the output matches the other two exactly for the same input.
-use /std/{Str, Nat, Char, Option, Io};
+use /std/{Str, Nat, Char, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 let decode(s: Str) -> Option(Nat) =
-    match Str/is_empty(s): (_) => Option(Nat)
+    match Str/is_empty(s)
     | true => Option/none()
     | false =>
         Str/fold(
             s,
             Option/some(0),
             (cp, acc) =>
-                match acc: (_) => Option(Nat)
+                match acc
                 | some(n) =>
-                    match Char/is_ascii_digit(cp): (_) => Option(Nat)
+                    match Char/is_ascii_digit(cp)
                     | true => Option/some(n * 10 + (Char/to_nat(cp) - 0x30))
                     | false => Option/none()
                     end
@@ -22,10 +22,10 @@ let decode(s: Str) -> Option(Nat) =
     end;
 
 let loop(k: Nat, digits: Str, acc: Nat) -> Nat =
-    match k: (_) => Nat
+    match k
     | 0 => acc
     | m + 1 =>
-        match decode(digits): (_) => Nat
+        match decode(digits)
         | some(n) => loop(m, digits, (acc + n) % 1000003)
         | none() => loop(m, digits, acc)
         end
@@ -34,20 +34,11 @@ let loop(k: Nat, digits: Str, acc: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     loop(n, Nat/to_str(n), 0);
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(total(n)));
 
-entry()
+execute()

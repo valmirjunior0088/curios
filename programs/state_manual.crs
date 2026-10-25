@@ -1,28 +1,19 @@
 -- The control for `state_monad.crs`: the same counter threaded through N steps by hand, with the state as an ordinary accumulator parameter. Same input,
 -- same output, no monad — so a diff of the two emitted IRs is a measurement of what `State` costs after the optimizer has had its say.
 -- N is read from the command line so the loop survives constant folding; output is 3N.
-use /std/{Str, Nat, Io};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 let loop(n: Nat, s: Nat) -> Nat =
-    match n: (_) => Nat | 0 => s | m + 1 => loop(m, s + 3) end;
+    match n | 0 => s | m + 1 => loop(m, s + 3) end;
 
 let total(n: Nat) -> Nat =
     loop(n, 0);
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(total(n)));
 
-entry()
+execute()

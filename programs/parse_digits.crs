@@ -3,13 +3,13 @@
 -- unlike `trees/trees.crs`, whose allocations are the data structure itself and are therefore semantically necessary. What separates the two is what a transient sum costs.
 -- The parsed string is derived from the command line rather than written as a literal, so closed-term evaluation cannot fold the parse away.
 -- N is read from the command line so the loop survives constant folding; output stays bounded well inside i31.
-use /std/{Str, Nat, Io};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 let loop(k: Nat, digits: Str, acc: Nat) -> Nat =
-    match k: (_) => Nat
+    match k
     | 0 => acc
     | m + 1 =>
-        match Nat/of_str(digits): (_) => Nat
+        match Nat/of_str(digits)
         | some(n) => loop(m, digits, (acc + n) % 1000003)
         | none() => loop(m, digits, acc)
         end
@@ -18,20 +18,11 @@ let loop(k: Nat, digits: Str, acc: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     loop(n, Nat/to_str(n), 0);
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(total(n)));
 
-entry()
+execute()

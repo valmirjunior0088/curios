@@ -1,7 +1,7 @@
 -- The returned scan state removed from the baseline mirror: the transition is inlined, so no scan value crosses a call, and the range test the step performed is paid once rather than twice.
 -- One of five mirror programs attributing `/std/Str/fold`'s allocation obligations; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
 -- N is read from the command line so the loop survives constant folding; output stays bounded well inside i31.
-use /std/{Str, Nat, Byte, Bytes, Bool, Io};
+use /std/{Str, Nat, Byte, Bytes, Bool, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 induct MClass: Type
 | ascii()
@@ -53,9 +53,9 @@ let walk3(sc: MScan, b: Bytes, acc: {Nat, Nat}) -> {Nat, Nat} =
     match b
     | x[] => acc
     | x[h, ..t] =>
-        match sc: (_) => {Nat, Nat}
+        match sc
         | lead() =>
-            match mclassify(h): (_) => {Nat, Nat}
+            match mclassify(h)
             | ascii() => walk3(MScan/lead(), t, ((acc.0 + Byte/to_nat(h)) % 1000003, 0))
             | lead(width, lo, hi, payload) => walk3(MScan/cont(width, lo, hi), t, (acc.0, payload))
             | bad() => walk3(MScan/bad(), t, acc)
@@ -76,7 +76,7 @@ let text_of(n: Nat) -> Bytes =
     Str/to_bytes(Str/concat(Nat/to_str(n), "é→𝄞é→𝄞"));
 
 let iterate(k: Nat, b: Bytes, acc: Nat) -> Nat =
-    match k: (_) => Nat
+    match k
     | 0 => acc
     | m + 1 => iterate(m, b, (acc + walk3(MScan/lead(), b, (0, 0)).0) % 1000003)
     end;
@@ -84,20 +84,11 @@ let iterate(k: Nat, b: Bytes, acc: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     iterate(n, text_of(n), 0);
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(total(n)));
 
-entry()
+execute()

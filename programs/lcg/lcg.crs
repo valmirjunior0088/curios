@@ -2,25 +2,16 @@
 -- Small constants keep every intermediate within Curios's i31 runtime integers.
 -- N is read from the command line as the Rust spelling reads it.
 -- Pure integer ALU + a tail-recursive counted loop. Output matches the Rust spelling.
-use /std/{Str, Nat, Io};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 let loop(k: Nat, x: Nat) -> Nat =
-    match k: (_) => Nat | 0 => x | kp + 1; _ => loop(kp, 75 * x % 65537) end;
+    match k | 0 => x | kp + 1; _ => loop(kp, 75 * x % 65537) end;
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(n) => /std/print(Str/concat(Nat/to_str(loop(n, 1)), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(loop(n, 1)));
 
-entry()
+execute()

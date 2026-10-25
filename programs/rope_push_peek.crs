@@ -1,9 +1,9 @@
 -- Push, then peek: one append and one indexed read per step, over a list that grows to N. A `List` is a rope whose append is one node, and a read of a node that was never flattened answers from the child that holds its index where that child is flat, so each peek here reads the leaf just appended and copies nothing: the alternation of an append with a read of the newest part, which `curios-emit`'s read keeps linear and a read that flattened its node would make quadratic.
 -- N is read from the command line; output is the sum of the peeked elements mod 1000003. Each peek reads the element just pushed, so the output is `rng_manual.crs`'s for the same N, which is the control: the same arithmetic with no list.
-use /std/{Str, Nat, List, Io};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 let run(k: Nat, s: Nat, built: List(Nat), acc: Nat) -> Nat =
-    match k: (_) => Nat
+    match k
     | 0 => acc
     | m + 1 =>
         let n = 75 * s % 65537;
@@ -15,20 +15,11 @@ let run(k: Nat, s: Nat, built: List(Nat), acc: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     run(n, 1, [], 0);
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(total(n)));
 
-entry()
+execute()

@@ -1,27 +1,15 @@
 -- flt_hot_loop: N rounds of ties-to-even float arithmetic that never meets a NaN — a multiply, two adds, a square root and a divide per round on a value that stays positive — so every instruction's NaN check is taken and never fires. The instrument for what that check costs on the hot path, which `curios-emit`'s README records.
 -- N is read from the command line; output is the final value's shortest decimal.
-use /std/{Str, Nat, Flt, Io};
+use /std/{Str, Nat, Flt, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 let run(k: Nat, x: Flt) -> Flt =
-    match k: (_) => Flt
-    | 0 => x
-    | m + 1 => run(m, Flt/sqrt(x * +1.0000001 + +0.5) / +0.999 + +0.25)
-    end;
+    match k | 0 => x | m + 1 => run(m, Flt/sqrt(x * +1.0000001 + +0.5) / +0.999 + +0.25) end;
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(n) => /std/print(Str/concat(Flt/to_str(run(n, +1.0)), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(run(n, +1.0)));
 
-entry()
+execute()

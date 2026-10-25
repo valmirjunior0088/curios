@@ -2,7 +2,7 @@
 -- The distinct payloads make every node structurally unique, so Curios's pure
 -- IR cannot share/CSE the two subtrees -> 2^(D+1)-1 real allocations.
 -- D is read from the command line; output is the payload sum mod 1000003 (bounded to i31).
-use /std/{Str, Nat, Io};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 induct Tree: Type
 | leaf(Nat)
@@ -10,31 +10,19 @@ induct Tree: Type
 end
 
 let build(d: Nat, v: Nat) -> Tree =
-    match d: (_) => Tree
+    match d
     | 0 => Tree/leaf(v)
     | dp + 1; _ => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
     end;
 
 let sum(t: Tree) -> Nat =
-    match t: (_) => Nat
-    | leaf(n) => n % 1000003
-    | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
-    end;
+    match t | leaf(n) => n % 1000003 | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003 end;
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(d) => /std/print(Str/concat(Nat/to_str(sum(build(d, 1))), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let d = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(sum(build(d, 1))));
 
-entry()
+execute()

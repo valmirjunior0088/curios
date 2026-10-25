@@ -1,9 +1,9 @@
 -- Push, then drop the first: one append and one window past the first element per step, over a list that grows to N. A window of a node never flattened flattens it, so every step flattens the run: where a flattening copies its whole run, the program's time grows with the square of N, and where it writes into the room the run's first piece left, it copies the element appended.
 -- N is read from the command line; output is the sum of the windows' lengths, N(N - 1)/2, mod 1000003. `rope_push_peek.crs` is the control: the same appends, each read the element just appended.
-use /std/{Str, Nat, List, Io};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 let run(k: Nat, s: Nat, built: List(Nat), acc: Nat) -> Nat =
-    match k: (_) => Nat
+    match k
     | 0 => acc
     | m + 1 =>
         let n = 75 * s % 65537;
@@ -15,20 +15,11 @@ let run(k: Nat, s: Nat, built: List(Nat), acc: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     run(n, 1, [], 0);
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(total(n)));
 
-entry()
+execute()

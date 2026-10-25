@@ -3,10 +3,10 @@
 -- Each fold starts from the accumulator the fold before it produced, so the walk is a dependency chain: no implementation may hoist it out of the loop and walk the text once, which is what separates this from the ladder's `parse_multibyte.crs`.
 -- The text is derived from the command line rather than written as a literal, so closed-term evaluation cannot fold the walk away.
 -- N is read from the command line so the loop survives constant folding; `a * 31 + c` stays under 33M against a modulus of 1000003, well inside i31.
-use /std/{Str, Char, Nat, Io};
+use /std/{Str, Char, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 let loop(k: Nat, text: Str, acc: Nat) -> Nat =
-    match k: (_) => Nat
+    match k
     | 0 => acc
     | m + 1 => loop(m, text, Str/fold(text, acc, (c, a) => (a * 31 + Char/to_nat(c)) % 1000003))
     end;
@@ -14,20 +14,11 @@ let loop(k: Nat, text: Str, acc: Nat) -> Nat =
 let total(n: Nat) -> Nat =
     loop(n, Str/concat(Nat/to_str(n), Str/repeat("é→𝄞", 16)), 0);
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(total(n)));
 
-entry()
+execute()

@@ -1,7 +1,7 @@
 -- The accumulator obligation removed from the baseline mirror: the `{Nat, Nat}` tuple becomes two parameters, which forces each acc arm to carry its own tail call.
 -- One of five mirror programs attributing `/std/Str/fold`'s allocation obligations; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
 -- N is read from the command line so the loop survives constant folding; output stays bounded well inside i31.
-use /std/{Str, Nat, Byte, Bytes, Bool, Io};
+use /std/{Str, Nat, Byte, Bytes, Bool, List, Option, Result, Try, Io, Process, Fmt, Monad};
 
 induct MClass: Type
 | ascii()
@@ -53,16 +53,16 @@ let walk1(sc: MScan, b: Bytes, sum: Nat, partial: Nat) -> Nat =
     match b
     | x[] => sum
     | x[h, ..t] =>
-        match sc: (_) => Nat
+        match sc
         | lead() =>
-            match mclassify(h): (_) => Nat
+            match mclassify(h)
             | ascii() => walk1(mstep(h, MScan/lead()), t, (sum + Byte/to_nat(h)) % 1000003, 0)
             | lead(_, _, _, payload) => walk1(mstep(h, MScan/lead()), t, sum, payload)
             | bad() => walk1(mstep(h, MScan/lead()), t, sum, partial)
             end
         | cont(rem, lo, hi) =>
             let p = partial * 0x40 + (Byte/to_nat(h) - 0x80);
-            match rem == 1: (_) => Nat
+            match rem == 1
             | true => walk1(mstep(h, MScan/cont(rem, lo, hi)), t, (sum + p) % 1000003, 0)
             | false => walk1(mstep(h, MScan/cont(rem, lo, hi)), t, sum, p)
             end
@@ -74,28 +74,16 @@ let text_of(n: Nat) -> Bytes =
     Str/to_bytes(Str/concat(Nat/to_str(n), "é→𝄞é→𝄞"));
 
 let iterate(k: Nat, b: Bytes, acc: Nat) -> Nat =
-    match k: (_) => Nat
-    | 0 => acc
-    | m + 1 => iterate(m, b, (acc + walk1(MScan/lead(), b, 0, 0)) % 1000003)
-    end;
+    match k | 0 => acc | m + 1 => iterate(m, b, (acc + walk1(MScan/lead(), b, 0, 0)) % 1000003) end;
 
 let total(n: Nat) -> Nat =
     iterate(n, text_of(n), 0);
 
-let entry() -> /std/Io({}) =
-    let arguments = /std/Process/args()!;
-    let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
-    | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
-        | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
-            | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
-            | none() => /std/print("bad input\n")
-            end
-        | failure(_) => /std/print("invalid utf-8\n")
-        end
-    | none() => /std/print("no input\n")
-    end;
+let execute() -> Try(Io, Str, {}) =
+    let arguments = Process/args()!;
+    let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
+    let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
+    let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
+    Monad/lift(Fmt/print("%\n")(total(n)));
 
-entry()
+execute()
