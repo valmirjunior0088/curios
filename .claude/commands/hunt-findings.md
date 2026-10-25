@@ -1,11 +1,11 @@
 ---
 description: Hunt for what is wrong and not yet written down, one charter an invocation — alone, or gathering what a count of hunters finds — and file it where it belongs, one entry a cause: what the tree can show as its cause closes, what would set the roadmap once it is approved
-argument-hint: "[count] [scope — a crate, a path or an area — and optionally a seed: a commit, a decision, a section of the reference]"
+argument-hint: "[count] [directions in prose — a scope: a crate, a path, an area or a theme; a seed: a commit, a decision, a section of the reference; what to look at or leave alone]"
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*), Bash(df:*), Agent, SendMessage
 disable-model-invocation: true
 ---
 
-Hunt for what is wrong and not yet written down. One invocation is one charter: a scope, a seed and a way of looking. `$ARGUMENTS` names the scope — a crate, a path or an area — and may name the seed; what it leaves out, the seed or the scope itself, is the hunt's to choose. A first word that is a number is a count of hunters and no part of the scope: with none, or `0`, you hunt and file alone, as **Alone** says; with one or more you gather, as **Gathering** says, and the hunting is the hunters', one charter each under the scope. Every charter — all three, and why — is said before its first probe. This command is the user's to invoke and not the model's, so it does not run under `/loop`.
+Hunt for what is wrong and not yet written down. One invocation is one charter: a scope, a seed and a way of looking. After an optional count, `$ARGUMENTS` is directions in prose: a scope — a crate, a path, an area or a theme — a seed, what to look at or leave alone. The charters follow them, and what they leave out, the seed or the scope itself, is the hunt's to choose. A first word that is a number is a count of hunters and no part of the directions: with none, or `0`, you hunt and file alone, as **Alone** says; with one or more you gather, as **Gathering** says, and the hunting is the hunters', one charter each under the scope. Every charter — all three, and why — is said before its first probe. This command is the user's to invoke and not the model's, so it does not run under `/loop`.
 
 ## Read first
 
@@ -57,7 +57,7 @@ Up to here this file is the hunter's as much as the gatherer's; from **Alone** o
 
 ## Alone
 
-Where a write follows, make it as its cause closes, in the form [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states for an entry or `xboard/README.md` for a ticket, and commit it as prose, by itself. A finding whose fix changes documentation alone — a comment, a doc comment, a `.md` file — is fixed on the spot instead, in a commit of its own, and never filed. Where it sets, hold it with its text exactly as it would be written. A probe that held whose claim no test holds leaves a test, as **Attacking a rule** of `.claude/commands/hunt-soundness.md` leaves one, and a charter's tests land together in one commit, its subject led by `Findings hunt: `. Then close as **Close** says.
+Where a write follows, make it as its cause closes, in the form [Pending work is owned by its specification](../../documentation/design/pending-work-is-owned-by-its-specification.md) states for an entry or `xboard/README.md` for a ticket, and commit it as prose, by itself. A finding whose fix changes documentation alone — a comment, a doc comment, a `.md` file — is fixed on the spot instead, in a commit of its own, and never filed. Where it sets, hold it with its text exactly as it would be written. A probe that held whose claim no test holds leaves a test, as **Attacking a charter** of `.claude/commands/hunt-soundness.md` leaves one, and a charter's tests land together in one commit, its subject led by `Findings hunt: `. Then close as **Close** says.
 
 ## Gathering
 
