@@ -5,13 +5,14 @@
 use {
     super::test_support::{
         assert_modules_agree, assert_stored_alike, carried_variances, compile_modules,
-        keeps_lowered, mounted, read_from, recompile_after, recompile_modules, recompile_over,
-        restored, reuses_body, unit_after, unit_of, unused_binders, written, written_files,
+        entrypoint_of, keeps_lowered, mounted, read_from, recompile_after, recompile_modules,
+        recompile_over, restored, reuses_body, unit_after, unit_of, unused_binders, written,
+        written_files,
     },
     curios_core::{Enter, Item, Module, Variance, Zonked},
     curios_elab::DEFAULT_BUDGET,
     curios_prelude::with_prelude,
-    curios_text::SYNTAX,
+    curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},
     curios_utilities::fill,
     std::fs,
@@ -411,6 +412,45 @@ fn a_chain_of_recompiles_holds_each_name_where_its_module_does() {
         assert_stored_alike(&unit_of(&text), &next);
         unit = next;
     }
+}
+
+/// Declarations written one at a time between the same two, each recompiled over the unit before, until no place is left between them and the module's items are placed apart again, each kept item standing where the baseline held another or none: every name is held where its module holds it, the unit is stored as the whole compile of its text, and a program naming a declaration kept through it compiles.
+#[test]
+fn a_unit_whose_items_are_placed_apart_again_keeps_every_erased_form() {
+    let mut text = "use /std/{Nat};\n\npub let a: Nat = 1;\n\npub let b: Nat = 2;\n".to_string();
+    let mut unit = unit_of(&text);
+    for step in (0..24).rev() {
+        text = text.replace(
+            "pub let b",
+            &format!("pub let a_{step:02}: Nat = {step};\n\npub let b"),
+        );
+
+        let next = recompile_over(&text, &unit).unwrap();
+
+        assert_placed(&next);
+        assert_stored_alike(&unit_of(&text), &next);
+        unit = next;
+    }
+    let program = entrypoint_of(
+        "use /std/{Io, Nat};\nuse /lib/{a_23};\n\nlet named: Nat = a_23 + 1;\n\nIo/pure(())",
+    );
+
+    let compiled = with_prelude(|prelude| {
+        let scope = prelude.iter().copied().chain([&unit]).collect::<Vec<_>>();
+
+        crate::compile_entrypoint(
+            DEFAULT_BUDGET,
+            Predecessors::over(&scope),
+            &SYNTAX,
+            &UnitSource::entry(&program, &RootSource::none()),
+            None,
+            |_| {},
+        )
+        .map(|_| ())
+        .map_err(String::from)
+    });
+
+    assert_eq!(compiled, Ok(()));
 }
 
 /// A struct literal names its declaration in the registry rather than by a variable, so an item building one asked for the declaration's entry, and is elaborated again where the entry came out another way.

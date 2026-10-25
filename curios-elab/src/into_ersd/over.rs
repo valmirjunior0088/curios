@@ -96,6 +96,11 @@ impl<'a> ErasedOver<'a> {
                 self.mark(place.item(), &mut frontier);
             }
         }
+        // An item held where the baseline held another or none, the baseline's own moved there: visited, so its form is kept at the place the module holds it at, every form the baseline held where the module holds another being taken out.
+        if let Some(changes) = &self.changes {
+            self.visited
+                .extend(changes.inserted.iter().chain(&changes.replaced).copied());
+        }
         if self.changes.is_none() {
             for place in module.items.places() {
                 let names = module.items.names(place);
