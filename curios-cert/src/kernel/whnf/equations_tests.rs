@@ -122,6 +122,53 @@ fn a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under() {
     );
 }
 
+/// A quotient whose only local is the proof of its bound names a local, and its reduct lives as such a term's does: an equation answers it inside its arm alone. A fold reads no proof, so `6 / 2` under the proof `p` folds to `3` as it does under any proof, and only the free-variable walk, which hands the proof of a bound out beside the operands (`Intrinsic::for_each_operand`), says the term is not local-free. Counted local-free, it would take the closed machine, file its reduct in the tables that live the declaration and record no equation, so the arm's `0` would never be its answer.
+///
+/// The quotient is reduced before the arm, inside it and after it, as `a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under` reduces its open term, and the uncached kernel agrees on all three.
+#[test]
+fn a_quotient_naming_a_local_only_in_its_bound_is_refined_within_its_arm_alone() {
+    let sequence = |kernel: &mut Kernel| {
+        let bound = binder(1, "bound");
+        let p = binder(2, "p");
+        kernel.assume(&bound, &Term::prop());
+        kernel.assume(&p, &Term::free_var(&bound));
+        let quotient = Term::intrinsic(Intrinsic::NatDiv {
+            dividend: nat(6),
+            divisor: nat(2),
+            non_zero: Term::free_var(&p),
+        });
+
+        let before = kernel.reduce_forced(quotient.clone()).expect("reduces");
+        let inside = kernel.scoped(|kernel| {
+            kernel
+                .refine(quotient.clone(), nat(0))
+                .expect("the equation records");
+            kernel.reduce_forced(quotient.clone()).expect("reduces")
+        });
+        let after = kernel.reduce_forced(quotient).expect("reduces");
+
+        [before, inside, after]
+    };
+
+    let mut cached = kernel();
+    let [before, inside, after] = sequence(&mut cached);
+
+    assert_eq!(before, nat(3), "a fold reads no proof");
+    assert_eq!(
+        inside,
+        nat(0),
+        "the proof's local makes the quotient a term an equation answers"
+    );
+    assert_eq!(after, before, "and its answer does not outlive the arm");
+
+    let mut uncached = Kernel::uncached(1_000_000, SYNTAX);
+    assert_eq!(
+        sequence(&mut uncached),
+        [before, inside, after],
+        "the memos changed no reduct on any side of the arm"
+    );
+}
+
 /// A local-bearing term is remembered for as long as the equations in force stand: the second reduction within a declaration spends nothing, exactly as a closed term's does. Without it, the web of definitions an index inversion forces — each naming the one before it twice, a local in every one — would be re-derived `2^n` times.
 #[test]
 fn a_local_bearing_reduct_is_a_free_hit_within_its_span() {
