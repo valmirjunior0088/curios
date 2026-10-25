@@ -845,6 +845,16 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
         "#,
             "Nat",
         ),
+        // A proof's region, which is a proposition: nothing is sequenced into a proof.
+        (
+            r#"
+        use /std/{Io};
+        use /std/Bool/{True, Holds};
+        let _sequenced: Holds(true) = (let _ = Io/pure(1)!; True/qed());
+        /std/Io/pure(())
+        "#,
+            "True",
+        ),
     ] {
         let error = typecheck(source).expect_err("a non-monadic region must refuse");
         assert!(

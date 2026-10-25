@@ -305,6 +305,29 @@ fn a_test_body_is_checked_against_the_description_type() {
     assert!(error.contains("Test"), "unexpected error: {error}");
 }
 
+// A test program is judged by the kernel as any program is, the tests its synthesized tail schedules with it, and a build holds no test to judge. The body is one the elaborator admits and the kernel refuses — a bound filled through a recursive member's own body, which the kernel holds standing for nothing — so the refusal is the kernel's; once the elaborator refuses that body itself, the fixture is restated over another term the kernel alone refuses.
+#[test]
+fn a_test_program_is_judged_by_the_kernel_and_a_build_holds_none_of_its_tests() {
+    let source = r#"
+        use /std/{Nat, List, Test};
+        test kernel_judged =
+            let r(n: Nat) -> Nat =
+                match n
+                | 0 => 0
+                | _ + 1 => List/get([1, 2, 3], r(0))
+                end;
+            Test/assert(r(2) == 1);
+        /std/print("built\n")
+        "#;
+
+    let report = tests_error(source);
+    assert!(
+        report.contains("the kernel refused /kernel_judged"),
+        "{report}"
+    );
+    assert_eq!(run(source), b"built\n");
+}
+
 #[test]
 fn a_test_body_sequences_assertions_and_lifted_io() {
     assert_eq!(

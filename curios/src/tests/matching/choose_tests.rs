@@ -1,6 +1,6 @@
-//! `choose`: arm order, bind arms, and the fallthrough a nested bind shares.
+//! `choose`: arm order, bind arms, the fallthrough a nested bind shares, and what a ladder's rest learns of the arms before it.
 
-use crate::tests::run;
+use crate::tests::{error, run};
 
 // A condition arm followed by a refutable bind arm parses as `Choose`, and lowering the bind arm does not route through the headed-match dependent-motive/default gate.
 #[test]
@@ -112,4 +112,36 @@ fn a_nested_bind_arms_rest_is_typed_at_the_ladders_type() {
         "#;
 
     assert_eq!(run(source), b"-7");
+}
+
+// What a ladder's rest learns is what the nested match it lowers to states: a condition arm's rest is the `false` arm of a match on the condition, so the condition's failure is a fact there, and a bind arm's rest is a `_` row, which learns nothing of the value the pattern missed.
+#[test]
+fn a_ladders_rest_learns_a_conditions_failure_and_nothing_of_a_missed_pattern() {
+    let condition = r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+        let learned(b: Bool) -> Nat =
+            choose
+            | b => 1
+            | _ => (let _: Holds(Bool/not(b)) = True/qed(); 0)
+            end;
+        /std/print(Nat/to_str(learned(false)))
+        "#;
+    assert_eq!(run(condition), b"0");
+
+    let bind = r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+        let unlearned(b: Bool) -> Nat =
+            choose
+            | true = b => 1
+            | _ => (let _: Holds(Bool/not(b)) = True/qed(); 0)
+            end;
+        /std/print(Nat/to_str(unlearned(false)))
+        "#;
+    let report = error(bind);
+    assert!(
+        report.contains("type mismatch\n  inferred: True\n  expected: Holds(Bool/xor(b, true))"),
+        "{report}"
+    );
 }

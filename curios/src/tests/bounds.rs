@@ -305,6 +305,12 @@ const ROWS: &[Row] = &[
         "Int",
         "match n > +20 | true => match proved(@False) end | false => +0 end",
     ),
+    // A ladder's default under every condition that failed, as the nested matches it lowers to state them: trichotomy leaves it no case.
+    body(
+        "a: Nat, b: Nat",
+        "Nat",
+        "choose | a < b => 1 | b < a => 2 | a == b => 3 | _ => match proved(@False) end end",
+    ),
     // A range check from zero over a local definition, `Str`'s shape: the check folds to its upper bound, which is still proved over the check the arm recorded.
     body(
         "c: Byte, q: Holds(Nat/in_range(Byte/to_nat(c), 0x80, 0xBF))",
@@ -656,6 +662,12 @@ const CONTROLS: &[Row] = &[
         "x: Nat, p: Holds(x * 2 <= 3), q: Holds(3 <= x * 2)",
         "Nat",
         "match proved(@False) end",
+    ),
+    // A ladder's default whose failed conditions leave it a case, `a == b`.
+    body(
+        "a: Nat, b: Nat",
+        "Nat",
+        "choose | a < b => 1 | b < a => 2 | _ => match proved(@False) end end",
     ),
     // A product of three facts.
     claim("x: Nat, p: Holds(x * x * x <= 7)", "Holds(x <= 1)"),

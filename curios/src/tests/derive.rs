@@ -297,6 +297,60 @@ fn the_standard_library_derives_option_result_and_order() {
 
 // --- Refusals, each at the declaration and naming what to write instead. ---
 
+// A derived body is a term judged as an authored one is, its termination included: over a recursive family it reaches its own entry, as the body written out does, and a proof that reads either is refused, so no derivation is a recursion graded total that a written one is not.
+#[test]
+fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is() {
+    let derived = r#"
+        use /std/{Nat};
+        use /std/ops/{Eql};
+        use /std/Bool/{False, Holds};
+        induct Tree: Type | leaf(Nat) | node(Tree, Tree) end
+        satisfy Eql(Tree) { .. }
+        let _apart(h: Holds(Tree/leaf(1) == Tree/leaf(2))) -> False = h;
+        /std/print("")
+        "#;
+    let written = r#"
+        use /std/{Nat, Bool};
+        use /std/ops/{Eql};
+        use /std/Bool/{False, Holds};
+        induct Tree: Type | leaf(Nat) | node(Tree, Tree) end
+        satisfy Eql(Tree) {
+            eql(a, b) = match a
+                | leaf(x) => match b | leaf(y) => x == y | _ => false end
+                | node(l, r) => match b | node(m, s) => Eql/eql(l, m) && Eql/eql(r, s) | _ => false end
+                end,
+            neq(a, b) = Bool/not(Eql/eql(a, b)),
+        }
+        let _apart(h: Holds(Tree/leaf(1) == Tree/leaf(2))) -> False = h;
+        /std/print("")
+        "#;
+
+    for source in [derived, written] {
+        let report = error(source);
+        assert!(
+            report.contains("a proof in '_apart' is a proof position but reaches '/witness@/std/ops/Eql(/Tree)', which is not known to terminate"),
+            "{report}"
+        );
+    }
+}
+
+// A proposition is no key: every derivable concept is over a `Type`, so the signature is refused before a body is written, and no derived body takes a proof apart into data.
+#[test]
+fn a_proposition_is_no_key_of_a_derived_witness() {
+    let source = r#"
+        use /std/ops/{Eql};
+        induct Two: Prop | a() | b() end
+        satisfy Eql(Two) { .. }
+        /std/print("")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("type mismatch\n  inferred: Prop\n  expected: Type"),
+        "{report}"
+    );
+}
+
 #[test]
 fn an_ineligible_key_is_refused_by_its_shape() {
     let concept = r#"

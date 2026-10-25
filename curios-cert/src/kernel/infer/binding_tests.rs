@@ -426,6 +426,54 @@ fn a_member_stands_for_its_group_in_the_groups_tail() {
     assert_eq!(whnf(&mut kernel, inferred).ok(), Some(nat_type()));
 }
 
+/// And a member stands for nothing in its group's own bodies: there `countdown(3) == 0` is a `Bool` that never arrives, so a type stated over it in the body is stuck where the same type in the tail is the one it reduces to. A value a body reads of its own member is no fact the kernel holds, whoever wrote the term that reads it.
+///
+/// Mutation-checked: with the bodies checked over members bound to their folded selections, as the tail's are, `countdown(3)` computes in the body and its `let` is accepted.
+#[test]
+fn a_member_stands_for_nothing_in_its_groups_bodies() {
+    let mut kernel = kernel();
+    let countdown = binder(0, "countdown");
+    let n = binder(1, "n");
+    let motive = binder(2, "m");
+    let pred = binder(3, "pred");
+    let hypothesis = binder(4, "ih");
+    let y = binder(5, "y");
+
+    let arrives = Term::intrinsic(Intrinsic::NatEql(
+        Term::apply(Term::free_var(&countdown), [nat(3)]),
+        nat(0),
+    ));
+    let signature = Term::func_type([(n, nat_type())], nat_type());
+    // (n) => match n | 0 => 0 | pred + 1 => let y : family(countdown(3) == 0) = 7; countdown(pred) end
+    let body = Term::func(
+        [(n, nat_type())],
+        Term::nat_match(
+            Term::free_var(&n),
+            Some(&motive),
+            nat_type(),
+            nat(0),
+            &pred,
+            &hypothesis,
+            Term::let_(
+                &y,
+                family(arrives),
+                nat(7),
+                Term::apply(Term::free_var(&countdown), [Term::free_var(&pred)]),
+            ),
+        ),
+    );
+    let term = Term::rec(
+        [(countdown, signature, body)],
+        Term::apply(Term::free_var(&countdown), [nat(3)]),
+    );
+
+    let inferred = infer(&mut kernel, &term);
+    assert!(
+        matches!(inferred, Err(Error::Mismatch { .. })),
+        "{inferred:?}"
+    );
+}
+
 /// A position in a group's tail that reaches the group says whether the group descends, as one over a `let`-bound group does: the type stated over `stuck` holds the group once it is read by value.
 ///
 /// Mutation-checked: with a member bound as enclosing no such group, the type over `stuck` is recorded as reaching none.

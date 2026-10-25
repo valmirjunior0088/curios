@@ -1,4 +1,4 @@
-//! Resolving a goal through a superclass edge of a `use` binder in scope, and an edge's scope over the fields of its own concept.
+//! Resolving a goal through a superclass edge of a `use` binder in scope, an edge's scope over the fields of its own concept, and a literal's laws over the edge it writes.
 
 use crate::tests::{error, run};
 
@@ -121,4 +121,22 @@ fn a_superclass_edge_is_reached_by_no_label() {
         "#;
 
     assert_eq!(run(declared), b"2");
+}
+
+// A literal's law is stated over the superclass slot it writes, a hidden member of the value like any other: a `Key(Nat)` written over an encoding that sends every key to one string cannot borrow the law the registered encoding proves, which is what `/std/Map` would otherwise merge two keys under.
+#[test]
+fn a_literals_law_is_stated_over_the_superclass_it_writes() {
+    let source = r#"
+        use /std/{Nat, Bytes, Hash};
+        use /std/Map/{Key};
+        let flat: Hash(Nat) = Hash { hash(n) = x[] };
+        let _forged: Key(Nat) = Key { use flat, use _, injective = Hash/nat/injective, monotone = Hash/nat/monotone };
+        /std/print("")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("expected: (a: Nat, b: Nat, same: /std/Eq(@Bytes)(x[], x[])) -> /std/Eq(@Nat)(a, b)"),
+        "{report}"
+    );
 }

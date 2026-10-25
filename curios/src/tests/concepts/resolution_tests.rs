@@ -418,3 +418,34 @@ fn an_implicit_parameter_at_a_concept_nothing_mentions_is_refused_where_it_is_de
 
     assert_eq!(run(determined), b"false");
 }
+
+// An operator is the projection of the witness its operands resolve, the carrier's table entry only where no premise answers first: under a local `use Eql(Nat)`, `x == x` is the premise's comparison, which no reduction decides, and a guard on it is no fact the bound search reads, since the premise's `eql` need not be `Nat`'s.
+#[test]
+fn an_operator_under_a_local_premise_decides_nothing_the_carriers_witness_would() {
+    let reduced = r#"
+        use /std/{Nat};
+        use /std/ops/{Eql};
+        use /std/Bool/{True, Holds};
+        let _under(use Eql(Nat), x: Nat) -> Holds(x == x) = True/qed();
+        /std/print("")
+        "#;
+    let report = error(reduced);
+    assert!(
+        report.contains("type mismatch\n  inferred: True\n  expected: Holds(x == x)"),
+        "{report}"
+    );
+
+    let guarded = r#"
+        use /std/{Nat, List};
+        use /std/ops/{Eql};
+        let _under(use Eql(Nat), x: Nat, y: Nat) -> Nat =
+            match x == y | true => List/get([1], y - x) | false => 0 end;
+        /std/print("")
+        "#;
+    let report = error(guarded);
+    assert!(
+        report.contains("nothing discharged /std/Bool/Holds(y - x < List/len(@Nat, [1]))")
+            && report.contains("not read: a guard, x == y"),
+        "{report}"
+    );
+}
