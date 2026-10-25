@@ -2,7 +2,7 @@
 -- Small constants keep every intermediate within Curios's i31 runtime integers.
 -- N is read from the command line as the Rust spelling reads it.
 -- Pure integer ALU + a tail-recursive counted loop. Output matches the Rust spelling.
-use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt};
 
 let loop(k: Nat, x: Nat) -> Nat =
     match k | 0 => x | kp + 1; _ => loop(kp, 75 * x % 65537) end;
@@ -12,6 +12,7 @@ let execute() -> Try(Io, Str, {}) =
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
     let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
-    Monad/lift(Fmt/print("%\n")(loop(n, 1)));
+    let _ = Fmt/print("%\n")(loop(n, 1))!;
+    Try/pure(());
 
 execute()

@@ -2,7 +2,7 @@
 -- The digit-parsing rungs never leave the ASCII arm of `/std/Str/fold`, so the two `Scan` obligations — the scan state returned by `/std/Str/step` and the argument reconstruction in the `cont` arm — execute zero times there. This fixture walks 1-, 2-, 3- and 4-byte characters so those obligations run once per continuation byte and their shares are measurable rather than absent.
 -- The text is derived from the command line rather than written as a literal, so closed-term evaluation cannot fold the walk away.
 -- N is read from the command line so the loop survives constant folding; output stays bounded well inside i31.
-use /std/{Str, Char, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
+use /std/{Str, Char, Nat, List, Option, Result, Try, Io, Process, Fmt};
 
 let loop(k: Nat, text: Str, acc: Nat) -> Nat =
     match k
@@ -18,6 +18,7 @@ let execute() -> Try(Io, Str, {}) =
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
     let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
-    Monad/lift(Fmt/print("%\n")(total(n)));
+    let _ = Fmt/print("%\n")(total(n))!;
+    Try/pure(());
 
 execute()

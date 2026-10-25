@@ -1,7 +1,7 @@
 -- The control for `parse_digits.crs`: the same digit string decoded the same number of times, walked by index with the accumulator threaded by hand. No `Str/fold`, so no closure invoked per character, and no `!` in the walk, so no `/std/Monad/bind` and no transient `Option` per character.
 -- **It is a ceiling, not an equivalent.** Indexing bytes also skips the UTF-8 scanning `Str/fold` performs per codepoint, which is work the abstraction is paying for rather than overhead it adds -- so the gap bounds what removing the closure and the bind could recover, and does not estimate it. Splitting the two apart wants a third program that folds with an explicit match in place of `!`, keeping the scan and dropping only the bind.
 -- N is read from the command line so the loop survives constant folding; the output matches `parse_digits.crs` exactly for the same input.
-use /std/{Str, Nat, Bytes, Byte, List, Option, Result, Try, Io, Process, Fmt, Monad};
+use /std/{Str, Nat, Bytes, Byte, List, Option, Result, Try, Io, Process, Fmt};
 
 let walk(b: Bytes, i: Nat, remaining: Nat, acc: Nat) -> Option(Nat) =
     match remaining
@@ -45,6 +45,7 @@ let execute() -> Try(Io, Str, {}) =
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
     let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
-    Monad/lift(Fmt/print("%\n")(total(n)));
+    let _ = Fmt/print("%\n")(total(n))!;
+    Try/pure(());
 
 execute()

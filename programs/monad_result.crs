@@ -1,7 +1,7 @@
 -- One of four programs running the *same* N-step monadic loop in a different monad, to find whether the cost `state_monad.crs` measures is a fact about `bind` or about the carrier `bind` builds. `Result(E, A)` is plain data,
 -- so its `bind` is a `match` over data and allocates no closure — this is the control the function-carrier monads are read against.
 -- N is read from the command line so the loop survives constant folding; output is 3N.
-use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt};
 
 let loop(n: Nat, acc: Nat) -> Result(Str, Nat) =
     match n
@@ -19,6 +19,7 @@ let execute() -> Try(Io, Str, {}) =
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
     let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
-    Monad/lift(Fmt/print("%\n")(total(n)));
+    let _ = Fmt/print("%\n")(total(n))!;
+    Try/pure(());
 
 execute()

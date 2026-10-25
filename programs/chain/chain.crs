@@ -6,7 +6,7 @@
 -- free to walk the chain either way; the reverse-accumulate spelling is used
 -- everywhere because it is the one that is tail-recursive in every language.
 -- K is read from the command line; the seed is derived from it so nothing is a closed term.
-use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt, Monad};
+use /std/{Str, Nat, List, Option, Result, Try, Io, Process, Fmt};
 
 induct Chain: Type
 | nil()
@@ -39,6 +39,7 @@ let execute() -> Try(Io, Str, {}) =
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
     let k = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
     let chain = rounds(k, build(cells, (k + 1) % 65537, Chain/nil()));
-    Monad/lift(Fmt/print("%\n")(total(chain, 0)));
+    let _ = Fmt/print("%\n")(total(chain, 0))!;
+    Try/pure(());
 
 execute()
