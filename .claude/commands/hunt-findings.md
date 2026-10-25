@@ -72,9 +72,9 @@ This is one gatherer, and no workflow or team: the compiler answers every unit w
 
 Each hunter works in a worktree of its own, `.claude/worktrees/hunter-<n>`, which the checkout ignores, so its status, its searches and its builds never meet one. The gatherer keeps every worktree; a hunter only steps in. A worktree is scratch the gatherer owns and never the user's work, so resetting one discards nothing a unit did not carry.
 
-- **Before spawning.** Read `df`: a worktree's `target/` grows as the main checkout's does. A worktree that does not exist is added detached at the commit of the tree, `git worktree add --detach .claude/worktrees/hunter-<n> HEAD`, so no branch is made; one kept from an earlier run is reset if it is not clean and brought to that commit, `git -C <worktree> checkout --detach <commit>`. Then build each worktree's board, `cargo build --manifest-path <worktree>/Cargo.toml --package xboard`, one worktree at a time, so every hunter starts warm and no two builds share the machine.
-- **After a hunter's last report.** Reset its worktree, `git -C <worktree> checkout -- .` and `git -C <worktree> clean -fd`, once every unit it sent has been shown again in the main checkout.
-- **At the close.** Put the worktrees to the user with what `df` reads: kept warm, each has its `target/*/incremental` cleared and is brought to the tree's commit when the next run begins; removed, each goes with `git worktree remove --force <worktree>`, its `target/` with it.
+- **Before spawning.** Read `df`: a worktree's `target/` grows as the main checkout's does. A worktree that does not exist is added detached at the commit of the tree, `git worktree add --detach .claude/worktrees/hunter-<n> HEAD`, so no branch is made; one kept from an earlier run is reset to that commit, `git -C <worktree> reset --hard <commit>` and `git -C <worktree> clean -fd`. Then build each worktree's board, `cargo build --manifest-path <worktree>/Cargo.toml --package xboard`, one worktree at a time, so every hunter starts warm and no two builds share the machine.
+- **After a hunter's last report.** Reset its worktree to the commit it hunted, `git -C <worktree> reset --hard <commit>` and `git -C <worktree> clean -fd`, once every unit it sent has been shown again in the main checkout.
+- **At the close.** Put the worktrees to the user with what `df` reads: kept warm, each has its `target/*/incremental` cleared and is reset to the tree's commit when the next run begins; removed, each goes with `git worktree remove --force <worktree>`, its `target/` with it.
 
 ## Close
 
