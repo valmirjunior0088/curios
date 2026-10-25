@@ -24,22 +24,28 @@ judge_xboard() {
     esac
 }
 
-# Cargo in a hunter's worktree alone, named by the worktree's manifest, so nothing a hunter builds or runs is the main checkout's: that checkout moves under its own commits while a hunt runs.
-judge_cargo() {
-    if [[ ${2-} == --manifest-path ]]; then
-        judge_worktree_cargo "$@"
-    else
-        refuse "cargo $*" "cargo runs in a hunter's worktree, named by its manifest: cargo <build|test|run> --manifest-path <worktree>/Cargo.toml"
+# The directory a subshell entered, empty outside one: `cd` is judged only as the first step of `(cd <worktree> && …)`, so no directory outlives the command it was entered for.
+entered=''
+entered_stack=()
+
+judge_cd() {
+    local within
+    if ((${#entered_stack[@]} == 0)); then
+        refuse "cd $*" 'a directory is entered only inside a subshell, `(cd <worktree> && …)`, so it does not outlive the command'
     fi
+    if [[ $# -ne 1 || $1 != /* || ! -d $1 ]] || ! within=$(within_worktree "$1") || [[ -n $within ]]; then
+        refuse "cd $*" "cd enters the root of a hunter's worktree, by its absolute path, and nothing else"
+    fi
+    entered=$(realpath -m -- "$1")
 }
 
-# A build or a test in a hunter's worktree, or the compiler and the board run there, with the words that follow judged as the program's own. An option that reaches configuration, the compiler's flags or another target directory is refused: each can run a program, or write outside the worktree.
-judge_worktree_cargo() {
-    local subcommand=${1-} within
-    if ! within=$(within_worktree "${3-}") || [[ $within != Cargo.toml && $within != */Cargo.toml ]]; then
-        refuse "cargo $*" "the manifest path names a Cargo.toml inside a hunter's worktree"
+# Cargo in a hunter's worktree alone, entered by `(cd <worktree> && cargo …)`, so nothing a hunter builds or runs is the main checkout's: that checkout moves under its own commits while a hunt runs. A build, a test, or the compiler and the board run there, with the words that follow judged as the program's own. An option that reaches configuration, the compiler's flags or another target directory is refused: each can run a program, or write outside the worktree.
+judge_cargo() {
+    if [[ -z $entered ]]; then
+        refuse "cargo $*" "cargo runs in a hunter's worktree, entered by a subshell: (cd <worktree> && cargo …)"
     fi
-    shift 3
+    local subcommand=${1-}
+    shift || true
     local argument
     for argument in "$@"; do
         case $argument in
@@ -48,6 +54,7 @@ judge_worktree_cargo() {
     done
     case $subcommand in
         build | test) ;;
+        xboard) judge_xboard "$@" ;;
         run)
             if [[ ${1-} == --release ]]; then
                 shift
@@ -64,16 +71,8 @@ judge_worktree_cargo() {
     esac
 }
 
-# Readings of the repository, and a revert of a hunter's worktree named by `-C` at its root. Any other leading option is refused since `-c` reaches configuration, where an alias runs a shell; `--output` is the file every reading can write, `-O` opens an editor, and `clean -x` would delete the worktree's build with the rest.
+# Readings of the repository, and a revert of a hunter's worktree inside the subshell that entered it. A leading option is refused since `-c` and `-C` reach configuration, where an alias runs a shell; `--output` is the file every reading can write, `-O` opens an editor, and `clean -x` would delete the worktree's build with the rest.
 judge_git() {
-    local worktree=0 within
-    if [[ ${1-} == -C ]]; then
-        if ! within=$(within_worktree "${2-}") || [[ -n $within ]]; then
-            refuse "git $*" "git -C names the root of a hunter's worktree"
-        fi
-        worktree=1
-        shift 2
-    fi
     local subcommand=${1-}
     if [[ $subcommand == --no-pager ]]; then
         shift
@@ -82,8 +81,8 @@ judge_git() {
     case $subcommand in
         log | show | blame | diff | status | grep | rev-parse | rev-list | ls-files | shortlog | describe) ;;
         restore | clean)
-            if ((!worktree)); then
-                refuse "git $*" 'only a worktree is reverted, named by git -C at its root'
+            if [[ -z $entered ]]; then
+                refuse "git $*" 'only a worktree is reverted, entered by a subshell: (cd <worktree> && git restore …)'
             fi
             ;;
         *) refuse "git $*" 'not a reading of the repository, or a revert of a worktree' ;;
@@ -112,6 +111,7 @@ judge() {
             judge "$@"
             ;;
         time) judge "$@" ;;
+        cd) judge_cd "$@" ;;
         cargo) judge_cargo "$@" ;;
         git) judge_git "$@" ;;
         rg)
@@ -177,7 +177,7 @@ while IFS= read -r line || [[ -n $line ]]; do
     done
 done <<<"$command"
 
-# The scan: quotes are resolved into words, a pipe, a list, a subshell or a brace group ends a command, and what the shell would evaluate itself — a substitution, a parameter, a background `&`, a redirection past a descriptor merge or /dev/null — is refused rather than guessed at.
+# The scan: quotes are resolved into words, a pipe, a list, a subshell or a brace group ends a command, a subshell's `cd` lasts until it closes, and what the shell would evaluate itself — a substitution, a parameter, a background `&`, a redirection past a descriptor merge or /dev/null — is refused rather than guessed at.
 words=()
 word=''
 in_word=0
@@ -254,7 +254,19 @@ while ((i < length)); do
             fi
             ;;
         ' ' | $'\t') end_word ;;
-        $'\n' | ';' | '|' | '(' | ')' | '{' | '}') end_command ;;
+        $'\n' | ';' | '|' | '{' | '}') end_command ;;
+        '(')
+            end_command
+            entered_stack+=("$entered")
+            ;;
+        ')')
+            end_command
+            if ((${#entered_stack[@]} == 0)); then
+                refuse "$text" 'a subshell closed that was never opened'
+            fi
+            entered=${entered_stack[-1]}
+            unset 'entered_stack[-1]'
+            ;;
         '<') ;;
         '`' | '$') refuse "$text" 'a substitution or a parameter the shell would evaluate' ;;
         '&')

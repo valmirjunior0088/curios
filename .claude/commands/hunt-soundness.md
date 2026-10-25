@@ -31,7 +31,7 @@ An attack on a premise starts from a seed, as **Where a suspicion comes from** o
 - **What landed last** in the checker crates — `curios-elab`, `curios-cert` and the layer both judge through — each change read whole.
 - **Two checkers that must agree.** `cargo xboard probe` prints what each made of a program, and a program one admits and the other refuses is a route into whichever is wrong.
 - **A check waived.** Every `#[allow]` and `#[expect]` in the checker crates and the layer both judge through is a place where a compiler's own check was argued away by hand, and the reason it states is a premise.
-- **A rule no program reaches.** It has no probe; its witness is a module built by hand, the `fn() -> (Module, Term)` a ticket's `Proof::Module` names, written as the tickets of its part write theirs. A hunter writes it as a ticket file in its worktree and puts it there, `cargo run --manifest-path <worktree>/Cargo.toml --package xboard -- report`.
+- **A rule no program reaches.** It has no probe; its witness is a module built by hand, the `fn() -> (Module, Term)` a ticket's `Proof::Module` names, written as the tickets of its part write theirs. A hunter writes it as a ticket file in its worktree and puts it there, `(cd <worktree> && cargo xboard report)`.
 
 ## Probing
 
@@ -52,7 +52,7 @@ f(2, True/qed())
 CRS
 ```
 
-What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects. A hunter asks it of its worktree's board, `cargo run --manifest-path <worktree>/Cargo.toml --package xboard -- probe -`.
+What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects. A hunter asks it of its worktree's board, the program inside the subshell that enters it: `(cd <worktree> && cargo xboard probe - <<'CRS'`, the program, `CRS`, then `)`.
 
 ## Attacking a rule
 
