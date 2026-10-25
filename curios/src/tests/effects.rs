@@ -467,6 +467,51 @@ fn an_io_tail_lifts_into_a_region_with_a_declared_edge() {
     assert_eq!(run(source), b"tp");
 }
 
+/// A format print's result is computed from its format string, which the oracle reads in where it is a literal: the print ends a `Try` region and sequences in one with nothing spelled, as an `Io` action whose result is written out does.
+#[test]
+fn a_format_print_lifts_into_a_try_region() {
+    let source = r#"
+        use /std/{Str, Try, Io, Fmt};
+        let first() -> Try(Io, Str, {}) =
+            let _ = Fmt/print("a %\n")(1)!;
+            Fmt/print("b %\n")(2);
+        first()
+        "#;
+
+    assert_eq!(run(source), b"a 1\nb 2\n");
+}
+
+/// A result computed from a settled argument is read for any declaration, not only a format: `true` is a literal, so `Shape(true)` reduces to `Io({})` and the tail lifts. A numeral is a literal no type has realized while the action is still unelaborated, so a result computed from one is not read, and the explicit lift is how it is embedded.
+#[test]
+fn a_result_computed_from_a_settled_argument_is_read() {
+    let source = |argument: &str, tail: &str| {
+        fill!(
+            r#"
+            use /std/{Str, Nat, Bool, Try, Io, Monad, print};
+            let Shape(b: ${argument}) -> Type =
+                match b | ${first} => Io({}) | ${rest} => Nat end;
+            let say(b: ${argument}) -> Shape(b) =
+                match b | ${first} => print("said\n") | ${rest} => 0 end;
+            let execute() -> Try(Io, Str, {}) =
+                ${tail};
+            execute()
+            "#,
+            argument = argument,
+            first = if argument == "Bool" { "true" } else { "0" },
+            rest = if argument == "Bool" { "false" } else { "_ + 1" },
+            tail = tail,
+        )
+    };
+
+    assert_eq!(run(&source("Bool", "say(true)")), b"said\n");
+    assert_eq!(run(&source("Nat", "Monad/lift(say(0))")), b"said\n");
+    let error = typecheck(&source("Nat", "say(0)")).expect_err("a numeral is not read");
+    assert!(
+        error.contains("an action of one monad where another is expected"),
+        "expected the lift report, got: {error}"
+    );
+}
+
 /// A tail with no declared edge reports the missing embedding as a `!` does, rather than a bare type mismatch: both heads are monads, so the report names the edge to declare.
 #[test]
 fn a_tail_with_no_edge_reports_the_lift_witness() {

@@ -883,7 +883,7 @@ pub(crate) fn region_flex(context: &Context, whnf: &Term) -> bool {
     }
 }
 
-/// The action's monad head, read without elaborating: peel the explicit application spine to a named head, read the head's *declared* type from the assumption store, and key the syntactic result behind its telescope. `None` on anything unreadable — an unnamed or computed head, a spine whose explicit-argument count differs from the declared telescope's, an alias-headed or computed result — so the oracle never wraps on a guess: reads only, no elaboration, no reduction, no instantiation, and a wrong abstention costs a message, never a solution.
+/// The action's monad head, read without elaborating: peel the explicit application spine to a named head, read the head's *declared* type from the assumption store, and key the syntactic result behind its telescope. `None` on anything unreadable — an unnamed or computed head, a spine whose explicit-argument count differs from the declared telescope's, a result computed from an argument that is not [`settled`] — so the oracle never wraps on a guess: reads only, no elaboration, and a wrong abstention costs a message, never a solution.
 fn action_result_shape(context: &mut Context, action: &Term) -> Result<Option<MonadShape>, Error> {
     let mut head = action;
     let mut explicit: Vec<Term> = Vec::new();
@@ -916,13 +916,13 @@ fn action_result_shape(context: &mut Context, action: &Term) -> Result<Option<Mo
     }
 }
 
-/// The [`MonadShape`] of `declared`'s result when the explicit arguments `args` saturate it exactly; `None` otherwise. The telescope is opened with fresh frees on the way to the result, so a *dependent* result — `Io(Cell(T))`, `Io(Future(A))` — keys on its head like any other: the head is rigid whatever the binder, and a result actually *headed* by a binder (`M(Nat)` under `(M: (Type) -> Type, …)`), or carrying one in a *context* argument (`Try(M, E, A)` under the same telescope), keys that binder by the argument that fixes it (see [`binder_key`]), and one no argument fixes keys on nothing there and is compatible with any region. The result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a [`Probe`]: a type with no reading abstains, and a wrong abstention still costs a message, never a solution.
+/// The [`MonadShape`] of `declared`'s result when the explicit arguments `args` saturate it exactly; `None` otherwise. The telescope is opened on the way to the result at each explicit argument that is [`settled`] and with a fresh free everywhere else, so a result computed from a literal argument reduces to the call's own, and a *dependent* result — `Io(Cell(T))`, `Io(Future(A))` — keys on its head like any other: the head is rigid whatever the binder, and a result actually *headed* by a binder (`M(Nat)` under `(M: (Type) -> Type, …)`), or carrying one in a *context* argument (`Try(M, E, A)` under the same telescope), keys that binder by the argument that fixes it (see [`binder_key`]), and one no argument fixes keys on nothing there and is compatible with any region. The result takes one weak-head reduction before keying, because a declared type keeps its nominal spelling (`Io({})` is stored as the `/sys/Io/Io` application, aliases as their own names); the reduction is the same read `resolve`'s `node_type` performs on assumption-derived types, and a [`Probe`]: a type with no reading abstains, and a wrong abstention still costs a message, never a solution.
 fn declared_result_shape(
     context: &mut Context,
     declared: &Term,
     args: &[Term],
 ) -> Result<Option<MonadShape>, Error> {
-    // The declared type is peeled arrow by arrow until the spine's arguments are spent, each arrow's binders opened with fresh frees: a concept method wrapper is curried — `(@S: Type, use w: Read(S)) -> (S, Nat) -> Io(Chunk)` — so its explicit binders sit behind an arrow of hidden ones. An arrow with more explicit binders than arguments remain is a partial application, which is a function and not an action, and abstains. A zero-argument action (`Io/yield`) has the carrier itself as its declared type.
+    // The declared type is peeled arrow by arrow until the spine's arguments are spent, each arrow's explicit binders opened at their arguments as far as those are settled: a concept method wrapper is curried — `(@S: Type, use w: Read(S)) -> (S, Nat) -> Io(Chunk)` — so its explicit binders sit behind an arrow of hidden ones. An arrow with more explicit binders than arguments remain is a partial application, which is a function and not an action, and abstains. A zero-argument action (`Io/yield`) has the carrier itself as its declared type.
     let Some(mut whnf) = reduce_with(context, declared).probed()? else {
         return Ok(None);
     };
@@ -937,13 +937,21 @@ fn declared_result_shape(
         if explicit_count > remaining.len() {
             return Ok(None);
         }
-        remaining = &remaining[explicit_count..];
+        let (here, after) = remaining.split_at(explicit_count);
+        remaining = after;
+        let mut here = here.iter();
         let mut cursor = func_type.telescope.cursor();
         while let Some((_, binder_type)) = cursor.entry() {
             let explicit = matches!(plicities.get(cursor.args().len()), Some(Plicity::Explicit));
-            let binder = cursor.advance_fresh(|hint| context.fresh(hint));
+            // A settled argument is read in, so a result computed from it — `Fmt/print`'s from its format string — reduces to what the call answers; any other stands as a fresh binder.
+            match explicit.then(|| here.next()).flatten() {
+                Some(arg) if settled(arg) => cursor.advance(arg.clone()),
+                _ => {
+                    cursor.advance_fresh(|hint| context.fresh(hint));
+                }
+            }
             if explicit {
-                explicit_binders.push((binder, binder_type));
+                explicit_binders.push(binder_type);
             }
         }
         let result = cursor.body().expect("a cursor past every entry");
@@ -999,16 +1007,25 @@ fn declared_result_shape(
     }))
 }
 
+/// Whether `arg`, read before it is elaborated, is already a term the reducer reads as it stands: no index loose, no local, no metavariable, no level one and no transient node — a literal, or a closed call written whole.
+fn settled(arg: &Term) -> bool {
+    arg.closed()
+        && !arg.has_local_free()
+        && !arg.has_metavar()
+        && !arg.has_universe_meta()
+        && !arg.has_transient()
+}
+
 /// The key `base`, a binder of the declared telescope, is fixed at by the explicit arguments: the first explicit parameter whose declared type applies `base` takes its argument's head, and one whose declared type is a nominal application with `base` in a context slot takes the key its argument's shape has there. `None` where no argument settles it.
 fn binder_key(
     context: &mut Context,
     base: &Free,
-    explicit_binders: &[(Free, Term)],
+    explicit_binders: &[Term],
     args: &[Term],
 ) -> Result<Option<HeadKey>, Error> {
     let is_base = |term: &Term| matches!(&**term, Subterm::Var(var) if var.as_free() == Some(base));
 
-    for ((_, parameter_type), arg) in explicit_binders.iter().zip(args) {
+    for (parameter_type, arg) in explicit_binders.iter().zip(args) {
         let Some(parameter) = reduce_with(context, parameter_type).probed()? else {
             return Ok(None);
         };
