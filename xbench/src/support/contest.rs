@@ -41,10 +41,10 @@ pub(crate) const WORKLOADS: &[Workload] = &[
         name: "lcg",
         title: "LCG",
         letter: "N",
-        size: 100_000_000,
+        size: 200_000_000,
         check: 8,
         answer: "9345",
-        anchor: "17662",
+        anchor: "55661",
     },
     Workload {
         name: "trees",
@@ -59,10 +59,10 @@ pub(crate) const WORKLOADS: &[Workload] = &[
         name: "chain",
         title: "chain",
         letter: "K",
-        size: 1600,
+        size: 4800,
         check: 8,
         answer: "819185",
-        anchor: "457407",
+        anchor: "378420",
     },
     Workload {
         name: "churn",
@@ -86,10 +86,10 @@ pub(crate) const WORKLOADS: &[Workload] = &[
         name: "spines",
         title: "spines",
         letter: "N",
-        size: 75_000,
+        size: 500_000,
         check: 8,
         answer: "28",
-        anchor: "675283",
+        anchor: "391724",
     },
 ];
 
