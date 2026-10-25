@@ -2,11 +2,13 @@
 
 use {
     super::test_support::*,
-    crate::{Baseline, Error, Globals, Kernel, Rechecked, complete, induct_alike, struct_alike},
+    crate::{
+        Baseline, Error, Globals, Kernel, Rechecked, Verdict, complete, induct_alike, struct_alike,
+    },
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Certification, Certified, Free, Global, Intrinsic, Item, ItemRun, Module, Nat, Places,
-        ReadTable, Reads, Term, Totality,
+        Certification, Certified, Definition, Free, Global, Intrinsic, Item, ItemRun, Level,
+        Module, Nat, Places, ReadTable, Reads, Term, Totality, UniverseParam,
     },
     curios_utilities::{Candidates, Digest, Facet, Member, Object, Qualifier, candidate_prefix},
     std::collections::{BTreeMap, BTreeSet},
@@ -209,6 +211,88 @@ fn a_walk_over_a_version_files_what_a_walk_over_every_declaration_files() {
         rechecked.certification,
         walked(&reading_module(nat(), |_| literal(7))).certification
     );
+}
+
+/// A declaration a recompile writes under a name a unit in scope declares is refused for the name over a baseline, as over every declaration, though the unit in scope is the one the baseline's walk read: `three` respelled as the environment's `shadowed`, the baseline's other declarations shared.
+///
+/// Mutation-checked: with a changed item never asked whether a unit in scope declares its name, the module is judged and `shadowed` refused where the walk writes it, twice.
+#[test]
+fn a_name_a_unit_in_scope_declares_written_over_a_baseline_is_refused_for_it() {
+    let environment = already_judged(&judged_environment());
+    let globals = environment.globals();
+    let baseline = versioned(written());
+    let certification = fixture_certified(&baseline, BUDGET, &globals, SYNTAX).certification;
+    let edited = replaced(
+        &baseline,
+        "three",
+        authored(&shadowed_name(), nat(), literal(3)),
+    );
+    let (places, now) = (Places::of(&baseline), Places::of(&edited));
+
+    let rechecked = super::verdicts_into(
+        &mut Kernel::new(BUDGET, SYNTAX),
+        &edited,
+        None,
+        &globals,
+        Some(super::Over {
+            baseline: Baseline {
+                module: &baseline,
+                places: &places,
+                certification: &certification,
+            },
+            places: &now,
+            candidates: None,
+        }),
+    );
+
+    assert!(
+        matches!(
+            rechecked.verdicts.as_slice(),
+            [Verdict { name: Some(name), error: Error::Redeclared(_) }] if *name == shadowed_name()
+        ),
+        "a name the environment declares was written over a baseline: {:?}",
+        rechecked.verdicts
+    );
+}
+
+/// A scheme's constraint strengthened under the same type and body reaches the declaration that instantiated it, as a walk over every declaration does: `A<u, v | u + 2 <= v>` in place of `u + 1 <= v`, beside `user<u, v | u + 1 <= v> : Type v = A<u, v>`, whose instance discharged the constraint `A` stated and not the one it states now.
+///
+/// Mutation-checked: with a signature read digested without its scheme's constraints, `user` is adopted and the walk refuses nothing.
+#[test]
+fn a_schemes_constraint_strengthened_reaches_the_declaration_that_instantiated_it() {
+    let (_, instance) = scheme_occurrences();
+    let baseline = versioned(universe_scheme_module(Some((scheme_context(), instance))));
+    let certification = walked(&baseline).certification;
+    let place = Places::of(&baseline)
+        .place(&global("A"))
+        .expect("the module declares the scheme")
+        .item();
+    let Item::Let(scheme) = &baseline.items[place] else {
+        panic!("the scheme is a definition");
+    };
+    let mut stronger = scheme_context();
+    stronger.constraints[0].lower = Level::param(UniverseParam(0))
+        .checked_add(2)
+        .expect("level admits the offset");
+    let edited = replaced(
+        &baseline,
+        "A",
+        Item::Let(Box::new(Definition {
+            universe_context: stronger,
+            ..(**scheme).clone()
+        })),
+    );
+
+    let whole = fixture_certified(&edited, BUDGET, &Globals::default(), SYNTAX);
+    let over = walked_over(&edited, &baseline, &certification);
+
+    assert!(
+        whole.verdicts.iter().any(|verdict| verdict.name == Some(global("user"))
+            && matches!(verdict.error, Error::UniverseInstance { .. })),
+        "the control stopped refusing: `user`'s instance does not discharge `u + 2 <= v`: {:?}",
+        whole.verdicts
+    );
+    assert_eq!(over.verdicts, whole.verdicts);
 }
 
 /// A declaration the walk does not visit is read once the walk has passed its place: `alias` respelled to name `five`, stored after it, finds it unbound, as a walk over every declaration does, though nothing `five` read moved and the walk adopts `five` without visiting it.

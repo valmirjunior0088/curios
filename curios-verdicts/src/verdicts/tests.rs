@@ -726,3 +726,104 @@ fn a_damaged_pack_is_taken_away_and_written_again() {
     );
     assert!(reused(&root), "and what it wrote is restored");
 }
+
+/// `base`'s `x` as `body` computes it.
+fn base_library(body: &str) -> String {
+    fill!(
+        "use /std/{Nat};\n\npub let x(n: Nat) -> Nat = ${body};\n",
+        body
+    )
+}
+
+/// Three packages, each declaring the one below it and nothing further: `mid`'s `g` calls `base`'s `x`, and `top` proves that `g(0)` is `1`, which unfolds both.
+fn chained(name: &str, body: &str) -> Temporary {
+    let root = temporary(name);
+    let manifest = |name: &str, below: Option<&str>| {
+        let dependency = below.map_or(String::new(), |below| {
+            fill!(
+                "\n[dependencies]\n${below} = { source = \"path\", path = \"../${below}\" }\n",
+                below
+            )
+        });
+
+        fill!(
+            "compiler = \"0.0.0\"\nname = \"${name}\"\n${dependency}",
+            name,
+            dependency
+        )
+    };
+
+    write(&root, "base/curios.toml", &manifest("base", None));
+    write(&root, "base/lib.crs", &base_library(body));
+    write(&root, "mid/curios.toml", &manifest("mid", Some("base")));
+    write(
+        &root,
+        "mid/lib.crs",
+        "use /std/{Nat};\nuse /base/{x};\n\npub let g(n: Nat) -> Nat = x(n);\n",
+    );
+    write(&root, "top/curios.toml", &manifest("top", Some("mid")));
+    write(
+        &root,
+        "top/lib.crs",
+        "use /std/{Eq};\nuse /mid/{g};\n\npub let p: Eq()(g(0), 1) = Eq/refl();\n",
+    );
+    write(&root, "exe.crs", "use /std/{Io};\n\nIo/pure(())\n");
+
+    root
+}
+
+/// What a build of `root`'s `top` through the store did to each unit, or what it was refused with.
+fn folded_chain(root: &Path) -> Result<Vec<String>, String> {
+    let verdicts = Verdicts::at(root.to_path_buf());
+    let governing = Governing::of(&root.join("top")).expect("a governed package");
+    let library = order(&governing).expect("a resolvable library");
+    let (entrypoint, loader, _source) =
+        Entrypoint::opened(&root.join("exe.crs")).expect("an openable entrypoint");
+
+    let mut events = Vec::new();
+    let compiled = Fold::new(1_000_000, &library, Some(&verdicts)).compile(
+        &entrypoint,
+        &loader,
+        |_| {},
+        |progress| match progress {
+            Progress::Compiling(prefix) => events.push(format!("compiling {}", prefix.join())),
+            Progress::Recompiling(prefix) => {
+                events.push(format!("recompiling {}", prefix.join()));
+            }
+            Progress::Reused(prefix) => events.push(format!("reused {}", prefix.join())),
+            _ => {}
+        },
+    );
+
+    compiled.map(|_| events).map_err(String::from)
+}
+
+/// A hit rests on every unit its unit could have read, the ones those could read among them. `base`'s `x` respelled to add two leaves `mid` stored as it was, `g` calling `x` by its signature alone; `top`, which declares `mid` and nothing of `base`, unfolded `x` through `g` to prove `g(0)` is `1`, so it is no hit, and is refused as a build with nothing stored refuses it.
+///
+/// Mutation-checked: with a unit's reach left without the units its own reach holds, `base` and `mid` are compiled again, `top` is reused, and the build admits `p` with `g(0)` at `2`.
+#[test]
+fn a_unit_reaching_an_edited_one_through_a_unit_stored_as_it_was_is_not_reused() {
+    let root = chained("chained", "n + 1");
+    folded_chain(&root).expect("the chain builds");
+    assert!(
+        folded_chain(&root)
+            .expect("the chain builds")
+            .contains(&"reused /top".to_string()),
+        "the control stopped holding: an unchanged chain is reused"
+    );
+
+    write(&root, "base/lib.crs", &base_library("n + 2"));
+
+    // Each refusal names the file it stands in, under a directory of its own.
+    let refused = |root: &Path| {
+        folded_chain(root)
+            .expect_err("`g(0)` is `2`")
+            .replace(&root.display().to_string(), "<root>")
+    };
+    let fresh = chained("chained-fresh", "n + 2");
+    assert_eq!(
+        refused(&root),
+        refused(&fresh),
+        "a build over the store answers what a build with nothing stored answers"
+    );
+}

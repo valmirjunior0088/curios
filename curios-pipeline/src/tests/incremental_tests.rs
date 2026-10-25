@@ -5,11 +5,15 @@
 use {
     super::test_support::{
         assert_modules_agree, assert_stored_alike, carried_variances, compile_modules,
-        keeps_lowered, mounted, read_from, recompile_after, recompile_modules, recompile_over,
+        keeps_lowered, mounted, read_from, recompile_after, recompile_modules,
+        recompile_over,
         restored, reuses_body, unit_after, unit_of, unused_binders, written, written_files,
     },
-    curios_core::{Enter, Item, Variance},
-    curios_unit::Unit,
+    curios_core::{Enter, Item, Module, Variance, Zonked},
+    curios_elab::DEFAULT_BUDGET,
+    curios_prelude::with_prelude,
+    curios_text::SYNTAX,
+    curios_unit::{Predecessors, Unit},
     curios_utilities::fill,
     std::fs,
 };
@@ -342,6 +346,72 @@ pub let twice: Nat = apply(double, 2);
     assert_eq!(incremental.core().items.len(), 4);
     assert_modules_agree(unit_of(&inserted).core(), incremental.core());
     assert_stored_alike(&unit_of(&inserted), &incremental);
+}
+
+/// Every name `unit` declares held where its module holds it: the places a recompile revised are the ones its module would be placed at whole, which every later walk reads a name of the unit by.
+fn assert_placed(unit: &Unit) {
+    let module = unit.core();
+    let fresh = curios_core::Places::of(module);
+    for place in module.items.places() {
+        for name in module.items.names(place) {
+            assert_eq!(unit.places().place(name), fresh.place(name), "{name:?}");
+        }
+    }
+}
+
+/// Six declarations, a family among them: `b` reads `a`, `d` matches on `T` and reads `b`, and `e` reads `d`.
+const PLACED: &str = "use /std/{Nat};
+
+pub let a: Nat = 1;
+
+pub let b: Nat = a + 1;
+
+pub let c: Nat = 7;
+
+pub induct T: pub Type
+| one()
+| two(n: Nat)
+end
+
+pub let d(t: T) -> Nat =
+    match t
+    | one() => b
+    | two(n) => n
+    end;
+
+pub let e: Nat = d(T/one());
+";
+
+/// A chain of recompiles, each over the one before, holds each name where its module does and is stored as the whole compile of its text: a declaration that comes to read a deeper one, one inserted beside one renamed, one that stops reading what it read, which moves the depth of what read it, a constructor added, a declaration taken out, and one that comes to read the declaration inserted.
+#[test]
+fn a_chain_of_recompiles_holds_each_name_where_its_module_does() {
+    let edits: [&dyn Fn(&str) -> String; 6] = [
+        &|text| text.replace("c: Nat = 7", "c: Nat = b + 7"),
+        &|text| {
+            text.replace("pub let b", "pub let a2: Nat = 2;\n\npub let b")
+                .replace("pub let e:", "pub let e2:")
+        },
+        &|text| text.replace("b: Nat = a + 1", "b: Nat = 3"),
+        &|text| {
+            text.replace("| two(n: Nat)\nend", "| two(n: Nat)\n| three()\nend")
+                .replace("| two(n) => n\n", "| two(n) => n\n    | three() => 3\n")
+        },
+        &|text| text.replace("pub let c: Nat = b + 7;\n\n", ""),
+        &|text| text.replace("d(T/one());", "d(T/one()) + a2;"),
+    ];
+    let mut text = PLACED.to_string();
+    let mut unit = unit_of(&text);
+    for edit in edits {
+        let edited = edit(&text);
+        assert_ne!(edited, text, "every edit changes the text");
+        text = edited;
+
+        let next = recompile_over(&text, &unit).unwrap();
+
+        assert_placed(&next);
+        assert_stored_alike(&unit_of(&text), &next);
+        unit = next;
+    }
 }
 
 /// A struct literal names its declaration in the registry rather than by a variable, so an item building one asked for the declaration's entry, and is elaborated again where the entry came out another way.
@@ -1052,6 +1122,57 @@ fn what_a_unit_records_of_another_follows_what_its_declarations_read_now() {
 
     assert!(reuses_body(&baseline, &incremental, "twice"));
     assert_stored_alike(&unit_after("lib", &edited, &[&dependency]), &incremental);
+}
+
+/// `/dep` holds `Wrap`, whose parameter is as positive as `Arrow`, which it holds, takes its own.
+const ARROW: &str = "pub induct Arrow(T: Type): pub Type
+| arrow(t: T)
+end
+
+pub induct Wrap(T: Type): pub Type
+| wrap(a: Arrow(T))
+end
+";
+
+/// `/lib` ties `Knot` through `/dep`'s `Wrap`.
+const KNOT: &str = "use /dep/{Wrap};
+
+pub induct Knot: pub Type
+| knot(w: Wrap(Knot))
+end
+";
+
+/// `module`, elaborated already, put to the kernel alone with the prelude and then `units` in scope.
+fn certified_after(module: &Module, units: &[&Unit]) -> Vec<curios_cert::Verdict> {
+    let module = Zonked::project(module).expect("an elaborated module is zonked");
+
+    with_prelude(|prelude| {
+        let scope = prelude.iter().chain(units).copied().collect::<Vec<_>>();
+
+        crate::certify(&module, DEFAULT_BUDGET, Predecessors::over(&scope), &SYNTAX).verdicts
+    })
+}
+
+/// A family whose parameter turns negative only through a family it holds is composed through at the vector a whole compile files: `Arrow` respelled to take `T` to a function's domain leaves `Wrap`'s terms the baseline's, and `Knot`, tied through `Wrap` and admitted while `Arrow` held `T` as a payload, is refused by a kernel reading the recompiled `/dep`.
+///
+/// Mutation-checked: with every signature read taken to stand over a baseline, `Wrap` keeps the baseline's vector and the kernel admits `Knot`.
+#[test]
+fn a_family_turned_negative_through_one_it_holds_is_composed_through_as_a_whole_compile_files_it() {
+    let negative = ARROW.replace("| arrow(t: T)", "| arrow(f: (T) -> /std/Nat)");
+    let baseline = unit_after("dep", ARROW, &[]);
+    let recompiled = recompile_after("dep", &negative, &baseline, &[], &[]);
+    let knot = unit_after("lib", KNOT, &[&baseline]);
+
+    assert_eq!(certified_after(knot.core(), &[&baseline]), []);
+    let verdicts = certified_after(knot.core(), &[&recompiled]);
+    assert!(
+        matches!(
+            verdicts.as_slice(),
+            [verdict] if matches!(verdict.error, curios_cert::Error::NotPositive { .. })
+        ),
+        "a family tied through a recompiled one that turned negative was admitted: {verdicts:?}"
+    );
+    assert_stored_alike(&unit_after("dep", &negative, &[]), &recompiled);
 }
 
 /// A value computed where its unit is erased ran the erased forms of what it reaches in other units too, each recorded by the digest it had. `/dep`'s `double` is given another body under its signature, so `/lib`'s `twice` is elaborated once and what it erased to is computed again over the `double` that is there now: the unit is the one a whole compile after the edited `/dep` stores.
