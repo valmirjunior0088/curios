@@ -55,6 +55,11 @@ judge_cargo() {
     case $subcommand in
         build | test) ;;
         xboard) judge_xboard "$@" ;;
+        xtask)
+            if [[ $# -ne 2 || ${1-} != launcher || ${2-} != build ]]; then
+                refuse "cargo xtask $*" 'the one xtask a worktree takes is the launcher the compiler embeds, `cargo xtask launcher build`'
+            fi
+            ;;
         run)
             if [[ ${1-} == --release ]]; then
                 shift
