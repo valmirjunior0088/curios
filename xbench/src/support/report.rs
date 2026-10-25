@@ -2,7 +2,7 @@
 //!
 //! **A difference is proven only where two spans are disjoint.** A figure's span is the least and greatest of what its groups give, and two readings whose spans overlap could have produced each other, so the report says `no difference proven` rather than a percentage. The rule assumes nothing about how the samples are distributed, and it errs toward missing a real movement rather than announcing one: a single bad batch widens a span and hides a change, which is the direction worth being wrong in.
 //!
-//! **A movement is read against Rust.** Across two readings the report compares Curios's time over Rust's, group by group. The two ran interleaved in each group, so what moved the machine during a group or between the two sittings reaches both and cancels in the ratio, and what is left is Curios's own.
+//! **A movement is read against Rust (Native).** Across two readings the report compares Curios's time over native Rust's, group by group. The two ran interleaved in each group, so what moved the machine during a group or between the two sittings reaches both and cancels in the ratio, and what is left is Curios's own.
 //!
 //! **No figure states a precision its span does not support.** Every number is rounded to the place of the first significant digit of its half-span, so a median of 438.2 with a span of six milliseconds prints as 438.
 
@@ -195,7 +195,7 @@ pub(crate) fn table(title: &str, letter: &str, size: u64, rows: &[(&str, &[&[f64
 
     format!(
         "### `{title}` ({letter} = {size})\n\n{}",
-        tabulated(&["Contestant", "Median", "Span", "× Rust"], &rows)
+        tabulated(&["Contestant", "Median", "Span", "× Rust (Native)"], &rows)
     )
 }
 
@@ -313,7 +313,12 @@ pub(crate) fn compare(number: usize, before: &Reading, after: &Reading) -> Strin
     }
 
     out.push_str(&tabulated(
-        &["Workload", "Was, × Rust", "Is, × Rust", ""],
+        &[
+            "Workload",
+            "Was, × Rust (Native)",
+            "Is, × Rust (Native)",
+            "",
+        ],
         &rows,
     ));
 

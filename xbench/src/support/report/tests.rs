@@ -135,7 +135,7 @@ fn a_table_puts_the_fastest_first_and_reads_the_rest_against_rust() {
         "LCG",
         "N",
         100_000_000,
-        &[("Curios", CURIOS), ("Rust", STEADY)],
+        &[("Curios", CURIOS), ("Rust (Native)", STEADY)],
     );
     let rows = rendered
         .lines()
@@ -143,7 +143,7 @@ fn a_table_puts_the_fastest_first_and_reads_the_rest_against_rust() {
         .collect::<Vec<_>>();
 
     assert!(rendered.contains("`LCG` (N = 100000000)"));
-    assert!(rows[1].contains("Rust"), "{rendered}");
+    assert!(rows[1].contains("Rust (Native)"), "{rendered}");
     assert!(rows[2].contains("Curios"), "{rendered}");
     assert!(rows[2].contains("2.0"), "{rendered}");
 }

@@ -31,12 +31,12 @@ Taking a reading needs a checkout, `cargo`, and the `wasmtime` CLI at the versio
 | Contestant | What it is | What it tells you |
 | --- | --- | --- |
 | **Curios** | a self-contained executable, reading its size from its arguments | the subject |
-| **Rust** | `rustc -O`, native | the ceiling |
-| **Rust → wasm** | the same source, `--target wasm32-wasip2`, under the `wasmtime` CLI | what WebAssembly itself costs |
+| **Rust (Native)** | `rustc -O`, native | the ceiling |
+| **Rust (WebAssembly)** | the same source, `--target wasm32-wasip2`, under the `wasmtime` CLI | what WebAssembly itself costs |
 
-Rust native against Rust → wasm is one source compiled two ways, so what separates them is WebAssembly's own cost, and what remains between Curios and Rust → wasm is Curios's.
+Rust (Native) against Rust (WebAssembly) is one source compiled two ways, so what separates them is WebAssembly's own cost, and what remains between Curios and Rust (WebAssembly) is Curios's.
 
-On a workload that allocates, Rust → wasm is a **bound** and the report names it one. Rust manages linear memory while Curios delegates collection to the engine, so that gap holds Curios's codegen and the whole cost of having a collector at all, and no contestant separates them. A WebAssembly-GC peer would, and none is reachable: WASI passes its arguments through linear memory while WebAssembly-GC values live on the engine's heap, so every WebAssembly-GC toolchain targets a JavaScript host. Curios runs standalone only because [`curios-abi`](../curios-abi/README.md) is its own host boundary. That question is answered inside Curios instead, by counts and by arrangements of the collector — `chain_collection_decomposition` in `curios/src/tests/codegen/churn.rs` is where it lives.
+On a workload that allocates, Rust (WebAssembly) is a **bound** and the report names it one. Rust manages linear memory while Curios delegates collection to the engine, so that gap holds Curios's codegen and the whole cost of having a collector at all, and no contestant separates them. A WebAssembly-GC peer would, and none is reachable: WASI passes its arguments through linear memory while WebAssembly-GC values live on the engine's heap, so every WebAssembly-GC toolchain targets a JavaScript host. Curios runs standalone only because [`curios-abi`](../curios-abi/README.md) is its own host boundary. That question is answered inside Curios instead, by counts and by arrangements of the collector — `chain_collection_decomposition` in `curios/src/tests/codegen/churn.rs` is where it lives.
 
 ## Workloads
 
@@ -50,7 +50,7 @@ A contestant is measured in **five groups of five executions**, one untimed roun
 
 - Within a group is iteration noise. Between the group medians is the **span**.
 - A contestant's figure is the median of its group medians; its span is the least and greatest of them.
-- Across two readings, what is compared is **Curios over Rust, group by group**: each group's Curios median over its Rust median, read as a figure is.
+- Across two readings, what is compared is **Curios over Rust (Native), group by group**: each group's Curios median over its native Rust median, read as a figure is.
 - A difference is **proven only where two spans are disjoint**. Overlapping spans could have produced each other, so the report says `no difference proven`.
 - Every figure is stated to the place of the first significant digit of its half-span, so no number claims a precision its span does not support.
 
@@ -86,9 +86,9 @@ Software is not gated because a patch that moves a figure moves Rust with Curios
 
 **Rejected.** A threshold written by hand, "ignore moves under two percent": a number someone believed, where the machine can measure the real one. Student's t over the samples, as `ministat` does: the samples are not independent and not normal, and the assumption buys a confidence level to argue about rather than an answer. Two groups rather than five: the span would be a single difference between two numbers instead of an estimate of one.
 
-### A movement is read against Rust
+### A movement is read against Rust (Native)
 
-**Decision.** Across two readings the report compares Curios's time over Rust's, taken group by group — each group's Curios median over that group's Rust median — and a movement is proven where the two readings' spans of that ratio are disjoint.
+**Decision.** Across two readings the report compares Curios's time over native Rust's, taken group by group — each group's Curios median over that group's native Rust median — and a movement is proven where the two readings' spans of that ratio are disjoint.
 
 **Rationale.** The contestants run interleaved inside a group, so what moves the machine during a group or between two sittings — a kernel update, a thermal state, something else running — reaches both and cancels in the ratio, where Curios's time alone would carry it as a movement of the compiler. The bench this one replaces asked of every sitting, by hand in prose, whether the controls held still; the ratio answers that in the figure itself, on every workload, with nothing left for a person to remember to apply.
 

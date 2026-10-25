@@ -111,11 +111,11 @@ pub(crate) const CONTESTANTS: &[Contestant] = &[
     },
     Contestant {
         name: "rust",
-        title: "Rust",
+        title: "Rust (Native)",
     },
     Contestant {
         name: "rust-wasm",
-        title: "Rust → wasm",
+        title: "Rust (WebAssembly)",
     },
 ];
 
