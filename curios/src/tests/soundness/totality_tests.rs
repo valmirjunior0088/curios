@@ -629,3 +629,83 @@ fn a_halving_walk_descends_on_its_span_halved_and_stands_in_a_type() {
         "#;
     assert_eq!(run(source), b"ababab");
 }
+
+// The subtraction half of `an_arithmetic_decrease_needs_a_literal_operand_that_shrinks`: `n - k` decreases only for a literal `k >= 1`, because `Nat` subtraction saturates and `n - 0` is `n` itself — a fixed point, not a descent. The division sibling pins `k >= 2`; nothing pinned subtraction's floor, so a reader that let `0` through would grade `Bad(n - 0)` as descending and admit a type that unfolds to itself forever. The control is `a_dispatch_that_enumerates_zero_licenses_the_decrease`, whose `Bad(n - 1)` is the same shape one above the floor.
+#[test]
+fn a_subtraction_by_zero_licenses_no_decrease() {
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat};
+
+        let Bad(n : Nat) -> Type =
+            match n
+            | 0 => {}
+            | _ => Bad(n - 0)
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+}
+
+// A `choose` ladder reaches the same nonzero reader a headed boolean match does, by a different spelling: each condition arm desugars to a boolean match whose true branch is the arm and whose false branch is the rest of the ladder. The arm-scoping `a_nonzero_fact_does_not_escape_the_arm_that_established_it` holds for a `match` must survive that desugaring — a guard that admits zero (`n < 10`) licenses no decrease, and only one that excludes it (`n > 0`) does.
+#[test]
+fn a_choose_guard_that_does_not_exclude_zero_licenses_no_decrease() {
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat};
+
+        let Bad(n : Nat) -> Type =
+            choose
+            | n < 10 => Bad(n - 1)
+            | _ => {}
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+}
+
+// The control for the fixture above: `n > 0` excludes zero through the same desugaring, so the ladder's true arm descends and the type is accepted.
+#[test]
+fn a_choose_guard_that_excludes_zero_licenses_the_decrease() {
+    let source = r#"
+        use /std/{Nat};
+
+        let Good(n : Nat) -> Type =
+            choose
+            | n > 0 => Good(n - 1)
+            | _ => {}
+            end;
+
+        let held : Good(2) = ();
+
+        /std/print("ok")
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+// The payload-child rule at a type-level recursion: `Bad` recurses on `g(0)`, an application of the constructor payload `g`, which the size order reads as a child of the `c(g)` it was projected from — so `Bad` is graded total. Its soundness rests entirely on (T): the only way `g(0)` can re-produce a `c(...)` that keeps `Bad` unfolding is for `g` to feed itself, which makes `g` non-descending, and a type reaching `g` is then refused. `loop` is exactly such a `g`, and the type of `held` reaches it; nothing in the totality grading refuses this — (T) does.
+#[test]
+fn a_payload_application_that_reaches_a_partial_function_is_a_partial_type() {
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat};
+
+        induct F : pub Type
+        | c(g : (Nat) -> F)
+        end
+
+        let Bad(x : F) -> Type =
+            match x
+            | c(g) => Bad(g(0))
+            end;
+
+        let loop : (Nat) -> F = (n) => F/c(loop);
+
+        let held : Bad(F/c(loop)) = ();
+
+        /std/print("unreachable")
+        "#,
+    );
+}
