@@ -136,7 +136,9 @@ fn a_literals_law_is_stated_over_the_superclass_it_writes() {
 
     let report = error(source);
     assert!(
-        report.contains("expected: (a: Nat, b: Nat, same: /std/Eq(@Bytes)(x[], x[])) -> /std/Eq(@Nat)(a, b)"),
+        report.contains(
+            "expected: (a: Nat, b: Nat, same: /std/Eq(@Bytes)(x[], x[])) -> /std/Eq(@Nat)(a, b)"
+        ),
         "{report}"
     );
 }
