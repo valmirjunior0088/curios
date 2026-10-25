@@ -355,7 +355,7 @@ pub struct Certified {
 ///
 /// Recorded where the kernel consults its environment — a name's type or universe scheme, a declaration's registry entry, a definition's body — so a read counts however the judgment reached it. A remembered reduct included: every memo lives one declaration, so the bodies a remembered reduct unfolds were asked for within the judgment that hits it. A body counts as read whenever it is asked for, unfolded or not, because asking is what makes the answer depend on it.
 ///
-/// A definition's classification also reads the verdict of every name it mentions, which the totality closure runs over. That is not a third kind: typing a mention reads its type, so each such verdict read is already a signature read.
+/// A definition's classification also reads the verdict of every name it mentions, which the totality closure runs over, and that read is a signature read of the name: typing a mention reads its type, but a mention in an arm no reduction takes is typed by no rule, so the certifier records the read where it classifies the definition, and a verdict closed over such a name is judged again once the name's verdict moves.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Reads {

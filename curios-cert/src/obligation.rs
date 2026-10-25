@@ -160,7 +160,14 @@ impl<'g> Totals<'g> {
             {
                 self.partial.insert(definition.name);
             }
-            mentions.insert(definition.name, definition.mentions());
+            let mentioned = definition.mentions();
+            if typed {
+                let own = item.declared_names();
+                for name in mentioned.iter().filter(|name| !own.contains(name)) {
+                    kernel.read_verdict(name);
+                }
+            }
+            mentions.insert(definition.name, mentioned);
         }
     }
 

@@ -851,6 +851,41 @@ fn answers_as_the_whole_compile_does(edited: &str, baseline: &Unit) {
     }
 }
 
+/// `f` names `spin` in an arm no reduction takes, a `false` arm under the literal `true`, which the kernel does not type: what it mentions there is in the totality it is classified at, and no read of `spin` is recorded.
+const UNTAKEN: &str = "use /std/{Nat};
+
+pub let spin(n: Nat) -> Nat = spin(n);
+
+pub let f: Nat =
+    match true
+    | true => 1
+    | false => spin(0)
+    end;
+
+pub let unrelated: Nat = 7;
+";
+
+/// A definition partial only through a name in an arm no reduction takes turns total with that name: `spin` made total leaves `f` total in a whole compile, and the recompile answers the same.
+#[test]
+fn a_definition_partial_only_through_an_untaken_arm_turns_total_with_it_as_the_whole_compile_does()
+{
+    let baseline = unit_of(UNTAKEN);
+
+    answers_as_the_whole_compile_does(
+        &UNTAKEN.replace("spin(n: Nat) -> Nat = spin(n);", "spin(n: Nat) -> Nat = n;"),
+        &baseline,
+    );
+}
+
+/// The converse: `spin` made partial makes `f` partial in a whole compile, and the recompile records it so.
+#[test]
+fn a_definition_total_through_an_untaken_arm_turns_partial_with_it_as_the_whole_compile_does() {
+    let total = UNTAKEN.replace("spin(n: Nat) -> Nat = spin(n);", "spin(n: Nat) -> Nat = n;");
+    let baseline = unit_of(&total);
+
+    answers_as_the_whole_compile_does(UNTAKEN, &baseline);
+}
+
 /// A module a glob imports gains a member under a name the scope already holds: `y` wrote that name and no character of it changed, and what the recompile makes of it is what the whole compile does.
 #[test]
 fn a_globbed_module_gaining_a_member_is_answered_as_the_whole_compile_answers() {
@@ -1121,6 +1156,28 @@ fn what_a_unit_records_of_another_follows_what_its_declarations_read_now() {
 
     assert!(reuses_body(&baseline, &incremental, "twice"));
     assert_stored_alike(&unit_after("lib", &edited, &[&dependency]), &incremental);
+}
+
+/// What [`UNTAKEN`] holds of another unit: `f` names `/dep`'s `spin` in the arm no reduction takes, and `spin` is made total in `/dep`.
+#[test]
+fn a_definition_partial_only_through_another_units_name_in_an_untaken_arm_turns_total_with_it() {
+    let dependency = "use /std/{Nat};\n\npub let spin(n: Nat) -> Nat = spin(n);\n";
+    let dependent = "use /std/{Nat};
+use /dep/{spin};
+
+pub let f: Nat =
+    match true
+    | true => 1
+    | false => spin(0)
+    end;
+";
+    let before = unit_after("dep", dependency, &[]);
+    let baseline = unit_after("lib", dependent, &[&before]);
+    let moved = unit_after("dep", &dependency.replace("= spin(n);", "= n;"), &[]);
+
+    let incremental = recompile_after("lib", dependent, &baseline, &[&moved], &[true]);
+
+    assert_stored_alike(&unit_after("lib", dependent, &[&moved]), &incremental);
 }
 
 /// `/dep` holds `Wrap`, whose parameter is as positive as `Arrow`, which it holds, takes its own.

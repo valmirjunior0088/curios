@@ -1009,6 +1009,11 @@ impl<'s> Kernel<'s> {
         self.globals.file_polarities(name, vector);
     }
 
+    /// The verdict on `name`, which a definition being classified mentions: a read of its signature, as typing a mention is, and the one read of a name mentioned where no rule types, an arm no reduction takes.
+    pub(crate) fn read_verdict(&self, name: &Global) {
+        self.reads.signature(name);
+    }
+
     /// How the family `name` uses its parameter at `index`, by the vector this walk or the walk over its unit filed for it: a read of the family's signature, as a read of its registry entry is.
     pub(crate) fn polarity(&self, name: &Global, index: usize) -> Polarity {
         self.reads.signature(name);

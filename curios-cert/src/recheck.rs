@@ -817,13 +817,6 @@ fn verdicts_within<'s>(
             }
         }
 
-        // A group is judged as one item, so each of its members read what the group did.
-        let item_reads = kernel.take_reads();
-        for name in item.declared_names() {
-            reads.insert(*name, item_reads.clone());
-            judged.push(*name);
-        }
-
         let (drained, failure) = kernel.take_checked();
         if let Some(error) = failure {
             verdicts.push(Verdict {
@@ -838,6 +831,13 @@ fn verdicts_within<'s>(
                 name: Some(name),
                 error,
             });
+        }
+
+        // A group is judged as one item, so each of its members read what the group did; and what the classification read of what it mentions is the item's too.
+        let item_reads = kernel.take_reads();
+        for name in item.declared_names() {
+            reads.insert(*name, item_reads.clone());
+            judged.push(*name);
         }
         if let Err(error) = check_positions(kernel, &drained, &totals, &mut local_memo) {
             verdicts.push(Verdict {
