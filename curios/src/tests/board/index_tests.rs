@@ -266,3 +266,19 @@ fn an_unreachable_arm_retypes_no_local() {
         "expected: Eq(@Nat)(0, 7)",
     );
 }
+
+// Inversion takes an equation only where it is deduced, and a factor both indices share leaves the others' equation unknown: `x * a` against `x * b` holds at `x = 0` whatever `a` and `b` are, so reading `a = b` off it would prove `Eq()(0, 1)`.
+#[test]
+fn a_factor_both_indices_share_forces_no_equation_of_the_others() {
+    rejected_by(
+        r#"
+        use /std/{Nat, Eq};
+
+        let cancel(x: Nat, a: Nat, b: Nat, p: Eq()(x * a, x * b)) -> Eq()(a, b) =
+            match p | refl() => Eq/refl() end;
+
+        /std/print(Nat/to_str(0))
+        "#,
+        "type mismatch",
+    );
+}

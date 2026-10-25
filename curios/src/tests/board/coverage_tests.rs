@@ -30,3 +30,35 @@ fn a_non_strict_occurrence_behind_a_record_is_still_refused() {
         "positively, but not strictly",
     );
 }
+
+// An index pair is impossible only where no value meets it: a truncated difference is zero wherever its subtrahend is at least its minuend, so `x - y` against `0` is no clash.
+#[test]
+fn a_truncated_difference_against_zero_is_no_clash() {
+    rejected_by(
+        r#"
+        use /std/{Nat, Eq};
+        use /std/Bool/{False};
+
+        let absurd(x: Nat, y: Nat, p: Eq()(x - y, 0)) -> False = match p end;
+
+        /std/print(Nat/to_str(0))
+        "#,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}
+
+// The same over the free monoid: a concatenation of chunks is empty wherever every chunk is, so `[..xs, ..xs]` against `[]` is no clash.
+#[test]
+fn a_concatenation_of_chunks_against_the_empty_list_is_no_clash() {
+    rejected_by(
+        r#"
+        use /std/{Nat, Eq, List};
+        use /std/Bool/{False};
+
+        let absurd(xs: List(Nat), p: Eq()([..xs, ..xs], [])) -> False = match p end;
+
+        /std/print(Nat/to_str(0))
+        "#,
+        "is not provably impossible at the scrutinee's indices",
+    );
+}

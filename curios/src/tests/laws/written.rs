@@ -279,6 +279,10 @@ const ATOMS_REFUSED: &[&str] = &[
     "Eq()((a == b) || (p(c) && q(c)), (b == a) && (q(c) || p(c)))",
     // A float's sum is no association: the inner sum is one value, rounded, and an atom of the outer.
     "Eq()((r(a) + r(b)) + r(c), r(a) + (r(b) + r(c)))",
+    // Two heads are two atoms however their arguments are classed.
+    "Eq()(f(a + b) + g(b + a), g(a + b) + g(b + a))",
+    // A node one past its distribution is another polynomial, whatever bucket its image falls in.
+    "Eq()(Nat/pow((a + b) * (c + d), n) * Nat/pow((a + b) * (c + d), n), Nat/pow((a + b) * (c + d), n) * Nat/pow(a * c + a * d + b * c + b * d + 1, n))",
 ];
 
 const CARRIERS: &[Carrier] = &[
@@ -321,7 +325,10 @@ const CARRIERS: &[Carrier] = &[
         name: "Nat under -",
         binders: "x: Nat, y: Nat, z: Nat",
         held: &["Eq()((x + 5) - 3, x + 2)", "Eq()((x - y) - z, x - (y + z))"],
-        refused: &[],
+        refused: &[
+            // The control, and not a law: a difference truncates, so adding back what it took off fails at `x = 0, y = 1`.
+            "Eq()((x - y) + y, x)",
+        ],
     },
     Carrier {
         name: "Nat under / and %",
@@ -353,6 +360,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()((x / 3) * 3, x)",
             "Eq()((x / 3) * 2 + x % 3, x)",
             "Eq()((x / 3) * 3 + y % 3, x)",
+            // The control for the Euclidean split, and not a law: the residual's bound, `7`, reaches the divisor, and the quotient is one more at `x = 0, y = 4`.
+            "Eq()((4 * x + Nat/and(y, 7)) / 4, x)",
         ],
     },
     Carrier {
@@ -403,6 +412,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(x * 2 + 1 == y * 2, false)",
             "Eq()(x * 2 + 1 != y * 2, true)",
             "Eq()(x * 4 + 6 == y * 2 + 1, false)",
+            // And across a product the fold leaves standing: two odd factors make an odd product.
+            "Eq()((2 * x + 2 * y + 1) * (2 * x + 2 * y + 1) == 12, false)",
         ],
         refused: &[
             // Controls, and neither is a law: floors that agree modulo the gcd meet at `x = y + 1`, and a gcd of `1` divides every floor, so these meet at `x = y = 1`.
@@ -413,6 +424,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(x + 1 <= y, x <= y)",
             // The control for a bound against a floor, and not a law: `x % 8` is `7` at `x = 7`, past `y + 6` at zero.
             "Eq()(x % 8 <= y + 6, true)",
+            // The control for a remainder against what its divisor is at most one past, and not a law: `x % 2` is `1` at `x = 1, y = 0`.
+            "Eq()(x % (y + 2) <= y, true)",
+            // The control for divisibility across a product, and not a law: an odd factor beside one whose coefficients share nothing with it leaves the divisor `1`, and the product is `12` at `x = 1, y = 0`.
+            "Eq()((2 * x + 2 * y + 1) * (3 * x + 3 * y + 1) == 12, false)",
         ],
     },
     Carrier {
@@ -495,6 +510,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(0 < x * Nat/shl(1, y), true)",
             // A right shift by a literal count is a quotient by `2ᵏ` and could join the division family through the Euclidean split. It may not do so by building a division node, which carries a proof that the divisor is nonzero, and a reducer may not invent one.
             "Eq()(Nat/shr(x * 4, 2), x)",
+            // The control, and not a law: a right shift drops the low bit a left shift does not restore, so `x = 1` comes back as `0`.
+            "Eq()(Nat/shl(Nat/shr(x, 1), 1), x)",
         ],
     },
     Carrier {
@@ -520,7 +537,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Byte/to_nat(Nat/to_byte(Nat/and(x, 255))), Nat/and(x, 255))",
             "Eq()((16 * q + Byte/to_nat(Nat/to_byte(Nat/and(x, 15)))) / 16, q)",
         ],
-        refused: &[],
+        refused: &[
+            // The control for the carrier's bound, and not a law: one below it fails at the byte `255`.
+            "Eq()(Byte/to_nat(b) < 255, true)",
+        ],
     },
     Carrier {
         name: "Int",
@@ -570,6 +590,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(i * 2 == j * 2 + 2, false)",
             // A candidate, declined on purpose: true over truncated division, but reading it would rewrite a difference into a remainder where the recombination only ever shrinks a sum, so `i - d · (i / d)` and `i % d` stay two spellings.
             "Eq()(i - (i / 3) * 3, i % 3)",
+            // The control for the recombination, and not a law: a remainder taken off its multiple is no recombination, `-1` at `i = +1`.
+            "Eq()(+2 * (i / +2) - i % +2, i)",
         ],
     },
     Carrier {
@@ -742,6 +764,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Int/sign(Int/sign(i)), Int/sign(i))",
             // A power of a symbolic base does not leave as one of a literal base does: at a literal exponent it is so many plain factors, which stay inside, so a rule that took it out would fail there.
             "Eq()(Int/abs(Nat/to_int(Nat/pow(m, n)) * i), Nat/pow(m, n) * Int/abs(i))",
+            // Nor does it leave a sign: a symbolic base may be zero, which takes the sign to zero at `m = 0, n = 1, i = +1`.
+            "Eq()(Int/sign(Nat/to_int(Nat/pow(m, n)) * i), Int/sign(i))",
             // Controls, and none is a law: the first fails at `i = +1, j = -1`, the second at `i = +1, j = +1`, and the third at `i = -1`.
             "Eq()(Int/abs(i + j), Int/abs(i) + Int/abs(j))",
             "Eq()(Int/sign(i + j), Int/sign(i) + Int/sign(j))",
@@ -795,6 +819,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Nat/pow(x + y, 2), x * x + y * y)",
             "Eq()(Nat/pow(x, y + z), Nat/pow(x, y) + Nat/pow(x, z))",
             "Eq()(0 < Nat/pow(x, y), true)",
+            // A base of zero answers zero only over an exponent above zero: `0⁰` is one.
+            "Eq()(Nat/pow(0, y), 0)",
         ],
     },
     Carrier {
