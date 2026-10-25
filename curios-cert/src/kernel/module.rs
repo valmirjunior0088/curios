@@ -561,7 +561,7 @@ fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
 ///
 /// A `Prop`-sorted result bounds its telescope as a `Type`-sorted one does, and a `Prop`-sorted domain counts at its own level, whichever sort the result is. The size order reads an application of a payload as a child of its constructor, which holds only of a payload that cannot be applied at the family holding it: a payload quantifying over the sort its family sits in can, and hands back the value it was given.
 ///
-/// **Typing the domain is a separate clause from sizing it.** Run inside the size test, `infer_type` would type no domain of a declaration whose `result_sort` is `Prop` — and nothing else covers them: `check_arity` reaches an `induct`'s parameters and indices but not its constructor telescopes, a `struct` has no `check_arity`, and `check_non_informative` only *classifies* each field with `Sort::of`, so a field type that lies about its own sort would stand unexamined; see `recheck::proposition_tests::a_proposition_may_not_carry_a_computed_relevant_field`.
+/// **Typing the domain is a separate clause from sizing it.** The size test reads a domain only where the result reduces to a sort, and nothing else covers the domains: `check_arity` reaches an `induct`'s parameters and indices but not its constructor telescopes, a `struct` has no `check_arity`, and `check_non_informative` only *classifies* each field with `Sort::of`, so a field type that lies about its own sort would stand unexamined; see `recheck::proposition_tests::a_proposition_may_not_carry_a_computed_relevant_field`.
 fn check_signature<B: Bound + Clone>(
     kernel: &mut Kernel,
     telescope: &Telescope<B>,

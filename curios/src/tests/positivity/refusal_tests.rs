@@ -42,7 +42,7 @@ fn a_negative_occurrence_is_rejected() {
     );
 }
 
-// Positive but not strictly positive: two arrows, so the sign flips back. This records the impredicative-`Prop` decision as a test rather than as prose — with an impredicative `Prop` and a universe hierarchy both present, the Coquand–Paulin construction applies, so the merely-positive relaxation other systems allow is not available here.
+// Positive but not strictly positive: two arrows, so the sign flips back. This records `documentation/design/theory/strict-positivity-modulo-polarity.md`'s refusal of the merely positive as a test rather than as prose: a family that is its own double function space has no model as a set, so the merely-positive relaxation other systems allow is not available here.
 #[test]
 fn a_positive_but_not_strictly_positive_occurrence_is_rejected() {
     rejected_by(

@@ -170,7 +170,7 @@ fn the_empty_record_is_not_a_proposition() {
     rejected_by(THE_EMPTY_RECORD_IS_NOT_A_PROPOSITION, "is informative");
 }
 
-// `func_sort`, and the half that makes `Prop` impredicative: the domain's level is discarded when the codomain is a proposition, so quantifying over a universe still yields one. That is what puts Coquand–Paulin's construction in range, which is why this rule's soundness is not its own — see the positivity fixture below.
+// `func_sort`: a function into a proposition is a proposition whatever it quantifies over, at the join of its domains' levels and its own, so quantifying over a universe yields a proposition a level above it, never one among those it ranges over. The rule's soundness is not its own all the same: a family that is its own double function space is kept out by positivity — see the positivity fixture below.
 #[test]
 fn a_function_into_a_proposition_is_a_proposition() {
     assert_eq!(run(A_FUNCTION_INTO_A_PROPOSITION_IS_A_PROPOSITION), b"1");

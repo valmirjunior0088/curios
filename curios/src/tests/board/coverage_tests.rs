@@ -22,7 +22,7 @@ fn a_foreign_declaration_is_confined_to_wire_types() {
 
 // The other support the argument names, at a shape positivity's own probes do not spell: they run the negative and the double negative bare, through an `induct` parameter, through a `struct` parameter, through a type alias, under `List`, behind a type-level `match`, and at a higher-kinded parameter — never behind an anonymous Σ, which is the construct this row is about.
 //
-// The diagnostic is what makes this more than a repeat. It reads *positively, but not strictly* rather than *negatively*, which is the same verdict the bare spelling gets: the polarity lattice is computed through the tuple component rather than the component being answered opaquely, since an opaque answer would join to `Mixed` and refuse with the other message. Refusing a merely-`Pos` diagonal is precisely what keeps `℘℘` out while `Prop` is impredicative, so this is the pairing the row rests on, checked where the row lives.
+// The diagnostic is what makes this more than a repeat. It reads *positively, but not strictly* rather than *negatively*, which is the same verdict the bare spelling gets: the polarity lattice is computed through the tuple component rather than the component being answered opaquely, since an opaque answer would join to `Mixed` and refuse with the other message. Refusing a merely-`Pos` diagonal is precisely what keeps `℘℘` out, a family that is its own double function space having no model as a set, so this is the pairing the row rests on, checked where the row lives.
 #[test]
 fn a_non_strict_occurrence_behind_a_record_is_still_refused() {
     rejected_by(

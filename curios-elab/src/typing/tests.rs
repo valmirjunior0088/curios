@@ -73,7 +73,7 @@ fn metavariable_origins_are_read_once_per_node() {
 ///
 /// Both checkers are told the same single thing — one nullary `Prop`-sorted family — and nothing else, so a disagreement here is about the rule rather than about what either was handed. That declaration is unavoidable rather than convenient: `Prop` is itself `Type`-sorted, so no closed proposition can be built out of intrinsics and type formers alone. Without it the table would compare only *informative* types against each other, agreeing perfectly while testing nothing; the control below is what catches that.
 ///
-/// The table spans the shapes the rule turns on: both universes, a proof, an impredicative `Π` into a proposition beside a `Π` into a *universe* — a type family, not a proposition — a `Σ` whose fields are all propositions, and the unit type, which is `Type`-sorted deliberately, being what an effect returns, so calling it a proposition would erase it.
+/// The table spans the shapes the rule turns on: both universes, a proof, a `Π` into a proposition beside a `Π` into a *universe* — a type family, not a proposition — a `Σ` whose fields are all propositions, and the unit type, which is `Type`-sorted deliberately, being what an effect returns, so calling it a proposition would erase it.
 #[test]
 fn both_checkers_decide_non_informativeness_alike() {
     let mut context = Context::new(100_000, SYNTAX);
@@ -117,7 +117,7 @@ fn both_checkers_decide_non_informativeness_alike() {
         ("the unit type", Term::tuple_type_unit()),
         // A proof, which is the one thing that genuinely carries nothing.
         ("a proposition", proof()),
-        // `Π` into a proposition is a proposition whatever it quantifies over — impredicativity, and what makes `(n : Nat) -> P(n)` erasable.
+        // `Π` into a proposition is a proposition whatever it quantifies over, a level above what it ranges over, which is what makes `(n : Nat) -> P(n)` erasable.
         (
             "(Nat) -> a proposition",
             Term::func_type([(binder(0), nat())], proof()),
