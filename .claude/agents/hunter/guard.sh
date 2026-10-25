@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The hunter's shell: the PreToolUse hook of `.claude/agents/hunter.md`, admitting the probes and readers a hunt needs in the checkout, and the builds, tests and reverts it makes in a hunter's worktree, as `worktree.sh` beside it judges one, and refusing every other form. It judges the words bash would hand each program rather than the text, so a quoted flag is seen and a quoted `>` is no redirection; anything it cannot judge it refuses.
+# The hunter's shell: the PreToolUse hook of `.claude/agents/hunter.md`, admitting the readers a hunt needs and the probes, builds, tests and reverts a hunter makes in its worktree, as `worktree.sh` beside it judges one, and refusing every other form. It judges the words bash would hand each program rather than the text, so a quoted flag is seen and a quoted `>` is no redirection; anything it cannot judge it refuses.
 set -euo pipefail
 trap 'echo "hunter guard: could not judge the command, so it is refused" >&2; exit 2' ERR
 source "$(dirname "${BASH_SOURCE[0]}")/worktree.sh"
@@ -24,24 +24,16 @@ judge_xboard() {
     esac
 }
 
-# The two cargo forms CLAUDE.md and the hunts spell, with the words that follow judged as the program's own, and the forms a hunter's worktree takes.
+# Cargo in a hunter's worktree alone, named by the worktree's manifest, so nothing a hunter builds or runs is the main checkout's: that checkout moves under its own commits while a hunt runs.
 judge_cargo() {
-    if [[ ${1-} == run && ${2-} == --release && ${3-} == --package && ${4-} == curios && ${5-} == -- ]]; then
-        judge_curios "${@:6}"
-    elif [[ ${1-} == run && ${2-} == --package && ${3-} == curios && ${4-} == -- ]]; then
-        judge_curios "${@:5}"
-    elif [[ ${1-} == xboard ]]; then
-        judge_xboard "${@:2}"
-    elif [[ ${1-} == run && ${2-} == --package && ${3-} == xboard && ${4-} == -- ]]; then
-        judge_xboard "${@:5}"
-    elif [[ ${2-} == --manifest-path ]]; then
+    if [[ ${2-} == --manifest-path ]]; then
         judge_worktree_cargo "$@"
     else
-        refuse "cargo $*" 'cargo here runs the compiler or the board, nothing else'
+        refuse "cargo $*" "cargo runs in a hunter's worktree, named by its manifest: cargo <build|test|run> --manifest-path <worktree>/Cargo.toml"
     fi
 }
 
-# A build or a test in a hunter's worktree, or the compiler and the board run there, each named by the worktree's manifest so the shell never leaves the checkout. An option that reaches configuration, the compiler's flags or another target directory is refused: each can run a program, or write outside the worktree.
+# A build or a test in a hunter's worktree, or the compiler and the board run there, with the words that follow judged as the program's own. An option that reaches configuration, the compiler's flags or another target directory is refused: each can run a program, or write outside the worktree.
 judge_worktree_cargo() {
     local subcommand=${1-} within
     if ! within=$(within_worktree "${3-}") || [[ $within != Cargo.toml && $within != */Cargo.toml ]]; then
@@ -121,7 +113,6 @@ judge() {
             ;;
         time) judge "$@" ;;
         cargo) judge_cargo "$@" ;;
-        ./target/release/curios | ./target/debug/curios) judge_curios "$@" ;;
         git) judge_git "$@" ;;
         rg)
             local argument

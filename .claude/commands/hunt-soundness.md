@@ -52,7 +52,7 @@ f(2, True/qed())
 CRS
 ```
 
-What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects.
+What it shows admitted is what `cargo xboard report` then shows `OPEN`, and the checker and error it names for a refusal are what a fixed ticket expects. A hunter asks it of its worktree's board, `cargo run --manifest-path <worktree>/Cargo.toml --package xboard -- probe -`.
 
 ## Attacking a rule
 
@@ -84,7 +84,7 @@ Where the fix sets, or is not correct and targeted, yield: the open ticket is al
 
 ## Gathering
 
-Gather as **Gathering** of `.claude/commands/hunt-findings.md` gathers, each hunter's charter one rule of the part with its premises, and each prompt naming this file. Build the board once before spawning, `cargo build --package xboard`, since every probe runs through it, and each hunter's worktree as **Worktrees** of `.claude/commands/hunt-findings.md` keeps it. Three things are this command's. A candidate for `False` is shown again by the probe it carries, and one built by hand by filing its ticket file in the main checkout, as **Recording a proof of `False`** files one. A held bundle is one rule's attacks that held, and lands as **Attacking a rule** lands a run's tests, one commit a rule, after the last report. The fix of a ticket, where it follows, changes a checker every hunter's probe runs through, so it too waits for the last report, and is then made as **Recording a proof of `False`** makes one.
+Gather as **Gathering** of `.claude/commands/hunt-findings.md` gathers, each hunter's charter one rule of the part with its premises, and each prompt naming this file. Each hunter hunts in a worktree of its own, kept as **Worktrees** of `.claude/commands/hunt-findings.md` says, so nothing the gatherer lands in the main checkout moves under it. Three things are this command's. A candidate for `False` is shown again by the probe it carries, and one built by hand by filing its ticket file in the main checkout, as **Recording a proof of `False`** files one. A held bundle is one rule's attacks that held, and lands as **Attacking a rule** lands a run's tests, one commit a rule, once it is shown again. The fix of a ticket, where it follows, is made as **Recording a proof of `False`** makes one as soon as it follows, and every hunter whose charter the ticket names is told: its worktree still holds the commit the fix changed.
 
 ## Under `/loop`
 
