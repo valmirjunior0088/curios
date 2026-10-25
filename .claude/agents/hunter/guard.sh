@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# The hunter's shell: the PreToolUse hook of `.claude/agents/hunter.md`, admitting the probes and readers a hunt needs and refusing every other form. It judges the words bash would hand each program rather than the text, so a quoted flag is seen and a quoted `>` is no redirection; anything it cannot judge it refuses.
+# The hunter's shell: the PreToolUse hook of `.claude/agents/hunter.md`, admitting the probes and readers a hunt needs in the checkout, and the builds, tests and reverts it makes in a hunter's worktree, as `worktree.sh` beside it judges one, and refusing every other form. It judges the words bash would hand each program rather than the text, so a quoted flag is seen and a quoted `>` is no redirection; anything it cannot judge it refuses.
 set -euo pipefail
 trap 'echo "hunter guard: could not judge the command, so it is refused" >&2; exit 2' ERR
+source "$(dirname "${BASH_SOURCE[0]}")/worktree.sh"
 
 refuse() {
     printf 'hunter guard: refused `%s`: %s. What a hunter may run is listed in .claude/agents/hunter/guard.sh.\n' "$1" "$2" >&2
@@ -23,7 +24,7 @@ judge_xboard() {
     esac
 }
 
-# The two cargo forms CLAUDE.md and the hunts spell, with the words that follow judged as the program's own.
+# The two cargo forms CLAUDE.md and the hunts spell, with the words that follow judged as the program's own, and the forms a hunter's worktree takes.
 judge_cargo() {
     if [[ ${1-} == run && ${2-} == --release && ${3-} == --package && ${4-} == curios && ${5-} == -- ]]; then
         judge_curios "${@:6}"
@@ -33,13 +34,54 @@ judge_cargo() {
         judge_xboard "${@:2}"
     elif [[ ${1-} == run && ${2-} == --package && ${3-} == xboard && ${4-} == -- ]]; then
         judge_xboard "${@:5}"
+    elif [[ ${2-} == --manifest-path ]]; then
+        judge_worktree_cargo "$@"
     else
         refuse "cargo $*" 'cargo here runs the compiler or the board, nothing else'
     fi
 }
 
-# Readings of the repository. A leading option is refused since `-c` and `-C` reach configuration, where an alias runs a shell; `--output` is the file every reading can write, and `-O` opens an editor.
+# A build or a test in a hunter's worktree, or the compiler and the board run there, each named by the worktree's manifest so the shell never leaves the checkout. An option that reaches configuration, the compiler's flags or another target directory is refused: each can run a program, or write outside the worktree.
+judge_worktree_cargo() {
+    local subcommand=${1-} within
+    if ! within=$(within_worktree "${3-}") || [[ $within != Cargo.toml && $within != */Cargo.toml ]]; then
+        refuse "cargo $*" "the manifest path names a Cargo.toml inside a hunter's worktree"
+    fi
+    shift 3
+    local argument
+    for argument in "$@"; do
+        case $argument in
+            --config* | -Z* | --target-dir* | --manifest-path* | -C*) refuse "cargo $subcommand $*" 'an option that reaches configuration or writes outside the worktree' ;;
+        esac
+    done
+    case $subcommand in
+        build | test) ;;
+        run)
+            if [[ ${1-} == --release ]]; then
+                shift
+            fi
+            if [[ ${1-} == --package && ${2-} == curios && ${3-} == -- ]]; then
+                judge_curios "${@:4}"
+            elif [[ ${1-} == --package && ${2-} == xboard && ${3-} == -- ]]; then
+                judge_xboard "${@:4}"
+            else
+                refuse "cargo run $*" 'cargo run in a worktree runs the compiler or the board, nothing else'
+            fi
+            ;;
+        *) refuse "cargo $subcommand $*" 'cargo in a worktree builds, tests, or runs the compiler or the board' ;;
+    esac
+}
+
+# Readings of the repository, and a revert of a hunter's worktree named by `-C` at its root. Any other leading option is refused since `-c` reaches configuration, where an alias runs a shell; `--output` is the file every reading can write, `-O` opens an editor, and `clean -x` would delete the worktree's build with the rest.
 judge_git() {
+    local worktree=0 within
+    if [[ ${1-} == -C ]]; then
+        if ! within=$(within_worktree "${2-}") || [[ -n $within ]]; then
+            refuse "git $*" "git -C names the root of a hunter's worktree"
+        fi
+        worktree=1
+        shift 2
+    fi
     local subcommand=${1-}
     if [[ $subcommand == --no-pager ]]; then
         shift
@@ -47,12 +89,20 @@ judge_git() {
     fi
     case $subcommand in
         log | show | blame | diff | status | grep | rev-parse | rev-list | ls-files | shortlog | describe) ;;
-        *) refuse "git $*" 'not a reading of the repository' ;;
+        restore | clean)
+            if ((!worktree)); then
+                refuse "git $*" 'only a worktree is reverted, named by git -C at its root'
+            fi
+            ;;
+        *) refuse "git $*" 'not a reading of the repository, or a revert of a worktree' ;;
     esac
     local argument
     for argument in "$@"; do
         if [[ $argument == --output* || $argument == -O* ]]; then
             refuse "git $*" 'an output file or an editor'
+        fi
+        if [[ $subcommand == clean && $argument =~ ^-[^-]*[xX] ]]; then
+            refuse "git $*" "git clean -x deletes the worktree's build with the rest"
         fi
     done
 }
