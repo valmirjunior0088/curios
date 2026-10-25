@@ -215,6 +215,103 @@ fn folded_and_executed_nans_agree() {
     assert_eq!(executed[24], b"-1", "copysign reads a NaN's sign");
 }
 
+/// The laws conversion takes of a float hold of the folded and the executed program at the patterns they are most fragile at: each pair of rows is a law's two sides, which conversion holds one term, and the running program computes them to one pattern, as the folders do. The operands are assembled from bytes with a runtime-tainted low byte, as [`folded_and_executed_nans_agree`]'s are, and a zero is the runtime zero converted, so a signaling NaN reaches each instruction unquieted and a signed zero keeps its sign.
+///
+/// Mutation-checked: with the model's NaN rule answering its first NaN operand quieted, the folded product of two NaNs parts from the executed one.
+#[test]
+fn folded_and_executed_float_laws_hold_where_they_are_most_fragile() {
+    let bytes = |term: &str| {
+        format!(
+            "Bytes/fold(Flt/to_le_bytes({term}), \"\", (b, acc) => \
+             Str/concat(Str/concat(acc, \":\"), Nat/to_str(Byte/to_nat(b))))"
+        )
+    };
+    let signaling =
+        "Flt/of_le_bytes(x[Nat/to_byte((n + 1) % 256), 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x7f])";
+    let quiet =
+        "Flt/of_le_bytes(x[Nat/to_byte((n + 2) % 256), 0x12, 0x00, 0x00, 0x00, 0x00, 0xf8, 0xff])";
+    let zero = "Nat/to_flt(n)";
+    let negative_zero = "Flt/neg(Nat/to_flt(n))";
+    let one = "Nat/to_flt(n + 1)";
+    let half = "Flt/neg(Nat/to_flt(n + 1)) / 2.0";
+
+    let laws = [
+        (
+            format!("Flt/rounded/mul(Flt/Rounding/toward_positive(), {signaling}, {quiet})"),
+            format!("Flt/rounded/mul(Flt/Rounding/toward_positive(), {quiet}, {signaling})"),
+        ),
+        (
+            format!("Flt/rounded/add(Flt/Rounding/toward_negative(), {zero}, {negative_zero})"),
+            format!("Flt/rounded/add(Flt/Rounding/toward_negative(), {negative_zero}, {zero})"),
+        ),
+        (
+            format!("Flt/min({zero}, {negative_zero})"),
+            format!("Flt/min({negative_zero}, {zero})"),
+        ),
+        (
+            format!("Flt/max({negative_zero}, {zero})"),
+            format!("Flt/max({zero}, {negative_zero})"),
+        ),
+        (
+            format!("Flt/max({signaling}, {quiet})"),
+            format!("Flt/max({quiet}, {signaling})"),
+        ),
+        (
+            format!("Flt/fma({signaling}, {quiet}, {one})"),
+            format!("Flt/fma({quiet}, {signaling}, {one})"),
+        ),
+        (
+            format!("Flt/rounded/fma(Flt/Rounding/toward_zero(), {one}, {quiet}, {signaling})"),
+            format!("Flt/rounded/fma(Flt/Rounding/toward_zero(), {quiet}, {one}, {signaling})"),
+        ),
+        (
+            format!("Flt/sub({one}, {signaling})"),
+            format!("Flt/add({one}, Flt/neg({signaling}))"),
+        ),
+        (
+            format!("Flt/floor(Flt/ceil({half}))"),
+            format!("Flt/ceil({half})"),
+        ),
+        (
+            format!("Flt/round(Flt/trunc({signaling}))"),
+            format!("Flt/trunc({signaling})"),
+        ),
+        (
+            format!("Flt/copysign({signaling}, Flt/abs({quiet}))"),
+            format!("Flt/abs({signaling})"),
+        ),
+        (
+            format!("Flt/of_le_bytes(Flt/to_le_bytes({signaling}))"),
+            signaling.to_owned(),
+        ),
+    ];
+    let rows = laws
+        .iter()
+        .flat_map(|(left, right)| [bytes(left), bytes(right)])
+        .chain([
+            format!(
+                "match Flt/eql({signaling}, {one}) == Flt/eql({one}, {signaling}) | true => \"true\" | false => \"false\" end"
+            ),
+            format!(
+                "match Flt/neq({quiet}, {one}) == Flt/neq({one}, {quiet}) | true => \"true\" | false => \"false\" end"
+            ),
+        ])
+        .collect::<Vec<_>>();
+    let rows = rows.iter().map(String::as_str).collect::<Vec<_>>();
+
+    let executed = folded_matches_runtime(&rows);
+
+    for (index, (left, right)) in laws.iter().enumerate() {
+        assert_eq!(
+            executed[2 * index],
+            executed[2 * index + 1],
+            "`{left}` and `{right}` compute two patterns"
+        );
+    }
+    assert_eq!(executed[2 * laws.len()], b"true");
+    assert_eq!(executed[2 * laws.len() + 1], b"true");
+}
+
 /// A reassociated product answers what the written one does, however large its partial products grow.
 ///
 /// `k(1)` is zero, so the product is zero, while the accumulator rebase in `curios-ersd` threads the factors the other way and multiplies `65536 · 65536` before it meets the zero. Nothing refuses a size, so multiplication is registered for the rebase, and the two orders differ only in what their partials build.

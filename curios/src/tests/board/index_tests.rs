@@ -282,3 +282,34 @@ fn a_factor_both_indices_share_forces_no_equation_of_the_others() {
         "type mismatch",
     );
 }
+
+// A rounded sum cancels nothing: `1.0 + 1.0e300` and `2.0 + 1.0e300` round to one float, so a summand two float sums share leaves the others' equation unknown, and reading `a = c` off it would prove `Eq()(1.0, 2.0)`. Pairing the shared summand is conversion's sufficient condition, which inversion never reads; nor is a fused multiply-add's, whose two values at a zero factor are the addend whatever the factors beside it are.
+#[test]
+fn an_operand_two_float_operations_share_forces_no_equation_of_the_others() {
+    rejected_by(
+        r#"
+        use /std/{Flt, Eq};
+
+        let cancel(a: Flt, b: Flt, c: Flt, p: Eq()(a + b, c + b)) -> Eq()(a, c) =
+            match p | refl() => Eq/refl() end;
+
+        let _forged: Eq()(1.0, 2.0) = cancel(1.0, 1.0e300, 2.0, Eq/refl());
+
+        /std/print("unreachable")
+        "#,
+        "expected: Eq(@Flt)(a, c)",
+    );
+    rejected_by(
+        r#"
+        use /std/{Flt, Eq};
+
+        let cancel(a: Flt, b: Flt, c: Flt, d: Flt, p: Eq()(Flt/fma(a, b, c), Flt/fma(a, d, c))) -> Eq()(b, d) =
+            match p | refl() => Eq/refl() end;
+
+        let _forged: Eq()(1.0, 2.0) = cancel(0.0, 1.0, 3.0, 2.0, Eq/refl());
+
+        /std/print("unreachable")
+        "#,
+        "expected: Eq(@Flt)(b, d)",
+    );
+}

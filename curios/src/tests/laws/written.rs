@@ -1190,6 +1190,8 @@ const CARRIERS: &[Carrier] = &[
             "Eq()(Flt/rounded/add(Flt/Rounding/toward_zero(), a, b), Flt/rounded/add(Flt/Rounding/toward_positive(), b, a))",
             // The addend is no factor.
             "Eq()(Flt/rounded/fma(Flt/Rounding/ties_to_even(), a, b, c), Flt/rounded/fma(Flt/Rounding/ties_to_even(), a, c, b))",
+            // A fused multiply-add rounds once where a product and a sum round twice: `(1 + 2⁻⁵²)(1 - 2⁻⁵²) - 1` is `-2⁻¹⁰⁴` fused and `0.0` split.
+            "Eq()(Flt/fma(a, b, c), a * b + c)",
             // A sign operation is not the identity, and `copysign` reads its sign from its second operand alone.
             "Eq()(Flt/neg(a), a)",
             "Eq()(Flt/abs(Flt/neg(a)), a)",
@@ -1487,6 +1489,121 @@ fn a_rounding_to_an_integral_value_is_fixed_by_every_direction() {
     let mut found = misplaced(IMPORTS, name, &rows, rows.len());
     found.extend(misplaced_by_the_kernel(IMPORTS, name, &rows, rows.len()));
     assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[test]
+fn a_float_law_carried_to_where_it_is_most_fragile_carries_only_true() {
+    // Each law conversion takes of a float, proved by `refl` over symbols, instantiated at the patterns it is most fragile at and carried along the bytes of its two sides: were the fold to compute the sides apart there, what is carried would be `False`. A quiet NaN with a payload of one, positive; a signaling one with a payload of two, negative; and a signaling one with a payload of one, positive.
+    //
+    // Mutation-checked: with the model's NaN rule answering its first NaN operand quieted, as x86 does, the first attack is admitted at `False`.
+    let quiet = "Flt/of_le_bytes(x[1, 0, 0, 0, 0, 0, 0xf8, 0x7f])";
+    let signaling = "Flt/of_le_bytes(x[2, 0, 0, 0, 0, 0, 0xf0, 0xff])";
+    let positive = "Flt/of_le_bytes(x[1, 0, 0, 0, 0, 0, 0xf0, 0x7f])";
+    let attacks = [
+        // The greatest quieted pattern, read unsigned, whatever the operands' order: the negative one.
+        ("a + b", "b + a", quiet, signaling, "0.0"),
+        (
+            "Flt/rounded/mul(Flt/Rounding/toward_positive(), a, b)",
+            "Flt/rounded/mul(Flt/Rounding/toward_positive(), b, a)",
+            signaling,
+            quiet,
+            "0.0",
+        ),
+        // An exact zero sum of opposite signs is `-0.0` toward negative, in either order.
+        (
+            "Flt/rounded/add(Flt/Rounding/toward_negative(), a, b)",
+            "Flt/rounded/add(Flt/Rounding/toward_negative(), b, a)",
+            "+0.0",
+            "-0.0",
+            "0.0",
+        ),
+        // `-0.0` is below `+0.0` to `min` and `max`, in either order.
+        ("Flt/min(a, b)", "Flt/min(b, a)", "+0.0", "-0.0", "0.0"),
+        ("Flt/max(a, b)", "Flt/max(b, a)", "-0.0", "+0.0", "0.0"),
+        ("Flt/min(a, b)", "Flt/min(b, a)", signaling, quiet, "0.0"),
+        // A NaN addend answers with the factors' NaNs, the greatest of the three.
+        (
+            "Flt/fma(a, b, c)",
+            "Flt/fma(b, a, c)",
+            quiet,
+            signaling,
+            positive,
+        ),
+        (
+            "Flt/fma(a, b, c)",
+            "Flt/fma(b, a, c)",
+            "0.0",
+            "+inf.0",
+            quiet,
+        ),
+        // The subtrahend's sign is flipped before its NaN is chosen.
+        ("a - b", "a + Flt/neg(b)", "1.0", signaling, "0.0"),
+        // `ceil(-0.5)` is `-0.0`, which every direction leaves, and a signaling NaN is quieted once.
+        (
+            "Flt/floor(Flt/ceil(a))",
+            "Flt/ceil(a)",
+            "-0.5",
+            "0.0",
+            "0.0",
+        ),
+        (
+            "Flt/round(Flt/trunc(a))",
+            "Flt/trunc(a)",
+            positive,
+            "0.0",
+            "0.0",
+        ),
+        // The sign operations quiet nothing.
+        (
+            "Flt/copysign(a, Flt/abs(b))",
+            "Flt/abs(a)",
+            signaling,
+            quiet,
+            "0.0",
+        ),
+        (
+            "Flt/neg(Flt/copysign(a, b))",
+            "Flt/copysign(a, Flt/neg(b))",
+            positive,
+            signaling,
+            "0.0",
+        ),
+        // Decoding what encoding wrote canonicalizes no NaN.
+        (
+            "Flt/of_le_bytes(Flt/to_le_bytes(a))",
+            "a",
+            positive,
+            "0.0",
+            "0.0",
+        ),
+    ];
+    for (left, right, a, b, c) in attacks {
+        let source = fill!(
+            r#"
+            use /std/{Flt, Bytes, Eq, Io};
+            use /std/Bool/{True, False, Holds};
+
+            let left(a: Flt, b: Flt, c: Flt) -> Flt = ${left};
+            let right(a: Flt, b: Flt, c: Flt) -> Flt = ${right};
+            let law(a: Flt, b: Flt, c: Flt) -> Eq()(left(a, b, c), right(a, b, c)) = Eq/refl();
+
+            let at(f: Flt) -> Prop = Holds(Bytes/eql(Flt/to_le_bytes(f), Flt/to_le_bytes(left(${a}, ${b}, ${c}))));
+            let _forged: False = Eq/subst(at, law(${a}, ${b}, ${c}), True/qed());
+
+            Io/pure(())
+            "#,
+            left,
+            right,
+            a,
+            b,
+            c
+        );
+        let error = typecheck(&source).expect_err("a law carried to a pattern proves `False`");
+        assert!(
+            error.contains("inferred: True"),
+            "`{left}` against `{right}` at `{a}`, `{b}`, `{c}` is refused otherwise than by carrying `True`:\n{error}"
+        );
+    }
 }
 
 /// What the rows over a recursive function are stated under: one whose body multiplies two of its own calls, so two calls that differ unfold to products nothing pairs, whose atoms are the same two calls one step on.
