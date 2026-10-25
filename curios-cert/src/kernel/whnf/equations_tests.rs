@@ -124,7 +124,7 @@ fn a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under() {
 
 /// A quotient whose only local is the proof of its bound names a local, and its reduct lives as such a term's does: an equation answers it inside its arm alone. A fold reads no proof, so `6 / 2` under the proof `p` folds to `3` as it does under any proof, and only the free-variable walk, which hands the proof of a bound out beside the operands (`Intrinsic::for_each_operand`), says the term is not local-free. Counted local-free, it would take the closed machine, file its reduct in the tables that live the declaration and record no equation, so the arm's `0` would never be its answer.
 ///
-/// The quotient is reduced before the arm, inside it and after it, as `a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under` reduces its open term, and the uncached kernel agrees on all three.
+/// The quotient is reduced before the arm, inside it and after it, as `a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under` reduces its open term, and the uncached kernel agrees on all three. Mutation-checked: with `Intrinsic::for_each_operand` handing a bound's proof to no reader, the quotient reads `3` inside the arm and the assertion on `inside` is what sees it; the same mutation fails six of `kernel::infer`'s intrinsic and signature tests, where `operands` comes up one short of its row.
 #[test]
 fn a_quotient_naming_a_local_only_in_its_bound_is_refined_within_its_arm_alone() {
     let sequence = |kernel: &mut Kernel| {
