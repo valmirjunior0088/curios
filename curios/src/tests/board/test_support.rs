@@ -2320,6 +2320,29 @@ pub(super) const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r
         /std/print(Nat/to_str(1))
         "#;
 
+pub(super) const A_STRUCT_PROPOSITION_QUANTIFYING_OVER_ITS_OWN_SORT: &str = r#"
+        use /std/Bool/{False};
+
+        struct Bad: Prop
+        { f: (A: Prop) -> (A) -> A }
+
+        let bad(b: Bad) -> False = bad(b.0(Bad)(b));
+
+        /std/print("unreachable")
+        "#;
+
+pub(super) const A_STRUCT_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        struct Fine: Prop
+        { f: (A: Prop) -> (A) -> A }
+
+        let through(b: Fine, p: True) -> True = b.0(True)(p);
+
+        /std/print(Nat/to_str(1))
+        "#;
+
 pub(super) const A_FUNCTION_TYPE_ALIASED_UNDER_ITS_OWN_MARK: &str = r#"
         use /std/{Nat, Bool};
 

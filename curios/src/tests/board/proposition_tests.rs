@@ -244,3 +244,20 @@ fn a_proposition_holding_a_polymorphic_proof_is_admitted_at_its_level() {
         b"1"
     );
 }
+
+// The same sizing through a record rather than an `induct`: a `Prop`-sorted `struct` holding `(A: Prop) -> (A) -> A` sits at the level of the propositions its field ranges over, so projecting the field and applying it at the struct itself asks that `Prop` to be strictly below itself. The `induct` neighbours above refuse the declaration where its constructor is sized; the struct is admitted and the paradox is stopped at the self-instantiation, through `tuple_sort`'s field sizing rather than constructor sizing. `a_struct_proposition_holding_a_polymorphic_proof_is_admitted` is the control, the same field applied at a proposition below it.
+#[test]
+fn a_struct_proposition_quantifying_over_its_own_sort_is_refused() {
+    rejected_by(
+        A_STRUCT_PROPOSITION_QUANTIFYING_OVER_ITS_OWN_SORT,
+        "this Prop would need to be strictly below itself",
+    );
+}
+
+#[test]
+fn a_struct_proposition_holding_a_polymorphic_proof_is_admitted() {
+    assert_eq!(
+        run(A_STRUCT_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED),
+        b"1"
+    );
+}
