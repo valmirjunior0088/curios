@@ -56,3 +56,51 @@ fn a_classing_made_under_an_arms_equation_answers_nothing_after_the_arm() {
         "type mismatch",
     );
 }
+
+// What a guard's spelling settled under a split's re-typing answers is the split's: at `c = true` the operands are units and the guard is `k(0)`, inside a lambda there as anywhere in the arm, and after the split nothing says so. `curios-cert`'s `scope_tests` hold the kernel to the same terms.
+#[test]
+fn a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split() {
+    rejected_by(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+
+        let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
+        let leak(c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> Holds(k(0)) =
+            match (match h(p) == h(q) | true => k(0) | false => k(1) end)
+            | false => match guard end
+            | true =>
+                let split: Nat = match c | false => 0 | true => ((settled: Holds(k(0))) => 0)(True/qed()) end;
+                True/qed()
+            end;
+
+        /std/print(Nat/to_str(0))
+        "#,
+        "type mismatch",
+    );
+}
+
+// The same guard settled in the arm of a split the operands are units in, and asked in the arm where they are numbers.
+#[test]
+fn a_guard_settled_in_one_arm_of_a_split_answers_nothing_in_the_other() {
+    rejected_by(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/Bool/{True, Holds};
+
+        let F(c: Bool) -> Type = match c | false => {} | true => Nat end;
+        let leak(c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> Holds(k(0)) =
+            match (match h(p) == h(q) | true => k(0) | false => k(1) end)
+            | false => match guard end
+            | true =>
+                match c
+                | false => (let settled: Holds(k(0)) = True/qed(); True/qed())
+                | true => True/qed()
+                end
+            end;
+
+        /std/print(Nat/to_str(0))
+        "#,
+        "type mismatch",
+    );
+}
