@@ -353,6 +353,11 @@ fn proposition(kernel: &mut Kernel, path: &str) -> Term {
 
 /// A `Prop`-sorted structure with one field of `field_type` and no parameters, registered and returned for checking.
 fn proposition_with_field(kernel: &mut Kernel, field_type: Term) -> StructDecl {
+    struct_with_field(kernel, Term::prop(), field_type)
+}
+
+/// A structure at `result_sort` with one field of `field_type` and no parameters, registered and returned for checking.
+fn struct_with_field(kernel: &mut Kernel, result_sort: Term, field_type: Term) -> StructDecl {
     let name = Global::Authored(Qualifier::from(["Bad"]));
     let declaration = StructDecl {
         universe_context: UniverseContext::default(),
@@ -360,7 +365,7 @@ fn proposition_with_field(kernel: &mut Kernel, field_type: Term) -> StructDecl {
             [(Free::local(0, Some("value")), field_type)],
             (),
         )),
-        result_sort: Term::prop(),
+        result_sort,
         module: Qualifier::default(),
         rep_public: true,
         polarities: Vec::new(),
@@ -371,6 +376,28 @@ fn proposition_with_field(kernel: &mut Kernel, field_type: Term) -> StructDecl {
         .expect("a name is declared once");
 
     declaration
+}
+
+/// A `struct` field is sized against the structure's level exactly as an inductive payload is: `struct Bad : Type 0 { value : Type 0 }` holds a field at its own level and is refused, the struct face of [`a_payload_at_the_familys_own_level_is_refused`]. The existing `Prop`-structure fixtures reach `check_non_informative` first and never exercise the size clause, so without this the field-sizing arm of `check_signature` could stop firing and only the `Prop` path would notice.
+#[test]
+fn a_struct_field_at_the_structs_own_level_is_refused() {
+    let mut kernel = kernel();
+    let declaration = struct_with_field(&mut kernel, Term::type_ground(), Term::type_ground());
+
+    assert!(matches!(
+        check_struct_decl(&mut kernel, &declaration),
+        Err(Error::Oversized { .. }),
+    ));
+}
+
+/// The control: the same field one level below the structure is admitted, so the clause refuses a field at or above the level and not every field.
+#[test]
+fn a_struct_field_below_the_structs_level_is_admitted() {
+    let mut kernel = kernel();
+    let one = Level::zero().succ().expect("level zero has a successor");
+    let declaration = struct_with_field(&mut kernel, Term::type_at(one), Term::type_ground());
+
+    assert_eq!(check_struct_decl(&mut kernel, &declaration), Ok(()));
 }
 
 /// The name the definitions below are checked under.
