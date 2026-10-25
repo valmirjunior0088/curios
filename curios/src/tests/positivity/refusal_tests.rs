@@ -208,6 +208,106 @@ fn a_negative_occurrence_borrowed_through_a_sealed_concept_is_rejected() {
     );
 }
 
+// A concept's superclass is a hidden field of its dictionary, and the walk reads it as it reads a written one: `Sub`'s edge `use Refute(Sub(X))` puts `Sub` left of `refute`'s arrow one dictionary away, and skipping a field no projection counts would make that edge the paradox's negative occurrence.
+#[test]
+fn a_negative_occurrence_through_a_superclass_field_is_rejected() {
+    rejected_by(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{False};
+
+        concept Refute(A : Type) : pub Type { refute(A) -> False }
+
+        concept Sub(X : Type) : pub Type { use Refute(Sub(X)), tag() -> Nat }
+
+        /std/print("unreachable")
+        "#,
+        "it occurs in itself negatively",
+    );
+}
+
+// An associated type a witness chooses is a field of a dictionary the walk unfolds: `Fam/Carrier(@Box(Bad))` resolves to the generic witness for `Box(A)` and projects its `Carrier`, which that witness spells `(A) -> False`. Neither `Bad`'s field nor `Fam`'s declaration shows an arrow, so only reading through the wrapper, the witness and the projection finds the negative occurrence.
+#[test]
+fn a_negative_occurrence_a_generic_witness_chooses_is_rejected() {
+    rejected_by(
+        r#"
+        use /std/Bool/{False};
+
+        concept Fam(A : Type) : pub Type { Carrier : Prop }
+
+        struct Box(A : Type) : pub Type { held : A }
+
+        satisfy (@A : Type) => Fam(Box(A)) { Carrier = (A) -> False }
+
+        struct Bad : pub Type { x : Fam/Carrier(@Box(Bad)) }
+
+        /std/print("unreachable")
+        "#,
+        "it occurs in itself negatively",
+    );
+}
+
+// A type declared under a premise takes its dictionary as a parameter, and a field resolving through the premise projects it, so `S` uses its dictionary where nothing can see through: `Bad` hands `S` a dictionary whose `Carrier` is `(Bad) -> False`, and reading the dictionary parameter as unused would hand `Bad` that arrow as its own field with no occurrence recorded.
+#[test]
+fn a_negative_occurrence_in_the_dictionary_a_premise_takes_is_rejected() {
+    rejected_by(
+        r#"
+        use /std/Bool/{False};
+
+        concept Fam(A : Type) : pub Type { Carrier : Prop }
+
+        struct S(A : Type, use Fam(A)) : pub Type { x : Fam/Carrier(@A) }
+
+        struct Bad : pub Type { s : S(Bad, use Fam(Bad) { Carrier = (Bad) -> False }) }
+
+        /std/print("unreachable")
+        "#,
+        "a position the checker cannot see through",
+    );
+}
+
+// A record's field holding a type is read where it is projected: `neg(Bad).T` is a definition's record literal, its field `(Bad) -> False`, and the projection reduces to it. Read as an opaque projection the field type would name `Bad` only inside a value, and the record the paradox is built from would carry its own consumer.
+#[test]
+fn a_negative_occurrence_projected_from_a_record_is_rejected() {
+    rejected_by(
+        r#"
+        use /std/Bool/{False};
+
+        struct Pack : pub Type { T : Prop }
+
+        let neg(X : Type) -> Pack = Pack { T = (X) -> False };
+
+        struct Bad : pub Type { x : neg(Bad).T }
+
+        /std/print("unreachable")
+        "#,
+        "it occurs in itself negatively",
+    );
+}
+
+// A body the compiler writes is a definition the walk unfolds like a written one: `Sel` picks `(X) -> False` where a derived `Eql` says `Tag/a()` is `Tag/a()`, so `Bad`'s field is the negative arrow only through the derived witness's body.
+#[test]
+fn a_negative_occurrence_a_derived_witness_selects_is_rejected() {
+    rejected_by(
+        r#"
+        use /std/{Bool};
+        use /std/Bool/{True, False};
+        use /std/ops/{Eql};
+
+        induct Tag : pub Type | a() | b() end
+
+        satisfy Eql(Tag) { .. }
+
+        let Sel(t : Tag, X : Type) -> Prop = match t == Tag/a() | true => (X) -> False | false => True end;
+
+        struct Bad : pub Type { x : Sel(Tag/a(), Bad) }
+
+        /std/print("unreachable")
+        "#,
+        "it occurs in itself negatively",
+    );
+}
+
 // A `let`-defined alias is unfolded rather than read as an opaque former, so the arrow it hides counts where it stands — once for the negative, twice for the merely positive.
 #[test]
 fn a_negative_occurrence_behind_an_alias_is_rejected() {

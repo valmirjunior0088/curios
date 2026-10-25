@@ -195,6 +195,25 @@ fn parametric_witnesses_over_one_family_still_collide() {
     );
 }
 
+// A name for a type is read through to the type before it keys a witness, so a second witness spelled through the name meets the first at the type's own key: were the name a key of its own, one goal at `Nat` would have two witnesses answering it, and which ran would follow which spelling resolution met.
+#[test]
+fn a_witness_spelled_through_a_name_for_a_type_collides_with_the_types_own() {
+    let source = r#"
+        use /std/{Nat, Str};
+        concept Named(A : Type) : pub Type { name() -> Str }
+        satisfy Named(Nat) { name() = "nat" }
+        let N : Type = Nat;
+        satisfy Named(N) { name() = "alias" }
+        /std/print(Named/name(@Nat))
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("duplicate witness of 'Named' for head 'Nat'"),
+        "expected the witness spelled through the name refused at the type's key:\n{report}"
+    );
+}
+
 // A group's members register on their signatures before any body elaborates, so a member whose key another member already holds is refused as any duplicate is.
 #[test]
 fn a_group_member_with_a_taken_key_is_a_duplicate() {

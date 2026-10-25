@@ -365,6 +365,60 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
     );
 }
 
+/// The same route to `False` behind an alias named as a universe instance: `Bad`'s constructor takes `D@{0}`, an instance of a definition generic in one level whose value is `(Bad) -> False`. An instance is a variable head the levels spell, which the walk records nothing at unless it forces the instance to the value it stands for, as it forces a bare name; the instance of a parameter is the occurrence itself (the board's `A parameter named through an instance is an occurrence positivity does not see`), and the instance of a definition is its value. With the budget to unfold it the set is refused by the rule, at `Bad`.
+///
+/// Mutation-checked against `forceable` declining an `Instance`: the instance then falls to the walk's variable arm, names no parameter, and `Bad` is admitted.
+#[test]
+fn a_payload_behind_a_universe_instance_of_an_alias_is_refused_by_the_rule() {
+    let mut kernel = kernel();
+
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let bad_name = Global::Authored(Qualifier::from(["Bad"]));
+    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let bad_type = Term::induct_type(bad_name, Vec::<Term>::new(), Vec::<Term>::new());
+
+    let alias = Free::local(1, Some("D"));
+    kernel
+        .define(
+            &alias,
+            &Term::type_ground(),
+            &Term::func_type([(Free::local(2, Some("x")), bad_type)], false_type),
+            &UniverseContext {
+                parameter_count: 1,
+                ..UniverseContext::default()
+            },
+        )
+        .expect("a name is declared once");
+
+    let mut inducts = BTreeMap::new();
+    inducts.insert(
+        false_name,
+        InductDecl {
+            constructors: Vec::new().into(),
+            ..single_payload(Term::type_ground(), Term::prop())
+        },
+    );
+    inducts.insert(
+        bad_name,
+        single_payload(
+            Term::instance_of(&alias, vec![Level::zero()]),
+            Term::type_ground(),
+        ),
+    );
+    for (name, entry) in &inducts {
+        kernel
+            .declare_induct(name, entry)
+            .expect("a name is declared once");
+    }
+
+    let refusal = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()))
+        .expect_err("an alias named as a universe instance is read through, not admitted");
+    assert!(
+        matches!(&refusal, PositivityRefusal::NotPositive(refusal) if refusal.name == bad_name),
+        "refused by the rule, at `Bad`: {refusal:?}",
+    );
+}
+
 /// An alias standing for the declaration itself is a strict occurrence, and with no budget to unfold it the set is still refused — the alias is read at `Mixed`, a non-strict path back to `Good` — but for the budget, which is all the verdict rests on. With the budget to unfold it the same set is admitted, and that control is what says the refusal was the budget's.
 ///
 /// Reporting it as not strictly positive would have a kernel out of budget blame a sound declaration, as it would `/std/Toml/Toml`, whose recursion reaches the walk through `Map`.
