@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Definition, Free, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many,
-        Module, Nat, Quality, QualityParam, Rec, RecItem, Scope, Subterm, Telescope, Term,
-        UniverseContext, Universes, test_support::declaring,
+        Module, Nat, Quality, QualityParam, Rec, RecItem, Scope, StructDecl, Subterm, Telescope,
+        Term, UniverseContext, UniverseParam, Universes, test_support::declaring,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::BTreeSet,
@@ -230,6 +230,57 @@ fn family_at(name: Global, sorts: impl IntoIterator<Item = Quality>, params: Vec
         params,
         Vec::<Term>::new(),
     )
+}
+
+/// `induct Eq(@A: Sort): (x: A, y: A) -> Prop | refl(@z: A): (z, z) end`, the equality over a sort its caller states.
+fn equality_over_a_sort() -> (Global, InductDecl) {
+    let (carrier, this, that, value) = (
+        Free::local(60, Some("A")),
+        Free::local(61, Some("x")),
+        Free::local(62, Some("y")),
+        Free::local(63, Some("z")),
+    );
+
+    (
+        named("Eq"),
+        InductDecl {
+            universe_context: leaving(1),
+            arity: Telescope::build(
+                [(carrier, left(0))],
+                Telescope::build(
+                    [
+                        (this, Term::free_var(&carrier)),
+                        (that, Term::free_var(&carrier)),
+                    ],
+                    (),
+                ),
+            ),
+            constructors: vec![(
+                Atom::from("refl"),
+                InductParam::new(
+                    Telescope::build(
+                        [(carrier, left(0)), (value, Term::free_var(&carrier))],
+                        vec![Term::free_var(&value), Term::free_var(&value)],
+                    ),
+                    vec![Plicity::Implicit, Plicity::Implicit],
+                ),
+            )]
+            .into(),
+            result_sort: Term::prop(),
+            module: Qualifier::default(),
+            rep_public: true,
+            polarities: Vec::new(),
+            variances: Vec::new(),
+        },
+    )
+}
+
+/// The one sort a declaration leaves, as an occurrence inside it states it.
+fn left_open() -> Universes {
+    Universes {
+        levels: Vec::new(),
+        qualities: vec![Quality::Param(QualityParam(0))],
+    }
 }
 
 /// One definition serves data and proofs: each use states the sort it stands at, and reads the definition's type and body at it.
@@ -482,7 +533,7 @@ fn a_family_whose_own_sort_is_left_to_its_caller_is_refused() {
     );
 }
 
-/// Two instances of one family apart in a sort are two types, whatever else they share: nothing of `Tagged` mentions the sort it leaves, and its instance at `Prop` is still no instance at `Type`.
+/// Two instances of one family apart in a sort are two types, whatever else they share: nothing of `Tagged` mentions the sort it leaves, and its instance at `Prop` is still no instance at `Type`. `curios`'s `tests::board::subsumption_tests` puts two such instances to the elaborator under this name. Rename both or neither.
 #[test]
 fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
     let (name, _) = tagged();
@@ -636,6 +687,373 @@ fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
             at_sorts(verdict),
             Some((sorts, Error::LargeElimination(_))) if sorts == [Quality::Type]
         )),
+        "{verdicts:?}",
+    );
+}
+
+/// A proposition carries only proofs at every assignment of the sorts it leaves: `struct W(A: Sort): Prop { a: A }` holds a proof at `Prop` and a value at `Type`, where any two of its values would be one with their fields apart, so it is refused at that assignment. `curios`'s `tests::board::subsumption_tests` puts the same structure to the elaborator under this name. Rename both or neither.
+#[test]
+fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
+    let (carrier, held) = (Free::local(40, Some("A")), Free::local(41, Some("a")));
+    let declaration = StructDecl {
+        universe_context: leaving(1),
+        arity: Telescope::build(
+            [(carrier, left(0))],
+            Telescope::build([(held, Term::free_var(&carrier))], ()),
+        ),
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    let module = declaring(
+        Module {
+            mounts: Vec::new(),
+            items: Vec::new().into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        [],
+        [(named("W"), declaration)],
+        [],
+    );
+
+    let verdicts = verdicts(&module);
+
+    assert!(
+        verdicts.iter().any(|verdict| matches!(
+            at_sorts(verdict),
+            Some((sorts, Error::Informative { .. })) if sorts == [Quality::Type]
+        )),
+        "{verdicts:?}",
+    );
+}
+
+/// A value at a sort left to a caller is a proof at the use that states `Prop`, so a recursion answering one owes a proof's descent: `rec spin(A: Sort, n: Nat) -> A = spin(A, n)` is a proof's recursion at `Prop`, where it does not descend, and is refused at that assignment alone.
+#[test]
+fn a_recursion_into_a_sort_left_to_its_caller_descends_as_a_proof_must() {
+    let spin = named("spin");
+    let (carrier, count) = (Free::local(50, Some("A")), Free::local(51, Some("n")));
+    let binders = || [(carrier, left(0)), (count, nat())];
+    let group = match generic(
+        &spin,
+        1,
+        Term::func_type(binders(), Term::free_var(&carrier)),
+        Term::func(
+            binders(),
+            Term::apply(
+                Term::free_var(&Free::from(&spin)),
+                [Term::free_var(&carrier), Term::free_var(&count)],
+            ),
+        ),
+    ) {
+        Item::Let(definition) => Item::Rec(RecItem::new(vec![*definition])),
+        item => item,
+    };
+
+    let verdicts = verdicts(&module(vec![group], []));
+
+    assert!(
+        verdicts.iter().any(|verdict| matches!(
+            at_sorts(verdict),
+            Some((sorts, Error::NotDescending { .. })) if sorts == [Quality::Prop]
+        )),
+        "{verdicts:?}",
+    );
+}
+
+/// A recursive group's members state no sort its context does not leave: `rec id(A: Sort, a: A) -> A` under a context leaving none is refused, its members being read as definitions under the group's own context.
+#[test]
+fn a_group_stating_a_sort_its_context_does_not_leave_is_refused() {
+    let group = match identity() {
+        Item::Let(definition) => Item::Rec(RecItem::new(vec![Definition {
+            universe_context: leaving(0),
+            ..*definition
+        }])),
+        item => item,
+    };
+
+    let verdicts = verdicts(&module(vec![group], []));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::OpenSort(_))),
+        "{verdicts:?}",
+    );
+}
+
+/// The sort a definition states its value inhabits is read at each assignment of the sorts its declaration leaves, though no scan before the judgment reads it: one past those sorts is a sort no assignment states, and is refused where the value's own sort is put beside it.
+#[test]
+fn a_value_sort_past_the_sorts_a_declaration_leaves_is_refused() {
+    let item = match generic(&named("T"), 1, Term::type_ground(), nat()) {
+        Item::Let(definition) => Item::Let(Box::new(Definition {
+            value_sort: Some(left(1)),
+            ..*definition
+        })),
+        item => item,
+    };
+
+    let verdicts = verdicts(&module(vec![item], []));
+
+    assert!(
+        verdicts.iter().any(|verdict| matches!(
+            at_sorts(verdict),
+            Some((sorts, Error::ValueSort { .. })) if sorts == [Quality::Prop]
+        )),
+        "{verdicts:?}",
+    );
+}
+
+/// A recursive occurrence that only a sort left to a caller would uncover: at `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands, and a match the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios`'s `tests::positivity::refusal_tests` puts the same declaration to the elaborator under this name. Rename both or neither.
+#[test]
+fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
+    let (eq, eq_decl) = equality_over_a_sort();
+    let bottom = named("False");
+    let bad = named("Bad");
+    let (carrier, this, that, proof, eater, value, eaten) = (
+        Free::local(70, Some("A")),
+        Free::local(71, Some("x")),
+        Free::local(72, Some("y")),
+        Free::local(73, Some("h")),
+        Free::local(74, Some("f")),
+        Free::local(75, Some("z")),
+        Free::local(76, Some("b")),
+    );
+    let (left_index, right_index, scrutinee) = (
+        Free::local(77, None),
+        Free::local(78, None),
+        Free::local(79, None),
+    );
+    let equation = Term::induct_type_at(
+        eq,
+        left_open(),
+        vec![Term::free_var(&carrier)],
+        vec![Term::free_var(&this), Term::free_var(&that)],
+    );
+    let itself = Term::induct_type_at(
+        bad,
+        left_open(),
+        vec![
+            Term::free_var(&carrier),
+            Term::free_var(&this),
+            Term::free_var(&that),
+            Term::free_var(&proof),
+        ],
+        Vec::<Term>::new(),
+    );
+    // match h : Eq(A)(x, y) | refl(@z) => (b: Bad(A, x, y, h)) -> False end
+    let payload = Term::induct_match_scoped_marked(
+        Term::free_var(&proof),
+        Scope::close(
+            Many(3),
+            &[&left_index, &right_index, &scrutinee],
+            Term::prop(),
+        ),
+        [(
+            "refl",
+            vec![(Plicity::Implicit, value)],
+            Term::func_type(
+                [(eaten, itself)],
+                Term::induct_type(bottom, Vec::<Term>::new(), Vec::<Term>::new()),
+            ),
+        )],
+        None,
+    )
+    .stating(equation.clone());
+    let declaration = InductDecl {
+        universe_context: leaving(1),
+        arity: Telescope::build(
+            [
+                (carrier, left(0)),
+                (this, Term::free_var(&carrier)),
+                (that, Term::free_var(&carrier)),
+                (proof, equation.clone()),
+            ],
+            Telescope::done(()),
+        ),
+        constructors: vec![(
+            Atom::from("c"),
+            InductParam::new(
+                Telescope::build(
+                    [
+                        (carrier, left(0)),
+                        (this, Term::free_var(&carrier)),
+                        (that, Term::free_var(&carrier)),
+                        (proof, equation),
+                        (eater, payload),
+                    ],
+                    Vec::new(),
+                ),
+                vec![
+                    Plicity::Implicit,
+                    Plicity::Explicit,
+                    Plicity::Explicit,
+                    Plicity::Explicit,
+                    Plicity::Explicit,
+                ],
+            ),
+        )]
+        .into(),
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    let verdicts = verdicts(&module(
+        Vec::new(),
+        [
+            (eq, eq_decl),
+            (bottom, proposition(Vec::new())),
+            (bad, declaration),
+        ],
+    ));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::NotPositive { .. })),
+        "{verdicts:?}",
+    );
+}
+
+/// A level carried only by a match that stands is held: `induct Lv(@A: Sort, x: A, y: A, h: Eq(x, y)): Type u | mk(f: match h : (_, _, _) => Type u | refl(@z) => Nat end) end` holds `u` in its motive alone, where conversion compares two such matches, since at `Type` a match on `h` stands whatever `x` and `y` are. So two instances of `Lv` at `Type` apart in `u` are two types, and a value of one is no value of the other.
+#[test]
+fn a_level_a_standing_match_carries_is_held_by_its_family() {
+    let (eq, eq_decl) = equality_over_a_sort();
+    let lv = named("Lv");
+    let level = Level::param(UniverseParam(0));
+    let (carrier, this, that, proof, field, value) = (
+        Free::local(80, Some("A")),
+        Free::local(81, Some("x")),
+        Free::local(82, Some("y")),
+        Free::local(83, Some("h")),
+        Free::local(84, Some("f")),
+        Free::local(85, Some("z")),
+    );
+    let (left_index, right_index, scrutinee) = (
+        Free::local(86, None),
+        Free::local(87, None),
+        Free::local(88, None),
+    );
+    let equation = |universes: Universes, carrier: &Free, this: &Free, that: &Free| {
+        Term::induct_type_at(
+            eq,
+            universes,
+            vec![Term::free_var(carrier)],
+            vec![Term::free_var(this), Term::free_var(that)],
+        )
+    };
+    let payload = Term::induct_match_scoped_marked(
+        Term::free_var(&proof),
+        Scope::close(
+            Many(3),
+            &[&left_index, &right_index, &scrutinee],
+            Term::type_at(level.clone()),
+        ),
+        [("refl", vec![(Plicity::Implicit, value)], nat())],
+        None,
+    )
+    .stating(equation(left_open(), &carrier, &this, &that));
+    let parameters = || {
+        [
+            (carrier, left(0)),
+            (this, Term::free_var(&carrier)),
+            (that, Term::free_var(&carrier)),
+            (proof, equation(left_open(), &carrier, &this, &that)),
+        ]
+    };
+    let [a, x, y, h] = parameters();
+    let declaration = InductDecl {
+        universe_context: UniverseContext {
+            parameter_count: 1,
+            quality_count: 1,
+            constraints: Vec::new(),
+        },
+        arity: Telescope::build(parameters(), Telescope::done(())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam::new(
+                Telescope::build([a, x, y, h, (field, payload)], Vec::new()),
+                vec![
+                    Plicity::Implicit,
+                    Plicity::Explicit,
+                    Plicity::Explicit,
+                    Plicity::Explicit,
+                    Plicity::Explicit,
+                ],
+            ),
+        )]
+        .into(),
+        result_sort: Term::type_at(level),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    // coerce(A: Type, x: A, y: A, h: Eq(x, y), v: Lv.{0; Type}(A, x, y, h)) -> Lv.{1; Type}(A, x, y, h) = v
+    let (held_carrier, held_this, held_that, held_proof, held) = (
+        Free::local(90, Some("A")),
+        Free::local(91, Some("x")),
+        Free::local(92, Some("y")),
+        Free::local(93, Some("h")),
+        Free::local(94, Some("v")),
+    );
+    let at_type = Universes {
+        levels: Vec::new(),
+        qualities: vec![Quality::Type],
+    };
+    let lv_at = |level: Level| {
+        Term::induct_type_at(
+            lv,
+            Universes {
+                levels: vec![level],
+                qualities: vec![Quality::Type],
+            },
+            vec![
+                Term::free_var(&held_carrier),
+                Term::free_var(&held_this),
+                Term::free_var(&held_that),
+                Term::free_var(&held_proof),
+            ],
+            Vec::<Term>::new(),
+        )
+    };
+    let binders = || {
+        [
+            (held_carrier, Term::type_ground()),
+            (held_this, Term::free_var(&held_carrier)),
+            (held_that, Term::free_var(&held_carrier)),
+            (
+                held_proof,
+                equation(at_type.clone(), &held_carrier, &held_this, &held_that),
+            ),
+            (held, lv_at(Level::zero())),
+        ]
+    };
+    let coerce = named("coerce");
+    let module = module(
+        vec![authored(
+            &coerce,
+            Term::func_type(binders(), lv_at(Level::constant(1))),
+            Term::func(binders(), Term::free_var(&held)),
+        )],
+        [(eq, eq_decl), (lv, declaration)],
+    );
+
+    let verdicts = verdicts(&module);
+
+    assert!(
+        !verdicts.iter().any(|verdict| verdict.name == Some(lv)),
+        "the family is accepted: {verdicts:?}",
+    );
+    assert!(
+        verdicts.iter().any(|verdict| verdict.name == Some(coerce)
+            && matches!(verdict.error, Error::Mismatch { .. })),
         "{verdicts:?}",
     );
 }

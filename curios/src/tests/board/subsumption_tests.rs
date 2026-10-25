@@ -381,3 +381,44 @@ fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
 
     rejected_by(source, "it can only be `Prop`");
 }
+
+// A proposition carries only proofs, so a field at a sort left to a caller is one the structure decides: at `Type` two of its values would be one with their fields apart. The elaborator refuses the structure for deciding its sort; `curios-cert`'s `recheck::sort_tests` refuses it at the assignment that states `Type`, under this name.
+#[test]
+fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
+    let source = r#"
+        struct W(A: Sort): pub Prop {
+            a: A,
+        }
+
+        /std/print("")
+        "#;
+
+    rejected_by(source, "it can only be `Prop`");
+}
+
+// Two instances of one family apart in a sort are two types, whatever else they share: `Ph` takes no parameter, and its one payload holds the irrelevance a proposition grants, so a value built at `Prop` and read at `Type` would hand `Eq()(false, true)` over. `curios-cert`'s `recheck::sort_tests` puts two such instances to the kernel under this name.
+#[test]
+fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
+    let source = r#"
+        use /std/{Eq, Bool};
+
+        induct Ph: pub Type
+        | mk(g: (A: Sort, x: A, y: A) -> Eq()(x, y))
+        end
+
+        let v: Ph = Ph/mk((A: Prop, x: A, y: A) => Eq/refl());
+
+        let apply(p: Ph) -> Eq()(false, true) =
+            match p | mk(g) => g(Bool, false, true) end;
+
+        let leak: Bool/False = Bool/false_neq_true(apply(v));
+
+        /std/print("")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("inferred: Ph.{Prop;") && report.contains("expected: Ph.{Type;"),
+        "{report}"
+    );
+}

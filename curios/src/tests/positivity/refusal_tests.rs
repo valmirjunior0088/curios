@@ -332,3 +332,19 @@ fn a_family_read_under_a_short_budget_is_never_refused_as_not_positive() {
     }
     assert!(short > 0, "no budget of the ladder is short of the program");
 }
+
+// A recursive occurrence that only a sort left to a caller would uncover. At `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands: one the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios-cert`'s `recheck::sort_tests` puts the same declaration to the kernel under this name.
+#[test]
+fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
+    let source = r#"
+        use /std/{Eq};
+        use /std/Bool/{False};
+
+        induct Bad(@A: Sort, x: A, y: A, h: Eq()(x, y)): pub Type
+        | c(f: match h | refl() => (Bad(x, y, h)) -> False end)
+        end
+
+        /std/print("")
+        "#;
+    rejected_by(source, "'Bad' is not strictly positive");
+}
