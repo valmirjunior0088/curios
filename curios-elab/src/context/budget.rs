@@ -23,27 +23,27 @@ impl<'s> Context<'s> {
     /// Take what a unit's lowering minted, declaration by declaration. Each attempt at a declaration begins its state above what that declaration's lowering minted, and the entry's above the entry's ([`Context::begin_state`]), so no identity either mints is one the other already holds.
     ///
     /// `into_core` mints the binders of every lowered scope, a metavariable for every hole and a level for every written type, and elaboration mints more of each; both draw from one identity space per declaration, so the second source starts above the first. Nothing from another declaration or another unit is in that space: no term the scope replays or the context publishes carries a local or a metavariable.
-    pub fn seed(&mut self, minted: &Rc<Minted>) {
+    pub(crate) fn seed(&mut self, minted: &Rc<Minted>) {
         self.underway.minted = Rc::clone(minted);
     }
 
     /// [`Spend::spend`](super::Spend::spend).
-    pub fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
+    pub(crate) fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
         self.typing.spend.spend(cost)
     }
 
     /// [`Spend::enter_level`](super::Spend::enter_level).
-    pub fn enter_level(&self) -> Result<(), ReduceError> {
+    pub(crate) fn enter_level(&self) -> Result<(), ReduceError> {
         self.typing.spend.enter_level()
     }
 
     /// [`Spend::leave_level`](super::Spend::leave_level).
-    pub fn leave_level(&self) {
+    pub(crate) fn leave_level(&self) {
         self.typing.spend.leave_level();
     }
 
     /// Restore the full budget for a new declaration ([`Spend::restore`](super::Spend::restore)), and forget what was memoized under the one it closes: nothing a budget paid for outlives it.
-    pub fn restore_budget(&mut self) {
+    pub(crate) fn restore_budget(&mut self) {
         self.typing.spend.restore();
         self.typing.caches.begin_declaration();
     }

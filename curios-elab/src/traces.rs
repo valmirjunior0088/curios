@@ -43,7 +43,7 @@ pub struct Made {
     pub credited: Vec<(Global, u32)>,
 }
 
-/// A declaration's trace as a unit holds it: what it asked, and once a filing completed it, what it was made from and made ([`Made`]). Shared with every version that keeps it, beside the digest it is stored under.
+/// A declaration's trace as a unit holds it: what it asked, and once a filing completed it, what it was made from and made (`Made`). Shared with every version that keeps it, beside the digest it is stored under.
 #[derive(Debug)]
 pub struct TraceRecord {
     asked: Trace<Question, Answered>,

@@ -315,7 +315,7 @@ fn place_of(position: i64) -> usize {
     usize::try_from(position).expect("a place is not negative")
 }
 
-/// A unit's items' erased forms, by the place the unit's module holds each item at ([`ErasedIndex`]).
+/// A unit's items' erased forms, by the place the unit's module holds each item at (`ErasedIndex`).
 ///
 /// Each is held by a handle of its own, the form or the bytes it was stored as until something reads it: a unit compiled over a baseline keeps the baseline's own handle for every item it does not erase again, so it copies none and reads none, and where it is filed that form's bytes are the ones it was restored from.
 ///

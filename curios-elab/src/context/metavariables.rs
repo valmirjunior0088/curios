@@ -16,7 +16,7 @@ use {
 
 impl<'s> Context<'s> {
     /// [`Solutions::note_solve_blockers`](super::Solutions::note_solve_blockers).
-    pub fn note_solve_blockers(
+    pub(crate) fn note_solve_blockers(
         &mut self,
         id: MetavarId,
         blockers: Vec<(MetavarId, MetavarOrigin, Option<Extent>)>,
@@ -28,22 +28,30 @@ impl<'s> Context<'s> {
     }
 
     /// [`Solutions::solve_blockers`](super::Solutions::solve_blockers).
-    pub fn solve_blockers(&self, id: MetavarId) -> &[(MetavarId, MetavarOrigin, Option<Extent>)] {
+    pub(crate) fn solve_blockers(
+        &self,
+        id: MetavarId,
+    ) -> &[(MetavarId, MetavarOrigin, Option<Extent>)] {
         self.underway.attempt.solutions.solve_blockers(id)
     }
 
     /// [`Goals::note_extent`](super::Goals::note_extent).
-    pub fn note_goal_extent(&mut self, id: MetavarId, extent: Extent) {
+    pub(crate) fn note_goal_extent(&mut self, id: MetavarId, extent: Extent) {
         self.underway.attempt.goals.note_extent(id, extent);
     }
 
     /// [`Goals::extent`](super::Goals::extent).
-    pub fn goal_extent(&self, id: MetavarId) -> Option<&Extent> {
+    pub(crate) fn goal_extent(&self, id: MetavarId) -> Option<&Extent> {
         self.underway.attempt.goals.extent(id)
     }
 
     /// [`Goals::note_obligation`](super::Goals::note_obligation).
-    pub fn note_goal_obligation(&mut self, goals: BTreeSet<MetavarId>, this: Term, that: Term) {
+    pub(crate) fn note_goal_obligation(
+        &mut self,
+        goals: BTreeSet<MetavarId>,
+        this: Term,
+        that: Term,
+    ) {
         self.underway
             .attempt
             .goals
@@ -51,12 +59,12 @@ impl<'s> Context<'s> {
     }
 
     /// [`Goals::obligations`](super::Goals::obligations).
-    pub fn goal_obligations(&self) -> &[GoalObligation] {
+    pub(crate) fn goal_obligations(&self) -> &[GoalObligation] {
         self.underway.attempt.goals.obligations()
     }
 
     /// Whether the declaration being elaborated wrote a goal ([`Goals::any`](super::Goals::any)).
-    pub fn holds_goals(&self) -> bool {
+    pub(crate) fn holds_goals(&self) -> bool {
         self.underway.attempt.goals.any()
     }
 
@@ -78,7 +86,7 @@ impl<'s> Context<'s> {
     }
 
     /// Materialize a metavariable's birth record where the context stands — its telescope the local binders in scope, taken with the frames that stand ([`Scoped::Held`]) — and hand back its identity spine.
-    pub fn birth_here(&mut self, id: MetavarId, result: Term) -> SharedSpine {
+    pub(crate) fn birth_here(&mut self, id: MetavarId, result: Term) -> SharedSpine {
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar_as(id, telescope, Scoped::Held, result, MetaKind::Inference);
 
@@ -115,7 +123,7 @@ impl<'s> Context<'s> {
     }
 
     /// Bring the telescope a metavariable was born over into scope, where a judgment of it stands on the frames it was born under ([`Context::at_birth`]): nothing where the telescope was taken with those frames and no binder was bound again in view since, the frames binding it as they did, and every binder again otherwise. Assuming it every time would cost each judgment the scope the metavariable was born in.
-    pub fn assume_birth_scope(
+    pub(crate) fn assume_birth_scope(
         &mut self,
         telescope: &BirthTelescope,
         scoped: Scoped,
@@ -132,7 +140,7 @@ impl<'s> Context<'s> {
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.
     ///
     /// `name` is the member this slot stands for, kept so the substitution walks can spell it — see [`Context::rec_slot_name`].
-    pub fn fresh_rec_slot(&mut self, name: &Free, result: Term) -> (MetavarId, Term) {
+    pub(crate) fn fresh_rec_slot(&mut self, name: &Free, result: Term) -> (MetavarId, Term) {
         self.typing.caches.note_write();
         let id = self.underway.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
@@ -146,7 +154,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Solutions::rec_slot_name`](super::Solutions::rec_slot_name).
-    pub fn rec_slot_name(&self, id: MetavarId) -> Option<&Free> {
+    pub(crate) fn rec_slot_name(&self, id: MetavarId) -> Option<&Free> {
         self.underway.attempt.solutions.rec_slot_name(id)
     }
 
@@ -155,7 +163,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Solutions::owner_fills`](super::Solutions::owner_fills).
-    pub fn owner_fills(&self, id: MetavarId) -> bool {
+    pub(crate) fn owner_fills(&self, id: MetavarId) -> bool {
         self.underway.attempt.solutions.owner_fills(id)
     }
 
@@ -172,7 +180,7 @@ impl<'s> Context<'s> {
     }
 
     /// Fill a parked problem's placeholder with the term the problem rebuilt. Only the problem does, and once: conversion waits on a placeholder ([`Solutions::owner_fills`](super::Solutions::owner_fills)), and whatever runs a parked problem holds it out of the store, so a second fill would be a second elaboration of one written term.
-    pub fn fill_placeholder(&mut self, id: MetavarId, term: Term) {
+    pub(crate) fn fill_placeholder(&mut self, id: MetavarId, term: Term) {
         let entry = self
             .underway
             .attempt
@@ -189,7 +197,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::is_top_level`](super::Frames::is_top_level): whether `name` is a declaration's, bound wherever a solution may stand. That a declaration is there at all is its signature's to say, so the question is noted as one about it: a candidate a solver admits for naming a declaration is another candidate once the declaration is gone.
-    pub fn is_top_level(&self, name: &Free) -> bool {
+    pub(crate) fn is_top_level(&self, name: &Free) -> bool {
         self.asks(name, Question::Signature);
         self.typing.frames.is_top_level(name)
     }
@@ -229,12 +237,12 @@ impl<'s> Context<'s> {
     }
 
     /// [`Solutions::note_dead_arm`](super::Solutions::note_dead_arm).
-    pub fn note_dead_arm(&mut self, id: MetavarId, dead: DeadArm) {
+    pub(crate) fn note_dead_arm(&mut self, id: MetavarId, dead: DeadArm) {
         self.underway.attempt.solutions.note_dead_arm(id, dead);
     }
 
     /// [`Solutions::note_written`](super::Solutions::note_written).
-    pub fn note_written(&mut self, id: MetavarId, extent: Extent) {
+    pub(crate) fn note_written(&mut self, id: MetavarId, extent: Extent) {
         self.underway.attempt.solutions.note_written(id, extent);
     }
 
@@ -656,12 +664,12 @@ impl<'s> Context<'s> {
     }
 
     /// The type of `metavar` at its occurrence ([`Solutions::type_at`](super::Solutions::type_at)).
-    pub fn metavar_type_at(&self, metavar: &Metavar) -> Option<Term> {
+    pub(crate) fn metavar_type_at(&self, metavar: &Metavar) -> Option<Term> {
         self.underway.attempt.solutions.type_at(metavar)
     }
 
     /// Commit a metavariable's solution ([`Solutions::solve`](super::Solutions::solve)), stamping the write. Needs no reduction-cache clear: a WHNF that still named an unsolved metavariable was never memoized (see `Context::reduce`), and a solve is monotonic, so every surviving entry stays valid. (Re-validation's [`Context::rollback_solutions`], which *un*-solves, does clear.)
-    pub fn solve_metavar(&mut self, id: MetavarId, term: Term) {
+    pub(crate) fn solve_metavar(&mut self, id: MetavarId, term: Term) {
         self.typing.caches.note_write();
         self.underway.attempt.solutions.solve(id, term);
     }

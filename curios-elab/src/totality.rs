@@ -338,7 +338,7 @@ pub fn check_proof_totality(
 ///
 /// Takes what [`Context::record_checked`] collected since `mark` and keeps the propositions. This is the whole of (V)'s seeding. There is no walk, because there is nothing to look for — elaboration already decided, for every term in the program, what type that term has, and the only thing a later pass can do with that question is re-derive it, incompletely.
 ///
-/// Two properties follow from the seed rather than from care. **Coverage** is a consequence of elaboration being a typechecker: a position it never settles is a position the program was never typed at. And the **prelude boundary** is a consequence of replay — the archived prefix is defined into the context rather than elaborated, so it settles nothing and seeds nothing, and its verdicts arrive through [`recorded_totality`] instead.
+/// Two properties follow from the seed rather than from care. **Coverage** is a consequence of elaboration being a typechecker: a position it never settles is a position the program was never typed at. And the **prelude boundary** is a consequence of replay — the archived prefix is defined into the context rather than elaborated, so it settles nothing and seeds nothing, and its verdicts arrive stamped on its definitions instead ([`stamp_totality`]).
 ///
 /// Sort-hood is decided here rather than at the hook because a type may still carry unsolved metavariables while elaborating. Once the declaration is published every solution is materialized, so [`proof_position`] is asked once per *distinct* type, and hash-consing keeps that set far smaller than the term count.
 fn checked_proof_positions(

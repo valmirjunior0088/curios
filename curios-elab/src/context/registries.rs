@@ -95,7 +95,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Program::record_variances`](crate::Program::record_variances).
-    pub fn record_definition_variances(&mut self, definition: &Definition) {
+    pub(crate) fn record_definition_variances(&mut self, definition: &Definition) {
         self.typing.program.record_variances(definition);
     }
 
@@ -192,7 +192,7 @@ impl<'s> Context<'s> {
     }
 
     /// Record the prefixes one seeded module's unit claims. See [`Program::mount`](crate::Program::mount).
-    pub fn mount(&mut self, mounts: &[Mount]) {
+    pub(crate) fn mount(&mut self, mounts: &[Mount]) {
         self.typing.program.mount(mounts);
     }
 
@@ -225,12 +225,12 @@ impl<'s> Context<'s> {
     }
 
     /// [`DeclaredWitnesses::declare`](super::DeclaredWitnesses::declare).
-    pub fn declare_witness(&mut self, name: Global, declared: Declared) {
+    pub(crate) fn declare_witness(&mut self, name: Global, declared: Declared) {
         self.underway.witnesses.declare(name, declared);
     }
 
     /// [`DeclaredWitnesses::spelled`](super::DeclaredWitnesses::spelled).
-    pub fn spelled_witness(&self, name: &Global) -> Option<Option<&(Global, WitnessKey)>> {
+    pub(crate) fn spelled_witness(&self, name: &Global) -> Option<Option<&(Global, WitnessKey)>> {
         self.underway.witnesses.spelled(name)
     }
 
@@ -264,7 +264,7 @@ impl<'s> Context<'s> {
     }
 
     /// The witness the unit declares at `(concept, key)` and has not finished: the one that registers there once it elaborates ([`DeclaredWitnesses::at`](super::DeclaredWitnesses::at)).
-    pub fn witness_pending(&self, concept: &Global, key: &WitnessKey) -> Option<Global> {
+    pub(crate) fn witness_pending(&self, concept: &Global, key: &WitnessKey) -> Option<Global> {
         self.underway.witnesses.at(concept, key)
     }
 
@@ -293,7 +293,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Program::insert_witness`](crate::Program::insert_witness), stamping the write on an actual insert — a new witness can change which pure elaborations succeed.
-    pub fn insert_witness(
+    pub(crate) fn insert_witness(
         &mut self,
         concept: Global,
         key: WitnessKey,
@@ -307,7 +307,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Program::remove_witness`](crate::Program::remove_witness), stamping the write: a witness gone can change which pure elaborations succeed as much as one arriving.
-    pub fn remove_witness(&mut self, name: &Global) -> Vec<(Global, WitnessKey)> {
+    pub(crate) fn remove_witness(&mut self, name: &Global) -> Vec<(Global, WitnessKey)> {
         let keys = self.typing.program.remove_witness(name);
         if !keys.is_empty() {
             self.typing.caches.note_write();
@@ -316,7 +316,7 @@ impl<'s> Context<'s> {
     }
 
     /// Mark `(concept, key)` as a slot a refused declaration's witness stood in — see [`DeclaredWitnesses::poison`](super::DeclaredWitnesses::poison).
-    pub fn poison_witness_key(&mut self, concept: Global, key: WitnessKey) {
+    pub(crate) fn poison_witness_key(&mut self, concept: Global, key: WitnessKey) {
         self.underway.witnesses.poison(concept, key);
     }
 
@@ -325,7 +325,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Program::update_witness_scheme`](crate::Program::update_witness_scheme), stamping the write.
-    pub fn update_witness_scheme(
+    pub(crate) fn update_witness_scheme(
         &mut self,
         name: &Global,
         universe_context: UniverseContext,

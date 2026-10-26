@@ -1,6 +1,6 @@
 //! The lexical half of the elaborator's state: assumptions, local definitions, counterfactual refinements, and the witness scope, a stack of frames ([`Frame`]) bracket-disciplined by `enter`/`leave`.
 //!
-//! Everything here lives and dies with binder frames — the opposite lifetime from the flat stores in [`Program`](super::Program) and [`Solutions`](super::Solutions). Cache coordination stays with the `Context` façade: a frame write that must clear or stamp the caches does so there, so this type's methods are pure store operations.
+//! Everything here lives and dies with binder frames — the opposite lifetime from the flat stores in [`Program`](crate::context::Program) and [`Solutions`](crate::context::Solutions). Cache coordination stays with the `Context` façade: a frame write that must clear or stamp the caches does so there, so this type's methods are pure store operations.
 //!
 //! **A question costs what it asks, not the depth of the scope.** The innermost frame carries the scope through it ([`Frame`]), so a lookup asks it and the base frame; the gates the reducer puts at every step read counts and links the frames keep; what walks the refinements in view walks only the frames that register one; and holding the scope takes the innermost frame.
 //!

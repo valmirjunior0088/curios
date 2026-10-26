@@ -1089,7 +1089,7 @@ pub enum Error {
         dead: Box<DeadArm>,
         error: Box<Error>,
     },
-    /// Where `error` arose, as its reader stands there ([`ReaderScope`]): the position its terms are settled for and spelled for. A sibling of [`Error::Located`], attached by the same drivers.
+    /// Where `error` arose, as its reader stands there (`ReaderScope`): the position its terms are settled for and spelled for. A sibling of [`Error::Located`], attached by the same drivers.
     InScope {
         scope: ReaderScope,
         error: Box<Error>,
@@ -1997,7 +1997,7 @@ impl Error {
     }
 
     /// This error as it is reported: its reports built ([`Error::shown`]), then every term it shows written as a program writes it where its reader stands ([`written`](fn@crate::written)), standing on the frames it arose in, and those frames let go. What a refusal is made into where it is final, before the context it arose in is undone; written after it is built, since what a pending report shows is only a term once it is. A batch is settled member by member, each where its own reader stands.
-    pub fn settled(self, context: &mut Context) -> Self {
+    pub(crate) fn settled(self, context: &mut Context) -> Self {
         if let Self::Batch(errors) = self {
             return Self::Batch(
                 errors

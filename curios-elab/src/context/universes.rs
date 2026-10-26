@@ -15,7 +15,7 @@ use {
 
 impl<'s> Context<'s> {
     /// `group` at `universes`, remembered as that instance of it for the declaration in progress and read back by [`Context::instance_of`]. An instance holds its levels substituted through every member, so a copy does not say which instance of which group it is, and a term that names a group's members again ([`named_members`](crate::named_members)) knows one by this record alone. So this is the one way an instance is opened here: by the reducer where it unfolds a name, by the closed machine through its host, by the neutral typer where it reads a member's type, and by the reduction table where it serves a reduct at another spelling's levels ([`Caches::reduction_get`](super::Caches::reduction_get)).
-    pub fn opened_instance(
+    pub(crate) fn opened_instance(
         &mut self,
         group: &RecGroup,
         universes: &Universes,
@@ -60,7 +60,7 @@ impl<'s> Context<'s> {
     }
 
     /// The type `name` is assumed at, at a fresh instance of the scheme it was generalized over: the instance of the occurrence written at `extent`, where a term wrote one, which the scheme's constraints are restated under ([`Occurrence`]).
-    pub fn instantiate_assumption_universes(
+    pub(crate) fn instantiate_assumption_universes(
         &mut self,
         name: &Free,
         extent: Option<Extent>,
@@ -260,7 +260,7 @@ impl<'s> Context<'s> {
     /// [`Frames::set_assumption_universe_context`](super::Frames::set_assumption_universe_context), with the redefinition cache protocol — a scheme rewritten in place makes cached entries through the old scheme unsound.
     ///
     /// A write of the scheme already registered rewrites nothing and clears nothing. Replaying an established scope writes every declaration's scheme once more, and a clear on each — a wholesale one, thousands of times per compilation — would keep the reduction cache from ever holding a reduct across the mentions of one literal.
-    pub fn set_assumption_universe_context(
+    pub(crate) fn set_assumption_universe_context(
         &mut self,
         name: &Free,
         universe_context: UniverseContext,
@@ -290,7 +290,7 @@ impl<'s> Context<'s> {
     }
 
     /// The universe solver for a judgment's writes ([`UniverseMutation`]), advancing the elaboration cache's universe stamp where they move it. Rollback performs the conservative cache clear separately.
-    pub fn universes_mut(&mut self) -> UniverseMutation<'_> {
+    pub(crate) fn universes_mut(&mut self) -> UniverseMutation<'_> {
         UniverseMutation::new(
             &mut self.underway.attempt.universe_solver,
             self.typing.caches.universe_stamp(),
@@ -315,12 +315,12 @@ impl<'s> Context<'s> {
     }
 
     /// Close every speculative universe scope a refusal left open — see [`UniverseSolver::abandon_speculation`] for where that is sound.
-    pub fn abandon_universe_speculation(&mut self) {
+    pub(crate) fn abandon_universe_speculation(&mut self) {
         self.underway.attempt.universe_solver.abandon_speculation();
     }
 
     /// Close the qualities nothing decided, each as a type's ([`UniverseSolver::default_qualities`]). An item closes them once it has drained what it parked: a problem that waited on a metavariable may be the one that puts a proposition under a sort left to inference, and it is retried after the item's levels have closed.
-    pub fn close_qualities(&mut self) {
+    pub(crate) fn close_qualities(&mut self) {
         self.closing_universes(UniverseSolver::default_qualities);
     }
 

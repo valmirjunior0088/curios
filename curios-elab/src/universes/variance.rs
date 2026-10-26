@@ -415,7 +415,7 @@ fn answers_a_type(type_: &Term) -> bool {
 
 /// Recompute the vector of each entry `published` declares over its zonked telescopes and hold the one the entry carries to it.
 ///
-/// The entries of one declaration are exactly the set to analyze, and anything outside it answers from this context's registry, for the reason [`decide_polarities`](super::decide_polarities) gives. The carried vector is the one taken as the family's group finalized, and it stays: the declaration's later items were compared under it, so a stored unit hands a later compile the reading its own items had and a reused family is read as a re-elaborated one is. What this run decides is that it claims no irrelevance the final telescopes deny. It may claim less, a telescope having held a metavariable since solved, and that family is counted rather than rewritten.
+/// The entries of one declaration are exactly the set to analyze, and anything outside it answers from this context's registry, for the reason [`decide_polarities`](crate::decide_polarities) gives. The carried vector is the one taken as the family's group finalized, and it stays: the declaration's later items were compared under it, so a stored unit hands a later compile the reading its own items had and a reused family is read as a re-elaborated one is. What this run decides is that it claims no irrelevance the final telescopes deny. It may claim less, a telescope having held a metavariable since solved, and that family is counted rather than rewritten.
 ///
 /// A reduction the budget refused reads its term as mentioning every level, so a denial that follows one may be the budget's alone, and the budget is what is reported.
 pub fn hold_variances(context: &mut Context, published: &Published) -> Result<(), Error> {

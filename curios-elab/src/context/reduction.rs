@@ -28,7 +28,7 @@ impl<'s> Context<'s> {
     /// Record that `term` reduces to `result` — the write half of the reduction cache, hit wherever a reduction's value lands: the reducer's final return, and its scrutinee stack's frame pop. Memoize only closed terms whose WHNF names no *unsolved* term metavariable — `any_metavar` bails on the first one, never building the id set. A solve is monotonic, so it can only invalidate a reduct that still names the metavariable it solved, and reduction gets stuck on (hence surfaces) an unsolved metavariable it actually depends on. Refusing to cache those is what lets `solve_metavar` skip a cache clear; an entry naming only *solved* metavariables stays valid under forward solves (re-validation's `rollback_solutions`, which *un*-solves, clears separately). A *universe* metavariable excludes nothing, for the reason [`Context::cached_reduced`] gives.
     ///
     /// **Stored for nothing.** The entry dies with the declaration — [`Caches::begin_declaration`](super::Caches::begin_declaration) clears the table where the budget is restored — so the work budget that built it is its bound.
-    pub fn reduce(&mut self, term: Term, result: &Term) {
+    pub(crate) fn reduce(&mut self, term: Term, result: &Term) {
         let cacheable =
             term.closed() && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
 
@@ -40,7 +40,7 @@ impl<'s> Context<'s> {
     }
 
     /// What classifying the stuck operation `term` found, where it is remembered ([`Caches::classification`](super::Caches::classification)).
-    pub fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
+    pub(crate) fn classification(&self, term: &Term) -> Option<Rc<Classification>> {
         self.typing.caches.classification(term)
     }
 
@@ -59,14 +59,14 @@ impl<'s> Context<'s> {
     }
 
     /// What `term` was forced to, under the reduction in progress ([`Caches::forced`](super::Caches::forced)).
-    pub fn cached_forced(&self, term: &Term) -> Option<Term> {
+    pub(crate) fn cached_forced(&self, term: &Term) -> Option<Term> {
         self.typing
             .caches
             .forced_get(term, self.typing.asking.plain())
     }
 
     /// Record that `term` is forced to `value`: [`Context::reduce`] for the forced demand, under the same gate.
-    pub fn remember_forced(&mut self, term: Term, value: &Term) {
+    pub(crate) fn remember_forced(&mut self, term: Term, value: &Term) {
         let cacheable =
             term.closed() && !value.any_metavar(&mut |id| self.metavar_solution(id).is_none());
 
@@ -78,7 +78,7 @@ impl<'s> Context<'s> {
     }
 
     /// The remembered sort of `type_`, where the context stands as it did when it was filed. [`Caches::sorts`](super::Caches::sorts) carries how long that is.
-    pub fn cached_sort(&mut self, type_: &Term) -> Option<Sort> {
+    pub(crate) fn cached_sort(&mut self, type_: &Term) -> Option<Sort> {
         self.typing
             .caches
             .sort_get(type_, self.typing.asking.plain())
@@ -92,7 +92,7 @@ impl<'s> Context<'s> {
     }
 
     /// What [`is_erasable_in`](crate::is_erasable_in) answered of the closed `type_`, where no scrutinee refinement stands ([`Caches::erasable`](super::Caches::erasable) carries why, and how long an answer is kept).
-    pub fn remembered_erasable(&mut self, type_: &Term) -> Option<bool> {
+    pub(crate) fn remembered_erasable(&mut self, type_: &Term) -> Option<bool> {
         if self.typing.frames.has_scrutinee_refinements() {
             return None;
         }
@@ -102,7 +102,7 @@ impl<'s> Context<'s> {
     }
 
     /// Remember what [`is_erasable_in`](crate::is_erasable_in) answered of the closed `type_`, where no scrutinee refinement stands.
-    pub fn remember_erasable(&mut self, type_: Term, erasable: bool) {
+    pub(crate) fn remember_erasable(&mut self, type_: Term, erasable: bool) {
         if !self.typing.frames.has_scrutinee_refinements() {
             self.typing
                 .caches
@@ -111,7 +111,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Context::kernel_spelling`] of a recorded scrutinee, remembered where no metavariable in it is left unsolved ([`Caches::kernel_spellings`](super::Caches::kernel_spellings)).
-    pub fn kernel_spelled(&self, term: &Term) -> Term {
+    pub(crate) fn kernel_spelled(&self, term: &Term) -> Term {
         if let Some(known) = self.typing.caches.kernel_spelling_get(term) {
             return known;
         }
@@ -135,7 +135,7 @@ impl<'s> Context<'s> {
     }
 
     /// The settled reduced spelling of the scrutinee entry `key` registered in `frame`: `None` if no probe has asked for it yet, `Some(None)` if reducing it refused. [`Frame::scrutinee_spellings`](super::Frame::scrutinee_spellings) carries how long one stands.
-    pub fn settled_key(&self, frame: usize, key: &Term) -> Option<Option<Settled>> {
+    pub(crate) fn settled_key(&self, frame: usize, key: &Term) -> Option<Option<Settled>> {
         let spelling = self
             .typing
             .frames
@@ -145,7 +145,7 @@ impl<'s> Context<'s> {
     }
 
     /// Record a settlement, on what it rests on ([`Context::footing`]). Every one is recorded, whatever its metavariables: the loop that asks the reduced spellings settles the innermost entry *not yet asked* (`reduce`'s `refined_reduct`), so an unrecorded settlement would be asked for again forever.
-    pub fn record_settled_key(
+    pub(crate) fn record_settled_key(
         &mut self,
         frame: usize,
         key: Term,
@@ -162,7 +162,7 @@ impl<'s> Context<'s> {
     }
 
     /// What an answer taken now rests on beyond the frames it is read under ([`Footing`]): the solutions committed, and the definitions in view. `unsolved` says what it was taken of held an unsolved metavariable, so a solution committed since moves it; `levels` is the universe solver's state where a question was declined for a commit on the way, which moves it once either solver moves; `universes` says it holds a universe metavariable, which a rewrite of levels moves; `asked` says a question was put to conversion on the way, whose answer goes where its level constraints are withdrawn.
-    pub fn footing(
+    pub(crate) fn footing(
         &self,
         unsolved: bool,
         levels: Option<UniverseStateToken>,
@@ -203,7 +203,7 @@ impl<'s> Context<'s> {
     /// Without this cache, elaboration tree-walks DAG-shaped lowered terms: a string literal's UTF-8 derivation shares every scan-state chain by `Rc`, so re-elaborating the chain at each link would cost O(N²) work and the chain's depth in native stack; with it, each shared node elaborates once, at O(1) additional depth.
     ///
     /// Probe, compute under the stamp snapshot, record — the one way in, used by every `elaborate_subterm` dispatch. The halves are split out as [`Context::probe_elaborated`] and [`Context::record_elaborated`] because this method is exactly the two of them with the `compute` call spliced in; nothing else calls them.
-    pub fn get_or_init_elaborated<E>(
+    pub(crate) fn get_or_init_elaborated<E>(
         &mut self,
         term: &Term,
         expected: Option<&Term>,
@@ -348,7 +348,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Asking::note_apart`](crate::Asking::note_apart).
-    pub fn note_apart(&mut self) {
+    pub(crate) fn note_apart(&mut self) {
         self.typing.asking.note_apart();
     }
 
@@ -362,7 +362,7 @@ impl<'s> Context<'s> {
     }
 
     /// What `this` and `that` were answered to be, asked with nothing committed, where the context stands as it did then ([`Caches::same`](super::Caches::same)).
-    pub fn remembered_same(&mut self, this: &Term, that: &Term) -> Option<bool> {
+    pub(crate) fn remembered_same(&mut self, this: &Term, that: &Term) -> Option<bool> {
         self.typing
             .caches
             .same_get(this, that, self.typing.asking.plain())

@@ -590,7 +590,7 @@ pub fn erase_unit_over(
     })
 }
 
-/// [`erase_unit`] for a program: its module erased over its scope, its entry erased at the type it states, and the two linked with what they reach of the scope — the module whose [`ErasedProgram::into_module`] the back half lowers.
+/// [`erase_unit`] for a program: its module erased over its scope, its entry erased at the type it states, and the two linked with what they reach of the scope — the module whose `ErasedProgram::into_module` the back half lowers.
 pub fn erase_program(
     budget: u64,
     syntax: SyntaxRegistry,

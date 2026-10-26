@@ -362,7 +362,7 @@ impl<'a> Established<'a> {
     }
 
     /// The digest of the part `question` asks, of the declaration a unit in scope holds under its name ([`part_digest`]): `Ok(None)` where no unit declares the name, or the one that does holds no such part.
-    pub fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
+    pub(crate) fn part_digest(&self, question: &Question) -> Result<Option<String>, String> {
         let Some(unit) = question.subject().and_then(|name| self.declaring(name)) else {
             return Ok(None);
         };

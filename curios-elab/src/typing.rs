@@ -868,7 +868,7 @@ impl Context<'_> {
     }
 
     /// Drain the parked store ([`Context::drain_store`]), then hold each product a literal shaped to the sort its metavariable was declared at ([`Context::hold_shapes`]). Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and held frames do not pile up.
-    pub fn drain_parked(&mut self) -> Result<(), Error> {
+    pub(crate) fn drain_parked(&mut self) -> Result<(), Error> {
         self.drain_store()?;
         self.hold_shapes()
     }

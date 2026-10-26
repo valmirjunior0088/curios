@@ -19,12 +19,12 @@ impl<'s> Context<'s> {
     /// Mint a binder nothing else can name, rendering as `hint`.
     ///
     /// The counter starts above every index the declaration's lowering minted ([`Context::seed`]), so a lowered binder and an elaborated one can never be the same identity.
-    pub fn fresh(&mut self, hint: Option<&str>) -> Free {
+    pub(crate) fn fresh(&mut self, hint: Option<&str>) -> Free {
         self.fresh_for(hint, None)
     }
 
     /// [`Context::fresh`] for a local opened from a scope's binder, recording where the lowering wrote that binder among its declaration's written binders: so a proof that reads the local credits the binder a lint names ([`Context::credit`]).
-    pub fn fresh_for(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
+    pub(crate) fn fresh_for(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
         let local = Free::local(self.typing.fresh_names.fresh(), hint);
         if let Some(written) = written {
             self.underway
@@ -35,7 +35,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Context::fresh`] for a binder a scope is closed over before anything reads it, as the binder of a `let` the matrix compiler writes ahead of a row's body is: the local remembers where the lowering wrote its binder, as a lowered one does, so the scope closed over it does, and the local opened from that scope is the one a proof credits ([`Context::fresh_for`]).
-    pub fn fresh_written(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
+    pub(crate) fn fresh_written(&mut self, hint: Option<&str>, written: Option<u32>) -> Free {
         let index = self.typing.fresh_names.fresh();
 
         match written {
@@ -81,23 +81,23 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::open_arm`](super::Frames::open_arm): say that the frame being elaborated is the arm at `case` of a match on `guard`, so that a bound given up under it is told whether a value reaches the arm.
-    pub fn open_arm(&mut self, guard: &Term, case: &Term) {
+    pub(crate) fn open_arm(&mut self, guard: &Term, case: &Term) {
         self.typing.frames.open_arm(guard.clone(), case.clone());
     }
 
     /// [`Frames::open_body`](super::Frames::open_body): say that the frame being elaborated is a function's body, whose result type is the region a `!` there sequences in.
-    pub fn open_body(&mut self) {
+    pub(crate) fn open_body(&mut self) {
         self.typing.frames.open_body();
     }
 
     /// [`Frames::assume`](super::Frames::assume), stamping the write.
-    pub fn assume(&mut self, name: &Free, type_: &Term) {
+    pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
         self.typing.caches.note_write();
         self.typing.frames.assume(name, type_);
     }
 
     /// [`Context::assume`] of each of `bindings` in order, the scope restated once for all of them: an arm's retyped locals.
-    pub fn assume_all(&mut self, bindings: Vec<(Free, Term)>) {
+    pub(crate) fn assume_all(&mut self, bindings: Vec<(Free, Term)>) {
         self.typing.caches.note_write();
         self.typing.frames.assume_all(bindings);
     }
@@ -126,12 +126,12 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::witness_scope`](super::Frames::witness_scope).
-    pub fn witness_scope(&self) -> impl Iterator<Item = &(Free, Term)> {
+    pub(crate) fn witness_scope(&self) -> impl Iterator<Item = &(Free, Term)> {
         self.typing.frames.witness_scope()
     }
 
     /// [`Frames::reassume`](super::Frames::reassume), invalidating the elaboration cache — an entry elaborated between a `rec` group's lowered `assume` and this upgrade could embed the lowered signature.
-    pub fn reassume(&mut self, name: &Free, type_: &Term) {
+    pub(crate) fn reassume(&mut self, name: &Free, type_: &Term) {
         self.typing.caches.invalidate_for_reassumption();
         self.typing.frames.reassume(name, type_);
     }
@@ -148,12 +148,12 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::rec_definitions`](super::Frames::rec_definitions): every top-level `rec` group defined so far, with its members' names.
-    pub fn rec_definitions(&self) -> Vec<(RecGroup, Vec<Global>)> {
+    pub(crate) fn rec_definitions(&self) -> Vec<(RecGroup, Vec<Global>)> {
         self.typing.frames.rec_definitions()
     }
 
     /// [`Frames::member_names`](super::Frames::member_names): the globals `group`'s members are defined under, in member order, by the definitions reduction opened it from in the declaration in progress ([`Caches::opened_from`](super::Caches::opened_from)), and none where it opened none. A group is its members' bodies, so a judgment told which names one goes by has read the body of each.
-    pub fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
+    pub(crate) fn member_names(&self, group: &RecGroup) -> Option<Vec<Global>> {
         let opened = self.typing.caches.opened_from(group)?;
         let names = self.typing.frames.member_names(group, opened);
         for name in names.iter().flatten() {
@@ -175,7 +175,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::local_binders`](super::Frames::local_binders).
-    pub fn local_binders(&self) -> impl Iterator<Item = &(Free, Term)> {
+    pub(crate) fn local_binders(&self) -> impl Iterator<Item = &(Free, Term)> {
         self.typing.frames.local_binders()
     }
 
@@ -207,14 +207,14 @@ impl<'s> Context<'s> {
     }
 
     /// `term` by value: each local definition it names outside a metavariable's occurrence replaced by what that definition is by value, which it was read as where it was defined ([`ByValue`]), and each occurrence kept as it stands, as conversion reads a block's locals ([`read_outside_spines`](crate::read_outside_spines)): a spine is the scope its occurrence was born in, which no reading here changes, so reading into it would cost each spelling the scope. One substitution over what `term` holds, as the kernel reads a term through the values its `let`s were bound to (`curios-cert`'s `Scope::by_value`), where unfolding each definition in turn would read a chain of them again at every spelling.
-    pub fn by_value(&self, term: &Term) -> Term {
+    pub(crate) fn by_value(&self, term: &Term) -> Term {
         self.typing
             .frames
             .substituted_by_value(term, |by_value| &by_value.term)
     }
 
     /// [`Context::by_value`] with universe instances erased ([`project_erased_universes`]), over the erased values each definition keeps: what an equation's key over local definitions is spelled from, in what `term` holds.
-    pub fn erased_by_value(&self, term: &Term) -> Term {
+    pub(crate) fn erased_by_value(&self, term: &Term) -> Term {
         self.typing
             .frames
             .substituted_by_value(&project_erased_universes(term), |by_value| &by_value.erased)
@@ -256,13 +256,13 @@ impl<'s> Context<'s> {
     }
 
     /// Undo a top-level declaration's bindings ([`Frames::forget`](super::Frames::forget)) — a refused item's, so the scope holds what elaborated and nothing of what did not. The caches clear as for a redefinition: an entry may have consumed the binding.
-    pub fn forget(&mut self, name: &Free) {
+    pub(crate) fn forget(&mut self, name: &Free) {
         self.typing.frames.forget(name);
         self.typing.caches.invalidate_for_redefinition();
     }
 
     /// [`Frames::refine`](super::Frames::refine), with the refinement cache protocol — the variable now reduces differently — with every equation that names the variable restated under its value ([`Context::restate_equations`]), and with every equation the refinement closes withheld ([`Context::withhold_closed_equations`]).
-    pub fn refine(&mut self, name: &Free, term: &Term) {
+    pub(crate) fn refine(&mut self, name: &Free, term: &Term) {
         self.typing.caches.invalidate_for_refinement();
         self.typing.frames.refine(name, term);
         self.restate_equations(name, term);
@@ -324,14 +324,14 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::spelled_as_refined`](super::Frames::spelled_as_refined).
-    pub fn spelled_as_refined(&self, term: &Term) -> Term {
+    pub(crate) fn spelled_as_refined(&self, term: &Term) -> Term {
         self.typing.frames.spelled_as_refined(term)
     }
 
     /// `term` as the kernel is handed it under the arms in force: its solved metavariables materialized, its local definitions substituted by value ([`Context::by_value`]), and every variable an arm refined spelled as the value it was refined to. The kernel reads the arm it checks with a case's solution substituted, where the elaborator records it and keeps the variable spelled, so this is the reading a rule shared with the kernel is judged on.
     ///
     /// A solved metavariable is materialized first because it stands over a spine of the locals in scope where it was born, and would read as naming them: a guard written through a concept holds its witness as one, and names no local of its own once the witness is the global it resolved to. A definition's value was materialized where it was defined, and is again here for what has been solved since. An unsolved one is kept as it stands, its spine the scope it was born in: the kernel is handed none.
-    pub fn kernel_spelling(&self, term: &Term) -> Term {
+    pub(crate) fn kernel_spelling(&self, term: &Term) -> Term {
         let by_value = self.by_value(&zonk_solved_term_metas(self, term));
         self.spelled_as_refined(&zonk_solved_term_metas(self, &by_value))
     }
@@ -356,13 +356,13 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::refine_projection`](super::Frames::refine_projection), with the refinement cache protocol.
-    pub fn refine_projection(&mut self, base: Term, index: usize, value: Term) {
+    pub(crate) fn refine_projection(&mut self, base: Term, index: usize, value: Term) {
         self.typing.caches.invalidate_for_refinement();
         self.typing.frames.refine_projection(base, index, value);
     }
 
     /// [`Frames::definition_body`](super::Frames::definition_body), and a need where the body is missing because its declaration has not finished ([`Context::missed`]): a reduction that asks for one would otherwise go stuck on a name that only has no body yet, and the attempt would be judged on a term it could have reduced.
-    pub fn definition_body(&self, name: &Free) -> Option<&Term> {
+    pub(crate) fn definition_body(&self, name: &Free) -> Option<&Term> {
         self.asks(name, Question::Body);
         let body = self.typing.frames.definition_body(name);
         match body {
@@ -379,7 +379,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::var_reduct`](super::Frames::var_reduct), and a need as [`Context::definition_body`] records one.
-    pub fn var_reduct(&self, name: &Free) -> Option<&Term> {
+    pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
         self.asks(name, Question::Body);
         let reduct = self.typing.frames.var_reduct(name);
         match reduct {
@@ -404,7 +404,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::var_reduct_at`](super::Frames::var_reduct_at), and a need as [`Context::definition_body`] records one.
-    pub fn var_reduct_at(&self, name: &Free) -> Option<&Term> {
+    pub(crate) fn var_reduct_at(&self, name: &Free) -> Option<&Term> {
         self.asks(name, Question::Body);
         let reduct = self.typing.frames.var_reduct_at(name);
         match reduct {
@@ -418,7 +418,7 @@ impl<'s> Context<'s> {
     /// [`Frames::projection_entry`](super::Frames::projection_entry)'s value, with `base` and the base the arm scrutinized held to one universe instance, and declined where they cannot be ([`hold_at_one_instance`]).
     ///
     /// The commitment sits in the accessor for the reason [`Context::scrutinee_reduct`] states, and this store needs one more thing to carry it: its key erases the base, so the unerased spelling is kept beside the value rather than recovered.
-    pub fn proj_reduct(&mut self, base: &Term, index: usize) -> Option<Term> {
+    pub(crate) fn proj_reduct(&mut self, base: &Term, index: usize) -> Option<Term> {
         let entry = self.typing.frames.projection_entry(base, index)?;
         let (original, value) = (entry.original.clone(), entry.value.clone());
 
@@ -457,7 +457,7 @@ impl<'s> Context<'s> {
     /// **The commitment is in the accessor, so no read of the store rests on an instance it has not held.** The key cannot carry this: it is computed when an arm is entered, which is before the levels in it are solved, and it is then compared for as long as the arm stands. The kernel needs none of it because it is handed a zonked module, where every instance is already ground and keying on the scrutinee itself is exact ([Case equations and their key](../../documentation/design/soundness/case-equations-and-their-key.md)).
     ///
     /// A universe error declines. That is the direction the whole read moves in — fewer refinements fire, never more — so it can cost a reduction and never admit one.
-    pub fn scrutinee_reduct(&mut self, canonical: &Term, probe: &Term) -> Option<Term> {
+    pub(crate) fn scrutinee_reduct(&mut self, canonical: &Term, probe: &Term) -> Option<Term> {
         let entry = self.typing.frames.scrutinee_entry(canonical)?;
         if entry.withheld {
             return None;
@@ -487,17 +487,17 @@ impl<'s> Context<'s> {
     }
 
     /// [`Frames::is_key_set_aside`](super::Frames::is_key_set_aside).
-    pub fn is_key_set_aside(&self, canonical: &Term) -> bool {
+    pub(crate) fn is_key_set_aside(&self, canonical: &Term) -> bool {
         self.typing.frames.is_key_set_aside(canonical)
     }
 
     /// [`Frames::reads_the_refinements_of`](super::Frames::reads_the_refinements_of): whether the refinements a lookup reads now are the ones the frames `born` register, so that a spelling reduced where the solver stands rests on nothing the metavariable's birth lacks.
-    pub fn reads_the_refinements_of(&self, born: &HeldFrames) -> bool {
+    pub(crate) fn reads_the_refinements_of(&self, born: &HeldFrames) -> bool {
         self.typing.frames.reads_the_refinements_of(born)
     }
 
     /// Run `f`, a judgment of a metavariable, where the metavariable was born: `born` are the frames its birth holds. At once where they are the ones a lookup reads already ([`Frames::stands_on`](super::Frames::stands_on)), the common case of a term judged in the arm it was born in: the live context is then the birth's with binders and definitions added, and what is judged names none of them. Standing on the frames otherwise ([`Context::standing_on`]), so a solution's check, two answers' comparison, a bound's discharge, the solver's reading of a candidate and a goal's candidates each read the birth's guards in the frames they stood in, its definitions and its witness binders, and nothing of the arm the judgment happens to be made in.
-    pub fn at_birth<R>(&mut self, born: &HeldFrames, f: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn at_birth<R>(&mut self, born: &HeldFrames, f: impl FnOnce(&mut Self) -> R) -> R {
         match self.typing.frames.stands_on(born) {
             true => f(self),
             false => self.standing_on(born, f),
@@ -505,7 +505,7 @@ impl<'s> Context<'s> {
     }
 
     /// Run `f` with the refinements of `frame` and every frame inside it withheld — the bracket a scrutinee entry's reduced spelling is settled under, so it rests only on the equations that outlive it. [`Frames::withhold_refinements_from`](super::Frames::withhold_refinements_from) carries the rule, and the caches set the live window's scoped answers aside for the bracket and hand them back where it ends ([`Caches::enter_window`](super::Caches::enter_window)). What the settlement remembers is kept under the refinements it read, for the next settlement made under them, for as long as the deepest frame it read stands ([`Frames::take_settled_window`](super::Frames::take_settled_window), [`Frames::begin_reads`](super::Frames::begin_reads)).
-    pub fn with_refinements_withheld_from<R>(
+    pub(crate) fn with_refinements_withheld_from<R>(
         &mut self,
         frame: usize,
         f: impl FnOnce(&mut Self) -> R,

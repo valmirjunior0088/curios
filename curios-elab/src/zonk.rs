@@ -579,7 +579,7 @@ impl<'a> Zonk<'a> {
         )))
     }
 
-    /// Like [`zonk_telescope`], for a constructor signature: the payload domains, and the index targets it terminates in.
+    /// Like [`Self::zonk_telescope`], for a constructor signature: the payload domains, and the index targets it terminates in.
     fn zonk_signature(
         &self,
         telescope: &Telescope<Vec<Term>>,
@@ -601,7 +601,7 @@ impl<'a> Zonk<'a> {
 
     /// Zonk a function/Π telescope (`Func`/`FuncType`): its parameter types and its trailing body/return type, which is a real term to recurse into.
     ///
-    /// A free function rather than an inherent method on [`Telescope`]: the telescope is representation, this is the elaborator's metavariable machinery, and only the latter may name [`Context`].
+    /// The pass's method rather than an inherent method on [`Telescope`]: the telescope is representation, this is the elaborator's metavariable machinery, and only the latter may name [`Context`].
     fn zonk_telescope(&self, telescope: &Telescope<Term>) -> Result<Telescope<Term>, Error> {
         match telescope {
             Telescope::Done(body) => Ok(Telescope::Done(self.zonk_term(body)?.into())),
@@ -629,7 +629,7 @@ impl<'a> Zonk<'a> {
         }
     }
 
-    /// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body is `()`, which carries no metavariables and is rebuilt as-is. The companion of [`zonk_telescope`], and a free function for the same reason.
+    /// Zonk a Σ telescope (`TupleType`): only its field types — its `Done` body is `()`, which carries no metavariables and is rebuilt as-is. The companion of [`Self::zonk_telescope`], and the pass's for the same reason.
     fn zonk_field_telescope(&self, telescope: &Telescope<()>) -> Result<Telescope<()>, Error> {
         match telescope {
             Telescope::Done(_) => Ok(Telescope::Done(Box::new(()))),
@@ -1097,7 +1097,7 @@ pub fn report_goals(
     reports
 }
 
-/// Like [`zonk_field_telescope`], for a declaration's nested arity: the parameter domains, then the telescope they terminate in — a family's indices, a structure's fields.
+/// Like [`Zonk::zonk_field_telescope`], for a declaration's nested arity: the parameter domains, then the telescope they terminate in — a family's indices, a structure's fields.
 pub fn zonk_arity(
     context: &Context,
     arity: &Telescope<Telescope<()>>,

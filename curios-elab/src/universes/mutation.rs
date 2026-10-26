@@ -2,11 +2,14 @@
 //!
 //! Closing a declaration's levels into its scheme is none of these. The context alone holds the solver, so it alone closes them, beside the caches that closing rewrites.
 
+#[cfg(test)]
+mod test_support;
+
 use {
     crate::{Occurrence, UniverseSolver, UniverseStateToken},
     curios_core::{
         Extent, Level, Quality, Term, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, UniverseMetaId, UniverseRole, Universes,
+        UniverseContext, UniverseError, UniverseRole, Universes,
     },
     curios_utilities::Entropy,
 };
@@ -84,14 +87,6 @@ impl<'a> UniverseMutation<'a> {
         self.solver.instantiate_at(context, universes, occurrence)
     }
 
-    pub fn fresh(
-        &mut self,
-        role: UniverseRole,
-        origin: Option<UniverseConstraintOrigin>,
-    ) -> UniverseMetaId {
-        self.solver.fresh(role, origin)
-    }
-
     /// A fresh level standing for `beside` at an occurrence of its own ([`UniverseSolver::fresh_beside`]).
     pub fn fresh_beside(
         &mut self,
@@ -99,10 +94,6 @@ impl<'a> UniverseMutation<'a> {
         origin: Option<UniverseConstraintOrigin>,
     ) -> Result<Level, UniverseError> {
         self.solver.fresh_beside(beside, origin).map(Level::meta)
-    }
-
-    pub fn fresh_quality(&mut self, origin: Option<UniverseConstraintOrigin>) -> Quality {
-        self.solver.fresh_quality(origin)
     }
 
     /// The sort of a type left to inference: its quality and its level each a metavariable of its own ([`UniverseSolver::fresh_quality`]), so the first sort it is held to decides whether it is a proposition's or a type's.

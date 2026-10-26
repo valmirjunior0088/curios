@@ -12,7 +12,7 @@ use {
 
 impl<'s> Context<'s> {
     /// [`Frames::hold`](super::Frames::hold): the frames above the base as they stand, which a parked problem takes where it parks and a metavariable where it is born.
-    pub fn hold_frames(&mut self) -> HeldFrames {
+    pub(crate) fn hold_frames(&mut self) -> HeldFrames {
         self.typing.frames.hold()
     }
 
@@ -23,7 +23,11 @@ impl<'s> Context<'s> {
     /// **Nothing is assumed, defined or registered again**, so the frame an entry stands in is the frame it was registered in: two guards, one read under the other, stand one under the other, and a guard's reduced spelling is the one its frame settled. What `work` writes is written to its own frame and goes with it, and what parks or is born meanwhile holds the frames stood on and that frame.
     ///
     /// **The caches are told what a context rebuilt told them.** A reduct taken with a refinement in view must not answer where it is not, nor the other way round, and neither must one taken under a definition the frames held state otherwise than the live context does. So where the frames set aside or stood on hold a refinement, whether or not they are the same frames, or define a name otherwise, the stand is a bracket: the live window's reducts are set aside and handed back where it ends ([`Caches::enter_window`](super::Caches::enter_window)), what is reduced standing on the held frames is its own, and the elaborations clear at both ends. A definition the held frames bring into view that the live context lacks is a fresh one to the reducts stuck on its absence, and goes at the end as a frame's definitions go; and the binders in view are a write.
-    pub fn standing_on<R>(&mut self, held: &HeldFrames, work: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn standing_on<R>(
+        &mut self,
+        held: &HeldFrames,
+        work: impl FnOnce(&mut Self) -> R,
+    ) -> R {
         curios_profile::profile!("ctx::standing_on");
         let set_aside_refined = self.typing.frames.locally_refined();
         let stood_on_refined = held.refined();
@@ -103,24 +107,24 @@ impl<'s> Context<'s> {
     }
 
     /// [`Solutions::awaits_any`](super::Solutions::awaits_any).
-    pub fn awaits_any(&self, term: &Term) -> bool {
+    pub(crate) fn awaits_any(&self, term: &Term) -> bool {
         self.underway.attempt.solutions.awaits_any(term)
     }
 
     /// Have the term being read await the unsolved metavariables of `term` that no standing term awaits ([`Solutions::adopt`](super::Solutions::adopt)).
-    pub fn adopt(&mut self, term: &Term) {
+    pub(crate) fn adopt(&mut self, term: &Term) {
         if term.has_metavar() {
             self.underway.attempt.solutions.adopt(term.metavars());
         }
     }
 
     /// [`Solutions::waiting_numerals`](super::Solutions::waiting_numerals).
-    pub fn waiting_numerals(&self) -> BTreeMap<MetavarId, Vec<NumLit>> {
+    pub(crate) fn waiting_numerals(&self) -> BTreeMap<MetavarId, Vec<NumLit>> {
         self.underway.attempt.solutions.waiting_numerals()
     }
 
     /// [`Solutions::choices_awaited_by`](super::Solutions::choices_awaited_by).
-    pub fn choices_awaited_by(
+    pub(crate) fn choices_awaited_by(
         &self,
         term: Option<AwaitId>,
     ) -> (Vec<ParkedChoice>, Vec<BTreeSet<MetavarId>>) {
@@ -128,37 +132,37 @@ impl<'s> Context<'s> {
     }
 
     /// [`Solutions::conversions_awaited_by`](super::Solutions::conversions_awaited_by).
-    pub fn conversions_awaited_by(&self, term: Option<AwaitId>) -> Vec<ParkedConversion> {
+    pub(crate) fn conversions_awaited_by(&self, term: Option<AwaitId>) -> Vec<ParkedConversion> {
         self.underway.attempt.solutions.conversions_awaited_by(term)
     }
 
     /// [`Solutions::drop_conversions`](super::Solutions::drop_conversions).
-    pub fn drop_conversions(&mut self, at: &BTreeSet<u64>) {
+    pub(crate) fn drop_conversions(&mut self, at: &BTreeSet<u64>) {
         self.underway.attempt.solutions.drop_conversions(at);
     }
 
     /// [`Solutions::witnesses_awaited_by`](super::Solutions::witnesses_awaited_by).
-    pub fn witnesses_awaited_by(&self, term: Option<AwaitId>) -> Vec<MetavarId> {
+    pub(crate) fn witnesses_awaited_by(&self, term: Option<AwaitId>) -> Vec<MetavarId> {
         self.underway.attempt.solutions.witnesses_awaited_by(term)
     }
 
     /// [`Solutions::take_witness`](super::Solutions::take_witness).
-    pub fn take_witness(&mut self, slot: MetavarId) -> Option<ParkedProblem> {
+    pub(crate) fn take_witness(&mut self, slot: MetavarId) -> Option<ParkedProblem> {
         self.underway.attempt.solutions.take_witness(slot)
     }
 
     /// [`Solutions::choice_waiting_on`](super::Solutions::choice_waiting_on).
-    pub fn choice_waiting_on(&self, id: MetavarId) -> Option<ParkedChoice> {
+    pub(crate) fn choice_waiting_on(&self, id: MetavarId) -> Option<ParkedChoice> {
         self.underway.attempt.solutions.choice_waiting_on(id)
     }
 
     /// [`Solutions::note_shaped`](super::Solutions::note_shaped).
-    pub fn note_shaped(&mut self, choice: ParkedChoice) {
+    pub(crate) fn note_shaped(&mut self, choice: ParkedChoice) {
         self.underway.attempt.solutions.note_shaped(choice);
     }
 
     /// [`Solutions::take_shaped`](super::Solutions::take_shaped).
-    pub fn take_shaped(&mut self) -> Vec<ParkedChoice> {
+    pub(crate) fn take_shaped(&mut self) -> Vec<ParkedChoice> {
         self.underway.attempt.solutions.take_shaped()
     }
 
@@ -170,13 +174,17 @@ impl<'s> Context<'s> {
     }
 
     /// Re-park work that is still blocked after a retry, with the frames it held ([`Solutions::park`](super::Solutions::park)), stamping the write.
-    pub fn repark(&mut self, work: ParkedWork, origin: Term, frames: HeldFrames) {
+    pub(crate) fn repark(&mut self, work: ParkedWork, origin: Term, frames: HeldFrames) {
         self.typing.caches.note_write();
         self.underway.attempt.solutions.park(work, origin, frames);
     }
 
     /// Mint the placeholder metavariable for a parked checking problem: birthed like any hole — frozen Γ, identity spine — with no insertion provenance, and of its own kind, since its check is what fills it ([`MetaKind::Placeholder`]). If it survives unsolved, the item drain reports the parked problem at its origin before zonk could ever meet the placeholder.
-    pub fn fresh_placeholder(&mut self, result: Term, extent: Option<Extent>) -> (MetavarId, Term) {
+    pub(crate) fn fresh_placeholder(
+        &mut self,
+        result: Term,
+        extent: Option<Extent>,
+    ) -> (MetavarId, Term) {
         let id = self.underway.attempt.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar_as(id, telescope, Scoped::Held, result, MetaKind::Placeholder);
@@ -200,7 +208,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Solutions::take_checking`](super::Solutions::take_checking).
-    pub fn take_checking(&mut self, placeholder: MetavarId) -> Option<ParkedProblem> {
+    pub(crate) fn take_checking(&mut self, placeholder: MetavarId) -> Option<ParkedProblem> {
         self.underway.attempt.solutions.take_checking(placeholder)
     }
 
@@ -217,7 +225,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Solutions::imitates`](super::Solutions::imitates).
-    pub fn imitates(&self) -> bool {
+    pub(crate) fn imitates(&self) -> bool {
         self.underway.attempt.solutions.imitates()
     }
 
@@ -231,12 +239,12 @@ impl<'s> Context<'s> {
     }
 
     /// [`Solutions::holds_spines`](super::Solutions::holds_spines).
-    pub fn holds_spines(&self) -> bool {
+    pub(crate) fn holds_spines(&self) -> bool {
         self.underway.attempt.solutions.holds_spines()
     }
 
     /// Run `work`, a conversion a completing term awaits asked again, with spines held: two applications of one definition met in it agree where their spines can be made to, by whatever that solves, and an application of an unsolved metavariable is imitated ([`Context::imitates`]).
-    pub fn holding_spines<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn holding_spines<R>(&mut self, work: impl FnOnce(&mut Self) -> R) -> R {
         let before = self.underway.attempt.solutions.set_holding(true);
         let result = work(self);
         self.underway.attempt.solutions.set_holding(before);
@@ -255,7 +263,7 @@ impl<'s> Context<'s> {
     }
 
     /// Run `f` as a yes/no *oracle* around full elaboration — a solution's re-validation, a goal candidate's fit. Parking is suppressed — `expect` treats `Blocked` as a mismatch and `retry_parked` is a no-op, so provisional success can neither leak into the verdict nor consume a parked obligation whose error the oracle would swallow — and so are the representation-privacy checks: an oracle candidate is a unification artifact that can embed machinery-built projections (eta-expansions, witness splices) whose privacy elaboration already adjudicated, and a swallowed privacy error would silently flip the verdict. The suppressions are a package: an oracle that set only some would be subtly unsound, which is why the parking half has no public setter. What the parking half suppressed is recorded for the oracle's own reader ([`Context::may_park`]): a goal candidate's fit and an entailment read a failure as no, and re-validation, which has a third answer, reads a failure where a park was declined as not judged yet. The bracket also keeps an elaboration table of its own, for what only a verdict may reuse — see [`Context::oracle_memoizable`]. Where the verdict is one of a metavariable, the oracle is asked where the metavariable was born ([`Context::at_birth`]).
-    pub fn with_oracle<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn with_oracle<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         self.typing.caches.begin_oracle();
         let result = self.with_suppressed_parking(|context| context.with_suppressed_privacy(f));
         self.typing.caches.end_oracle();
@@ -272,7 +280,7 @@ impl<'s> Context<'s> {
     }
 
     /// Run `question`, what a report asks of a term it shows, as an oracle ([`Context::with_oracle`]), with every solution it lands rolled back: the answer is all it leaves.
-    pub fn asking<R>(&mut self, question: impl FnOnce(&mut Self) -> R) -> R {
+    pub(crate) fn asking<R>(&mut self, question: impl FnOnce(&mut Self) -> R) -> R {
         self.with_oracle(|context| {
             let mark = context.solution_mark();
             let answered = question(context);
@@ -296,7 +304,7 @@ impl<'s> Context<'s> {
     }
 
     /// Where a report about the judgment under way stands: the witness binders in scope, and the frames standing, which its terms are settled on ([`Error::settled`]).
-    pub fn reader_scope(&mut self) -> ReaderScope {
+    pub(crate) fn reader_scope(&mut self) -> ReaderScope {
         let witnesses = self
             .witness_scope()
             .map(|(name, _)| *name)

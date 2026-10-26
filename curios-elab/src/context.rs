@@ -285,13 +285,13 @@ impl<'s> Context<'s> {
     }
 
     /// Begin an attempt at the declaration declaring `names`, with nothing needed yet and in a state of its own ([`Context::begin_state`]).
-    pub fn attempt(&mut self, names: &[&Global]) {
+    pub(crate) fn attempt(&mut self, names: &[&Global]) {
         self.underway.needs.attempt(names);
         self.typing.traced.begin(names);
         self.begin_state();
     }
 
-    /// Replace what one declaration's elaboration mints and solves with a state no other declaration wrote: its binder identities, its metavariables and their solutions, and its universe levels with the solver that settles them, each counting from what the declaration's own lowering minted ([`Minted`]). What a declaration elaborates to then follows nothing of the declarations elaborated before it — neither how many there were nor what they left solved — and the identities it mints are the ones it would mint elaborated alone. Every other declaration is read as it was published ([`Context::publish`]), which holds none of these.
+    /// Replace what one declaration's elaboration mints and solves with a state no other declaration wrote: its binder identities, its metavariables and their solutions, and its universe levels with the solver that settles them, each counting from what the declaration's own lowering minted ([`Minted`](curios_core::Minted)). What a declaration elaborates to then follows nothing of the declarations elaborated before it — neither how many there were nor what they left solved — and the identities it mints are the ones it would mint elaborated alone. Every other declaration is read as it was published ([`Context::publish`]), which holds none of these.
     fn begin_state(&mut self) {
         let minted = Rc::clone(&self.underway.minted);
         // The items of one declaration were lowered in one space, so any name the attempt declares says which; an attempt that declares none is the entry's.
@@ -303,7 +303,7 @@ impl<'s> Context<'s> {
     }
 
     /// The refusal of `term`, a variable nothing binds, with the reason the lowering filed for it where it is a name the lowering could not resolve. Read off what the declaration under way minted, as its state is ([`Context::begin_state`]): a binder's identity is that declaration's, and so is what was filed under it.
-    pub fn unbound_variable(&self, term: Term) -> Error {
+    pub(crate) fn unbound_variable(&self, term: Term) -> Error {
         let mints = match self.underway.needs.attempted() {
             Some(name) => self.underway.minted.of(name),
             None => &self.underway.minted.entry,
@@ -377,7 +377,7 @@ impl<'s> Context<'s> {
     }
 
     /// Publish a finished item: bind each of its names to what it elaborated to and file the registry entries it declares, each zonked ([`zonk_published`](crate::zonk_published)). What another declaration reads of this one then holds no metavariable of the state it was elaborated in, which the next declaration replaces, and is what a recompile that keeps the item reads of its baseline.
-    pub fn publish(&mut self, published: &Published) {
+    pub(crate) fn publish(&mut self, published: &Published) {
         for (name, declaration) in &published.induct_decls {
             self.update_induct(name, declaration.clone());
         }
@@ -433,7 +433,7 @@ impl<'s> Context<'s> {
     }
 
     /// Publish `item`, an item a candidate made, as its elaboration published it ([`Context::publish`]), the registry entries its formers carry being the ones its elaboration rebuilt, with the totality stamped on each of its definitions: what the declarations that read it read of it.
-    pub fn publish_adopted(&mut self, item: &Item) {
+    pub(crate) fn publish_adopted(&mut self, item: &Item) {
         let mut published = Published {
             item: item.clone(),
             induct_decls: Vec::new(),
@@ -542,7 +542,7 @@ impl<'s> Context<'s> {
     }
 
     /// [`Credits::credit`].
-    pub fn credit(&mut self, proof: &Term) {
+    pub(crate) fn credit(&mut self, proof: &Term) {
         self.underway.credits.credit(proof);
     }
 

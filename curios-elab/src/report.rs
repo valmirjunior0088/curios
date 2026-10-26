@@ -138,7 +138,7 @@ fn held_beside(context: &Context, beside: Option<Beside>) -> Option<Beside> {
 
 impl Error {
     /// This error with every report it holds built, each standing on the frames it was raised on: the reports a refusal shows, made where the refusal stands and before what its attempt wrote is undone, and settled for their reader after ([`Error::settled`]).
-    pub fn shown(self, context: &mut Context) -> Self {
+    pub(crate) fn shown(self, context: &mut Context) -> Self {
         match self {
             Self::Pending(pending) => {
                 let Pending { frames, build } = *pending;
