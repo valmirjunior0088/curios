@@ -331,3 +331,27 @@ fn an_arm_no_reduction_takes_records_no_call() {
     assert!(closes(true).is_ok());
     assert!(closes(false).is_err());
 }
+
+/// A group this walk never typed is read in the refusing direction: no verdict is on record, so it does not descend, and each member reads as enclosing a group that does not, which is what the obligations read of an item whose bodies nothing typed. The control is the same group once typed, whose check files the verdict and the enclosure it found.
+#[test]
+fn a_group_this_walk_never_typed_reads_as_one_that_does_not_descend() {
+    let (f, signature) = member();
+    let n = binder(1, "n");
+    let term = group(
+        &f,
+        signature,
+        &n,
+        split(&n, |pred| call(&f, Term::free_var(pred))),
+    );
+    let Subterm::Rec(rec) = &*term else {
+        panic!("`group` states a group: {term}");
+    };
+    let mut kernel = kernel();
+
+    assert_eq!(kernel.group_verdict(&rec.group), None);
+    assert!(kernel.member_encloses_partial(&rec.group, 0));
+
+    assert!(infer(&mut kernel, &term).is_ok());
+    assert_eq!(kernel.group_verdict(&rec.group), Some(Totality::Total));
+    assert!(!kernel.member_encloses_partial(&rec.group, 0));
+}

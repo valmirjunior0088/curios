@@ -2,7 +2,8 @@
 
 use {
     super::*,
-    crate::{Level, MetavarId, UniverseMetaId},
+    crate::{Level, MetavarId, Nat, UniverseMetaId},
+    curios_utilities::Keyed,
 };
 
 fn hole(id: usize) -> Term {
@@ -82,4 +83,30 @@ fn a_structural_difference_is_unequal_under_any_renaming() {
             .equal_modulo_metas(&arrow(type_at(2), hole(2)), &mut MetaRenaming::default())
     );
     assert!(!arrow(hole(1), hole(2)).equal_modulo_metas(&hole(3), &mut MetaRenaming::default()));
+}
+
+/// Two terms whose cached hashes are made one, as a collision would make them: the hash is consulted only to refuse, so equality walks past the two roots to the operands that differ, a `Keyed` key compares the terms it holds, and a table keyed by one misses the other. A collision costs a walk and never a verdict.
+#[test]
+fn two_terms_hashed_alike_are_still_two() {
+    let x = Term::free_var(&Free::local(0, Some("x")));
+    let sum = |addend: usize| {
+        Term::intrinsic(Intrinsic::NatAdd(
+            x.clone(),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(addend))),
+        ))
+    };
+    let (one, two) = (sum(1), sum(2));
+    for term in [&one, &two] {
+        term.inner.scalars.fill(Scalars {
+            hash: 0x5eed,
+            ..Scalars::of(term.look())
+        });
+    }
+
+    assert_eq!(one.structural_hash(), two.structural_hash());
+    assert_ne!(one, two);
+    assert!(Keyed::new(one.clone()) != Keyed::new(two.clone()));
+    let table = HashMap::from([(one.clone(), ())]);
+    assert!(table.contains_key(&one));
+    assert!(!table.contains_key(&two));
 }

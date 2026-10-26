@@ -888,6 +888,90 @@ pub(super) fn instance_of_width(width: usize) -> Module {
     )
 }
 
+/// `let held : Type.{expected} = Levelled.{instance}`, where `Levelled.{u}` is a family of no constructors whose sort is `Type.{u + 1}`: an occurrence whose sort is its scheme's read at the instance it states.
+pub(super) fn family_instance_at(instance: u32, expected: u32) -> Module {
+    let family = Global::Authored(Qualifier::from(["Levelled"]));
+    let declaration = InductDecl {
+        universe_context: UniverseContext {
+            parameter_count: 1,
+            quality_count: 0,
+            constraints: Vec::new(),
+        },
+        arity: Telescope::done(Telescope::done(())),
+        constructors: Vec::new().into(),
+        result_sort: Term::type_at(
+            Level::param(UniverseParam(0))
+                .succ()
+                .expect("a parameter has a successor"),
+        ),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![authored(
+                &Global::Authored(Qualifier::from(["held"])),
+                Term::type_at(Level::constant(expected)),
+                Term::induct_type_at(
+                    family,
+                    vec![Level::constant(instance)],
+                    Vec::<Term>::new(),
+                    Vec::<Term>::new(),
+                ),
+            )]
+            .into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        BTreeMap::from([(family, declaration)]),
+        [],
+        [],
+    )
+}
+
+/// `let lift.{u} : Type.{u + 1} = Type.{u}`, then `let held : Type.{expected} = lift.{instance}`: an occurrence whose type is its scheme's read at the instance it states.
+pub(super) fn scheme_instance_at(instance: u32, expected: u32) -> Module {
+    let lift = Global::Authored(Qualifier::from(["lift"]));
+    let parameter = Level::param(UniverseParam(0));
+    let scheme = Definition {
+        name: lift,
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext {
+            parameter_count: 1,
+            quality_count: 0,
+            constraints: Vec::new(),
+        },
+        island: Qualifier::default(),
+        totality: Totality::Total,
+        proof: false,
+        variances: Vec::new(),
+        field_variances: Vec::new(),
+        parameter_field: None,
+        value_sort: None,
+        type_: Term::type_at(parameter.succ().expect("a parameter has a successor")),
+        body: Term::type_at(parameter),
+    };
+
+    Module {
+        mounts: Vec::new(),
+        items: vec![
+            Item::Let(Box::new(scheme)),
+            authored(
+                &Global::Authored(Qualifier::from(["held"])),
+                Term::type_at(Level::constant(expected)),
+                Term::instance_of(&Free::from(&lift), vec![Level::constant(instance)]),
+            ),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    }
+}
+
 /// A row no store issued, returning one `Nat`.
 pub(super) fn forged_row() -> ForeignFunction {
     ForeignFunction {

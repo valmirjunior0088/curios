@@ -6,8 +6,9 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, Module, Nat, Quality,
-        QualityMetaId, QualityParam, Term, Totality, UniverseConstraint, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, Variance,
+        QualityMetaId, QualityParam, ReduceError, Term, Totality, UniverseConstraint,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMetaId, UniverseParam, Variance,
     },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
@@ -271,6 +272,53 @@ fn a_universe_instance_of_the_declared_width_is_accepted() {
         Vec::new(),
         "the boundary refused an occurrence that supplies exactly the levels its scheme declares",
     );
+}
+
+/// An instance at the top of the offset range, read through a scheme that adds to it, is refused as an overflow rather than wrapped or saturated.
+///
+/// A level is `max(constant, head + offset, …)` over `u32` offsets, and an occurrence's sort or type is its scheme's read at the levels it states, so a scheme's `u + 1` at `u = u32::MAX` asks for a successor no offset holds. Saturated, the successor would be its own level and `Type.{MAX} : Type.{MAX}` would be the collapse the hierarchy exists to refuse; wrapped, it would be `Type.{0}`, below what it types. Both are refused by `Level::checked_add` as `OffsetOverflow`, in a family's sort read at an instance and in a definition's type read at one. Reachable from no surface program, which spells no level.
+///
+/// The control is [`an_instance_below_the_top_of_the_offset_range_is_accepted`], the same two occurrences two below the top, where the definition's own type still has a sort.
+#[test]
+fn an_instance_at_the_top_of_the_offset_range_is_refused_as_an_overflow() {
+    for (label, module) in [
+        ("a family's sort", family_instance_at(u32::MAX, 0)),
+        ("a definition's type", scheme_instance_at(u32::MAX, 0)),
+    ] {
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+
+        assert!(
+            matches!(
+                verdicts.as_slice(),
+                [Verdict {
+                    name: Some(name),
+                    error: Error::Reduce(ReduceError::Universe(UniverseError::OffsetOverflow)),
+                }] if *name == Global::Authored(Qualifier::from(["held"]))
+            ),
+            "{label}: the kernel read a successor past the top of the offset range: {verdicts:?}",
+        );
+    }
+}
+
+/// The control for the fixture above: the same occurrences two below the top, where every successor the walk takes has an offset to land on.
+#[test]
+fn an_instance_below_the_top_of_the_offset_range_is_accepted() {
+    for (label, module) in [
+        (
+            "a family's sort",
+            family_instance_at(u32::MAX - 2, u32::MAX - 1),
+        ),
+        (
+            "a definition's type",
+            scheme_instance_at(u32::MAX - 2, u32::MAX - 1),
+        ),
+    ] {
+        assert_eq!(
+            fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
+            Vec::new(),
+            "{label}: the kernel refused an instance whose successors all fit",
+        );
+    }
 }
 
 /// An occurrence of a universe-polymorphic definition that states no instance is refused rather than typed at the scheme's own type, which would discharge nothing.

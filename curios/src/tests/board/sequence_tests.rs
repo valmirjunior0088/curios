@@ -1,6 +1,13 @@
 //! A sequence fold answers alike at every spelling of its operands: what `Bytes` and `List` operations decide over a symbolic value, and what their rows let a bound or a validity discharge.
 
-use super::test_support::*;
+use {
+    super::test_support::*,
+    curios_cert::{Error, Verdict},
+    curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term, Zonked},
+    curios_pipeline::{DEFAULT_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_text::{Entrypoint, RootSource},
+    curios_utilities::Qualifier,
+};
 
 // The shapes a fold reads a `Bytes` value by: a fill of a successor opens with its atom, which is the cons `x[a, ..fill]`, and the same run spelled as a snoc ends with it. The two are one value at every count, so a strip or a byte split that told them apart would refute at the symbolic count what `n = 0` makes `true`, and `absurd(0, 7, qed)` would be a closed inhabitant of `False`. What holds them is that a chunk facing an element is handed on, never clashed: the comparison stays a stuck `==`.
 #[test]
@@ -163,5 +170,55 @@ fn a_surrogate_is_neither_text_nor_a_character() {
         /std/print("FORGED")
         "#,
         "Char/Valid(55296), which reduces to /std/Bool/False",
+    );
+}
+
+// The kernel's half of `a_surrogate_is_neither_text_nor_a_character`: the kernel reads no privacy and discharges nothing, so a value built past the elaborator is held by the field its literal states alone. `c` is elaborated at `A`, whose validity reduces to `True`, and its code is rewritten to the surrogate `U+D800` with the elaborated proof kept, which the field then states at `Valid(55296)`, reducing to `False`.
+#[test]
+fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_field() {
+    let source = r#"
+        use /std/{Char};
+
+        pub let c: Char = Char { code = 65 };
+
+        /std/print("A")
+        "#;
+    let entrypoint = source.parse::<Entrypoint>().expect("the subject parses");
+    let mut program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
+        .expect("the subject elaborates")
+        .program;
+    let control = Zonked::project(&program).expect("an elaborated program is zonked");
+    assert_eq!(
+        recheck_with_prelude(&control, DEFAULT_BUDGET),
+        Vec::new(),
+        "the kernel accepts `c` at `A`"
+    );
+    let name = Global::Authored(Qualifier::from(["c"]));
+    let mut forged = 0;
+    for item in program.module.items.iter_mut() {
+        let Item::Let(definition) = item else {
+            continue;
+        };
+        if definition.name != name {
+            continue;
+        }
+        let Subterm::Struct(literal) = &*definition.body else {
+            panic!("`c` elaborates to a literal: {}", definition.body);
+        };
+        let mut literal = literal.clone();
+        literal.fields[0] = Term::intrinsic(Intrinsic::Nat(Nat::new(0xD800usize)));
+        definition.body = Term::from(Subterm::Struct(literal));
+        forged += 1;
+    }
+    assert_eq!(forged, 1, "the subject declares `c` once");
+
+    let program = Zonked::project(&program).expect("a forged literal stays zonked");
+    let verdicts = recheck_with_prelude(&program, DEFAULT_BUDGET);
+    assert!(
+        matches!(
+            verdicts.as_slice(),
+            [Verdict { name: Some(refused), error: Error::Mismatch { .. } }] if *refused == name
+        ),
+        "the kernel refuses the forged `c` alone, as a mismatch: {verdicts:?}"
     );
 }
