@@ -269,13 +269,6 @@ impl Traces {
     pub fn each(&self) -> impl Iterator<Item = &Trace<Question, Answered>> {
         self.declarations.iter().map(|(_, trace)| &***trace)
     }
-
-    /// The declarations holding a trace, by the name each is written as, with how many questions each asked.
-    pub fn sizes(&self) -> impl Iterator<Item = (&Global, usize)> {
-        self.declarations
-            .iter()
-            .map(|(name, trace)| (name, trace.len()))
-    }
 }
 
 /// Which parts of a name a declaration's questions read: a set over the parts a [`Question`] can ask.
