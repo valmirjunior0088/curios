@@ -63,31 +63,19 @@ pub fn test_subjects(
 ) -> Result<Vec<TestSubject>, CompileError> {
     match selection {
         Selection::Entire(entire) => {
-            let governing = entire.governing;
-            // The same scope for every subject: the dependency graph, with the governing package's own library last — the order `wonder` walks and `run` compiles. The library is tested in its own subject and built in every executable's, so each reads the graph for itself.
-            let units = || order(&governing).map_err(CompileError::failure);
+            let governing = &entire.governing;
             let mut subjects = Vec::new();
             if governing.directory.join(LIBRARY).is_file() {
+                // The library is tested in its own subject and built in every executable's, each over the dependency graph with the governing package's own library last — the order `wonder` walks and `run` compiles.
                 subjects.push(TestSubject::library(
-                    units()?,
+                    order(governing).map_err(CompileError::failure)?,
                     &governing.package.name,
                     &governing.root,
                     &governing.manifest,
                 ));
             }
-            for executable in &governing.package.executables {
-                subjects.push(TestSubject::executable(
-                    units()?,
-                    &governing.directory.join(&executable.path),
-                    &executable.name,
-                    Filing {
-                        root: governing.root.clone(),
-                        package: governing.package.name.clone(),
-                        executable: Some(executable.name.clone()),
-                        reserved: format!("tests/{}", executable.name),
-                        manifest: governing.manifest.clone(),
-                    },
-                )?);
+            for program in entire.programs().map_err(CompileError::failure)? {
+                subjects.push(TestSubject::declared(program)?);
             }
 
             Ok(subjects)
@@ -99,26 +87,7 @@ pub fn test_subjects(
             &library.manifest,
         )]),
         Selection::Program(program) => match program.home() {
-            Some(home) => {
-                let filing = Filing {
-                    root: home.root.clone(),
-                    package: home.package.clone(),
-                    executable: Some(home.executable.clone()),
-                    reserved: format!("tests/{}", home.executable),
-                    manifest: home.manifest.clone(),
-                };
-                let name = home.executable.clone();
-                let Entry::File(entry) = program.entry().clone() else {
-                    unreachable!("a declared program is written in a file");
-                };
-
-                Ok(vec![TestSubject::executable(
-                    program.into_units(),
-                    &entry,
-                    &name,
-                    filing,
-                )?])
-            }
+            Some(_) => Ok(vec![TestSubject::declared(program)?]),
             None => match program.entry() {
                 Entry::File(path) => {
                     Ok(vec![
@@ -176,22 +145,34 @@ impl TestSubject {
         }
     }
 
-    /// An executable's tests: its entry, its own declarations compiled tested, with the tail scheduling their tests.
-    fn executable(
-        units: Vec<RootSource>,
-        entry: &Path,
-        name: &str,
-        filing: Filing,
-    ) -> Result<Self, CompileError> {
-        let (entrypoint, loader, source) = opened(entry)?;
+    /// An executable's tests: its entry, opened with the prefixes its manifest declares as a run opens it ([`curios_package::Program::declares`]), its own declarations compiled tested, with the tail scheduling their tests.
+    fn declared(program: curios_package::Program) -> Result<Self, CompileError> {
+        let home = program.home().expect("a declared program has a home");
+        let name = home.executable.clone();
+        let filing = Filing {
+            root: home.root.clone(),
+            package: home.package.clone(),
+            executable: Some(home.executable.clone()),
+            reserved: format!("tests/{}", home.executable),
+            manifest: home.manifest.clone(),
+        };
+        let declares = program.declares();
+        let Entry::File(entry) = program.entry().clone() else {
+            unreachable!("a declared program is written in a file");
+        };
+        let (entrypoint, loader, source) = opened(&entry)?;
+        let loader = match declares {
+            Some(declares) => loader.declaring(declares),
+            None => loader,
+        };
 
         Ok(Self {
-            named: Named::Executable(name.to_string()),
-            units,
+            named: Named::Executable(name),
+            units: program.into_units(),
             entrypoint,
             loader: loader.tested(),
             text: source.text.clone(),
-            entry: entry.to_path_buf(),
+            entry,
             filing: Some(filing),
         })
     }

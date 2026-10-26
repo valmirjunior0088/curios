@@ -355,3 +355,58 @@ fn a_dependency_edit_only_the_kernel_refuses_stops_every_command_over_a_warm_sto
         );
     }
 }
+
+/// Packages `a`, and `b` standing on it, beside the root of a package `app` whose executable's entry is `entry`: `a` is in the fold of every manifest `app` writes that declares `b`, and spellable from the entry only where `app` declares it too.
+fn layered(name: &str, entry: &str) -> (Temporary, Temporary, Temporary) {
+    let a = temporary(&format!("{name}-a"));
+    write(&a, "curios.toml", "compiler = \"0.0.0\"\nname = \"a\"\n");
+    write(&a, "lib.crs", "pub let word : /std/Str = \"from a\";\n");
+
+    let b = temporary(&format!("{name}-b"));
+    write(&b, "curios.toml", &app_manifest("b", &[("a", &a)]));
+    write(&b, "lib.crs", "pub let side : /std/Str = /a/word;\n");
+
+    let root = temporary(name);
+    write(&root, "app.crs", entry);
+
+    (root, a, b)
+}
+
+/// A manifest for the package `name`, declaring the executable `app` where `name` is `app`, and a path dependency on each of `dependencies`.
+fn app_manifest(name: &str, dependencies: &[(&str, &Path)]) -> String {
+    let executables = match name {
+        "app" => "\n[[executables]]\nname = \"app\"\n",
+        _ => "",
+    };
+    let rows = dependencies
+        .iter()
+        .map(|(name, path)| format!("{name} = {{ source = \"path\", path = {path:?} }}\n"))
+        .collect::<String>();
+
+    format!("compiler = \"0.0.0\"\nname = \"{name}\"\n{executables}\n[dependencies]\n{rows}")
+}
+
+/// What an executable's entry may name is what its manifest declares, whichever command compiles it: `test` refuses a declaration naming a dependency that `run` refuses it for, though another dependency puts that one in the fold.
+#[test]
+fn a_test_run_names_only_what_the_executable_declares() {
+    let (root, _a, b) = layered(
+        "tested-undeclared",
+        "let shown : /std/Str = /a/word;\n\ntest shown_is_named = /std/Test/assert(true);\n\n/std/print(shown)\n",
+    );
+    write(&root, "curios.toml", &app_manifest("app", &[("b", &b)]));
+
+    let ran = curios(&root, &["run"]);
+    assert!(
+        !ran.status.success(),
+        "a run refuses the name the manifest does not declare: {}",
+        String::from_utf8_lossy(&ran.stderr)
+    );
+
+    let tested = curios(&root, &["test"]);
+    assert!(
+        !tested.status.success(),
+        "and so does a test run: {}{}",
+        String::from_utf8_lossy(&tested.stdout),
+        String::from_utf8_lossy(&tested.stderr)
+    );
+}
