@@ -17,6 +17,7 @@ mod metavariable_tests;
 mod mutation_tests;
 mod plicity_tests;
 mod proposition_tests;
+mod sequence_tests;
 mod spine_tests;
 mod subsumption_tests;
 mod test_support;
