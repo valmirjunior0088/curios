@@ -632,9 +632,7 @@ fn bytes_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         ),
         // A window is a start and a *count*, so a reversed one cannot be spelled and an ordering bound has no proposition to state. What survives is that the window ends inside the value.
         documented(
-            &[
-                "The `l` bytes from `s` on, under the evidence that they end within the length.",
-            ],
+            &["The `l` bytes from `s` on, under the evidence that they end within the length."],
             operation(
                 "slice",
                 &["b", "s", "l", "within"],
@@ -756,9 +754,7 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<Decl> {
         ),
         // The `List` twin of `Bytes/slice`'s window bound; see the comment there for why only one half survives the count.
         documented(
-            &[
-                "The `l` elements from `s` on, under the evidence that they end within the length.",
-            ],
+            &["The `l` elements from `s` on, under the evidence that they end within the length."],
             operation(
                 "slice",
                 &["T", "a", "s", "l", "within"],

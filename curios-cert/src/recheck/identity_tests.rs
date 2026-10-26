@@ -187,10 +187,8 @@ fn a_universe_escape_a_stated_value_sort_discards_is_refused_where_it_is_held() 
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| verdict.name == Some(held())
-                && matches!(&verdict.error, Error::UnclosedUniverses)),
+        verdicts.iter().any(|verdict| verdict.name == Some(held())
+            && matches!(&verdict.error, Error::UnclosedUniverses)),
         "a universe escape a stated value sort discards was not refused where it is held: {verdicts:?}",
     );
 }
