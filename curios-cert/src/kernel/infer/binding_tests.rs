@@ -59,7 +59,7 @@ fn a_lambda_checks_against_a_let_bound_function_type() {
 
 /// An arm binds again the `let` its solution moves. `c` stands for `b`, and in the arm where `b` is `true` it stands for `true`: a substituted `let` would have had the solution substituted through its value, and a bound one is bound again at it.
 ///
-/// Mutation-checked: with the arm leaving a moved `let` as it was, `family(c)` is stuck on `b` inside the arm that decided it.
+/// Mutation-checked: with a binding over a local that stood for nothing leaving a moved `let` as it was, `family(c)` is stuck on `b` inside the arm that decided it.
 #[test]
 fn an_arm_binds_again_the_let_its_solution_moves() {
     let mut kernel = kernel();
@@ -521,6 +521,28 @@ fn reduction_reads_a_let_bound_name_by_value() {
     });
 
     assert_eq!(reduct.ok(), Some(nat(2)));
+}
+
+/// Binding over a local that stood for nothing reads it again wherever the scope named it, whoever binds: `v`'s type and `c`'s value were taken while `b` stood for nothing, and once `b` stands for `true`, `v` is at `family(true)` and `c` stands for `true`.
+///
+/// Mutation-checked: with `Kernel::bind` leaving what named the local as it was, `v` stays at `family(b)`, and `c` hands reduction `b`, a `let`-bound name.
+#[test]
+fn binding_over_a_local_that_stood_for_nothing_reads_it_again_where_the_scope_named_it() {
+    let mut kernel = kernel();
+    let b = binder(0, "b");
+    let v = binder(1, "v");
+    let c = binder(2, "c");
+    let boolean = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+
+    kernel.scoped(|kernel| {
+        kernel.assume(&b, &bool_type());
+        kernel.assume(&v, &family(Term::free_var(&b)));
+        kernel.bind(&c, &bool_type(), &Term::free_var(&b), false);
+        kernel.bind(&b, &bool_type(), &boolean(true), false);
+
+        assert_eq!(kernel.local_type(&v), Some(&family(boolean(true))));
+        assert_eq!(whnf(kernel, Term::free_var(&c)).ok(), Some(boolean(true)));
+    });
 }
 
 /// A remembered reduct is keyed on its term by value, so it never rests on what a `let`-bound name stood for when it was taken. An arm binds `x` again at another value; the reduct tables carry no binder and are not cleared when the arm is left, so an entry filed under a spelling that names `x` would answer for the outer `x` with what the inner one stood for.

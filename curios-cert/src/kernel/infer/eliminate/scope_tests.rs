@@ -16,6 +16,48 @@ fn family(v: Term) -> Term {
     Term::bool_match(v, None, Term::type_ground(), bool_type(), nat_type())
 }
 
+/// A case value is bound at its own type, which its case's targets give it. `s(p) : Ix(p + 1)` matched against `subject : Ix(a + b)` leaves `a + b ~ p + 1` standing, an index the unifier does not take apart, so `subject` stands for `s(p) : Ix(p + 1)` where its own type is `Ix(a + b)`, and the arm, expected at the targets, reads it at the type the value has.
+///
+/// Mutation-checked: with a solution bound at the type its variable stands at in scope, `subject` is at `Ix(a + b)` where the arm expects `Ix(p + 1)`.
+#[test]
+fn a_case_value_is_bound_at_its_own_type() {
+    let mut kernel = kernel();
+    let a = binder(0, "a");
+    let b = binder(1, "b");
+    let payload = binder(2, "p");
+    let arm_binder = binder(10, "p");
+    kernel.assume(&a, &nat_type());
+    kernel.assume(&b, &nat_type());
+
+    let family = declare(
+        &mut kernel,
+        "Ix",
+        Term::type_ground(),
+        vec![carrying(
+            "s",
+            payload,
+            nat_type(),
+            succ(Term::free_var(&payload)),
+        )],
+    );
+    let at = |index: Term| Term::induct_type(family, Vec::<Term>::new(), [index]);
+    let sum = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&a), Term::free_var(&b)));
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        sum.clone(),
+        at(Term::free_var(&binder(51, "i"))),
+        vec![(
+            "s",
+            vec![arm_binder],
+            Term::free_var(&binder(50, "subject")),
+        )],
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(at(sum)));
+}
+
 /// `match c : (_) => Type | false => Nat | true => {}`, the unit type at `unit` and `Nat` at the other case: where a split re-types `p, q` at it, any two of them are one by the type's shape.
 fn carried(c: &Free, unit: bool) -> Term {
     let (at_false, at_true) = match unit {

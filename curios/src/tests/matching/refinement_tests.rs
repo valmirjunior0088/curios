@@ -438,7 +438,7 @@ fn a_bound_the_guards_do_not_imply_is_still_stuck() {
 
 // === A scrutinee bound by `let` ===============================================
 //
-// The kernel substitutes a `let` rather than binding it, so what it matches on is the binding's definition, and it refines that. The elaborator binds the name to its definition and refines the name, and a metavariable solved against the name is stored as the definition — so refining a local binding refines its definition too, in both arms, whatever the scrutinee's type, or `refl`'s implicit below, `x`, would stay apart from `xp + 1`.
+// The kernel reads a `let`-bound scrutinee by value, so what it matches on is the binding's definition, and it refines that. The elaborator binds the name to its definition and refines the name, and a metavariable solved against the name is stored as the definition — so refining a local binding refines its definition too, in both arms, whatever the scrutinee's type, or `refl`'s implicit below, `x`, would stay apart from `xp + 1`.
 
 #[test]
 fn a_let_bound_scrutinee_is_refined_through_its_definition() {

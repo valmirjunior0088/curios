@@ -52,11 +52,12 @@ pub(crate) use whnf::*;
 use {
     crate::{
         Baseline, entails, erased_half, holds_no_type, instantiate_qualities, one_up_to_instances,
+        retyped,
     },
     curios_analysis::{Classification, DeclaredPart, Env, Erased, Judge, MemberLabel},
     curios_core::{
         Advance, Atom, ClosedMemo, Consumption, Cost, Exhaustion, Free, Global, InductDecl, Level,
-        LevelHead, Lexicon, Module, Polarity, Probe, Quality, Reads, ReduceError, Reducer,
+        LevelHead, Lexicon, Module, Names, Polarity, Probe, Quality, Reads, ReduceError, Reducer,
         Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError, Universes,
         Variance,
     },
@@ -1078,14 +1079,60 @@ impl<'s> Kernel<'s> {
 
     /// Open a `let`'s binder: [`Kernel::assume`] for a local that stands for `value`, which the caller has checked at `type_` — `encloses_partial` saying that check enclosed a group that does not descend.
     ///
+    /// **Binding over a local that stood for nothing reads it again wherever the scope named it.** An arm binds each variable its case solves over the binder that opened it, and a recursive group's tail binds each member its bodies were checked over; what the scope already holds of other locals — a type, a `let`'s value — was taken while the local stood for nothing, and may name it. Every local whose type names it is assumed again at that type with the value substituted, and every `let` whose value names it bound again ([`Kernel::read_again`]), here rather than by a caller, so no binding leaves the scope holding a term that hands reduction a `let`-bound name, which reduction refuses to meet.
+    ///
     /// **A `let` is bound for typing and read by value by everything else.** The tail is typed over the binder, so a value named twice is typed once; a variable is typed by the binder's type. Whatever reads a term for more than its type is handed the term with the name unfolded ([`Kernel::by_value`]), which is the term a substituted `let` leaves, so reduction's tables, an arm's equations, the recorded positions and the graded calls are keyed and read as they are where a `let` is substituted. The local stands for one value for as long as its opening does, so what the typing tables remember of a term naming it stays true while its binder stands — the life they have.
     pub(crate) fn bind(&mut self, name: &Free, type_: &Term, value: &Term, encloses_partial: bool) {
         if let Some(index) = name.local_index() {
             self.spend.reserve(index);
         }
+        let over_nothing = self.scope.assumes(name);
         // A local bound again stands for another value, which is what a term naming it was typed through: the typings go, and nothing else does, since every other table is keyed by value and names no `let`.
         if self.scope.bind(name, type_, value, encloses_partial) {
             self.memos.begin_sizes();
+        }
+        if over_nothing {
+            self.read_again(&[(*name, value.clone())]);
+        }
+    }
+
+    /// Read what the scope holds again under `bound`, a local just bound over one that stood for nothing: assume every local whose type names it at that type with the value substituted — the shared [`retyped`], which the elaborator's arms apply too — and bind again every `let` whose value names it. The shadows are what a lookup finds, and the bracket the binding stands in retracts them with it.
+    ///
+    /// **A `let` is moved where its value, read by value, names the local bound.** Its value was read while the local stood for nothing, so it names the local still; bound again, it stands for what a substituted `let` would have left in its place. One the binding only re-types is bound again at the value it had — assumed, it would stand for nothing.
+    ///
+    /// **Bound again from the value as written, in scope order.** A `let`'s value names the `let`s before it, so with those already bound again its own value is its written one with the binding substituted, read by value where they now stand. Substituting through each value by value instead would walk, for every `let` in scope, everything beneath it — the square of a chain of `let`s at every binding.
+    fn read_again(&mut self, bound: &[(Free, Term)]) {
+        let locals = self
+            .local_names()
+            .into_iter()
+            .zip(self.local_types())
+            .collect::<Vec<_>>();
+        let retyped = retyped(&*self, &locals, bound);
+        let lets = self.bound_locals();
+
+        for (name, type_) in &retyped {
+            if !lets.iter().any(|local| local.name == *name) {
+                self.assume(name, type_);
+            }
+        }
+        let names = Names::new(bound.iter().map(|(name, _)| *name));
+        for local in &lets {
+            // The innermost of the name's re-typings, which is the one a lookup finds.
+            let specialized = retyped
+                .iter()
+                .rev()
+                .find(|(name, _)| *name == local.name)
+                .map(|(_, type_)| type_);
+            let moved = local.value.mentions_any(&names);
+
+            if moved || specialized.is_some() {
+                self.bind(
+                    &local.name,
+                    specialized.unwrap_or(&local.type_),
+                    &local.written.substitute(bound),
+                    local.encloses_partial,
+                );
+            }
         }
     }
 

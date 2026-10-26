@@ -8,9 +8,9 @@
 //!
 //! # Context specialization
 //!
-//! Opening the motive at the case's targets teaches the *goal* the case's equations, and nothing else: the ambient locals, the body's occurrences of outer variables, and the scrutinee variable itself would all stay at their unrefined types. The other half of the rule is [`specialize`]: the arm is checked in a context specialized by the most-general solution of `actual indices ~ case targets` (plus `scrutinee ~ constructed value` when the scrutinee is a variable). Definitional K — `Eq : Prop` plus proof irrelevance, recorded permanent in `documentation/design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md` — is the license for solving those equations by first-order unification and substituting.
+//! Opening the motive at the case's targets teaches the *goal* the case's equations, and nothing else: the ambient locals, the body's occurrences of outer variables, and the scrutinee variable itself would all stay at their unrefined types. The other half of the rule is [`specialize`]: the arm is checked in a context specialized by the most-general solution of `actual indices ~ case targets` (plus `scrutinee ~ constructed value` when the scrutinee is a variable). Definitional K — `Eq : Prop` plus proof irrelevance, recorded permanent in `documentation/design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md` — is the license for solving those equations by first-order unification and binding each solved variable to its solution.
 //!
-//! Both directions run the *shared* unifier from [`curios_analysis::invert_indices`]. Pinning an arm binder to the rigid actual it must equal is the call as the elaborator makes it; refining an outer variable to the target it must equal is the same call with its sides swapped, and the swap lands the guards exactly right — the occurs check refuses the parameter cycle (`b := b + 1` through a family parameter), and the top guard leaves the variable-variable case to the first direction. Both directions and their composition are one shared function, [`curios_analysis::solve_indices`], which the elaborator calls too: it records the solution in its refinement store, while the kernel holds no store, so it substitutes into the arm instead. Which locals the solution re-types, and at what type, is shared as well ([`curios_analysis::retyped`]), and so is the scrutinee's own solution ([`curios_analysis::scrutinee_solution`]); the existing `mark`/`retract` bracket scopes the re-typed entries exactly to the arm.
+//! Both directions run the *shared* unifier from [`curios_analysis::invert_indices`]. Pinning an arm binder to the rigid actual it must equal is the call as the elaborator makes it; refining an outer variable to the target it must equal is the same call with its sides swapped, and the swap lands the guards exactly right — the occurs check refuses the parameter cycle (`b := b + 1` through a family parameter), and the top guard leaves the variable-variable case to the first direction. Both directions and their composition are one shared function, [`curios_analysis::solve_indices`], which the elaborator calls too: it records the solution in its counterfactual refinement store, while the kernel binds each solved variable to its solution as a `let` binds a local, so the arm is checked as written and every reader reads it by value ([`bind_solutions`]). Which locals the solution re-types, and at what type, is shared as well ([`curios_analysis::retyped`], which [`Kernel::bind`] applies wherever it binds over a local that stood for nothing), and so is the scrutinee's own solution ([`curios_analysis::scrutinee_solution`]); the existing `mark`/`retract` bracket scopes the bindings and the re-typed entries exactly to the arm.
 //!
 //! # The large-elimination guard
 //!
@@ -34,13 +34,13 @@ mod tests;
 use {
     super::check,
     crate::{
-        Counted, Error, InductAt, Kernel, Sort, another_case, retyped, scrutinee_solution,
-        solve_indices, wholly_pinned,
+        Counted, Error, InductAt, Kernel, Sort, another_case, scrutinee_solution, solve_indices,
+        wholly_pinned,
     },
     curios_analysis::Invert,
     curios_core::{
-        Atom, Bound, Exhaustion, Free, InductArm, InductType, MatchResult, Names, Probe,
-        ReduceError, Reducer, Subterm, Telescope, Term, Variant,
+        Atom, Bound, Exhaustion, Free, InductArm, InductType, MatchResult, Probe, ReduceError,
+        Reducer, Subterm, Telescope, Term, Variant,
     },
 };
 
@@ -169,13 +169,9 @@ fn check_arm(
                 kernel.assume_payloads(binders)?;
 
                 let refs = payload.iter().collect::<Vec<_>>();
-                let body = arm.open(&refs).substitute(&solutions);
-
-                let expected = result
-                    .at(scrutinee, &family.indices, targets, &value)
-                    .substitute(&solutions);
-
-                shadow(kernel, &solutions);
+                let body = arm.open(&refs);
+                let expected = result.at(scrutinee, &family.indices, targets, &value);
+                bind_solutions(kernel, &solutions)?;
 
                 check(kernel, &body, &expected)
             });
@@ -249,7 +245,7 @@ pub(super) fn never_taken(
 ///
 /// Appends to `solutions` rather than replacing them, so [`check_arm`] can hand over the index equations it has already solved; `value` is substituted through those first, since a case value built from the constructor's payload may mention a binder they pinned. Must be called inside the arm's [`Kernel::scoped`] bracket — that bracket is what scopes the refinement to the arm.
 ///
-/// **The solution reaches the equations already in force.** An arm's body and expectation are substituted, so an equation an outer arm recorded over a variable this case solves would be keyed on a term the arm no longer holds; [`Kernel::restate_refinements`] assumes each such equation again at the solution, for the arm and no longer.
+/// **The solution reaches the equations already in force.** Every reader in the arm reads it by value, the solution substituted, so an equation an outer arm recorded over a variable this case solves would be keyed on a term no reader in the arm is handed; [`Kernel::restate_refinements`] assumes each such equation again at the solution, for the arm and no longer.
 ///
 /// **Answers every equation the arm assumes**, each as its scrutinee and the case it states: its own, where the scrutinee is no variable, and those restated under its solution, recorded or not. They are what [`unless_never_taken`] puts to reduction where the arm is refused.
 pub(super) fn assume_case_value(
@@ -268,7 +264,7 @@ pub(super) fn assume_case_value(
             kernel.refine(scrutinee.clone(), value)?;
         }
     }
-    // The arm is checked with `solutions` substituted through it, so every equation in force — the one just assumed among them, where the index equations solved a variable its scrutinee names — is restated under them.
+    // Every reader in the arm reads it with `solutions` substituted, so every equation in force — the one just assumed among them, where the index equations solved a variable its scrutinee names — is restated under them.
     assumed.extend(kernel.restate_refinements(solutions));
 
     Ok(assumed)
@@ -289,48 +285,16 @@ fn specialize(
     )
 }
 
-/// Re-assume every local the solution re-types at its specialized type — the shared [`retyped`], which the elaborator's arms apply too — and bind again every `let`-bound local the solution moves. The shadow is what a lookup finds, and the enclosing `mark`/`retract` bracket retracts it with the arm.
+/// Bind each variable the case solves to its solution, at the solution's own type, as a `let` binds a local: the arm is checked as written, typing reads a solved variable at that type, and every other reader reads the arm by value, the solution substituted. What the scope held of other locals that names the variable is read again where it is bound ([`Kernel::bind`]), and the enclosing `mark`/`retract` bracket retracts all of it with the arm.
 ///
-/// **A `let`-bound local is moved where its value, read by value, names a solved variable.** The arm's body and expectation have the solution substituted through them, and a `let` substituted into either would have had it substituted through its value too. Bound, the local a body names still stands for the value as it was outside the arm; bound again, it stands for what the substitution would have left in its place. One the solution only re-types is bound again at the value it had — assumed, it would stand for nothing.
-///
-/// **Bound again from the value as written, in scope order.** A `let`'s value names the `let`s before it, so with those already bound again its own value is its written one with the solution substituted, read by value where they now stand. Substituting through each value by value instead would walk, for every `let` in scope, everything beneath it — the square of a chain of `let`s at every arm.
-pub(super) fn shadow(kernel: &mut Kernel, solutions: &[(Free, Term)]) {
-    if solutions.is_empty() {
-        return;
+/// **At the solution's type, not the variable's.** A case value is typed at its case's targets, and an index equation the unifier leaves standing — one between forms it does not take apart, as a list spelled `[h, ..l]` — keeps the scrutinee's own type apart from them: in `/std/List/Member/uncons`'s `here` arm, `i : Member(x, [h, ..l])` stands for `here(x, l) : Member(x, [x, ..l])`. Bound at its variable's type, a solution would be a `let` holding a value of another type; bound at its own, each occurrence is typed as the solution substituted in its place was, and the solution is typed once.
+pub(super) fn bind_solutions(kernel: &mut Kernel, solutions: &[(Free, Term)]) -> Result<(), Error> {
+    for (name, solution) in solutions {
+        let type_ = super::infer(kernel, solution)?;
+        kernel.bind(name, &type_, solution, false);
     }
 
-    let locals = kernel
-        .local_names()
-        .into_iter()
-        .zip(kernel.local_types())
-        .collect::<Vec<_>>();
-    let retyped = retyped(&*kernel, &locals, solutions);
-    let bound = kernel.bound_locals();
-
-    for (name, type_) in &retyped {
-        if !bound.iter().any(|local| local.name == *name) {
-            kernel.assume(name, type_);
-        }
-    }
-    let solved = Names::new(solutions.iter().map(|(solved, _)| *solved));
-    for local in &bound {
-        // The innermost of the name's re-typings, which is the one a lookup finds.
-        let specialized = retyped
-            .iter()
-            .rev()
-            .find(|(name, _)| *name == local.name)
-            .map(|(_, type_)| type_);
-        let moved = local.value.mentions_any(&solved);
-
-        if moved || specialized.is_some() {
-            kernel.bind(
-                &local.name,
-                specialized.unwrap_or(&local.type_),
-                &local.written.substitute(solutions),
-                local.encloses_partial,
-            );
-        }
-    }
+    Ok(())
 }
 
 /// Open a constructor signature's payload binders into scope, hand the binder names, the occurrences, and the constructed terminal to `body`.

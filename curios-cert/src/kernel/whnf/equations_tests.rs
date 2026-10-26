@@ -828,7 +828,7 @@ fn an_arm_that_records_no_equation_leaves_what_was_remembered() {
 
 /// An equation in force follows the solution an arm is checked under.
 ///
-/// The kernel substitutes a case's solution through the arm, so under `match f(n) < 5` a second match on `n` checks its `0` arm with `f(0) < 5` where the program wrote `f(n) < 5`, and the guard's equation, keyed on the term that names `n`, would answer nothing the arm holds — the kernel refusing a fact the elaborator, which refines `n` in a store and keeps it spelled, accepts. Restated, the equation answers the instance for as long as the arm stands, and as it was recorded once the arm is gone.
+/// The kernel reads an arm with its case's solution substituted, so under `match f(n) < 5` a second match on `n` reads its `0` arm with `f(0) < 5` where the program wrote `f(n) < 5`, and the guard's equation, keyed on the term that names `n`, would answer nothing the arm holds — the kernel refusing a fact the elaborator, which refines `n` in a store and keeps it spelled, accepts. Restated, the equation answers the instance for as long as the arm stands, and as it was recorded once the arm is gone.
 ///
 /// Mutation-checked three ways. With `Scope::restate` assuming nothing the instance stays stuck inside the arm. With the recorded equation left answering beside its restatement, the recorded spelling still answers there. With `Scope::retract` reviving nothing, the recorded spelling answers nothing after the arm.
 #[test]

@@ -878,7 +878,7 @@ fn a_proof_credits_the_written_binder_a_local_was_opened_from_and_a_rollback_wit
     assert_eq!(context.credited(), BTreeSet::from([(Some(declaration), 2)]));
 }
 
-/// An equation whose scrutinee names no local once an arm refines a variable answers nothing in that arm, and answers again after it. The kernel substitutes an arm's solution through the equations in force and records none under a closed spelling, so an equation left answering here would accept in the arm a proof the kernel refuses.
+/// An equation whose scrutinee names no local once an arm refines a variable answers nothing in that arm, and answers again after it. The kernel restates the equations in force under an arm's solution and records none under a closed spelling, so an equation left answering here would accept in the arm a proof the kernel refuses.
 ///
 /// The control is an equation that names a second variable the arm does not refine: its instance still names a local, the kernel still records it, and it answers at that instance, the recorded spelling stepping aside for the arm.
 ///

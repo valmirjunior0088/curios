@@ -164,6 +164,11 @@ impl Scope {
         term.substitute(&values)
     }
 
+    /// Whether the innermost local called `name` stands for nothing, so that a `let` binding it binds over a binder.
+    pub(super) fn assumes(&self, name: &Free) -> bool {
+        self.local(name).is_some_and(|local| local.value.is_none())
+    }
+
     /// Whether `name` is a local a `let` bound.
     pub(super) fn binds(&self, name: &Free) -> bool {
         self.local(name).is_some_and(|local| local.value.is_some())
@@ -251,11 +256,11 @@ impl Scope {
 
     /// Restate the equations in force under an arm's solution, answering each as it was restated, its scrutinee and the case it assumes: each that names a solved variable — in its key, its resolved spelling or its value — is assumed again with the solution substituted through all three, and stops answering until the arm retracts.
     ///
-    /// **An arm is checked under its solution, and so are the equations it was opened under.** The kernel holds no refinement store, so it substitutes a case's solution through the arm's body, its expectation and the types of the locals it re-types: within the arm a solved variable is spelled as its value. An equation recorded outside still names the variable, so its key is a term the arm never holds, and a guard's fact would be lost at the first match on a variable the guard names. The restated equation is the recorded one at the instance the arm is checked at — what holds of the scrutinee at every value of the variable holds at the one the case fixes — so it is the same hypothesis, read where the arm reads everything else.
+    /// **An arm is checked under its solution, and so are the equations it was opened under.** The kernel binds each variable a case solves to its solution, re-types the locals that name it, and reads the arm by value: to every reader in the arm a solved variable is spelled as its value. An equation recorded outside still names the variable, so its key is a term no reader in the arm is handed, and a guard's fact would be lost at the first match on a variable the guard names. The restated equation is the recorded one at the instance the arm is checked at — what holds of the scrutinee at every value of the variable holds at the one the case fixes — so it is the same hypothesis, read where the arm reads everything else.
     ///
-    /// **The recorded equation steps aside rather than standing beside its instance.** Nothing the arm holds names a solved variable, so the recorded spelling answers nothing there; left in force, it would be restated again by every arm inside, and an equation naming the variables of `n` nested matches would stand `2^n` times. Stepping aside, each equation stands once however deep the arms go.
+    /// **The recorded equation steps aside rather than standing beside its instance.** Nothing a reader in the arm is handed names a solved variable, so the recorded spelling answers nothing there; left in force, it would be restated again by every arm inside, and an equation naming the variables of `n` nested matches would stand `2^n` times. Stepping aside, each equation stands once however deep the arms go.
     ///
-    /// **An equation whose settlement would read the solution is restated too**, though it names no solved variable: one that names a local whose type, or whose value where a `let` bound it, names one, read through to the end ([`reads_solved`]). The arm re-types the first kind of local and binds the second again (`eliminate::shadow`), and a settlement reads both, a `let` by its value and every local at its type, so a spelling settled under the arm would rest on what the arm assumes while the equation outlives the arm. Restated, the spelling is settled in the arm and goes with it, and the recorded equation is settled where the arm does not stand.
+    /// **An equation whose settlement would read the solution is restated too**, though it names no solved variable: one that names a local whose type, or whose value where a `let` bound it, names one, read through to the end ([`reads_solved`]). Binding a solved variable re-types the first kind of local and binds the second again (`Kernel::bind`), and a settlement reads both, a `let` by its value and every local at its type, so a spelling settled under the arm would rest on what the arm assumes while the equation outlives the arm. Restated, the spelling is settled in the arm and goes with it, and the recorded equation is settled where the arm does not stand.
     ///
     /// A restated equation goes through [`Scope::refine`] like any other, so one the solution leaves with no local is not recorded, for the reason no local-free equation is. It is pushed inside the arm's bracket, and [`Scope::retract`] both drops it and lets the recorded one answer again. It is answered whether or not it was recorded: the arm assumes it either way, and an arm refused under one that computes to another case is one no reduction takes.
     pub(super) fn restate(&mut self, solutions: &[(Free, Term)]) -> Vec<(Term, Term)> {

@@ -109,7 +109,7 @@ fn a_guard_over_a_global_projection_records_nothing() {
     );
 }
 
-/// The kernel substitutes a local definition before it checks what follows, so the guard it meets is the closed term the definition names; the elaborator judges the guard in that spelling too.
+/// The kernel reads a local definition by value, so the guard it meets is the closed term the definition names; the elaborator judges the guard in that spelling too.
 #[test]
 fn a_guard_over_a_local_definition_of_a_closed_term_records_nothing() {
     assert_refused_in_a_dead_arm(

@@ -583,13 +583,9 @@ fn check_cases(
             let mut solutions = Vec::new();
             assumed = eliminate::assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
             kernel.assume_arm(scrutinee, &value, &solutions)?;
-            eliminate::shadow(kernel, &solutions);
+            eliminate::bind_solutions(kernel, &solutions)?;
 
-            check(
-                kernel,
-                &body.substitute(&solutions),
-                &expected.substitute(&solutions),
-            )
+            check(kernel, body, &expected)
         });
 
         eliminate::unless_never_taken(kernel, checked, &assumed, &[])
@@ -746,13 +742,9 @@ fn check_free_monoid(
                 assumed =
                     eliminate::assume_case_value(kernel, scrutinee, &cons_value, &mut solutions)?;
                 kernel.assume_arm(scrutinee, &size_value, &solutions)?;
-                eliminate::shadow(kernel, &solutions);
+                eliminate::bind_solutions(kernel, &solutions)?;
 
-                check(
-                    kernel,
-                    &body.substitute(&solutions),
-                    &expected.substitute(&solutions),
-                )
+                check(kernel, body, &expected)
             });
 
             eliminate::unless_never_taken(kernel, checked, &assumed, &names)

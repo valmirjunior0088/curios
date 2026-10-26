@@ -171,7 +171,7 @@ pub fn solve_indices<J: Judge>(
     Ok(Invert::Solved(solutions))
 }
 
-/// Whether `value` may stand for the outer variable `name` everywhere `name` stands. An outer variable is checked at its index's type by subsumption, so its own type may sit below that type, while the target it would be refined to is typed at the index's: where the variable's type is a sort, the target is a type whose own sort the variable's may not hold, and the solution is kept only where the judge holds it below. A refinement both checkers apply alike, the elaborator through its store and the kernel by substitution, is one whose value has the variable's own type; one left out keeps the variable as it stands, an answer both read alike. Any other variable's type is its index's by conversion, which the target inhabits.
+/// Whether `value` may stand for the outer variable `name` everywhere `name` stands. An outer variable is checked at its index's type by subsumption, so its own type may sit below that type, while the target it would be refined to is typed at the index's: where the variable's type is a sort, the target is a type whose own sort the variable's may not hold, and the solution is kept only where the judge holds it below. A refinement both checkers apply alike, the elaborator through its store and the kernel by binding, is one whose value has the variable's own type; one left out keeps the variable as it stands, an answer both read alike. Any other variable's type is its index's by conversion, which the target inhabits.
 fn fits_its_variable<J: Judge>(judge: &mut J, name: &Free, value: &Term) -> Result<bool, J::Error> {
     let Some(type_) = judge.assumption(name).cloned() else {
         return Ok(true);

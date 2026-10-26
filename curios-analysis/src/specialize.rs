@@ -1,6 +1,6 @@
 //! What one case's solution does to the context its arm is checked in, stated once for both checkers.
 //!
-//! [`solve_indices`](crate::solve_indices) finds what an arm learns about the scrutinee's indices, and a variable scrutinee adds the zero-index instance of the same equations, itself standing for the case's value ([`scrutinee_solution`]). The kernel substitutes that solution into the arm's body and expectation; the elaborator, which is still producing the body, records it as refinements instead. Neither reaches the *types* of the locals already in scope, and those are read where no refinement is consulted — a metavariable born in the arm keeps the types of its birth context and checks its solution against them, retried outside the arm's frame. So both checkers re-assume every local whose type mentions a solved variable at its specialized type ([`retyped`]).
+//! [`solve_indices`](crate::solve_indices) finds what an arm learns about the scrutinee's indices, and a variable scrutinee adds the zero-index instance of the same equations, itself standing for the case's value ([`scrutinee_solution`]). The kernel binds each solved variable to its solution, as a `let` binds a local, and reads the arm by value; the elaborator, which is still producing the body, records it as refinements instead. Neither reaches the *types* of the locals already in scope, and those are read where no refinement is consulted — a metavariable born in the arm keeps the types of its birth context and checks its solution against them, retried outside the arm's frame. So both checkers re-assume every local whose type mentions a solved variable at its specialized type ([`retyped`]).
 //!
 //! # Shared, not duplicated
 //!
@@ -28,7 +28,7 @@ pub fn scrutinee_solution<E: Env>(env: &E, scrutinee: &Term, value: &Term) -> Op
 
 /// The locals one case re-types, each at its specialized type: every local whose type mentions a solved variable, reading through local definitions, at that type with those definitions inlined and `solutions` substituted.
 ///
-/// A solved variable's own entry is left alone. Its occurrences in the arm are substituted away or refined, so nothing reads it at its stale type.
+/// A solved variable's own entry is left alone. Its occurrences in the arm are read as its solution or refined, so nothing reads it at its stale type.
 ///
 /// `locals` is the scope outermost first, and so is the answer: a caller re-assuming each entry in order leaves a name bound twice innermost at its innermost binding.
 pub fn retyped<E: Env>(
