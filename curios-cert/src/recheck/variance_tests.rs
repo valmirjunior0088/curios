@@ -110,6 +110,40 @@ fn a_carried_invariance_the_walk_would_grant_is_read_by_no_comparison() {
     assert_eq!(carried(level_one()), Vec::new());
 }
 
+// `Box` holds its level only as the element of an intrinsic carrier: a list, a cell, a channel or a description of `Type u`. A carrier is compared by its element, so two instances apart in the level hold carriers of different universes, and granted irrelevant, `box([Type 0]) : Box.{1}` read back at `Box.{0}` would list `Type 0` among the types of `Type 0`. Carried honestly the coercion is refused, and nothing else is; carried as irrelevant the declaration is denied.
+//
+// Mutation-checked at `curios-analysis`'s variance walk: reading no carrier's element admits the honest coercion.
+#[test]
+fn a_level_only_a_carriers_element_holds_is_invariant() {
+    let boxed = Global::Authored(Qualifier::from(["Box"]));
+    let formers: [fn(Term) -> Intrinsic; 4] = [
+        Intrinsic::ListType,
+        Intrinsic::CellType,
+        Intrinsic::ChannelType,
+        Intrinsic::IoType,
+    ];
+
+    for former in formers {
+        let honest = refusals(&coercion_module(
+            boxed,
+            carried_box_declaration(former, vec![Variance::Invariant]),
+            Vec::new(),
+            level_one(),
+            Level::zero(),
+        ));
+        assert!(only_the_coercion_refused(&honest), "{honest:?}");
+
+        let lying = refusals(&coercion_module(
+            boxed,
+            carried_box_declaration(former, vec![Variance::Irrelevant]),
+            Vec::new(),
+            level_one(),
+            Level::zero(),
+        ));
+        assert!(denied(&lying, boxed, 0), "{lying:?}");
+    }
+}
+
 // `Fam`'s first level reaches no payload and no index type, and its constructor's target puts it at `Box`'s invariant position: two instances apart in it have different inhabitants at one index. Carried honestly the coercion is refused; carried as irrelevant the declaration is.
 #[test]
 fn a_level_only_an_index_target_mentions_is_invariant() {

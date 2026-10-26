@@ -2,10 +2,11 @@
 
 use {
     super::test_support::*,
-    crate::{Error, infer},
+    crate::{Error, Kernel, infer},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Free, Intrinsic, Term, UniverseContext},
+    curios_core::{Atom, Free, Global, InductDecl, Intrinsic, Telescope, Term, UniverseContext},
     curios_num::Integer,
+    curios_utilities::Qualifier,
 };
 
 #[test]
@@ -294,6 +295,128 @@ fn a_dispatch_requires_a_natural_scrutinee() {
         infer(&mut kernel, &eliminated).is_err(),
         "the kernel typed a `Nat` dispatch on a `Bool`",
     );
+}
+
+/// A description, a cell and a channel are eliminated by nothing, so no term reads the value one holds or describes: each form that takes a value apart — a tuple's or a record's projection, a match on a family, and each carrier's own case forms — is refused over one, however well its arms would type at what it carries. Read, a description of `{False, Nat}` that exits would hand back the `False` it never returns.
+#[test]
+fn a_description_a_cell_and_a_channel_are_taken_apart_by_nothing() {
+    let carriers: [fn(Term) -> Intrinsic; 3] = [
+        Intrinsic::IoType,
+        Intrinsic::CellType,
+        Intrinsic::ChannelType,
+    ];
+
+    // Each form over a value held at `wrap(carried)`, with the refusal it meets where the wrapper is a carrier.
+    let forms = |kernel: &mut Kernel, wrap: &dyn Fn(Term) -> Term| {
+        let boxed = parameterized_struct(kernel);
+        let absurd = Global::Authored(Qualifier::from(["Absurd"]));
+        kernel
+            .declare_induct(&absurd, &empty_proposition())
+            .expect("a name is declared once");
+        let held = |kernel: &mut Kernel, index: u32, carried: Term| {
+            let held = binder(index, "held");
+            kernel.assume(&held, &wrap(carried));
+            Term::free_var(&held)
+        };
+        let [head, tail, ih] = [binder(10, "head"), binder(11, "tail"), binder(12, "ih")];
+
+        let pair = Term::tuple_type([
+            (binder(20, "f"), nat_type()),
+            (binder(21, "n"), bool_type()),
+        ]);
+        let pair = held(kernel, 0, pair);
+        let record = held(kernel, 1, Term::struct_type(boxed, [nat_type()]));
+        let refuted = held(
+            kernel,
+            2,
+            Term::induct_type(absurd, Vec::<Term>::new(), Vec::<Term>::new()),
+        );
+        let truth = held(kernel, 3, bool_type());
+        let count = held(kernel, 4, nat_type());
+        let list = held(kernel, 5, Term::intrinsic(Intrinsic::ListType(nat_type())));
+
+        let no_components: fn(&Error) -> bool = |error| matches!(error, Error::NotATuple(_));
+        let no_family: fn(&Error) -> bool = |error| matches!(error, Error::Unclassified(_));
+        [
+            ("a tuple's projection", Term::proj(pair, 0), no_components),
+            (
+                "a record's projection",
+                Term::proj_struct(record, boxed, 0),
+                no_components,
+            ),
+            (
+                "a match on an empty family",
+                Term::induct_match(
+                    refuted,
+                    None,
+                    nat_type(),
+                    Vec::<(Atom, Vec<Free>, Term)>::new(),
+                ),
+                no_family,
+            ),
+            (
+                "a boolean elimination",
+                Term::bool_match(truth, None, nat_type(), nat(0), nat(1)),
+                no_family,
+            ),
+            (
+                "a dispatch",
+                Term::switch(count.clone(), None, nat_type(), [(0u32, nat(1))], nat(2)),
+                no_family,
+            ),
+            (
+                "a natural-number fold",
+                Term::nat_match(count, None, nat_type(), nat(0), &head, &ih, nat(1)),
+                no_family,
+            ),
+            (
+                "a list fold",
+                Term::list_match(
+                    list,
+                    nat_type(),
+                    None,
+                    nat_type(),
+                    nat(0),
+                    &[&head, &tail, &ih],
+                    nat(1),
+                ),
+                no_family,
+            ),
+        ]
+    };
+
+    // The control: each form over the carried value itself types, so what refuses it below is the carrier.
+    let mut kernel = kernel();
+    for (form, term, _) in forms(&mut kernel, &|carried| carried) {
+        assert_eq!(infer(&mut kernel, &term), Ok(nat_type()), "{form} stopped typing");
+    }
+
+    for carrier in carriers {
+        let mut kernel = self::kernel();
+        let wrapped = |carried| Term::intrinsic(carrier(carried));
+        for (form, term, refused) in forms(&mut kernel, &wrapped) {
+            let answer = infer(&mut kernel, &term);
+            assert!(
+                answer.as_ref().err().is_some_and(refused),
+                "{form} over a `{}` answered {answer:?}",
+                Term::intrinsic(carrier(nat_type())),
+            );
+        }
+    }
+}
+
+/// `induct Absurd : Prop end`.
+fn empty_proposition() -> InductDecl {
+    InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: Vec::new().into(),
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    }
 }
 
 /// The control for both, and it is what a fix by brick would fail: each form at its own carrier is ordinary code and must keep typing.

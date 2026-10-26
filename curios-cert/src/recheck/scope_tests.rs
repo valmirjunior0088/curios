@@ -129,6 +129,52 @@ fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
     }
 }
 
+/// The same lie told of a carrier: `Wrapper(A)` holds its parameter in a cell or a channel, which are read and written and so invariant, or a function out of it in a list or a description, which are covariant and keep the arrow's left where it stands, and its entry is stamped `Strict` in `A` all the same. The walk reads an intrinsic carrier's parameter by its own rule and files that vector, so `Outer`, storing a `Wrapper(Outer)`, is refused under the record and under none.
+///
+/// Mutation-checked at `curios-analysis`'s positivity walk: reading a cell's element at the polarity it stands at accepts `Outer`.
+#[test]
+fn a_mounted_familys_carrier_is_read_by_the_certifier_and_not_by_its_entry() {
+    let carriers: [(&str, fn(Term) -> Term); 4] = [
+        ("a cell", |a| Term::intrinsic(Intrinsic::CellType(a))),
+        ("a channel", |a| Term::intrinsic(Intrinsic::ChannelType(a))),
+        ("a list of functions out of it", |a| Term::intrinsic(Intrinsic::ListType(taken(a)))),
+        ("a description of a function out of it", |a| {
+            Term::intrinsic(Intrinsic::io_type(taken(a)))
+        }),
+    ];
+
+    for (carrier, held) in carriers {
+        let unit = wrapper_holding(held);
+        let certified = fixture_certified(&unit, 1_000_000, &Globals::default(), SYNTAX);
+        assert_eq!(
+            certified.verdicts,
+            Vec::new(),
+            "`Wrapper` is well formed on its own holding {carrier}",
+        );
+
+        let environments = [
+            (
+                "the record its walk left",
+                AlreadyJudged::with(&unit, &certified.certification),
+            ),
+            ("no record", already_judged(&unit)),
+        ];
+        for (under, environment) in environments {
+            let verdicts = fixture_verdicts(
+                &stored_in_the_wrapper(),
+                1_000_000,
+                &environment.globals(),
+                SYNTAX,
+            );
+            assert!(
+                verdicts.iter().any(|verdict| verdict.name == Some(stored_family())
+                    && matches!(verdict.error, Error::NotPositive { .. })),
+                "`Outer` was accepted through a `Wrapper` holding {carrier} on the `Strict` its stamp claims, under {under}: {verdicts:?}",
+            );
+        }
+    }
+}
+
 /// A declaration under a name the environment holds is refused for the name though it is the environment's, term for term: what an environment holds is read where it stands, and no comparison decides that two declarations under one name are one.
 ///
 /// The module carries the environment's `shadowed` and `Shadowed`, rebuilt so that neither is the environment's allocation, beside `reader : Nat = shadowed`. Each held name is refused once and nothing is judged, `reader` with the rest: the walk's record is empty.

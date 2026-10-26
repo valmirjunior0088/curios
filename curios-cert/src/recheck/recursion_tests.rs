@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::Globals,
+    crate::{Error, Globals},
     curios_analysis::test_support::SYNTAX,
     curios_core::{Free, Global, Intrinsic, Many, Module, RecGroup, RecMemberScopes, Scope, Term},
     curios_utilities::Qualifier,
@@ -91,5 +91,40 @@ fn a_member_of_a_legal_group_is_still_accepted() {
         fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX),
         Vec::new(),
         "general recursion at a relevant type is legal however it is spelled",
+    );
+}
+
+/// A member handed bare to an intrinsic operation is a call of it: `rec f : Absurd = fold([], f, (x, acc) => acc)` is `f` by one reduction, the empty list's fold handing back its initial value, so the group recurs on nothing. The fold applies no argument to the member, and the occurrence is held to descend as a selection's is.
+#[test]
+fn a_member_handed_bare_to_a_list_fold_does_not_descend() {
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let absurd = Term::induct_type(
+        Global::Authored(Qualifier::from(["Absurd"])),
+        Vec::<Term>::new(),
+        Vec::<Term>::new(),
+    );
+    let (x, acc) = (Free::local(902, Some("x")), Free::local(903, Some("acc")));
+    let handed_back = Term::intrinsic(Intrinsic::ListFold {
+        element: nat.clone(),
+        result: absurd.clone(),
+        list: Term::intrinsic(Intrinsic::List {
+            element: nat.clone(),
+            items: Vec::new(),
+        }),
+        init: Term::free_var(&member()),
+        function: Term::func([(x, nat), (acc, absurd)], Term::free_var(&acc)),
+    });
+
+    let verdicts = fixture_verdicts(
+        &selection_module(handed_back),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
+        "the kernel certified a closed inhabitant of an empty proposition: {verdicts:?}",
     );
 }

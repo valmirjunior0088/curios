@@ -7,5 +7,6 @@
 mod composition_tests;
 mod computed_type_tests;
 mod index_tests;
+mod kernel_tests;
 mod refusal_tests;
 mod test_support;

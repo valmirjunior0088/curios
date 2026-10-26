@@ -142,3 +142,36 @@ fn a_struct_field_below_the_structs_level_is_admitted() {
 
     assert_eq!(check_struct_decl(&mut kernel, &declaration), Ok(()));
 }
+
+/// A parameterized intrinsic carrier sits at its element's level, so one of the structure's own types is a field at the structure's level: `struct Bad : Type 0 { value : F(Type 0) }` for each of `List`, `Cell`, `Channel` and `Io` would hold a code for every type of its own universe, `Bad` among them, which is type in type and Girard's paradox. Each is refused as `value : Type 0` is, and admitted a level up, the control.
+///
+/// Mutation-checked at `sort_of_intrinsic`: a carrier pinned at level zero admits the small structure.
+#[test]
+fn a_field_holding_a_carrier_of_the_structs_own_types_is_refused() {
+    let formers: [fn(Term) -> Intrinsic; 4] = [
+        Intrinsic::ListType,
+        Intrinsic::CellType,
+        Intrinsic::ChannelType,
+        Intrinsic::IoType,
+    ];
+    let one = Level::zero().succ().expect("level zero has a successor");
+
+    for former in formers {
+        let codes = || Term::intrinsic(former(Term::type_ground()));
+
+        let mut kernel = kernel();
+        let declaration = struct_with_field(&mut kernel, Term::type_ground(), codes());
+        assert!(
+            matches!(
+                check_struct_decl(&mut kernel, &declaration),
+                Err(Error::Oversized { .. }),
+            ),
+            "a small structure held `{}`",
+            codes(),
+        );
+
+        let mut kernel = self::kernel();
+        let declaration = struct_with_field(&mut kernel, Term::type_at(one.clone()), codes());
+        assert_eq!(check_struct_decl(&mut kernel, &declaration), Ok(()));
+    }
+}

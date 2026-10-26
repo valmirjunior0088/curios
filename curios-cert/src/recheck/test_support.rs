@@ -3051,14 +3051,24 @@ pub(super) fn wrapper_family() -> Global {
 
 /// `induct Wrapper(A : Type) | wrap(held : A) end`, or with `negatively` `| wrap(held : (A) -> Nat) end`, the entry stamped `Strict` in `A` either way: elaboration's vector, the truth of the first and a lie of the second.
 pub(super) fn wrapper_of_its_parameter(negatively: bool) -> Module {
+    wrapper_holding(|a| match negatively {
+        true => taken(a),
+        false => a,
+    })
+}
+
+/// `(taken: of) -> Nat`.
+pub(super) fn taken(of: Term) -> Term {
+    Term::func_type(
+        [(Free::local(991, Some("taken")), of)],
+        Term::intrinsic(Intrinsic::NatType),
+    )
+}
+
+/// `induct Wrapper(A : Type) | wrap(held : held(A)) end`, the entry stamped `Strict` in `A` whatever `held` makes of it.
+pub(super) fn wrapper_holding(held: impl FnOnce(Term) -> Term) -> Module {
     let a = Free::local(990, Some("A"));
-    let held = match negatively {
-        true => Term::func_type(
-            [(Free::local(991, Some("taken")), Term::free_var(&a))],
-            Term::intrinsic(Intrinsic::NatType),
-        ),
-        false => Term::free_var(&a),
-    };
+    let held = held(Term::free_var(&a));
 
     collision_module(
         Vec::new(),
@@ -3293,6 +3303,31 @@ pub(super) fn box_declaration(variances: Vec<Variance>) -> InductDecl {
         rep_public: true,
         polarities: Vec::new(),
         variances,
+    }
+}
+
+/// `induct Box.{u}: Type (u + 1) | box(T: F(Type u)) end` for an intrinsic carrier `former`, carried with `variances`: a level only the carrier's element mentions.
+pub(super) fn carried_box_declaration(
+    former: fn(Term) -> Intrinsic,
+    variances: Vec<Variance>,
+) -> InductDecl {
+    let held = Free::local(34, Some("T"));
+    let declaration = box_declaration(variances);
+    let level = Level::param(UniverseParam(0));
+
+    InductDecl {
+        constructors: vec![(
+            Atom::from("box"),
+            InductParam::new(
+                Telescope::build(
+                    [(held, Term::intrinsic(former(Term::type_at(level))))],
+                    Vec::new(),
+                ),
+                vec![Plicity::Explicit],
+            ),
+        )]
+        .into(),
+        ..declaration
     }
 }
 

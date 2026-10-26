@@ -76,6 +76,26 @@ fn a_proof_payload_below_the_familys_level_is_admitted() {
     assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
 }
 
+/// An intrinsic carrier of propositions is data at their level, and a list of the ground propositions themselves sits where they do, a level above them: `induct Box : Prop | mk(x : List(Prop))` holds a code for every proposition of its own level, the carrier Coquand's paradox of trees needs, and is refused as `mk(x : Prop)` is. `Box : Prop 1` holds it, which is the control.
+///
+/// Mutation-checked at `sort_of_intrinsic`: a carrier pinned at level zero admits the small proposition.
+#[test]
+fn a_proposition_holding_a_list_of_its_own_propositions_is_refused() {
+    let codes = || Term::intrinsic(Intrinsic::ListType(Term::prop()));
+
+    let mut kernel = kernel();
+    let declaration = family(&mut kernel, Term::prop(), codes());
+    assert!(matches!(
+        check_induct_decl(&mut kernel, &declaration),
+        Err(Error::Oversized { .. }),
+    ));
+
+    let mut kernel = self::kernel();
+    let one = Level::zero().succ().expect("level zero has a successor");
+    let declaration = family(&mut kernel, Term::prop_at(one), codes());
+    assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
+}
+
 /// Russell's paradox through a large inductive, the kernel's reading of the clash the elaborator refuses at `R: V = V/set(Regular, …)`. `V : Type 1 | set(A : Type 0, f : (A) -> V)` is a set of the values of any `Type 0`, a valid declaration since the payload fits below it; and `V/set(V, …)`, the set whose members are `V`s, hands `V` itself — a `Type 1` — to the `A : Type 0` field, which asks a type to sit strictly below itself. The declaration stands and the self-application is refused, where `curios`'s `tests::universes::hierarchy_tests` puts the paradox's own `R` to the elaborator.
 #[test]
 fn a_large_inductive_holding_its_own_type_is_refused_at_the_self_application() {
