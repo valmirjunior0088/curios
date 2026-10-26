@@ -3,12 +3,13 @@
 use {
     super::test_support::*,
     crate::{
-        Baseline, Error, Globals, Kernel, Rechecked, Verdict, complete, induct_alike, struct_alike,
+        Baseline, Error, Globals, Kernel, Rechecked, Verdict, complete, held_digest, induct_alike,
+        struct_alike,
     },
     curios_analysis::test_support::SYNTAX,
     curios_core::{
-        Certification, Certified, Definition, Free, Global, Intrinsic, Item, ItemRun, Level,
-        Module, Nat, Places, ReadTable, Reads, Term, Totality, UniverseParam,
+        Certification, Certified, Definition, Entrypoint, Free, Global, Intrinsic, Item, ItemRun,
+        Level, Module, Nat, Places, Program, ReadTable, Reads, Term, Totality, UniverseParam,
     },
     curios_utilities::{Candidates, Digest, Facet, Member, Object, Qualifier, candidate_prefix},
     std::collections::{BTreeMap, BTreeSet},
@@ -728,4 +729,182 @@ fn a_stores_verdict_that_read_a_part_since_moved_is_passed_over() {
     );
     assert_eq!(rechecked.verdicts, Vec::new());
     assert_eq!(rechecked.certification, walked(&respelled).certification);
+}
+
+/// `Type 5`, `Type 4` and `Type 0` as hand-built universes.
+fn type_at(level: u32) -> Term {
+    Term::type_at(Level::constant(level))
+}
+
+/// `name : type_ = body`, stating the sort `value_sort` its value inhabits ([`curios_core::Definition::value_sort`]): the field a type alias carries and the one `read_digest` leaves out.
+fn aliased(name: &Global, type_: Term, body: Term, value_sort: Term) -> Item {
+    match authored(name, type_, body) {
+        Item::Let(definition) => Item::Let(Box::new(Definition {
+            value_sort: Some(value_sort),
+            ..*definition
+        })),
+        item => item,
+    }
+}
+
+/// Three declarations: `H : Type 5 = h_body` stating its value sort `h_value_sort`, `G : Type 5 = H` stating `g_value_sort`, and `D : (G) -> G = (x) => x`, which reads `G`'s value sort through `Sort::of` when it checks its binder.
+///
+/// `G`'s declared type is `Type 5` in every version, so cumulativity admits an `H` body at any level up to 5; what moves between versions is the *value* sort `H`'s body reaches, which `G` republishes.
+fn value_sort_module(h_body: Term, h_value_sort: Term, g_value_sort: Term) -> Module {
+    let x = Free::local(10, Some("x"));
+    let g = Term::free_var(&Free::from(&global("G")));
+
+    Module {
+        mounts: Vec::new(),
+        items: vec![
+            aliased(&global("H"), type_at(5), h_body, h_value_sort),
+            aliased(
+                &global("G"),
+                type_at(5),
+                Term::free_var(&Free::from(&global("H"))),
+                g_value_sort,
+            ),
+            authored(
+                &global("D"),
+                Term::func_type([(x, g.clone())], g.clone()),
+                Term::func([(x, g.clone())], Term::free_var(&x)),
+            ),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    }
+}
+
+/// A reader adopted over a baseline carries the baseline's `value_sort` for a definition it read, because the certifier's read-digest ([`held_digest`]) digests a body read as the body *term* and omits `value_sort` — yet the verdict a whole compile gives is preserved.
+///
+/// `H : Type 5` moves from `Nat` (value sort `Type 0`) to `Type 4` (value sort `Type 5`) under a fixed declared type, so the alias `G : Type 5 = H` republishes a value sort that moves `Type 0` → `Type 5` while `G`'s body term, the occurrence of `H`, does not. `D : (G) -> G` reads `G`'s value sort through `Sort::of` and is adopted, its body-read of `G` standing on the unchanged body term.
+///
+/// **Why the stale sort is harmless, which nothing else pins.** Every acceptance gate `Sort::of` drives reads only `.is_prop()`; a level alone gates no verdict, and a definition's prop-ness is carried by its declared type, which the signature read-digest does keep. So `D`'s verdict — accepted — is the one a whole compile of the edited module gives, and the walk's record matches it.
+///
+/// The first assertion pins the omission directly: two modules whose `G` differs only in `value_sort` have one `held_digest` for `G`, signature and body alike.
+///
+/// Mutation-checked: adding `self.held.value_sort` to `Readable::digest`'s signature part makes the two `G` digests differ and the first assertion fail.
+#[test]
+fn a_reader_of_a_moved_value_sort_is_adopted_and_its_verdict_is_a_whole_compiles() {
+    // The omission, read off the digest: `G`'s part digests alike whether its value sort is `Type 0` or `Type 5`.
+    let low = value_sort_module(type_at(4), type_at(5), type_at(0));
+    let high = value_sort_module(type_at(4), type_at(5), type_at(5));
+    let (low_places, high_places) = (Places::of(&low), Places::of(&high));
+    for body in [false, true] {
+        assert_eq!(
+            held_digest(&low, &low_places, &global("G"), (false, None, None), body)
+                .expect("G digests"),
+            held_digest(&high, &high_places, &global("G"), (false, None, None), body)
+                .expect("G digests"),
+            "the read-digest of G ignores its value_sort (body read: {body})",
+        );
+    }
+
+    // The walk: `G`'s republished value sort moves `Type 0` → `Type 5`, `D` reads it, and the edited module is compiled over the baseline.
+    let baseline = versioned(value_sort_module(nat(), type_at(0), type_at(0)));
+    let certification = walked(&baseline).certification;
+    let edited = replaced(
+        &replaced(
+            &baseline,
+            "H",
+            aliased(&global("H"), type_at(5), type_at(4), type_at(5)),
+        ),
+        "G",
+        aliased(
+            &global("G"),
+            type_at(5),
+            Term::free_var(&Free::from(&global("H"))),
+            type_at(5),
+        ),
+    );
+
+    let whole = walked(&value_sort_module(type_at(4), type_at(5), type_at(5)));
+    let over = walked_over(&edited, &baseline, &certification);
+
+    assert_eq!(
+        over.verdicts,
+        Vec::new(),
+        "the edited module is admitted over the baseline, D adopted with G's stale value sort",
+    );
+    assert_eq!(
+        over.verdicts, whole.verdicts,
+        "a whole compile of the edited module gives D the same verdict",
+    );
+    assert_eq!(
+        over.certification, whole.certification,
+        "and files the record a whole compile files",
+    );
+}
+
+/// A forged `Certification` filing a genuinely partial proof as `Total`, mounted as a unit in scope, admits a looping proof of an empty proposition: the mounted record is believed without the walk that would refuse it.
+///
+/// `loop : Absurd = loop` recurses without descending, so a walk refuses it as a proof that may not terminate ([`totality-of-the-erased-program`]). Filed `Total` and mounted, nothing re-judges it: `Globals::mount` stands a scope entry at its type with its body, unjudged, and the reader's totality obligation reads the forged verdict (`Globals::partial`). The control is the same record filing it `Partial`, which refuses.
+///
+/// The input is forged — no walk of this crate produces this record — so this names what the boundary's ground, that a scope entry was judged by the walk that built it, does not itself check: the mounted `Certification`'s totality is believed, and nothing in the record (no digest, no checksum) is consulted to tell a forged verdict from one a walk filed. A stored unit's slot is guarded by the compiler digest and the verified read-set, which bind the record to this compiler over these inputs, not to a walk having concluded it.
+#[test]
+fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
+    let loop_name = global("loop");
+    let absurd_name = global("Absurd");
+    let absurd = Term::induct_type(absurd_name, Vec::<Term>::new(), Vec::<Term>::new());
+    let mounted = collision_module(
+        vec![authored_proof(
+            &loop_name,
+            absurd.clone(),
+            Term::free_var(&Free::from(&loop_name)),
+        )],
+        BTreeMap::from([(absurd_name, proposition(Vec::new()))]),
+    );
+    let reader = || Program {
+        module: Module {
+            mounts: Vec::new(),
+            items: Vec::new().into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        entry: Entrypoint {
+            body: Term::free_var(&Free::from(&loop_name)),
+            type_: Some(absurd.clone()),
+        },
+    };
+    let certified = |totality: Totality| {
+        Certification::of(
+            mounted
+                .items
+                .iter()
+                .flat_map(Item::declared_names)
+                .map(|name| {
+                    (
+                        *name,
+                        Certified {
+                            totality,
+                            reads: Reads::default(),
+                        },
+                    )
+                }),
+            [],
+            [],
+            [],
+        )
+    };
+
+    let forged = certified(Totality::Total);
+    let scope = AlreadyJudged::with(&mounted, &forged);
+    let admitted = fixture_certified(&reader(), BUDGET, &scope.globals(), SYNTAX).verdicts;
+    assert_eq!(
+        admitted,
+        Vec::new(),
+        "a forged Total verdict admitted a looping proof of Absurd: {admitted:?}",
+    );
+
+    // The control: the same record, honest, refuses — so the admission rode on the lie.
+    let honest = certified(Totality::Partial);
+    let honest_scope = AlreadyJudged::with(&mounted, &honest);
+    let refused = fixture_certified(&reader(), BUDGET, &honest_scope.globals(), SYNTAX).verdicts;
+    assert!(
+        refused
+            .iter()
+            .any(|verdict| matches!(verdict.error, Error::NotTotal { .. })),
+        "the control stopped refusing: an honest Partial must refuse the looping proof: {refused:?}",
+    );
 }
