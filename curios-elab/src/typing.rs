@@ -431,10 +431,11 @@ pub(crate) fn blocked_on_metavar(
     })
 }
 
-/// Whether metavar `id` is solved *all the way down*: solved, and every metavar in its solution is itself transitively ground. `metavar_solution` only sees one level, and a solution can still embed unsolved metavars, so `expected_ground` needs this transitive view to be sure the turnaround will actually pin a result metavar rather than alias it flex-flex. Terminates: the occurs check forbids cyclic solutions.
+/// Whether metavar `id` is solved *all the way down*: solved, and every metavar in its solution is itself transitively ground. `metavar_solution` only sees one level, and a solution can still embed unsolved metavars, so `expected_ground` needs this transitive view to be sure the turnaround will actually pin a result metavar rather than alias it flex-flex. A filled recursive slot is ground and not walked: it stands for its member, and it is the one solution the occurs check does not hold, filled with a body that may name it again, through a signature read through the slots or another solution, so stopping there is what ends the walk.
 pub(crate) fn transitively_ground(context: &Context, id: MetavarId) -> bool {
     match context.metavar_solution(id) {
         None => false,
+        Some(_) if context.is_rec_slot(id) => true,
         Some(solution) => solution
             .metavars()
             .iter()

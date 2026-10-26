@@ -558,6 +558,51 @@ fn a_group_member_type_cannot_fold_to_a_proposition() {
     );
 }
 
+// A recursive slot is the one solution the occurs check does not hold, and a signature reads a member through its slot, so a body reading a sibling at its signature, or an implicit solved from one, names a slot inside the solution that fills it. A walk through solutions stops at a filled slot, which stands for its member; walked into, each program here overflowed the elaborator's stack.
+#[test]
+fn a_slot_reached_from_its_own_solution_is_judged_and_refused() {
+    let lambda = "introduced a lambda where the expected type is not a function type";
+    let refused = |groups: &str, tail: &str, diagnostic: &str| {
+        let error = error(&fill!(
+            r#"
+            use /std/{Nat};
+            let id(@A: Type, a: A) -> A = a;
+            ${groups}
+            /std/print(Nat/to_str(${tail}))
+            "#,
+            groups,
+            tail,
+        ));
+        assert!(
+            error.contains(diagnostic) && !error.contains("the kernel refused"),
+            "{error}"
+        );
+    };
+
+    refused(
+        "let outer(m: Nat) -> Nat =
+            let T(n: Nat) -> Type = match n | 0 => (Nat) -> Nat | k + 1 => T(k) end
+            and val: T(2) = id((x) => x + 1);
+            val(m);",
+        "outer(3)",
+        lambda,
+    );
+    refused(
+        "let outer(m: Nat) -> Nat =
+            let T(n: Nat) -> Type = match n | 0 => (Nat) -> Nat | k + 1 => T(k) end
+            and val: T(2) = id(@T(2), m);
+            val(m);",
+        "outer(3)",
+        "expected: T(2)",
+    );
+    refused(
+        "let T(n: Nat) -> Type = match n | 0 => (Nat) -> Nat | k + 1 => let _w = val; T(k) end
+        and val: T(2) = id((x) => x + 1);",
+        "val(3)",
+        lambda,
+    );
+}
+
 #[test]
 fn a_type_reaching_two_partial_definitions_names_the_first_written() {
     let refusal = |arguments: &str| {
