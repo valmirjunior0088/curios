@@ -49,7 +49,6 @@ license = "Apache-2.0"
 
 [workspace.lints.rust]
 warnings = "deny"
-unreachable_pub = "warn"
 
 [workspace.lints.clippy]
 allow_attributes_without_reason = "warn"

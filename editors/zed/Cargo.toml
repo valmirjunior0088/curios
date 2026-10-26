@@ -12,7 +12,6 @@ description = "The Zed extension for Curios: launches `curios wonder server` for
 # The compiler's workspace's lint table, restated because a workspace of its own cannot inherit one; `the_lint_table_is_the_workspace_s` holds the two equal.
 [lints.rust]
 warnings = "deny"
-unreachable_pub = "warn"
 
 [lints.clippy]
 allow_attributes_without_reason = "warn"
