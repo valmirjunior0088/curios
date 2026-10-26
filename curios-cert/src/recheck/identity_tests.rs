@@ -4,7 +4,10 @@ use {
     super::test_support::*,
     crate::{Error, Globals},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Entrypoint, Free, Global, Intrinsic, Module, Nat, Program, Term},
+    curios_core::{
+        Entrypoint, Free, Global, Intrinsic, Level, Module, Nat, Program, Term, UniverseContext,
+        UniverseParam,
+    },
     curios_utilities::Qualifier,
     std::collections::BTreeSet,
 };
@@ -149,6 +152,47 @@ fn a_stated_value_sort_a_stray_local_decides_is_refused_where_it_is_held() {
             "a value sort decided by free local {index} was not refused where it is held: {verdicts:?}",
         );
     }
+}
+
+/// A universe parameter past the scheme, carried in a stated value sort where reduction discards it, is refused at the boundary — the escape the instance route (`value_sort_at`, then `instantiate_universes_scoped`) would renumber into a capture.
+///
+/// The level sits in the domain of a redex whose body drops its binder, so the stated sort reduces to `Type 0`, which is the value's own sort: `hold_value_sort`'s conversion passes, exactly as it passes a free local reduction discards. The boundary's `universe_escape` over the unreduced sort is the sole guard, as `free_locals_of` is for the free local. Mutation-checked: dropping the `universe_escape` over `value_sort` certifies the definition.
+#[test]
+fn a_universe_escape_a_stated_value_sort_discards_is_refused_where_it_is_held() {
+    let mut universe_context = UniverseContext::empty();
+    universe_context.parameter_count = 1;
+    // `((Y : Type(param 1)) => Type 0)(Prop)`: reduces to `Type 0`, dropping the domain that carries `param 1`, which the scheme does not bind.
+    let escaping = Term::apply(
+        Term::func(
+            [(
+                Free::local(9_002, Some("Y")),
+                Term::type_at(Level::param(UniverseParam(1))),
+            )],
+            Term::type_ground(),
+        ),
+        [Term::prop()],
+    );
+
+    let item = match authored(&held(), Term::type_ground(), nat()) {
+        curios_core::Item::Let(definition) => {
+            curios_core::Item::Let(Box::new(curios_core::Definition {
+                universe_context,
+                value_sort: Some(escaping),
+                ..*definition
+            }))
+        }
+        item => item,
+    };
+    let module = holding(vec![item]);
+
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), SYNTAX);
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name == Some(held())
+                && matches!(&verdict.error, Error::UnclosedUniverses)),
+        "a universe escape a stated value sort discards was not refused where it is held: {verdicts:?}",
+    );
 }
 
 /// The entry is held to the same boundary as the module's items, since it is judged in the same walk by the same counter. Mutation-checked as above.
