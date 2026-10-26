@@ -760,3 +760,23 @@ fn a_recursion_that_hands_its_arguments_on_exchanged_does_not_descend() {
         "#,
     );
 }
+
+// (T) across the unit boundary: a partial definition in one unit is partial to every unit that mounts it. Every (T) fixture above builds its partiality in-unit, so none exercises the replay path's load-bearing half — that a definition the prelude's own walk classified `Partial` is read back as partial by a user suffix that only mentions it. `Json/decode` is that definition: a parser no size-change checker can show terminates, whose `Partial` verdict lives in the archived record alone. `Bad(s)` is a type that computes through that parse, so its body is a type position reaching `Json/decode`; a gate that read the archive's verdict as `Total`, or did not consult it, would form `Bad` over a diverging type and satisfy (T) by a classification it never read.
+#[test]
+fn a_type_reaching_a_partial_prelude_definition_is_rejected() {
+    rejected_as_a_type(
+        r#"
+        use /std/{Nat, Json, Str};
+
+        let Bad(s : Str) -> Type =
+            match Json/decode(s)
+            | success(_) => Nat
+            | failure(_) => {}
+            end;
+
+        let _held(s : Str, _x : Bad(s)) -> Nat = 0;
+
+        /std/print("unreachable")
+        "#,
+    );
+}

@@ -270,3 +270,21 @@ fn a_partial_proof_cannot_arrive_through_witness_resolution() {
         "#;
     rejected_as_a_proof(source);
 }
+
+// (V) across the unit boundary, the proof-side twin of `a_type_reaching_a_partial_prelude_definition_is_rejected`. Every fixture above builds its partiality in-unit; this one reaches `/std/Json/decode`, whose `Partial` classification lives only in the archived record the user suffix reads back. `p`'s type is `True`, a proof position, and its body eliminates a partial parse, so the proof reaches `Json/decode`. A gate reading the archive's verdict as `Total` would accept `p`, and the parser's divergence would stand behind a proof erasure deletes — the identification (V) exists to prevent, here resting entirely on the prelude's own verdict being read.
+#[test]
+fn a_proof_reaching_a_partial_prelude_definition_is_rejected() {
+    let source = r#"
+        use /std/{Json, Str};
+        use /std/Bool/{True};
+
+        let p : True =
+            match Json/decode("x")
+            | success(_) => True/qed()
+            | failure(_) => True/qed()
+            end;
+
+        /std/print("unreachable")
+        "#;
+    rejected_as_a_proof(source);
+}
