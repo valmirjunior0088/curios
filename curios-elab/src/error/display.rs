@@ -180,16 +180,16 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
         }
     };
     let mut lines = String::new();
-    if !refusal.considered.is_empty() {
+    if !refusal.considered().is_empty() {
         // A counterexample no program takes says what the search found, and nothing of the facts themselves.
-        let heading = match refusal.conclusion {
-            Conclusion::Counterexample(_) if refusal.absurd && refusal.refuted => {
+        let heading = match refusal.conclusion() {
+            Conclusion::Counterexample(_) if refusal.absurd() && refusal.refuted() => {
                 "the search finds no contradiction among the facts in scope:"
             }
-            Conclusion::Counterexample(_) | Conclusion::Unsearched if refusal.absurd => {
+            Conclusion::Counterexample(_) | Conclusion::Unsearched if refusal.absurd() => {
                 "the facts in scope do not refute each other:"
             }
-            Conclusion::Counterexample(_) if refusal.refuted => {
+            Conclusion::Counterexample(_) if refusal.refuted() => {
                 "the search finds no proof from the facts in scope:"
             }
             Conclusion::Exhausted(_) => "the facts in scope the search ran over:",
@@ -199,21 +199,21 @@ fn refused(refusal: &Refusal, spelling: &Rc<Spelling>) -> String {
             }
         };
         lines += &format!("\n  {heading}");
-        for (from, statement) in &refusal.considered {
+        for (from, statement) in refusal.considered() {
             lines += &format!("\n    {}", fact(from, statement));
         }
     }
-    for (from, statement) in &refusal.unread {
+    for (from, statement) in refusal.unread() {
         lines += &format!("\n  not read: {}", fact(from, statement));
     }
-    match &refusal.conclusion {
+    match refusal.conclusion() {
         Conclusion::Counterexample(assignment) if !assignment.is_empty() => {
             let values = assignment
                 .iter()
                 .map(|(atom, value)| format!("{} = {value}", atom.spelled(spelling)))
                 .collect::<Vec<_>>()
                 .join(", ");
-            lines += &match (refusal.absurd, refusal.refuted) {
+            lines += &match (refusal.absurd(), refusal.refuted()) {
                 (true, false) => format!("\n  they all hold at {values}"),
                 (false, false) => format!("\n  it fails at {values}"),
                 (true, true) => format!(
@@ -1550,17 +1550,14 @@ impl fmt::Display for Displayed<'_> {
                 // Rendered as a one-element batch so the safety-net spelling and the compile path's [`Error::Goals`] can never drift; this form carries no occurrence extent or candidates of its own.
                 // Its reader position is the enclosing `InDeclaration`'s and `InScope`'s, which the spelling handed here already stands at.
                 let reader = spelling.reader();
-                let report = GoalReport {
-                    extent: None,
-                    owner: reader.owner,
-                    witnesses: Rc::clone(&reader.witnesses),
-                    scope: scope.clone(),
-                    goal: (**goal).clone(),
-                    solution: solution.as_deref().cloned(),
-                    obligations: Vec::new(),
-                    candidates: Vec::new(),
-                    refusal: None,
-                };
+                let report = GoalReport::new(
+                    None,
+                    reader.owner,
+                    Rc::clone(&reader.witnesses),
+                    scope.clone(),
+                    (**goal).clone(),
+                    solution.as_deref().cloned(),
+                );
                 Displayed(&Error::Goals(vec![report]), Rc::clone(spelling), anchors).fmt(f)
             }
             Error::Goals(reports) => {

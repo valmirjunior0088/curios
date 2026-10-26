@@ -557,13 +557,13 @@ fn argument_site(
         Plicity::Explicit | Plicity::Implicit => rest.first_hint().map(str::to_string),
         Plicity::Witness => None,
     };
-    ArgumentSite {
-        function: function.clone(),
+    ArgumentSite::new(
+        function.clone(),
         parameter,
         plicity,
         position,
         function_typed,
-    }
+    )
 }
 
 /// The metavariables the result `expect` can pin, as seen from one slot: the suffix telescope's terminal with this and every later binder opened as a fresh variable. Only prefix-born metavariables can occur in a slot's own domain — domains open over the prefix — so fresh-var opening of the unvisited suffix is decision-equivalent to a full-argument pre-read of the output, computed only for postponement candidates instead of once per application.

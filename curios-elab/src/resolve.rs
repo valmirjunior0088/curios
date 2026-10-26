@@ -124,10 +124,10 @@ fn diagnose_shape(context: &mut Reporting, goal: &Term) -> Option<Box<ShapeDiagn
         .witness_declared(&concept_name, &bare)
         .then_some(())?;
 
-    Some(Box::new(ShapeDiagnosis {
-        wanted: WitnessKey::from(wanted),
+    Some(Box::new(ShapeDiagnosis::new(
+        WitnessKey::from(wanted),
         bare,
-    }))
+    )))
 }
 
 /// What the missing witness of `goal` was needed for, where its concept is one the compiler resolves for a form of its own ([`Need`]): an embedding, or what closes a program. `site` is where the goal was inserted, which an embedding's report reads what was written from.
@@ -161,10 +161,10 @@ fn diagnose_joining(context: &mut Reporting, goal: &Term) -> Option<Box<Joining>
     let text = HeadKey::Nominal(Global::Authored(syntax.string.string.qualifier()));
 
     (HeadKey::of_whnf(&operand)? == text).then(|| {
-        Box::new(Joining {
-            concat: global(syntax.report.str_concat),
-            render: global(syntax.report.fmt_render),
-        })
+        Box::new(Joining::new(
+            global(syntax.report.str_concat),
+            global(syntax.report.fmt_render),
+        ))
     })
 }
 
@@ -234,7 +234,6 @@ fn diagnose_embedding(
         Some(site) => resolved_for_display(context, &site.region),
         None => resolved_for_display(context, &target_whnf),
     };
-    let owner = written.as_ref().map(|site| site.owner);
     let written_goal = written.and_then(|_| match &*goal {
         Subterm::StructType(struct_type) => {
             let mut struct_type = struct_type.clone();
@@ -249,22 +248,21 @@ fn diagnose_embedding(
     let fallible = HeadKey::Nominal(Global::Authored(syntax.report.try_type.qualifier()));
     let runner = (source_key.as_ref() == Some(&fallible) && target_key.as_ref() != Some(&fallible))
         .then(|| {
-            Box::new(Runner {
-                family: global(syntax.report.try_type),
-                run: global(syntax.report.try_run),
-                result: global(syntax.result.family),
-            })
+            Box::new(Runner::new(
+                global(syntax.report.try_type),
+                global(syntax.report.try_run),
+                global(syntax.result.family),
+            ))
         });
 
-    Some(EmbeddingDiagnosis {
-        source: Box::new(source),
-        target: Box::new(target),
+    Some(EmbeddingDiagnosis::new(
+        source,
+        target,
         source_is_monad,
+        written_goal,
         chain,
-        goal: written_goal,
         runner,
-        owner,
-    })
+    ))
 }
 
 /// `F(c̄, v)` as the monad it names, `F(c̄)`: an application of a name — at a universe instance or not — without its value slot, its explicit arguments alone, which is what a report shows of a monad. `None` unless `type_` applies a name.

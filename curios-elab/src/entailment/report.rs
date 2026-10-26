@@ -14,15 +14,15 @@ use {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Refusal {
     /// The facts it considered, each spelled as the comparison it states, beside where it came from. That a natural is at least zero, and what an operation defines, are left out: they hold of every program, and naming them buries the facts a reader can act on.
-    pub considered: Vec<(Origin, Term)>,
+    considered: Vec<(Origin, Term)>,
     /// The propositions in scope stating a decision the view does not read.
-    pub unread: Vec<(Origin, Term)>,
+    unread: Vec<(Origin, Term)>,
     /// What the search concluded.
-    pub conclusion: Conclusion,
+    conclusion: Conclusion,
     /// Whether the bound was an empty proposition, which only a contradiction among the facts proves: a counterexample then shows them all holding, not a goal failing.
-    pub absurd: bool,
+    absurd: bool,
     /// Whether the counterexample is one no program takes (`refuted`): a report then states it, with the heading above it, as what the search found, each atom read as a number of its own.
-    pub refuted: bool,
+    refuted: bool,
 }
 
 /// The search's conclusion, as the report states it.
@@ -50,6 +50,26 @@ pub enum SearchOutcome {
 }
 
 impl Refusal {
+    pub fn considered(&self) -> &[(Origin, Term)] {
+        &self.considered
+    }
+
+    pub fn unread(&self) -> &[(Origin, Term)] {
+        &self.unread
+    }
+
+    pub fn conclusion(&self) -> &Conclusion {
+        &self.conclusion
+    }
+
+    pub fn absurd(&self) -> bool {
+        self.absurd
+    }
+
+    pub fn refuted(&self) -> bool {
+        self.refuted
+    }
+
     /// Whether the refusal says anything at all: a bound the procedure read nothing in reports exactly as it would with no procedure.
     pub fn is_silent(&self) -> bool {
         self.considered.is_empty()
@@ -110,6 +130,7 @@ impl Refusal {
         views: &LinearViews,
         outcome: SearchOutcome,
         absurd: bool,
+        refuted: bool,
     ) -> Self {
         // A fact two hypotheses state as one, as a structure update's base and the term it stands for do, is listed once.
         let mut considered: Vec<(Origin, Term)> = Vec::new();
@@ -142,7 +163,7 @@ impl Refusal {
             unread: facts.unread().to_vec(),
             conclusion: outcome,
             absurd,
-            refuted: false,
+            refuted,
         }
     }
 }

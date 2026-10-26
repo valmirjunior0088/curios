@@ -98,22 +98,59 @@ impl CycleMember {
 /// One written goal's entry in an [`Error::Goals`] batch: its occurrence extent, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
 #[derive(Debug)]
 pub struct GoalReport {
-    pub extent: Option<Extent>,
+    extent: Option<Extent>,
     /// The definition the goal was written in (the entrypoint's final term when `None`) and the witness binders in scope there, outermost first: the reader position its report is spelled for.
-    pub owner: Option<Global>,
-    pub witnesses: Rc<[Free]>,
-    pub scope: Vec<(Term, Term)>,
-    pub goal: Term,
-    pub solution: Option<Term>,
+    owner: Option<Global>,
+    witnesses: Rc<[Free]>,
+    scope: Vec<(Term, Term)>,
+    goal: Term,
+    solution: Option<Term>,
     /// Conversions the item drain could not decide because this goal (perhaps with others) was all that held them up, each as the two sides that must become equal — rendered as `? such that` lines. What tells the reader of `Eq/cong(?, ih)` that the hole has to send `double(p)` to `double(p) + 2`.
-    pub obligations: Vec<(Term, Term)>,
+    obligations: Vec<(Term, Term)>,
     /// Sandboxed candidate fits for an unsolved goal, display-ready and rendered as `? ≈` lines; empty for a solved goal. Observation-only: the compiler re-checks whatever the author pastes.
-    pub candidates: Vec<Term>,
+    candidates: Vec<Term>,
     /// Why the procedure that proves a bound from the facts in scope proved nothing, where the goal is a bound: the facts it considered and what its search concluded, rendered as a refused bound's report renders them.
-    pub refusal: Option<Refusal>,
+    refusal: Option<Refusal>,
 }
 
 impl GoalReport {
+    /// The report of a goal as it stands, with nothing said beside it ([`GoalReport::beside`]).
+    pub fn new(
+        extent: Option<Extent>,
+        owner: Option<Global>,
+        witnesses: Rc<[Free]>,
+        scope: Vec<(Term, Term)>,
+        goal: Term,
+        solution: Option<Term>,
+    ) -> Self {
+        Self {
+            extent,
+            owner,
+            witnesses,
+            scope,
+            goal,
+            solution,
+            obligations: Vec::new(),
+            candidates: Vec::new(),
+            refusal: None,
+        }
+    }
+
+    /// The report with what is said beside the goal: the conversions it holds up, the candidates that fit it, and why the procedure proving a bound proved nothing.
+    pub fn beside(
+        self,
+        obligations: Vec<(Term, Term)>,
+        candidates: Vec<Term>,
+        refusal: Option<Refusal>,
+    ) -> Self {
+        Self {
+            obligations,
+            candidates,
+            refusal,
+            ..self
+        }
+    }
+
     /// The axis-(a) rename map for this one report: built over the names *it* mentions, so a binder is suffixed only against a collision the reader can see from this goal. A batch-wide map — the one [`Error::rename_map`] builds for every other error — would rename the second of two functions' `n` to `n2`, a collision with a binder that belongs to a different goal's scope and appears nowhere in this one.
     fn rename_map(&self, spelling: &Spelling) -> Rc<Rename> {
         let mut names = DisplayNames::default();
@@ -142,33 +179,67 @@ impl GoalReport {
 /// The embedding-specific half of a missing-witness report, computed when the unresolved goal is the registry's `Lift`: the two monads, whether the source is a monad at all, and any chain of declared edges connecting the pair — each fact the report needs to steer the fix (declare the edge, fix the action, or spell the composite) without the reader reconstructing the table.
 #[derive(Debug)]
 pub struct EmbeddingDiagnosis {
-    pub source: Box<Term>,
-    pub target: Box<Term>,
+    source: Box<Term>,
+    target: Box<Term>,
     /// Whether any `Monad` witness exists for the source's head: an edge out of a non-monad could never be declared, so suggesting one would be a trap.
-    pub source_is_monad: bool,
+    source_is_monad: bool,
     /// The goal spelled with the monads the auto-lift named as written, which the report leads with in place of the goal unification solved — present where the site recorded them.
-    pub goal: Option<Box<Term>>,
+    goal: Option<Box<Term>>,
     /// A chain of declared edges from source to target, each hop `(key display, declaring module)`. Non-empty means the embeddings exist but were never composed — embeddings never chain automatically. The module rides as its [`Qualifier`] so rendering stays with `declaring_module`, the one spelling of "declared in …".
-    pub chain: Vec<(String, Qualifier)>,
+    chain: Vec<(String, Qualifier)>,
     /// Present where the source is the fallible wrapper the registry names and the target is no instance of it: a failure has no edge into a monad that cannot hold one, so the report names the two ways the action is written instead.
-    pub runner: Option<Box<Runner>>,
-    /// What the region the auto-lift sequenced in belongs to, where a site recorded it.
-    pub owner: Option<RegionOwner>,
+    runner: Option<Box<Runner>>,
+}
+
+impl EmbeddingDiagnosis {
+    pub fn new(
+        source: Term,
+        target: Term,
+        source_is_monad: bool,
+        goal: Option<Box<Term>>,
+        chain: Vec<(String, Qualifier)>,
+        runner: Option<Box<Runner>>,
+    ) -> Self {
+        Self {
+            source: Box::new(source),
+            target: Box::new(target),
+            source_is_monad,
+            goal,
+            chain,
+            runner,
+        }
+    }
 }
 
 /// The names a report offers where an action that may fail meets a region with no edge for it, each a global the reader's own imports spell: the wrapper's family, the function that runs one where it stands, and the family of what that hands back.
 #[derive(Debug)]
 pub struct Runner {
-    pub family: Term,
-    pub run: Term,
-    pub result: Term,
+    family: Term,
+    run: Term,
+    result: Term,
+}
+
+impl Runner {
+    pub fn new(family: Term, run: Term, result: Term) -> Self {
+        Self {
+            family,
+            run,
+            result,
+        }
+    }
 }
 
 /// The functions a report names where `+` meets text, each a global the reader's own imports spell: the one that joins two, and the one that builds a text from a format.
 #[derive(Debug)]
 pub struct Joining {
-    pub concat: Term,
-    pub render: Term,
+    concat: Term,
+    render: Term,
+}
+
+impl Joining {
+    pub fn new(concat: Term, render: Term) -> Self {
+        Self { concat, render }
+    }
 }
 
 /// What a missing witness was needed for, where its goal's concept is one the compiler resolves for a form of its own: the report then says what that form wanted, in place of the premise of a call the author never wrote.
@@ -185,8 +256,14 @@ pub enum Need {
 /// The shape-specific half of a missing-witness report, computed when the unresolved goal keys on a *labeled* tuple shape and the same key with every label dropped does have a witness. Labels are part of a tuple type's identity, which is the surprise an anonymous-shape key has; a reader who meets it deserves the rule rather than a bare miss.
 #[derive(Debug)]
 pub struct ShapeDiagnosis {
-    pub wanted: WitnessKey,
-    pub bare: WitnessKey,
+    wanted: WitnessKey,
+    bare: WitnessKey,
+}
+
+impl ShapeDiagnosis {
+    pub fn new(wanted: WitnessKey, bare: WitnessKey) -> Self {
+        Self { wanted, bare }
+    }
 }
 
 /// One still-unsolved metavariable a postponed conversion watched, by what it is: what a reader can act on.
@@ -226,15 +303,33 @@ pub enum Underivable {
 #[derive(Debug)]
 pub struct ArgumentSite {
     /// The applied callee, carried as its identity so the report spells it under the names in scope.
-    pub function: CalleeId,
+    function: CalleeId,
     /// The parameter the argument filled, when the telescope names it and the slot is not a `use` one.
-    pub parameter: Option<String>,
+    parameter: Option<String>,
     /// The mark the argument was written with, which is its slot's plicity.
-    pub plicity: Plicity,
+    plicity: Plicity,
     /// The argument's 0-based position among the arguments written with that mark.
-    pub position: usize,
+    position: usize,
     /// For a plain argument, a later explicit parameter whose type is a function type, with its name and 0-based position among the explicit parameters — the slot a misplaced lambda was meant for.
-    pub function_typed: Option<(Option<String>, usize)>,
+    function_typed: Option<(Option<String>, usize)>,
+}
+
+impl ArgumentSite {
+    pub fn new(
+        function: CalleeId,
+        parameter: Option<String>,
+        plicity: Plicity,
+        position: usize,
+        function_typed: Option<(Option<String>, usize)>,
+    ) -> Self {
+        Self {
+            function,
+            parameter,
+            plicity,
+            position,
+            function_typed,
+        }
+    }
 }
 
 /// Who an inserted argument was inserted for, as a report names it.

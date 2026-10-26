@@ -553,26 +553,30 @@ pub fn report_goals(
             });
         });
 
-        reports.push(GoalReport {
-            extent: *extent,
-            owner: *owner,
-            witnesses,
-            scope: scope
-                .iter()
-                .map(|(name, type_)| (name.clone(), shown(context, type_)))
-                .collect(),
-            goal: shown(context, &goal),
-            solution: solution.map(|solution| shown(context, &solution)),
-            obligations: obligations
-                .iter()
-                .map(|(this, that)| (shown(context, this), shown(context, that)))
-                .collect(),
-            candidates: candidates
-                .iter()
-                .map(|candidate| shown(context, candidate))
-                .collect(),
-            refusal,
-        });
+        reports.push(
+            GoalReport::new(
+                *extent,
+                *owner,
+                witnesses,
+                scope
+                    .iter()
+                    .map(|(name, type_)| (name.clone(), shown(context, type_)))
+                    .collect(),
+                shown(context, &goal),
+                solution.map(|solution| shown(context, &solution)),
+            )
+            .beside(
+                obligations
+                    .iter()
+                    .map(|(this, that)| (shown(context, this), shown(context, that)))
+                    .collect(),
+                candidates
+                    .iter()
+                    .map(|candidate| shown(context, candidate))
+                    .collect(),
+                refusal,
+            ),
+        );
     }
 
     reports

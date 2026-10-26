@@ -228,10 +228,7 @@ fn linear(
     // A counterexample's atoms named in one pass through every spelling the report has, so an outer reduct is replaced before one inside it whichever reading found either: the operands as stated, and the operands written beneath them, which are asked only now the search is over. A bound that is a metavariable elaboration has solved, as the statement `proved()` leaves implicit is, opens to no `Holds`: the search read its reduct, and what the solution states is read here, for the report alone, since the proof is written over what the search read and one written over the solution does not check. A reading that runs out leaves its spellings out.
     let refused = |context: &mut Context, views: &LinearViews, outcome: SearchOutcome| {
         let refuted = refuted(context, views, &outcome);
-        let refusal = Refusal {
-            refuted,
-            ..Refusal::of(&facts, views, outcome, absurd)
-        };
+        let refusal = Refusal::of(&facts, views, outcome, absurd, refuted);
         let inferred = match stated {
             Some(_) => Vec::new(),
             None => {
