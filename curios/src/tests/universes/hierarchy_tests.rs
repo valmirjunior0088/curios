@@ -1,4 +1,4 @@
-//! What the hierarchy admits and what it refuses: cumulativity, one declaration at two levels, the paradox's shape, and the two honest programs that meet the refusal with their remedies.
+//! What the hierarchy admits and what it refuses: cumulativity, one declaration at two levels, the shapes Girard's, Hurkens' and Russell's paradoxes take, and the two honest programs that meet the refusal with their remedies.
 
 use {
     super::test_support::universe_parameters,
@@ -94,6 +94,88 @@ fn the_same_quantifier_instantiates_at_a_type_below_it() {
     );
 
     assert_eq!(run(&source), b"stratified");
+}
+
+// Russell's paradox through a large inductive, the route Girard's takes by a large elimination: `V` holds a set of the values of any type, so `Regular`, the sets that are no member of themselves, is a type of `V`s, and `R` would be the set of them, a member of itself exactly where it is not. `V` holds a type, so it sits a level above every type it holds, and `V/set(Regular, …)` asks `Regular`, which holds a `V`, to be one of them.
+#[test]
+fn the_set_of_the_sets_that_are_not_members_of_themselves_is_refused() {
+    let message = error(
+        r#"
+        use /std/{Eq};
+        use /std/Bool/{False};
+
+        induct V: Type
+        | set(A: Type, f: (A) -> V)
+        end
+
+        let Member(x: V, y: V) -> Type = match y | set(A, f) => {a: A, p: Eq()(f(a), x)} end;
+
+        let Regular: Type = {x: V, h: (Member(x, x)) -> False};
+
+        let R: V = V/set(Regular, (r) => r.x);
+
+        /std/print("no")
+        "#,
+    );
+
+    assert!(message.contains("strictly below itself"), "got: {message}");
+    assert!(message.contains("while elaborating R:"), "got: {message}");
+}
+
+// The control: the same `V` holds sets of types below it, the empty set and the set of it, so what the refusal above rests on is the self-membership and not the family.
+#[test]
+fn a_set_of_the_values_of_a_type_below_its_family_is_admitted() {
+    let source = r#"
+        use /std/{Nat};
+
+        induct V: Type
+        | set(A: Type, f: (A) -> V)
+        end
+
+        induct Void: Type
+        end
+
+        let empty: V = V/set(Void, (v) => match v end);
+        let singleton: V = V/set(Nat, (_) => empty);
+
+        /std/print("stratified")
+        "#;
+
+    assert_eq!(run(source), b"stratified");
+}
+
+// Hurkens' route through an impredicative pair: a strong sum of a proposition and its proof that was itself a proposition would be one of the propositions it packs, the carrier Girard's paradox needs one sort down. A record holding `Prop` holds a type, so it is a type a level above the propositions it ranges over, and is refused where a proposition is asked for.
+#[test]
+fn a_pair_of_a_proposition_and_its_proof_is_no_proposition() {
+    let message = error(
+        r#"
+        let Packed: Prop = {P: Prop, p: P};
+
+        /std/print("no")
+        "#,
+    );
+
+    assert!(message.contains("inferred: Type"), "got: {message}");
+    assert!(message.contains("expected: Prop"), "got: {message}");
+    assert!(
+        message.contains("while elaborating Packed:"),
+        "got: {message}"
+    );
+}
+
+// The control: the same pair is a type, and packs a proposition below it.
+#[test]
+fn a_pair_of_a_proposition_and_its_proof_is_a_type() {
+    let source = r#"
+        use /std/Bool/{True};
+
+        let Packed: Type = {P: Prop, p: P};
+        let packed: Packed = (True, True/qed());
+
+        /std/print("packed")
+        "#;
+
+    assert_eq!(run(source), b"packed");
 }
 
 // **An honest program that reaches the refusal, and what the message owes it.** Two surface programs do: a *local* polymorphic definition applied to itself, and a recursive call at a level above its group's own. Neither is a paradox — the top-level twin of the first is admitted below, and stratification is what refuses them — so each is a program a user can write by accident and has no way to annotate out of, levels having no syntax.

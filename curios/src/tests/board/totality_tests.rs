@@ -38,3 +38,47 @@ fn saturating_subtraction_is_not_descent() {
 fn permuting_arguments_is_not_descent() {
     rejected_by(PERMUTING_ARGUMENTS_IS_NOT_DESCENT, "not known to terminate");
 }
+
+// A structure's field is read by projection, which takes no case of the value apart, so a function field applied off one grades below nothing: `f` would recur for ever along `l`'s `next`, a structure that hands itself back, and is refused as no descent wherever it is reached.
+#[test]
+fn a_field_applied_off_a_structure_is_not_descent() {
+    rejected_by(
+        r#"
+        use /std/Bool/{False};
+
+        struct S: Type { next: () -> S }
+
+        let l() -> S = S { next = l };
+
+        let f(x: S) -> False = f(x.next());
+
+        let bad: False = f(l());
+
+        /std/print("FORGED")
+        "#,
+        "reaches 'f', which is not known to terminate",
+    );
+}
+
+// An application of a payload is a child of its constructor, which is true of a value that is a finite tree (`curios-analysis`'s `totality`), the premise the paradox of trees breaks: `down` descends by it and is admitted, and `x`, whose payload hands back `x` itself, is a tree with no bottom for the descent to reach. A recursive binding is not known to terminate, so the proof that reaches it is refused at `x`, and the descent is never asked of it.
+#[test]
+fn a_value_that_is_its_own_child_is_not_known_to_terminate() {
+    rejected_by(
+        r#"
+        use /std/Bool/{False};
+
+        induct N: Type
+        | s(p: () -> N)
+        end
+
+        let down(n: N) -> False = match n | s(p) => down(p()) end;
+
+        let x: N = N/s(() => x);
+
+        let bad: False = down(x);
+
+        /std/print("FORGED")
+        "#,
+        "reaches 'x', which is not known to terminate",
+    );
+}

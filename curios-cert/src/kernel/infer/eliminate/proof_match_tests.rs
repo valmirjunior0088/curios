@@ -1,4 +1,4 @@
-//! A match on a proof, put to the kernel where the elaborator refuses first: the sort its motive is held to, and the instance a closed one states.
+//! A match on a proof, put to the kernel where the elaborator refuses first: the sort its motive is held to, a universe among the relevant ones, and the instance a closed one states.
 
 use {
     super::test_support::*,
@@ -67,6 +67,83 @@ fn a_motive_whose_sort_its_index_decides_is_no_motive() {
         infer(&mut kernel, &term),
         Err(Error::NotAMotive { refusal, .. }) if matches!(*refusal, Error::NotASort(_))
     ));
+}
+
+/// Berardi's route, where proof irrelevance meets a proposition that decides something: `Two : (Nat) -> Prop | here : (0) | there : (0)` eliminated at `(i, s) => Prop`, answering the inhabited `Target(0)` at `here` and the empty `Absurd(0)` at `there`. Irrelevance makes `here` and `there` one value, so the two answers would be one proposition and a proof of the first a proof of the second. A universe is relevant, so the guard refuses the match into `Prop` as it refuses one into `Nat` (`tests::a_proposition_with_two_constructors_does_not_eliminate_into_a_type`). `curios`'s `tests::board::large_elimination_tests` puts the same elimination to the elaborator under this name.
+#[test]
+fn a_proposition_with_two_constructors_does_not_eliminate_into_a_universe() {
+    let mut kernel = kernel();
+
+    let target = declare(
+        &mut kernel,
+        "Target",
+        Term::prop(),
+        vec![nullary("only", nat(0))],
+    );
+    let absurd = declare(&mut kernel, "Absurd", Term::prop(), Vec::new());
+    let family = declare(
+        &mut kernel,
+        "Two",
+        Term::prop(),
+        vec![nullary("here", nat(0)), nullary("there", nat(0))],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        Term::prop(),
+        vec![
+            (
+                "here",
+                Vec::new(),
+                Term::induct_type(target, Vec::<Term>::new(), [nat(0)]),
+            ),
+            (
+                "there",
+                Vec::new(),
+                Term::induct_type(absurd, Vec::<Term>::new(), [nat(0)]),
+            ),
+        ],
+    );
+
+    assert_eq!(
+        infer(&mut kernel, &term),
+        Err(Error::LargeElimination(family)),
+    );
+}
+
+/// The control: a proposition whose one constructor holds nothing is taken into `Prop` and typed there, so the refusal above is the second constructor's.
+#[test]
+fn a_proposition_with_one_bare_constructor_eliminates_into_a_universe() {
+    let mut kernel = kernel();
+
+    let target = declare(
+        &mut kernel,
+        "Target",
+        Term::prop(),
+        vec![nullary("only", nat(0))],
+    );
+    let family = declare(
+        &mut kernel,
+        "One",
+        Term::prop(),
+        vec![nullary("it", nat(0))],
+    );
+
+    let term = eliminate(
+        &mut kernel,
+        &family,
+        nat(0),
+        Term::prop(),
+        vec![(
+            "it",
+            Vec::new(),
+            Term::induct_type(target, Vec::<Term>::new(), [nat(0)]),
+        )],
+    );
+
+    assert_eq!(infer(&mut kernel, &term), Ok(Term::prop()));
 }
 
 /// A closed match on a proof is its arm at the payload the instance it states says, asked nothing of the indices, since a closed proof of a family with one constructor is that constructor: over `same(0)`, a match stating `Same(1, 1)` reduces to `1`. The reading is true only of an instance typing held to the scrutinee's own type, and this one is refused where it is typed, as the open match stating another instance is (`tests::a_stated_instance_is_held_to_the_scrutinees_type`).

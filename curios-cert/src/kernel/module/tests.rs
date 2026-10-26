@@ -1,5 +1,5 @@
 use {
-    crate::{Error, Kernel, check_definition, check_induct_decl, check_struct_decl},
+    crate::{Error, Kernel, Sort, check_definition, check_induct_decl, check_struct_decl, infer},
     curios_analysis::test_support::SYNTAX,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Nat, StructDecl, StructType,
@@ -157,6 +157,100 @@ fn large_proposition() -> Term {
     let a = Free::local(1, Some("A"));
 
     Term::func_type([(a, Term::prop())], Term::free_var(&a))
+}
+
+/// Declare `Fam : outer | mk(A : inner, f : (A) -> Fam) end`, with `outer` a level above `inner`, and hand back the family-type term and its declaration. A family holding a value of any type of `inner` — Russell's `set` at `Type`, the paradox of trees' `node` at `Prop` — takes this shape, and the two sorts a level apart are what make the *declaration* stand: the payload fits under the family. The paradox is the self-application a caller builds from it, not the declaration.
+fn family_holding_a_type(kernel: &mut Kernel, outer: Term, inner: Term) -> (Term, InductDecl) {
+    let carrier = Free::local(0, Some("A"));
+    let forward = Free::local(1, Some("f"));
+    let fam_type = Term::induct_type(fam(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("mk"),
+            InductParam::new(
+                Telescope::build(
+                    [
+                        (carrier, inner),
+                        (
+                            forward,
+                            Term::func_type(
+                                [(Free::local(2, Some("x")), Term::free_var(&carrier))],
+                                fam_type.clone(),
+                            ),
+                        ),
+                    ],
+                    Vec::new(),
+                ),
+                vec![Plicity::Explicit, Plicity::Explicit],
+            ),
+        )]
+        .into(),
+        result_sort: outer,
+        module: Qualifier::from(["Fam"]),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+    kernel
+        .declare_induct(&fam(), &declaration)
+        .expect("a name is declared once");
+
+    (fam_type, declaration)
+}
+
+/// `mk(Fam, (x) => x)` — the family's own type handed to the field that must sit below it. Russell's and the paradox of trees' self-application both take this shape, and the identity closes the forward field whatever the first argument's fate.
+fn holding_itself(fam_type: &Term) -> Term {
+    let bound = Free::local(3, Some("x"));
+    let identity = Term::func([(bound, fam_type.clone())], Term::free_var(&bound));
+
+    Term::variant(fam(), Vec::<Term>::new(), "mk", [fam_type.clone(), identity])
+}
+
+/// Russell's paradox through a large inductive, the kernel's reading of the clash the elaborator refuses at `R: V = V/set(Regular, …)`. `V : Type 1 | set(A : Type 0, f : (A) -> V)` is a set of the values of any `Type 0`, a valid declaration since the payload fits below it; and `V/set(V, …)`, the set whose members are `V`s, hands `V` itself — a `Type 1` — to the `A : Type 0` field, which asks a type to sit strictly below itself. The declaration stands and the self-application is refused, where `curios`'s `tests::universes::hierarchy_tests` puts the paradox's own `R` to the elaborator.
+#[test]
+fn a_large_inductive_holding_its_own_type_is_refused_at_the_self_application() {
+    let mut kernel = kernel();
+    let one = Level::zero().succ().expect("level zero has a successor");
+    let (fam_type, declaration) =
+        family_holding_a_type(&mut kernel, Term::type_at(one), Term::type_ground());
+
+    assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
+    assert!(matches!(
+        infer(&mut kernel, &holding_itself(&fam_type)),
+        Err(Error::Mismatch { .. }),
+    ));
+}
+
+/// Coquand's paradox of trees, the same clash one sort down, which the elaborator refuses at `t: T = T/node(T, …)`. `T : Prop 1 | node(A : Prop 0, f : (A) -> T)` is a tree branching over any proposition, a valid declaration; and `T/node(T, …)` hands `T` itself — a `Prop 1` — to the `A : Prop 0` field, asking a proposition to sit strictly below itself. The declaration stands and the self-application is refused, as its `Type` twin above is.
+#[test]
+fn a_tree_over_every_proposition_is_refused_at_the_self_application() {
+    let mut kernel = kernel();
+    let one = Level::zero().succ().expect("level zero has a successor");
+    let (fam_type, declaration) =
+        family_holding_a_type(&mut kernel, Term::prop_at(one), Term::prop());
+
+    assert_eq!(check_induct_decl(&mut kernel, &declaration), Ok(()));
+    assert!(matches!(
+        infer(&mut kernel, &holding_itself(&fam_type)),
+        Err(Error::Mismatch { .. }),
+    ));
+}
+
+/// Hurkens' impredicative pair, the kernel's reading of the clash the elaborator refuses at `Packed: Prop = {P: Prop, p: P}`. A strong sum of a proposition and its proof holds a `Prop`, so it sits a level above the propositions it ranges over: the kernel sizes `{P: Prop, p: P}` as a `Type`, never a `Prop`, so the carrier Girard's paradox needs one sort down is none of the propositions it would pack. `carries_information` says so, which is what refuses the definition where its sort is stated `Prop`.
+#[test]
+fn an_impredicative_pair_of_a_proposition_and_its_proof_is_a_type() {
+    let mut kernel = kernel();
+    let proposition = Free::local(0, Some("P"));
+    let proof = Free::local(1, Some("p"));
+    let pair = Term::tuple_type([
+        (proposition, Term::prop()),
+        (proof, Term::free_var(&proposition)),
+    ]);
+
+    assert!(matches!(Sort::of(&mut kernel, &pair), Ok(Sort::Type(_))));
 }
 
 /// A uniform parameter gets one rung of slack: a family at `Type 0` may take a `T : Type` parameter — the parameter's domain sorts at `1 ≤ 0 + 1` — while the same domain as a *payload* is refused above.

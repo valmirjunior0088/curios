@@ -1,4 +1,4 @@
-//! A proposition taken apart into data: the sort the guard reads off a motive, what the singleton rung counts as pinned, the instance a match on a proof fires on, and the sizing that keeps a cast from unfolding without end.
+//! A proposition taken apart into data: the sort the guard reads off a motive however the motive is spelled, a universe among the data, what the singleton rung counts as pinned, the instance a match on a proof fires on, and the sizing that keeps a cast from unfolding without end and a tree from holding itself.
 
 use {super::test_support::*, crate::tests::run};
 
@@ -125,6 +125,124 @@ fn a_proposition_over_every_proposition_is_not_applied_at_itself() {
         /std/print("unreachable")
         "#,
         "this Prop would need to be strictly below itself",
+    );
+}
+
+// Berardi's route, where proof irrelevance meets a proposition that decides something: `F` answers `True` at `Two/a()` and `False` at `Two/b()`, irrelevance makes the two one value, so `F(Two/a())` and `F(Two/b())` would be one type and `True/qed()` a proof of `False`. A universe is relevant, so a match into `Prop` is the large elimination the guard refuses, as one into `Nat` is. `curios-cert`'s `kernel::infer::eliminate::proof_match_tests` puts the same elimination to the kernel under this name.
+#[test]
+fn a_proposition_with_two_constructors_does_not_eliminate_into_a_universe() {
+    rejected_by(
+        r#"
+        use /std/Bool/{False, True};
+
+        induct Two: Prop
+        | a()
+        | b()
+        end
+
+        let F(t: Two) -> Prop = match t | a() => True | b() => False end;
+
+        let cast(h: F(Two/a())) -> F(Two/b()) = h;
+
+        cast(True/qed())
+        "#,
+        "cannot eliminate the proposition 'Two' into a relevant result",
+    );
+}
+
+// The control: a proposition whose one constructor holds nothing tells nothing, so it is taken into a universe as into any type, and the refusal above is the second constructor's.
+#[test]
+fn a_proposition_with_one_bare_constructor_eliminates_into_a_universe() {
+    assert_eq!(
+        run(r#"
+        use /std/Bool/{True};
+
+        induct One: Prop
+        | it()
+        end
+
+        let F(o: One) -> Prop = match o | it() => True end;
+
+        let held: F(One/it()) = True/qed();
+
+        /std/print("one")
+        "#),
+        b"one"
+    );
+}
+
+// A motive is a term, so the result an elimination states may be computed by one: a definition named in its place, a function value a local binds, or a family the caller hands in. Each is typed under the motive's binders before the guard reads its sort, so each is the large elimination the written `(_) => Prop` above is, and the caller's family is held at the `Type` its parameter states.
+#[test]
+fn a_motive_computed_by_a_term_meets_the_guard_however_it_is_spelled() {
+    for source in [
+        r#"
+        use /std/Bool/{False, True};
+
+        induct Two: Prop
+        | a()
+        | b()
+        end
+
+        let Universe(s: Two) -> Type = Prop;
+
+        let F(t: Two) -> Prop = match t : Universe | a() => True | b() => False end;
+
+        /std/print("unreachable")
+        "#,
+        r#"
+        use /std/Bool/{False, True};
+
+        induct Two: Prop
+        | a()
+        | b()
+        end
+
+        let F(t: Two) -> Prop =
+            let m = (s: Two) => Prop;
+            match t : m | a() => True | b() => False end;
+
+        /std/print("unreachable")
+        "#,
+        r#"
+        induct Two: Prop
+        | a()
+        | b()
+        end
+
+        let elim(P: (Two) -> Type, x: P(Two/a()), y: P(Two/b()), t: Two) -> P(t) =
+            match t : P | a() => x | b() => y end;
+
+        /std/print("unreachable")
+        "#,
+    ] {
+        rejected_by(
+            source,
+            "cannot eliminate the proposition 'Two' into a relevant result",
+        );
+    }
+}
+
+// Coquand's paradox of trees, which needs a tree over every proposition to be one of them and its label read back out. Sized, `T` sits a level above the propositions `node` ranges over, so `T/node(T, …)` asks that `Prop` to be strictly below itself; and `node` holds a payload no index pins, so `label` is the large elimination the guard refuses. Each refusal stands where its own declaration is, so one program shows both.
+#[test]
+fn a_tree_over_every_proposition_is_none_of_them_and_hands_back_no_label() {
+    const TREES: &str = r#"
+        use /std/Bool/{False};
+
+        induct T: Prop
+        | node(A: Prop, f: (A) -> T)
+        end
+
+        let t: T = T/node(T, (x) => x);
+
+        let label(x: T) -> Prop = match x | node(A, f) => A end;
+
+        /std/print("unreachable")
+        "#;
+
+    rejected_by(TREES, "this Prop would need to be strictly below itself");
+    rejected_by(
+        TREES,
+        "cannot eliminate the proposition 'T' into a relevant result",
     );
 }
 
