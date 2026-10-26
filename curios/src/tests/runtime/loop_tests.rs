@@ -1,8 +1,8 @@
 //! Loops that stay linear, and the values they carry through storage and retrieval.
 
 use {
-    crate::tests::{compile, cont_optm, cont_optm_module, run, run_text},
-    curios_cont::{Callee, Node, ValueExpr},
+    crate::tests::{compile, cps_optm, cps_optm_module, run, run_text},
+    curios_cps::{Callee, Node, ValueExpr},
     curios_native::{MockHost, test_support::run_within_heap},
     curios_utilities::fill,
     std::collections::BTreeSet,
@@ -177,7 +177,7 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
 
 /// Narrowed through `try_to_nat` because the subject *is* a NaN on one edge — the fixture unwraps against `+nan.0` deliberately — so `NonNeg` is undischargeable by construction rather than by cost, and the deciding pair is the only correct shape. (`flt_of_str_returns_option` is the other side of that line: its subject is computed but always a number, so it takes the bounded form.)
 ///
-/// An `Option(Flt)` built in a bind's continuation, unwrapped against `+nan.0`, is a shape that would run the Cont fixpoint to its 1024-round backstop: the NaN default rides a switch edge, and were `curios_cont::Literal::Flt` compared under IEEE equality, `forward_continuations` would read that untouched edge as rewritten on every round. The literal compares bitwise, and this program keeps the fixpoint's convergence on a NaN-carrying edge asserted end-to-end rather than only at the pass.
+/// An `Option(Flt)` built in a bind's continuation, unwrapped against `+nan.0`, is a shape that would run the CPS fixpoint to its 1024-round backstop: the NaN default rides a switch edge, and were `curios_cps::Literal::Flt` compared under IEEE equality, `forward_continuations` would read that untouched edge as rewritten on every round. The literal compares bitwise, and this program keeps the fixpoint's convergence on a NaN-carrying edge asserted end-to-end rather than only at the pass.
 #[test]
 fn a_nan_default_on_a_runtime_option_converges() {
     assert_eq!(
@@ -215,11 +215,11 @@ fn arena_pure_computation_hugs_a_host_effect() {
         "#;
     assert_eq!(run(source), b"a10000".to_vec());
 
-    let cont_optm = cont_optm(source);
+    let cps_optm = cps_optm(source);
     assert!(
-        !cont_optm.contains("triangle"),
+        !cps_optm.contains("triangle"),
         "the closed recursion must collapse to its constant around the effects:\n{}",
-        &cont_optm[..cont_optm.len().min(4000)]
+        &cps_optm[..cps_optm.len().min(4000)]
     );
 }
 
@@ -256,18 +256,18 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
         "the rebased recursion must not overflow at depth"
     );
 
-    let cont_optm = cont_optm(&program(60_000));
+    let cps_optm = cps_optm(&program(60_000));
     assert!(
-        cont_optm.contains("/count@w("),
+        cps_optm.contains("/count@w("),
         "the deferred recursion must be the rebase's worker, a loop over an accumulator:\n{}",
-        &cont_optm[..cont_optm.len().min(4000)]
+        &cps_optm[..cps_optm.len().min(4000)]
     );
 }
 
 /// A span builds its answer once, where its walk stops: what a step's recursion returns to constructs nothing, so no step rebuilds the answer of the one after it and a character passed keeps no frame. A walk that restates its proof around its recursion erases to that rebuild, a pair a character under a frame a character, and a program's stack holds the depth, so the shape is looked for and not the depth, as the worker is above. The text is read from standard input, or the closed walk would be evaluated where the program is compiled.
 #[test]
 fn a_span_builds_its_answer_where_its_walk_stops() {
-    let module = cont_optm_module(
+    let module = cps_optm_module(
         r#"
         use /std/{Str, Nat, Char, Option, Result, Io};
         use /std/Str/{At};
@@ -383,7 +383,7 @@ fn a_sequence_built_under_its_recursion_is_a_loop() {
         "#;
     assert_eq!(run(source), b"100000 same 3 200000".to_vec());
 
-    let cont_optm = cont_optm(source);
+    let cps_optm = cps_optm(source);
     for worker in [
         "/std/List/take@w(",
         "/std/List/take_while@w(",
@@ -394,9 +394,9 @@ fn a_sequence_built_under_its_recursion_is_a_loop() {
         "/twice@w(",
     ] {
         assert!(
-            cont_optm.contains(worker),
+            cps_optm.contains(worker),
             "{worker} must be its builder's worker, a loop over an accumulator:\n{}",
-            &cont_optm[..cont_optm.len().min(4000)]
+            &cps_optm[..cps_optm.len().min(4000)]
         );
     }
 }

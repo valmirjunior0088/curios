@@ -3,7 +3,7 @@ name = "curios-anf"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios erased IR, in A-normal form: post-erasure optimization and lowering to continuations"
+description = "The Curios erased IR, in A-normal form: post-erasure optimization and lowering to continuation-passing style"
 
 [lints]
 workspace = true
@@ -18,5 +18,5 @@ curios-archive = { workspace = true }
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-utilities = { workspace = true }
-curios-cont = { workspace = true }
+curios-cps = { workspace = true }
 curios-num = { workspace = true }

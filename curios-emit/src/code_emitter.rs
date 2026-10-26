@@ -116,7 +116,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     /// Load one operand at the representation `intrinsic` declares for that position.
     fn emit_operand(
         &mut self,
-        intrinsic: &curios_cont::Intrinsic,
+        intrinsic: &curios_cps::Intrinsic,
         index: usize,
         name: &EmissionValueName,
     ) {
@@ -127,7 +127,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     /// Store a value sitting on the stack in the representation `produced` into `dest`.
     ///
     /// Nothing is coerced here. A local is held in a register only at the carrier its own definition produces — that is what `Offer`, in the representation analysis, states, and what the assert at the head of [`CodeEmitter::emit_intrinsic`] checks — so a definition and its local always agree, and every *disagreeing use* pays for itself at its own site instead.
-    fn emit_store(&mut self, dest: &Dest<'_>, produced: &curios_cont::Repr) {
+    fn emit_store(&mut self, dest: &Dest<'_>, produced: &curios_cps::Repr) {
         if self.context.table().raw_carrier(dest.value_name).is_none() {
             self.emit_instrs(box_instrs(produced, self.context.table()));
         }
@@ -141,7 +141,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_unary_op(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::Intrinsic,
+        intrinsic: &curios_cps::Intrinsic,
         operand: &EmissionValueName,
         instr: curios_wasm::Instr,
     ) {
@@ -156,7 +156,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_flt_narrowing(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::Intrinsic,
+        intrinsic: &curios_cps::Intrinsic,
         operand: &EmissionValueName,
         signed: bool,
     ) {
@@ -168,7 +168,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             true => (curios_wasm::Instr::F64Gt, f64::NEG_INFINITY),
             false => (curios_wasm::Instr::F64Ge, 0.0),
         };
-        let bound = f64::from(1u32 << (curios_cont::ENVELOPE_BITS - 1));
+        let bound = f64::from(1u32 << (curios_cps::ENVELOPE_BITS - 1));
 
         self.emit_operand(intrinsic, 0, operand);
         self.emit_instrs([
@@ -185,7 +185,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             when(
                 self.context
                     .table()
-                    .refuse_instrs(curios_cont::Panic::Invariant),
+                    .refuse_instrs(curios_cps::Panic::Invariant),
             ),
             get(&flt),
             curios_wasm::Instr::F64Const {
@@ -213,7 +213,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_flt_decomposition(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::Intrinsic,
+        intrinsic: &curios_cps::Intrinsic,
         operand: &EmissionValueName,
         mantissa: bool,
     ) {
@@ -251,7 +251,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             when(
                 self.context
                     .table()
-                    .refuse_instrs(curios_cont::Panic::Invariant),
+                    .refuse_instrs(curios_cps::Panic::Invariant),
             ),
         ]);
         match mantissa {
@@ -295,7 +295,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_binary_op(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::Intrinsic,
+        intrinsic: &curios_cps::Intrinsic,
         left: &EmissionValueName,
         right: &EmissionValueName,
         instr: curios_wasm::Instr,
@@ -310,7 +310,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_flt_checked(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::Intrinsic,
+        intrinsic: &curios_cps::Intrinsic,
         operands: &[&EmissionValueName],
         apply: Vec<curios_wasm::Instr>,
         negated: bool,
@@ -356,7 +356,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_flt_rounded(
         &mut self,
         dest: &Dest<'_>,
-        intrinsic: &curios_cont::Intrinsic,
+        intrinsic: &curios_cps::Intrinsic,
         operands: &[EmissionValueName],
         rounding: Rounding,
         negated: bool,
@@ -383,7 +383,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     /// Park one `Nat` or `Int` operand for the fast path: a register-held word as its load, anything else in a fresh scratch local.
     fn operand(&mut self, name: &EmissionValueName) -> Operand {
         match self.context.table().raw_carrier(name) {
-            Some(curios_cont::Repr::Nat) => {
+            Some(curios_cps::Repr::Nat) => {
                 Operand::Word(self.context.load_value_instrs(name, LoadAs::Nat))
             }
             _ => {
@@ -444,7 +444,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let value = self
                     .context
                     .push_local("wide", curios_wasm::ValType::Num(curios_wasm::NumType::I32));
-                let spare = 32 - curios_cont::ENVELOPE_BITS;
+                let spare = 32 - curios_cps::ENVELOPE_BITS;
                 vec![
                     tee(&value),
                     curios_wasm::Instr::I32Const { value: spare },
@@ -468,7 +468,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let value = self
                     .context
                     .push_local("wide", curios_wasm::ValType::Num(curios_wasm::NumType::I64));
-                let spare = i64::from(64 - curios_cont::ENVELOPE_BITS);
+                let spare = i64::from(64 - curios_cps::ENVELOPE_BITS);
                 vec![
                     tee(&value),
                     curios_wasm::Instr::I64Const { value: spare },
@@ -524,7 +524,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     ) {
         // A word-held result and a length-held one alike: what reaches here into a length is a word, a length's own operations lowering apart.
         match self.context.table().raw_carrier(dest.value_name) {
-            Some(curios_cont::Repr::Nat | curios_cont::Repr::Length) => {
+            Some(curios_cps::Repr::Nat | curios_cps::Repr::Length) => {
                 let fast = match finish {
                     Fast::Small | Fast::Wide32 => fast,
                     Fast::Wide64 => fast
@@ -547,12 +547,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     fast,
                     slow,
                 );
-                self.emit_store(dest, &curios_cont::Repr::Nat);
+                self.emit_store(dest, &curios_cps::Repr::Nat);
             }
             _ => {
                 let fast = fast.into_iter().chain(self.finish(finish)).collect();
                 self.emit_split(operands, Table::top_type(false), fast, slow);
-                self.emit_store(dest, &curios_cont::Repr::Ref);
+                self.emit_store(dest, &curios_cps::Repr::Ref);
             }
         }
     }
@@ -587,7 +587,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             fast,
             slow,
         );
-        self.emit_store(dest, &curios_cont::Repr::Nat);
+        self.emit_store(dest, &curios_cps::Repr::Nat);
     }
 
     /// Lower a `min` or a `max`: two i31s compare as machine words and `keeps` says where the left one is kept, and anything else is compared by `big/cmp`, whose `-1`, `0` or `1` is put to `keeps` against zero. Either way one of the two operands is the result as it stands, so nothing is built. Signed on both carriers, as a comparison is.
@@ -716,7 +716,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             fast,
             vec![curios_wasm::Instr::I32Const { value: 0 }],
         );
-        self.emit_store(dest, &curios_cont::Repr::Nat);
+        self.emit_store(dest, &curios_cps::Repr::Nat);
     }
 
     /// Lower a conversion to `Flt` in the direction named: an i31 converts exactly, whatever the direction, and a boxed value through `big/to_f64`, which rounds as the model does.
@@ -744,7 +744,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             fast,
             slow,
         );
-        self.emit_store(dest, &curios_cont::Repr::Flt);
+        self.emit_store(dest, &curios_cps::Repr::Flt);
     }
 
     /// Lower a left shift. The fast path shifts in 64 bits when the count is below 32, where any i31 shifted stays inside an `i64`; a larger count, like a boxed operand, goes to `big/shl` with a 64-bit count, refusing a nonzero result beyond the limb array's capacity.
@@ -784,7 +784,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             .collect();
 
         self.emit_split(&[&value, &count], Table::top_type(false), fast, slow);
-        self.emit_store(dest, &curios_cont::Repr::Ref);
+        self.emit_store(dest, &curios_cps::Repr::Ref);
     }
 
     /// Lower a power: `big/pow` over the base as a reference and the exponent as a 64-bit count, at every size. Squaring has no fast path worth a test of its operands, and the helper answers an i31 where the power is one.
@@ -804,7 +804,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             .collect();
 
         self.emit_instrs(power);
-        self.emit_store(dest, &curios_cont::Repr::Ref);
+        self.emit_store(dest, &curios_cps::Repr::Ref);
     }
 
     /// Lower a right shift, the floor of the value over a power of two. On an i31 the count clamps to 31 — any i31 shifted that far is already its sign — so one `i32.shr_s` decides every count.
@@ -875,10 +875,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     /// Store the length on the stack: as it is where its local is a length, and boxed otherwise.
     fn emit_length_settled(&mut self, dest: &Dest<'_>) {
         match self.context.table().raw_carrier(dest.value_name) {
-            Some(curios_cont::Repr::Length) => self.emit_store(dest, &curios_cont::Repr::Length),
+            Some(curios_cps::Repr::Length) => self.emit_store(dest, &curios_cps::Repr::Length),
             _ => {
                 self.emit_length_box();
-                self.emit_store(dest, &curios_cont::Repr::Ref);
+                self.emit_store(dest, &curios_cps::Repr::Ref);
             }
         }
     }
@@ -905,7 +905,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 curios_wasm::Instr::Select { val_types: vec![] },
             ],
         ]));
-        self.emit_store(dest, &curios_cont::Repr::Length);
+        self.emit_store(dest, &curios_cps::Repr::Length);
     }
 
     /// Box the length on the stack as the `Nat` it is: an i31 below `2³⁰`, and through `big/of_i64` past it, which a sequence may reach.
@@ -918,7 +918,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         self.emit_instrs([
             tee(&length),
             curios_wasm::Instr::I32Const {
-                value: curios_cont::ENVELOPE_BITS - 1,
+                value: curios_cps::ENVELOPE_BITS - 1,
             },
             curios_wasm::Instr::I32ShrU,
             either(
@@ -1148,7 +1148,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// A suffix: the same helper as a window, with the count the *rope* decides rather than one an operand supplied.
     ///
-    /// **This is the only place a compiler-emitted window's extent is derived, and it derives it from the value.** Every window the compiler emits is a suffix — `into_cont`'s peel is the sole producer — and deriving `len - start` in each lowering would be an agreement between two crates rather than a fact about the rope. A start past the end underflows the subtraction to a count no run could hold, which the slice helper's own bounds test refuses exactly as it refuses the overshoot it is written for.
+    /// **This is the only place a compiler-emitted window's extent is derived, and it derives it from the value.** Every window the compiler emits is a suffix — `into_cps`'s peel is the sole producer — and deriving `len - start` in each lowering would be an agreement between two crates rather than a fact about the rope. A start past the end underflows the subtraction to a count no run could hold, which the slice helper's own bounds test refuses exactly as it refuses the overshoot it is written for.
     fn emit_rope_rest(
         &mut self,
         result_local: &curios_wasm::LocalName,
@@ -1256,7 +1256,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 then_instructions: self
                     .context
                     .table()
-                    .refuse_instrs(curios_cont::Panic::OutOfBounds),
+                    .refuse_instrs(curios_cps::Panic::OutOfBounds),
                 else_instructions: vec![],
             },
             curios_wasm::Instr::LocalGet { local_name: imm },
@@ -1752,7 +1752,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// Read field `index` through the object's *exact* tuple type, trying `arities` in order and casting on the last.
     ///
-    /// The tuple types are final and unrelated, so there is no prefix supertype to read a field through — the object's own type has to be found. Exhausting every roster arity that could hold the field is what makes this correct without an assumption: it never supposes an object's arity is its construction's, which `curios-cont`'s field split makes false whenever a narrow tuple materialises at its region's width, and the roster holds every arity the module builds a tuple at. The order is a preference only.
+    /// The tuple types are final and unrelated, so there is no prefix supertype to read a field through — the object's own type has to be found. Exhausting every roster arity that could hold the field is what makes this correct without an assumption: it never supposes an object's arity is its construction's, which `curios-cps`'s field split makes false whenever a narrow tuple materialises at its region's width, and the roster holds every arity the module builds a tuple at. The order is a preference only.
     fn tuple_get_cascade(
         &self,
         operand: &'a EmissionValueName,
@@ -1764,7 +1764,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             [] => self
                 .context
                 .table()
-                .refuse_instrs(curios_cont::Panic::Invariant),
+                .refuse_instrs(curios_cps::Panic::Invariant),
             [last] => {
                 let type_name = self.context.table().find_tuple_type(*last);
                 self.context
@@ -1814,15 +1814,15 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     fn emit_intrinsic(
         &mut self,
         dest: &Dest<'a>,
-        op: curios_cont::Intrinsic,
+        op: curios_cps::Intrinsic,
         args: &'a [EmissionValueName],
     ) {
         let (value_name, result_local) = (dest.value_name, dest.local.clone());
 
-        // Every store below may assume this: a local held in a register is held at exactly the carrier this op produces, so no path has to coerce on the way in. What makes it true is that the representation analysis only offers a register to a value whose own definition produces that carrier — see `Offer` in `curios-cont`'s `represent`.
+        // Every store below may assume this: a local held in a register is held at exactly the carrier this op produces, so no path has to coerce on the way in. What makes it true is that the representation analysis only offers a register to a value whose own definition produces that carrier — see `Offer` in `curios-cps`'s `represent`.
         let result_repr = match op {
             // A row read produces its slot's carrier, which is a fact of the row rather than of the operation.
-            curios_cont::Intrinsic::RowGet(row, index) => {
+            curios_cps::Intrinsic::RowGet(row, index) => {
                 self.context.table().row_slots(row)[index].repr()
             }
             _ => op.result_repr(),
@@ -1833,23 +1833,23 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 .table()
                 .raw_carrier(value_name)
                 .is_none_or(|carrier| carrier == result_repr
-                    || (carrier == curios_cont::Repr::Nat && op.may_bound_result())
-                    || (carrier == curios_cont::Repr::Length
+                    || (carrier == curios_cps::Repr::Nat && op.may_bound_result())
+                    || (carrier == curios_cps::Repr::Length
                         && (op.may_hold_length()
                             || op.may_bound_result()
-                            || result_repr == curios_cont::Repr::Nat))),
+                            || result_repr == curios_cps::Repr::Nat))),
             "`{value_name}` is held as {:?} where {op:?} produces {result_repr:?}",
             self.context.table().raw_carrier(value_name),
         );
 
         match op {
-            curios_cont::Intrinsic::NatEql | curios_cont::Intrinsic::IntEql => self.emit_compare(
+            curios_cps::Intrinsic::NatEql | curios_cps::Intrinsic::IntEql => self.emit_compare(
                 dest,
                 (&args[0], &args[1]),
                 curios_wasm::Instr::I32Eq,
                 vec![curios_wasm::Instr::I32Eqz],
             ),
-            curios_cont::Intrinsic::NatNeq | curios_cont::Intrinsic::IntNeq => self.emit_compare(
+            curios_cps::Intrinsic::NatNeq | curios_cps::Intrinsic::IntNeq => self.emit_compare(
                 dest,
                 (&args[0], &args[1]),
                 curios_wasm::Instr::I32Ne,
@@ -1858,7 +1858,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     curios_wasm::Instr::I32Ne,
                 ],
             ),
-            curios_cont::Intrinsic::NatLt | curios_cont::Intrinsic::IntLt => self.emit_compare(
+            curios_cps::Intrinsic::NatLt | curios_cps::Intrinsic::IntLt => self.emit_compare(
                 dest,
                 (&args[0], &args[1]),
                 curios_wasm::Instr::I32LtS,
@@ -1867,7 +1867,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     curios_wasm::Instr::I32LtS,
                 ],
             ),
-            curios_cont::Intrinsic::NatLe | curios_cont::Intrinsic::IntLe => self.emit_compare(
+            curios_cps::Intrinsic::NatLe | curios_cps::Intrinsic::IntLe => self.emit_compare(
                 dest,
                 (&args[0], &args[1]),
                 curios_wasm::Instr::I32LeS,
@@ -1876,7 +1876,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     curios_wasm::Instr::I32LeS,
                 ],
             ),
-            curios_cont::Intrinsic::NatAdd | curios_cont::Intrinsic::IntAdd => {
+            curios_cps::Intrinsic::NatAdd | curios_cps::Intrinsic::IntAdd => {
                 let slow = vec![
                     curios_wasm::Instr::I32Const { value: 0 },
                     self.big(BigHelper::Add),
@@ -1889,7 +1889,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     slow,
                 );
             }
-            curios_cont::Intrinsic::IntSub => {
+            curios_cps::Intrinsic::IntSub => {
                 let slow = vec![
                     curios_wasm::Instr::I32Const { value: 1 },
                     self.big(BigHelper::Add),
@@ -1903,14 +1903,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 );
             }
             // A monus held as a length takes its operands as words read unsigned, each narrowed where it arrives as a reference: what it leaves lies within its first operand, so narrowing the second changes no answer.
-            curios_cont::Intrinsic::NatSub
+            curios_cps::Intrinsic::NatSub
                 if self.context.table().raw_carrier(value_name)
-                    == Some(curios_cont::Repr::Length) =>
+                    == Some(curios_cps::Repr::Length) =>
             {
                 self.emit_length_monus(dest, (&args[0], &args[1]));
             }
             // Monus: the difference of two i31 naturals lies in `(-2³⁰, 2³⁰)`, and a negative one clamps to zero.
-            curios_cont::Intrinsic::NatSub => {
+            curios_cps::Intrinsic::NatSub => {
                 let difference = self.context.push_local(
                     "nat_sub",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -1939,7 +1939,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 );
             }
             // Sixty-four bits hold the product of any two i31s, so the one check after the multiply decides it.
-            curios_cont::Intrinsic::NatMul | curios_cont::Intrinsic::IntMul => {
+            curios_cps::Intrinsic::NatMul | curios_cps::Intrinsic::IntMul => {
                 let slow = vec![self.big(BigHelper::Mul)];
                 self.emit_arith(
                     dest,
@@ -1960,7 +1960,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 );
             }
             // A zero divisor is ruled out by the evidence every division carries; were one to arrive, `i32.div_u` would trap on it.
-            curios_cont::Intrinsic::NatDiv => {
+            curios_cps::Intrinsic::NatDiv => {
                 let slow = vec![self.big(BigHelper::Div)];
                 self.emit_arith(
                     dest,
@@ -1970,7 +1970,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     slow,
                 );
             }
-            curios_cont::Intrinsic::IntDiv => {
+            curios_cps::Intrinsic::IntDiv => {
                 let slow = vec![self.big(BigHelper::Div)];
                 self.emit_arith(
                     dest,
@@ -1980,7 +1980,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     slow,
                 );
             }
-            curios_cont::Intrinsic::NatRem => {
+            curios_cps::Intrinsic::NatRem => {
                 let slow = vec![self.big(BigHelper::Rem)];
                 self.emit_arith(
                     dest,
@@ -1990,7 +1990,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     slow,
                 );
             }
-            curios_cont::Intrinsic::IntRem => {
+            curios_cps::Intrinsic::IntRem => {
                 let slow = vec![self.big(BigHelper::Rem)];
                 self.emit_arith(
                     dest,
@@ -2000,35 +2000,35 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     slow,
                 );
             }
-            curios_cont::Intrinsic::NatAnd | curios_cont::Intrinsic::IntAnd => {
+            curios_cps::Intrinsic::NatAnd | curios_cps::Intrinsic::IntAnd => {
                 self.emit_bitwise(dest, (&args[0], &args[1]), Bitwise::And)
             }
-            curios_cont::Intrinsic::NatOr | curios_cont::Intrinsic::IntOr => {
+            curios_cps::Intrinsic::NatOr | curios_cps::Intrinsic::IntOr => {
                 self.emit_bitwise(dest, (&args[0], &args[1]), Bitwise::Or)
             }
-            curios_cont::Intrinsic::NatXor | curios_cont::Intrinsic::IntXor => {
+            curios_cps::Intrinsic::NatXor | curios_cps::Intrinsic::IntXor => {
                 self.emit_bitwise(dest, (&args[0], &args[1]), Bitwise::Xor)
             }
-            curios_cont::Intrinsic::NatMin | curios_cont::Intrinsic::IntMin => {
+            curios_cps::Intrinsic::NatMin | curios_cps::Intrinsic::IntMin => {
                 self.emit_extreme(dest, (&args[0], &args[1]), curios_wasm::Instr::I32LeS)
             }
-            curios_cont::Intrinsic::NatMax | curios_cont::Intrinsic::IntMax => {
+            curios_cps::Intrinsic::NatMax | curios_cps::Intrinsic::IntMax => {
                 self.emit_extreme(dest, (&args[0], &args[1]), curios_wasm::Instr::I32GeS)
             }
-            curios_cont::Intrinsic::IntAbs => self.emit_magnitude(dest, &args[0]),
-            curios_cont::Intrinsic::IntSign => self.emit_sign(dest, &args[0]),
-            curios_cont::Intrinsic::NatShl | curios_cont::Intrinsic::IntShl => {
+            curios_cps::Intrinsic::IntAbs => self.emit_magnitude(dest, &args[0]),
+            curios_cps::Intrinsic::IntSign => self.emit_sign(dest, &args[0]),
+            curios_cps::Intrinsic::NatShl | curios_cps::Intrinsic::IntShl => {
                 self.emit_shift_left(dest, &args[0], &args[1])
             }
-            curios_cont::Intrinsic::NatPow => self.emit_power(dest, &args[0], &args[1]),
-            curios_cont::Intrinsic::NatShr | curios_cont::Intrinsic::IntShr => {
+            curios_cps::Intrinsic::NatPow => self.emit_power(dest, &args[0], &args[1]),
+            curios_cps::Intrinsic::NatShr | curios_cps::Intrinsic::IntShr => {
                 self.emit_shift_right(dest, &args[0], &args[1])
             }
-            curios_cont::Intrinsic::NatEqz | curios_cont::Intrinsic::IntEqz => {
+            curios_cps::Intrinsic::NatEqz | curios_cps::Intrinsic::IntEqz => {
                 self.emit_eqz(dest, &args[0])
             }
             // The virtual-window bounds guard, kept at the original evaluation point — the eager trap a physical slice would have performed. Its operands are a start and a *count*, so a reversed range cannot be spelled, and the extent is the count itself rather than a difference. `s > len || n > len - s` rather than `s + n > len`, because the sum is i32 arithmetic and would wrap; the subtraction underflows only in the case the first test has already decided. The words are narrowed, so a count no sequence holds saturates and fails the guard; what passes is handed on as the `Nat` it arrived as.
-            curios_cont::Intrinsic::WindowExtent => {
+            curios_cps::Intrinsic::WindowExtent => {
                 let (start, count, len) = (&args[0], &args[1], &args[2]);
                 self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
                 self.emit_instrs(self.context.load_value_instrs(len, LoadAs::Nat));
@@ -2045,14 +2045,14 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     then_instructions: self
                         .context
                         .table()
-                        .refuse_instrs(curios_cont::Panic::OutOfBounds),
+                        .refuse_instrs(curios_cps::Panic::OutOfBounds),
                     else_instructions: vec![],
                 });
                 // What passed is a count no greater than the length, so a length holding it takes it narrowed.
                 match self.context.table().raw_carrier(value_name) {
-                    Some(curios_cont::Repr::Length) => {
+                    Some(curios_cps::Repr::Length) => {
                         self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Nat));
-                        self.emit_store(dest, &curios_cont::Repr::Length);
+                        self.emit_store(dest, &curios_cps::Repr::Length);
                     }
                     _ => {
                         self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Null));
@@ -2061,75 +2061,75 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 }
             }
             // The default direction is the hardware's, checked for a NaN; every other one, and a fused multiply-add in any, is a helper computing the model's rounding in integers.
-            curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven) => self.emit_flt_checked(
+            curios_cps::Intrinsic::FltAdd(Rounding::TiesToEven) => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0], &args[1]],
                 vec![curios_wasm::Instr::F64Add],
                 false,
             ),
-            curios_cont::Intrinsic::FltSub(Rounding::TiesToEven) => self.emit_flt_checked(
+            curios_cps::Intrinsic::FltSub(Rounding::TiesToEven) => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0], &args[1]],
                 vec![curios_wasm::Instr::F64Sub],
                 true,
             ),
-            curios_cont::Intrinsic::FltMul(Rounding::TiesToEven) => self.emit_flt_checked(
+            curios_cps::Intrinsic::FltMul(Rounding::TiesToEven) => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0], &args[1]],
                 vec![curios_wasm::Instr::F64Mul],
                 false,
             ),
-            curios_cont::Intrinsic::FltDiv(Rounding::TiesToEven) => self.emit_flt_checked(
+            curios_cps::Intrinsic::FltDiv(Rounding::TiesToEven) => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0], &args[1]],
                 vec![curios_wasm::Instr::F64Div],
                 false,
             ),
-            curios_cont::Intrinsic::FltAdd(rounding) => {
+            curios_cps::Intrinsic::FltAdd(rounding) => {
                 self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Add)
             }
             // The model's difference is the sum with the subtrahend negated, which `neg` does bit for bit.
-            curios_cont::Intrinsic::FltSub(rounding) => {
+            curios_cps::Intrinsic::FltSub(rounding) => {
                 self.emit_flt_rounded(dest, &op, args, rounding, true, FltHelper::Add)
             }
-            curios_cont::Intrinsic::FltMul(rounding) => {
+            curios_cps::Intrinsic::FltMul(rounding) => {
                 self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Mul)
             }
-            curios_cont::Intrinsic::FltDiv(rounding) => {
+            curios_cps::Intrinsic::FltDiv(rounding) => {
                 self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Div)
             }
-            curios_cont::Intrinsic::FltFma(rounding) => {
+            curios_cps::Intrinsic::FltFma(rounding) => {
                 self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Fma)
             }
             // WebAssembly has no `f64.rem`; the helper computes the exact `fmod` the folders compute (see `FltHelper::Rem`).
-            curios_cont::Intrinsic::FltRem => {
+            curios_cps::Intrinsic::FltRem => {
                 let rem = call(&self.context.table().flt_func(FltHelper::Rem));
                 self.emit_flt_checked(dest, &op, &[&args[0], &args[1]], vec![rem], false)
             }
-            curios_cont::Intrinsic::FltEql => {
+            curios_cps::Intrinsic::FltEql => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Eq)
             }
-            curios_cont::Intrinsic::FltNeq => {
+            curios_cps::Intrinsic::FltNeq => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Ne)
             }
-            curios_cont::Intrinsic::FltLt => {
+            curios_cps::Intrinsic::FltLt => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Lt)
             }
-            curios_cont::Intrinsic::FltLe => {
+            curios_cps::Intrinsic::FltLe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F64Le)
             }
-            curios_cont::Intrinsic::FltMin => self.emit_flt_checked(
+            curios_cps::Intrinsic::FltMin => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0], &args[1]],
                 vec![curios_wasm::Instr::F64Min],
                 false,
             ),
-            curios_cont::Intrinsic::FltMax => self.emit_flt_checked(
+            curios_cps::Intrinsic::FltMax => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0], &args[1]],
@@ -2137,36 +2137,36 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 false,
             ),
             // The three sign operations are bit operations in WebAssembly as in IEEE (§5.5.1): they touch the sign bit alone, a NaN's included, so no check follows them.
-            curios_cont::Intrinsic::FltNeg => {
+            curios_cps::Intrinsic::FltNeg => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Neg)
             }
-            curios_cont::Intrinsic::FltAbs => {
+            curios_cps::Intrinsic::FltAbs => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F64Abs)
             }
-            curios_cont::Intrinsic::FltCopysign => self.emit_binary_op(
+            curios_cps::Intrinsic::FltCopysign => self.emit_binary_op(
                 dest,
                 &op,
                 &args[0],
                 &args[1],
                 curios_wasm::Instr::F64Copysign,
             ),
-            curios_cont::Intrinsic::FltSqrt(Rounding::TiesToEven) => self.emit_flt_checked(
+            curios_cps::Intrinsic::FltSqrt(Rounding::TiesToEven) => self.emit_flt_checked(
                 dest,
                 &op,
                 &[&args[0]],
                 vec![curios_wasm::Instr::F64Sqrt],
                 false,
             ),
-            curios_cont::Intrinsic::FltSqrt(rounding) => {
+            curios_cps::Intrinsic::FltSqrt(rounding) => {
                 self.emit_flt_rounded(dest, &op, args, rounding, false, FltHelper::Sqrt)
             }
             // Four of the five directions are an instruction each; ties away from zero is not.
-            curios_cont::Intrinsic::FltRoundIntegral(Rounding::TiesToAway) => {
+            curios_cps::Intrinsic::FltRoundIntegral(Rounding::TiesToAway) => {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
                 self.emit_instr(call(&self.context.table().flt_func(FltHelper::Round)));
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::FltRoundIntegral(rounding) => {
+            curios_cps::Intrinsic::FltRoundIntegral(rounding) => {
                 let instr = match rounding {
                     Rounding::TowardNegative => curios_wasm::Instr::F64Floor,
                     Rounding::TowardPositive => curios_wasm::Instr::F64Ceil,
@@ -2176,15 +2176,15 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_flt_checked(dest, &op, &[&args[0]], vec![instr], false)
             }
             // `Nat` and `Int` share one runtime form, so either conversion is the identity on the reference. `Int/to_nat` carries the evidence that its operand is not negative, and `Nat/to_int` needs none.
-            curios_cont::Intrinsic::NatToInt | curios_cont::Intrinsic::IntToNat => {
+            curios_cps::Intrinsic::NatToInt | curios_cps::Intrinsic::IntToNat => {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Null));
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::NatToFlt(rounding)
-            | curios_cont::Intrinsic::IntToFlt(rounding) => {
+            curios_cps::Intrinsic::NatToFlt(rounding)
+            | curios_cps::Intrinsic::IntToFlt(rounding) => {
                 self.emit_to_flt(dest, &args[0], rounding)
             }
-            curios_cont::Intrinsic::FltToLeBytes => {
+            curios_cps::Intrinsic::FltToLeBytes => {
                 let operand = &args[0];
                 // Reinterpret the f64 as its IEEE-754 bit pattern and split it into the eight little-endian bytes. The `$bytes` payload is `i8`-packed, so `array.new_fixed` truncates each wrapped i32 to its low byte -- byte-for-byte `f64::to_le_bytes`, with no host round-trip. The pattern is sixty-four bits wide, so each byte is shifted out in i64 and wrapped. Every pattern is written as it is, a NaN's sign and payload included: the check after each arithmetic operation is what makes those the model's.
                 let bits_local = self.context.push_local(
@@ -2218,7 +2218,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::FltOfLeBytes => {
+            curios_cps::Intrinsic::FltOfLeBytes => {
                 let operand = &args[0];
                 // The inverse of `FltToLeBytes`: trap (via the special label) unless the `Bytes` is exactly 8 bytes, then OR the bytes back into an i64 -- each `$bytes/read` zero-extends its packed byte to i32, which is widened again before it is shifted into place -- and reinterpret. Byte-for-byte `f64::from_le_bytes`, no host round-trip.
                 let rope = self.context.table().bytes_rope();
@@ -2233,7 +2233,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     then_instructions: self
                         .context
                         .table()
-                        .refuse_instrs(curios_cont::Panic::FltDecode),
+                        .refuse_instrs(curios_cps::Panic::FltDecode),
                     else_instructions: vec![],
                 });
                 for shift in [0, 8, 16, 24, 32, 40, 48, 56] {
@@ -2254,27 +2254,27 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::F64ReinterpretI64);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::FltToNat => self.emit_flt_narrowing(dest, &op, &args[0], false),
-            curios_cont::Intrinsic::FltToInt => self.emit_flt_narrowing(dest, &op, &args[0], true),
-            curios_cont::Intrinsic::FltMantissa => {
+            curios_cps::Intrinsic::FltToNat => self.emit_flt_narrowing(dest, &op, &args[0], false),
+            curios_cps::Intrinsic::FltToInt => self.emit_flt_narrowing(dest, &op, &args[0], true),
+            curios_cps::Intrinsic::FltMantissa => {
                 self.emit_flt_decomposition(dest, &op, &args[0], true)
             }
-            curios_cont::Intrinsic::FltExponent => {
+            curios_cps::Intrinsic::FltExponent => {
                 self.emit_flt_decomposition(dest, &op, &args[0], false)
             }
-            curios_cont::Intrinsic::BytesLen => {
+            curios_cps::Intrinsic::BytesLen => {
                 self.emit_bytes_len(&args[0]);
                 self.emit_length_settled(dest);
             }
-            curios_cont::Intrinsic::BytesEql => {
+            curios_cps::Intrinsic::BytesEql => {
                 self.emit_bytes_eql(&args[0], &args[1]);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::BytesGet => {
+            curios_cps::Intrinsic::BytesGet => {
                 self.emit_bytes_get(&args[0], &args[1]);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::BytesSlice => {
+            curios_cps::Intrinsic::BytesSlice => {
                 let funcs = WindowFuncs {
                     slice: self.context.table().bytes_slice_func(),
                     norm: Some(self.context.table().bytes_norm_func()),
@@ -2288,7 +2288,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     funcs,
                 );
             }
-            curios_cont::Intrinsic::BytesRest => {
+            curios_cps::Intrinsic::BytesRest => {
                 let funcs = WindowFuncs {
                     slice: self.context.table().bytes_slice_func(),
                     norm: Some(self.context.table().bytes_norm_func()),
@@ -2303,17 +2303,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     funcs,
                 );
             }
-            curios_cont::Intrinsic::BytesAppend => {
+            curios_cps::Intrinsic::BytesAppend => {
                 let elem_instrs = self.context.load_value_instrs(&args[1], LoadAs::Nat);
                 self.emit_bytes_append(&args[0], elem_instrs);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::BytesConcat(_) => {
+            curios_cps::Intrinsic::BytesConcat(_) => {
                 self.emit_bytes_concat(&result_local, args);
             }
-            curios_cont::Intrinsic::BytesReplicate => {
+            curios_cps::Intrinsic::BytesReplicate => {
                 let replicate = self.context.table().bytes_replicate_func();
                 let norm = self.context.table().bytes_norm_func();
                 let count = self.context.load_length_instrs(&args[0]);
@@ -2329,28 +2329,28 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::BytesAnd => {
+            curios_cps::Intrinsic::BytesAnd => {
                 let combine = self.context.table().bytes_and_func();
                 self.emit_bytes_pointwise(&args[0], &args[1], combine);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::BytesOr => {
+            curios_cps::Intrinsic::BytesOr => {
                 let combine = self.context.table().bytes_or_func();
                 self.emit_bytes_pointwise(&args[0], &args[1], combine);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::BytesXor => {
+            curios_cps::Intrinsic::BytesXor => {
                 let combine = self.context.table().bytes_xor_func();
                 self.emit_bytes_pointwise(&args[0], &args[1], combine);
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::BytesChunk(arity) => {
+            curios_cps::Intrinsic::BytesChunk(arity) => {
                 let rope = self.context.table().bytes_rope();
                 // A small chunk is its immediate, built by ORing each (wrapped) element at its constant slot — no allocation, no call. The envelope and the slot stride are the layout's.
                 let layout = ImmediateLayout::new();
@@ -2401,19 +2401,19 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::ListLen => {
+            curios_cps::Intrinsic::ListLen => {
                 let rope = self.context.table().list_rope();
                 self.emit_operand(&op, 0, &args[0]);
                 self.emit_instr(Self::rope_get(&rope, &rope.len_field));
                 self.emit_length_settled(dest);
             }
-            curios_cont::Intrinsic::ListGet => {
+            curios_cps::Intrinsic::ListGet => {
                 let rope = self.context.table().list_rope();
                 let read = self.context.table().list_read_func();
                 self.emit_seq_get(&args[0], &args[1], LoadAs::List, &rope, read);
                 self.emit_store(dest, &op.result_repr());
             }
-            curios_cont::Intrinsic::ListSlice => {
+            curios_cps::Intrinsic::ListSlice => {
                 let funcs = WindowFuncs {
                     slice: self.context.table().list_slice_func(),
                     norm: None,
@@ -2427,7 +2427,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     funcs,
                 );
             }
-            curios_cont::Intrinsic::ListRest => {
+            curios_cps::Intrinsic::ListRest => {
                 let funcs = WindowFuncs {
                     slice: self.context.table().list_slice_func(),
                     norm: None,
@@ -2442,16 +2442,16 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     funcs,
                 );
             }
-            curios_cont::Intrinsic::ListAppend => {
+            curios_cps::Intrinsic::ListAppend => {
                 let rope = self.context.table().list_rope();
                 let elem_instrs = self.context.load_value_instrs(&args[1], LoadAs::Null);
                 self.emit_rope_append(&result_local, &args[0], elem_instrs, LoadAs::List, &rope);
             }
-            curios_cont::Intrinsic::ListConcat(_) => {
+            curios_cps::Intrinsic::ListConcat(_) => {
                 let rope = self.context.table().list_rope();
                 self.emit_rope_concat(&result_local, args, LoadAs::List, &rope, None);
             }
-            curios_cont::Intrinsic::ListSettle => {
+            curios_cps::Intrinsic::ListSettle => {
                 let rope = self.context.table().list_rope();
                 let exact = self.context.table().list_exact_func();
                 let base_ref = curios_wasm::ValType::Ref(curios_wasm::RefType {
@@ -2480,7 +2480,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::ListFlat(_) => {
+            curios_cps::Intrinsic::ListFlat(_) => {
                 let rope = self.context.table().list_rope();
                 let force = self.context.table().list_force_func();
                 let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
@@ -2568,7 +2568,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     local_name: result_local.clone(),
                 });
             }
-            curios_cont::Intrinsic::TupleGet(index) => {
+            curios_cps::Intrinsic::TupleGet(index) => {
                 // Widest first, a preference only: the roster is module-global and small, so the chain is short whatever the order.
                 let mut arities: Vec<usize> = self
                     .context
@@ -2584,7 +2584,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &op.result_repr());
             }
             // One exact cast, no cascade: a row value's heap type is a fact of the row, because the door pads every construction to the row's width and the row's type is final. This is what the whole keying buys — the roster search `TupleGet` performs above has nothing to search here. The slot then hands back its own carrier: a scalar arrives in a register with nothing to unbox, and the tag comes out of its packed byte through `struct.get_u`.
-            curios_cont::Intrinsic::RowGet(row, index) => {
+            curios_cps::Intrinsic::RowGet(row, index) => {
                 let family_type = self.context.table().find_row_type(row);
                 let slot = self.context.table().row_slots(row)[index];
                 self.emit_instrs(
@@ -2593,7 +2593,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 );
                 let field_name = Table::tuple_field(index);
                 self.emit_instr(match slot {
-                    curios_cont::Slot::Tag => curios_wasm::Instr::StructGetU {
+                    curios_cps::Slot::Tag => curios_wasm::Instr::StructGetU {
                         type_name: family_type,
                         field_name,
                     },
@@ -2605,7 +2605,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &slot.repr());
             }
             // An i31 answers at the first test; only a row or a boxed magnitude pays the second, which admits the magnitude as the bare payload it is.
-            curios_cont::Intrinsic::IsImmediate => {
+            curios_cps::Intrinsic::IsImmediate => {
                 let big = self.context.table().big().big;
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::NonNull));
                 self.emit_instr(curios_wasm::Instr::RefTest {
@@ -2630,12 +2630,12 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &op.result_repr());
             }
             // The identity on the reference — it computes nothing, and exists so the payload has a definition of its own rather than aliasing the scrutinee. `LoadAs::Null` is what `Repr::Ref` resolves to: the value is handed on exactly as stored, and each use coerces at its own site.
-            curios_cont::Intrinsic::ImmediateGet => {
+            curios_cps::Intrinsic::ImmediateGet => {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Null));
                 self.emit_store(dest, &op.result_repr());
             }
             // One test against the row's final type, which answers no for null as for every other reference.
-            curios_cont::Intrinsic::IsRow(row) => {
+            curios_cps::Intrinsic::IsRow(row) => {
                 let row_type = self.context.table().find_row_type(row);
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Null));
                 self.emit_instr(curios_wasm::Instr::RefTest {

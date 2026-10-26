@@ -63,7 +63,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     pub(crate) fn emit_data(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
         match value {
-            EmissionData::Nat(value) => match curios_cont::nat_is_small(value) {
+            EmissionData::Nat(value) => match curios_cps::nat_is_small(value) {
                 true => self.emit_instrs([
                     curios_wasm::Instr::I32Const {
                         value: u32::try_from(value).expect("a small `Nat` is a word") as i32,
@@ -72,7 +72,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 ]),
                 false => self.emit_big(value_name, false, value),
             },
-            EmissionData::Int(value) => match curios_cont::int_is_small(value) {
+            EmissionData::Int(value) => match curios_cps::int_is_small(value) {
                 true => self.emit_instrs([
                     curios_wasm::Instr::I32Const {
                         value: i32::try_from(value).expect("a small `Int` is a word"),
@@ -247,7 +247,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             (Some(_), EmissionData::Nat(value)) => self.emit_instr(curios_wasm::Instr::I32Const {
                 value: u32::try_from(value)
                     .ok()
-                    .filter(|_| curios_cont::nat_is_small(value))
+                    .filter(|_| curios_cps::nat_is_small(value))
                     .expect("a register-held `Nat` literal is small") as i32,
             }),
             (Some(_), &EmissionData::Flt(value)) => {

@@ -1,6 +1,6 @@
 # curios-print
 
-The Curios pretty-printing combinator DSL: single-use `Printer` actions composed through `flat`, `sep_flat` and `indent` and run by `run_printer` — the document algebra `curios-text`, `curios-core` and `curios-wasm` write their `Display` impls in. `curios-anf` and `curios-cont` print their arenas directly and depend on nothing here. The layout algorithm is the cross-cutting [A printer states each fact once, where it is bound](../documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md); why the document is data rather than a tree of closures, why the crate depends on nothing beyond `std::fmt`, and every combinator's contract belong to the crate rustdoc.
+The Curios pretty-printing combinator DSL: single-use `Printer` actions composed through `flat`, `sep_flat` and `indent` and run by `run_printer` — the document algebra `curios-text`, `curios-core` and `curios-wasm` write their `Display` impls in. `curios-anf` and `curios-cps` print their arenas directly and depend on nothing here. The layout algorithm is the cross-cutting [A printer states each fact once, where it is bound](../documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md); why the document is data rather than a tree of closures, why the crate depends on nothing beyond `std::fmt`, and every combinator's contract belong to the crate rustdoc.
 
 ## Design
 

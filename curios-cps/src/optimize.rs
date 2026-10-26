@@ -77,7 +77,7 @@ pub(crate) const ROUND_LIMIT: usize = 1024;
 
 /// Run the verifier-delimited, FIFO high-CPS simplifier. Phase analyses are rebuilt at deterministic boundaries instead of being kept as shadow state.
 pub fn optimize(module: &mut Module) {
-    curios_profile::profile!("cont_optimize");
+    curios_profile::profile!("cps_optimize");
     module
         .verify()
         .expect("invalid high CPS before optimization");
@@ -109,48 +109,48 @@ pub fn optimize(module: &mut Module) {
     // The round on which the sequence settled, or `None` if it never did.
     let mut converged = None;
     for round in 1..=ROUND_LIMIT {
-        let substitutions = curios_profile::profile!("cont::known_values" => known_values(module));
-        let changed = pass!("cont::rewrite_atoms", rewrite_atoms(module, &substitutions))
-            | pass!("cont::forward_continuations", forward_continuations(module))
-            | pass!("cont::forward_calls", forward_calls(module))
-            | pass!("cont::shrink", shrink(module))
-            | pass!("cont::answer_row_tests", answer_row_tests(module))
-            | pass!("cont::answer_window_guards", answer_window_guards(module))
-            | pass!("cont::dedupe_intrinsics", dedupe_intrinsics(module))
-            | pass!("cont::fuse_append_chains", fuse_append_chains(module))
-            | pass!("cont::flatten_indexed_lists", flatten_indexed_lists(module))
+        let substitutions = curios_profile::profile!("cps::known_values" => known_values(module));
+        let changed = pass!("cps::rewrite_atoms", rewrite_atoms(module, &substitutions))
+            | pass!("cps::forward_continuations", forward_continuations(module))
+            | pass!("cps::forward_calls", forward_calls(module))
+            | pass!("cps::shrink", shrink(module))
+            | pass!("cps::answer_row_tests", answer_row_tests(module))
+            | pass!("cps::answer_window_guards", answer_window_guards(module))
+            | pass!("cps::dedupe_intrinsics", dedupe_intrinsics(module))
+            | pass!("cps::fuse_append_chains", fuse_append_chains(module))
+            | pass!("cps::flatten_indexed_lists", flatten_indexed_lists(module))
             | pass!(
-                "cont::eliminate_dead_parameters",
+                "cps::eliminate_dead_parameters",
                 eliminate_dead_parameters(module)
             )
-            | pass!("cont::eliminate_dead_calls", eliminate_dead_calls(module))
-            | pass!("cont::inline_known_calls", inline_known_calls(module))
-            | pass!("cont::contify_calls", contify_calls(module))
+            | pass!("cps::eliminate_dead_calls", eliminate_dead_calls(module))
+            | pass!("cps::inline_known_calls", inline_known_calls(module))
+            | pass!("cps::contify_calls", contify_calls(module))
             | pass!(
-                "cont::specialize_scc_calls",
+                "cps::specialize_scc_calls",
                 specialize_scc_calls(module, &mut scc_clone_budget)
             )
             // After the specializer, which copies a loop for a caller whose arguments it can then fold: what that leaves with several callers is copied for contification alone.
             | pass!(
-                "cont::separate_loop_entries",
+                "cps::separate_loop_entries",
                 separate_loop_entries(module, &mut entry_clone_budget)
             )
             | pass!(
-                "cont::specialize_call_patterns",
+                "cps::specialize_call_patterns",
                 specialize_call_patterns(module, &mut branch_clone_budget)
             )
             | pass!(
-                "cont::specialize_jump_patterns",
+                "cps::specialize_jump_patterns",
                 specialize_jump_patterns(module, &mut jump_clone_budget)
             )
-            | pass!("cont::split_returns", split_returns(module))
-            | pass!("cont::split_parameters", split_parameters(module))
-            | pass!("cont::split_workers", split_workers(module))
-            | pass!("cont::uncurry_nests", uncurry_nests(module))
-            | pass!("cont::uncurry_returns", uncurry_returns(module))
-            | pass!("cont::prune_unreachable", prune_unreachable(module));
+            | pass!("cps::split_returns", split_returns(module))
+            | pass!("cps::split_parameters", split_parameters(module))
+            | pass!("cps::split_workers", split_workers(module))
+            | pass!("cps::uncurry_nests", uncurry_nests(module))
+            | pass!("cps::uncurry_returns", uncurry_returns(module))
+            | pass!("cps::prune_unreachable", prune_unreachable(module));
         // Windows are virtualized only once everything else has settled, because a window split is irrevocable in a way no other rewrite here is: it records a group over every position the region spans, and a later region that transfers into one of those positions is declined whole. A region's extent is a fact of the *converged* graph — the continuations inlining, contification and specialization mint do not exist in the round that split a region they will turn out to flow into — so deciding it earlier measures something transient and then freezes it. `programs/walk_mirror_held_scan.crs` is the case: its walk's continuation is minted a round after the sub-region below it would be split, which would leave the walk slicing a fresh rope per character.
-        let changed = changed || pass!("cont::split_windows", split_windows(module));
+        let changed = changed || pass!("cps::split_windows", split_windows(module));
         // Debug builds verify at each round boundary, so an invalid rewrite is named within one round of its pass instead of surfacing at the exit gate arbitrarily later. The boundary is the round and not the pass on purpose: mid-round states are transiently unscoped by design, and only the round's close, behind its prune, promises a structurally canonical module. The row-vocabulary clause is deliberately not part of that promise — `verify_structure` states why — so it is checked at the entry and exit gates alone.
         #[cfg(debug_assertions)]
         if let Err(error) = module.verify_structure() {
@@ -161,7 +161,7 @@ pub fn optimize(module: &mut Module) {
             break;
         }
     }
-    curios_profile::sample!("cont_optimize::rounds", converged.unwrap_or(ROUND_LIMIT));
+    curios_profile::sample!("cps_optimize::rounds", converged.unwrap_or(ROUND_LIMIT));
 
     // Loud rather than silent: a module that exhausts the limit is emitted less optimized than an equivalent one that did not, and no later stage can detect the difference. Debug-only because the consequence is worse code rather than wrong code — a release compile should still produce a working program.
     debug_assert!(

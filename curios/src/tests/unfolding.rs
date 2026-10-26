@@ -1,6 +1,6 @@
 //! What a combinator web costs to compile, and where.
 //!
-//! Two measurements of what a combinator web can drive a compilation to spend: how a case refinement is keyed and what an index inversion reduces, and how a reified closure is shared — the Cont fixpoint's cost is `tests::instrumented::fixpoint`'s. They are kept in code rather than prose because a figure taken by a throwaway script does not survive being re-measured.
+//! Two measurements of what a combinator web can drive a compilation to spend: how a case refinement is keyed and what an index inversion reduces, and how a reified closure is shared — the CPS fixpoint's cost is `tests::instrumented::fixpoint`'s. They are kept in code rather than prose because a figure taken by a throwaway script does not survive being re-measured.
 //!
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude-archive`'s `stored_prelude_measurements`, whose shape this follows.
 
@@ -240,7 +240,7 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 /// cargo test --release --package curios --lib -- --ignored --nocapture combinator_sharing_measurements
 /// ```
 ///
-/// Release only. The wall clocks are dominated by `curios_cont::optimize`, which a debug build prices differently; the *counts* are deterministic and hold in either profile.
+/// Release only. The wall clocks are dominated by `curios_cps::optimize`, which a debug build prices differently; the *counts* are deterministic and hold in either profile.
 ///
 /// # What it last printed
 ///
@@ -267,8 +267,8 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 /// | | as written | hoisted |
 /// | --- | --- | --- |
 /// | `compile_entrypoint` | 1 479 ms | 1 658 ms |
-/// | `cont_optimize` | 604 ms | 604 ms |
-/// | `cont_optimize` allocations | 5 814 986 | 5 815 088 |
+/// | `cps_optimize` | 604 ms | 604 ms |
+/// | `cps_optimize` allocations | 5 814 986 | 5 815 088 |
 /// | `evaluate_closed_terms` | 8 ms | 7 ms |
 ///
 /// **The allocation counts agree to 102 in 5.8 million**, which says more than the wall clocks: the fixpoint does the same work on either spelling's module. `evaluate_closed_terms`, the pass this measurement is about, is never the cost; what it *produces* can be, because the fixpoint below it prices the module it is handed — `tests::instrumented::fixpoint` carries that measurement.

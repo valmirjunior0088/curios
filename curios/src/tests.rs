@@ -268,40 +268,40 @@ fn core_elab(source: &str) -> String {
     printed.expect("the pipeline emits the elaborated Core stage")
 }
 
-/// Compile through production and capture the optimized Cont module.
+/// Compile through production and capture the optimized CPS module.
 ///
 /// The module rather than its printout is what a shape assertion should ask: a spelling belongs to the printer, and a scraper over the text can silently match nothing after a printer change, where a program's shape is in its graph.
-fn cont_optm_module(source: &str) -> curios_cont::Module {
+fn cps_optm_module(source: &str) -> curios_cps::Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut captured = None;
     compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
-        if let Stage::ContOptm(module) = stage {
+        if let Stage::CpsOptm(module) = stage {
             captured = Some(module.clone());
         }
     })
     .expect("fixture compiles");
 
-    captured.expect("the pipeline observes cont-optm")
+    captured.expect("the pipeline observes cps-optm")
 }
 
-/// Compile through production and capture the optimized Cont printout. For the suites whose subject genuinely is a name in the dump — which declarations survived — rather than an operation.
-fn cont_optm(source: &str) -> String {
-    cont_optm_module(source).to_string()
+/// Compile through production and capture the optimized CPS printout. For the suites whose subject genuinely is a name in the dump — which declarations survived — rather than an operation.
+fn cps_optm(source: &str) -> String {
+    cps_optm_module(source).to_string()
 }
 
 /// Every intrinsic the optimized module emits, tagged by the node kind that carries it, sorted.
 ///
 /// The `Debug` spelling is the comparison key on purpose: it is exact, total, and carries the arity a printed name deliberately leaves to the operand list — `Bytes/chunk` is one name for `BytesChunk(2)` and `BytesChunk(3)`. Nothing here reaches a user, so the Rust spelling costs nothing and cannot drift from the enum it names.
-fn cont_operations(module: &curios_cont::Module) -> Vec<String> {
+fn cps_operations(module: &curios_cps::Module) -> Vec<String> {
     let mut operations: Vec<String> = module
         .nodes()
         .iter()
         .flatten()
         .filter_map(|node| match node {
-            curios_cont::Node::LetIntrinsic { op, .. } => Some(format!("{op:?}")),
-            curios_cont::Node::Cell { op, .. } => Some(format!("cell.{op:?}")),
-            curios_cont::Node::Intrinsic { op, .. } => Some(format!("intrinsic.{op:?}")),
+            curios_cps::Node::LetIntrinsic { op, .. } => Some(format!("{op:?}")),
+            curios_cps::Node::Cell { op, .. } => Some(format!("cell.{op:?}")),
+            curios_cps::Node::Intrinsic { op, .. } => Some(format!("intrinsic.{op:?}")),
             _ => None,
         })
         .collect();
@@ -310,21 +310,18 @@ fn cont_operations(module: &curios_cont::Module) -> Vec<String> {
 }
 
 /// Whether a `Nat` literal of `value` is an operand anywhere — how a constant baked into a kernel is found, since nothing names it.
-fn reads_nat(module: &curios_cont::Module, value: u32) -> bool {
+fn reads_nat(module: &curios_cps::Module, value: u32) -> bool {
     module.nodes().iter().flatten().any(|node| {
-        curios_cont::atoms(node).into_iter().any(|atom| {
-            matches!(atom, curios_cont::Atom::Literal(curios_cont::Literal::Nat(literal)) if u32::try_from(literal).ok() == Some(value))
+        curios_cps::atoms(node).into_iter().any(|atom| {
+            matches!(atom, curios_cps::Atom::Literal(curios_cps::Literal::Nat(literal)) if u32::try_from(literal).ok() == Some(value))
         })
     })
 }
 
 /// Whether the optimized module emits an intrinsic the predicate accepts.
-fn emits(
-    module: &curios_cont::Module,
-    predicate: impl Fn(&curios_cont::Intrinsic) -> bool,
-) -> bool {
+fn emits(module: &curios_cps::Module, predicate: impl Fn(&curios_cps::Intrinsic) -> bool) -> bool {
     module.nodes().iter().flatten().any(|node| match node {
-        curios_cont::Node::LetIntrinsic { op, .. } => predicate(op),
+        curios_cps::Node::LetIntrinsic { op, .. } => predicate(op),
         _ => false,
     })
 }

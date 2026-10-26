@@ -20,7 +20,7 @@ fn prop_concept_resolves_and_erases() {
     assert_eq!(run(source), b"3");
 }
 
-// A proof-returning method wrapper demanded by a top-level binding. The wrapper call returns an erased method, so the outer application's callee is proof content rather than a function — `erase_apply` collapses it to the unit constant (value-driven: a direct function reference like `/std/Process/exit` keeps its call). Without that collapse it would survive erasure as an application of an erased callee and panic `into_cont`.
+// A proof-returning method wrapper demanded by a top-level binding. The wrapper call returns an erased method, so the outer application's callee is proof content rather than a function — `erase_apply` collapses it to the unit constant (value-driven: a direct function reference like `/std/Process/exit` keeps its call). Without that collapse it would survive erasure as an application of an erased callee and panic `into_cps`.
 #[test]
 fn prop_method_in_top_level_binding_collapses() {
     let source = r#"

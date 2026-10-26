@@ -1,6 +1,6 @@
 //! Erasure removes proofs; optimization removes unused total values, but preserves calls that may diverge — and a program pays for nothing it does not name.
 
-use crate::tests::{cont_optm, run};
+use crate::tests::{cps_optm, run};
 
 // A `Prop` family is proof-irrelevant, so erasure drops its inhabitants wholesale. Classifying `Eq`'s `refl(@z : A)` payload on its own abstract `A` would keep it, and rebuilding the constructor would compute the field from binders the same erasure had dropped — `Eq/cong` erasing to `apply f(unit)`. A proof bound as a top-level item is not computed at all (see `a_top_level_proof_does_not_run_before_the_program`), so what this holds is the classification.
 #[test]
@@ -30,7 +30,7 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
             let p = le/trans(@n, @n, @n + 1, le/refl(n), True/qed());
             Process/exit(Nat/to_byte(use_it(n, n + 1, p) % 256)))
         "#;
-    let optimized = cont_optm(source);
+    let optimized = cps_optm(source);
     assert!(
         !optimized.contains("trans"),
         "the proof's recursion reached the optimized program:\n{optimized}"
@@ -48,7 +48,7 @@ fn a_top_level_proof_does_not_run_before_the_program() {
         let p: Holds(300 <= 301) = le/trans(@300, @300, @301, le/refl(300), True/qed());
         print("ok")
         "#;
-    let optimized = cont_optm(source);
+    let optimized = cps_optm(source);
     assert!(
         !optimized.contains("trans"),
         "the proof's recursion reached the optimized program:\n{optimized}"
@@ -68,7 +68,7 @@ fn an_unused_total_value_leaves_no_computation_behind() {
             let _unused = count(n, n);
             Process/exit(Nat/to_byte(n % 256)))
         "#;
-    let optimized = cont_optm(source);
+    let optimized = cps_optm(source);
     assert!(
         !optimized.contains("count"),
         "the unused total value's recursion reached the optimized program:\n{optimized}"
@@ -87,7 +87,7 @@ fn an_unused_partial_value_is_still_computed() {
             let _unused = count(n, n);
             Process/exit(Nat/to_byte(n % 256)))
         "#;
-    let optimized = cont_optm(source);
+    let optimized = cps_optm(source);
     assert!(
         optimized.contains("count"),
         "the partial value's recursion was dropped from the optimized program:\n{optimized}"
@@ -112,10 +112,10 @@ fn proof_in_an_erased_position_is_not_evaluated() {
 ///
 /// Parser factories and the descriptions the library still constructs are unreachable here. Pruning keeps their recursive grammars and the `Json`/`Parse`/`Flt/of_str` web out of an unrelated entry.
 ///
-/// Asserted on the *optimized* Cont, which is the last place anything could still drop it, and by name rather than by size, so the reason a regression fails here is legible.
+/// Asserted on the *optimized* CPS, which is the last place anything could still drop it, and by name rather than by size, so the reason a regression fails here is legible.
 #[test]
 fn a_trivial_program_retains_none_of_the_parser_web() {
-    let cont = cont_optm(r#"/std/print("hi\n")"#);
+    let cps = cps_optm(r#"/std/print("hi\n")"#);
 
     for absent in [
         "/std/Json/",
@@ -125,9 +125,9 @@ fn a_trivial_program_retains_none_of_the_parser_web() {
         "/std/Flt/of_str",
     ] {
         assert!(
-            !cont.contains(absent),
+            !cps.contains(absent),
             "{absent} reaches an entry that names nothing of it:\n{}",
-            &cont[..cont.len().min(4000)]
+            &cps[..cps.len().min(4000)]
         );
     }
 }
@@ -135,7 +135,7 @@ fn a_trivial_program_retains_none_of_the_parser_web() {
 /// An application through a witness method is pure when the method it selects is pure, even though its callee is no bare function atom. Keep this initializer case independent of how the library spells its parser factories.
 #[test]
 fn an_unused_parser_built_through_a_witness_method_is_pruned() {
-    let cont = cont_optm(
+    let cps = cps_optm(
         r#"
         use /std/{Monad, Parse, Bytes, Nat};
         let unused: Parse(Bytes, Nat) =
@@ -143,8 +143,8 @@ fn an_unused_parser_built_through_a_witness_method_is_pruned() {
         /std/print("hi")
         "#,
     );
-    assert!(!cont.contains("/unused"), "{cont}");
-    assert!(!cont.contains("/std/Parse/"), "{cont}");
+    assert!(!cps.contains("/unused"), "{cps}");
+    assert!(!cps.contains("/std/Parse/"), "{cps}");
 }
 
 // A recursion on a bound runs as its step and nothing else: the proofs that keep the measure under the bound are erased, and `descend` is a wrapper around a local loop, so inlining the wrapper fuses the step into the loop. A `recurse` passing `step` to itself would survive to the optimized program as a function of its own, calling the step through a closure at every level.
@@ -161,7 +161,7 @@ fn a_recursion_on_a_bound_is_fused_with_its_step() {
                 n);
         Io/bind(Process/args(), (args) => Process/exit(Nat/to_byte(sum_to(List/len(args)) % 256)))
         "#;
-    let optimized = cont_optm(source);
+    let optimized = cps_optm(source);
     assert!(
         !optimized.contains("Nat/descend"),
         "the fixpoint survived the step it should have fused:\n{optimized}"

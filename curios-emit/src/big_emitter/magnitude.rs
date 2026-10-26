@@ -304,7 +304,7 @@ impl BigEmitter<'_, '_> {
             get(&width),
             i64_const(u32::MAX.into()),
             curios_wasm::Instr::I64GtU,
-            when(self.table.refuse_instrs(curios_cont::Panic::Capacity)),
+            when(self.table.refuse_instrs(curios_cps::Panic::Capacity)),
             get(&count),
             i64_const(5),
             curios_wasm::Instr::I64ShrU,
@@ -755,7 +755,7 @@ impl BigEmitter<'_, '_> {
             set(&lb),
             get(&lb),
             curios_wasm::Instr::I32Eqz,
-            when(self.table.refuse_instrs(curios_cont::Panic::Invariant)),
+            when(self.table.refuse_instrs(curios_cps::Panic::Invariant)),
             return_if(
                 vec![
                     get(&a),

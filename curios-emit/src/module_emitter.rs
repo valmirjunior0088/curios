@@ -190,7 +190,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// One final struct per nominal row: for a family, slot zero the tag and the rest the payload slots its constructors share; for a product, the schema's row outright. Final and unrelated to every other type, so a read of one is an exact cast — the reason rows are keyed here rather than by arity — and each field is declared at the carrier [`curios_cont::Slot`] names rather than uniformly `anyref`, which is what lets a scalar payload live in a register and a list payload arrive already at its rope base.
+    /// One final struct per nominal row: for a family, slot zero the tag and the rest the payload slots its constructors share; for a product, the schema's row outright. Final and unrelated to every other type, so a read of one is an exact cast — the reason rows are keyed here rather than by arity — and each field is declared at the carrier [`curios_cps::Slot`] names rather than uniformly `anyref`, which is what lets a scalar payload live in a register and a list payload arrive already at its rope base.
     ///
     /// A family's tag is `i8`. Its constructor count is bounded by its declaration and no corpus family approaches the byte, so the discriminant packs into one and reads back through `struct.get_u` with no unboxing at all — the store side is the raw index, where a uniform slot would write an `i31` reference.
     fn emit_row_types(&mut self) {
@@ -239,7 +239,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     /// The wasm storage type one row slot is declared at.
-    fn slot_storage_type(&self, slot: curios_cont::Slot) -> curios_wasm::StorageType {
+    fn slot_storage_type(&self, slot: curios_cps::Slot) -> curios_wasm::StorageType {
         let reference = |type_name| {
             curios_wasm::StorageType::Val(curios_wasm::ValType::Ref(curios_wasm::RefType {
                 is_nullable: true,
@@ -247,17 +247,17 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             }))
         };
         match slot {
-            curios_cont::Slot::Tag => curios_wasm::StorageType::Packed(curios_wasm::PackedType::I8),
-            curios_cont::Slot::Nat => {
+            curios_cps::Slot::Tag => curios_wasm::StorageType::Packed(curios_wasm::PackedType::I8),
+            curios_cps::Slot::Nat => {
                 curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::I32))
             }
-            curios_cont::Slot::Flt => {
+            curios_cps::Slot::Flt => {
                 curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::F64))
             }
-            curios_cont::Slot::List => reference(self.table.list_rope().base.clone()),
-            curios_cont::Slot::Closure(arity) => reference(self.table.find_envr_type(arity)),
-            curios_cont::Slot::Row(row) => reference(self.table.find_row_type(row)),
-            curios_cont::Slot::Opaque => curios_wasm::StorageType::Val(Table::top_type(true)),
+            curios_cps::Slot::List => reference(self.table.list_rope().base.clone()),
+            curios_cps::Slot::Closure(arity) => reference(self.table.find_envr_type(arity)),
+            curios_cps::Slot::Row(row) => reference(self.table.find_row_type(row)),
+            curios_cps::Slot::Opaque => curios_wasm::StorageType::Val(Table::top_type(true)),
         }
     }
 
@@ -462,8 +462,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// Emit a module-level const. Every global is declared mutable so that aggregate (`Tuple`/`List`/`EmissionClosure`) consts can `global.get` their dependencies inside the start function — wasm constant expressions can only read immutable globals. An `Flt` and a small `Nat` or `Int` keep a self-contained const initializer (mutability is harmless when the init is constant); a boxed `Nat` or `Int`, `Bytes` and the aggregates declare a placeholder init and build the real value in the start function, the boxed value because its limbs come from a data segment, which no constant expression reads. `Bytes` is special-cased via [`Self::emit_let_bytes_data`] for its immediate form.
     fn emit_let_data(&mut self, name: &'a EmissionValueName, value: &'a EmissionData) {
         let constant = match value {
-            EmissionData::Nat(number) => curios_cont::nat_is_small(number),
-            EmissionData::Int(number) => curios_cont::int_is_small(number),
+            EmissionData::Nat(number) => curios_cps::nat_is_small(number),
+            EmissionData::Int(number) => curios_cps::int_is_small(number),
             EmissionData::Flt(_) => true,
             EmissionData::Bytes(_)
             | EmissionData::Tuple(_)

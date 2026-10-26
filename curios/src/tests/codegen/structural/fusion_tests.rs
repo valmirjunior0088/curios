@@ -1,8 +1,8 @@
 //! Packed literals and field stores fusing to a flat build, and the regrown store that stays lazy.
 
-use crate::tests::{census_settles, cont_optm_module, emits, run};
+use crate::tests::{census_settles, cps_optm_module, emits, run};
 
-/// A packed literal's non-constant atoms fuse into one flat chunk build (`fuse_append_chains` in `curios-cont`): the byte literal's two runtime atoms become a `BytesChunk(X, 2)`, in place of the append-per-atom chains the lowering honestly writes, and the program still prints what the chains would. The taint keeps every atom out of constant folding, so the chunks survive to emission and the equality runs over runtime-built values.
+/// A packed literal's non-constant atoms fuse into one flat chunk build (`fuse_append_chains` in `curios-cps`): the byte literal's two runtime atoms become a `BytesChunk(X, 2)`, in place of the append-per-atom chains the lowering honestly writes, and the program still prints what the chains would. The taint keeps every atom out of constant folding, so the chunks survive to emission and the equality runs over runtime-built values.
 #[test]
 fn tainted_packed_literals_fuse_to_flat_chunks() {
     let source = r#"
@@ -19,16 +19,16 @@ fn tainted_packed_literals_fuse_to_flat_chunks() {
         entry()
         "#;
 
-    let module = cont_optm_module(source);
+    let module = cps_optm_module(source);
     assert!(
-        emits(&module, |op| *op == curios_cont::Intrinsic::BytesChunk(2)),
+        emits(&module, |op| *op == curios_cps::Intrinsic::BytesChunk(2)),
         "the byte atoms fuse into one chunk: {module}"
     );
 
     assert_eq!(run(source), b"ok\n");
 }
 
-/// A list stored into a field the ANF census marks indexed-only settles at the store, and the settle over the literal's unshared construction tree fuses into one exact flat build (`flatten_indexed_lists` in `curios-cont`): the spliced rebuild becomes a `ListFlat` in place of the concat-of-rope-nodes the lowering honestly writes, and the read answers the same element. The reads reach the census through `/std/List/try_get`, so the fixture also pins the census's deferral through saturated known calls — the shape every real read has at the arena.
+/// A list stored into a field the ANF census marks indexed-only settles at the store, and the settle over the literal's unshared construction tree fuses into one exact flat build (`flatten_indexed_lists` in `curios-cps`): the spliced rebuild becomes a `ListFlat` in place of the concat-of-rope-nodes the lowering honestly writes, and the read answers the same element. The reads reach the census through `/std/List/try_get`, so the fixture also pins the census's deferral through saturated known calls — the shape every real read has at the arena.
 #[test]
 fn indexed_field_store_fuses_to_flat_build() {
     let source = r#"
@@ -58,9 +58,9 @@ fn indexed_field_store_fuses_to_flat_build() {
         census_settles(source, "/Box", "pack", "items"),
         "the census marks the stored field indexed-only"
     );
-    let module = cont_optm_module(source);
+    let module = cps_optm_module(source);
     assert!(
-        emits(&module, |op| *op == curios_cont::Intrinsic::ListFlat(3)),
+        emits(&module, |op| *op == curios_cps::Intrinsic::ListFlat(3)),
         "the spliced store flattens to one exact build: {module}"
     );
 
@@ -81,9 +81,9 @@ fn a_shared_tuple_field_settles_nothing() {
         entry()
         "#;
 
-    let module = cont_optm_module(source);
+    let module = cps_optm_module(source);
     assert!(
-        !emits(&module, |op| *op == curios_cont::Intrinsic::ListSettle),
+        !emits(&module, |op| *op == curios_cps::Intrinsic::ListSettle),
         "{module}"
     );
 
@@ -121,11 +121,11 @@ fn regrown_field_store_stays_lazy() {
         !census_settles(source, "/Acc", "keep", "items"),
         "a re-grown field is never marked"
     );
-    let module = cont_optm_module(source);
+    let module = cps_optm_module(source);
     assert!(
         !emits(&module, |op| matches!(
             op,
-            curios_cont::Intrinsic::ListSettle | curios_cont::Intrinsic::ListFlat(_)
+            curios_cps::Intrinsic::ListSettle | curios_cps::Intrinsic::ListFlat(_)
         )),
         "a re-grown field is never settled: {module}"
     );
@@ -150,9 +150,9 @@ fn indexed_local_concat_fuses_to_flat_build() {
         entry()
         "#;
 
-    let module = cont_optm_module(source);
+    let module = cps_optm_module(source);
     assert!(
-        emits(&module, |op| *op == curios_cont::Intrinsic::ListFlat(2)),
+        emits(&module, |op| *op == curios_cps::Intrinsic::ListFlat(2)),
         "the indexed concat flattens: {module}"
     );
 

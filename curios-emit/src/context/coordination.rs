@@ -75,7 +75,7 @@ impl<'a> Context<'a, '_> {
         let data = self.table().channel();
         let word = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
         let mut output = Vec::new();
-        if target.op == curios_cont::ChannelOp::New {
+        if target.op == curios_cps::ChannelOp::New {
             output.extend(self.load_length_instrs(&target.args[0]));
             output.push(curios_wasm::Instr::ArrayNewDefault {
                 type_name: data.payload,
@@ -99,20 +99,20 @@ impl<'a> Context<'a, '_> {
             instrs
         };
         match target.op {
-            curios_cont::ChannelOp::New => unreachable!("creation was emitted above"),
-            curios_cont::ChannelOp::Close => {
+            curios_cps::ChannelOp::New => unreachable!("creation was emitted above"),
+            curios_cps::ChannelOp::Close => {
                 output.extend([
                     get(&channel),
                     i32_const(1),
                     field_set(&data.channel, &data.closed_field),
                 ]);
             }
-            curios_cont::ChannelOp::Closed => {
+            curios_cps::ChannelOp::Closed => {
                 output.extend(read(&data.closed_field));
                 output.push(curios_wasm::Instr::RefI31);
             }
-            curios_cont::ChannelOp::Count | curios_cont::ChannelOp::Capacity => {
-                output.extend(if target.op == curios_cont::ChannelOp::Count {
+            curios_cps::ChannelOp::Count | curios_cps::ChannelOp::Capacity => {
+                output.extend(if target.op == curios_cps::ChannelOp::Count {
                     read(&data.count_field)
                 } else {
                     capacity()
@@ -120,7 +120,7 @@ impl<'a> Context<'a, '_> {
                 output.push(curios_wasm::Instr::I64ExtendI32U);
                 output.push(call(&self.table().big_func(BigHelper::OfU64)));
             }
-            curios_cont::ChannelOp::Push => {
+            curios_cps::ChannelOp::Push => {
                 let mut insert = read(&data.payload_field);
                 // Widen the index sum so a head near the array bound cannot wrap before the remainder.
                 insert.extend(read(&data.head_field));
@@ -156,7 +156,7 @@ impl<'a> Context<'a, '_> {
                 output.push(either(word, vec![i32_const(2)], open));
                 output.push(curios_wasm::Instr::RefI31);
             }
-            curios_cont::ChannelOp::Take => {
+            curios_cps::ChannelOp::Take => {
                 let payload = self.push_local("channel_item", Table::top_type(true));
                 let status = self.push_local("channel_status", word.clone());
                 let mut take = read(&data.payload_field);

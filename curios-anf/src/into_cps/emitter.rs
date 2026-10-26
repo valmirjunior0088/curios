@@ -1,8 +1,8 @@
-//! The Cont module under construction, and what each erased name has become in it.
+//! The CPS module under construction, and what each erased name has become in it.
 //!
-//! The lowering above this is a walk that decides *what* to emit; this is everything the walk emits *through*. It owns the Cont module being built and the three correspondences that make a write possible — an arena value's Cont atom, an arena function's Cont identity, and a knot member's storage and forcing function — so that deciding and emitting are not the same object's business.
+//! The lowering above this is a walk that decides *what* to emit; this is everything the walk emits *through*. It owns the CPS module being built and the three correspondences that make a write possible — an arena value's CPS atom, an arena function's CPS identity, and a knot member's storage and forcing function — so that deciding and emitting are not the same object's business.
 //!
-//! Nothing here descends into a block or chooses a branch. Every method either mints one Cont node, translates one erased name, answers one question about the knot, or emits a fixed instruction sequence whose shape does not depend on what it is wrapping. [`Emitter::define_force`] is the largest and still obeys that rule: a knot member's forcing function is the same protocol whatever the member computes.
+//! Nothing here descends into a block or chooses a branch. Every method either mints one CPS node, translates one erased name, answers one question about the knot, or emits a fixed instruction sequence whose shape does not depend on what it is wrapping. [`Emitter::define_force`] is the largest and still obeys that rule: a knot member's forcing function is the same protocol whatever the member computes.
 
 use {
     super::{
@@ -17,17 +17,17 @@ use {
 /// One computed member: a write-once result cell, a capacity-one initializer channel, and its forcing function.
 #[derive(Clone, Copy)]
 pub(super) struct KnotMember {
-    pub(super) result: curios_cont::ValueId,
-    pub(super) initializer: curios_cont::ValueId,
-    pub(super) force: curios_cont::FunctionId,
+    pub(super) result: curios_cps::ValueId,
+    pub(super) initializer: curios_cps::ValueId,
+    pub(super) force: curios_cps::FunctionId,
 }
 
-/// The Cont module being built, with the erased-to-Cont correspondence that every write consults.
+/// The CPS module being built, with the erased-to-CPS correspondence that every write consults.
 pub(super) struct Emitter<'a> {
     source: &'a Module,
-    pub(super) module: curios_cont::Module,
-    pub(super) values: BTreeMap<ValueId, curios_cont::Atom>,
-    pub(super) functions: BTreeMap<FunctionId, curios_cont::FunctionId>,
+    pub(super) module: curios_cps::Module,
+    pub(super) values: BTreeMap<ValueId, curios_cps::Atom>,
+    pub(super) functions: BTreeMap<FunctionId, curios_cps::FunctionId>,
     /// Computed members of recursive knots, mapped to its result cell, initializer channel, and forcing function. A reference to such a member lowers to a call of that function at the referencing region's entry, so the member is computed on first use, once, and the tie is invisible to everything but this lowering.
     pub(super) knot_members: BTreeMap<ValueId, KnotMember>,
 }
@@ -36,29 +36,29 @@ impl<'a> Emitter<'a> {
     pub(super) fn new(source: &'a Module) -> Self {
         Self {
             source,
-            module: curios_cont::Module::new(),
+            module: curios_cps::Module::new(),
             values: BTreeMap::new(),
             functions: BTreeMap::new(),
             knot_members: BTreeMap::new(),
         }
     }
 
-    /// Allocate the Cont value representing an arena value, carrying its source hint and the register its type names, and record the mapping — the single choke point for every binder that names a source value.
-    pub(super) fn bind_value(&mut self, arena: ValueId) -> curios_cont::ValueId {
+    /// Allocate the CPS value representing an arena value, carrying its source hint and the register its type names, and record the mapping — the single choke point for every binder that names a source value.
+    pub(super) fn bind_value(&mut self, arena: ValueId) -> curios_cps::ValueId {
         let register = self
             .source
             .value(arena)
             .and_then(|value| value.register)
             .map(|register| match register {
-                crate::RegisterShape::Immediate => curios_cont::Register::Word,
-                crate::RegisterShape::Flt => curios_cont::Register::Float,
+                crate::RegisterShape::Immediate => curios_cps::Register::Word,
+                crate::RegisterShape::Flt => curios_cps::Register::Float,
             });
-        let cont = self.module.add_value_def(curios_cont::ValueDef {
+        let value = self.module.add_value_def(curios_cps::ValueDef {
             debug_name: self.arena_value_name(arena),
             register,
         });
-        self.values.insert(arena, curios_cont::Atom::Value(cont));
-        cont
+        self.values.insert(arena, curios_cps::Atom::Value(value));
+        value
     }
 
     pub(super) fn arena_value_name(&self, id: ValueId) -> Option<String> {
@@ -67,45 +67,45 @@ impl<'a> Emitter<'a> {
             .and_then(|value| value.debug_name.clone())
     }
 
-    pub(super) fn lower_callee(&self, atom: Atom) -> curios_cont::Callee {
+    pub(super) fn lower_callee(&self, atom: Atom) -> curios_cps::Callee {
         match self.lower_atom(atom) {
-            curios_cont::Atom::Fun(function) => curios_cont::Callee::Known(function),
-            curios_cont::Atom::Value(value) => curios_cont::Callee::Closure(value),
-            curios_cont::Atom::Literal(_) | curios_cont::Atom::Filler => {
+            curios_cps::Atom::Fun(function) => curios_cps::Callee::Known(function),
+            curios_cps::Atom::Value(value) => curios_cps::Callee::Closure(value),
+            curios_cps::Atom::Literal(_) | curios_cps::Atom::Filler => {
                 panic!("arena application head lowered to a literal")
             }
         }
     }
 
-    pub(super) fn lower_atom(&self, atom: Atom) -> curios_cont::Atom {
+    pub(super) fn lower_atom(&self, atom: Atom) -> curios_cps::Atom {
         match atom {
             Atom::Value(value) => self
                 .values
                 .get(&value)
                 .unwrap_or_else(|| panic!("arena lowering lacks value {value}"))
                 .clone(),
-            Atom::Function(function) => curios_cont::Atom::Fun(
+            Atom::Function(function) => curios_cps::Atom::Fun(
                 *self
                     .functions
                     .get(&function)
                     .unwrap_or_else(|| panic!("arena lowering lacks function {function}")),
             ),
-            Atom::Constant(constant) => curios_cont::Atom::Literal(self.lower_constant(constant)),
+            Atom::Constant(constant) => curios_cps::Atom::Literal(self.lower_constant(constant)),
         }
     }
 
-    pub(super) fn lower_constant(&self, constant: ConstantId) -> curios_cont::Literal {
+    pub(super) fn lower_constant(&self, constant: ConstantId) -> curios_cps::Literal {
         match self.source.constant(constant).expect("live constant") {
             // Unit, Bool, and Byte collapse onto the Nat runtime carrier here, at the one-way door — never earlier.
-            Constant::Unit => curios_cont::Literal::Nat(Natural::zero()),
-            Constant::Bool(value) => curios_cont::Literal::Nat(Natural::from(u32::from(*value))),
-            Constant::Nat(value) => curios_cont::Literal::Nat(value.clone()),
-            Constant::Byte(value) => curios_cont::Literal::Nat(Natural::from(u32::from(*value))),
-            Constant::Int(value) => curios_cont::Literal::Int(value.clone()),
-            Constant::Flt(value) => curios_cont::Literal::Flt(*value),
-            Constant::Bytes(value) => curios_cont::Literal::Bytes(value.clone()),
+            Constant::Unit => curios_cps::Literal::Nat(Natural::zero()),
+            Constant::Bool(value) => curios_cps::Literal::Nat(Natural::from(u32::from(*value))),
+            Constant::Nat(value) => curios_cps::Literal::Nat(value.clone()),
+            Constant::Byte(value) => curios_cps::Literal::Nat(Natural::from(u32::from(*value))),
+            Constant::Int(value) => curios_cps::Literal::Int(value.clone()),
+            Constant::Flt(value) => curios_cps::Literal::Flt(*value),
+            Constant::Bytes(value) => curios_cps::Literal::Bytes(value.clone()),
             // A Handle descriptor token rides the packed-binary carrier, spelled by the one encoding the host reads back.
-            Constant::Handle(token) => curios_cont::Literal::Bytes(Binary::from_bytes(
+            Constant::Handle(token) => curios_cps::Literal::Bytes(Binary::from_bytes(
                 Handle::encode(&Natural::from(*token)),
             )),
         }
@@ -114,12 +114,12 @@ impl<'a> Emitter<'a> {
     /// A parameterless continuation over `body`, for a switch arm.
     pub(super) fn continuation_of(
         &mut self,
-        body: curios_cont::NodeId,
-    ) -> curios_cont::ContinuationId {
+        body: curios_cps::NodeId,
+    ) -> curios_cps::ContinuationId {
         let continuation = self.module.reserve_continuation();
         self.module.define_continuation(
             continuation,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: None,
                 params: Vec::new(),
                 body,
@@ -130,11 +130,11 @@ impl<'a> Emitter<'a> {
 
     pub(super) fn jump(
         &mut self,
-        target: curios_cont::ContinuationId,
-        args: Vec<curios_cont::Atom>,
-    ) -> curios_cont::NodeId {
+        target: curios_cps::ContinuationId,
+        args: Vec<curios_cps::Atom>,
+    ) -> curios_cps::NodeId {
         self.module
-            .add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+            .add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
                 target,
                 args,
             }))
@@ -150,14 +150,14 @@ impl<'a> Emitter<'a> {
     pub(super) fn emit_peel(
         &mut self,
         grain: SequenceGrain,
-        sequence: &curios_cont::Atom,
-        element: curios_cont::ValueId,
-        at: curios_cont::Atom,
-        suffix: Option<(curios_cont::ValueId, curios_cont::Atom)>,
-        next: curios_cont::NodeId,
-    ) -> curios_cont::NodeId {
+        sequence: &curios_cps::Atom,
+        element: curios_cps::ValueId,
+        at: curios_cps::Atom,
+        suffix: Option<(curios_cps::ValueId, curios_cps::Atom)>,
+        next: curios_cps::NodeId,
+    ) -> curios_cps::NodeId {
         let next = match suffix {
-            Some((suffix, after)) => self.module.add_node(curios_cont::Node::LetIntrinsic {
+            Some((suffix, after)) => self.module.add_node(curios_cps::Node::LetIntrinsic {
                 result: suffix,
                 op: sequence_rest_op(grain),
                 args: vec![sequence.clone(), after],
@@ -166,7 +166,7 @@ impl<'a> Emitter<'a> {
             None => next,
         };
 
-        self.module.add_node(curios_cont::Node::LetIntrinsic {
+        self.module.add_node(curios_cps::Node::LetIntrinsic {
             result: element,
             op: sequence_get_op(grain),
             args: vec![sequence.clone(), at],
@@ -178,13 +178,13 @@ impl<'a> Emitter<'a> {
     pub(super) fn settle_stores(
         &mut self,
         marked: &[bool],
-        atoms: &mut [curios_cont::Atom],
-    ) -> Vec<(curios_cont::ValueId, curios_cont::Atom)> {
+        atoms: &mut [curios_cps::Atom],
+    ) -> Vec<(curios_cps::ValueId, curios_cps::Atom)> {
         let mut settles = Vec::new();
         for (atom, _) in atoms.iter_mut().zip(marked).filter(|(_, marked)| **marked) {
             let settled = self.module.add_value(None);
             settles.push((settled, atom.clone()));
-            *atom = curios_cont::Atom::Value(settled);
+            *atom = curios_cps::Atom::Value(settled);
         }
         settles
     }
@@ -192,16 +192,16 @@ impl<'a> Emitter<'a> {
     /// Chain the settle bindings in front of `node`, preserving their field order.
     pub(super) fn wrap_settles(
         &mut self,
-        settles: Vec<(curios_cont::ValueId, curios_cont::Atom)>,
-        node: curios_cont::NodeId,
-    ) -> curios_cont::NodeId {
+        settles: Vec<(curios_cps::ValueId, curios_cps::Atom)>,
+        node: curios_cps::NodeId,
+    ) -> curios_cps::NodeId {
         settles
             .into_iter()
             .rev()
             .fold(node, |next, (result, atom)| {
-                self.module.add_node(curios_cont::Node::LetIntrinsic {
+                self.module.add_node(curios_cps::Node::LetIntrinsic {
                     result,
-                    op: curios_cont::Intrinsic::ListSettle,
+                    op: curios_cps::Intrinsic::ListSettle,
                     args: vec![atom],
                     next,
                 })
@@ -283,115 +283,115 @@ impl<'a> Emitter<'a> {
         let return_cont = self.module.reserve_continuation();
         let produced = self.module.add_value(None);
         let accepted = self.module.add_value(None);
-        let returning = self.jump(return_cont, vec![curios_cont::Atom::Value(produced)]);
+        let returning = self.jump(return_cont, vec![curios_cps::Atom::Value(produced)]);
         let after_fill = self.module.reserve_continuation();
         self.module.define_continuation(
             after_fill,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("knot/filled".into()),
                 params: vec![accepted],
                 body: returning,
             },
         );
-        let fill = self.module.add_node(curios_cont::Node::Cell {
-            op: curios_cont::CellOp::Fill,
+        let fill = self.module.add_node(curios_cps::Node::Cell {
+            op: curios_cps::CellOp::Fill,
             args: vec![
-                curios_cont::Atom::Value(knot.result),
-                curios_cont::Atom::Value(produced),
+                curios_cps::Atom::Value(knot.result),
+                curios_cps::Atom::Value(produced),
             ],
             return_to: after_fill,
         });
-        let fill = self.module.add_node(curios_cont::Node::LetCont {
+        let fill = self.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![after_fill],
             body: fill,
         });
         let receive = self.module.reserve_continuation();
         self.module.define_continuation(
             receive,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("knot/produced".into()),
                 params: vec![produced],
                 body: fill,
             },
         );
         let thunk = self.module.add_value(None);
-        let run = self.module.add_node(curios_cont::Node::ApplyFun {
-            callee: curios_cont::Callee::Closure(thunk),
+        let run = self.module.add_node(curios_cps::Node::ApplyFun {
+            callee: curios_cps::Callee::Closure(thunk),
             args: Vec::new(),
             return_to: receive,
         });
-        let run = self.module.add_node(curios_cont::Node::LetCont {
+        let run = self.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![receive],
             body: run,
         });
         let run = self.continuation_of(run);
         let cycle = self
             .module
-            .add_node(curios_cont::Node::Panic(curios_cont::Panic::Cycle));
+            .add_node(curios_cps::Node::Panic(curios_cps::Panic::Cycle));
         let cycle = self.continuation_of(cycle);
         let status = self.module.add_value(None);
-        let taken = self.module.add_node(curios_cont::Node::Switch {
-            scrutinee: curios_cont::Atom::Value(status),
+        let taken = self.module.add_node(curios_cps::Node::Switch {
+            scrutinee: curios_cps::Atom::Value(status),
             cases: BTreeMap::from([(0, edge(run)), (1, edge(cycle))]),
             default: None,
         });
-        let taken = self.module.add_node(curios_cont::Node::LetCont {
+        let taken = self.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![run, cycle],
             body: taken,
         });
         let after_take = self.module.reserve_continuation();
         self.module.define_continuation(
             after_take,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("knot/taken".into()),
                 params: vec![status, thunk],
                 body: taken,
             },
         );
-        let take = self.module.add_node(curios_cont::Node::Channel {
-            op: curios_cont::ChannelOp::Take,
-            args: vec![curios_cont::Atom::Value(knot.initializer)],
+        let take = self.module.add_node(curios_cps::Node::Channel {
+            op: curios_cps::ChannelOp::Take,
+            args: vec![curios_cps::Atom::Value(knot.initializer)],
             return_to: after_take,
         });
-        let take = self.module.add_node(curios_cont::Node::LetCont {
+        let take = self.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![after_take],
             body: take,
         });
         let unforced = self.continuation_of(take);
         let cached = self.module.add_value(None);
-        let forced = self.jump(return_cont, vec![curios_cont::Atom::Value(cached)]);
+        let forced = self.jump(return_cont, vec![curios_cps::Atom::Value(cached)]);
         let forced = self.continuation_of(forced);
         let present = self.module.add_value(None);
-        let polled = self.module.add_node(curios_cont::Node::Switch {
-            scrutinee: curios_cont::Atom::Value(present),
+        let polled = self.module.add_node(curios_cps::Node::Switch {
+            scrutinee: curios_cps::Atom::Value(present),
             cases: BTreeMap::from([(0, edge(unforced)), (1, edge(forced))]),
             default: None,
         });
-        let polled = self.module.add_node(curios_cont::Node::LetCont {
+        let polled = self.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![unforced, forced],
             body: polled,
         });
         let after_poll = self.module.reserve_continuation();
         self.module.define_continuation(
             after_poll,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("knot/polled".into()),
                 params: vec![present, cached],
                 body: polled,
             },
         );
-        let poll = self.module.add_node(curios_cont::Node::Cell {
-            op: curios_cont::CellOp::Poll,
-            args: vec![curios_cont::Atom::Value(knot.result)],
+        let poll = self.module.add_node(curios_cps::Node::Cell {
+            op: curios_cps::CellOp::Poll,
+            args: vec![curios_cps::Atom::Value(knot.result)],
             return_to: after_poll,
         });
-        let body = self.module.add_node(curios_cont::Node::LetCont {
+        let body = self.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![after_poll],
             body: poll,
         });
         self.module.define_function(
             knot.force,
-            curios_cont::Function {
+            curios_cps::Function {
                 debug_name: hint.map(|hint| format!("{hint}/force")),
                 params: Vec::new(),
                 return_cont,

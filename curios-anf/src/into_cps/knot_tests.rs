@@ -1,12 +1,12 @@
 //! The knot protocol: publication before forcing, storage-only captures, and the cached and reentrant paths.
 
 use {
-    crate::{AnfBuilder, Atom, Constant, Operation, Rhs, Terminator, lower_to_cont},
+    crate::{AnfBuilder, Atom, Constant, Operation, Rhs, Terminator, lower_to_cps},
     curios_num::Natural,
     std::collections::BTreeSet,
 };
 
-fn knot() -> curios_cont::Module {
+fn knot() -> curios_cps::Module {
     let mut builder = AnfBuilder::new();
     let constant = builder.constant(Constant::Nat(Natural::from(41u32)));
     let seed = builder.item_value(Some("seed".into()), Rhs::Alias(Atom::Constant(constant)));
@@ -39,10 +39,10 @@ fn knot() -> curios_cont::Module {
     );
     let entry = builder.seal_block(Terminator::Return(Atom::Value(sum)));
     builder.set_entry(entry);
-    lower_to_cont(&builder.finalize().expect("a pure acyclic knot"))
+    lower_to_cps(&builder.finalize().expect("a pure acyclic knot"))
 }
 
-fn force(module: &curios_cont::Module) -> &curios_cont::Function {
+fn force(module: &curios_cps::Module) -> &curios_cps::Function {
     module
         .functions()
         .iter()
@@ -51,16 +51,16 @@ fn force(module: &curios_cont::Module) -> &curios_cont::Function {
         .expect("left's forcing function")
 }
 
-fn executable(module: &curios_cont::Module, mut node: curios_cont::NodeId) -> &curios_cont::Node {
+fn executable(module: &curios_cps::Module, mut node: curios_cps::NodeId) -> &curios_cps::Node {
     loop {
         match module.node(node).unwrap() {
-            curios_cont::Node::LetCont { body, .. } => node = *body,
+            curios_cps::Node::LetCont { body, .. } => node = *body,
             node => return node,
         }
     }
 }
 
-fn resumed(module: &curios_cont::Module, id: curios_cont::ContinuationId) -> &curios_cont::Node {
+fn resumed(module: &curios_cps::Module, id: curios_cps::ContinuationId) -> &curios_cps::Node {
     executable(module, module.continuation(id).unwrap().body)
 }
 
@@ -74,15 +74,15 @@ fn every_initializer_is_published_before_the_first_force() {
     let mut functions_bound = false;
     loop {
         match module.node(node).unwrap() {
-            curios_cont::Node::LetValue { next, .. } => node = *next,
-            curios_cont::Node::LetCont { body, .. } => node = *body,
-            curios_cont::Node::LetFun { body, .. } => {
+            curios_cps::Node::LetValue { next, .. } => node = *next,
+            curios_cps::Node::LetCont { body, .. } => node = *body,
+            curios_cps::Node::LetFun { body, .. } => {
                 assert_eq!((cells.len(), channels.len()), (2, 2));
                 functions_bound = true;
                 node = *body;
             }
-            curios_cont::Node::Cell {
-                op: curios_cont::CellOp::Reserve,
+            curios_cps::Node::Cell {
+                op: curios_cps::CellOp::Reserve,
                 return_to,
                 ..
             } => {
@@ -91,15 +91,15 @@ fn every_initializer_is_published_before_the_first_force() {
                 cells.insert(continuation.params[0]);
                 node = continuation.body;
             }
-            curios_cont::Node::Channel {
-                op: curios_cont::ChannelOp::New,
+            curios_cps::Node::Channel {
+                op: curios_cps::ChannelOp::New,
                 args,
                 return_to,
             } => {
                 assert!(!functions_bound);
                 assert_eq!(
                     args,
-                    &[curios_cont::Atom::Literal(curios_cont::Literal::Nat(
+                    &[curios_cps::Atom::Literal(curios_cps::Literal::Nat(
                         Natural::from(1u32)
                     ))]
                 );
@@ -107,20 +107,20 @@ fn every_initializer_is_published_before_the_first_force() {
                 channels.insert(continuation.params[0]);
                 node = continuation.body;
             }
-            curios_cont::Node::Channel {
-                op: curios_cont::ChannelOp::Push,
+            curios_cps::Node::Channel {
+                op: curios_cps::ChannelOp::Push,
                 args,
                 return_to,
             } => {
                 assert!(functions_bound);
-                let curios_cont::Atom::Value(channel) = args[0] else {
+                let curios_cps::Atom::Value(channel) = args[0] else {
                     panic!("channel handle")
                 };
                 assert!(channels.contains(&channel) && published.insert(channel));
-                assert!(matches!(args[1], curios_cont::Atom::Fun(_)));
+                assert!(matches!(args[1], curios_cps::Atom::Fun(_)));
                 node = module.continuation(*return_to).unwrap().body;
             }
-            curios_cont::Node::ApplyFun { .. } => {
+            curios_cps::Node::ApplyFun { .. } => {
                 assert_eq!(published, channels);
                 break;
             }
@@ -133,8 +133,8 @@ fn every_initializer_is_published_before_the_first_force() {
 fn a_cached_result_returns_without_touching_the_initializer() {
     let module = knot();
     let function = force(&module);
-    let curios_cont::Node::Cell {
-        op: curios_cont::CellOp::Poll,
+    let curios_cps::Node::Cell {
+        op: curios_cps::CellOp::Poll,
         return_to,
         ..
     } = executable(&module, function.body)
@@ -142,21 +142,21 @@ fn a_cached_result_returns_without_touching_the_initializer() {
         panic!("poll first")
     };
     let polled = module.continuation(*return_to).unwrap();
-    let curios_cont::Node::Switch { cases, .. } = resumed(&module, *return_to) else {
+    let curios_cps::Node::Switch { cases, .. } = resumed(&module, *return_to) else {
         panic!("dispatch presence")
     };
-    let curios_cont::Node::ApplyCont(edge) = resumed(&module, cases[&1].target) else {
+    let curios_cps::Node::ApplyCont(edge) = resumed(&module, cases[&1].target) else {
         panic!("cached return")
     };
     assert_eq!(edge.target, function.return_cont);
-    assert_eq!(edge.args, vec![curios_cont::Atom::Value(polled.params[1])]);
+    assert_eq!(edge.args, vec![curios_cps::Atom::Value(polled.params[1])]);
 }
 
 #[test]
 fn an_empty_initializer_is_a_cycle_and_a_taken_initializer_fills_the_result() {
     let module = knot();
     let function = force(&module);
-    let curios_cont::Node::Cell {
+    let curios_cps::Node::Cell {
         args: poll_args,
         return_to,
         ..
@@ -164,11 +164,11 @@ fn an_empty_initializer_is_a_cycle_and_a_taken_initializer_fills_the_result() {
     else {
         panic!("poll")
     };
-    let curios_cont::Node::Switch { cases, .. } = resumed(&module, *return_to) else {
+    let curios_cps::Node::Switch { cases, .. } = resumed(&module, *return_to) else {
         panic!("presence")
     };
-    let curios_cont::Node::Channel {
-        op: curios_cont::ChannelOp::Take,
+    let curios_cps::Node::Channel {
+        op: curios_cps::ChannelOp::Take,
         return_to,
         ..
     } = resumed(&module, cases[&0].target)
@@ -176,15 +176,15 @@ fn an_empty_initializer_is_a_cycle_and_a_taken_initializer_fills_the_result() {
         panic!("claim initializer")
     };
     let taken = module.continuation(*return_to).unwrap();
-    let curios_cont::Node::Switch { cases, .. } = resumed(&module, *return_to) else {
+    let curios_cps::Node::Switch { cases, .. } = resumed(&module, *return_to) else {
         panic!("take outcome")
     };
     assert!(matches!(
         resumed(&module, cases[&1].target),
-        curios_cont::Node::Panic(curios_cont::Panic::Cycle)
+        curios_cps::Node::Panic(curios_cps::Panic::Cycle)
     ));
-    let curios_cont::Node::ApplyFun {
-        callee: curios_cont::Callee::Closure(thunk),
+    let curios_cps::Node::ApplyFun {
+        callee: curios_cps::Callee::Closure(thunk),
         args,
         return_to,
     } = resumed(&module, cases[&0].target)
@@ -194,8 +194,8 @@ fn an_empty_initializer_is_a_cycle_and_a_taken_initializer_fills_the_result() {
     assert_eq!(*thunk, taken.params[1]);
     assert!(args.is_empty());
     let produced = module.continuation(*return_to).unwrap().params[0];
-    let curios_cont::Node::Cell {
-        op: curios_cont::CellOp::Fill,
+    let curios_cps::Node::Cell {
+        op: curios_cps::CellOp::Fill,
         args,
         return_to,
     } = resumed(&module, *return_to)
@@ -204,13 +204,13 @@ fn an_empty_initializer_is_a_cycle_and_a_taken_initializer_fills_the_result() {
     };
     assert_eq!(
         args,
-        &[poll_args[0].clone(), curios_cont::Atom::Value(produced)]
+        &[poll_args[0].clone(), curios_cps::Atom::Value(produced)]
     );
-    let curios_cont::Node::ApplyCont(edge) = resumed(&module, *return_to) else {
+    let curios_cps::Node::ApplyCont(edge) = resumed(&module, *return_to) else {
         panic!("return result")
     };
     assert_eq!(edge.target, function.return_cont);
-    assert_eq!(edge.args, vec![curios_cont::Atom::Value(produced)]);
+    assert_eq!(edge.args, vec![curios_cps::Atom::Value(produced)]);
 }
 
 #[test]
@@ -223,17 +223,17 @@ fn forcing_captures_only_the_cell_and_channel() {
     let mut work = vec![function.body];
     while let Some(id) = work.pop() {
         let node = module.node(id).unwrap();
-        for atom in curios_cont::atoms(node) {
+        for atom in curios_cps::atoms(node) {
             match atom {
-                curios_cont::Atom::Value(value) => {
+                curios_cps::Atom::Value(value) => {
                     used.insert(*value);
                 }
-                curios_cont::Atom::Fun(_) => panic!("a force must not capture a named initializer"),
+                curios_cps::Atom::Fun(_) => panic!("a force must not capture a named initializer"),
                 _ => {}
             }
         }
         match node {
-            curios_cont::Node::LetCont {
+            curios_cps::Node::LetCont {
                 continuations,
                 body,
             } => {
@@ -244,21 +244,21 @@ fn forcing_captures_only_the_cell_and_channel() {
                     work.push(continuation.body);
                 }
             }
-            curios_cont::Node::Cell { args, .. } | curios_cont::Node::Channel { args, .. } => {
-                let curios_cont::Atom::Value(handle) = args[0] else {
+            curios_cps::Node::Cell { args, .. } | curios_cps::Node::Channel { args, .. } => {
+                let curios_cps::Atom::Value(handle) = args[0] else {
                     panic!("storage handle")
                 };
                 storage.insert(handle);
             }
-            curios_cont::Node::ApplyFun {
-                callee: curios_cont::Callee::Closure(value),
+            curios_cps::Node::ApplyFun {
+                callee: curios_cps::Callee::Closure(value),
                 ..
             } => {
                 used.insert(*value);
             }
-            curios_cont::Node::ApplyCont(_)
-            | curios_cont::Node::Switch { .. }
-            | curios_cont::Node::Panic(_) => {}
+            curios_cps::Node::ApplyCont(_)
+            | curios_cps::Node::Switch { .. }
+            | curios_cps::Node::Panic(_) => {}
             other => panic!("unexpected force operation: {other:?}"),
         }
     }

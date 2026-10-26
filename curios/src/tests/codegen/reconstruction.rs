@@ -43,7 +43,7 @@ let walk(n: Nat, seed: Nat) -> Option({at: Nat, seen: Nat, low: Holds(0 <= at)})
 
 struct Fixture {
     erased: curios_anf::Module,
-    cont: curios_cont::Module,
+    cps: curios_cps::Module,
     wasm: curios_wasm::Module,
     foreigns: ForeignStore,
 }
@@ -51,21 +51,21 @@ struct Fixture {
 fn compile(source: &str) -> Fixture {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
     let mut erased = None;
-    let mut cont = None;
+    let mut cps = None;
     let (wasm, foreigns) = compile_with_prelude(
         DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| match stage {
             Stage::AnfOptm(module) => erased = Some(module.clone()),
-            Stage::ContOptm(module) => cont = Some(module.clone()),
+            Stage::CpsOptm(module) => cps = Some(module.clone()),
             _ => {}
         },
     )
     .expect("fixture compiles");
     Fixture {
         erased: erased.unwrap(),
-        cont: cont.unwrap(),
+        cps: cps.unwrap(),
         wasm,
         foreigns,
     }
@@ -108,10 +108,10 @@ fn tail_erased(fixture: &Fixture) {
     assert!(calls > 0, "the fixture retains a recursive transfer");
 }
 
-fn cont_nodes(
-    module: &curios_cont::Module,
-    root: curios_cont::NodeId,
-) -> BTreeSet<curios_cont::NodeId> {
+fn cps_nodes(
+    module: &curios_cps::Module,
+    root: curios_cps::NodeId,
+) -> BTreeSet<curios_cps::NodeId> {
     let mut work = vec![root];
     let mut seen = BTreeSet::new();
     while let Some(id) = work.pop() {
@@ -119,10 +119,10 @@ fn cont_nodes(
             continue;
         }
         match module.node(id).unwrap() {
-            curios_cont::Node::LetValue { next, .. }
-            | curios_cont::Node::LetIntrinsic { next, .. } => work.push(*next),
-            curios_cont::Node::LetFun { body, .. } => work.push(*body),
-            curios_cont::Node::LetCont {
+            curios_cps::Node::LetValue { next, .. }
+            | curios_cps::Node::LetIntrinsic { next, .. } => work.push(*next),
+            curios_cps::Node::LetFun { body, .. } => work.push(*body),
+            curios_cps::Node::LetCont {
                 continuations,
                 body,
             } => {
@@ -140,7 +140,7 @@ fn cont_nodes(
 }
 
 fn loop_cont(fixture: &Fixture) {
-    let module = &fixture.cont;
+    let module = &fixture.cps;
     assert!(
         !module
             .live_functions()
@@ -151,8 +151,8 @@ fn loop_cont(fixture: &Fixture) {
         .continuation_ids()
         .find(|&id| module.continuation(id).unwrap().debug_name.as_deref() == Some("/walk"))
         .expect("the contified walk retains its loop");
-    let nodes = cont_nodes(module, module.continuation(target).unwrap().body);
-    assert!(nodes.iter().any(|&id| matches!(module.node(id), Some(curios_cont::Node::ApplyCont(edge)) if edge.target == target)), "the loop has a backedge: {module}");
+    let nodes = cps_nodes(module, module.continuation(target).unwrap().body);
+    assert!(nodes.iter().any(|&id| matches!(module.node(id), Some(curios_cps::Node::ApplyCont(edge)) if edge.target == target)), "the loop has a backedge: {module}");
     let wat = fixture.wasm.to_string();
     let functions = functions(&wat);
     let kernels = functions
@@ -243,16 +243,16 @@ fn an_escaping_walk_with_multiple_callers_keeps_a_tail_recursive_function() {
         PROOF
     ));
     tail_erased(&fixture);
-    let module = &fixture.cont;
+    let module = &fixture.cps;
     let (function, definition) = module
         .live_functions()
         .find(|(_, f)| f.debug_name.as_deref() == Some("/walk"))
         .expect("storing the walk keeps its function boundary");
-    let nodes = cont_nodes(module, definition.body);
+    let nodes = cps_nodes(module, definition.body);
     let mut calls = 0;
     for id in nodes {
-        if let Some(curios_cont::Node::ApplyFun {
-            callee: curios_cont::Callee::Known(callee),
+        if let Some(curios_cps::Node::ApplyFun {
+            callee: curios_cps::Callee::Known(callee),
             return_to,
             ..
         }) = module.node(id)

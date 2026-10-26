@@ -6,7 +6,7 @@
 //! A region whose constructions disagree about width is reported as a *variant* beside its roster and class-merged width, and return components are surveyed apart from the regions — a variant-width return need contain no construction at all, an immediate family's bare constructor returning its payload, so a walk seeded at tuple sites would report its absence as its absence.
 
 use {
-    curios_cont::{
+    curios_cps::{
         Atom, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Literal, Module, Node, NodeId,
         ValueExpr, ValueId,
     },
@@ -117,19 +117,19 @@ const CORPUS: [(&str, &str); 14] = [
     ),
 ];
 
-/// The optimized CPS `source` compiles to, captured at the `cont-optm` stage.
-fn cont_optm_module(source: &str) -> Module {
+/// The optimized CPS `source` compiles to, captured at the `cps-optm` stage.
+fn cps_optm_module(source: &str) -> Module {
     let entrypoint = source.parse::<Entrypoint>().expect("corpus program parses");
 
     let mut captured = None;
     compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
-        if let Stage::ContOptm(module) = stage {
+        if let Stage::CpsOptm(module) = stage {
             captured = Some(module.clone());
         }
     })
     .expect("corpus program compiles");
 
-    captured.expect("the pipeline observes cont-optm")
+    captured.expect("the pipeline observes cps-optm")
 }
 
 /// How one occurrence consumes the value it names, in the classification the module documentation lists.
@@ -620,7 +620,7 @@ impl<'m> Census<'m> {
         shapes
     }
 
-    /// The live nodes cloning `fun` would copy: its own body's, plus — recursively — those of every function declared inside it, which is the accounting `curios-cont`'s `copied_extent` prices a specialization clone at.
+    /// The live nodes cloning `fun` would copy: its own body's, plus — recursively — those of every function declared inside it, which is the accounting `curios-cps`'s `copied_extent` prices a specialization clone at.
     fn extent(&self, fun: FunctionId) -> usize {
         let own = self
             .owner_of_node
@@ -860,7 +860,7 @@ struct Survey {
 
 /// The census over one program, printed one region per line.
 fn survey(label: &str, source: &str) -> Survey {
-    let module = cont_optm_module(source);
+    let module = cps_optm_module(source);
     let census = Census::of(&module);
     let regions = census.regions();
     println!(
@@ -982,7 +982,7 @@ fn aggregate_flow_census() {
                 );
             }
 
-            // The boxed-tag annex: a construction leading with a literal discriminant that nothing in its flow ever reads back. Counted over tag-led constructions rather than over families, because Cont holds no family identity — the tag is what survives the door.
+            // The boxed-tag annex: a construction leading with a literal discriminant that nothing in its flow ever reads back. Counted over tag-led constructions rather than over families, because CPS holds no family identity — the tag is what survives the door.
             if !region.tags.is_empty() {
                 tagged_constructions += region.tuple_sites.len() - region.untagged;
                 if !region.reads.contains(&0) {
@@ -1049,7 +1049,7 @@ fn aggregate_flow_census() {
     }
 }
 
-/// The clone extent the specializer's budget compares, measured on the functions the value-lifetime decision names. `specialize_call_patterns` refuses a clone when the callee's copied extent plus one exceeds `BRANCH_SPECIALIZATION_GROWTH_LIMIT` (`curios-cont/src/optimize.rs`), and the claim that the scan-state candidate is declined *on a budget rather than on a rule* is a claim about these numbers. Run explicitly:
+/// The clone extent the specializer's budget compares, measured on the functions the value-lifetime decision names. `specialize_call_patterns` refuses a clone when the callee's copied extent plus one exceeds `BRANCH_SPECIALIZATION_GROWTH_LIMIT` (`curios-cps/src/optimize.rs`), and the claim that the scan-state candidate is declined *on a budget rather than on a rule* is a claim about these numbers. Run explicitly:
 ///
 /// ```sh
 /// cargo test --package curios --lib --all-features -- --ignored --nocapture step_specialization_extent
@@ -1066,7 +1066,7 @@ fn step_specialization_extent() {
         .find(|(label, _)| *label == "parse_multibyte")
         .expect("the multi-byte fixture is in the corpus")
         .1;
-    let module = cont_optm_module(source);
+    let module = cps_optm_module(source);
     let census = Census::of(&module);
     for (index, slot) in module.functions().iter().enumerate() {
         let Some(function) = slot else { continue };
@@ -1096,7 +1096,7 @@ fn surveys_the_fold_accumulator_region() {
             /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))));
         entry()
         "#;
-    let module = cont_optm_module(source);
+    let module = cps_optm_module(source);
     let census = Census::of(&module);
     let regions = census.regions();
 
@@ -1324,7 +1324,7 @@ fn death_birth_census() {
         .chain(WORKLOADS.iter())
         .chain([("toml_decode", TOML_DRIVER)].iter())
     {
-        let module = cont_optm_module(source);
+        let module = cps_optm_module(source);
         let census = Census::of(&module);
         let tally = rebirth(&census);
 
@@ -1400,7 +1400,7 @@ fn death_birth_classifier_pins_the_canonical_pair() {
             end;
         entry()
     "#;
-    let module = cont_optm_module(paired);
+    let module = cps_optm_module(paired);
     let census = Census::of(&module);
     let tally = rebirth(&census);
     assert!(

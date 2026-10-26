@@ -8,7 +8,7 @@ use {
 #[test]
 fn bytes_slice_calls_the_shared_slice_helper() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesSlice,
+        curios_cps::Intrinsic::BytesSlice,
         vec![bytes_lit(vec![1, 2, 3]), nat(0), nat(2)],
     ));
     assert_contains(&wat, "call $bytes/slice");
@@ -20,7 +20,7 @@ fn bytes_slice_calls_the_shared_slice_helper() {
 #[test]
 fn a_cut_copies_nothing_of_its_base() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesSlice,
+        curios_cps::Intrinsic::BytesSlice,
         vec![bytes_lit(vec![1, 2, 3]), nat(0), nat(2)],
     ));
 
@@ -30,7 +30,7 @@ fn a_cut_copies_nothing_of_its_base() {
 #[test]
 fn bytes_read_calls_the_read_helper_and_forces_its_input() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesGet,
+        curios_cps::Intrinsic::BytesGet,
         vec![bytes_lit(vec![1, 2, 3]), nat(1)],
     ));
     assert_contains(&wat, "call $bytes/read");
@@ -54,7 +54,7 @@ fn func<'a>(wat: &'a str, name: &str) -> &'a str {
 #[test]
 fn a_read_of_an_unflattened_node_looks_in_its_children_before_it_forces() {
     let packed = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesGet,
+        curios_cps::Intrinsic::BytesGet,
         vec![bytes_lit(vec![1, 2, 3]), nat(1)],
     ));
 
@@ -85,7 +85,7 @@ fn a_read_of_an_unflattened_node_looks_in_its_children_before_it_forces() {
 /// A consumer of a forced payload bounds its walk by the run's `len` and never by its array's length, which a flattened payload may hold room past: equality, the pointwise combiners, a map, the host's deep and scalar forms and the write a force fills its payload by read no `array.len` at all, and a force reads one, the capacity of its first piece's payload, where it claims that piece's room.
 #[test]
 fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
-    let packed = |op: curios_cont::Intrinsic| {
+    let packed = |op: curios_cps::Intrinsic| {
         wat(&intrinsic_main(
             op,
             vec![bytes_lit(vec![1, 2, 3, 4]), bytes_lit(vec![5, 6, 7, 8])],
@@ -99,8 +99,8 @@ fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
         ],
         WireResults::single(WireType::Nat),
     )));
-    let eql = packed(curios_cont::Intrinsic::BytesEql);
-    let and = packed(curios_cont::Intrinsic::BytesAnd);
+    let eql = packed(curios_cps::Intrinsic::BytesEql);
+    let and = packed(curios_cps::Intrinsic::BytesAnd);
     let map = wat(&list_map());
 
     for (wat, helper) in [
@@ -127,7 +127,7 @@ fn a_consumer_of_a_forced_payload_reads_the_runs_length() {
 #[test]
 fn a_flattening_allocates_nothing_but_its_payload() {
     let bytes = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesGet,
+        curios_cps::Intrinsic::BytesGet,
         vec![bytes_lit(vec![1, 2, 3, 4]), nat(1)],
     ));
     let list = wat(&list_read());
@@ -180,7 +180,7 @@ fn what_leaves_the_rope_is_its_exact_payload() {
 #[test]
 fn a_flattening_reads_its_first_pieces_extent_before_it_allocates() {
     let bytes = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesGet,
+        curios_cps::Intrinsic::BytesGet,
         vec![bytes_lit(vec![1, 2, 3, 4]), nat(1)],
     ));
     let list = wat(&list_read());
@@ -207,7 +207,7 @@ fn a_flattening_reads_its_first_pieces_extent_before_it_allocates() {
 #[test]
 fn a_node_is_built_with_no_room() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesConcat(2),
+        curios_cps::Intrinsic::BytesConcat(2),
         vec![bytes_lit(vec![1, 2, 3, 4]), bytes_lit(vec![5, 6, 7, 8])],
     ));
     let room = wat
@@ -222,7 +222,7 @@ fn a_node_is_built_with_no_room() {
 #[test]
 fn bytes_eql_calls_the_equality_helper() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesEql,
+        curios_cps::Intrinsic::BytesEql,
         vec![bytes_lit(vec![1, 2]), bytes_lit(vec![1, 2])],
     ));
     assert_contains(&wat, "call $bytes/eql");
@@ -231,7 +231,7 @@ fn bytes_eql_calls_the_equality_helper() {
 #[test]
 fn bytes_concat_builds_o1_nodes_inline_without_a_helper() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesConcat(2),
+        curios_cps::Intrinsic::BytesConcat(2),
         vec![bytes_lit(vec![1]), bytes_lit(vec![2])],
     ));
     assert_contains(&wat, "struct.new $rope/bytes/node");
@@ -242,7 +242,7 @@ fn bytes_concat_builds_o1_nodes_inline_without_a_helper() {
 #[test]
 fn bytes_concat_joins_two_immediates_by_arithmetic_ahead_of_the_node() {
     let pair = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesConcat(2),
+        curios_cps::Intrinsic::BytesConcat(2),
         vec![bytes_lit(vec![1]), bytes_lit(vec![2])],
     ));
     assert_eq!(count(&pair, "block $bytes_concat_rope"), 1);
@@ -250,7 +250,7 @@ fn bytes_concat_joins_two_immediates_by_arithmetic_ahead_of_the_node() {
     assert_contains(&pair, "struct.new $rope/bytes/node");
 
     let triple = wat(&intrinsic_main(
-        curios_cont::Intrinsic::BytesConcat(3),
+        curios_cps::Intrinsic::BytesConcat(3),
         vec![bytes_lit(vec![1]), bytes_lit(vec![2]), bytes_lit(vec![3])],
     ));
     assert_eq!(count(&triple, "block $bytes_concat_rope"), 2);
@@ -259,7 +259,7 @@ fn bytes_concat_joins_two_immediates_by_arithmetic_ahead_of_the_node() {
 /// A packed operand a lowering reads more than once is boxed once, since a box of an immediate is a fresh leaf: a concatenation's rope arm boxes each operand once for its empty tests, its length sum and its node, a pointwise combiner its left operand once for its force and its two lengths, and a suffix its carrier once for its window and its length.
 #[test]
 fn a_packed_operand_is_boxed_once_however_often_it_is_read() {
-    let boxes = |op: curios_cont::Intrinsic, args| {
+    let boxes = |op: curios_cps::Intrinsic, args| {
         count(
             func(&wat(&intrinsic_main(op, args)), "$func/main"),
             "call $bytes/box",
@@ -268,21 +268,21 @@ fn a_packed_operand_is_boxed_once_however_often_it_is_read() {
 
     assert_eq!(
         boxes(
-            curios_cont::Intrinsic::BytesConcat(2),
+            curios_cps::Intrinsic::BytesConcat(2),
             vec![bytes_lit(vec![1, 2]), bytes_lit(vec![3, 4])]
         ),
         2
     );
     assert_eq!(
         boxes(
-            curios_cont::Intrinsic::BytesAnd,
+            curios_cps::Intrinsic::BytesAnd,
             vec![bytes_lit(vec![1, 2]), bytes_lit(vec![3, 4])]
         ),
         2
     );
     assert_eq!(
         boxes(
-            curios_cont::Intrinsic::BytesRest,
+            curios_cps::Intrinsic::BytesRest,
             vec![bytes_lit(vec![1, 2]), nat(1)]
         ),
         1

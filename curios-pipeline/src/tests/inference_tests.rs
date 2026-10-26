@@ -372,7 +372,7 @@ fn a_wildcard_parameter_nothing_types_is_described_rather_than_quoted() {
 
 #[test]
 fn typecheck_accepts_a_well_typed_program() {
-    // The fast path stops after `elaborate → zonk`; a well-typed program passes without running erase/cont/optimize/wasm.
+    // The fast path stops after `elaborate → zonk`; a well-typed program passes without running erase/cps/optimize/wasm.
     assert!(typecheck("/std/print(/std/Nat/to_str(0))").is_ok());
 }
 

@@ -15,8 +15,8 @@ pub enum Stage<'a> {
     CoreElab(&'a curios_core::Program),
     Anf(&'a curios_anf::Module),
     AnfOptm(&'a curios_anf::Module),
-    Cont(&'a curios_cont::Module),
-    ContOptm(&'a curios_cont::Module),
+    Cps(&'a curios_cps::Module),
+    CpsOptm(&'a curios_cps::Module),
     Wasm(&'a curios_wasm::Module),
     /// The Binaryen-optimized module, rendered by Binaryen's own text writer when the observer formats it — ground truth from the session that optimized it, not a reader's reconstruction, and free for an observer that does not look. The native product's `optimize` emits it where Binaryen runs, as the driver emits every other stage at its production site; `compile_entrypoint` never does, and `every_stage_is_observed_once_in_names_order` pins that deliberate absence.
     WasmOptm(&'a dyn fmt::Display),
@@ -30,8 +30,8 @@ impl<'a> Stage<'a> {
         "core-elab",
         "anf",
         "anf-optm",
-        "cont",
-        "cont-optm",
+        "cps",
+        "cps-optm",
         "wasm",
         "wasm-optm",
     ];
@@ -49,8 +49,8 @@ impl<'a> Stage<'a> {
             Stage::CoreElab(_) => "core-elab",
             Stage::Anf(_) => "anf",
             Stage::AnfOptm(_) => "anf-optm",
-            Stage::Cont(_) => "cont",
-            Stage::ContOptm(_) => "cont-optm",
+            Stage::Cps(_) => "cps",
+            Stage::CpsOptm(_) => "cps-optm",
             Stage::Wasm(_) => "wasm",
             Stage::WasmOptm(_) => "wasm-optm",
         }
@@ -65,8 +65,8 @@ impl fmt::Display for Stage<'_> {
             Stage::CoreElab(program) => write!(f, "{program}"),
             Stage::Anf(module) => write!(f, "{module}"),
             Stage::AnfOptm(module) => write!(f, "{module}"),
-            Stage::Cont(module) => write!(f, "{module}"),
-            Stage::ContOptm(module) => write!(f, "{module}"),
+            Stage::Cps(module) => write!(f, "{module}"),
+            Stage::CpsOptm(module) => write!(f, "{module}"),
             // The one stage dump rendered within a width: `wonder stage wasm` is a manual-inspection surface, and wide signature lines break one binding per line there. The other document-based dumps use the unbounded layout, their printers having no break points worth fitting.
             Stage::Wasm(module) => write!(f, "{}", module.display_within(100)),
             // Already laid out by Binaryen's writer; only its trailing newline is trimmed, so this dump ends like every house-rendered one.

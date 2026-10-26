@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::tests::{cont_optm_module, emits, run},
+    crate::tests::{cps_optm_module, emits, run},
 };
 
 /// The tree's payloads stay `(ref null any)` in its row, which is what makes the representation analysis's locals-only scope *observable* rather than merely intended: it reaches locals and block parameters, never a heap layout, because a field is a contract between an allocation site and every reader of it rather than one function's private decision. A row's typed slots are the door's decision, made from the recorded shape, and here it types the tag alone; a scalar payload appearing here means the analysis's scope leaked.
@@ -217,13 +217,13 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         "#;
 
     assert!(
-        emits(&cont_optm_module(nat_family), |op| *op
-            == curios_cont::Intrinsic::IsImmediate),
+        emits(&cps_optm_module(nat_family), |op| *op
+            == curios_cps::Intrinsic::IsImmediate),
         "an always-immediate unary payload keeps the bare encoding"
     );
-    let module = cont_optm_module(bytes_family);
+    let module = cps_optm_module(bytes_family);
     assert!(
-        !emits(&module, |op| *op == curios_cont::Intrinsic::IsImmediate),
+        !emits(&module, |op| *op == curios_cps::Intrinsic::IsImmediate),
         "a sometimes-immediate packed payload declines it: {module}"
     );
 
@@ -274,7 +274,7 @@ fn a_two_way_dispatch_is_a_branch_not_a_table() {
 
 /// An aggregate is read at its own final type — a variant family through its own row, a structural tuple through the roster.
 ///
-/// A prefix subtype chain — `$tuple/4 <: $tuple/3 <: … <: $tuple/1` — would let one `ref.cast (ref $tuple/1)` read field 0 of any tuple whatever its arity, and would make the cast a *host call*: wasmtime's `is_subtype` short-circuits only when the target is final, so every cast to a prefix of a wider object would take the `is_subtype` libcall. Final types keep the short-circuit, and the reader finds a tuple's exact type by exhausting the roster instead; correctness does not rest on an object's arity being its construction's, which `curios-cont`'s field split makes false whenever a narrow tuple materialises at its region's width. A family is one final row at its own width, so a family read is a single exact cast with no roster to search — this fixture pins that half, and the `$tuple/` finality check below the other.
+/// A prefix subtype chain — `$tuple/4 <: $tuple/3 <: … <: $tuple/1` — would let one `ref.cast (ref $tuple/1)` read field 0 of any tuple whatever its arity, and would make the cast a *host call*: wasmtime's `is_subtype` short-circuits only when the target is final, so every cast to a prefix of a wider object would take the `is_subtype` libcall. Final types keep the short-circuit, and the reader finds a tuple's exact type by exhausting the roster instead; correctness does not rest on an object's arity being its construction's, which `curios-cps`'s field split makes false whenever a narrow tuple materialises at its region's width. A family is one final row at its own width, so a family read is a single exact cast with no roster to search — this fixture pins that half, and the `$tuple/` finality check below the other.
 ///
 /// The programs final types move are exactly those whose hot loop reads a multi-constructor heap family, `chain` and `spines`, which makes the gain a class rather than a coincidence; `lcg` declares no variant at all, `trees`' leaf rides the i31 so its family never reads a tag and its one boxed constructor casts exactly, and `churn`'s hot loop is not a variant walk.
 #[test]
@@ -391,8 +391,8 @@ fn a_window_walk_holds_its_end_and_length_in_words_read_unsigned() {
         entry()
         "#;
 
-    let module = cont_optm_module(source);
-    let decided = curios_cont::representation(&module).values;
+    let module = cps_optm_module(source);
+    let decided = curios_cps::representation(&module).values;
     let fields = module
         .value_ids()
         .filter_map(|value| {
@@ -409,7 +409,7 @@ fn a_window_walk_holds_its_end_and_length_in_words_read_unsigned() {
     for (name, value) in fields {
         assert_eq!(
             decided[&value],
-            curios_cont::Storage::Raw(curios_cont::Repr::Length),
+            curios_cps::Storage::Raw(curios_cps::Repr::Length),
             "`{name}` rides a word read unsigned"
         );
     }

@@ -899,7 +899,7 @@ fn define_walk(
             args: vec![Atom::Value(head)],
         }),
     });
-    // A *suffix*, which is what `into_cont`'s peel emits: no count operand, so the fixture exercises the shape the compiler actually produces.
+    // A *suffix*, which is what `into_cps`'s peel emits: no count operand, so the fixture exercises the shape the compiler actually produces.
     let slice = module.add_node(Node::LetIntrinsic {
         result: tail,
         op: Intrinsic::BytesRest,

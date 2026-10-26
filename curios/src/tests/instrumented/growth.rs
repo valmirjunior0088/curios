@@ -79,8 +79,8 @@ const STAGES: [&str; 11] = [
     "elaborate",
     "erase",
     "anf-optm",
-    "cont",
-    "cont-optm",
+    "cps",
+    "cps-optm",
     "emit",
     "binaryen",
     "cranelift",
@@ -108,8 +108,8 @@ fn counted(source: &str, counters: &Counters) -> [Count; 11] {
                 Stage::CoreElab(_) => 3,
                 Stage::Anf(_) => 4,
                 Stage::AnfOptm(_) => 5,
-                Stage::Cont(_) => 6,
-                Stage::ContOptm(_) => 7,
+                Stage::Cps(_) => 6,
+                Stage::CpsOptm(_) => 7,
                 Stage::Wasm(_) => 8,
                 Stage::WasmOptm(_) => return,
             };
@@ -249,19 +249,19 @@ const HELD_SLOPE: f64 = 3.0;
 ///
 /// | growth | n | instructions | looks | allocations | bytes |
 /// | --- | --- | --- | --- | --- | --- |
-/// | LetPlus | 25 | 2.34 binaryen | 2.00 erase | 2.23 cont-optm | 2.11 cont |
-/// | LetCall | 25 | 2.37 binaryen | 2.00 erase | 2.23 cont-optm | 2.73 parse |
+/// | LetPlus | 25 | 2.34 binaryen | 2.00 erase | 2.23 cps-optm | 2.11 cps |
+/// | LetCall | 25 | 2.37 binaryen | 2.00 erase | 2.23 cps-optm | 2.73 parse |
 /// | Statements | 100 | 2.19 elaborate | 2.00 erase | 2.03 erase | 2.26 binaryen |
 /// | Definitions | 250 | 2.03 parse | 2.00 erase | 2.00 erase | 2.58 parse |
 /// | Functions | 250 | 3.37 binaryen | 2.00 erase | 2.09 cranelift | 2.74 cranelift |
 /// | Strings | 250 | 2.00 parse | 2.00 lower | 2.00 parse | 2.00 binaryen |
 /// | List | 1000 | 1.98 erase | 2.00 erase | 2.00 elaborate | 2.00 binaryen |
-/// | ListOpen | 400 | 3.80 binaryen | 2.00 erase | 2.11 cont | 2.83 cont |
+/// | ListOpen | 400 | 3.80 binaryen | 2.00 erase | 2.11 cps | 2.83 cps |
 /// | Arms | 250 | 6.15 binaryen | 2.00 erase | 2.03 cranelift | 2.56 cranelift |
-/// | Parameters | 400 | 2.20 anf-optm | 2.00 erase | 2.08 cont | 2.24 anf-optm |
+/// | Parameters | 400 | 2.20 anf-optm | 2.00 erase | 2.08 cps | 2.24 anf-optm |
 /// | ParametersSummed | 100 | 2.84 binaryen | 2.00 erase | 2.06 cranelift | 2.37 cranelift |
-/// | LetsSummed | 250 | 3.94 cranelift | 2.00 erase | 2.17 cont | 3.49 cranelift |
-/// | ProductCommuted | 128 | 3.21 cont | 2.00 erase | 2.03 elaborate | 2.82 cont |
+/// | LetsSummed | 250 | 3.94 cranelift | 2.00 erase | 2.17 cps | 3.49 cranelift |
+/// | ProductCommuted | 128 | 3.21 cps | 2.00 erase | 2.03 elaborate | 2.82 cps |
 /// | Tuple | 250 | 2.05 lower | 2.00 erase | 2.00 parse | 2.03 elaborate |
 /// | Fields | 250 | 2.07 elaborate | 2.00 erase | 2.00 erase | 2.01 elaborate |
 /// | StructReaders | 250 | 2.16 elaborate | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
@@ -271,22 +271,22 @@ const HELD_SLOPE: f64 = 3.0;
 /// | ComparedConstructions | 250 | 2.07 binaryen | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
 /// | AliasReaders | 250 | 2.02 elaborate | 2.00 erase | 2.00 elaborate | 2.00 erase |
 /// | ArrowAliasReaders | 250 | 2.02 parse | 2.00 erase | 2.00 elaborate | 2.00 elaborate |
-/// | Methods | 250 | 2.54 cont-optm | 2.00 erase | 2.02 cont | 2.19 cont |
-/// | Calls | 250 | 2.01 erase | 2.00 erase | 2.05 cont | 2.75 cont |
+/// | Methods | 250 | 2.54 cps-optm | 2.00 erase | 2.02 cps | 2.19 cps |
+/// | Calls | 250 | 2.01 erase | 2.00 erase | 2.05 cps | 2.75 cps |
 /// | Parentheses | 1000 | 2.01 parse | - | 2.00 parse | 2.00 parse |
 /// | RightPlus | 250 | 3.47 cranelift | 2.00 erase | 2.07 cranelift | 3.57 cranelift |
-/// | LeftPlus | 250 | 3.37 binaryen | 2.00 erase | 2.07 cranelift | 2.71 cont |
+/// | LeftPlus | 250 | 3.37 binaryen | 2.00 erase | 2.07 cranelift | 2.71 cps |
 /// | Matches | 200 | 3.36 binaryen | 2.00 erase | 2.01 cranelift | 2.80 cranelift |
-/// | ChainedMatches | 100 | 2.93 binaryen | 2.00 erase | 2.09 cont-optm | 2.29 cranelift |
-/// | Lambdas | 100 | 2.06 cont | 2.47 elaborate | 2.07 erase | 2.52 cont |
+/// | ChainedMatches | 100 | 2.93 binaryen | 2.00 erase | 2.09 cps-optm | 2.29 cranelift |
+/// | Lambdas | 100 | 2.06 cps | 2.47 elaborate | 2.07 erase | 2.52 cps |
 /// | Lists | 400 | 3.70 binaryen | 2.00 erase | 2.01 emit | 2.68 anf-optm |
 /// | Lets | 100 | 2.13 erase | 2.00 erase | 2.00 elaborate | 2.33 erase |
 /// | Arrow | 1000 | 2.06 elaborate | 2.00 erase | 2.08 elaborate | 2.05 elaborate |
 /// | StringLiteral | 2000 | 2.01 elaborate | 2.00 erase | 2.00 erase | 2.00 elaborate |
 ///
-/// A product commuted's instructions at `cont` read 3.21 here, above [`HELD_SLOPE`], and 2.38 and 2.16 in two more runs of the same compiler: the hash keys a run draws move them.
+/// A product commuted's instructions at `cps` read 3.21 here, above [`HELD_SLOPE`], and 2.38 and 2.16 in two more runs of the same compiler: the hash keys a run draws move them.
 ///
-/// **Twenty-one growths are held in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements, nested lambdas, matches each on the `let` before it, a product of two spines commuted, a structure's readers, a family's values, its constructions compared, and a tuple alias's and a function-type alias's readers, the ones [`HELD`] lists. **Twelve more are held through emission**, the ones [`HELD_FRONT`] lists. A family's defaulted matches are held in neither: their parse stage's bytes read 3.00, at the bound. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cont` do.
+/// **Twenty-one growths are held in every stage**: definitions, strings, a list literal, a telescope's parameters, a tuple, a family's constructors, a concept's methods, nested calls, parentheses, `let`s, an arrow, a string literal, an `Io` block's statements, nested lambdas, matches each on the `let` before it, a product of two spines commuted, a structure's readers, a family's values, its constructions compared, and a tuple alias's and a function-type alias's readers, the ones [`HELD`] lists. **Twelve more are held through emission**, the ones [`HELD_FRONT`] lists. A family's defaulted matches are held in neither: their parse stage's bytes read 3.00, at the bound. One reading below [`HELD_SLOPE`] at the grid's sizes may still hold a square too small there to show, as nested list literals' bytes in `cps` do.
 #[test]
 #[ignore = "measurement, counted: run by hand, alone in its invocation"]
 fn growth_slopes() {

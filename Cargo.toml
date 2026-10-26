@@ -11,7 +11,7 @@ members = [
     "curios-parse",
     "curios-print",
     "curios-wasm",
-    "curios-cont",
+    "curios-cps",
     "curios-emit",
     "curios-anf",
     "curios-core",
@@ -70,7 +70,7 @@ curios-algebra = { path = "curios-algebra" }
 curios-parse = { path = "curios-parse" }
 curios-print = { path = "curios-print" }
 curios-wasm = { path = "curios-wasm" }
-curios-cont = { path = "curios-cont" }
+curios-cps = { path = "curios-cps" }
 curios-emit = { path = "curios-emit" }
 curios-anf = { path = "curios-anf" }
 curios-core = { path = "curios-core" }

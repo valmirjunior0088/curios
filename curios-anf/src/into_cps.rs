@@ -1,10 +1,10 @@
-//! The lowering into Cont — the one-way door from meaning to mechanism.
+//! The lowering into CPS — the one-way door from meaning to mechanism.
 //!
 //! Every encoding decision the erasure deliberately deferred is made here, exactly once, and this is the table: `Unit`, `Bool`, and `Byte` ride the `Nat` carrier (`Bool` operations become `Nat` bit operations, `Byte` comparisons `Nat` comparisons, `NatToByte` a mask, `ByteToNat` the identity); a `Handle` token is its little-endian bytes as a `Bytes` value; a declared product and a variant are nominal rows (a variant is `(tag, payload…)`, the tag the constructor's position in its family, every construction padded to its family's width with each field in the slot its carrier owns), and a shared anonymous row stays a structural tuple; a single-constructor family collapses instead — nothing ever needs discriminating, so the tag is never minted and it encodes as the struct with the same relevant row would (one payload the bare value, several an untagged tuple, none the `Nat` zero, matches dispatch-free); a family whose one immediate-unary constructor stands beside boxed siblings rides that constructor bare too, matches discriminating with an `IsImmediate` test instead of a tag read; matches and switches are otherwise one `Nat`-keyed `Switch` behind the tag projection; the fold forms are synthesized accumulator loops; a function-only recursive group is a `LetFun`, and a group with computed members is a knot tied through write-once result cells and capacity-one initializer channels. The per-family choice is [`FamilyEncoding`], a pure function of the registered schema; see `documentation/design/compilation/a-variant-collapses-when-nothing-needs-to-distinguish-it.md` for the decision.
 //!
-//! The lowering is target-continuation shaped: each arena block is lowered against the continuation that receives its result — its terminator delivers there, and its statements build the node chain in front. Because the arena is already ANF, every operand is an atom and maps directly to a [`curios_cont::Atom`]; no administrative continuation is introduced merely to evaluate an operand. Only a genuine control split — an application return, a switch or match, a fold loop, a host call — opens a join continuation whose parameter receives the split's result and whose body is the rest of the block.
+//! The lowering is target-continuation shaped: each arena block is lowered against the continuation that receives its result — its terminator delivers there, and its statements build the node chain in front. Because the arena is already ANF, every operand is an atom and maps directly to a [`curios_cps::Atom`]; no administrative continuation is introduced merely to evaluate an operand. Only a genuine control split — an application return, a switch or match, a fold loop, a host call — opens a join continuation whose parameter receives the split's result and whose body is the rest of the block.
 //!
-//! Arena identities are globally unique and never shadowed, so flat maps to their Cont counterparts suffice; source hints are carried onto the Cont values and functions they lower to.
+//! Arena identities are globally unique and never shadowed, so flat maps to their CPS counterparts suffice; source hints are carried onto the CPS values and functions they lower to.
 
 mod census;
 pub(crate) use census::*;
@@ -36,21 +36,21 @@ use {
     curios_utilities::grown,
 };
 
-/// Lower a verified arena [`Module`] into a Cont [`curios_cont::Module`]. The module's top level — its item chain followed by its entry block — becomes the parameterless Cps entry `main`, delivering its result to a bodyless `return_cont`. The produced module is verified; a failure is a lowering bug, not a user error, so it panics.
+/// Lower a verified arena [`Module`] into a CPS [`curios_cps::Module`]. The module's top level — its item chain followed by its entry block — becomes the parameterless Cps entry `main`, delivering its result to a bodyless `return_cont`. The produced module is verified; a failure is a lowering bug, not a user error, so it panics.
 ///
 /// The walk recurses once per statement and once per block nesting, inside [`recurse`](curios_utilities::recurse), and the stage takes its first segment with [`grown`]: a folded parser is a chain of thousands of statements, which would overflow the default test-thread stack at about 1 900 levels.
-pub fn lower_to_cont(source: &Module) -> curios_cont::Module {
-    curios_profile::profile!("lower_to_cont");
-    grown(|| lower_to_cont_within(source))
+pub fn lower_to_cps(source: &Module) -> curios_cps::Module {
+    curios_profile::profile!("lower_to_cps");
+    grown(|| lower_to_cps_within(source))
 }
 
-fn lower_to_cont_within(source: &Module) -> curios_cont::Module {
+fn lower_to_cps_within(source: &Module) -> curios_cps::Module {
     Lowerer::new(source).finish()
 }
 
 /// An argumentless edge into a switch arm.
-fn edge(target: curios_cont::ContinuationId) -> curios_cont::Edge {
-    curios_cont::Edge {
+fn edge(target: curios_cps::ContinuationId) -> curios_cps::Edge {
+    curios_cps::Edge {
         target,
         args: Vec::new(),
     }

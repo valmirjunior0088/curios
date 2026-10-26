@@ -75,7 +75,7 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
         match data {
             EmissionData::Nat(value) => {
                 let key = ConstKey::Nat(value.clone());
-                match curios_cont::nat_is_small(value) {
+                match curios_cps::nat_is_small(value) {
                     true => {
                         consts.scalars.insert(name.clone(), (key, data.clone()));
                     }
@@ -87,7 +87,7 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
             }
             EmissionData::Int(value) => {
                 let key = ConstKey::Int(value.clone());
-                match curios_cont::int_is_small(value) {
+                match curios_cps::int_is_small(value) {
                     true => {
                         consts.scalars.insert(name.clone(), (key, data.clone()));
                     }

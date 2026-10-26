@@ -339,8 +339,8 @@ The stages, in the order the compiler passes them:
 | `core-elab` | the same after elaboration and zonking — the module every later stage consumes |
 | `anf` | the erased term, in A-normal form |
 | `anf-optm` | the erased term in A-normal form, after optimization |
-| `cont` | the continuation IR |
-| `cont-optm` | the continuation IR after optimization |
+| `cps` | the program in continuation-passing style |
+| `cps-optm` | the program in continuation-passing style, after optimization |
 | `wasm` | the emitted WebAssembly module |
 | `wasm-optm` | the module after Binaryen optimization, rendered by Binaryen's own text writer |
 

@@ -19,7 +19,7 @@ impl<'a, 'b> TurnEmitter<'a, 'b> {
     }
 
     /// Export the entry's turn and the advance. `entry` is the program's own entry function, answering what its forced description answered; `row` is the suspension's.
-    pub(crate) fn emit_turns(&mut self, entry: curios_wasm::FuncName, row: curios_cont::RowId) {
+    pub(crate) fn emit_turns(&mut self, entry: curios_wasm::FuncName, row: curios_cps::RowId) {
         let turn = self.emit_turn(row);
 
         let main = self.add_func(
@@ -61,7 +61,7 @@ impl<'a, 'b> TurnEmitter<'a, 'b> {
     }
 
     /// `$io/turn (anyref) -> turn`: what a forced description answered, as a turn. The handles cross as a `List(Handle)` operand of a host row does.
-    fn emit_turn(&mut self, row: curios_cont::RowId) -> curios_wasm::FuncName {
+    fn emit_turn(&mut self, row: curios_cps::RowId) -> curios_wasm::FuncName {
         let row_type = self.table.find_row_type(row);
         let answer = curios_wasm::LocalName::from("answer");
         let suspension = curios_wasm::LocalName::from("suspension");

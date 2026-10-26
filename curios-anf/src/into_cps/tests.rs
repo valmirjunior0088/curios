@@ -10,61 +10,61 @@ fn nat(builder: &mut AnfBuilder, value: u32) -> Atom {
     Atom::Constant(constant)
 }
 
-/// Every completed lowering has already passed `curios_cont::Module::verify` inside `lower_to_cont`; the shape assertions on top ask the graph.
+/// Every completed lowering has already passed `curios_cps::Module::verify` inside `lower_to_cps`; the shape assertions on top ask the graph.
 ///
 /// They ask the graph rather than the printed text: a spelling belongs to the printer, so an assertion over it is a claim about how a Rust variant is rendered, which a printer change can turn quietly vacuous rather than failing. The printed module is still what a failure reports, because that is what a reader needs in front of them.
-fn lowered(module: &Module) -> curios_cont::Module {
-    lower_to_cont(module)
+fn lowered(module: &Module) -> curios_cps::Module {
+    lower_to_cps(module)
 }
 
-fn has_node(module: &curios_cont::Module, predicate: impl Fn(&curios_cont::Node) -> bool) -> bool {
+fn has_node(module: &curios_cps::Module, predicate: impl Fn(&curios_cps::Node) -> bool) -> bool {
     module.nodes().iter().flatten().any(predicate)
 }
 
 fn has_intrinsic(
-    module: &curios_cont::Module,
-    predicate: impl Fn(&curios_cont::Intrinsic) -> bool,
+    module: &curios_cps::Module,
+    predicate: impl Fn(&curios_cps::Intrinsic) -> bool,
 ) -> bool {
     has_node(module, |node| match node {
-        curios_cont::Node::LetIntrinsic { op, .. } => predicate(op),
+        curios_cps::Node::LetIntrinsic { op, .. } => predicate(op),
         _ => false,
     })
 }
 
 fn has_value(
-    module: &curios_cont::Module,
-    predicate: impl Fn(&curios_cont::ValueExpr) -> bool,
+    module: &curios_cps::Module,
+    predicate: impl Fn(&curios_cps::ValueExpr) -> bool,
 ) -> bool {
     has_node(module, |node| match node {
-        curios_cont::Node::LetValue { value, .. } => predicate(value),
+        curios_cps::Node::LetValue { value, .. } => predicate(value),
         _ => false,
     })
 }
 
 /// Every intrinsic the lowering emitted, so a test can say what it did *not* emit by saying what it did.
-fn intrinsics(module: &curios_cont::Module) -> Vec<curios_cont::Intrinsic> {
+fn intrinsics(module: &curios_cps::Module) -> Vec<curios_cps::Intrinsic> {
     module
         .nodes()
         .iter()
         .flatten()
         .filter_map(|node| match node {
-            curios_cont::Node::LetIntrinsic { op, .. } => Some(*op),
+            curios_cps::Node::LetIntrinsic { op, .. } => Some(*op),
             _ => None,
         })
         .collect()
 }
 
 /// Whether a `Nat` literal of `value` is an operand anywhere — how a mask the lowering synthesizes is found, since nothing names it.
-fn has_nat_operand(module: &curios_cont::Module, value: u32) -> bool {
+fn has_nat_operand(module: &curios_cps::Module, value: u32) -> bool {
     module.nodes().iter().flatten().any(|node| {
-        curios_cont::atoms(node).into_iter().any(|atom| {
-            matches!(atom, curios_cont::Atom::Literal(curios_cont::Literal::Nat(literal)) if u32::try_from(literal).ok() == Some(value))
+        curios_cps::atoms(node).into_iter().any(|atom| {
+            matches!(atom, curios_cps::Atom::Literal(curios_cps::Literal::Nat(literal)) if u32::try_from(literal).ok() == Some(value))
         })
     })
 }
 
 #[test]
-fn a_scalar_module_lowers_to_verified_cont() {
+fn a_scalar_module_lowers_to_verified_cps() {
     let mut builder = AnfBuilder::new();
     let one = nat(&mut builder, 1);
     let bound = builder.item_value(Some("one".into()), Rhs::Alias(one));
@@ -80,10 +80,10 @@ fn a_scalar_module_lowers_to_verified_cont() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     assert!(
-        intrinsics(&cont).contains(&curios_cont::Intrinsic::NatAdd),
-        "{cont}"
+        intrinsics(&cps).contains(&curios_cps::Intrinsic::NatAdd),
+        "{cps}"
     );
 }
 
@@ -111,13 +111,13 @@ fn bool_and_byte_collapse_onto_the_nat_carrier() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     // Bool ops ride Nat bit ops and `NatToByte` masks, so no Bool- or Byte-shaped operation survives the door. The mask is what makes the narrowing total *here* — Core refuses an out-of-range operand and `NatToByte`'s own `below` field promises this can only ever be narrowing a value already in range, so the instruction is provably redundant rather than load-bearing, and it is emitted because the carrier is shared rather than because anything could be out of range.
     assert!(
-        intrinsics(&cont).contains(&curios_cont::Intrinsic::NatAnd),
-        "{cont}"
+        intrinsics(&cps).contains(&curios_cps::Intrinsic::NatAnd),
+        "{cps}"
     );
-    assert!(has_nat_operand(&cont, 255), "{cont}");
+    assert!(has_nat_operand(&cps, 255), "{cps}");
 }
 
 #[test]
@@ -142,11 +142,11 @@ fn byte_to_nat_is_the_identity() {
     let entry = builder.seal_block(Terminator::Return(Atom::Value(sum)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     assert_eq!(
-        intrinsics(&cont),
-        vec![curios_cont::Intrinsic::NatAdd],
-        "{cont}"
+        intrinsics(&cps),
+        vec![curios_cps::Intrinsic::NatAdd],
+        "{cps}"
     );
 }
 
@@ -200,35 +200,29 @@ fn a_variant_match_lowers_to_tag_dispatch() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     // The constructor is its family's own value — the tag at slot 0, payloads above it, padded to the family's width — so dispatch reads the tag and the payload through the family rather than through the arity roster.
     assert!(
         has_intrinsic(
-            &cont,
-            |op| matches!(op, curios_cont::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 0)
+            &cps,
+            |op| matches!(op, curios_cps::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 0)
         ),
-        "{cont}"
+        "{cps}"
     );
     assert!(
         has_intrinsic(
-            &cont,
-            |op| matches!(op, curios_cont::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 1)
+            &cps,
+            |op| matches!(op, curios_cps::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 1)
         ),
-        "{cont}"
+        "{cps}"
     );
     assert!(
-        !has_intrinsic(&cont, |op| matches!(
-            op,
-            curios_cont::Intrinsic::TupleGet(_)
-        )),
-        "{cont}"
+        !has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::TupleGet(_))),
+        "{cps}"
     );
     assert!(
-        has_node(&cont, |node| matches!(
-            node,
-            curios_cont::Node::Switch { .. }
-        )),
-        "{cont}"
+        has_node(&cps, |node| matches!(node, curios_cps::Node::Switch { .. })),
+        "{cps}"
     );
 }
 
@@ -271,28 +265,22 @@ fn a_single_constructor_family_collapses_to_its_bare_payload() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     // The collapsed value is the payload itself: no tuple is built, no tag is read, and the match never dispatches.
     assert!(
-        !has_value(&cont, |value| matches!(
+        !has_value(&cps, |value| matches!(
             value,
-            curios_cont::ValueExpr::Tuple(_)
+            curios_cps::ValueExpr::Tuple(_)
         )),
-        "{cont}"
+        "{cps}"
     );
     assert!(
-        !has_intrinsic(&cont, |op| matches!(
-            op,
-            curios_cont::Intrinsic::TupleGet(_)
-        )),
-        "{cont}"
+        !has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::TupleGet(_))),
+        "{cps}"
     );
     assert!(
-        !has_node(&cont, |node| matches!(
-            node,
-            curios_cont::Node::Switch { .. }
-        )),
-        "{cont}"
+        !has_node(&cps, |node| matches!(node, curios_cps::Node::Switch { .. })),
+        "{cps}"
     );
 }
 
@@ -356,37 +344,37 @@ fn an_immediate_constructor_rides_its_payload() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     // The leaf construct builds nothing, the dispatch is an `IsImmediate` test, and with exactly one boxed constructor the tag is never read — the node arm's payloads still project at their tagged offsets.
     assert!(
-        !has_value(&cont, |value| matches!(
+        !has_value(&cps, |value| matches!(
             value,
-            curios_cont::ValueExpr::Tuple(_)
+            curios_cps::ValueExpr::Tuple(_)
         )),
-        "{cont}"
+        "{cps}"
     );
     assert!(
-        intrinsics(&cont).contains(&curios_cont::Intrinsic::IsImmediate),
-        "{cont}"
+        intrinsics(&cps).contains(&curios_cps::Intrinsic::IsImmediate),
+        "{cps}"
     );
     assert!(
         !has_intrinsic(
-            &cont,
-            |op| matches!(op, curios_cont::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 0)
+            &cps,
+            |op| matches!(op, curios_cps::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 0)
         ),
-        "{cont}"
+        "{cps}"
     );
     assert!(
         has_intrinsic(
-            &cont,
-            |op| matches!(op, curios_cont::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 1)
+            &cps,
+            |op| matches!(op, curios_cps::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 1)
         ),
-        "{cont}"
+        "{cps}"
     );
     // The immediate arm's payload is *read*, not aliased to the scrutinee. Without this node the binder and the scrutinee are one value, and a raw demand from the arm reaches the scrutinee's own definition — which on the boxed path builds a tuple. See `an_immediate_arm_payload_survives_arithmetic_in_a_loop` in `curios`'s matching tests for what that emits.
     assert!(
-        intrinsics(&cont).contains(&curios_cont::Intrinsic::ImmediateGet),
-        "{cont}"
+        intrinsics(&cps).contains(&curios_cps::Intrinsic::ImmediateGet),
+        "{cps}"
     );
 }
 
@@ -457,18 +445,18 @@ fn an_immediate_family_with_two_boxed_constructors_keeps_the_inner_tag_dispatch(
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     // Two boxed constructors remain behind the test, so the tag dispatch survives on that side.
     assert!(
-        intrinsics(&cont).contains(&curios_cont::Intrinsic::IsImmediate),
-        "{cont}"
+        intrinsics(&cps).contains(&curios_cps::Intrinsic::IsImmediate),
+        "{cps}"
     );
     assert!(
         has_intrinsic(
-            &cont,
-            |op| matches!(op, curios_cont::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 0)
+            &cps,
+            |op| matches!(op, curios_cps::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 0)
         ),
-        "{cont}"
+        "{cps}"
     );
 }
 
@@ -500,18 +488,18 @@ fn two_immediate_constructors_decline_the_encoding() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     // Two immediate constructors would collide on the same i31 values, so the family stays tagged — a row of its own family rather than a structural tuple.
     assert!(
         has_value(
-            &cont,
-            |value| matches!(value, curios_cont::ValueExpr::Row(row, _) if row.index() == 0)
+            &cps,
+            |value| matches!(value, curios_cps::ValueExpr::Row(row, _) if row.index() == 0)
         ),
-        "{cont}"
+        "{cps}"
     );
     assert!(
-        !intrinsics(&cont).contains(&curios_cont::Intrinsic::IsImmediate),
-        "{cont}"
+        !intrinsics(&cps).contains(&curios_cps::Intrinsic::IsImmediate),
+        "{cps}"
     );
 }
 
@@ -559,35 +547,29 @@ fn a_collapsed_pair_is_an_untagged_tuple() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     // Untagged: the collapsed family is its own nominal row with no tag slot, so the second payload reads at slot 1 where the tagged encoding would put it at 2 — and nothing dispatches.
     assert!(
         has_intrinsic(
-            &cont,
-            |op| matches!(op, curios_cont::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 1)
+            &cps,
+            |op| matches!(op, curios_cps::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 1)
         ),
-        "{cont}"
+        "{cps}"
     );
     assert!(
         !has_intrinsic(
-            &cont,
-            |op| matches!(op, curios_cont::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 2)
+            &cps,
+            |op| matches!(op, curios_cps::Intrinsic::RowGet(row, slot) if row.index() == 0 && *slot == 2)
         ),
-        "{cont}"
+        "{cps}"
     );
     assert!(
-        !has_intrinsic(&cont, |op| matches!(
-            op,
-            curios_cont::Intrinsic::TupleGet(_)
-        )),
-        "{cont}"
+        !has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::TupleGet(_))),
+        "{cps}"
     );
     assert!(
-        !has_node(&cont, |node| matches!(
-            node,
-            curios_cont::Node::Switch { .. }
-        )),
-        "{cont}"
+        !has_node(&cps, |node| matches!(node, curios_cps::Node::Switch { .. })),
+        "{cps}"
     );
 }
 
@@ -625,21 +607,18 @@ fn a_collapsed_nullary_constructor_is_the_interned_zero() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     // The value carries zero information and rides the cheapest carrier — the Unit encoding — so nothing is allocated and nothing dispatches.
     assert!(
-        !has_value(&cont, |value| matches!(
+        !has_value(&cps, |value| matches!(
             value,
-            curios_cont::ValueExpr::Tuple(_)
+            curios_cps::ValueExpr::Tuple(_)
         )),
-        "{cont}"
+        "{cps}"
     );
     assert!(
-        !has_node(&cont, |node| matches!(
-            node,
-            curios_cont::Node::Switch { .. }
-        )),
-        "{cont}"
+        !has_node(&cps, |node| matches!(node, curios_cps::Node::Switch { .. })),
+        "{cps}"
     );
 }
 
@@ -711,10 +690,10 @@ fn a_shared_tuple_field_is_never_settled() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     assert!(
-        !intrinsics(&cont).contains(&curios_cont::Intrinsic::ListSettle),
-        "{cont}"
+        !intrinsics(&cps).contains(&curios_cps::Intrinsic::ListSettle),
+        "{cps}"
     );
 }
 
@@ -754,10 +733,10 @@ fn folds_lower_to_accumulator_loops() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
     // Completing at all means the synthesized loop verified.
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     assert!(
-        intrinsics(&cont).contains(&curios_cont::Intrinsic::NatEql),
-        "{cont}"
+        intrinsics(&cps).contains(&curios_cps::Intrinsic::NatEql),
+        "{cps}"
     );
 }
 
@@ -806,23 +785,23 @@ fn a_sequence_fold_reads_through_its_grain() {
     let entry = builder.seal_block(Terminator::Return(Atom::Value(folded)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     assert!(
-        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesLen)),
-        "{cont}"
+        has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::BytesLen)),
+        "{cps}"
     );
     assert!(
-        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesGet)),
-        "{cont}"
+        has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::BytesGet)),
+        "{cps}"
     );
     // A suffix, not a window: the peel names a start and lets the value decide how much follows, so no lowering derives a count. A `BytesSlice` here would mean a lowering derives one.
     assert!(
-        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesRest)),
-        "{cont}"
+        has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::BytesRest)),
+        "{cps}"
     );
     assert!(
-        !has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesSlice)),
-        "{cont}"
+        !has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::BytesSlice)),
+        "{cps}"
     );
 }
 
@@ -869,15 +848,15 @@ fn an_unused_fold_suffix_is_not_sliced() {
     let entry = builder.seal_block(Terminator::Return(Atom::Value(folded)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     // The element is still read through its grain; only the discarded suffix is gone.
     assert!(
-        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesGet)),
-        "{cont}"
+        has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::BytesGet)),
+        "{cps}"
     );
     assert!(
-        !has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesSlice)),
-        "{cont}"
+        !has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::BytesSlice)),
+        "{cps}"
     );
 }
 
@@ -898,33 +877,30 @@ fn a_mixed_recursive_group_lowers_through_cells() {
     let entry = builder.seal_block(Terminator::Return(Atom::Value(consume)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     assert!(
-        has_node(&cont, |node| matches!(
+        has_node(&cps, |node| matches!(
             node,
-            curios_cont::Node::Cell {
-                op: curios_cont::CellOp::Poll,
+            curios_cps::Node::Cell {
+                op: curios_cps::CellOp::Poll,
                 ..
             }
         )),
-        "{cont}"
+        "{cps}"
     );
     assert!(
-        has_node(&cont, |node| matches!(
+        has_node(&cps, |node| matches!(
             node,
-            curios_cont::Node::Cell {
-                op: curios_cont::CellOp::Fill,
+            curios_cps::Node::Cell {
+                op: curios_cps::CellOp::Fill,
                 ..
             }
         )),
-        "{cont}"
+        "{cps}"
     );
     assert!(
-        has_node(&cont, |node| matches!(
-            node,
-            curios_cont::Node::LetFun { .. }
-        )),
-        "{cont}"
+        has_node(&cps, |node| matches!(node, curios_cps::Node::LetFun { .. })),
+        "{cps}"
     );
 }
 
@@ -962,10 +938,10 @@ fn a_value_only_knot_lowers_through_cells() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     assert!(
-        has_node(&cont, |node| matches!(node, curios_cont::Node::Cell { .. })),
-        "{cont}"
+        has_node(&cps, |node| matches!(node, curios_cps::Node::Cell { .. })),
+        "{cps}"
     );
 }
 
@@ -987,10 +963,10 @@ fn a_halt_lowers_to_its_node() {
     });
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     assert!(
-        has_node(&cont, |node| matches!(node, curios_cont::Node::Halt { .. })),
-        "{cont}"
+        has_node(&cps, |node| matches!(node, curios_cps::Node::Halt { .. })),
+        "{cps}"
     );
 }
 
@@ -1009,10 +985,10 @@ fn io_constants_ride_the_binary_carrier() {
     let entry = builder.seal_block(Terminator::Return(Atom::Value(width)));
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     assert!(
-        has_intrinsic(&cont, |op| matches!(op, curios_cont::Intrinsic::BytesLen)),
-        "{cont}"
+        has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::BytesLen)),
+        "{cps}"
     );
 }
 
@@ -1058,10 +1034,10 @@ fn a_knot_member_read_only_by_an_item_is_kept() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
+    let cps = lowered(&module);
     assert!(
-        has_node(&cont, |node| matches!(node, curios_cont::Node::Cell { .. })),
-        "{cont}"
+        has_node(&cps, |node| matches!(node, curios_cps::Node::Cell { .. })),
+        "{cps}"
     );
 }
 
@@ -1144,8 +1120,8 @@ fn every_lowered_continuation_carries_the_role_it_fills() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
 
-    let cont = lowered(&module);
-    let mut roles: Vec<&str> = cont
+    let cps = lowered(&module);
+    let mut roles: Vec<&str> = cps
         .continuations()
         .iter()
         .flatten()
@@ -1160,6 +1136,6 @@ fn every_lowered_continuation_carries_the_role_it_fills() {
     assert_eq!(
         roles,
         ["apply/resume", "arm/none", "arm/some", "join"],
-        "{cont}"
+        "{cps}"
     );
 }

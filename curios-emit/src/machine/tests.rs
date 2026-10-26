@@ -8,24 +8,24 @@ use {
 };
 
 /// Lower `source` at the representation decided over it, as the emitter does.
-fn lowered(source: &curios_cont::Module) -> MachineModule {
-    lower(source, &curios_cont::representation(source).results)
+fn lowered(source: &curios_cps::Module) -> MachineModule {
+    lower(source, &curios_cps::representation(source).results)
 }
 
 #[test]
 fn return_sentinel_becomes_machine_return_without_a_block() {
-    let mut source = curios_cont::Module::new();
+    let mut source = curios_cps::Module::new();
     let function = source.reserve_function();
     let return_cont = source.reserve_continuation();
-    let body = source.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+    let body = source.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
         target: return_cont,
-        args: vec![curios_cont::Atom::Literal(curios_cont::Literal::Nat(
+        args: vec![curios_cps::Atom::Literal(curios_cps::Literal::Nat(
             Natural::from(7u32),
         ))],
     }));
     source.define_function(
         function,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -43,26 +43,26 @@ fn return_sentinel_becomes_machine_return_without_a_block() {
     };
     assert!(matches!(
         operands.as_slice(),
-        [MachineOperand::Literal(curios_cont::Literal::Nat(value))] if *value == Natural::from(7u32)
+        [MachineOperand::Literal(curios_cps::Literal::Nat(value))] if *value == Natural::from(7u32)
     ));
 }
 
 #[test]
 fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
-    let mut source = curios_cont::Module::new();
+    let mut source = curios_cps::Module::new();
     let main = source.reserve_function();
     let callee = source.reserve_function();
 
     let callee_return = source.reserve_continuation();
-    let callee_body = source.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+    let callee_body = source.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
         target: callee_return,
-        args: vec![curios_cont::Atom::Literal(curios_cont::Literal::Nat(
+        args: vec![curios_cps::Atom::Literal(curios_cps::Literal::Nat(
             Natural::from(1u32),
         ))],
     }));
     source.define_function(
         callee,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("callee".into()),
             params: vec![],
             return_cont: callee_return,
@@ -72,18 +72,18 @@ fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
     );
 
     let main_return = source.reserve_continuation();
-    let main_body = source.add_node(curios_cont::Node::ApplyFun {
-        callee: curios_cont::Callee::Known(callee),
+    let main_body = source.add_node(curios_cps::Node::ApplyFun {
+        callee: curios_cps::Callee::Known(callee),
         args: vec![],
         return_to: main_return,
     });
-    let main_body = source.add_node(curios_cont::Node::LetFun {
+    let main_body = source.add_node(curios_cps::Node::LetFun {
         functions: vec![callee],
         body: main_body,
     });
     source.define_function(
         main,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -104,15 +104,15 @@ fn call_to_return_sentinel_becomes_tail_call_without_resume_state() {
 
 #[test]
 fn a_halt_stays_terminal_through_structurization() {
-    let mut source = curios_cont::Module::new();
+    let mut source = curios_cps::Module::new();
     let main = source.reserve_function();
     let return_cont = source.reserve_continuation();
-    let body = source.add_node(halt(vec![curios_cont::Atom::Literal(
-        curios_cont::Literal::Nat(Natural::from(7u32)),
+    let body = source.add_node(halt(vec![curios_cps::Atom::Literal(
+        curios_cps::Literal::Nat(Natural::from(7u32)),
     )]));
     source.define_function(
         main,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -131,7 +131,7 @@ fn a_halt_stays_terminal_through_structurization() {
     ));
 }
 
-fn machine_make_closures(function: &MachineFunction, target: curios_cont::FunctionId) -> usize {
+fn machine_make_closures(function: &MachineFunction, target: curios_cps::FunctionId) -> usize {
     function
         .blocks
         .values()
@@ -147,21 +147,21 @@ fn machine_make_closures(function: &MachineFunction, target: curios_cont::Functi
 
 #[test]
 fn repeated_first_class_use_materializes_one_closure() {
-    let mut source = curios_cont::Module::new();
+    let mut source = curios_cps::Module::new();
     let main = source.reserve_function();
     let target = source.reserve_function();
     let consumer = source.reserve_function();
 
     let target_return = source.reserve_continuation();
-    let target_body = source.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+    let target_body = source.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
         target: target_return,
-        args: vec![curios_cont::Atom::Literal(curios_cont::Literal::Nat(
+        args: vec![curios_cps::Atom::Literal(curios_cps::Literal::Nat(
             Natural::from(0u32),
         ))],
     }));
     source.define_function(
         target,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("target".into()),
             params: vec![],
             return_cont: target_return,
@@ -173,15 +173,15 @@ fn repeated_first_class_use_materializes_one_closure() {
     let first = source.add_value(Some("first".into()));
     let second = source.add_value(Some("second".into()));
     let consumer_return = source.reserve_continuation();
-    let consumer_body = source.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+    let consumer_body = source.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
         target: consumer_return,
-        args: vec![curios_cont::Atom::Literal(curios_cont::Literal::Nat(
+        args: vec![curios_cps::Atom::Literal(curios_cps::Literal::Nat(
             Natural::from(0u32),
         ))],
     }));
     source.define_function(
         consumer,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("consumer".into()),
             params: vec![first, second],
             return_cont: consumer_return,
@@ -191,21 +191,18 @@ fn repeated_first_class_use_materializes_one_closure() {
     );
 
     let main_return = source.reserve_continuation();
-    let call = source.add_node(curios_cont::Node::ApplyFun {
-        callee: curios_cont::Callee::Known(consumer),
-        args: vec![
-            curios_cont::Atom::Fun(target),
-            curios_cont::Atom::Fun(target),
-        ],
+    let call = source.add_node(curios_cps::Node::ApplyFun {
+        callee: curios_cps::Callee::Known(consumer),
+        args: vec![curios_cps::Atom::Fun(target), curios_cps::Atom::Fun(target)],
         return_to: main_return,
     });
-    let main_body = source.add_node(curios_cont::Node::LetFun {
+    let main_body = source.add_node(curios_cps::Node::LetFun {
         functions: vec![target, consumer],
         body: call,
     });
     source.define_function(
         main,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -221,20 +218,20 @@ fn repeated_first_class_use_materializes_one_closure() {
 
 #[test]
 fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
-    let mut source = curios_cont::Module::new();
+    let mut source = curios_cps::Module::new();
     let main = source.reserve_function();
     let target = source.reserve_function();
 
     let target_return = source.reserve_continuation();
-    let target_body = source.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+    let target_body = source.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
         target: target_return,
-        args: vec![curios_cont::Atom::Literal(curios_cont::Literal::Nat(
+        args: vec![curios_cps::Atom::Literal(curios_cps::Literal::Nat(
             Natural::from(0u32),
         ))],
     }));
     source.define_function(
         target,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("target".into()),
             params: vec![],
             return_cont: target_return,
@@ -245,31 +242,31 @@ fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
 
     let main_return = source.reserve_continuation();
     let result = source.add_value(Some("result".into()));
-    let escape = source.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+    let escape = source.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
         target: main_return,
-        args: vec![curios_cont::Atom::Fun(target)],
+        args: vec![curios_cps::Atom::Fun(target)],
     }));
-    let resume = source.add_continuation(curios_cont::Continuation {
+    let resume = source.add_continuation(curios_cps::Continuation {
         debug_name: Some("resume".into()),
         params: vec![result],
         body: escape,
     });
-    let call = source.add_node(curios_cont::Node::ApplyFun {
-        callee: curios_cont::Callee::Known(target),
+    let call = source.add_node(curios_cps::Node::ApplyFun {
+        callee: curios_cps::Callee::Known(target),
         args: vec![],
         return_to: resume,
     });
-    let with_resume = source.add_node(curios_cont::Node::LetCont {
+    let with_resume = source.add_node(curios_cps::Node::LetCont {
         continuations: vec![resume],
         body: call,
     });
-    let main_body = source.add_node(curios_cont::Node::LetFun {
+    let main_body = source.add_node(curios_cps::Node::LetFun {
         functions: vec![target],
         body: with_resume,
     });
     source.define_function(
         main,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: main_return,
@@ -289,16 +286,16 @@ fn mixed_direct_and_escaping_use_keeps_the_call_direct() {
 }
 
 /// A nullary `main` that immediately exits — the smallest valid machine module, used to seed the verifier-rejection tests.
-fn exiting_main() -> (curios_cont::Module, curios_cont::FunctionId) {
-    let mut source = curios_cont::Module::new();
+fn exiting_main() -> (curios_cps::Module, curios_cps::FunctionId) {
+    let mut source = curios_cps::Module::new();
     let main = source.reserve_function();
     let return_cont = source.reserve_continuation();
-    let body = source.add_node(halt(vec![curios_cont::Atom::Literal(
-        curios_cont::Literal::Nat(Natural::from(0u32)),
+    let body = source.add_node(halt(vec![curios_cps::Atom::Literal(
+        curios_cps::Literal::Nat(Natural::from(0u32)),
     )]));
     source.define_function(
         main,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -330,29 +327,29 @@ fn verify_rejects_a_function_without_its_entry_block() {
 #[test]
 fn verify_rejects_a_nested_block_with_no_lexical_owner() {
     // A `LetCont` continuation becomes a block nested under the entry; drop the scope table and it is left without a lexical owner.
-    let mut source = curios_cont::Module::new();
+    let mut source = curios_cps::Module::new();
     let main = source.reserve_function();
     let return_cont = source.reserve_continuation();
     let bound = source.add_value(Some("bound".into()));
-    let exit = source.add_node(halt(vec![curios_cont::Atom::Value(bound)]));
-    let resume = source.add_continuation(curios_cont::Continuation {
+    let exit = source.add_node(halt(vec![curios_cps::Atom::Value(bound)]));
+    let resume = source.add_continuation(curios_cps::Continuation {
         debug_name: Some("resume".into()),
         params: vec![bound],
         body: exit,
     });
-    let enter = source.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+    let enter = source.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
         target: resume,
-        args: vec![curios_cont::Atom::Literal(curios_cont::Literal::Nat(
+        args: vec![curios_cps::Atom::Literal(curios_cps::Literal::Nat(
             Natural::from(0u32),
         ))],
     }));
-    let body = source.add_node(curios_cont::Node::LetCont {
+    let body = source.add_node(curios_cps::Node::LetCont {
         continuations: vec![resume],
         body: enter,
     });
     source.define_function(
         main,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -409,7 +406,7 @@ fn verify_rejects_a_tail_closure_call_in_a_function_returning_a_float_register()
     let mut machine = lowered(&source);
     let entry = machine.entry;
     let function = machine.functions.get_mut(&entry).unwrap();
-    function.results = vec![Some(curios_cont::Repr::Flt)];
+    function.results = vec![Some(curios_cps::Repr::Flt)];
     let closure = MachineValueId(0);
     let block = function.blocks.get_mut(&function.entry).unwrap();
     block.terminator = MachineTerminator::TailIndirectCall {

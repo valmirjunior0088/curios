@@ -2,17 +2,17 @@
 
 use {
     super::test_support::*,
-    crate::tests::{cont_optm_module, emits, reads_nat},
+    crate::tests::{cps_optm_module, emits, reads_nat},
 };
 
 // -- LCG --------------------------------------------------------------------
 
-/// The LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cont`'s `contify_calls` tests; this pins the end-to-end result.
+/// The LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cps`'s `contify_calls` tests; this pins the end-to-end result.
 #[test]
 fn lcg_kernel_is_single_entry_recursive_continuation() {
-    let module = cont_optm_module(LCG);
+    let module = cps_optm_module(LCG);
     assert!(
-        emits(&module, |op| *op == curios_cont::Intrinsic::NatRem) && reads_nat(&module, 65537),
+        emits(&module, |op| *op == curios_cps::Intrinsic::NatRem) && reads_nat(&module, 65537),
         "the kernel arithmetic must survive into the optimized cont module:\n{module}",
     );
 
@@ -75,7 +75,7 @@ fn lcg_loop_is_scalar_no_closure_no_indirect() {
     }
 }
 
-/// The loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: a boxed edge argument is loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the kernel is the loop-carried decision `curios-cont`'s `represent` fixpoint exists to produce.
+/// The loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: a boxed edge argument is loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the kernel is the loop-carried decision `curios-cps`'s `represent` fixpoint exists to produce.
 ///
 /// The casts do *not* go to zero and asserting that they do would be wrong: 4 `ref.cast`/`i31.get_u` pairs survive on values the loop reads from outside itself, where the coercion is correct and is the cheaper side of the trade. Nor does the `i64` widening go away — see `i64.mul` in [`lcg_loop_is_scalar_no_closure_no_indirect`] — because a `Nat` product leaving the i31 has to be detected and grown into a boxed magnitude, and `i32.mul` wraps silently, which no storage decision changes.
 #[test]
@@ -303,7 +303,7 @@ fn trees_build_and_sum_stay_direct_recursive() {
     );
 }
 
-/// The recursive arithmetic is folded to bare intrinsic instructions rather than dispatched through a witness — the invariant `Nat` operation implementations propagate through the recursive SCC and collapse to `i32` instructions, with no `call_indirect` witness dispatch left behind. The SCC known-argument propagation that enables this is owned by `curios-cont`'s specialization tests; this pins its emitted consequence.
+/// The recursive arithmetic is folded to bare intrinsic instructions rather than dispatched through a witness — the invariant `Nat` operation implementations propagate through the recursive SCC and collapse to `i32` instructions, with no `call_indirect` witness dispatch left behind. The SCC known-argument propagation that enables this is owned by `curios-cps`'s specialization tests; this pins its emitted consequence.
 #[test]
 fn trees_invariant_arithmetic_propagates_through_scc() {
     let wat = wat(TREES);

@@ -572,7 +572,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
             curios_wasm::Instr::I64ShrU,
             i64_const(u32::MAX.into()),
             curios_wasm::Instr::I64GeU,
-            when(self.table.refuse_instrs(curios_cont::Panic::Capacity)),
+            when(self.table.refuse_instrs(curios_cps::Panic::Capacity)),
             get(&x),
             set(&base),
             one(),
@@ -1283,7 +1283,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                 ],
                 self.magnitude64(&m),
             ),
-            self.table.refuse_instrs(curios_cont::Panic::NatWire),
+            self.table.refuse_instrs(curios_cps::Panic::NatWire),
         ];
 
         self.add_helper(BigHelper::NatWire, scope, i64_type(), instrs);
@@ -1330,7 +1330,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
                     vec![i64_const(0), get(&v), curios_wasm::Instr::I64Sub],
                 ),
             ]),
-            self.table.refuse_instrs(curios_cont::Panic::IntWire),
+            self.table.refuse_instrs(curios_cps::Panic::IntWire),
         ];
 
         self.add_helper(BigHelper::IntWire, scope, i64_type(), instrs);
@@ -1452,7 +1452,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
         let n = scope.local("n", i32_type());
         let m = scope.local("m", i32_type());
         let t = scope.local("t", self.words_type());
-        let bound = i32_const(1 << (curios_cont::ENVELOPE_BITS - 1));
+        let bound = i32_const(1 << (curios_cps::ENVELOPE_BITS - 1));
         let instrs = wasm![
             len(&a),
             set(&n),

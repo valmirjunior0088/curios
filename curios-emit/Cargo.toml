@@ -16,5 +16,5 @@ curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-utilities = { workspace = true }
 curios-num = { workspace = true }
-curios-cont = { workspace = true }
+curios-cps = { workspace = true }
 curios-wasm = { workspace = true }

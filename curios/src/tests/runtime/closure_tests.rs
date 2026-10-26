@@ -141,25 +141,25 @@ fn folds_constant_arg_through_let_function() {
         &entrypoint,
         &RootSource::none(),
         |stage| {
-            if let Stage::ContOptm(module) = stage {
+            if let Stage::CpsOptm(module) = stage {
                 optimized = Some(module.clone());
             }
         },
     )
     .expect("compile succeeded");
 
-    let optimized = optimized.expect("Stage::ContOptm observed");
+    let optimized = optimized.expect("Stage::CpsOptm observed");
     assert!(
-        !emits(&optimized, |op| *op == curios_cont::Intrinsic::NatAdd),
+        !emits(&optimized, |op| *op == curios_cps::Intrinsic::NatAdd),
         "the addition must fold at compile time, got:\n{optimized}",
     );
     assert!(
         optimized.nodes().iter().flatten().any(|node| matches!(
             node,
-            curios_cont::Node::Halt { args, .. }
+            curios_cps::Node::Halt { args, .. }
                 if matches!(
                     args.as_slice(),
-                    [curios_cont::Atom::Literal(curios_cont::Literal::Nat(folded))]
+                    [curios_cps::Atom::Literal(curios_cps::Literal::Nat(folded))]
                         if u32::try_from(folded).ok() == Some(4)
                 )
         )),
@@ -312,7 +312,7 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
     assert_eq!(io.output(), b"8:1");
 }
 
-/// A closure whose arity a run-time value decides is called at each. A function type computed from a `Bool` leaves one application for each shape, and a copy the optimizer specializes to one arm keeps the other arm's application, which no run arrives at (`curios-cont`'s `Module::applies`). Both arities are asked in one run, over a value only the host knows.
+/// A closure whose arity a run-time value decides is called at each. A function type computed from a `Bool` leaves one application for each shape, and a copy the optimizer specializes to one arm keeps the other arm's application, which no run arrives at (`curios-cps`'s `Module::applies`). Both arities are asked in one run, over a value only the host knows.
 #[test]
 fn a_closure_whose_arity_a_value_decides_is_called_at_each() {
     assert_eq!(

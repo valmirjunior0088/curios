@@ -1,9 +1,9 @@
-//! What survives to codegen once a `/std/Fmt` format string is a literal: the residual after partial evaluation, and the absence of any formatter in the emitted Cont. What a `%` slot shows is the corpus's `/data/fmt`.
+//! What survives to codegen once a `/std/Fmt` format string is a literal: the residual after partial evaluation, and the absence of any formatter in the emitted CPS. What a `%` slot shows is the corpus's `/data/fmt`.
 //!
 //! The rendering half is the witness each slot dispatches through. The specialization half is that a literal format string parses at compile time — the ANF `evaluate` pass folds the parse to a constant spine and `specialize` unrolls the fold over it, so neither the parser nor the generic fold reaches the backend.
 
 use {
-    super::{cont_optm, run},
+    super::{cps_optm, run},
     curios_native::{ForeignBindings, MockHost},
     curios_pipeline::{Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
@@ -39,26 +39,26 @@ fn print_partial_evaluation_reduces_residual() {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    let mut cont_optm = None;
+    let mut cps_optm = None;
 
     let (wasm_module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_BUDGET,
         &entrypoint,
         &RootSource::none(),
         |stage| {
-            if let Stage::ContOptm(module) = stage {
-                cont_optm = Some(format!("{module}"));
+            if let Stage::CpsOptm(module) = stage {
+                cps_optm = Some(format!("{module}"));
             }
         },
     )
     .expect("compile succeeded");
 
-    let cont = cont_optm.expect("Stage::ContOptm observed");
+    let cps = cps_optm.expect("Stage::CpsOptm observed");
     assert!(
-        cont.contains("/std/Nat/to_str")
-            && !cont.contains("/std/Fmt/print")
-            && !cont.contains("/std/Parse/"),
-        "expected only the specialized formatting spine after staging, got:\n{cont}",
+        cps.contains("/std/Nat/to_str")
+            && !cps.contains("/std/Fmt/print")
+            && !cps.contains("/std/Parse/"),
+        "expected only the specialized formatting spine after staging, got:\n{cps}",
     );
 
     let (system, io) = MockHost::builder().stdin_lines(["Alice"]).build();
@@ -150,7 +150,7 @@ fn print_constant_args_collapses_at_anf() {
         .expect("failed to parse source");
 
     let mut anf_optm = None;
-    let mut cont_optm = None;
+    let mut cps_optm = None;
 
     let (wasm_module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_BUDGET,
@@ -158,14 +158,14 @@ fn print_constant_args_collapses_at_anf() {
         &RootSource::none(),
         |stage| match stage {
             Stage::AnfOptm(module) => anf_optm = Some(format!("{module}")),
-            Stage::ContOptm(module) => cont_optm = Some(format!("{module}")),
+            Stage::CpsOptm(module) => cps_optm = Some(format!("{module}")),
             _ => {}
         },
     )
     .expect("compile succeeded");
 
     let anf = anf_optm.expect("Stage::AnfOptm observed");
-    // "x = 42, s = hello\n", already formatted, as the operand of the host write itself, ahead of a first call's lane. `print` is an `Io`-returning wrapper and inlines away with the rest, so what survives is the write inside the description thunk it erases to. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the Cont sweep below is where they must be gone.
+    // "x = 42, s = hello\n", already formatted, as the operand of the host write itself, ahead of a first call's lane. `print` is an `Io`-returning wrapper and inlines away with the rest, so what survives is the write inside the description thunk it erases to. Dead spine leftovers linger in the entry block (pruning drops items, not block statements) — the CPS sweep below is where they must be gone.
     assert!(
         anf.contains(
             "ffi//std/internal/Handle/handle_write(io:1, x\"78203d2034322c2073203d2068656c6c6f0a\", "
@@ -177,10 +177,10 @@ fn print_constant_args_collapses_at_anf() {
         "expected the parser web pruned, got:\n{anf}",
     );
 
-    let cont = cont_optm.expect("Stage::ContOptm observed");
+    let cps = cps_optm.expect("Stage::CpsOptm observed");
     assert!(
-        !cont.contains("/std/Fmt/") && !cont.contains("/std/Parse/") && !cont.contains("[lambda]"),
-        "expected the constant program to collapse to the write loop, got:\n{cont}",
+        !cps.contains("/std/Fmt/") && !cps.contains("/std/Parse/") && !cps.contains("[lambda]"),
+        "expected the constant program to collapse to the write loop, got:\n{cps}",
     );
 
     let (system, io) = MockHost::builder().build();
@@ -189,17 +189,17 @@ fn print_constant_args_collapses_at_anf() {
     assert_eq!(io.output(), b"x = 42, s = hello\n");
 }
 
-/// The partial-evaluation gate: `Fmt/print("literal")` with constant arguments collapses at the arena level — the emitted Cont carries no `/std/Fmt/` or `/std/Parse/` machinery, just the residual host call chain.
+/// The partial-evaluation gate: `Fmt/print("literal")` with constant arguments collapses at the arena level — the emitted CPS carries no `/std/Fmt/` or `/std/Parse/` machinery, just the residual host call chain.
 #[test]
-fn constant_args_leave_no_formatter_in_cont() {
+fn constant_args_leave_no_formatter_in_cps() {
     let source = r#"/std/Fmt/print("hello world")"#;
     assert_eq!(run(source), b"hello world".to_vec());
 
-    let cont_optm = cont_optm(source);
+    let cps_optm = cps_optm(source);
     assert!(
-        !cont_optm.contains("/std/Fmt/") && !cont_optm.contains("/std/Parse/"),
+        !cps_optm.contains("/std/Fmt/") && !cps_optm.contains("/std/Parse/"),
         "the format machinery must collapse at compile time:\n{}",
-        &cont_optm[..cont_optm.len().min(4000)]
+        &cps_optm[..cps_optm.len().min(4000)]
     );
 }
 
@@ -232,7 +232,7 @@ fn a_constant_prints_descriptions_are_copied_within_the_evaluators_cap() {
     );
 }
 
-/// A format the evaluator declines, one past its step budget, is left to the Cont optimizer, which specializes the formatter itself: the program compiles, and prints the format.
+/// A format the evaluator declines, one past its step budget, is left to the CPS optimizer, which specializes the formatter itself: the program compiles, and prints the format.
 #[test]
 fn a_format_past_the_evaluators_budget_still_prints() {
     let text = "a".repeat(2000);
@@ -245,7 +245,7 @@ fn a_format_past_the_evaluators_budget_still_prints() {
 
 /// Runtime arguments: the parse of the literal directive spine still runs at compile time — the residual is the specialized first-order chain.
 #[test]
-fn runtime_args_leave_no_formatter_in_cont() {
+fn runtime_args_leave_no_formatter_in_cps() {
     let source = r#"
         use /std/{Fmt, Nat, List, Process};
         let entry() -> /std/Io({}) =
@@ -254,11 +254,11 @@ fn runtime_args_leave_no_formatter_in_cont() {
         "#;
     assert_eq!(run(source), b"count: 0".to_vec());
 
-    let cont_optm = cont_optm(source);
+    let cps_optm = cps_optm(source);
     assert!(
-        !cont_optm.contains("/std/Fmt/") && !cont_optm.contains("/std/Parse/"),
+        !cps_optm.contains("/std/Fmt/") && !cps_optm.contains("/std/Parse/"),
         "the parse of the literal spine must collapse at compile time:\n{}",
-        &cont_optm[..cont_optm.len().min(4000)]
+        &cps_optm[..cps_optm.len().min(4000)]
     );
 }
 

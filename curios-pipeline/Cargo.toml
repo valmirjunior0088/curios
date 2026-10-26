@@ -15,7 +15,7 @@ profile = [
     "curios-unit/profile",
     "curios-elab/profile",
     "curios-anf/profile",
-    "curios-cont/profile",
+    "curios-cps/profile",
     "curios-emit/profile",
     "curios-cert/profile",
     "curios-prelude/profile",
@@ -25,7 +25,7 @@ profile = [
 curios-abi = { workspace = true }
 curios-utilities = { workspace = true }
 curios-cert = { workspace = true }
-curios-cont = { workspace = true }
+curios-cps = { workspace = true }
 curios-emit = { workspace = true }
 curios-core = { workspace = true }
 curios-elab = { workspace = true }

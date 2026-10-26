@@ -1,6 +1,6 @@
 //! The walk that decides what to emit: one pass over the erased arena, statement by statement and block by block, in continuation-passing order.
 //!
-//! Every method here answers "what does this construct become", and hands the answer to the [`Emitter`] that writes it or the [`Layout`] that shapes it. The split is what keeps this file about control flow alone — nothing below mints a Cont value or lays out a row, and nothing there descends into a block.
+//! Every method here answers "what does this construct become", and hands the answer to the [`Emitter`] that writes it or the [`Layout`] that shapes it. The split is what keeps this file about control flow alone — nothing below mints a CPS value or lays out a row, and nothing there descends into a block.
 
 use {
     super::{
@@ -19,20 +19,20 @@ use {
 
 pub(super) struct Lowerer<'a> {
     source: &'a Module,
-    /// Whether a call of each source function, its result unread, may simply not happen — the conjunction of the carried termination verdict and this stage's effect summary, which is the only form of either fact that crosses into Cont.
+    /// Whether a call of each source function, its result unread, may simply not happen — the conjunction of the carried termination verdict and this stage's effect summary, which is the only form of either fact that crosses into CPS.
     droppable: BTreeMap<FunctionId, bool>,
     /// Use counts over the finished arena, read only to decline emitting a binding nothing reads. The module does not change during lowering, so one analysis taken at entry stays exact throughout.
     analysis: Analysis,
     /// The sequence-usage census's verdicts, read at every construction site to settle the stores into indexed-only fields.
     facts: SequenceFacts,
-    /// The Cont module being built, and what each erased name has become in it.
+    /// The CPS module being built, and what each erased name has become in it.
     emitter: Emitter<'a>,
-    /// What every nominal shape's Cont heap type is and what it is called, memoized across the lowering.
+    /// What every nominal shape's CPS heap type is and what it is called, memoized across the lowering.
     layout: Layout<'a>,
     /// The step every bind's suspension arm calls, built at the first and bound at the top of the entry.
-    carry: Option<curios_cont::FunctionId>,
+    carry: Option<curios_cps::FunctionId>,
     /// The step every host call answered later suspends through, built and bound as `carry` is.
-    later: Option<curios_cont::FunctionId>,
+    later: Option<curios_cps::FunctionId>,
 }
 
 /// Where a `let` stands in its block: the value it binds, and what follows it — the statements after it, the terminator closing the block and the continuation the block delivers to. What a binding becomes is read off all four together: one nothing follows but its own return delivers straight to the target, and every other opens a continuation for the rest.
@@ -41,7 +41,7 @@ struct Site<'a> {
     result: ValueId,
     rest: &'a [StatementId],
     terminator: &'a Terminator,
-    target: curios_cont::ContinuationId,
+    target: curios_cps::ContinuationId,
 }
 
 impl<'a> Lowerer<'a> {
@@ -59,10 +59,10 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    /// Run the lowering and hand over the Cont module it built.
+    /// Run the lowering and hand over the CPS module it built.
     ///
     /// The arena's top level — its item chain followed by its entry block — becomes the parameterless entry `main`, delivering to a bodyless `return_cont`. The result is verified before it leaves: an invalid module here is a lowering bug, not a user error.
-    pub(super) fn finish(mut self) -> curios_cont::Module {
+    pub(super) fn finish(mut self) -> curios_cps::Module {
         let main = self.emitter.module.reserve_function();
         let return_cont = self.emitter.module.reserve_continuation();
         let entry = self
@@ -75,14 +75,14 @@ impl<'a> Lowerer<'a> {
         let mut body = self.lower_statements(&statements, &entry.terminator, return_cont);
         // Each closes over nothing, so binding it ahead of everything puts it in scope of every bind and every call.
         for step in [self.carry, self.later].into_iter().flatten() {
-            body = self.emitter.module.add_node(curios_cont::Node::LetFun {
+            body = self.emitter.module.add_node(curios_cps::Node::LetFun {
                 functions: vec![step],
                 body,
             });
         }
         self.emitter.module.define_function(
             main,
-            curios_cont::Function {
+            curios_cps::Function {
                 debug_name: Some("main".into()),
                 params: Vec::new(),
                 return_cont,
@@ -96,7 +96,7 @@ impl<'a> Lowerer<'a> {
         self.emitter
             .module
             .verify()
-            .unwrap_or_else(|error| panic!("arena lowering produced invalid Cont: {error}"));
+            .unwrap_or_else(|error| panic!("arena lowering produced invalid CPS: {error}"));
         self.emitter.module
     }
 }
@@ -106,8 +106,8 @@ impl Lowerer<'_> {
     fn lower_block(
         &mut self,
         block: BlockId,
-        target: curios_cont::ContinuationId,
-    ) -> curios_cont::NodeId {
+        target: curios_cps::ContinuationId,
+    ) -> curios_cps::NodeId {
         let block: Block = self.source.block(block).expect("live block").clone();
         self.lower_statements(&block.statements, &block.terminator, target)
     }
@@ -117,8 +117,8 @@ impl Lowerer<'_> {
         &mut self,
         statements: &[StatementId],
         terminator: &Terminator,
-        target: curios_cont::ContinuationId,
-    ) -> curios_cont::NodeId {
+        target: curios_cps::ContinuationId,
+    ) -> curios_cps::NodeId {
         recurse(|| self.lower_statements_within(statements, terminator, target))
     }
 
@@ -126,8 +126,8 @@ impl Lowerer<'_> {
         &mut self,
         statements: &[StatementId],
         terminator: &Terminator,
-        target: curios_cont::ContinuationId,
-    ) -> curios_cont::NodeId {
+        target: curios_cps::ContinuationId,
+    ) -> curios_cps::NodeId {
         let Some((&first, rest)) = statements.split_first() else {
             return self.lower_terminator(terminator, target);
         };
@@ -151,7 +151,7 @@ impl Lowerer<'_> {
                 let body = self.lower_statements(rest, terminator, target);
                 self.emitter
                     .module
-                    .add_node(curios_cont::Node::LetFun { functions, body })
+                    .add_node(curios_cps::Node::LetFun { functions, body })
             }
             Statement::Rec { group } => self.lower_rec_group(group, rest, terminator, target),
         }
@@ -160,8 +160,8 @@ impl Lowerer<'_> {
     fn lower_terminator(
         &mut self,
         terminator: &Terminator,
-        target: curios_cont::ContinuationId,
-    ) -> curios_cont::NodeId {
+        target: curios_cps::ContinuationId,
+    ) -> curios_cps::NodeId {
         match terminator {
             Terminator::Return(atom) => {
                 let atom = self.emitter.lower_atom(*atom);
@@ -179,15 +179,15 @@ impl Lowerer<'_> {
                     .collect();
                 self.emitter
                     .module
-                    .add_node(curios_cont::Node::Halt { function, args })
+                    .add_node(curios_cps::Node::Halt { function, args })
             }
-            Terminator::Unreachable => self.emitter.module.add_node(curios_cont::Node::Unreachable),
+            Terminator::Unreachable => self.emitter.module.add_node(curios_cps::Node::Unreachable),
         }
     }
 
-    /// Reserve every function of a group before defining any, so a member body can reference itself and its siblings; return the Cont ids in group order.
-    fn lower_function_group(&mut self, functions: &[FunctionId]) -> Vec<curios_cont::FunctionId> {
-        let ids: Vec<curios_cont::FunctionId> = functions
+    /// Reserve every function of a group before defining any, so a member body can reference itself and its siblings; return the CPS ids in group order.
+    fn lower_function_group(&mut self, functions: &[FunctionId]) -> Vec<curios_cps::FunctionId> {
+        let ids: Vec<curios_cps::FunctionId> = functions
             .iter()
             .map(|&arena| {
                 let id = self.emitter.module.reserve_function();
@@ -201,8 +201,8 @@ impl Lowerer<'_> {
         ids
     }
 
-    /// Define a reserved Cont function from its arena function. A body that references a knot's computed member reads it from the knot's cell at its own entry — at call time, once the knot is tied — rather than capturing the value directly.
-    fn define_function(&mut self, arena: FunctionId, id: curios_cont::FunctionId) {
+    /// Define a reserved CPS function from its arena function. A body that references a knot's computed member reads it from the knot's cell at its own entry — at call time, once the knot is tied — rather than capturing the value directly.
+    fn define_function(&mut self, arena: FunctionId, id: curios_cps::FunctionId) {
         let function: Function = self.source.function(arena).expect("live function").clone();
         let return_cont = self.emitter.module.reserve_continuation();
         let params = function
@@ -220,7 +220,7 @@ impl Lowerer<'_> {
         });
         self.emitter.module.define_function(
             id,
-            curios_cont::Function {
+            curios_cps::Function {
                 debug_name: function.debug_name.clone(),
                 params,
                 return_cont,
@@ -236,8 +236,8 @@ impl Lowerer<'_> {
         group: RecGroupId,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: curios_cont::ContinuationId,
-    ) -> curios_cont::NodeId {
+        target: curios_cps::ContinuationId,
+    ) -> curios_cps::NodeId {
         let mut group: RecGroup = self.source.rec_group(group).expect("live group").clone();
 
         // Drop computed members never referenced outside their own initializer — nothing would ever force them, and a self-knot `rec loop = loop` is legal exactly because its initializer never runs.
@@ -252,7 +252,7 @@ impl Lowerer<'_> {
             return self
                 .emitter
                 .module
-                .add_node(curios_cont::Node::LetFun { functions, body });
+                .add_node(curios_cps::Node::LetFun { functions, body });
         }
 
         self.lower_knot(&group, rest, terminator, target)
@@ -268,8 +268,8 @@ impl Lowerer<'_> {
         group: &RecGroup,
         rest: &[StatementId],
         terminator: &Terminator,
-        target: curios_cont::ContinuationId,
-    ) -> curios_cont::NodeId {
+        target: curios_cps::ContinuationId,
+    ) -> curios_cps::NodeId {
         let members: Vec<KnotMember> = group
             .values
             .iter()
@@ -290,7 +290,7 @@ impl Lowerer<'_> {
 
         // The members are in the map before any body below is lowered, so a reference to a computed sibling — from a function member, a thunk, or the rest — is a forcing read at its entry.
         let functions = self.lower_function_group(&group.functions);
-        let thunks: Vec<curios_cont::FunctionId> = group
+        let thunks: Vec<curios_cps::FunctionId> = group
             .values
             .iter()
             .map(|member| {
@@ -310,28 +310,28 @@ impl Lowerer<'_> {
             let status = self.emitter.module.add_value(None);
             self.emitter.module.define_continuation(
                 after_store,
-                curios_cont::Continuation {
+                curios_cps::Continuation {
                     debug_name: Some("knot/stored".into()),
                     params: vec![status],
                     body,
                 },
             );
-            let store = self.emitter.module.add_node(curios_cont::Node::Channel {
-                op: curios_cont::ChannelOp::Push,
+            let store = self.emitter.module.add_node(curios_cps::Node::Channel {
+                op: curios_cps::ChannelOp::Push,
                 args: vec![
-                    curios_cont::Atom::Value(knot.initializer),
-                    curios_cont::Atom::Fun(*thunk),
+                    curios_cps::Atom::Value(knot.initializer),
+                    curios_cps::Atom::Fun(*thunk),
                 ],
                 return_to: after_store,
             });
-            body = self.emitter.module.add_node(curios_cont::Node::LetCont {
+            body = self.emitter.module.add_node(curios_cps::Node::LetCont {
                 continuations: vec![after_store],
                 body: store,
             });
         }
 
         // Binding order, outside in: the cells and channels; the force functions, which capture only that storage; the function members, which call the force functions; the thunks, which call both.
-        body = self.emitter.module.add_node(curios_cont::Node::LetFun {
+        body = self.emitter.module.add_node(curios_cps::Node::LetFun {
             functions: thunks,
             body,
         });
@@ -339,9 +339,9 @@ impl Lowerer<'_> {
             body = self
                 .emitter
                 .module
-                .add_node(curios_cont::Node::LetFun { functions, body });
+                .add_node(curios_cps::Node::LetFun { functions, body });
         }
-        body = self.emitter.module.add_node(curios_cont::Node::LetFun {
+        body = self.emitter.module.add_node(curios_cps::Node::LetFun {
             functions: members.iter().map(|knot| knot.force).collect(),
             body,
         });
@@ -349,38 +349,38 @@ impl Lowerer<'_> {
             let channel_bound = self.emitter.module.reserve_continuation();
             self.emitter.module.define_continuation(
                 channel_bound,
-                curios_cont::Continuation {
+                curios_cps::Continuation {
                     debug_name: Some("knot/channel".into()),
                     params: vec![knot.initializer],
                     body,
                 },
             );
-            let channel = self.emitter.module.add_node(curios_cont::Node::Channel {
-                op: curios_cont::ChannelOp::New,
-                args: vec![curios_cont::Atom::Literal(curios_cont::Literal::Nat(
+            let channel = self.emitter.module.add_node(curios_cps::Node::Channel {
+                op: curios_cps::ChannelOp::New,
+                args: vec![curios_cps::Atom::Literal(curios_cps::Literal::Nat(
                     Natural::from(1u32),
                 ))],
                 return_to: channel_bound,
             });
-            body = self.emitter.module.add_node(curios_cont::Node::LetCont {
+            body = self.emitter.module.add_node(curios_cps::Node::LetCont {
                 continuations: vec![channel_bound],
                 body: channel,
             });
             let bound = self.emitter.module.reserve_continuation();
             self.emitter.module.define_continuation(
                 bound,
-                curios_cont::Continuation {
+                curios_cps::Continuation {
                     debug_name: Some("knot/cell".into()),
                     params: vec![knot.result],
                     body,
                 },
             );
-            let reserve = self.emitter.module.add_node(curios_cont::Node::Cell {
-                op: curios_cont::CellOp::Reserve,
+            let reserve = self.emitter.module.add_node(curios_cps::Node::Cell {
+                op: curios_cps::CellOp::Reserve,
                 args: Vec::new(),
                 return_to: bound,
             });
-            body = self.emitter.module.add_node(curios_cont::Node::LetCont {
+            body = self.emitter.module.add_node(curios_cps::Node::LetCont {
                 continuations: vec![bound],
                 body: reserve,
             });
@@ -389,7 +389,7 @@ impl Lowerer<'_> {
     }
 
     /// A member's initializer as a nullary function: what its channel holds until something forces it. It takes its own forcing reads at entry, so the members it depends on are computed before it runs — which is the by-need order, found by running rather than computed ahead.
-    fn define_thunk(&mut self, init: BlockId, hint: Option<String>) -> curios_cont::FunctionId {
+    fn define_thunk(&mut self, init: BlockId, hint: Option<String>) -> curios_cps::FunctionId {
         let thunk = self.emitter.module.reserve_function();
         let return_cont = self.emitter.module.reserve_continuation();
         let init_members = self.emitter.block_member_refs(init);
@@ -398,7 +398,7 @@ impl Lowerer<'_> {
         });
         self.emitter.module.define_function(
             thunk,
-            curios_cont::Function {
+            curios_cps::Function {
                 debug_name: hint.map(|hint| format!("{hint}/init")),
                 params: Vec::new(),
                 return_cont,
@@ -414,16 +414,16 @@ impl Lowerer<'_> {
     fn with_cell_reads(
         &mut self,
         members: Vec<ValueId>,
-        build: impl FnOnce(&mut Self) -> curios_cont::NodeId,
-    ) -> curios_cont::NodeId {
+        build: impl FnOnce(&mut Self) -> curios_cps::NodeId,
+    ) -> curios_cps::NodeId {
         if members.is_empty() {
             return build(self);
         }
         let reads: Vec<(
             ValueId,
-            curios_cont::ValueId,
-            curios_cont::FunctionId,
-            Option<curios_cont::Atom>,
+            curios_cps::ValueId,
+            curios_cps::FunctionId,
+            Option<curios_cps::Atom>,
         )> = members
             .into_iter()
             .map(|member| {
@@ -435,7 +435,7 @@ impl Lowerer<'_> {
                 let previous = self
                     .emitter
                     .values
-                    .insert(member, curios_cont::Atom::Value(local));
+                    .insert(member, curios_cps::Atom::Value(local));
                 (member, local, force, previous)
             })
             .collect();
@@ -454,18 +454,18 @@ impl Lowerer<'_> {
             let resume = self.emitter.module.reserve_continuation();
             self.emitter.module.define_continuation(
                 resume,
-                curios_cont::Continuation {
+                curios_cps::Continuation {
                     debug_name: Some("force/resume".into()),
                     params: vec![local],
                     body,
                 },
             );
-            let forcing = self.emitter.module.add_node(curios_cont::Node::ApplyFun {
-                callee: curios_cont::Callee::Known(force),
+            let forcing = self.emitter.module.add_node(curios_cps::Node::ApplyFun {
+                callee: curios_cps::Callee::Known(force),
                 args: Vec::new(),
                 return_to: resume,
             });
-            body = self.emitter.module.add_node(curios_cont::Node::LetCont {
+            body = self.emitter.module.add_node(curios_cps::Node::LetCont {
                 continuations: vec![resume],
                 body: forcing,
             });
@@ -473,7 +473,7 @@ impl Lowerer<'_> {
         body
     }
 
-    fn lower_let(&mut self, rhs: &Rhs, site: Site<'_>) -> curios_cont::NodeId {
+    fn lower_let(&mut self, rhs: &Rhs, site: Site<'_>) -> curios_cps::NodeId {
         let Site {
             result,
             rest,
@@ -481,7 +481,7 @@ impl Lowerer<'_> {
             target,
         } = site;
         match rhs {
-            // Aliasing binds an already-computed atom: record the mapping and continue; no Cont node is needed.
+            // Aliasing binds an already-computed atom: record the mapping and continue; no CPS node is needed.
             Rhs::Alias(atom) => {
                 let atom = self.emitter.lower_atom(*atom);
                 self.emitter.values.insert(result, atom);
@@ -495,19 +495,19 @@ impl Lowerer<'_> {
                 operation,
                 operands,
             } => {
-                let args: Vec<curios_cont::Atom> = operands
+                let args: Vec<curios_cps::Atom> = operands
                     .iter()
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
                 if let SequenceOp::ListBuild = operation {
-                    return self.straight(site, move |bound, next| curios_cont::Node::LetValue {
+                    return self.straight(site, move |bound, next| curios_cps::Node::LetValue {
                         result: bound,
-                        value: curios_cont::ValueExpr::List(args),
+                        value: curios_cps::ValueExpr::List(args),
                         next,
                     });
                 }
                 let op = sequence_intrinsic(*operation, args.len());
-                self.straight(site, move |bound, next| curios_cont::Node::LetIntrinsic {
+                self.straight(site, move |bound, next| curios_cps::Node::LetIntrinsic {
                     result: bound,
                     op,
                     args,
@@ -520,7 +520,7 @@ impl Lowerer<'_> {
                     .iter()
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
-                self.split(1, site, |return_to| curios_cont::Node::ApplyFun {
+                self.split(1, site, |return_to| curios_cps::Node::ApplyFun {
                     callee,
                     args,
                     return_to,
@@ -541,7 +541,7 @@ impl Lowerer<'_> {
                     }
                 };
                 // One writer, so every slot is filled and no filler is ever placed.
-                let mut atoms = vec![curios_cont::Atom::Filler; width];
+                let mut atoms = vec![curios_cps::Atom::Filler; width];
                 let mut marked = vec![false; width];
                 for (field, &atom) in fields.iter().enumerate() {
                     atoms[places[field]] = self.emitter.lower_atom(atom);
@@ -549,8 +549,8 @@ impl Lowerer<'_> {
                 }
                 let settles = self.emitter.settle_stores(&marked, &mut atoms);
                 let value = match self.layout.is_shared(*schema) {
-                    true => curios_cont::ValueExpr::Tuple(atoms),
-                    false => curios_cont::ValueExpr::Row(
+                    true => curios_cps::ValueExpr::Tuple(atoms),
+                    false => curios_cps::ValueExpr::Row(
                         self.layout
                             .product_identity(&mut self.emitter.module, *schema),
                         atoms,
@@ -558,7 +558,7 @@ impl Lowerer<'_> {
                 };
                 let bound = self.emitter.bind_value(result);
                 let next = self.lower_statements(rest, terminator, target);
-                let node = self.emitter.module.add_node(curios_cont::Node::LetValue {
+                let node = self.emitter.module.add_node(curios_cps::Node::LetValue {
                     result: bound,
                     value,
                     next,
@@ -584,7 +584,7 @@ impl Lowerer<'_> {
                     || matches!(encoding, FamilyEncoding::Immediate { constructor: bare } if bare == *constructor);
                 let node = if bare {
                     let atom = atoms.into_iter().next().unwrap_or_else(|| {
-                        curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::zero()))
+                        curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::zero()))
                     });
                     self.emitter.values.insert(result, atom);
                     self.lower_statements(rest, terminator, target)
@@ -592,7 +592,7 @@ impl Lowerer<'_> {
                     let value =
                         self.layout
                             .constructor_row(&mut self.emitter.module, *constructor, atoms);
-                    self.straight(site, |result, next| curios_cont::Node::LetValue {
+                    self.straight(site, |result, next| curios_cps::Node::LetValue {
                         result,
                         value,
                         next,
@@ -606,8 +606,8 @@ impl Lowerer<'_> {
                 field,
             } => {
                 let op = match self.layout.is_shared(*schema) {
-                    true => curios_cont::Intrinsic::TupleGet(*field as usize),
-                    false => curios_cont::Intrinsic::RowGet(
+                    true => curios_cps::Intrinsic::TupleGet(*field as usize),
+                    false => curios_cps::Intrinsic::RowGet(
                         self.layout
                             .product_identity(&mut self.emitter.module, *schema),
                         self.layout.product_slots(&mut self.emitter.module, *schema)
@@ -615,7 +615,7 @@ impl Lowerer<'_> {
                     ),
                 };
                 let product = self.emitter.lower_atom(*product);
-                self.straight(site, move |bound, next| curios_cont::Node::LetIntrinsic {
+                self.straight(site, move |bound, next| curios_cps::Node::LetIntrinsic {
                     result: bound,
                     op,
                     args: vec![product],
@@ -678,7 +678,7 @@ impl Lowerer<'_> {
                         fresh,
                         2,
                         &[(*none, false), (*some, true)],
-                        |return_to| curios_cont::Node::Cell {
+                        |return_to| curios_cps::Node::Cell {
                             op,
                             args,
                             return_to,
@@ -686,7 +686,7 @@ impl Lowerer<'_> {
                     );
                 }
                 self.split(op.result_arity(), site, |return_to| {
-                    curios_cont::Node::Cell {
+                    curios_cps::Node::Cell {
                         op,
                         args,
                         return_to,
@@ -702,13 +702,13 @@ impl Lowerer<'_> {
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
                 let op = match operation {
-                    ChannelOperation::New => curios_cont::ChannelOp::New,
-                    ChannelOperation::Push { .. } => curios_cont::ChannelOp::Push,
-                    ChannelOperation::Take { .. } => curios_cont::ChannelOp::Take,
-                    ChannelOperation::Close => curios_cont::ChannelOp::Close,
-                    ChannelOperation::Closed => curios_cont::ChannelOp::Closed,
-                    ChannelOperation::Count => curios_cont::ChannelOp::Count,
-                    ChannelOperation::Capacity => curios_cont::ChannelOp::Capacity,
+                    ChannelOperation::New => curios_cps::ChannelOp::New,
+                    ChannelOperation::Push { .. } => curios_cps::ChannelOp::Push,
+                    ChannelOperation::Take { .. } => curios_cps::ChannelOp::Take,
+                    ChannelOperation::Close => curios_cps::ChannelOp::Close,
+                    ChannelOperation::Closed => curios_cps::ChannelOp::Closed,
+                    ChannelOperation::Count => curios_cps::ChannelOp::Count,
+                    ChannelOperation::Capacity => curios_cps::ChannelOp::Capacity,
                 };
                 let outcomes = match operation {
                     ChannelOperation::Push {
@@ -724,7 +724,7 @@ impl Lowerer<'_> {
                 if !outcomes.is_empty() {
                     let (join, fresh) = self.open_join(site);
                     self.lower_outcome(join, fresh, op.result_arity(), &outcomes, |return_to| {
-                        curios_cont::Node::Channel {
+                        curios_cps::Node::Channel {
                             op,
                             args,
                             return_to,
@@ -732,7 +732,7 @@ impl Lowerer<'_> {
                     })
                 } else {
                     self.split(op.result_arity(), site, |return_to| {
-                        curios_cont::Node::Channel {
+                        curios_cps::Node::Channel {
                             op,
                             args,
                             return_to,
@@ -757,14 +757,14 @@ impl Lowerer<'_> {
                 operands,
             } => {
                 let op = match intrinsic {
-                    Intrinsic::ListMap => curios_cont::IntrinsicCall::ListMap,
+                    Intrinsic::ListMap => curios_cps::IntrinsicCall::ListMap,
                 };
                 // Both representations bind the list first, then the mapper; the operands transcribe in order.
                 let args = operands
                     .iter()
                     .map(|&operand| self.emitter.lower_atom(operand))
                     .collect();
-                self.split(1, site, |return_to| curios_cont::Node::Intrinsic {
+                self.split(1, site, |return_to| curios_cps::Node::Intrinsic {
                     op,
                     args,
                     return_to,
@@ -778,7 +778,7 @@ impl Lowerer<'_> {
     }
 
     /// The function a bind's suspension arm calls: `carry(suspension, continuation)` answers the suspension with the continuation appended to its frames. Built on first use and kept out of line, so every bind shares the one path it rarely takes, and the path it does take stays small enough to inline — the bind-inlining with a shared slow path of Xie and Leijen's evidence passing, whose `yield_extend` this is.
-    fn carry(&mut self, row: curios_cont::RowId) -> curios_cont::FunctionId {
+    fn carry(&mut self, row: curios_cps::RowId) -> curios_cps::FunctionId {
         if let Some(carry) = self.carry {
             return carry;
         }
@@ -794,39 +794,39 @@ impl Lowerer<'_> {
 
         let returned = self
             .emitter
-            .jump(return_cont, vec![curios_cont::Atom::Value(built)]);
+            .jump(return_cont, vec![curios_cps::Atom::Value(built)]);
         let module = &mut self.emitter.module;
-        let rebuilt = module.add_node(curios_cont::Node::LetValue {
+        let rebuilt = module.add_node(curios_cps::Node::LetValue {
             result: built,
-            value: curios_cont::ValueExpr::Row(
+            value: curios_cps::ValueExpr::Row(
                 row,
                 kept.into_iter()
                     .chain([appended])
-                    .map(curios_cont::Atom::Value)
+                    .map(curios_cps::Atom::Value)
                     .collect(),
             ),
             next: returned,
         });
-        let mut body = module.add_node(curios_cont::Node::LetIntrinsic {
+        let mut body = module.add_node(curios_cps::Node::LetIntrinsic {
             result: appended,
-            op: curios_cont::Intrinsic::ListAppend,
+            op: curios_cps::Intrinsic::ListAppend,
             args: vec![
-                curios_cont::Atom::Value(frames),
-                curios_cont::Atom::Value(continuation),
+                curios_cps::Atom::Value(frames),
+                curios_cps::Atom::Value(continuation),
             ],
             next: rebuilt,
         });
         for (slot, part) in parts.into_iter().enumerate().rev() {
-            body = module.add_node(curios_cont::Node::LetIntrinsic {
+            body = module.add_node(curios_cps::Node::LetIntrinsic {
                 result: part,
-                op: curios_cont::Intrinsic::RowGet(row, slot),
-                args: vec![curios_cont::Atom::Value(suspension)],
+                op: curios_cps::Intrinsic::RowGet(row, slot),
+                args: vec![curios_cps::Atom::Value(suspension)],
                 next: body,
             });
         }
         module.define_function(
             carry,
-            curios_cont::Function {
+            curios_cps::Function {
                 debug_name: Some("io/carry".into()),
                 params: vec![suspension, continuation],
                 return_cont,
@@ -841,7 +841,7 @@ impl Lowerer<'_> {
     }
 
     /// The function a host call answered later suspends through: `later(token, again)` answers the suspension on the token's handle, with `again(token, true)`, the description dropping the call, as its cancel, `again(token, false)`, the one asking for its answer, as its rest, and no cells or frames. Built on first use and kept out of line, so every row's call waits in the one shape.
-    fn later(&mut self, row: curios_cont::RowId) -> curios_cont::FunctionId {
+    fn later(&mut self, row: curios_cps::RowId) -> curios_cps::FunctionId {
         if let Some(later) = self.later {
             return later;
         }
@@ -858,23 +858,23 @@ impl Lowerer<'_> {
 
         let returned = self
             .emitter
-            .jump(return_cont, vec![curios_cont::Atom::Value(built)]);
+            .jump(return_cont, vec![curios_cps::Atom::Value(built)]);
         let module = &mut self.emitter.module;
-        let mut body = module.add_node(curios_cont::Node::LetValue {
+        let mut body = module.add_node(curios_cps::Node::LetValue {
             result: built,
-            value: curios_cont::ValueExpr::Row(
+            value: curios_cps::ValueExpr::Row(
                 row,
                 [token, cells, cancel, rest, frames]
                     .into_iter()
-                    .map(curios_cont::Atom::Value)
+                    .map(curios_cps::Atom::Value)
                     .collect(),
             ),
             next: returned,
         });
         for empty in [frames, cells] {
-            body = module.add_node(curios_cont::Node::LetValue {
+            body = module.add_node(curios_cps::Node::LetValue {
                 result: empty,
-                value: curios_cont::ValueExpr::List(Vec::new()),
+                value: curios_cps::ValueExpr::List(Vec::new()),
                 next: body,
             });
         }
@@ -883,28 +883,28 @@ impl Lowerer<'_> {
             let made_it = module.reserve_continuation();
             module.define_continuation(
                 made_it,
-                curios_cont::Continuation {
+                curios_cps::Continuation {
                     debug_name: Some("io/later/made".into()),
                     params: vec![made],
                     body,
                 },
             );
-            let apply = module.add_node(curios_cont::Node::ApplyFun {
-                callee: curios_cont::Callee::Closure(again),
+            let apply = module.add_node(curios_cps::Node::ApplyFun {
+                callee: curios_cps::Callee::Closure(again),
                 args: vec![
-                    curios_cont::Atom::Value(token),
-                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(dropping))),
+                    curios_cps::Atom::Value(token),
+                    curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(dropping))),
                 ],
                 return_to: made_it,
             });
-            body = module.add_node(curios_cont::Node::LetCont {
+            body = module.add_node(curios_cps::Node::LetCont {
                 continuations: vec![made_it],
                 body: apply,
             });
         }
         module.define_function(
             later,
-            curios_cont::Function {
+            curios_cps::Function {
                 debug_name: Some("io/later".into()),
                 params: vec![token, again],
                 return_cont,
@@ -924,7 +924,7 @@ impl Lowerer<'_> {
         operation: SuspensionOperation,
         operands: &[Atom],
         site: Site<'_>,
-    ) -> curios_cont::NodeId {
+    ) -> curios_cps::NodeId {
         let row = self.emitter.module.suspension_row();
         let mut args = operands
             .iter()
@@ -933,49 +933,49 @@ impl Lowerer<'_> {
         let op = match operation {
             SuspensionOperation::New => {
                 let frames = self.emitter.module.add_value(None);
-                args.push(curios_cont::Atom::Value(frames));
-                let built = self.straight(site, move |result, next| curios_cont::Node::LetValue {
+                args.push(curios_cps::Atom::Value(frames));
+                let built = self.straight(site, move |result, next| curios_cps::Node::LetValue {
                     result,
-                    value: curios_cont::ValueExpr::Row(row, args),
+                    value: curios_cps::ValueExpr::Row(row, args),
                     next,
                 });
-                return self.emitter.module.add_node(curios_cont::Node::LetValue {
+                return self.emitter.module.add_node(curios_cps::Node::LetValue {
                     result: frames,
-                    value: curios_cont::ValueExpr::List(Vec::new()),
+                    value: curios_cps::ValueExpr::List(Vec::new()),
                     next: built,
                 });
             }
             SuspensionOperation::Carry => {
                 let carry = self.carry(row);
-                return self.split(1, site, |return_to| curios_cont::Node::ApplyFun {
-                    callee: curios_cont::Callee::Known(carry),
+                return self.split(1, site, |return_to| curios_cps::Node::ApplyFun {
+                    callee: curios_cps::Callee::Known(carry),
                     args,
                     return_to,
                 });
             }
             SuspensionOperation::Later => {
                 let later = self.later(row);
-                return self.split(1, site, |return_to| curios_cont::Node::ApplyFun {
-                    callee: curios_cont::Callee::Known(later),
+                return self.split(1, site, |return_to| curios_cps::Node::ApplyFun {
+                    callee: curios_cps::Callee::Known(later),
                     args,
                     return_to,
                 });
             }
             SuspensionOperation::Build => {
-                return self.straight(site, move |result, next| curios_cont::Node::LetValue {
+                return self.straight(site, move |result, next| curios_cps::Node::LetValue {
                     result,
-                    value: curios_cont::ValueExpr::Row(row, args),
+                    value: curios_cps::ValueExpr::Row(row, args),
                     next,
                 });
             }
-            SuspensionOperation::Is => curios_cont::Intrinsic::IsRow(row),
-            SuspensionOperation::On => curios_cont::Intrinsic::RowGet(row, 0),
-            SuspensionOperation::Filled => curios_cont::Intrinsic::RowGet(row, 1),
-            SuspensionOperation::Cancel => curios_cont::Intrinsic::RowGet(row, 2),
-            SuspensionOperation::Next => curios_cont::Intrinsic::RowGet(row, 3),
-            SuspensionOperation::Frames => curios_cont::Intrinsic::RowGet(row, 4),
+            SuspensionOperation::Is => curios_cps::Intrinsic::IsRow(row),
+            SuspensionOperation::On => curios_cps::Intrinsic::RowGet(row, 0),
+            SuspensionOperation::Filled => curios_cps::Intrinsic::RowGet(row, 1),
+            SuspensionOperation::Cancel => curios_cps::Intrinsic::RowGet(row, 2),
+            SuspensionOperation::Next => curios_cps::Intrinsic::RowGet(row, 3),
+            SuspensionOperation::Frames => curios_cps::Intrinsic::RowGet(row, 4),
         };
-        self.straight(site, move |result, next| curios_cont::Node::LetIntrinsic {
+        self.straight(site, move |result, next| curios_cps::Node::LetIntrinsic {
             result,
             op,
             args,
@@ -989,7 +989,7 @@ impl Lowerer<'_> {
         operation: Operation,
         operands: &[Atom],
         site: Site<'_>,
-    ) -> curios_cont::NodeId {
+    ) -> curios_cps::NodeId {
         let Site {
             result,
             rest,
@@ -1004,14 +1004,12 @@ impl Lowerer<'_> {
             }
             Operation::NatToByte => {
                 let value = self.emitter.lower_atom(operands[0]);
-                self.straight(site, move |bound, next| curios_cont::Node::LetIntrinsic {
+                self.straight(site, move |bound, next| curios_cps::Node::LetIntrinsic {
                     result: bound,
-                    op: curios_cont::Intrinsic::NatAnd,
+                    op: curios_cps::Intrinsic::NatAnd,
                     args: vec![
                         value,
-                        curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(
-                            0xFFu32,
-                        ))),
+                        curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(0xFFu32))),
                     ],
                     next,
                 })
@@ -1022,7 +1020,7 @@ impl Lowerer<'_> {
                     .iter()
                     .map(|&atom| self.emitter.lower_atom(atom))
                     .collect();
-                self.straight(site, move |bound, next| curios_cont::Node::LetIntrinsic {
+                self.straight(site, move |bound, next| curios_cps::Node::LetIntrinsic {
                     result: bound,
                     op,
                     args,
@@ -1034,8 +1032,8 @@ impl Lowerer<'_> {
 
     // === Control splits ==================================================
 
-    /// Open a join continuation that receives a control split's single result and runs the rest of the block; every arm delivers to it. A split in tail position — the block's last statement, whose result the block returns — delivers straight to the block's own target instead: no administrative join means a self-call in an arm returns to the function's return continuation and is genuinely tail, which is what lets Cont contify the recursion into a loop (a bodyless return continuation is not a forwarding target, so an eta join there would never collapse).
-    fn open_join(&mut self, site: Site<'_>) -> (curios_cont::ContinuationId, bool) {
+    /// Open a join continuation that receives a control split's single result and runs the rest of the block; every arm delivers to it. A split in tail position — the block's last statement, whose result the block returns — delivers straight to the block's own target instead: no administrative join means a self-call in an arm returns to the function's return continuation and is genuinely tail, which is what lets CPS contify the recursion into a loop (a bodyless return continuation is not a forwarding target, so an eta join there would never collapse).
+    fn open_join(&mut self, site: Site<'_>) -> (curios_cps::ContinuationId, bool) {
         let Site {
             result,
             rest,
@@ -1052,7 +1050,7 @@ impl Lowerer<'_> {
     }
 
     /// Open a join unconditionally — the fold loops route their exit through a `Switch` *edge*, and a bodyless return continuation cannot be a switch target, so they never take the tail bypass.
-    fn open_join_fresh(&mut self, site: Site<'_>) -> curios_cont::ContinuationId {
+    fn open_join_fresh(&mut self, site: Site<'_>) -> curios_cps::ContinuationId {
         let Site {
             result,
             rest,
@@ -1064,7 +1062,7 @@ impl Lowerer<'_> {
         let body = self.lower_statements(rest, terminator, target);
         self.emitter.module.define_continuation(
             join,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("join".into()),
                 params: vec![parameter],
                 body,
@@ -1077,13 +1075,13 @@ impl Lowerer<'_> {
     fn plain_arm(
         &mut self,
         block: BlockId,
-        join: curios_cont::ContinuationId,
-    ) -> curios_cont::ContinuationId {
+        join: curios_cps::ContinuationId,
+    ) -> curios_cps::ContinuationId {
         let continuation = self.emitter.module.reserve_continuation();
         let body = self.lower_block(block, join);
         self.emitter.module.define_continuation(
             continuation,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("arm".into()),
                 params: Vec::new(),
                 body,
@@ -1097,11 +1095,11 @@ impl Lowerer<'_> {
     /// A `Switch` reads its scrutinee as a machine word, and a `Nat` narrows to one exactly only below the i31, saturating past it — so a key the i31 does not hold is not a table slot at all. Each such key is decided by an equality test on the default path instead, in key order, which leaves the table indexing only words and the saturated value matching no key.
     fn lower_switch(
         &mut self,
-        scrutinee: curios_cont::Atom,
+        scrutinee: curios_cps::Atom,
         arms: Vec<(u32, BlockId)>,
         default: Option<BlockId>,
         site: Site<'_>,
-    ) -> curios_cont::NodeId {
+    ) -> curios_cps::NodeId {
         let (join, fresh) = self.open_join(site);
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
         let mut cases = BTreeMap::new();
@@ -1109,11 +1107,11 @@ impl Lowerer<'_> {
         for (key, block) in arms {
             let continuation = self.plain_arm(block, join);
             continuations.push(continuation);
-            match curios_cont::nat_is_small(&Natural::from(key)) {
+            match curios_cps::nat_is_small(&Natural::from(key)) {
                 true => {
                     cases.insert(
                         key,
-                        curios_cont::Edge {
+                        curios_cps::Edge {
                             target: continuation,
                             args: Vec::new(),
                         },
@@ -1125,7 +1123,7 @@ impl Lowerer<'_> {
         let mut default = default.map(|block| {
             let continuation = self.plain_arm(block, join);
             continuations.push(continuation);
-            curios_cont::Edge {
+            curios_cps::Edge {
                 target: continuation,
                 args: Vec::new(),
             }
@@ -1133,17 +1131,17 @@ impl Lowerer<'_> {
         for (key, continuation) in tested.into_iter().rev() {
             let test = self.key_test(&scrutinee, key, continuation, default);
             continuations.push(test);
-            default = Some(curios_cont::Edge {
+            default = Some(curios_cps::Edge {
                 target: test,
                 args: Vec::new(),
             });
         }
-        let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
+        let switch = self.emitter.module.add_node(curios_cps::Node::Switch {
             scrutinee,
             cases,
             default,
         });
-        self.emitter.module.add_node(curios_cont::Node::LetCont {
+        self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations,
             body: switch,
         })
@@ -1152,17 +1150,17 @@ impl Lowerer<'_> {
     /// A parameterless continuation deciding one switch key by equality: `arm` when `scrutinee` is `key`, and `otherwise` — the next test or the switch's own default — when it is not.
     fn key_test(
         &mut self,
-        scrutinee: &curios_cont::Atom,
+        scrutinee: &curios_cps::Atom,
         key: u32,
-        arm: curios_cont::ContinuationId,
-        otherwise: Option<curios_cont::Edge>,
-    ) -> curios_cont::ContinuationId {
+        arm: curios_cps::ContinuationId,
+        otherwise: Option<curios_cps::Edge>,
+    ) -> curios_cps::ContinuationId {
         let equal = self.emitter.module.add_value(None);
-        let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
-            scrutinee: curios_cont::Atom::Value(equal),
+        let switch = self.emitter.module.add_node(curios_cps::Node::Switch {
+            scrutinee: curios_cps::Atom::Value(equal),
             cases: BTreeMap::from([(
                 1,
-                curios_cont::Edge {
+                curios_cps::Edge {
                     target: arm,
                     args: Vec::new(),
                 },
@@ -1172,19 +1170,19 @@ impl Lowerer<'_> {
         let body = self
             .emitter
             .module
-            .add_node(curios_cont::Node::LetIntrinsic {
+            .add_node(curios_cps::Node::LetIntrinsic {
                 result: equal,
-                op: curios_cont::Intrinsic::NatEql,
+                op: curios_cps::Intrinsic::NatEql,
                 args: vec![
                     scrutinee.clone(),
-                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(key))),
+                    curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(key))),
                 ],
                 next: switch,
             });
         let continuation = self.emitter.module.reserve_continuation();
         self.emitter.module.define_continuation(
             continuation,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("key".into()),
                 params: Vec::new(),
                 body,
@@ -1201,7 +1199,7 @@ impl Lowerer<'_> {
         arms: &[VariantArm],
         default: Option<BlockId>,
         site: Site<'_>,
-    ) -> curios_cont::NodeId {
+    ) -> curios_cps::NodeId {
         let scrutinee = self.emitter.lower_atom(scrutinee);
 
         match self.layout.family_encoding(family) {
@@ -1215,7 +1213,7 @@ impl Lowerer<'_> {
                     }
                 };
                 return match fresh {
-                    true => self.emitter.module.add_node(curios_cont::Node::LetCont {
+                    true => self.emitter.module.add_node(curios_cps::Node::LetCont {
                         continuations: vec![join],
                         body,
                     }),
@@ -1245,7 +1243,7 @@ impl Lowerer<'_> {
             continuations.push(continuation);
             cases.insert(
                 self.layout.constructor_tag(arm.constructor),
-                curios_cont::Edge {
+                curios_cps::Edge {
                     target: continuation,
                     args: Vec::new(),
                 },
@@ -1254,28 +1252,28 @@ impl Lowerer<'_> {
         let default = default.map(|block| {
             let continuation = self.plain_arm(block, join);
             continuations.push(continuation);
-            curios_cont::Edge {
+            curios_cps::Edge {
                 target: continuation,
                 args: Vec::new(),
             }
         });
 
         let tag = self.emitter.module.add_value(None);
-        let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
-            scrutinee: curios_cont::Atom::Value(tag),
+        let switch = self.emitter.module.add_node(curios_cps::Node::Switch {
+            scrutinee: curios_cps::Atom::Value(tag),
             cases,
             default,
         });
         let dispatch = self
             .emitter
             .module
-            .add_node(curios_cont::Node::LetIntrinsic {
+            .add_node(curios_cps::Node::LetIntrinsic {
                 result: tag,
-                op: curios_cont::Intrinsic::RowGet(identity, 0),
+                op: curios_cps::Intrinsic::RowGet(identity, 0),
                 args: vec![scrutinee],
                 next: switch,
             });
-        self.emitter.module.add_node(curios_cont::Node::LetCont {
+        self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations,
             body: dispatch,
         })
@@ -1286,11 +1284,11 @@ impl Lowerer<'_> {
         &mut self,
         family: FamilyId,
         immediate: ConstructorId,
-        scrutinee: curios_cont::Atom,
+        scrutinee: curios_cps::Atom,
         arms: &[VariantArm],
         default: Option<BlockId>,
         site: Site<'_>,
-    ) -> curios_cont::NodeId {
+    ) -> curios_cps::NodeId {
         let (join, fresh) = self.open_join(site);
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
 
@@ -1306,7 +1304,7 @@ impl Lowerer<'_> {
                 let continuation = self.emitter.module.reserve_continuation();
                 self.emitter.module.define_continuation(
                     continuation,
-                    curios_cont::Continuation {
+                    curios_cps::Continuation {
                         debug_name: Some("arm/immediate".into()),
                         params: Vec::new(),
                         body,
@@ -1346,35 +1344,35 @@ impl Lowerer<'_> {
                     continuations.push(continuation);
                     cases.insert(
                         self.layout.constructor_tag(arm.constructor),
-                        curios_cont::Edge {
+                        curios_cps::Edge {
                             target: continuation,
                             args: Vec::new(),
                         },
                     );
                 }
-                let default = default_cont.map(|continuation| curios_cont::Edge {
+                let default = default_cont.map(|continuation| curios_cps::Edge {
                     target: continuation,
                     args: Vec::new(),
                 });
                 let tag = self.emitter.module.add_value(None);
-                let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
-                    scrutinee: curios_cont::Atom::Value(tag),
+                let switch = self.emitter.module.add_node(curios_cps::Node::Switch {
+                    scrutinee: curios_cps::Atom::Value(tag),
                     cases,
                     default,
                 });
                 let body = self
                     .emitter
                     .module
-                    .add_node(curios_cont::Node::LetIntrinsic {
+                    .add_node(curios_cps::Node::LetIntrinsic {
                         result: tag,
-                        op: curios_cont::Intrinsic::RowGet(identity, 0),
+                        op: curios_cps::Intrinsic::RowGet(identity, 0),
                         args: vec![scrutinee.clone()],
                         next: switch,
                     });
                 let continuation = self.emitter.module.reserve_continuation();
                 self.emitter.module.define_continuation(
                     continuation,
-                    curios_cont::Continuation {
+                    curios_cps::Continuation {
                         debug_name: Some("arm/boxed".into()),
                         params: Vec::new(),
                         body,
@@ -1386,16 +1384,16 @@ impl Lowerer<'_> {
         };
 
         let kind = self.emitter.module.add_value(None);
-        let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
-            scrutinee: curios_cont::Atom::Value(kind),
+        let switch = self.emitter.module.add_node(curios_cps::Node::Switch {
+            scrutinee: curios_cps::Atom::Value(kind),
             cases: BTreeMap::from([(
                 1,
-                curios_cont::Edge {
+                curios_cps::Edge {
                     target: immediate_target,
                     args: Vec::new(),
                 },
             )]),
-            default: Some(curios_cont::Edge {
+            default: Some(curios_cps::Edge {
                 target: boxed_target,
                 args: Vec::new(),
             }),
@@ -1403,13 +1401,13 @@ impl Lowerer<'_> {
         let dispatch = self
             .emitter
             .module
-            .add_node(curios_cont::Node::LetIntrinsic {
+            .add_node(curios_cps::Node::LetIntrinsic {
                 result: kind,
-                op: curios_cont::Intrinsic::IsImmediate,
+                op: curios_cps::Intrinsic::IsImmediate,
                 args: vec![scrutinee],
                 next: switch,
             });
-        self.emitter.module.add_node(curios_cont::Node::LetCont {
+        self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations,
             body: dispatch,
         })
@@ -1417,18 +1415,18 @@ impl Lowerer<'_> {
 
     /// One collapsed arm body: a lone payload aliases the scrutinee, which *is* the payload under the collapsed encoding; a wider row projects untagged fields. Returns a body rather than a continuation because the caller inlines it with no dispatch to target it.
     ///
-    /// The aliasing is sound *here* and only here. A collapsed family has one constructor, so the scrutinee is the payload on every path there is. The immediate encoding looks like the same shape and is not — its scrutinee is a scalar on one path and a tuple on the other — so it binds through [`lower_immediate_arm`](Self::lower_immediate_arm) instead. Sharing this function with it would miscompile a loop that does arithmetic on the payload; see [`curios_cont::Intrinsic::ImmediateGet`].
+    /// The aliasing is sound *here* and only here. A collapsed family has one constructor, so the scrutinee is the payload on every path there is. The immediate encoding looks like the same shape and is not — its scrutinee is a scalar on one path and a tuple on the other — so it binds through [`lower_immediate_arm`](Self::lower_immediate_arm) instead. Sharing this function with it would miscompile a loop that does arithmetic on the payload; see [`curios_cps::Intrinsic::ImmediateGet`].
     fn lower_collapsed_arm(
         &mut self,
         arm: &VariantArm,
-        scrutinee: curios_cont::Atom,
-        join: curios_cont::ContinuationId,
-    ) -> curios_cont::NodeId {
+        scrutinee: curios_cps::Atom,
+        join: curios_cps::ContinuationId,
+    ) -> curios_cps::NodeId {
         if let [binder] = arm.bindings.as_slice() {
             self.emitter.values.insert(*binder, scrutinee);
             return self.lower_block(arm.block, join);
         }
-        let bindings: Vec<curios_cont::ValueId> = arm
+        let bindings: Vec<curios_cps::ValueId> = arm
             .bindings
             .iter()
             .map(|&binder| self.emitter.bind_value(binder))
@@ -1445,9 +1443,9 @@ impl Lowerer<'_> {
             body = self
                 .emitter
                 .module
-                .add_node(curios_cont::Node::LetIntrinsic {
+                .add_node(curios_cps::Node::LetIntrinsic {
                     result: bindings[index],
-                    op: curios_cont::Intrinsic::RowGet(row, places[index]),
+                    op: curios_cps::Intrinsic::RowGet(row, places[index]),
                     args: vec![scrutinee.clone()],
                     next: body,
                 });
@@ -1455,15 +1453,15 @@ impl Lowerer<'_> {
         body
     }
 
-    /// One immediate-encoded arm body: the payload is the scrutinee's value, bound through [`curios_cont::Intrinsic::ImmediateGet`] rather than aliased to it, so it has a definition of its own for the representation analysis to read a carrier off.
+    /// One immediate-encoded arm body: the payload is the scrutinee's value, bound through [`curios_cps::Intrinsic::ImmediateGet`] rather than aliased to it, so it has a definition of its own for the representation analysis to read a carrier off.
     ///
     /// Exactly one binding, always: the encoding admits only a unary constructor, so there is no wider row to project and a different shape is this lowering's own contract broken rather than a program's fault.
     fn lower_immediate_arm(
         &mut self,
         arm: &VariantArm,
-        scrutinee: curios_cont::Atom,
-        join: curios_cont::ContinuationId,
-    ) -> curios_cont::NodeId {
+        scrutinee: curios_cps::Atom,
+        join: curios_cps::ContinuationId,
+    ) -> curios_cps::NodeId {
         let [binder] = arm.bindings.as_slice() else {
             panic!("an immediate constructor binds exactly its one payload")
         };
@@ -1471,9 +1469,9 @@ impl Lowerer<'_> {
         let body = self.lower_block(arm.block, join);
         self.emitter
             .module
-            .add_node(curios_cont::Node::LetIntrinsic {
+            .add_node(curios_cps::Node::LetIntrinsic {
                 result: bound,
-                op: curios_cont::Intrinsic::ImmediateGet,
+                op: curios_cps::Intrinsic::ImmediateGet,
                 args: vec![scrutinee],
                 next: body,
             })
@@ -1481,12 +1479,12 @@ impl Lowerer<'_> {
 
     fn lower_variant_arm(
         &mut self,
-        family: curios_cont::RowId,
+        family: curios_cps::RowId,
         arm: &VariantArm,
-        scrutinee: curios_cont::Atom,
-        join: curios_cont::ContinuationId,
-    ) -> curios_cont::ContinuationId {
-        let bindings: Vec<curios_cont::ValueId> = arm
+        scrutinee: curios_cps::Atom,
+        join: curios_cps::ContinuationId,
+    ) -> curios_cps::ContinuationId {
+        let bindings: Vec<curios_cps::ValueId> = arm
             .bindings
             .iter()
             .map(|&binder| self.emitter.bind_value(binder))
@@ -1499,9 +1497,9 @@ impl Lowerer<'_> {
             body = self
                 .emitter
                 .module
-                .add_node(curios_cont::Node::LetIntrinsic {
+                .add_node(curios_cps::Node::LetIntrinsic {
                     result: bindings[index],
-                    op: curios_cont::Intrinsic::RowGet(family, places[index]),
+                    op: curios_cps::Intrinsic::RowGet(family, places[index]),
                     args: vec![scrutinee.clone()],
                     next: body,
                 });
@@ -1514,7 +1512,7 @@ impl Lowerer<'_> {
         let continuation = self.emitter.module.reserve_continuation();
         self.emitter.module.define_continuation(
             continuation,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some(hint),
                 params: Vec::new(),
                 body,
@@ -1532,7 +1530,7 @@ impl Lowerer<'_> {
         zero: BlockId,
         step: &FoldNatStep,
         site: Site<'_>,
-    ) -> curios_cont::NodeId {
+    ) -> curios_cps::NodeId {
         let head = self.emitter.lower_atom(scrutinee);
         let join = self.open_join_fresh(site);
 
@@ -1554,25 +1552,25 @@ impl Lowerer<'_> {
         let loop_back = self.emitter.jump(
             loop_cont,
             vec![
-                curios_cont::Atom::Value(next_index),
-                curios_cont::Atom::Value(next_acc),
+                curios_cps::Atom::Value(next_index),
+                curios_cps::Atom::Value(next_acc),
             ],
         );
         let increment = self
             .emitter
             .module
-            .add_node(curios_cont::Node::LetIntrinsic {
+            .add_node(curios_cps::Node::LetIntrinsic {
                 result: next_index,
-                op: curios_cont::Intrinsic::NatAdd,
+                op: curios_cps::Intrinsic::NatAdd,
                 args: vec![
-                    curios_cont::Atom::Value(step_index),
-                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(1u32))),
+                    curios_cps::Atom::Value(step_index),
+                    curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(1u32))),
                 ],
                 next: loop_back,
             });
         self.emitter.module.define_continuation(
             step_resume,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("loop/step_resume".into()),
                 params: vec![next_acc],
                 body: increment,
@@ -1581,13 +1579,13 @@ impl Lowerer<'_> {
 
         // step_cont(step_index, step_acc): run the step block, then resume.
         let step_body = self.lower_block(step.block, step_resume);
-        let step_body = self.emitter.module.add_node(curios_cont::Node::LetCont {
+        let step_body = self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![step_resume],
             body: step_body,
         });
         self.emitter.module.define_continuation(
             step_cont,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("loop/step".into()),
                 params: vec![step_index, step_acc],
                 body: step_body,
@@ -1595,35 +1593,35 @@ impl Lowerer<'_> {
         );
 
         // loop_cont(loop_index, loop_acc): step until the index reaches n.
-        let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
-            scrutinee: curios_cont::Atom::Value(comparison),
+        let switch = self.emitter.module.add_node(curios_cps::Node::Switch {
+            scrutinee: curios_cps::Atom::Value(comparison),
             cases: BTreeMap::from([(
                 0,
-                curios_cont::Edge {
+                curios_cps::Edge {
                     target: step_cont,
                     args: vec![
-                        curios_cont::Atom::Value(loop_index),
-                        curios_cont::Atom::Value(loop_acc),
+                        curios_cps::Atom::Value(loop_index),
+                        curios_cps::Atom::Value(loop_acc),
                     ],
                 },
             )]),
-            default: Some(curios_cont::Edge {
+            default: Some(curios_cps::Edge {
                 target: join,
-                args: vec![curios_cont::Atom::Value(loop_acc)],
+                args: vec![curios_cps::Atom::Value(loop_acc)],
             }),
         });
         let loop_body = self
             .emitter
             .module
-            .add_node(curios_cont::Node::LetIntrinsic {
+            .add_node(curios_cps::Node::LetIntrinsic {
                 result: comparison,
-                op: curios_cont::Intrinsic::NatEql,
-                args: vec![curios_cont::Atom::Value(loop_index), head],
+                op: curios_cps::Intrinsic::NatEql,
+                args: vec![curios_cps::Atom::Value(loop_index), head],
                 next: switch,
             });
         self.emitter.module.define_continuation(
             loop_cont,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("loop".into()),
                 params: vec![loop_index, loop_acc],
                 body: loop_body,
@@ -1634,13 +1632,13 @@ impl Lowerer<'_> {
         let zero_jump = self.emitter.jump(
             loop_cont,
             vec![
-                curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::zero())),
-                curios_cont::Atom::Value(zero_acc),
+                curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::zero())),
+                curios_cps::Atom::Value(zero_acc),
             ],
         );
         self.emitter.module.define_continuation(
             zero_resume,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("loop/base".into()),
                 params: vec![zero_acc],
                 body: zero_jump,
@@ -1648,7 +1646,7 @@ impl Lowerer<'_> {
         );
 
         let entry = self.lower_block(zero, zero_resume);
-        self.emitter.module.add_node(curios_cont::Node::LetCont {
+        self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![join, loop_cont, step_cont, zero_resume],
             body: entry,
         })
@@ -1664,7 +1662,7 @@ impl Lowerer<'_> {
         empty: BlockId,
         cons: &UnconsSequenceStep,
         site: Site<'_>,
-    ) -> curios_cont::NodeId {
+    ) -> curios_cps::NodeId {
         let sequence = self.emitter.lower_atom(scrutinee);
         let (join, fresh) = self.open_join(site);
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
@@ -1684,18 +1682,18 @@ impl Lowerer<'_> {
             grain,
             &sequence,
             element,
-            curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::zero())),
+            curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::zero())),
             suffix.map(|suffix| {
                 (
                     suffix,
-                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(1u32))),
+                    curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(1u32))),
                 )
             }),
             cons_body,
         );
         self.emitter.module.define_continuation(
             cons_arm,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("arm/cons".into()),
                 params: Vec::new(),
                 body: cons_body,
@@ -1703,28 +1701,28 @@ impl Lowerer<'_> {
         );
         continuations.push(cons_arm);
 
-        let dispatch = self.emitter.module.add_node(curios_cont::Node::Switch {
-            scrutinee: curios_cont::Atom::Value(length),
+        let dispatch = self.emitter.module.add_node(curios_cps::Node::Switch {
+            scrutinee: curios_cps::Atom::Value(length),
             cases: BTreeMap::from([(
                 0,
-                curios_cont::Edge {
+                curios_cps::Edge {
                     target: empty_arm,
                     args: Vec::new(),
                 },
             )]),
-            default: Some(curios_cont::Edge {
+            default: Some(curios_cps::Edge {
                 target: cons_arm,
                 args: Vec::new(),
             }),
         });
-        let dispatch = self.emitter.module.add_node(curios_cont::Node::LetCont {
+        let dispatch = self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations,
             body: dispatch,
         });
 
         self.emitter
             .module
-            .add_node(curios_cont::Node::LetIntrinsic {
+            .add_node(curios_cps::Node::LetIntrinsic {
                 result: length,
                 op: sequence_len_op(grain),
                 args: vec![sequence],
@@ -1740,7 +1738,7 @@ impl Lowerer<'_> {
         empty: BlockId,
         step: &FoldSequenceStep,
         site: Site<'_>,
-    ) -> curios_cont::NodeId {
+    ) -> curios_cps::NodeId {
         let sequence = self.emitter.lower_atom(scrutinee);
         let join = self.open_join_fresh(site);
 
@@ -1767,13 +1765,13 @@ impl Lowerer<'_> {
         let loop_back = self.emitter.jump(
             loop_cont,
             vec![
-                curios_cont::Atom::Value(element_index),
-                curios_cont::Atom::Value(next_acc),
+                curios_cps::Atom::Value(element_index),
+                curios_cps::Atom::Value(next_acc),
             ],
         );
         self.emitter.module.define_continuation(
             step_resume,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("loop/step_resume".into()),
                 params: vec![next_acc],
                 body: loop_back,
@@ -1782,7 +1780,7 @@ impl Lowerer<'_> {
 
         // step_cont(step_index, step_acc): extract seq[i-1], seq[i..], fold.
         let step_body = self.lower_block(step.block, step_resume);
-        let step_body = self.emitter.module.add_node(curios_cont::Node::LetCont {
+        let step_body = self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![step_resume],
             body: step_body,
         });
@@ -1790,25 +1788,25 @@ impl Lowerer<'_> {
             grain,
             &sequence,
             element,
-            curios_cont::Atom::Value(element_index),
-            suffix.map(|suffix| (suffix, curios_cont::Atom::Value(step_index))),
+            curios_cps::Atom::Value(element_index),
+            suffix.map(|suffix| (suffix, curios_cps::Atom::Value(step_index))),
             step_body,
         );
         let step_body = self
             .emitter
             .module
-            .add_node(curios_cont::Node::LetIntrinsic {
+            .add_node(curios_cps::Node::LetIntrinsic {
                 result: element_index,
-                op: curios_cont::Intrinsic::NatSub,
+                op: curios_cps::Intrinsic::NatSub,
                 args: vec![
-                    curios_cont::Atom::Value(step_index),
-                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(1u32))),
+                    curios_cps::Atom::Value(step_index),
+                    curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(1u32))),
                 ],
                 next: step_body,
             });
         self.emitter.module.define_continuation(
             step_cont,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("loop/step".into()),
                 params: vec![step_index, step_acc],
                 body: step_body,
@@ -1816,38 +1814,38 @@ impl Lowerer<'_> {
         );
 
         // loop_cont(loop_index, loop_acc): fold until the index reaches 0.
-        let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
-            scrutinee: curios_cont::Atom::Value(comparison),
+        let switch = self.emitter.module.add_node(curios_cps::Node::Switch {
+            scrutinee: curios_cps::Atom::Value(comparison),
             cases: BTreeMap::from([(
                 0,
-                curios_cont::Edge {
+                curios_cps::Edge {
                     target: step_cont,
                     args: vec![
-                        curios_cont::Atom::Value(loop_index),
-                        curios_cont::Atom::Value(loop_acc),
+                        curios_cps::Atom::Value(loop_index),
+                        curios_cps::Atom::Value(loop_acc),
                     ],
                 },
             )]),
-            default: Some(curios_cont::Edge {
+            default: Some(curios_cps::Edge {
                 target: join,
-                args: vec![curios_cont::Atom::Value(loop_acc)],
+                args: vec![curios_cps::Atom::Value(loop_acc)],
             }),
         });
         let loop_body = self
             .emitter
             .module
-            .add_node(curios_cont::Node::LetIntrinsic {
+            .add_node(curios_cps::Node::LetIntrinsic {
                 result: comparison,
-                op: curios_cont::Intrinsic::NatEql,
+                op: curios_cps::Intrinsic::NatEql,
                 args: vec![
-                    curios_cont::Atom::Value(loop_index),
-                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::zero())),
+                    curios_cps::Atom::Value(loop_index),
+                    curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::zero())),
                 ],
                 next: switch,
             });
         self.emitter.module.define_continuation(
             loop_cont,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("loop".into()),
                 params: vec![loop_index, loop_acc],
                 body: loop_body,
@@ -1858,13 +1856,13 @@ impl Lowerer<'_> {
         let empty_jump = self.emitter.jump(
             loop_cont,
             vec![
-                curios_cont::Atom::Value(length),
-                curios_cont::Atom::Value(base_acc),
+                curios_cps::Atom::Value(length),
+                curios_cps::Atom::Value(base_acc),
             ],
         );
         self.emitter.module.define_continuation(
             empty_resume,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("loop/base".into()),
                 params: vec![base_acc],
                 body: empty_jump,
@@ -1872,14 +1870,14 @@ impl Lowerer<'_> {
         );
 
         let entry = self.lower_block(empty, empty_resume);
-        let entry = self.emitter.module.add_node(curios_cont::Node::LetCont {
+        let entry = self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![join, loop_cont, step_cont, empty_resume],
             body: entry,
         });
         // Compute the length up front so every continuation sees it.
         self.emitter
             .module
-            .add_node(curios_cont::Node::LetIntrinsic {
+            .add_node(curios_cps::Node::LetIntrinsic {
                 result: length,
                 op: sequence_len_op(grain),
                 args: vec![sequence],
@@ -1896,8 +1894,8 @@ impl Lowerer<'_> {
         &mut self,
         result_arity: usize,
         site: Site<'_>,
-        make: impl FnOnce(curios_cont::ContinuationId) -> curios_cont::Node,
-    ) -> curios_cont::NodeId {
+        make: impl FnOnce(curios_cps::ContinuationId) -> curios_cps::Node,
+    ) -> curios_cps::NodeId {
         let Site {
             result,
             rest,
@@ -1915,7 +1913,7 @@ impl Lowerer<'_> {
         let params = if result_arity == 0 {
             self.emitter.values.insert(
                 result,
-                curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::zero())),
+                curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::zero())),
             );
             Vec::new()
         } else {
@@ -1927,13 +1925,13 @@ impl Lowerer<'_> {
         let role = resume_role(self.emitter.module.node(node).expect("the node just added"));
         self.emitter.module.define_continuation(
             join,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some(role.into()),
                 params,
                 body,
             },
         );
-        self.emitter.module.add_node(curios_cont::Node::LetCont {
+        self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![join],
             body: node,
         })
@@ -1942,12 +1940,12 @@ impl Lowerer<'_> {
     /// Turn the guest operation's private status into an ordinary constructor before delivering its language result.
     fn lower_outcome(
         &mut self,
-        join: curios_cont::ContinuationId,
+        join: curios_cps::ContinuationId,
         fresh_join: bool,
         arity: usize,
         outcomes: &[(ConstructorId, bool)],
-        make: impl FnOnce(curios_cont::ContinuationId) -> curios_cont::Node,
-    ) -> curios_cont::NodeId {
+        make: impl FnOnce(curios_cps::ContinuationId) -> curios_cps::Node,
+    ) -> curios_cps::NodeId {
         let params = (0..arity)
             .map(|_| self.emitter.module.add_value(None))
             .collect::<Vec<_>>();
@@ -1955,7 +1953,7 @@ impl Lowerer<'_> {
         let mut cases = BTreeMap::new();
         for (code, &(constructor, has_payload)) in outcomes.iter().enumerate() {
             let fields = if has_payload {
-                vec![curios_cont::Atom::Value(params[1])]
+                vec![curios_cps::Atom::Value(params[1])]
             } else {
                 Vec::new()
             };
@@ -1965,7 +1963,7 @@ impl Lowerer<'_> {
                 || matches!(encoding, FamilyEncoding::Immediate { constructor: bare } if bare == constructor);
             let body = if bare {
                 let atom = fields.into_iter().next().unwrap_or_else(|| {
-                    curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::zero()))
+                    curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::zero()))
                 });
                 self.emitter.jump(join, vec![atom])
             } else {
@@ -1975,8 +1973,8 @@ impl Lowerer<'_> {
                 let result = self.emitter.module.add_value(None);
                 let next = self
                     .emitter
-                    .jump(join, vec![curios_cont::Atom::Value(result)]);
-                self.emitter.module.add_node(curios_cont::Node::LetValue {
+                    .jump(join, vec![curios_cps::Atom::Value(result)]);
+                self.emitter.module.add_node(curios_cps::Node::LetValue {
                     result,
                     value,
                     next,
@@ -1986,25 +1984,25 @@ impl Lowerer<'_> {
             arms.push(arm);
             cases.insert(
                 code as u32,
-                curios_cont::Edge {
+                curios_cps::Edge {
                     target: arm,
                     args: Vec::new(),
                 },
             );
         }
-        let switch = self.emitter.module.add_node(curios_cont::Node::Switch {
-            scrutinee: curios_cont::Atom::Value(params[0]),
+        let switch = self.emitter.module.add_node(curios_cps::Node::Switch {
+            scrutinee: curios_cps::Atom::Value(params[0]),
             cases,
             default: None,
         });
-        let body = self.emitter.module.add_node(curios_cont::Node::LetCont {
+        let body = self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations: arms,
             body: switch,
         });
         let resume = self.emitter.module.reserve_continuation();
         self.emitter.module.define_continuation(
             resume,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("outcome/resume".into()),
                 params,
                 body,
@@ -2013,7 +2011,7 @@ impl Lowerer<'_> {
         let node = self.emitter.module.add_node(make(resume));
         let mut continuations = if fresh_join { vec![join] } else { Vec::new() };
         continuations.push(resume);
-        self.emitter.module.add_node(curios_cont::Node::LetCont {
+        self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations,
             body: node,
         })
@@ -2023,9 +2021,9 @@ impl Lowerer<'_> {
     fn lower_foreign(
         &mut self,
         function: Arc<ForeignFunction>,
-        args: Vec<curios_cont::Atom>,
+        args: Vec<curios_cps::Atom>,
         site: Site<'_>,
-    ) -> curios_cont::NodeId {
+    ) -> curios_cps::NodeId {
         let Site {
             result,
             rest,
@@ -2034,28 +2032,28 @@ impl Lowerer<'_> {
         } = site;
         let arity = function.signature().imported_results().len();
         if arity == 1 {
-            return self.split(1, site, |return_to| curios_cont::Node::Foreign {
+            return self.split(1, site, |return_to| curios_cps::Node::Foreign {
                 function,
                 args,
                 return_to,
             });
         }
 
-        let results: Vec<curios_cont::ValueId> = (0..arity)
+        let results: Vec<curios_cps::ValueId> = (0..arity)
             .map(|_| self.emitter.module.add_value(None))
             .collect();
         let record = self.emitter.module.add_value(None);
         self.emitter
             .values
-            .insert(result, curios_cont::Atom::Value(record));
+            .insert(result, curios_cps::Atom::Value(record));
         let next = self.lower_statements(rest, terminator, target);
-        let pack = self.emitter.module.add_node(curios_cont::Node::LetValue {
+        let pack = self.emitter.module.add_node(curios_cps::Node::LetValue {
             result: record,
-            value: curios_cont::ValueExpr::Tuple(
+            value: curios_cps::ValueExpr::Tuple(
                 results
                     .iter()
                     .copied()
-                    .map(curios_cont::Atom::Value)
+                    .map(curios_cps::Atom::Value)
                     .collect(),
             ),
             next,
@@ -2063,18 +2061,18 @@ impl Lowerer<'_> {
         let resume = self.emitter.module.reserve_continuation();
         self.emitter.module.define_continuation(
             resume,
-            curios_cont::Continuation {
+            curios_cps::Continuation {
                 debug_name: Some("foreign/resume".into()),
                 params: results,
                 body: pack,
             },
         );
-        let call = self.emitter.module.add_node(curios_cont::Node::Foreign {
+        let call = self.emitter.module.add_node(curios_cps::Node::Foreign {
             function,
             args,
             return_to: resume,
         });
-        self.emitter.module.add_node(curios_cont::Node::LetCont {
+        self.emitter.module.add_node(curios_cps::Node::LetCont {
             continuations: vec![resume],
             body: call,
         })
@@ -2082,12 +2080,12 @@ impl Lowerer<'_> {
 
     // === Atoms and identities ============================================
 
-    /// Bind a straight-line result: allocate its Cont value, lower the rest of the block, and emit the node `make` builds in front of it.
+    /// Bind a straight-line result: allocate its CPS value, lower the rest of the block, and emit the node `make` builds in front of it.
     fn straight(
         &mut self,
         site: Site<'_>,
-        make: impl FnOnce(curios_cont::ValueId, curios_cont::NodeId) -> curios_cont::Node,
-    ) -> curios_cont::NodeId {
+        make: impl FnOnce(curios_cps::ValueId, curios_cps::NodeId) -> curios_cps::Node,
+    ) -> curios_cps::NodeId {
         let Site {
             result,
             rest,
@@ -2103,13 +2101,13 @@ impl Lowerer<'_> {
 /// What a split's continuation resumes from, read off the node the split built.
 ///
 /// A wildcard rather than an exhaustive list: the input is whatever the caller's closure produced, and `split` builds only the four call-like nodes — a neutral name for anything else costs nothing, where a missed arm in a table the header depends on would cost a declaration.
-fn resume_role(node: &curios_cont::Node) -> &'static str {
+fn resume_role(node: &curios_cps::Node) -> &'static str {
     match node {
-        curios_cont::Node::ApplyFun { .. } => "apply/resume",
-        curios_cont::Node::Cell { .. } => "cell/resume",
-        curios_cont::Node::Channel { .. } => "channel/resume",
-        curios_cont::Node::Intrinsic { .. } => "intrinsic/resume",
-        curios_cont::Node::Foreign { .. } => "foreign/resume",
+        curios_cps::Node::ApplyFun { .. } => "apply/resume",
+        curios_cps::Node::Cell { .. } => "cell/resume",
+        curios_cps::Node::Channel { .. } => "channel/resume",
+        curios_cps::Node::Intrinsic { .. } => "intrinsic/resume",
+        curios_cps::Node::Foreign { .. } => "foreign/resume",
         _ => "resume",
     }
 }

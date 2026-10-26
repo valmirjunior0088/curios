@@ -1,6 +1,6 @@
 # A variant collapses when nothing needs to distinguish it
 
-**Decision.** A variant family's runtime encoding is decided per family at the one-way door, `curios-anf`'s `lower_to_cont`, as a pure function of its registered schema, and a family pays for discrimination only where discrimination can happen:
+**Decision.** A variant family's runtime encoding is decided per family at the one-way door, `curios-anf`'s `lower_to_cps`, as a pure function of its registered schema, and a family pays for discrimination only where discrimination can happen:
 
 - a **single-constructor family** collapses as the struct with the same relevant row erases: one payload is the bare value, several an untagged row, none the interned `Nat` zero, and its matches do not dispatch;
 - a **multi-constructor family with exactly one immediate-unary constructor** — one carrying one always-immediate payload, or one `Nat` or `Int` — rides that constructor as its bare payload while the siblings keep their rows, and a match opens with an `IsImmediate` test (`ref.test (ref i31)`, and `ref.test (ref $big)` behind it) instead of a tag read, which is never read at all when one boxed constructor remains;

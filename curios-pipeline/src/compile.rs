@@ -3,7 +3,7 @@
 use {
     super::{Over, Stage, compile_lowered_over, compile_unit_over_told},
     curios_abi::ForeignStore,
-    curios_anf::lower_to_cont,
+    curios_anf::lower_to_cps,
     curios_cert::{
         Globals, Kernel, Rechecked, Verdict, certify_module, certify_program,
         recheck_program_measured,
@@ -1200,7 +1200,7 @@ pub fn examine_entrypoint(
     })
 }
 
-/// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into Cont, Cont optimization, and wasm emission, observing every stage in order.
+/// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into CPS, CPS optimization, and wasm emission, observing every stage in order.
 fn lower_from_anf<O>(
     mut anf_module: curios_anf::Module,
     observe: &mut O,
@@ -1211,21 +1211,21 @@ where
     curios_profile::profile!("lower_from_anf");
     observe(Stage::Anf(&anf_module));
 
-    // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so Cont's whole-module fixpoint sees only the live slice (see `curios_anf::optimize`). Verified rather than verifying: erasure sealed this very module through `finalize`, which verified it.
+    // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so CPS's whole-module fixpoint sees only the live slice (see `curios_anf::optimize`). Verified rather than verifying: erasure sealed this very module through `finalize`, which verified it.
     curios_anf::optimize_verified(&mut anf_module);
 
     observe(Stage::AnfOptm(&anf_module));
 
-    let cont_module = lower_to_cont(&anf_module);
+    let cps_module = lower_to_cps(&anf_module);
 
-    observe(Stage::Cont(&cont_module));
+    observe(Stage::Cps(&cps_module));
 
-    let mut cont_optm_module = cont_module;
-    curios_cont::optimize(&mut cont_optm_module);
+    let mut cps_optm_module = cps_module;
+    curios_cps::optimize(&mut cps_optm_module);
 
-    observe(Stage::ContOptm(&cont_optm_module));
+    observe(Stage::CpsOptm(&cps_optm_module));
 
-    let (wasm_module, imported) = into_wasm(&cont_optm_module);
+    let (wasm_module, imported) = into_wasm(&cps_optm_module);
 
     observe(Stage::Wasm(&wasm_module));
 
@@ -1657,7 +1657,7 @@ pub enum Progress<'a> {
 
 /// Compile the program `source` is through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the `foreign` declarations of the program and of every predecessor — an embedder that will run the module builds its `ffi`-tier bindings (`curios-native`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 ///
-/// Production erases over the archived prelude's erased forms: the program's declarations are compiled as the unit they are, taken from `cache` where it holds them and handed to it where they were compiled, only the term that closes the program is erased beside them, the program is linked from what that term reaches, the ANF optimizer shrinks and rebases the module, and the lowering into Cont makes every encoding decision once (see `curios_anf::lower_to_cont`).
+/// Production erases over the archived prelude's erased forms: the program's declarations are compiled as the unit they are, taken from `cache` where it holds them and handed to it where they were compiled, only the term that closes the program is erased beside them, the program is linked from what that term reaches, the ANF optimizer shrinks and rebases the module, and the lowering into CPS makes every encoding decision once (see `curios_anf::lower_to_cps`).
 ///
 /// **`source` is borrowed, so the caller still owns the loader it was made over when this returns.** Resolution records what it read through `&self` — the log is interior-mutable precisely so that lowering never has to thread `&mut` — and a caller filing what this compilation produced needs that log *after* the fold, exactly as it needs the cache handle's refusal after the fold.
 pub fn compile_entrypoint<O>(

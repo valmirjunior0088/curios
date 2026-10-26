@@ -1,5 +1,5 @@
 [package]
-name = "curios-cont"
+name = "curios-cps"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

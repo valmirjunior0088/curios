@@ -4,7 +4,7 @@
 
 ## What is missing
 
-**A `Nat` or `Int` no bound reaches is a reference between steps.** The representation analysis holds a value in a word wherever everything reaching it lies below `2³⁰`, or below `2³²` for a word read unsigned ([`curios-cont`'s README](../../../curios-cont/README.md#representation-is-decided-wherever-every-party-is-visible)), so a remainder by a literal, a counter counted down from one, a byte taken apart and the fields a scan carries ride words. What it cannot bound pays the costs the decision accepts, a box per result and a tag test per operand, in three places:
+**A `Nat` or `Int` no bound reaches is a reference between steps.** The representation analysis holds a value in a word wherever everything reaching it lies below `2³⁰`, or below `2³²` for a word read unsigned ([`curios-cps`'s README](../../../curios-cps/README.md#representation-is-decided-wherever-every-party-is-visible)), so a remainder by a literal, a counter counted down from one, a byte taken apart and the fields a scan carries ride words. What it cannot bound pays the costs the decision accepts, a box per result and a tag test per operand, in three places:
 
 - **A counter counted down from an input.** A monus never passes its first operand, but an input is a reference whatever its size, so nothing bounds the seed or what is counted down from it: `programs/lcg`'s `k` and `programs/walk`'s.
 - **A value a relation bounds and the bound lattice does not hold.** A UTF-8 character's `partial` takes six bits a continuation byte, at most three times, so it lies below `2²¹`; the lattice sees it multiplied by `0x40` round a loop and bounds it by nothing: `/std/Str/fold`'s `partial`.

@@ -65,7 +65,7 @@ pub(super) fn compile(source: &str) -> Result<curios_wasm::Module, String> {
 pub(super) fn compile_printed_stages(source: &str) -> Result<(String, String), String> {
     let entrypoint = entrypoint_of(source);
     let mut anf = String::new();
-    let mut cont = String::new();
+    let mut cps = String::new();
 
     compile_with_prelude(
         DEFAULT_BUDGET,
@@ -73,12 +73,12 @@ pub(super) fn compile_printed_stages(source: &str) -> Result<(String, String), S
         &RootSource::none(),
         |stage| match stage {
             Stage::Anf(stage) => anf = format!("{stage}"),
-            Stage::Cont(stage) => cont = format!("{stage}"),
+            Stage::Cps(stage) => cps = format!("{stage}"),
             _ => {}
         },
     )?;
 
-    Ok((anf, cont))
+    Ok((anf, cps))
 }
 
 /// Whether a report spells a metavariable by its id — `?2659` — which no report should.

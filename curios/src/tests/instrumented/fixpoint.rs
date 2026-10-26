@@ -1,6 +1,6 @@
-//! What the Cont fixpoint costs, pass by pass.
+//! What the CPS fixpoint costs, pass by pass.
 //!
-//! Instrumented because the per-pass spans and fired-samples `curios_cont::optimize` carries exist only under the `profile` feature. It reports costs without asserting thresholds, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
+//! Instrumented because the per-pass spans and fired-samples `curios_cps::optimize` carries exist only under the `profile` feature. It reports costs without asserting thresholds, in the shape of `unfolding.rs`'s measurements, and its subject is the census's `TOML_DRIVER`, so the program a figure is taken over is named.
 
 use {
     crate::tests::TOML_DRIVER,
@@ -54,7 +54,7 @@ impl std::io::Write for Rows {
 /// | Span | ms [span] | Allocated MiB | Allocation calls |
 /// | --- | ---: | ---: | ---: |
 /// | `compile_entrypoint` | 2455.121 [2407.826–2458.732] | 1,622.4 | 21,782,607 [21,782,519–21,782,653] |
-/// | `cont_optimize` | 1909.334 [1874.810–1911.951] | 1,250.5 | 16,722,058 [16,722,048–16,722,060] |
+/// | `cps_optimize` | 1909.334 [1874.810–1911.951] | 1,250.5 | 16,722,058 [16,722,048–16,722,060] |
 ///
 /// The optimizer settles in 11 rounds. All fired counts and graph-size sample totals and counts agree across the seven measured compilations.
 ///
@@ -106,7 +106,7 @@ fn fixpoint_pass_measurements() {
         "total_ms", "calls", "min_ms", "max_ms", "allocated_bytes", "allocations"
     );
     for summary in report.summaries.iter().filter(|summary| {
-        summary.name == "compile_entrypoint" || summary.target.starts_with("curios_cont")
+        summary.name == "compile_entrypoint" || summary.target.starts_with("curios_cps")
     }) {
         println!(
             "{:>10.3} {:>6} {:>9.3} {:>9.3} {:>15} {:>12}  {}",
@@ -125,7 +125,7 @@ fn fixpoint_pass_measurements() {
     for sample in report
         .samples
         .iter()
-        .filter(|sample| sample.name.starts_with("cont"))
+        .filter(|sample| sample.name.starts_with("cps"))
     {
         println!("{:>10} {:>7}  {}", sample.total, sample.count, sample.name);
     }

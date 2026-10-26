@@ -22,7 +22,7 @@ pub struct FieldGroup {
     pub width: usize,
 }
 
-/// The production Cont representation. Arena slots never move or get reused; deletion writes `None` and deterministic compaction is explicit.
+/// The production CPS representation. Arena slots never move or get reused; deletion writes `None` and deterministic compaction is explicit.
 #[derive(Debug, Clone, Default)]
 pub struct Module {
     nodes: Arena<NodeId, Node>,

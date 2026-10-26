@@ -1,4 +1,4 @@
-//! How a nominal shape becomes a Cont heap type: the encoding each variant family gets, the slot every field lands in, and the row identity that names it.
+//! How a nominal shape becomes a CPS heap type: the encoding each variant family gets, the slot every field lands in, and the row identity that names it.
 //!
 //! One question, asked from every construction site and every match arm, whose answer has to be the same each time — so it is computed once per family or schema and memoized. [`lay_out`] is the packing rule the answers are built from: slots grouped by carrier rather than by field position, so two writers agreeing on a carrier share its slots and only a disagreement costs width.
 
@@ -19,7 +19,7 @@ pub(super) enum FamilyEncoding {
     Immediate { constructor: ConstructorId },
 }
 
-/// Where one erased row's writers live in its Cont heap type: the arity every construction of it carries, and the slot each writer's relevant fields occupy. The identity is not here — it is claimed before the layout exists, so it lives in the map that hands it out.
+/// Where one erased row's writers live in its CPS heap type: the arity every construction of it carries, and the slot each writer's relevant fields occupy. The identity is not here — it is claimed before the layout exists, so it lives in the map that hands it out.
 ///
 /// A variant family has one writer per constructor, indexed by the constructor's position — which is its tag. A product schema has exactly one, at index zero.
 #[derive(Debug, Clone)]
@@ -33,11 +33,11 @@ pub(super) struct RowLayout {
 /// Grouping by carrier rather than by field position is what lets every slot name a carrier without the row widening: two writers agreeing on a carrier share its slots, so only a disagreement costs width. A row with a single writer — a product schema, a collapsed family — has no disagreement to pay for, and the grouping degenerates to a permutation of its fields.
 fn lay_out(
     tagged: bool,
-    writers: &[Vec<curios_cont::Slot>],
-) -> (Vec<curios_cont::Slot>, Vec<Vec<usize>>) {
-    let mut widths = BTreeMap::<curios_cont::Slot, usize>::new();
+    writers: &[Vec<curios_cps::Slot>],
+) -> (Vec<curios_cps::Slot>, Vec<Vec<usize>>) {
+    let mut widths = BTreeMap::<curios_cps::Slot, usize>::new();
     for carriers in writers {
-        let mut here = BTreeMap::<curios_cont::Slot, usize>::new();
+        let mut here = BTreeMap::<curios_cps::Slot, usize>::new();
         for &carrier in carriers {
             *here.entry(carrier).or_default() += 1;
         }
@@ -48,10 +48,10 @@ fn lay_out(
     }
 
     let mut slots = match tagged {
-        true => vec![curios_cont::Slot::Tag],
+        true => vec![curios_cps::Slot::Tag],
         false => Vec::new(),
     };
-    let mut starts = BTreeMap::<curios_cont::Slot, usize>::new();
+    let mut starts = BTreeMap::<curios_cps::Slot, usize>::new();
     for (&carrier, &count) in &widths {
         starts.insert(carrier, slots.len());
         slots.extend(std::iter::repeat_n(carrier, count));
@@ -60,7 +60,7 @@ fn lay_out(
     let places = writers
         .iter()
         .map(|carriers| {
-            let mut taken = BTreeMap::<curios_cont::Slot, usize>::new();
+            let mut taken = BTreeMap::<curios_cps::Slot, usize>::new();
             carriers
                 .iter()
                 .map(|carrier| {
@@ -76,30 +76,30 @@ fn lay_out(
     (slots, places)
 }
 
-/// The Cont row every nominal shape lowers through, and the identity each one was given.
+/// The CPS row every nominal shape lowers through, and the identity each one was given.
 ///
 /// Split from [`Lowerer`](super::Lowerer) because it is the one part of the lowering that answers a question rather than emitting a step: given a family or a product schema, what does its heap type look like and what is it called? The answers are memoized, and the two maps of identities are separate from the two of layouts because an identity is claimed *before* the layout that would justify it exists — a row whose slots name itself has to terminate.
 ///
-/// The Cont module is passed in rather than held, because the lowering owns it and writes to it between these calls. Everything else this needs is the erased module, which never changes.
+/// The CPS module is passed in rather than held, because the lowering owns it and writes to it between these calls. Everything else this needs is the erased module, which never changes.
 pub(super) struct Layout<'a> {
     source: &'a Module,
-    /// The Cont layout of each tagged family, computed on first use. Only the tagged encodings register one: a collapsed family builds a bare value or a structural tuple, and an immediate family's bare constructor is a scalar, so neither has a family heap type to key.
+    /// The CPS layout of each tagged family, computed on first use. Only the tagged encodings register one: a collapsed family builds a bare value or a structural tuple, and an immediate family's bare constructor is a scalar, so neither has a family heap type to key.
     families: BTreeMap<FamilyId, RowLayout>,
-    /// The Cont layout of each product schema, computed on first use.
+    /// The CPS layout of each product schema, computed on first use.
     products: BTreeMap<ProductId, RowLayout>,
-    /// The Cont identity of each row, claimed *before* its layout is computed. A row's slots may name other rows and a self-referential declaration names its own, so identity has to be answerable while the layout that would answer it is still being built.
-    family_ids: BTreeMap<FamilyId, curios_cont::RowId>,
-    product_ids: BTreeMap<ProductId, curios_cont::RowId>,
+    /// The CPS identity of each row, claimed *before* its layout is computed. A row's slots may name other rows and a self-referential declaration names its own, so identity has to be answerable while the layout that would answer it is still being built.
+    family_ids: BTreeMap<FamilyId, curios_cps::RowId>,
+    product_ids: BTreeMap<ProductId, curios_cps::RowId>,
 }
 
 impl<'a> Layout<'a> {
     /// Pack a boxed constructor in the same row at every construction site, including guest operation outcomes.
     pub(super) fn constructor_row(
         &mut self,
-        module: &mut curios_cont::Module,
+        module: &mut curios_cps::Module,
         constructor: ConstructorId,
-        fields: Vec<curios_cont::Atom>,
-    ) -> curios_cont::ValueExpr {
+        fields: Vec<curios_cps::Atom>,
+    ) -> curios_cps::ValueExpr {
         let family = self.constructor_family(constructor);
         let encoding = self.family_encoding(family);
         let row = self.row_identity(module, family);
@@ -109,14 +109,14 @@ impl<'a> Layout<'a> {
             .map(|index| module.pad(Some(row), index))
             .collect::<Vec<_>>();
         if encoding != FamilyEncoding::Collapsed {
-            atoms[0] = curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(
+            atoms[0] = curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(
                 self.constructor_tag(constructor),
             )));
         }
         for (field, atom) in fields.into_iter().enumerate() {
             atoms[places[field]] = atom;
         }
-        curios_cont::ValueExpr::Row(row, atoms)
+        curios_cps::ValueExpr::Row(row, atoms)
     }
 
     pub(super) fn new(source: &'a Module) -> Self {
@@ -129,26 +129,26 @@ impl<'a> Layout<'a> {
         }
     }
 
-    /// The slot carrier a recorded field shape names, resolving a nominal shape to the Cont row that holds it.
+    /// The slot carrier a recorded field shape names, resolving a nominal shape to the CPS row that holds it.
     ///
-    /// Two shapes answer [`curios_cont::Slot::Opaque`] whatever else is true, and for one reason: a carrier that is *sometimes* an immediate has no single heap type to name. A packed value is one; so is a value of an [`FamilyEncoding::Immediate`] family, whose bare constructor rides the i31 while its siblings allocate. Everything unshaped is opaque by definition.
+    /// Two shapes answer [`curios_cps::Slot::Opaque`] whatever else is true, and for one reason: a carrier that is *sometimes* an immediate has no single heap type to name. A packed value is one; so is a value of an [`FamilyEncoding::Immediate`] family, whose bare constructor rides the i31 while its siblings allocate. Everything unshaped is opaque by definition.
     ///
     /// A *family*-typed field is named here but not necessarily kept: slots are grouped by carrier, so giving a family its own carrier can cost the row width it would otherwise share with the uniform range. [`Layout::compute_row_layout`] lays the row out both ways and keeps this one only where it is free.
     pub(super) fn slot_of(
         &mut self,
-        module: &mut curios_cont::Module,
+        module: &mut curios_cps::Module,
         shape: FieldShape,
         family_typed: bool,
-    ) -> curios_cont::Slot {
+    ) -> curios_cps::Slot {
         match shape {
-            FieldShape::Immediate => curios_cont::Slot::Nat,
+            FieldShape::Immediate => curios_cps::Slot::Nat,
             // A `Nat` or `Int` is an i31 or a boxed magnitude, so no single heap type names it, as for a packed carrier.
-            FieldShape::Number => curios_cont::Slot::Opaque,
-            FieldShape::Flt => curios_cont::Slot::Flt,
-            FieldShape::List => curios_cont::Slot::List,
-            FieldShape::Closure(arity) => curios_cont::Slot::Closure(arity),
+            FieldShape::Number => curios_cps::Slot::Opaque,
+            FieldShape::Flt => curios_cps::Slot::Flt,
+            FieldShape::List => curios_cps::Slot::List,
+            FieldShape::Closure(arity) => curios_cps::Slot::Closure(arity),
             FieldShape::Product(schema) => {
-                curios_cont::Slot::Row(self.product_identity(module, schema))
+                curios_cps::Slot::Row(self.product_identity(module, schema))
             }
             // An immediate family's values are *sometimes* the row struct and sometimes the bare payload riding the i31, so no single heap type names its population — the same always-never-sometimes line that keeps a packed carrier out. Every other encoding allocates the row for every constructor.
             FieldShape::Family(family)
@@ -158,10 +158,10 @@ impl<'a> Layout<'a> {
                         FamilyEncoding::Immediate { .. }
                     ) =>
             {
-                curios_cont::Slot::Row(self.row_identity(module, family))
+                curios_cps::Slot::Row(self.row_identity(module, family))
             }
             FieldShape::Family(_) | FieldShape::Bytes | FieldShape::Opaque => {
-                curios_cont::Slot::Opaque
+                curios_cps::Slot::Opaque
             }
         }
     }
@@ -169,11 +169,11 @@ impl<'a> Layout<'a> {
     /// The carriers each of `family`'s constructors writes, with its family-typed fields named or left uniform.
     pub(super) fn row_writers(
         &mut self,
-        module: &mut curios_cont::Module,
+        module: &mut curios_cps::Module,
         family: FamilyId,
         bare: Option<ConstructorId>,
         family_typed: bool,
-    ) -> Vec<Vec<curios_cont::Slot>> {
+    ) -> Vec<Vec<curios_cps::Slot>> {
         let constructors = self
             .source
             .family(family)
@@ -225,14 +225,14 @@ impl<'a> Layout<'a> {
         }
     }
 
-    /// The Cont layout of `family`, computed on first use and memoized.
+    /// The CPS layout of `family`, computed on first use and memoized.
     ///
     /// Slot zero is the tag; the payload slots are grouped by carrier, each group as wide as the constructor holding the most fields of that carrier. So two constructors agreeing on a carrier share its slots and only a disagreement costs width, which is what lets a slot name a carrier while the family widens only where its constructors disagree.
     ///
     /// A [`FamilyEncoding::Immediate`] family's bare constructor writes no slot — its value *is* its payload — so it contributes nothing to the widths.
     pub(super) fn row_layout(
         &mut self,
-        module: &mut curios_cont::Module,
+        module: &mut curios_cps::Module,
         family: FamilyId,
     ) -> &RowLayout {
         self.row_identity(module, family);
@@ -241,9 +241,9 @@ impl<'a> Layout<'a> {
 
     pub(super) fn compute_row_layout(
         &mut self,
-        module: &mut curios_cont::Module,
+        module: &mut curios_cps::Module,
         family: FamilyId,
-        id: curios_cont::RowId,
+        id: curios_cps::RowId,
     ) -> RowLayout {
         let definition = self.source.family(family).expect("live family");
         let debug_name = definition.debug_name.clone();
@@ -267,14 +267,14 @@ impl<'a> Layout<'a> {
             uniform => uniform,
         };
         let width = slots.len();
-        module.define_row(id, curios_cont::Row { debug_name, slots });
+        module.define_row(id, curios_cps::Row { debug_name, slots });
         RowLayout { width, places }
     }
 
-    /// The Cont layout of a product schema, computed on first use. One writer, so every slot is written and none is ever a filler.
+    /// The CPS layout of a product schema, computed on first use. One writer, so every slot is written and none is ever a filler.
     pub(super) fn product_layout(
         &mut self,
-        module: &mut curios_cont::Module,
+        module: &mut curios_cps::Module,
         schema: ProductId,
     ) -> &RowLayout {
         self.product_identity(module, schema);
@@ -289,12 +289,12 @@ impl<'a> Layout<'a> {
             .is_shared()
     }
 
-    /// The Cont identity of a product schema, laying its row out on first use. See [`Layout::row_identity`] for why the reservation comes first.
+    /// The CPS identity of a product schema, laying its row out on first use. See [`Layout::row_identity`] for why the reservation comes first.
     pub(super) fn product_identity(
         &mut self,
-        module: &mut curios_cont::Module,
+        module: &mut curios_cps::Module,
         schema: ProductId,
-    ) -> curios_cont::RowId {
+    ) -> curios_cps::RowId {
         if let Some(&id) = self.product_ids.get(&schema) {
             return id;
         }
@@ -305,13 +305,13 @@ impl<'a> Layout<'a> {
             let debug_name = definition.debug_name.clone();
             // One writer, so every field takes a slot of its own and no carrier can widen the row: the typed layout is free by construction.
             let shapes = definition.shapes();
-            let writer: Vec<curios_cont::Slot> = shapes
+            let writer: Vec<curios_cps::Slot> = shapes
                 .into_iter()
                 .map(|shape| self.slot_of(module, shape, true))
                 .collect();
             let (slots, places) = lay_out(false, std::slice::from_ref(&writer));
             let width = slots.len();
-            module.define_row(id, curios_cont::Row { debug_name, slots });
+            module.define_row(id, curios_cps::Row { debug_name, slots });
             self.products.insert(schema, RowLayout { width, places });
         }
         id
@@ -320,20 +320,20 @@ impl<'a> Layout<'a> {
     /// The slot each of a product schema's relevant fields occupies.
     pub(super) fn product_slots(
         &mut self,
-        module: &mut curios_cont::Module,
+        module: &mut curios_cps::Module,
         schema: ProductId,
     ) -> Vec<usize> {
         self.product_layout(module, schema).places[0].clone()
     }
 
-    /// The Cont identity of `family`, laying its row out on first use.
+    /// The CPS identity of `family`, laying its row out on first use.
     ///
     /// The identity is registered *before* the layout is computed, which is what lets a row whose slots name itself terminate: the recursive call finds the reservation and returns. Reserving and defining are one operation so that no identity can be handed out for a row nothing ever declares.
     pub(super) fn row_identity(
         &mut self,
-        module: &mut curios_cont::Module,
+        module: &mut curios_cps::Module,
         family: FamilyId,
-    ) -> curios_cont::RowId {
+    ) -> curios_cps::RowId {
         if let Some(&id) = self.family_ids.get(&family) {
             return id;
         }
@@ -345,18 +345,14 @@ impl<'a> Layout<'a> {
     }
 
     /// The arity every construction of `family` is padded to.
-    pub(super) fn row_width(
-        &mut self,
-        module: &mut curios_cont::Module,
-        family: FamilyId,
-    ) -> usize {
+    pub(super) fn row_width(&mut self, module: &mut curios_cps::Module, family: FamilyId) -> usize {
         self.row_layout(module, family).width
     }
 
     /// The slot each of `constructor`'s relevant fields occupies in its family's heap type.
     pub(super) fn constructor_slots(
         &mut self,
-        module: &mut curios_cont::Module,
+        module: &mut curios_cps::Module,
         constructor: ConstructorId,
     ) -> Vec<usize> {
         let family = self.constructor_family(constructor);

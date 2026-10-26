@@ -193,23 +193,23 @@ pub(crate) enum Position {
 
 impl Position {
     /// The position a value held at `carrier` takes — a register's, or `None` for a reference.
-    pub(crate) fn of(carrier: Option<curios_cont::Repr>) -> Self {
+    pub(crate) fn of(carrier: Option<curios_cps::Repr>) -> Self {
         match carrier {
             None => Self::Reference,
-            Some(curios_cont::Repr::Nat) => Self::Word,
-            Some(curios_cont::Repr::Length) => Self::Length,
-            Some(curios_cont::Repr::Flt) => Self::Float,
+            Some(curios_cps::Repr::Nat) => Self::Word,
+            Some(curios_cps::Repr::Length) => Self::Length,
+            Some(curios_cps::Repr::Flt) => Self::Float,
             Some(other) => panic!("a register holds a word, a length or a float, never {other:?}"),
         }
     }
 
     /// The register carrier this position holds, or `None` for a reference.
-    pub(crate) fn carrier(self) -> Option<curios_cont::Repr> {
+    pub(crate) fn carrier(self) -> Option<curios_cps::Repr> {
         match self {
             Self::Reference | Self::Closure(_) => None,
-            Self::Word => Some(curios_cont::Repr::Nat),
-            Self::Length => Some(curios_cont::Repr::Length),
-            Self::Float => Some(curios_cont::Repr::Flt),
+            Self::Word => Some(curios_cps::Repr::Nat),
+            Self::Length => Some(curios_cps::Repr::Length),
+            Self::Float => Some(curios_cps::Repr::Flt),
         }
     }
 
@@ -256,7 +256,7 @@ impl Signature {
     /// `func`'s type: a parameter is held as the representation decided its value is — in a register `raw` holds, or at the environment type of the closures `closures` knows it holds — and a result as the function hands it back.
     fn of(
         func: &EmissionFunction,
-        raw: &HashMap<EmissionValueName, curios_cont::Repr>,
+        raw: &HashMap<EmissionValueName, curios_cps::Repr>,
         closures: &HashMap<EmissionValueName, usize>,
     ) -> Self {
         Self {
@@ -276,7 +276,7 @@ impl Signature {
 
     /// The emitted name of this type. A type all of references keeps the spelling it had before any position was held in a register, `func/{parameters}` with one result and `func/{parameters}/{results}` with several; any other spells each position, `r` for a reference, `i` for a word, `u` for a length, `f` for a float and `c` with its arity for a closure, and `0` for none.
     ///
-    /// What produces several results is `curios-cont`'s return protocol, which hands a class of functions back the leading fields of the construction they would otherwise allocate, and what produces a register position is its representation analysis; both are decided per tail-call class, because `return_call` requires a callee's results to match its caller's exactly. Closure supertypes are keyed separately, on arity alone, and stay uniform and single-result — which is why both decisions exclude any function that escapes.
+    /// What produces several results is `curios-cps`'s return protocol, which hands a class of functions back the leading fields of the construction they would otherwise allocate, and what produces a register position is its representation analysis; both are decided per tail-call class, because `return_call` requires a callee's results to match its caller's exactly. Closure supertypes are keyed separately, on arity alone, and stay uniform and single-result — which is why both decisions exclude any function that escapes.
     fn name(&self) -> curios_wasm::TypeName {
         let uniform = self
             .params
@@ -310,7 +310,7 @@ impl<'a> FuncData<'a> {
     pub(crate) fn new(
         func_name: &'a EmissionFunctionName,
         func: &'a EmissionFunction,
-        raw: &HashMap<EmissionValueName, curios_cont::Repr>,
+        raw: &HashMap<EmissionValueName, curios_cps::Repr>,
         closures: &HashMap<EmissionValueName, usize>,
     ) -> Self {
         Self {
@@ -405,7 +405,7 @@ pub(crate) struct Table<'a> {
 
     panic: OnceCell<curios_wasm::FuncName>,
     // One slot per class, in `Panic::ALL`'s order, minted lazily: a module declares the refusals its code can reach and no others.
-    refuse: [OnceCell<curios_wasm::FuncName>; curios_cont::Panic::ALL.len()],
+    refuse: [OnceCell<curios_wasm::FuncName>; curios_cps::Panic::ALL.len()],
     // One slot per big-number helper, in `BigHelper::ALL`'s order, minted lazily like `refuse`: a module declares the helpers its code and its other helpers reach and no others.
     big: [OnceCell<curios_wasm::FuncName>; BigHelper::ALL.len()],
     // One slot per float helper, in `FltHelper::ALL`'s order, minted lazily like `big`.
@@ -441,8 +441,8 @@ pub(crate) struct Table<'a> {
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
     /// One final struct type for each arity the module builds a tuple at, and the unit a host call resumes with: every tuple a read can meet was built at one of them, since nothing outside the module builds one, and a read tries those wide enough to hold its field.
     tuple_types: BTreeMap<usize, curios_wasm::TypeName>,
-    /// One final struct type per nominal row, keyed by the row's identity rather than by an arity — which is what makes a row read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the Cont module's own row table, so a row whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
-    row_types: BTreeMap<curios_cont::RowId, (curios_wasm::TypeName, Vec<curios_cont::Slot>)>,
+    /// One final struct type per nominal row, keyed by the row's identity rather than by an arity — which is what makes a row read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the CPS module's own row table, so a row whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
+    row_types: BTreeMap<curios_cps::RowId, (curios_wasm::TypeName, Vec<curios_cps::Slot>)>,
     envr_types: BTreeMap<usize, curios_wasm::TypeName>,
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// Keyed by what a wasm function type actually is — what each parameter and each result is held at — rather than by parameter count alone, so two functions of the same arity delivering different result shapes, or holding a position in different carriers, cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
@@ -452,11 +452,11 @@ pub(crate) struct Table<'a> {
     /// The module consts that are `Tuple`/`List` constructions — the hoisted half of the population `Context::refuse_raw_aggregate` refuses to hand to a register. A closed aggregate is lifted out of its region by `hoist`, so a guard reading region values alone would miss exactly the constant ones.
     const_aggregates: HashSet<&'a EmissionValueName>,
     /// The scalar consts a register can hold, each with its carrier and the instruction that is its value there: a `Flt` and a small `Nat`. Hoisting renames a literal to its const whatever reads it, so a register read would otherwise take the global back out of its box.
-    const_registers: HashMap<&'a EmissionValueName, (curios_cont::Repr, curios_wasm::Instr)>,
+    const_registers: HashMap<&'a EmissionValueName, (curios_cps::Repr, curios_wasm::Instr)>,
     clsrs: HashMap<&'a EmissionClosureName, ClsrData<'a>>,
     funcs: HashMap<&'a EmissionFunctionName, FuncData<'a>>,
     /// The values the representation analysis decided to hold in a register, and at which carrier. A name absent here is held behind a reference, which is every synthetic name codegen mints for itself.
-    raw: &'a HashMap<EmissionValueName, curios_cont::Repr>,
+    raw: &'a HashMap<EmissionValueName, curios_cps::Repr>,
     /// The values the representation analysis knows hold closures of one arity, and that arity: each declared at its arity's environment type.
     closures: &'a HashMap<EmissionValueName, usize>,
     /// The values a closure construction binds, in a body or hoisted, with the closure each builds: each declared at that closure's own environment type.
@@ -466,7 +466,7 @@ pub(crate) struct Table<'a> {
 impl<'a> Table<'a> {
     pub(crate) fn new(
         module: &'a EmissionModule,
-        raw: &'a HashMap<EmissionValueName, curios_cont::Repr>,
+        raw: &'a HashMap<EmissionValueName, curios_cps::Repr>,
         closures: &'a HashMap<EmissionValueName, usize>,
     ) -> Self {
         Self {
@@ -621,11 +621,11 @@ impl<'a> Table<'a> {
                 .filter_map(|(const_name, data)| {
                     let register = match data {
                         &EmissionData::Flt(value) => (
-                            curios_cont::Repr::Flt,
+                            curios_cps::Repr::Flt,
                             curios_wasm::Instr::F64Const { value },
                         ),
-                        EmissionData::Nat(value) if curios_cont::nat_is_small(value) => (
-                            curios_cont::Repr::Nat,
+                        EmissionData::Nat(value) if curios_cps::nat_is_small(value) => (
+                            curios_cps::Repr::Nat,
                             curios_wasm::Instr::I32Const {
                                 value: u32::try_from(value).expect("a small `Nat` is a word")
                                     as i32,
@@ -873,7 +873,7 @@ impl<'a> Table<'a> {
     }
 
     /// The instruction sequence a refusal is: a call to the class's helper and the `unreachable` that keeps the block's type. Spelled once for the code emitter, the region context and the rope helpers alike.
-    pub(crate) fn refuse_instrs(&self, panic: curios_cont::Panic) -> Vec<curios_wasm::Instr> {
+    pub(crate) fn refuse_instrs(&self, panic: curios_cps::Panic) -> Vec<curios_wasm::Instr> {
         vec![
             curios_wasm::Instr::Call {
                 func_name: self.refuse_func(panic),
@@ -921,7 +921,7 @@ impl<'a> Table<'a> {
                 },
             })
             .collect();
-        instructions.extend(self.refuse_instrs(curios_cont::Panic::Invariant));
+        instructions.extend(self.refuse_instrs(curios_cps::Panic::Invariant));
         let block_type = match admits_null {
             true => rope.enter_or_null.clone(),
             false => rope.enter.clone(),
@@ -945,7 +945,7 @@ impl<'a> Table<'a> {
                 tee(wide),
                 i64_const(u32::MAX.into()),
                 curios_wasm::Instr::I64GtU,
-                when(self.refuse_instrs(curios_cont::Panic::Capacity)),
+                when(self.refuse_instrs(curios_cps::Panic::Capacity)),
                 get(wide),
                 curios_wasm::Instr::I32WrapI64,
             ])
@@ -973,8 +973,8 @@ impl<'a> Table<'a> {
     }
 
     /// `$refuse/<class> () -> ()`: build the class's sentence from its data segment, hand it to `sys.panic`, and never return. First use marks it for emission, so nothing is allocated for a refusal until one fires.
-    fn refuse_func(&self, panic: curios_cont::Panic) -> curios_wasm::FuncName {
-        let slot = curios_cont::Panic::ALL
+    fn refuse_func(&self, panic: curios_cps::Panic) -> curios_wasm::FuncName {
+        let slot = curios_cps::Panic::ALL
             .iter()
             .position(|class| *class == panic)
             .expect("`Panic::ALL` holds every class");
@@ -985,8 +985,8 @@ impl<'a> Table<'a> {
     }
 
     /// The refusals the emitted code referenced, in `Panic::ALL`'s order. Read after every body that can refuse has been built — the rope helpers' included.
-    pub(crate) fn refuse_funcs(&self) -> Vec<(curios_cont::Panic, curios_wasm::FuncName)> {
-        curios_cont::Panic::ALL
+    pub(crate) fn refuse_funcs(&self) -> Vec<(curios_cps::Panic, curios_wasm::FuncName)> {
+        curios_cps::Panic::ALL
             .into_iter()
             .zip(&self.refuse)
             .filter_map(|(class, slot)| Some((class, slot.get()?.clone())))
@@ -1143,7 +1143,7 @@ impl<'a> Table<'a> {
         self.scalars_embeds.borrow().clone()
     }
 
-    /// Box one raw scalar the host answered, alone or as a list's element: a `Nat`'s `i64` read unsigned through `big/of_u64` and an `Int`'s read signed through `big/of_i64`, each answering the i31 below `2³⁰` in magnitude and the boxed magnitude past it; a `Bool` is its own i31. An `Flt` stays the raw `f64` its continuation takes, since `curios-cont` offers that parameter at its carrier.
+    /// Box one raw scalar the host answered, alone or as a list's element: a `Nat`'s `i64` read unsigned through `big/of_u64` and an `Int`'s read signed through `big/of_i64`, each answering the i31 below `2³⁰` in magnitude and the boxed magnitude past it; a `Bool` is its own i31. An `Flt` stays the raw `f64` its continuation takes, since `curios-cps` offers that parameter at its carrier.
     pub(crate) fn box_word_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         match wire_type {
             WireType::Nat => vec![call(&self.big_func(BigHelper::OfU64))],
@@ -1287,9 +1287,9 @@ impl<'a> Table<'a> {
         &self,
     ) -> impl Iterator<
         Item = (
-            curios_cont::RowId,
+            curios_cps::RowId,
             curios_wasm::TypeName,
-            &[curios_cont::Slot],
+            &[curios_cps::Slot],
         ),
     > {
         self.row_types
@@ -1300,19 +1300,19 @@ impl<'a> Table<'a> {
     /// How a value is loaded to fill `slot`, and how a read of it is coerced back.
     ///
     /// A typed reference slot admits null, because the slots a narrow constructor leaves unwritten hold one; every other carrier is loaded exactly as any position naming it.
-    pub(crate) fn slot_load_as(&self, slot: curios_cont::Slot) -> LoadAs {
+    pub(crate) fn slot_load_as(&self, slot: curios_cps::Slot) -> LoadAs {
         match slot {
-            curios_cont::Slot::Tag | curios_cont::Slot::Nat => LoadAs::Nat,
-            curios_cont::Slot::Flt => LoadAs::Flt,
-            curios_cont::Slot::List => LoadAs::ConcreteOrNull(self.list_rope().base.clone()),
-            curios_cont::Slot::Closure(arity) => LoadAs::ConcreteOrNull(self.find_envr_type(arity)),
-            curios_cont::Slot::Row(row) => LoadAs::ConcreteOrNull(self.find_row_type(row)),
-            curios_cont::Slot::Opaque => LoadAs::Null,
+            curios_cps::Slot::Tag | curios_cps::Slot::Nat => LoadAs::Nat,
+            curios_cps::Slot::Flt => LoadAs::Flt,
+            curios_cps::Slot::List => LoadAs::ConcreteOrNull(self.list_rope().base.clone()),
+            curios_cps::Slot::Closure(arity) => LoadAs::ConcreteOrNull(self.find_envr_type(arity)),
+            curios_cps::Slot::Row(row) => LoadAs::ConcreteOrNull(self.find_row_type(row)),
+            curios_cps::Slot::Opaque => LoadAs::Null,
         }
     }
 
     /// The carriers of `row`'s slots.
-    pub(crate) fn row_slots(&self, row: curios_cont::RowId) -> &[curios_cont::Slot] {
+    pub(crate) fn row_slots(&self, row: curios_cps::RowId) -> &[curios_cps::Slot] {
         &self
             .row_types
             .get(&row)
@@ -1320,7 +1320,7 @@ impl<'a> Table<'a> {
             .1
     }
 
-    pub(crate) fn find_row_type(&self, row: curios_cont::RowId) -> curios_wasm::TypeName {
+    pub(crate) fn find_row_type(&self, row: curios_cps::RowId) -> curios_wasm::TypeName {
         self.row_types
             .get(&row)
             .unwrap_or_else(|| panic!("`Table` lacks a type for row `{}`", row))
@@ -1385,7 +1385,7 @@ impl<'a> Table<'a> {
     pub(crate) fn const_register(
         &self,
         const_name: &EmissionValueName,
-    ) -> Option<(curios_cont::Repr, curios_wasm::Instr)> {
+    ) -> Option<(curios_cps::Repr, curios_wasm::Instr)> {
         self.const_registers.get(const_name).cloned()
     }
 
@@ -1397,7 +1397,7 @@ impl<'a> Table<'a> {
     }
 
     /// The carrier this value is held at in a register, or `None` when it is held behind a reference.
-    pub(crate) fn raw_carrier(&self, value_name: &EmissionValueName) -> Option<curios_cont::Repr> {
+    pub(crate) fn raw_carrier(&self, value_name: &EmissionValueName) -> Option<curios_cps::Repr> {
         self.raw.get(value_name).copied()
     }
 
@@ -1406,15 +1406,15 @@ impl<'a> Table<'a> {
     /// The reference arms are unreachable — the analysis only ever answers a scalar carrier, since those are the only ones a register holds — and they answer `top_type` rather than panicking because a representation that cannot be held raw and a value that was never offered one are the same fact, and this function's job is to state it once.
     pub(crate) fn local_type(&self, value_name: &EmissionValueName) -> curios_wasm::ValType {
         match self.raw_carrier(value_name) {
-            Some(curios_cont::Repr::Nat | curios_cont::Repr::Length) => {
+            Some(curios_cps::Repr::Nat | curios_cps::Repr::Length) => {
                 curios_wasm::ValType::Num(curios_wasm::NumType::I32)
             }
-            Some(curios_cont::Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
+            Some(curios_cps::Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F64),
             Some(
-                curios_cont::Repr::Number
-                | curios_cont::Repr::Bytes
-                | curios_cont::Repr::List
-                | curios_cont::Repr::Ref,
+                curios_cps::Repr::Number
+                | curios_cps::Repr::Bytes
+                | curios_cps::Repr::List
+                | curios_cps::Repr::Ref,
             )
             | None => self
                 .static_type(value_name)

@@ -572,8 +572,8 @@ dependencies = [
  "curios-binaryen",
  "curios-browser",
  "curios-cert",
- "curios-cont",
  "curios-core",
+ "curios-cps",
  "curios-cranelift",
  "curios-document",
  "curios-elab",
@@ -626,7 +626,7 @@ version = "0.16.16"
 dependencies = [
  "curios-abi",
  "curios-archive",
- "curios-cont",
+ "curios-cps",
  "curios-num",
  "curios-profile",
  "curios-utilities",
@@ -688,16 +688,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "curios-cont"
-version = "0.16.16"
-dependencies = [
- "curios-abi",
- "curios-num",
- "curios-profile",
- "curios-utilities",
-]
-
-[[package]]
 name = "curios-core"
 version = "0.16.16"
 dependencies = [
@@ -706,6 +696,16 @@ dependencies = [
  "curios-archive",
  "curios-num",
  "curios-print",
+ "curios-profile",
+ "curios-utilities",
+]
+
+[[package]]
+name = "curios-cps"
+version = "0.16.16"
+dependencies = [
+ "curios-abi",
+ "curios-num",
  "curios-profile",
  "curios-utilities",
 ]
@@ -748,7 +748,7 @@ name = "curios-emit"
 version = "0.16.16"
 dependencies = [
  "curios-abi",
- "curios-cont",
+ "curios-cps",
  "curios-num",
  "curios-profile",
  "curios-utilities",
@@ -823,8 +823,8 @@ dependencies = [
  "curios-anf",
  "curios-archive",
  "curios-cert",
- "curios-cont",
  "curios-core",
+ "curios-cps",
  "curios-document",
  "curios-elab",
  "curios-emit",
@@ -975,8 +975,8 @@ dependencies = [
 name = "curios-wonder"
 version = "0.16.16"
 dependencies = [
- "curios-cont",
  "curios-core",
+ "curios-cps",
  "curios-document",
  "curios-package",
  "curios-pipeline",

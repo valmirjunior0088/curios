@@ -97,9 +97,9 @@ fn a_recursive_function_diverges_unless_its_definition_was_proved_total() {
     );
 }
 
-/// The conclusion the erased stage hands Cont is the *conjunction*, and it is the only form of either fact that crosses.
+/// The conclusion the erased stage hands CPS is the *conjunction*, and it is the only form of either fact that crosses.
 ///
-/// Cont has no lattice and no notion of purity: termination arrived from above Core, effects are this stage's summary, and both are in hand exactly once — at the lowering. A function proved total but performing an effect must not cross as droppable, which is the half a test of the verdict alone would miss.
+/// CPS has no lattice and no notion of purity: termination arrived from above Core, effects are this stage's summary, and both are in hand exactly once — at the lowering. A function proved total but performing an effect must not cross as droppable, which is the half a test of the verdict alone would miss.
 #[test]
 fn only_a_total_and_effect_free_function_crosses_as_droppable() {
     for (label, total, effectful, expected) in [
@@ -108,7 +108,7 @@ fn only_a_total_and_effect_free_function_crosses_as_droppable() {
         ("total but performing", true, true, false),
     ] {
         let source = a_self_recursive_function_that(total, effectful);
-        let lowered = crate::lower_to_cont(&source);
+        let lowered = crate::lower_to_cps(&source);
         let droppable = lowered
             .functions()
             .iter()

@@ -975,7 +975,7 @@ impl fmt::Display for Floating {
     }
 }
 
-/// The number, not the wrapper around the bits holding it — [`Natural`]'s reason, at the floating carrier: the erased stages render their IR with `{:?}`, and `wonder stage cont` is read by people, so a derived `Floating { bits: 4615626668101337088 }` would put the representation in every dump where `3.75` belongs.
+/// The number, not the wrapper around the bits holding it — [`Natural`]'s reason, at the floating carrier: the erased stages render their IR with `{:?}`, and `wonder stage cps` is read by people, so a derived `Floating { bits: 4615626668101337088 }` would put the representation in every dump where `3.75` belongs.
 impl fmt::Debug for Floating {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)

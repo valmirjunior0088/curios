@@ -4,26 +4,26 @@ use crate::test_support::{
     assert_absent, assert_contains, indirect_apply, indirect_apply_discarding_result, nat, wat,
 };
 
-fn registered_entry(suspended: bool, construct: bool) -> curios_cont::Module {
-    let mut module = curios_cont::Module::new();
+fn registered_entry(suspended: bool, construct: bool) -> curios_cps::Module {
+    let mut module = curios_cps::Module::new();
     let row = module.suspension_row();
     let main = module.reserve_function();
     let ret = module.reserve_continuation();
     let result = construct.then(|| module.add_value(None));
-    let body = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+    let body = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
         target: ret,
         args: vec![if suspended {
-            curios_cont::Atom::Value(result.unwrap())
+            curios_cps::Atom::Value(result.unwrap())
         } else {
             nat(7)
         }],
     }));
     let body = if construct {
-        module.add_node(curios_cont::Node::LetValue {
+        module.add_node(curios_cps::Node::LetValue {
             result: result.unwrap(),
-            value: curios_cont::ValueExpr::Row(
+            value: curios_cps::ValueExpr::Row(
                 row,
-                vec![curios_cont::Atom::Filler; module.row(row).width()],
+                vec![curios_cps::Atom::Filler; module.row(row).width()],
             ),
             next: body,
         })
@@ -32,7 +32,7 @@ fn registered_entry(suspended: bool, construct: bool) -> curios_cont::Module {
     };
     module.define_function(
         main,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: ret,

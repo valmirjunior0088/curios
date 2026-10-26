@@ -4,13 +4,13 @@
 
 ## What is missing
 
-**Nothing finds a body written twice.** A body a reader writes in two arms is emitted in both, through every rung to the optimized module, and the continuation optimizer (`curios-cont/src/optimize/`) holds no pass that takes two identical bodies for one. Today the reader chooses: a body bound once as a local function and called from both arms stays one where it is large, and is copied back into both where the inliner takes it. Once patterns are typed the choice is the compiler's: a row reached at several leaves is written at each as an instance of one elaborated body, since Core has nothing that shares a body among arms.
+**Nothing finds a body written twice.** A body a reader writes in two arms is emitted in both, through every rung to the optimized module, and the continuation optimizer (`curios-cps/src/optimize/`) holds no pass that takes two identical bodies for one. Today the reader chooses: a body bound once as a local function and called from both arms stays one where it is large, and is copied back into both where the inliner takes it. Once patterns are typed the choice is the compiler's: a row reached at several leaves is written at each as an instance of one elaborated body, since Core has nothing that shares a body among arms.
 
 ## What is known
 
 - **What a copy weighs.** Counted, at `6f2028e9b`, by the release compiler. A program reads `n` from standard input as `programs/lcg/lcg.crs` does and prints `pick(half(n), third(n), n)`, where `half(n)` is `Option/some(n)` at an even `n` and `Option/none()` otherwise, `third(n)` the same at a multiple of three, and `pick(a, b, n)` matches `a` and under each of its arms `b`: `x + y` at `some(x)` and `some(y)`, `y` at `none()` and `some(y)`, and one body at `none()` of `b` under both arms of `a`. In the copied spelling that body is written in both arms; in the shared one it is `let shared: () -> Nat = () => …;` above the match, called from both. The small body is `((n * 3 + 424243) % 1000003 * (n + 11) % 65537 + n * n % 9973) * 7 % 100003`. The large one is the sum, for `i` from 1 to 40, of `((n * 3 + 424243) % 1000003 * (n + 13 * i) % 65537)`, taken `% 100003`. Each program is reprinted by `wonder stage <rung> -` and the bytes of its standard output counted.
 
-  | Body | Spelling | `cont-optm` | `wasm-optm` |
+  | Body | Spelling | `cps-optm` | `wasm-optm` |
   | --- | --- | --- | --- |
   | small | copied | 130,037 | 558,714 |
   | small | shared | 130,037 | 558,714 |

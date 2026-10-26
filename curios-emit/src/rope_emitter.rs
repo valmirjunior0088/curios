@@ -219,7 +219,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             curios_wasm::Instr::If {
                 label_name: curios_wasm::LabelName::from("bounds"),
                 block_type: curios_wasm::BlockType::Empty,
-                then_instructions: self.table.refuse_instrs(curios_cont::Panic::OutOfBounds),
+                then_instructions: self.table.refuse_instrs(curios_cps::Panic::OutOfBounds),
                 else_instructions: vec![],
             },
         ]);
@@ -535,7 +535,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             curios_wasm::Instr::If {
                 label_name: curios_wasm::LabelName::from("bounds"),
                 block_type: curios_wasm::BlockType::Empty,
-                then_instructions: self.table.refuse_instrs(curios_cont::Panic::OutOfBounds),
+                then_instructions: self.table.refuse_instrs(curios_cps::Panic::OutOfBounds),
                 else_instructions: vec![],
             },
             get(&i),

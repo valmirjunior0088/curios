@@ -76,7 +76,7 @@ pub enum Intrinsic {
     BytesEql,
     BytesGet,
     BytesSlice,
-    /// `(bytes, start) -> bytes`: the suffix from `start`, whose extent is the value's own — there is no count operand to supply, so the one thing a caller could get wrong about a suffix it cannot say. Every compiler-emitted window is a suffix (`into_cont`'s peel is the only producer), and this is what keeps two lowerings from having to agree about how a count is derived; the derivation happens once, against the rope's own length.
+    /// `(bytes, start) -> bytes`: the suffix from `start`, whose extent is the value's own — there is no count operand to supply, so the one thing a caller could get wrong about a suffix it cannot say. Every compiler-emitted window is a suffix (`into_cps`'s peel is the only producer), and this is what keeps two lowerings from having to agree about how a count is derived; the derivation happens once, against the rope's own length.
     BytesRest,
     BytesAppend,
     BytesConcat(usize),

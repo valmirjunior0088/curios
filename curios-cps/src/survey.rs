@@ -1,4 +1,4 @@
-//! What became of each source declaration, read off the Cont graph on either side of the optimizer.
+//! What became of each source declaration, read off the CPS graph on either side of the optimizer.
 //!
 //! A function carries the name of the declaration it descends from — [`Function::debug_name`], set by erasure and copied onto every clone the optimizer makes, per `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`. So the optimizer's effect on a declaration is a difference of two counts: how many functions bore its name before, and how many bear it after.
 //!

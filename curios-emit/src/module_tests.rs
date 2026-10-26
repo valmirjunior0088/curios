@@ -53,7 +53,7 @@ fn an_irreducible_component_uses_exactly_one_localized_dispatcher() {
 #[test]
 fn a_refusal_calls_its_class_helper_which_builds_the_message_where_it_fires() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::FltToNat,
+        curios_cps::Intrinsic::FltToNat,
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "(import \"sys\" \"panic\"");
@@ -87,13 +87,13 @@ fn a_refusal_calls_its_class_helper_which_builds_the_message_where_it_fires() {
 /// A `Panic` node a lowering seated — the knot's forcing state — ends its block by calling its class's helper, the same sequence a refusal decided in the emitter emits.
 #[test]
 fn a_panic_node_reports_its_class() {
-    let mut module = curios_cont::Module::new();
+    let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
-    let body = module.add_node(curios_cont::Node::Panic(curios_cont::Panic::Cycle));
+    let body = module.add_node(curios_cps::Node::Panic(curios_cps::Panic::Cycle));
     module.define_function(
         main,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,

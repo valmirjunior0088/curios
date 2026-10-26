@@ -4,7 +4,7 @@ use super::test_support::*;
 
 #[test]
 fn let_bound_tuple_with_an_effectful_field_lowers() {
-    // A `let` bound to a tuple one of whose fields is an opaque foreign call: the field cannot be lowered in a pure-name position, so the binding must take the CPS join-block path in `into_cont`; a purity classification reading the head alone would lower the whole `let` as pure and panic the compiler on the field's host intrinsic. The field stays the call itself — a description the projection then forces — so the effectful term is still what the tuple carries.
+    // A `let` bound to a tuple one of whose fields is an opaque foreign call: the field cannot be lowered in a pure-name position, so the binding must take the CPS join-block path in `into_cps`; a purity classification reading the head alone would lower the whole `let` as pure and panic the compiler on the field's host intrinsic. The field stays the call itself — a description the projection then forces — so the effectful term is still what the tuple carries.
     let source = r#"
         foreign frobnicate(Nat) -> Nat;
         let entry() -> /std/Io({}) =

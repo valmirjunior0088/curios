@@ -1,10 +1,10 @@
-//! The Curios WebAssembly emission: [`into_wasm`](into_wasm()) lowers an optimized `curios_cont::Module` to a WebAssembly-GC module, performing delayed closure conversion, verifying a private closed machine CFG, structurizing reducible control into Wasm blocks and loops, and localizing dispatcher fallback to irreducible scopes.
+//! The Curios WebAssembly emission: [`into_wasm`](into_wasm()) lowers an optimized `curios_cps::Module` to a WebAssembly-GC module, performing delayed closure conversion, verifying a private closed machine CFG, structurizing reducible control into Wasm blocks and loops, and localizing dispatcher fallback to irreducible scopes.
 //!
 //! Machine lowering recognizes a function's bodyless return continuation in the current-function context, so an ordinary return, `ApplyCont(function.return_cont, [value])`, is emitted as `Return` without allocating a block.
 //!
 //! Every program value this crate emits lives in a GC reference — a struct, an array, or an `i31` — and never in linear memory, so a module emitted here declares no memory: [WebAssembly-GC is the only back end](../../documentation/design/compilation/webassembly-gc-is-the-only-back-end.md), which this crate enforces.
 //!
-//! The crate owns neither representation it works between, so every name from `curios_cont` and `curios_wasm` is written with its crate.
+//! The crate owns neither representation it works between, so every name from `curios_cps` and `curios_wasm` is written with its crate.
 
 use {curios_abi::ForeignStore, curios_utilities::grown, std::collections::HashMap};
 
@@ -93,14 +93,14 @@ mod test_support;
 /// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built, its reducible control structurized into blocks and loops and its constant data hoisted, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
 ///
 /// The module comes beside the rows its `ffi` imports are declared as, by import name: exactly the rows whose call sites the emitted code holds, which is what a program asks an implementation of. A row a unit declares and nothing calls is not among them.
-pub fn into_wasm(module: &curios_cont::Module) -> (curios_wasm::Module, ForeignStore) {
+pub fn into_wasm(module: &curios_cps::Module) -> (curios_wasm::Module, ForeignStore) {
     // On a segment of its own, as every other stage enters: the emitter below recurses per nested region, and its frames are large enough that a knot's few thousand lines of CPS would outgrow the default test-thread stack.
     grown(|| into_wasm_within(module))
 }
 
-fn into_wasm_within(module: &curios_cont::Module) -> (curios_wasm::Module, ForeignStore) {
+fn into_wasm_within(module: &curios_cps::Module) -> (curios_wasm::Module, ForeignStore) {
     curios_profile::profile!("into_wasm");
-    let representation = curios_cont::representation(module);
+    let representation = curios_cps::representation(module);
     let mut raw = raw_locals(&representation);
     let closures = closure_locals(&representation);
     let machine = lower(module, &representation.results);
@@ -123,7 +123,7 @@ fn into_wasm_within(module: &curios_cont::Module) -> (curios_wasm::Module, Forei
 
 /// The emission names the representation analysis knows hold closures of one arity, and that arity, translated as [`raw_locals`] translates registers.
 fn closure_locals(
-    representation: &curios_cont::Representation,
+    representation: &curios_cps::Representation,
 ) -> HashMap<EmissionValueName, usize> {
     representation
         .closures
@@ -136,8 +136,8 @@ fn closure_locals(
 ///
 /// Translated here rather than threaded through the lowerings because both hops are total functions of an index: a machine value *is* its CPS value, and its emission name is that index spelled. Nothing has to be carried along to reconstruct it. A name codegen mints for itself — a hoisted literal, a wrapper argument, a closure shell — is not a CPS value, is therefore absent, and is held behind a reference, which is the correct default; the one exception, a resume block's result parameter, is recorded where structurization mints it ([`EmissionModule::minted_registers`]).
 fn raw_locals(
-    representation: &curios_cont::Representation,
-) -> HashMap<EmissionValueName, curios_cont::Repr> {
+    representation: &curios_cps::Representation,
+) -> HashMap<EmissionValueName, curios_cps::Repr> {
     representation
         .values
         .iter()

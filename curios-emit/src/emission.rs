@@ -20,17 +20,17 @@ pub(crate) enum EmissionData {
     List(Vec<EmissionValueName>),
     Tuple(Vec<EmissionValueName>),
     /// A nominal row's construction, at that row's full width. Emitted as the row's own final struct type rather than an arity-keyed `$tuple/N`, which is what makes every read of it an exact cast.
-    Row(curios_cont::RowId, Vec<EmissionArg>),
+    Row(curios_cps::RowId, Vec<EmissionArg>),
     Closure(EmissionClosureName, Vec<EmissionValueName>),
 }
 
 /// One pure intrinsic computation over already-bound values: every variant produces exactly one value and has no effects, anything stateful being an [`EmissionTail`].
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCode {
-    /// One [`curios_cont::Intrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar rows (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bytes*`/`List*` rows are rope operations codegen services through shared helper functions.
-    Intrinsic(curios_cont::Intrinsic, Vec<EmissionValueName>),
+    /// One [`curios_cps::Intrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar rows (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bytes*`/`List*` rows are rope operations codegen services through shared helper functions.
+    Intrinsic(curios_cps::Intrinsic, Vec<EmissionValueName>),
     // `ListMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$list/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_indirect`.
-    /// The list-map runtime helper call: list first, mapper second. Not an [`Intrinsic`](Self::Intrinsic) member because it is no [`curios_cont::Intrinsic`] upstream — it runs a closure, so CPS carries it as the call-shaped `curios_cont::IntrinsicCall` with a return continuation, and only structurization collapses it to a pure helper call.
+    /// The list-map runtime helper call: list first, mapper second. Not an [`Intrinsic`](Self::Intrinsic) member because it is no [`curios_cps::Intrinsic`] upstream — it runs a closure, so CPS carries it as the call-shaped `curios_cps::IntrinsicCall` with a return continuation, and only structurization collapses it to a pure helper call.
     ListMap(EmissionValueName, EmissionValueName),
 }
 
@@ -133,7 +133,7 @@ impl EmissionCellTarget {
 /// A bounded guest channel operation, performed inline and delivering its results to `resume`.
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionChannelTarget {
-    pub(crate) op: curios_cont::ChannelOp,
+    pub(crate) op: curios_cps::ChannelOp,
     pub(crate) args: Vec<EmissionValueName>,
     pub(crate) resume: EmissionBlockName,
 }
@@ -147,7 +147,7 @@ pub(crate) enum EmissionTail {
     Host(EmissionHostTarget),
     Cell(EmissionCellTarget),
     Channel(EmissionChannelTarget),
-    Panic(curios_cont::Panic),
+    Panic(curios_cps::Panic),
     Unreachable,
 }
 
@@ -268,7 +268,7 @@ pub(crate) struct EmissionClosure {
 pub(crate) struct EmissionFunction {
     pub(crate) params: Vec<EmissionBinder>,
     /// What this function hands back, one carrier a value — a register's, or `None` for a reference: one value unless a return protocol delivers a constructor as its fields, each held as the representation decided for its result slot — which is why the wasm type is keyed on the carriers rather than on the parameter count alone.
-    pub(crate) results: Vec<Option<curios_cont::Repr>>,
+    pub(crate) results: Vec<Option<curios_cps::Repr>>,
     pub(crate) resume: EmissionBlockName,
     pub(crate) region: EmissionBody,
 }
@@ -281,11 +281,11 @@ pub(crate) struct EmissionModule {
     funcs: Vec<(EmissionFunctionName, EmissionFunction)>,
     entry: Option<EmissionFunctionName>,
     /// The nominal rows this module constructs and reads, each with its debug name and slot carriers. See [`EmissionData::Row`].
-    rows: Vec<(curios_cont::RowId, curios_cont::Row)>,
+    rows: Vec<(curios_cps::RowId, curios_cps::Row)>,
     /// The suspension row only when the residual entry may return it: what selects turn exports and their dispatch requirements.
-    entry_suspension: Option<curios_cont::RowId>,
+    entry_suspension: Option<curios_cps::RowId>,
     /// The values structurization minted that a register holds, at their carriers: a resume block it adds in front of one that captures takes a call's results as parameters of its own, each held as the callee hands that result back.
-    minted_registers: Vec<(EmissionValueName, curios_cont::Repr)>,
+    minted_registers: Vec<(EmissionValueName, curios_cps::Repr)>,
 }
 
 impl EmissionModule {
@@ -294,19 +294,19 @@ impl EmissionModule {
         Self::default()
     }
 
-    pub(crate) fn rows(&self) -> &[(curios_cont::RowId, curios_cont::Row)] {
+    pub(crate) fn rows(&self) -> &[(curios_cps::RowId, curios_cps::Row)] {
         &self.rows
     }
 
-    pub(crate) fn set_rows(&mut self, rows: Vec<(curios_cont::RowId, curios_cont::Row)>) {
+    pub(crate) fn set_rows(&mut self, rows: Vec<(curios_cps::RowId, curios_cps::Row)>) {
         self.rows = rows;
     }
 
-    pub(crate) fn entry_suspension(&self) -> Option<curios_cont::RowId> {
+    pub(crate) fn entry_suspension(&self) -> Option<curios_cps::RowId> {
         self.entry_suspension
     }
 
-    pub(crate) fn set_entry_suspension(&mut self, entry_suspension: Option<curios_cont::RowId>) {
+    pub(crate) fn set_entry_suspension(&mut self, entry_suspension: Option<curios_cps::RowId>) {
         self.entry_suspension = entry_suspension;
     }
 
@@ -317,7 +317,7 @@ impl EmissionModule {
     /// The values structurization minted that a register holds, at their carriers.
     pub(crate) fn minted_registers(
         &self,
-    ) -> impl Iterator<Item = (EmissionValueName, curios_cont::Repr)> + '_ {
+    ) -> impl Iterator<Item = (EmissionValueName, curios_cps::Repr)> + '_ {
         self.minted_registers.iter().cloned()
     }
 
@@ -325,7 +325,7 @@ impl EmissionModule {
     pub(crate) fn add_minted_register(
         &mut self,
         name: EmissionValueName,
-        carrier: curios_cont::Repr,
+        carrier: curios_cps::Repr,
     ) {
         self.minted_registers.push((name, carrier));
     }
@@ -390,7 +390,7 @@ impl EmissionModule {
         // A row slot declared at a closure arity names that arity's environment type, so the roster has to reach it whether or not the module ever builds a closure of that arity.
         for (_, row) in &self.rows {
             for slot in &row.slots {
-                if let curios_cont::Slot::Closure(arity) = slot {
+                if let curios_cps::Slot::Closure(arity) = slot {
                     arities.insert(*arity);
                 }
             }

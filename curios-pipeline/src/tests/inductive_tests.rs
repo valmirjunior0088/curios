@@ -371,15 +371,15 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
             end)
     "#;
 
-    let (anf, cont) = compile_printed_stages(source).unwrap();
+    let (anf, cps) = compile_printed_stages(source).unwrap();
 
     assert!(
         anf.contains("unreachable"),
         "expected ANF output to contain unreachable, got {anf}",
     );
     assert!(
-        cont.contains("unreachable"),
-        "expected Cont output to contain unreachable, got {cont}",
+        cps.contains("unreachable"),
+        "expected CPS output to contain unreachable, got {cps}",
     );
 }
 

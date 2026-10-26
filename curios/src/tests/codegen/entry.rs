@@ -54,26 +54,26 @@ fn residual_entry_capability_selects_the_abi_and_preserves_execution() {
 
 #[test]
 fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
-    let mut module = curios_cont::Module::new();
+    let mut module = curios_cps::Module::new();
     let row = module.suspension_row();
     let producer = module.reserve_function();
     let producer_ret = module.reserve_continuation();
     let value = module.add_value(None);
-    let body = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+    let body = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
         target: producer_ret,
-        args: vec![curios_cont::Atom::Value(value)],
+        args: vec![curios_cps::Atom::Value(value)],
     }));
-    let body = module.add_node(curios_cont::Node::LetValue {
+    let body = module.add_node(curios_cps::Node::LetValue {
         result: value,
-        value: curios_cont::ValueExpr::Row(
+        value: curios_cps::ValueExpr::Row(
             row,
-            vec![curios_cont::Atom::Filler; module.row(row).width()],
+            vec![curios_cps::Atom::Filler; module.row(row).width()],
         ),
         next: body,
     });
     module.define_function(
         producer,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: None,
             params: vec![],
             return_cont: producer_ret,
@@ -85,34 +85,34 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
     let ret = module.reserve_continuation();
     let ignored = module.add_value(None);
     let resume = module.reserve_continuation();
-    let body = module.add_node(curios_cont::Node::ApplyCont(curios_cont::Edge {
+    let body = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
         target: ret,
-        args: vec![curios_cont::Atom::Filler],
+        args: vec![curios_cps::Atom::Filler],
     }));
     module.define_continuation(
         resume,
-        curios_cont::Continuation {
+        curios_cps::Continuation {
             debug_name: None,
             params: vec![ignored],
             body,
         },
     );
-    let call = module.add_node(curios_cont::Node::ApplyFun {
-        callee: curios_cont::Callee::Known(producer),
+    let call = module.add_node(curios_cps::Node::ApplyFun {
+        callee: curios_cps::Callee::Known(producer),
         args: vec![],
         return_to: resume,
     });
-    let body = module.add_node(curios_cont::Node::LetCont {
+    let body = module.add_node(curios_cps::Node::LetCont {
         continuations: vec![resume],
         body: call,
     });
-    let body = module.add_node(curios_cont::Node::LetFun {
+    let body = module.add_node(curios_cps::Node::LetFun {
         functions: vec![producer],
         body,
     });
     module.define_function(
         entry,
-        curios_cont::Function {
+        curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont: ret,

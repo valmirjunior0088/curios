@@ -1,6 +1,6 @@
 //! Specialization of self-recursive functions on literal constructor spines.
 //!
-//! The closed-term evaluator leaves one shape it cannot finish: a self-recursive function applied to a **constant** inductive value with *runtime* companion arguments — `Fmt/go_with` over a parsed format-string spine, with a runtime `finish` and accumulator. Cont never runs closed recursion to a constant, so this residual would ship the whole combinator web unless the arena unrolls it.
+//! The closed-term evaluator leaves one shape it cannot finish: a self-recursive function applied to a **constant** inductive value with *runtime* companion arguments — `Fmt/go_with` over a parsed format-string spine, with a runtime `finish` and accumulator. CPS never runs closed recursion to a constant, so this residual would ship the whole combinator web unless the arena unrolls it.
 //!
 //! This pass mints one specialized function per `(target, position, spine)`: a verbatim deep copy with the baked parameter dropped and instead bound locally to the reified spine — *binding, not substitution* — then folded: a match on the now-known spine takes its arm, a known projection reads its field, and a self-recursive call whose spine argument folds to a strictly smaller literal is rewritten to the next specialization. The chain is finite because every mint keys on a strict subterm of its requester's spine; the budgets are belt and braces. A recursive call whose spine does not fold falls back to the generic target — always correct, never required to fire.
 
@@ -582,7 +582,7 @@ fn resolve_product(
     }
 }
 
-/// Inline a decided branch block in place of the eliminating statement: bind the payload to the arm's binders, splice the arm's statements, and alias the result to the arm's returned atom. Declines an arm that exits or traps, leaving the eliminator for Cont.
+/// Inline a decided branch block in place of the eliminating statement: bind the payload to the arm's binders, splice the arm's statements, and alias the result to the arm's returned atom. Declines an arm that exits or traps, leaving the eliminator for CPS.
 fn take_block(
     module: &mut Module,
     block: BlockId,

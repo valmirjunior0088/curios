@@ -71,7 +71,7 @@ Each lands alone, on its own check.
 
 ## Non-goals
 
-Parallelizing the ANF and Cont optimizers or the emitter beyond Cranelift; caching per item in the store; compiling across processes or machines; sharing cores with an outer build through a job server.
+Parallelizing the ANF and CPS optimizers or the emitter beyond Cranelift; caching per item in the store; compiling across processes or machines; sharing cores with an outer build through a job server.
 
 ## Completion and retirement
 

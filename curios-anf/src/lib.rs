@@ -1,8 +1,8 @@
-//! The erased, first-order IR — the pipeline stage between `curios-elab`'s type-directed erasure and the continuation IR of `curios-cont`. Types, proofs, and erasable binders are gone by construction.
+//! The erased, first-order IR — the pipeline stage between `curios-elab`'s type-directed erasure and the continuation IR of `curios-cps`. Types, proofs, and erasable binders are gone by construction.
 //!
 //! The program is flat, explicit, first-order data: a [`Module`] of arena-allocated blocks of single-operation statements over atomic operands, addressed by typed `u32` identities, with ordered top-level items plus an entry block at its top level. The alphabet is erased Core's vocabulary with its semantic identities intact, as `README.md`'s "Shapes stay distinct" decides. Functions store no capture lists; free values, uses, the call graph, and recursive components are derived on demand ([`Analysis`]).
 //!
-//! `curios_elab`'s `into_anf` is the sole producer, constructing through the checked [`AnfBuilder`]. It erases each declaration into a module of its own, a *fragment*, which declares what another declaration binds, and what it reads of another's rows, as an import ([`Imports`]) and verifies with no entry ([`Module::verify_fragment`]); [`Module::link`] appends fragments into one program under fresh identities, and only a program, which has no import left, is optimized or lowered. [`optimize`](optimize()) is the ANF-level optimizer (behavior-summary pruning, closed-term evaluation, literal-spine specialization, reconstruction recovery, monoid worker/wrapper), and [`lower_to_cont`] is the one-way door where every encoding decision is made, lowering the module to a `curios_cont::Module`.
+//! `curios_elab`'s `into_anf` is the sole producer, constructing through the checked [`AnfBuilder`]. It erases each declaration into a module of its own, a *fragment*, which declares what another declaration binds, and what it reads of another's rows, as an import ([`Imports`]) and verifies with no entry ([`Module::verify_fragment`]); [`Module::link`] appends fragments into one program under fresh identities, and only a program, which has no import left, is optimized or lowered. [`optimize`](optimize()) is the ANF-level optimizer (behavior-summary pruning, closed-term evaluation, literal-spine specialization, reconstruction recovery, monoid worker/wrapper), and [`lower_to_cps`] is the one-way door where every encoding decision is made, lowering the module to a `curios_cps::Module`.
 
 mod id;
 pub use id::*;
@@ -40,8 +40,8 @@ pub(crate) use walk::*;
 mod analysis;
 pub use analysis::*;
 
-mod into_cont;
-pub use into_cont::*;
+mod into_cps;
+pub use into_cps::*;
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: the path says at its use site that the caller reached for scaffolding rather than product API. This crate's own tests read it too, which the feature does not reach.
 #[cfg(any(test, feature = "test-support"))]

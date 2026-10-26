@@ -1,7 +1,7 @@
 use {
     super::{Uncosted, cost},
     crate::{Origin, Subject},
-    curios_cont::{Fate, Outcome},
+    curios_cps::{Fate, Outcome},
     curios_pipeline::DEFAULT_BUDGET,
     curios_text::Overlay,
 };
@@ -71,7 +71,7 @@ fn rows_are_ordered_by_name() {
 fn a_declaration_the_program_never_reaches_is_absorbed() {
     let fates = fates_of(HELPER);
 
-    // Pruning before Cont is as good an answer as absorption at it: either way the declaration is not in the compiled program, and this query reports what reached the graph.
+    // Pruning before CPS is as good an answer as absorption at it: either way the declaration is not in the compiled program, and this query reports what reached the graph.
     if let Some(fate) = fates.iter().find(|fate| fate.name.ends_with("helper")) {
         assert_eq!(fate.outcome, Outcome::Absorbed);
     }

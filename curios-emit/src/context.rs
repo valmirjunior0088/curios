@@ -219,7 +219,7 @@ impl<'a, 'b> Context<'a, 'b> {
     ///
     /// A `Tuple` or `List` construction is a heap reference, so loading one at a scalar carrier emits `ref.cast (ref i31)` over a `struct.new`. That traps at run time, in a function far from whatever decided the carrier.
     ///
-    /// **The representation analysis rules out what it can see, and the check holds the rest.** An aggregate's own definition offers `Offer::Never`, so no demand settles raw on *it*, and a continuation parameter is offered a word or a float only where every argument reaching it is one, so no edge it reads hands an aggregate to a register. What it cannot see is the *door's*: `curios-anf`'s lowering must never route an aggregate into a parameter something reads as a scalar. It breaks where an immediate arm's binder is aliased to its scrutinee, leaving the payload no definition of its own to refuse the demand — which is why `curios_cont::Intrinsic::ImmediateGet` exists. Both halves of the population are checked — a region binding and a `hoist`ed const — and both are pinned by `should_panic` fixtures in `aggregate_tests`.
+    /// **The representation analysis rules out what it can see, and the check holds the rest.** An aggregate's own definition offers `Offer::Never`, so no demand settles raw on *it*, and a continuation parameter is offered a word or a float only where every argument reaching it is one, so no edge it reads hands an aggregate to a register. What it cannot see is the *door's*: `curios-anf`'s lowering must never route an aggregate into a parameter something reads as a scalar. It breaks where an immediate arm's binder is aliased to its scrutinee, leaving the payload no definition of its own to refuse the demand — which is why `curios_cps::Intrinsic::ImmediateGet` exists. Both halves of the population are checked — a region binding and a `hoist`ed const — and both are pinned by `should_panic` fixtures in `aggregate_tests`.
     ///
     /// A panic rather than a diagnostic, per this workspace's rule for invariants: a program's fault is reported to its author, but this crate's own broken contract is not something to emit code for.
     fn refuse_raw_aggregate(&self, value_name: &EmissionValueName, load_as: &LoadAs) {
@@ -378,7 +378,7 @@ impl<'a, 'b> Context<'a, 'b> {
         value: &'a EmissionValueName,
     ) -> Vec<curios_wasm::Instr> {
         let producer = match self.table().raw_carrier(value) {
-            Some(curios_cont::Repr::Nat | curios_cont::Repr::Length) => self
+            Some(curios_cps::Repr::Nat | curios_cps::Repr::Length) => self
                 .load_value_instrs(value, LoadAs::Nat)
                 .into_iter()
                 .chain([curios_wasm::Instr::I64ExtendI32U])
@@ -397,15 +397,15 @@ impl<'a, 'b> Context<'a, 'b> {
     fn raw_as_instrs(
         &self,
         producer: Vec<curios_wasm::Instr>,
-        carrier: curios_cont::Repr,
+        carrier: curios_cps::Repr,
         load_as: LoadAs,
     ) -> Vec<curios_wasm::Instr> {
         match (carrier, &load_as) {
             // A word is below `2³⁰` and a length below `2³²`, so either is already its narrowing to any position, and to either wire once widened unsigned.
-            (curios_cont::Repr::Nat | curios_cont::Repr::Length, LoadAs::Nat)
-            | (curios_cont::Repr::Flt, LoadAs::Flt) => producer,
+            (curios_cps::Repr::Nat | curios_cps::Repr::Length, LoadAs::Nat)
+            | (curios_cps::Repr::Flt, LoadAs::Flt) => producer,
             (
-                curios_cont::Repr::Nat | curios_cont::Repr::Length,
+                curios_cps::Repr::Nat | curios_cps::Repr::Length,
                 LoadAs::WireNat | LoadAs::WireInt,
             ) => producer
                 .into_iter()
@@ -449,7 +449,7 @@ impl<'a, 'b> Context<'a, 'b> {
         assert!(
             block_data.params().iter().all(|(name, _)| matches!(
                 self.table().raw_carrier(name),
-                None | Some(curios_cont::Repr::Flt)
+                None | Some(curios_cps::Repr::Flt)
             )),
             "resume block `{resume}` holds a parameter in a register, where a result arrives as a reference",
         );
@@ -507,9 +507,9 @@ impl<'a, 'b> Context<'a, 'b> {
             if let Some((carrier, constant)) = self.table().const_register(value_name)
                 && matches!(
                     (carrier, &load_as),
-                    (curios_cont::Repr::Flt, LoadAs::Flt)
+                    (curios_cps::Repr::Flt, LoadAs::Flt)
                         | (
-                            curios_cont::Repr::Nat,
+                            curios_cps::Repr::Nat,
                             LoadAs::Nat | LoadAs::WireNat | LoadAs::WireInt
                         )
                 )
@@ -599,12 +599,12 @@ impl<'a, 'b> Context<'a, 'b> {
     pub(crate) fn match_instrs(&self, target: &'a EmissionMatchTarget) -> Vec<curios_wasm::Instr> {
         // A match with no arm at all, or a tag outside every case with no default, is an arm the theory proved impossible: reaching it is the compiler's fault, and the refusal says so.
         if target.cases.is_empty() && target.default.is_none() {
-            return self.table().refuse_instrs(curios_cont::Panic::Invariant);
+            return self.table().refuse_instrs(curios_cps::Panic::Invariant);
         }
 
         let default_instructions = match &target.default {
             Some(target) => self.jump_instrs(target),
-            None => self.table().refuse_instrs(curios_cont::Panic::Invariant),
+            None => self.table().refuse_instrs(curios_cps::Panic::Invariant),
         };
 
         let sorted: Vec<(u32, &EmissionJumpTarget)> =
@@ -914,8 +914,8 @@ impl<'a, 'b> Context<'a, 'b> {
             EmissionTail::Cell(cell) => self.cell_instrs(cell),
             EmissionTail::Channel(channel) => self.channel_instrs(channel),
             EmissionTail::Panic(panic) => self.table().refuse_instrs(*panic),
-            // An arm the theory proved impossible, carried down as `curios_cont::Node::Unreachable`; reaching it is a compiler bug, which is what the refusal reports.
-            EmissionTail::Unreachable => self.table().refuse_instrs(curios_cont::Panic::Invariant),
+            // An arm the theory proved impossible, carried down as `curios_cps::Node::Unreachable`; reaching it is a compiler bug, which is what the refusal reports.
+            EmissionTail::Unreachable => self.table().refuse_instrs(curios_cps::Panic::Invariant),
         }
     }
 
@@ -1123,8 +1123,7 @@ impl<'a, 'b> Context<'a, 'b> {
                             // An `Flt` stays the raw `f64` where the parameter receiving it is held at its carrier, and is boxed where it is a reference: a join of the call's answer with a suspension, say.
                             None if matches!(wire_type, WireType::Flt) => {
                                 if !self.resume_param_is_raw(resume, index) {
-                                    output
-                                        .extend(box_instrs(&curios_cont::Repr::Flt, self.table()));
+                                    output.extend(box_instrs(&curios_cps::Repr::Flt, self.table()));
                                 }
                             }
                             None => output.extend(self.table().box_word_instrs(wire_type)),
@@ -1172,16 +1171,16 @@ pub(crate) enum LoadAs {
 /// The zero of one row slot: the register zero for a scalar carrier, and a null for every reference, a declared heap type or the uniform one.
 ///
 /// A reference slot takes `ref.null none` rather than the boxed zero because the boxed zero is not of a declared heap type — and because null is what a filler *means*, where an `i31` zero is a perfectly good `Nat` standing in a position that holds no value at all.
-pub(crate) fn slot_zero_instrs(slot: curios_cont::Slot) -> Vec<curios_wasm::Instr> {
+pub(crate) fn slot_zero_instrs(slot: curios_cps::Slot) -> Vec<curios_wasm::Instr> {
     match slot {
-        curios_cont::Slot::Tag | curios_cont::Slot::Nat => {
+        curios_cps::Slot::Tag | curios_cps::Slot::Nat => {
             vec![curios_wasm::Instr::I32Const { value: 0 }]
         }
-        curios_cont::Slot::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
-        curios_cont::Slot::List
-        | curios_cont::Slot::Closure(_)
-        | curios_cont::Slot::Row(_)
-        | curios_cont::Slot::Opaque => null_instrs(),
+        curios_cps::Slot::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
+        curios_cps::Slot::List
+        | curios_cps::Slot::Closure(_)
+        | curios_cps::Slot::Row(_)
+        | curios_cps::Slot::Opaque => null_instrs(),
     }
 }
 
@@ -1193,59 +1192,57 @@ pub(crate) fn null_instrs() -> Vec<curios_wasm::Instr> {
 }
 
 /// Absence in a register: the zero of the carrier, since a register has no null. A packed carrier is small-canonical, so its zero is the empty immediate.
-pub(crate) fn zero_instrs(carrier: curios_cont::Repr) -> Vec<curios_wasm::Instr> {
+pub(crate) fn zero_instrs(carrier: curios_cps::Repr) -> Vec<curios_wasm::Instr> {
     match carrier {
-        curios_cont::Repr::Nat | curios_cont::Repr::Length => {
+        curios_cps::Repr::Nat | curios_cps::Repr::Length => {
             vec![curios_wasm::Instr::I32Const { value: 0 }]
         }
-        curios_cont::Repr::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
-        curios_cont::Repr::Bytes => vec![
+        curios_cps::Repr::Flt => vec![curios_wasm::Instr::F64Const { value: 0.0 }],
+        curios_cps::Repr::Bytes => vec![
             curios_wasm::Instr::I32Const { value: 0 },
             curios_wasm::Instr::RefI31,
         ],
-        curios_cont::Repr::Number | curios_cont::Repr::List | curios_cont::Repr::Ref => {
-            null_instrs()
-        }
+        curios_cps::Repr::Number | curios_cps::Repr::List | curios_cps::Repr::Ref => null_instrs(),
     }
 }
 
 /// How a value in its register carrier is boxed back into a reference: an `i31ref` for a word, which lies below `2³⁰` and so is already the i31 a `Bool`, a byte, a tag or a small `Nat` is; `big/of_u64` for a length, an i31 below `2³⁰` and a boxed magnitude past it; the `Flt` struct for `f64`; and nothing at all for a representation that already names one.
 ///
-/// The dual of [`LoadAs::of`], and the reason this reads a [`curios_cont::Repr`] rather than a dedicated enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
-pub(crate) fn box_instrs(repr: &curios_cont::Repr, table: &Table) -> Vec<curios_wasm::Instr> {
+/// The dual of [`LoadAs::of`], and the reason this reads a [`curios_cps::Repr`] rather than a dedicated enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
+pub(crate) fn box_instrs(repr: &curios_cps::Repr, table: &Table) -> Vec<curios_wasm::Instr> {
     match repr {
-        curios_cont::Repr::Nat => vec![curios_wasm::Instr::RefI31],
-        curios_cont::Repr::Length => vec![
+        curios_cps::Repr::Nat => vec![curios_wasm::Instr::RefI31],
+        curios_cps::Repr::Length => vec![
             curios_wasm::Instr::I64ExtendI32U,
             curios_wasm::Instr::Call {
                 func_name: table.big_func(BigHelper::OfU64),
             },
         ],
-        curios_cont::Repr::Flt => vec![curios_wasm::Instr::StructNew {
+        curios_cps::Repr::Flt => vec![curios_wasm::Instr::StructNew {
             type_name: table.flt_type(),
         }],
-        curios_cont::Repr::Number
-        | curios_cont::Repr::Bytes
-        | curios_cont::Repr::List
-        | curios_cont::Repr::Ref => vec![],
+        curios_cps::Repr::Number
+        | curios_cps::Repr::Bytes
+        | curios_cps::Repr::List
+        | curios_cps::Repr::Ref => vec![],
     }
 }
 
 impl LoadAs {
     /// The load that realises a representation the IR states.
     ///
-    /// This is the whole of the translation between [`curios_cont::Repr`] — what an operation declares it reads — and the instructions that deliver it. Every operand load in the emitter resolves through here rather than naming a `LoadAs` directly, so the demand has one statement (the intrinsic roster) and one realisation (this function), and the two cannot drift apart.
+    /// This is the whole of the translation between [`curios_cps::Repr`] — what an operation declares it reads — and the instructions that deliver it. Every operand load in the emitter resolves through here rather than naming a `LoadAs` directly, so the demand has one statement (the intrinsic roster) and one realisation (this function), and the two cannot drift apart.
     ///
     /// `Repr::Ref` maps to `Null` rather than `NonNull`: an uninterpreted operand is passed along exactly as stored, and asserting non-nullness of a value nothing reads would emit an instruction for no reader.
-    pub(crate) fn of(repr: &curios_cont::Repr) -> Self {
+    pub(crate) fn of(repr: &curios_cps::Repr) -> Self {
         match repr {
             // A length is read as a position is: narrowed to a word read unsigned, which is what it already is.
-            curios_cont::Repr::Nat | curios_cont::Repr::Length => Self::Nat,
-            curios_cont::Repr::Flt => Self::Flt,
-            curios_cont::Repr::Bytes => Self::Bytes,
-            curios_cont::Repr::List => Self::List,
+            curios_cps::Repr::Nat | curios_cps::Repr::Length => Self::Nat,
+            curios_cps::Repr::Flt => Self::Flt,
+            curios_cps::Repr::Bytes => Self::Bytes,
+            curios_cps::Repr::List => Self::List,
             // A `Nat` or `Int` operand is handed on as the reference it is; the lowering reading it tests and unboxes it itself, and takes a register-held word without this load.
-            curios_cont::Repr::Number | curios_cont::Repr::Ref => Self::Null,
+            curios_cps::Repr::Number | curios_cps::Repr::Ref => Self::Null,
         }
     }
 }

@@ -532,7 +532,7 @@ impl Lowering<'_> {
         //
         // The binders are opaque assumptions of the element and sequence types rather than the reads themselves, so the connection back to the scrutinee is restored by the refinement the arm was elaborated under: it is erased under `head = [element, ..suffix]`. Erasure re-types what it walks, and a proof in the arm may need the scrutinee at its case — `len(suffix) < len(head)` is decided only there.
         //
-        // **The reads are not emitted here at all.** `UnconsSequence` is one peel, and how a peel is performed belongs to the lowering that performs it — `into_cont`'s `emit_peel`, which the fold reaches too. Open-coding it here would make this crate hold a window's operand convention, which is the lowering's.
+        // **The reads are not emitted here at all.** `UnconsSequence` is one peel, and how a peel is performed belongs to the lowering that performs it — `into_cps`'s `emit_peel`, which the fold reaches too. Open-coding it here would make this crate hold a window's operand convention, which is the lowering's.
         if !cons_case.uses(2) {
             let element_hint = cons_case.first_hint().map(str::to_string);
             let suffix_hint = cons_case.second_hint().map(str::to_string);

@@ -17,7 +17,7 @@ fn assert_refuses_nothing(wat: &str) {
 fn nat_add_keeps_an_i31_fast_path_and_grows_past_it() {
     // A sum the representation analysis bounds below `2³⁰` rides a word with no overflow arm, so the operands are ones whose sum is `2³⁰`.
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatAdd,
+        curios_cps::Intrinsic::NatAdd,
         vec![nat(1 << 29), nat(1 << 29)],
     ));
     assert_contains(&wat, "i32.add");
@@ -30,7 +30,7 @@ fn nat_add_keeps_an_i31_fast_path_and_grows_past_it() {
 #[test]
 fn nat_sub_is_monus_on_the_fast_path_and_nat_sub_past_it() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatSub,
+        curios_cps::Intrinsic::NatSub,
         vec![nat(3), nat(4)],
     ));
     assert_contains(&wat, "i32.sub");
@@ -43,7 +43,7 @@ fn nat_sub_is_monus_on_the_fast_path_and_nat_sub_past_it() {
 fn nat_mul_widens_to_i64_and_grows_past_the_i31() {
     // As for the sum: a product its operands bound below `2³⁰` rides a word, so these multiply to `2³⁰`.
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatMul,
+        curios_cps::Intrinsic::NatMul,
         vec![nat(1 << 15), nat(1 << 15)],
     ));
     assert_contains(&wat, "i64.mul");
@@ -55,14 +55,14 @@ fn nat_mul_widens_to_i64_and_grows_past_the_i31() {
 #[test]
 fn nat_div_and_rem_are_unsigned_on_the_fast_path() {
     let div = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatDiv,
+        curios_cps::Intrinsic::NatDiv,
         vec![nat(9), nat(2)],
     ));
     assert_contains(&div, "i32.div_u");
     assert_contains(&div, "call $big/div");
 
     let rem = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatRem,
+        curios_cps::Intrinsic::NatRem,
         vec![nat(9), nat(2)],
     ));
     assert_contains(&rem, "i32.rem_u");
@@ -72,7 +72,7 @@ fn nat_div_and_rem_are_unsigned_on_the_fast_path() {
 #[test]
 fn nat_lt_compares_the_i31_signed_and_boxed_values_through_big_cmp() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatLt,
+        curios_cps::Intrinsic::NatLt,
         vec![nat(3), nat(4)],
     ));
     assert_contains(&wat, "i32.lt_s");
@@ -84,10 +84,10 @@ fn nat_lt_compares_the_i31_signed_and_boxed_values_through_big_cmp() {
 #[test]
 fn a_min_and_a_max_select_an_operand_by_a_signed_comparison_and_big_cmp_past_the_i31() {
     for (intrinsic, keeps) in [
-        (curios_cont::Intrinsic::NatMin, "i32.le_s"),
-        (curios_cont::Intrinsic::NatMax, "i32.ge_s"),
-        (curios_cont::Intrinsic::IntMin, "i32.le_s"),
-        (curios_cont::Intrinsic::IntMax, "i32.ge_s"),
+        (curios_cps::Intrinsic::NatMin, "i32.le_s"),
+        (curios_cps::Intrinsic::NatMax, "i32.ge_s"),
+        (curios_cps::Intrinsic::IntMin, "i32.le_s"),
+        (curios_cps::Intrinsic::IntMax, "i32.ge_s"),
     ] {
         let wat = wat(&intrinsic_main(intrinsic, vec![nat(3), nat(4)]));
         assert_contains(&wat, keeps);
@@ -101,7 +101,7 @@ fn a_min_and_a_max_select_an_operand_by_a_signed_comparison_and_big_cmp_past_the
 #[test]
 fn a_power_is_squared_and_multiplied_by_big_pow_under_a_wide_count() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatPow,
+        curios_cps::Intrinsic::NatPow,
         vec![nat(3), nat(4)],
     ));
     assert_contains(&wat, "call $big/pow");
@@ -116,7 +116,7 @@ fn a_power_is_squared_and_multiplied_by_big_pow_under_a_wide_count() {
 #[test]
 fn nat_and_combines_i31s_as_words_and_boxed_values_in_twos_complement() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatAnd,
+        curios_cps::Intrinsic::NatAnd,
         vec![nat(6), nat(3)],
     ));
     assert_contains(&wat, "i32.and");
@@ -127,7 +127,7 @@ fn nat_and_combines_i31s_as_words_and_boxed_values_in_twos_complement() {
 #[test]
 fn nat_to_flt_converts_an_i31_and_rounds_a_boxed_value() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatToFlt(Rounding::TiesToEven),
+        curios_cps::Intrinsic::NatToFlt(Rounding::TiesToEven),
         vec![nat(7)],
     ));
     assert_contains(&wat, "f64.convert_i32_s");
@@ -138,7 +138,7 @@ fn nat_to_flt_converts_an_i31_and_rounds_a_boxed_value() {
 #[test]
 fn nat_to_int_is_the_identity() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatToInt,
+        curios_cps::Intrinsic::NatToInt,
         vec![nat(7)],
     ));
     assert_absent(&wat, "call $big/add");
@@ -150,7 +150,7 @@ fn nat_to_int_is_the_identity() {
 #[test]
 fn a_nat_literal_past_the_i31_is_built_from_a_limb_segment() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatAdd,
+        curios_cps::Intrinsic::NatAdd,
         vec![nat(0x8000_0000), nat(1)],
     ));
     assert_contains(&wat, "array.new_data $words");
@@ -162,29 +162,28 @@ fn a_nat_literal_past_the_i31_is_built_from_a_limb_segment() {
 #[test]
 fn a_boxed_shift_count_crosses_as_a_wide_count_in_both_carriers() {
     for operation in [
-        curios_cont::Intrinsic::NatShl,
-        curios_cont::Intrinsic::NatShr,
-        curios_cont::Intrinsic::IntShl,
-        curios_cont::Intrinsic::IntShr,
+        curios_cps::Intrinsic::NatShl,
+        curios_cps::Intrinsic::NatShr,
+        curios_cps::Intrinsic::IntShl,
+        curios_cps::Intrinsic::IntShr,
     ] {
-        let count =
-            curios_cont::Atom::Literal(curios_cont::Literal::Nat(Natural::from(1u64 << 32)));
+        let count = curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(1u64 << 32)));
         let value = match operation {
-            curios_cont::Intrinsic::IntShl | curios_cont::Intrinsic::IntShr => int(-1),
+            curios_cps::Intrinsic::IntShl | curios_cps::Intrinsic::IntShr => int(-1),
             _ => nat(1),
         };
-        let mut module = curios_cont::Module::new();
+        let mut module = curios_cps::Module::new();
         let result = module.add_value(Some("result".into()));
         // No exit-code conversion: every big/word call would belong to the shift's count.
-        let end = module.add_node(curios_cont::Node::Unreachable);
-        let body = module.add_node(curios_cont::Node::LetIntrinsic {
+        let end = module.add_node(curios_cps::Node::Unreachable);
+        let body = module.add_node(curios_cps::Node::LetIntrinsic {
             result,
             op: operation,
             args: vec![value, count],
             next: end,
         });
         let return_cont = module.reserve_continuation();
-        let main = module.add_function(curios_cont::Function {
+        let main = module.add_function(curios_cps::Function {
             debug_name: Some("main".into()),
             params: vec![],
             return_cont,
@@ -198,7 +197,7 @@ fn a_boxed_shift_count_crosses_as_a_wide_count_in_both_carriers() {
         assert_absent(&wat, "call $big/word");
         if matches!(
             operation,
-            curios_cont::Intrinsic::NatShl | curios_cont::Intrinsic::IntShl
+            curios_cps::Intrinsic::NatShl | curios_cps::Intrinsic::IntShl
         ) {
             assert_contains(&wat, "call $refuse/capacity");
         } else {
@@ -212,7 +211,7 @@ fn a_boxed_shift_count_crosses_as_a_wide_count_in_both_carriers() {
 #[test]
 fn int_add_keeps_an_i31_fast_path_and_grows_past_it() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::IntAdd,
+        curios_cps::Intrinsic::IntAdd,
         vec![int(3), int(-4)],
     ));
     assert_contains(&wat, "i32.add");
@@ -224,7 +223,7 @@ fn int_add_keeps_an_i31_fast_path_and_grows_past_it() {
 #[test]
 fn int_mul_widens_to_i64_and_grows_past_the_i31() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::IntMul,
+        curios_cps::Intrinsic::IntMul,
         vec![int(3), int(-4)],
     ));
     assert_contains(&wat, "i64.mul");
@@ -236,7 +235,7 @@ fn int_mul_widens_to_i64_and_grows_past_the_i31() {
 #[test]
 fn int_div_is_signed_and_boxes_the_one_quotient_past_the_i31() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::IntDiv,
+        curios_cps::Intrinsic::IntDiv,
         vec![int(-9), int(2)],
     ));
     assert_contains(&wat, "i32.div_s");
@@ -251,7 +250,7 @@ fn int_div_is_signed_and_boxes_the_one_quotient_past_the_i31() {
 #[test]
 fn int_lt_compares_signed() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::IntLt,
+        curios_cps::Intrinsic::IntLt,
         vec![int(-3), int(4)],
     ));
     assert_contains(&wat, "i32.lt_s");
@@ -263,7 +262,7 @@ fn int_lt_compares_signed() {
 #[test]
 fn an_int_s_magnitude_selects_the_operand_or_its_negation_and_boxes_the_one_past_the_i31() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::IntAbs,
+        curios_cps::Intrinsic::IntAbs,
         vec![int(-7)],
     ));
     assert_contains(&wat, "i32.sub");
@@ -279,7 +278,7 @@ fn an_int_s_magnitude_selects_the_operand_or_its_negation_and_boxes_the_one_past
 #[test]
 fn an_int_s_sign_is_two_machine_comparisons_and_big_cmp_past_the_i31() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::IntSign,
+        curios_cps::Intrinsic::IntSign,
         vec![int(-7)],
     ));
     assert_contains(&wat, "i32.gt_s");
@@ -293,7 +292,7 @@ fn an_int_s_sign_is_two_machine_comparisons_and_big_cmp_past_the_i31() {
 #[test]
 fn a_remainder_by_a_small_literal_is_held_in_a_word() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::NatRem,
+        curios_cps::Intrinsic::NatRem,
         vec![nat(0x8000_0000), nat(7)],
     ));
     assert_contains(&wat, "i32.rem_u");
@@ -309,7 +308,7 @@ fn a_remainder_by_a_small_literal_is_held_in_a_word() {
 #[test]
 fn flt_add_boxes_into_the_flt_struct() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
+        curios_cps::Intrinsic::FltAdd(Rounding::TiesToEven),
         vec![flt(1.5), flt(2.5)],
     ));
     assert_contains(&wat, "f64.add");
@@ -320,9 +319,9 @@ fn flt_add_boxes_into_the_flt_struct() {
 #[test]
 fn a_float_operation_answers_a_nan_through_the_model_s_rule() {
     for intrinsic in [
-        curios_cont::Intrinsic::FltAdd(Rounding::TiesToEven),
-        curios_cont::Intrinsic::FltMin,
-        curios_cont::Intrinsic::FltRem,
+        curios_cps::Intrinsic::FltAdd(Rounding::TiesToEven),
+        curios_cps::Intrinsic::FltMin,
+        curios_cps::Intrinsic::FltRem,
     ] {
         let wat = wat(&intrinsic_main(intrinsic, vec![flt(1.5), flt(2.5)]));
         assert_contains(&wat, "f64.ne");
@@ -331,7 +330,7 @@ fn a_float_operation_answers_a_nan_through_the_model_s_rule() {
     }
 
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::FltSqrt(Rounding::TiesToEven),
+        curios_cps::Intrinsic::FltSqrt(Rounding::TiesToEven),
         vec![flt(2.0)],
     ));
     assert_contains(&wat, "call $flt/nan");
@@ -342,11 +341,11 @@ fn a_float_operation_answers_a_nan_through_the_model_s_rule() {
 fn a_sign_operation_and_the_bytes_carry_a_nan_as_it_is() {
     for (intrinsic, operands) in [
         (
-            curios_cont::Intrinsic::FltCopysign,
+            curios_cps::Intrinsic::FltCopysign,
             vec![flt(1.0), flt(-2.0)],
         ),
-        (curios_cont::Intrinsic::FltNeg, vec![flt(1.0)]),
-        (curios_cont::Intrinsic::FltToLeBytes, vec![flt(1.0)]),
+        (curios_cps::Intrinsic::FltNeg, vec![flt(1.0)]),
+        (curios_cps::Intrinsic::FltToLeBytes, vec![flt(1.0)]),
     ] {
         let wat = wat(&intrinsic_main(intrinsic, operands));
         assert_absent(&wat, "flt/nan");
@@ -358,7 +357,7 @@ fn a_sign_operation_and_the_bytes_carry_a_nan_as_it_is() {
 fn flt_div_divides() {
     assert_contains(
         &wat(&intrinsic_main(
-            curios_cont::Intrinsic::FltDiv(Rounding::TiesToEven),
+            curios_cps::Intrinsic::FltDiv(Rounding::TiesToEven),
             vec![flt(3.0), flt(2.0)],
         )),
         "f64.div",
@@ -368,7 +367,7 @@ fn flt_div_divides() {
 #[test]
 fn flt_to_le_bytes_packs_an_eight_byte_leaf() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::FltToLeBytes,
+        curios_cps::Intrinsic::FltToLeBytes,
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "i64.reinterpret_f64");
@@ -389,7 +388,7 @@ fn assert_guarded_before_truncating(wat: &str) {
 #[test]
 fn flt_to_nat_guards_its_domain_before_truncating() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::FltToNat,
+        curios_cps::Intrinsic::FltToNat,
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "f64.ge");
@@ -399,8 +398,8 @@ fn flt_to_nat_guards_its_domain_before_truncating() {
 #[test]
 fn flt_decomposition_refuses_a_non_number_before_reading_the_fields() {
     for part in [
-        curios_cont::Intrinsic::FltMantissa,
-        curios_cont::Intrinsic::FltExponent,
+        curios_cps::Intrinsic::FltMantissa,
+        curios_cps::Intrinsic::FltExponent,
     ] {
         let wat = wat(&intrinsic_main(part, vec![flt(1.0)]));
         let read = wat.find("i64.reinterpret_f64").expect("the bits read");
@@ -415,7 +414,7 @@ fn flt_decomposition_refuses_a_non_number_before_reading_the_fields() {
 #[test]
 fn flt_to_int_guards_its_domain_before_truncating() {
     let wat = wat(&intrinsic_main(
-        curios_cont::Intrinsic::FltToInt,
+        curios_cps::Intrinsic::FltToInt,
         vec![flt(1.0)],
     ));
     assert_contains(&wat, "f64.gt");

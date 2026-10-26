@@ -1,6 +1,6 @@
 //! The TOML codec, decoded and re-encoded in emitted wasm.
 //!
-//! **Every document in this module is a row of one program, compiled once, and run by one test.** The program is the codec plus a `match` over a row number the host supplies on stdin; `codec()` compiles it and the test runs every table's rows against it. This is the shape `numeric.rs` uses for its scalar tables, one level up, and it exists for one reason: compiling a program that reaches `Toml/decode` and `Toml/encode` costs a long Cont fixpoint over the whole codec, and that cost is per *program*, not per document, so one program for every document pays it once.
+//! **Every document in this module is a row of one program, compiled once, and run by one test.** The program is the codec plus a `match` over a row number the host supplies on stdin; `codec()` compiles it and the test runs every table's rows against it. This is the shape `numeric.rs` uses for its scalar tables, one level up, and it exists for one reason: compiling a program that reaches `Toml/decode` and `Toml/encode` costs a long CPS fixpoint over the whole codec, and that cost is per *program*, not per document, so one program for every document pays it once.
 //!
 //! One test rather than one per table, for the same cost seen from the test harness: tests per table sharing the program through a `OnceLock` would each hold a test thread doing nothing but wait while the first compiled it. One test holds one thread, and reports every mismatched row at once rather than a table's first.
 //!

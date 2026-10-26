@@ -42,7 +42,7 @@ fn entry_with(
         },
     );
     module.set_entry(entry);
-    module.verify().expect("fixture is valid Cont");
+    module.verify().expect("fixture is valid CPS");
     module
 }
 
