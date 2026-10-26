@@ -2285,7 +2285,10 @@ fn a_payload_stuck_on_a_neutral_is_read_at_mixed_and_refused() {
         let mut kernel = kernel();
         define_guard(&mut kernel, &guard, defined);
         let mut inducts = BTreeMap::new();
-        inducts.insert(bad_name, single_payload(payload.clone(), Term::type_ground()));
+        inducts.insert(
+            bad_name,
+            single_payload(payload.clone(), Term::type_ground()),
+        );
         for (name, entry) in &inducts {
             kernel
                 .declare_induct(name, entry)
@@ -2349,7 +2352,10 @@ fn a_call_argument_stuck_on_a_neutral_grades_unread() {
     for (defined, expected) in [(false, Totality::Partial), (true, Totality::Total)] {
         let mut kernel = kernel();
         kernel
-            .declare_induct(&name, &single_payload(self_type.clone(), Term::type_ground()))
+            .declare_induct(
+                &name,
+                &single_payload(self_type.clone(), Term::type_ground()),
+            )
             .expect("a name is declared once");
         define_guard(&mut kernel, &guard, defined);
 
