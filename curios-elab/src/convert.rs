@@ -2674,6 +2674,16 @@ impl Convert {
             None => return self.solve_rigid(context, metavar, rigid, standing),
         };
 
+        // A side headed by a filled recursive slot is a signature's reading of a group member, which no spelling in a body can say: a body names the member by its name, which stands for nothing there. Solved with that spelling, the metavariable would carry the member into a body the kernel reads it opaque in, so it is solved with the reduct where the reduct names no slot, and waits where it does.
+        if let Subterm::Metavar(Metavar { id, .. }) = &**applied_head(rigid_raw)
+            && context.is_rec_slot(*id)
+        {
+            return match rigid.any_metavar(&mut |id| context.is_rec_slot(id)) {
+                false => self.solve_rigid(context, metavar, rigid, standing),
+                true => Ok(Solved::Postponed),
+            };
+        }
+
         let behind = match &**applied_head(rigid_raw) {
             Subterm::Metavar(Metavar { id, .. }) if context.metavar_solution(*id).is_some() => {
                 Some(zonk_solved_term_metas(context, rigid_raw))

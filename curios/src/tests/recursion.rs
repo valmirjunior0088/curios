@@ -558,12 +558,11 @@ fn a_group_member_type_cannot_fold_to_a_proposition() {
     );
 }
 
-// A recursive slot is the one solution the occurs check does not hold, and a signature reads a member through its slot, so a body reading a sibling at its signature, or an implicit solved from one, names a slot inside the solution that fills it. A walk through solutions stops at a filled slot, which stands for its member; walked into, each program here overflowed the elaborator's stack.
+// A recursive slot is the one solution the occurs check does not hold, and a signature reads a member through its slot, so a body reading a sibling at its signature, or an implicit solved from one, names a slot inside the solution that fills it. A walk through solutions stops at a filled slot, which stands for its member; walked into, each program here overflowed the elaborator's stack. An implicit met at a type headed by a filled slot is solved with the type's reduct, which names no member, so `id`'s `@A` is `(Nat) -> Nat` and the first program runs.
 #[test]
-fn a_slot_reached_from_its_own_solution_is_judged_and_refused() {
-    let lambda = "introduced a lambda where the expected type is not a function type";
-    let refused = |groups: &str, tail: &str, diagnostic: &str| {
-        let error = error(&fill!(
+fn a_slot_reached_from_its_own_solution_is_judged() {
+    let program = |groups: &str, tail: &str| {
+        fill!(
             r#"
             use /std/{Nat};
             let id(@A: Type, a: A) -> A = a;
@@ -572,20 +571,25 @@ fn a_slot_reached_from_its_own_solution_is_judged_and_refused() {
             "#,
             groups,
             tail,
-        ));
+        )
+    };
+    let refused = |groups: &str, tail: &str, diagnostic: &str| {
+        let error = error(&program(groups, tail));
         assert!(
             error.contains(diagnostic) && !error.contains("the kernel refused"),
             "{error}"
         );
     };
 
-    refused(
-        "let outer(m: Nat) -> Nat =
+    assert_eq!(
+        run(&program(
+            "let outer(m: Nat) -> Nat =
             let T(n: Nat) -> Type = match n | 0 => (Nat) -> Nat | k + 1 => T(k) end
             and val: T(2) = id((x) => x + 1);
             val(m);",
-        "outer(3)",
-        lambda,
+            "outer(3)",
+        )),
+        b"4"
     );
     refused(
         "let outer(m: Nat) -> Nat =
@@ -599,7 +603,7 @@ fn a_slot_reached_from_its_own_solution_is_judged_and_refused() {
         "let T(n: Nat) -> Type = match n | 0 => (Nat) -> Nat | k + 1 => let _w = val; T(k) end
         and val: T(2) = id((x) => x + 1);",
         "val(3)",
-        lambda,
+        "is a type position but does not terminate on every input",
     );
 }
 
