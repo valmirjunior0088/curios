@@ -28,10 +28,31 @@ pub struct Report {
     pub samples: Vec<SampleSummary>,
     /// The greatest live-byte total any row reported, which is the process's high-water mark up to the last row the file holds.
     pub peak: usize,
+    /// What ran inside each span name: every other span name entered while one of it was entered, outer name first and costliest first beneath it.
+    pub within: Vec<Within>,
     /// The spans still entered when the rows ran out, outermost first.
     ///
     /// Empty for a stream whose operation returned. Non-empty is the useful case: it is the stack a compilation was inside when it was killed, and the reason a record stream is worth keeping over an aggregate that only exists once everything has closed.
     pub open: Vec<OpenSpan>,
+}
+
+/// The spans of one name entered while a span of another name was entered: how many entries, and for how long in all.
+///
+/// **What a row per span cannot say.** A span's row counts every call wherever it was made, so it cannot say how many of them one stage made — how many of the questions reduction put to conversion were erasure's (`erase_unit`) and how many elaboration's. Each exit is credited once to every distinct name entered above it, so nesting two spans of one outer name counts an inner call once, and a span entered within its own name is not counted inside itself.
+#[derive(Debug)]
+pub struct Within {
+    /// The tracing target of the span that was entered around it.
+    pub outer_target: String,
+    /// The name of the span that was entered around it.
+    pub outer_name: String,
+    /// The tracing target of the span entered inside.
+    pub target: String,
+    /// The name of the span entered inside.
+    pub name: String,
+    /// How many entries of the inner name exited while the outer one was entered.
+    pub entries: u64,
+    /// Their time, inclusive, summed over those entries.
+    pub total: Duration,
 }
 
 /// A span that was entered and never left before the rows ended.
@@ -149,7 +170,7 @@ pub fn fold_at(path: &Path) -> io::Result<Report> {
 }
 
 impl Report {
-    /// The report as tab-separated tables: the spans, the magnitude sites beneath them, and — for a stream whose run never returned — the stack it was inside.
+    /// The report as tab-separated tables: the spans, the magnitude sites beneath them, what ran inside each span, and — for a stream whose run never returned — the stack it was inside.
     ///
     /// The one renderer, so no two readers of a report print different columns of it.
     pub fn render(&self) -> String {
@@ -214,6 +235,21 @@ impl Report {
                     sample.max,
                     sample.target,
                     sample.name,
+                ));
+            }
+        }
+
+        if !self.within.is_empty() {
+            rendered.push_str("\nentries\ttotal_ms\touter_target\touter\ttarget\tname\t(within)\n");
+            for within in &self.within {
+                rendered.push_str(&format!(
+                    "{}\t{:.3}\t{}\t{}\t{}\t{}\n",
+                    within.entries,
+                    within.total.as_secs_f64() * 1_000.0,
+                    within.outer_target,
+                    within.outer_name,
+                    within.target,
+                    within.name,
                 ));
             }
         }
@@ -299,6 +335,10 @@ struct Fold {
     open: BTreeMap<u64, Open>,
     /// The spans entered and not yet exited, innermost last — what an exit credits its extent to. One stack for the stream, because the spans a stream records nest on one thread: the compiler is single-threaded by construction, and a build script runs on one. A stream that did interleave threads would fold with its inclusive figures intact and its self figures misattributed, which is why an exit that is not the innermost entry credits no one.
     stack: Vec<u64>,
+    /// How many spans of each callsite the stack holds, so an exit finds the distinct names entered above it without walking the stack.
+    on_stack: BTreeMap<u32, u32>,
+    /// Entries and inclusive time of a callsite's spans exited inside a span of another name, keyed by a callsite of that name and the inner callsite; merged by name when the report is made.
+    within: BTreeMap<(u32, u32), (u64, u128)>,
     spans: BTreeMap<(String, String, Option<String>), Aggregate>,
     samples: BTreeMap<(String, String), Distribution>,
     peak: u64,
@@ -375,6 +415,7 @@ impl Fold {
             ..Entry::default()
         });
         self.stack.push(id);
+        *self.on_stack.entry(callsite).or_default() += 1;
     }
 
     fn exit<'row>(&mut self, columns: impl Iterator<Item = &'row str>) {
@@ -400,11 +441,14 @@ impl Fold {
         span.allocations += readings
             .allocations
             .saturating_sub(entry.readings.allocations);
+        let callsite = span.callsite;
 
         // Credited to the span it was entered inside only when it is the innermost entry, which is what properly nested spans always are; an exit from anywhere else is left out of every parent's nesting rather than attributed to the wrong one.
         match self.stack.last() {
             Some(&innermost) if innermost == id => {
                 self.stack.pop();
+                self.left(callsite);
+                self.credit_within(callsite, elapsed);
                 if let Some(parent) = self
                     .stack
                     .last()
@@ -418,8 +462,38 @@ impl Fold {
             _ => {
                 if let Some(position) = self.stack.iter().rposition(|&entered| entered == id) {
                     self.stack.remove(position);
+                    self.left(callsite);
                 }
             }
+        }
+    }
+
+    /// A span of `callsite` left the stack.
+    fn left(&mut self, callsite: u32) {
+        if let Some(count) = self.on_stack.get_mut(&callsite) {
+            *count -= 1;
+            if *count == 0 {
+                self.on_stack.remove(&callsite);
+            }
+        }
+    }
+
+    /// Credit an exit of `callsite`'s span, `elapsed` long, once to every distinct name still entered above it, its own excepted.
+    fn credit_within(&mut self, callsite: u32, elapsed: u128) {
+        let inner = self.callsites.get(&callsite);
+        let mut outers: Vec<(u32, Option<&(String, String)>)> = Vec::new();
+        for &open in self.on_stack.keys() {
+            let outer = self.callsites.get(&open);
+            let named_alike = |other: Option<&(String, String)>| outer.is_some() && other == outer;
+            if named_alike(inner) || outers.iter().any(|(_, seen)| named_alike(*seen)) {
+                continue;
+            }
+            outers.push((open, outer));
+        }
+        for (open, _) in outers {
+            let credit = self.within.entry((open, callsite)).or_default();
+            credit.0 += 1;
+            credit.1 += elapsed;
         }
     }
 
@@ -562,10 +636,39 @@ impl Fold {
         // Outermost first: the span entered earliest is the one the others are nested inside.
         open.sort_by_key(|span| span.entered);
 
+        let mut merged = BTreeMap::<((String, String), (String, String)), (u64, u128)>::new();
+        for (&(outer, inner), &(entries, total)) in &self.within {
+            let slot = merged
+                .entry((self.named(outer), self.named(inner)))
+                .or_default();
+            slot.0 += entries;
+            slot.1 += total;
+        }
+        let mut within = merged
+            .into_iter()
+            .map(|((outer, inner), (entries, total))| Within {
+                outer_target: outer.0,
+                outer_name: outer.1,
+                target: inner.0,
+                name: inner.1,
+                entries,
+                total: nanos(total),
+            })
+            .collect::<Vec<_>>();
+        within.sort_by(|left, right| {
+            left.outer_target
+                .cmp(&right.outer_target)
+                .then_with(|| left.outer_name.cmp(&right.outer_name))
+                .then_with(|| right.total.cmp(&left.total))
+                .then_with(|| left.target.cmp(&right.target))
+                .then_with(|| left.name.cmp(&right.name))
+        });
+
         Report {
             summaries,
             samples,
             peak: self.peak as usize,
+            within,
             open,
         }
     }

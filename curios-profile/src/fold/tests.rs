@@ -241,6 +241,58 @@ fn self_time_excludes_the_spans_entered_directly_inside() {
     assert_eq!((convert.allocated, convert.self_allocated), (400, 400));
 }
 
+// What one stage made of a judgment every stage makes: a span is counted inside each distinct name entered above it, once however many spans of that name are, never inside its own name, and not at all where nothing encloses it.
+#[test]
+fn a_span_counts_once_within_each_name_entered_above_it() {
+    let report = folded(
+        "D\t0\tcurios_elab\terase_unit\n\
+         D\t1\tcurios_elab\treduce\n\
+         D\t2\tcurios_elab\treduce::asked_classes\n\
+         S\t1\t0\t0\n\
+         E\t1\t0\t0\t0\t0\t0\t0\n\
+         S\t2\t1\t10\n\
+         E\t2\t1\t10\t0\t0\t0\t0\n\
+         S\t3\t1\t20\n\
+         E\t3\t1\t20\t0\t0\t0\t0\n\
+         S\t4\t2\t30\n\
+         E\t4\t2\t30\t0\t0\t0\t0\n\
+         X\t4\t2\t70\t0\t0\t0\t0\n\
+         C\t4\t2\t70\n\
+         X\t3\t1\t80\t0\t0\t0\t0\n\
+         C\t3\t1\t80\n\
+         X\t2\t1\t90\t0\t0\t0\t0\n\
+         C\t2\t1\t90\n\
+         X\t1\t0\t100\t0\t0\t0\t0\n\
+         C\t1\t0\t100\n\
+         S\t5\t2\t200\n\
+         E\t5\t2\t200\t0\t0\t0\t0\n\
+         X\t5\t2\t250\t0\t0\t0\t0\n\
+         C\t5\t2\t250\n",
+    );
+
+    let within = |outer: &str, inner: &str| {
+        report
+            .within
+            .iter()
+            .find(|within| within.outer_name == outer && within.name == inner)
+            .map(|within| (within.entries, within.total))
+    };
+    assert_eq!(
+        within("erase_unit", "reduce::asked_classes"),
+        Some((1, Duration::from_nanos(40)))
+    );
+    assert_eq!(
+        within("reduce", "reduce::asked_classes"),
+        Some((1, Duration::from_nanos(40)))
+    );
+    assert_eq!(
+        within("erase_unit", "reduce"),
+        Some((2, Duration::from_nanos(140)))
+    );
+    assert_eq!(within("reduce", "reduce"), None);
+    assert!(report.render().contains("(within)"));
+}
+
 // The case inclusive time cannot serve: a span entered within itself counts the inner extent in both entries' totals, and once in their self times, so a recursive judgment's self row is the time it actually took.
 #[test]
 fn a_span_re_entered_within_itself_counts_each_nanosecond_once_in_its_self_time() {
