@@ -963,25 +963,31 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         elaborate_induct_indices(context, &def.name)?;
     }
 
-    let slots = defs
+    // A body reads a member by its name alone and a signature through the member's slot, as `elaborate_rec` states.
+    let mut slots = Vec::with_capacity(defs.len());
+    let mut through = Vec::with_capacity(defs.len());
+    for ((def, name), type_) in defs.iter().zip(&names).zip(&types) {
+        let (id, slot) = context.fresh_rec_slot(name, type_.clone());
+        context.define(name, &slot, Some(&def.kind));
+        slots.push(id);
+        through.push((*name, slot));
+    }
+    let read = types
         .iter()
-        .zip(&names)
-        .zip(&types)
-        .map(|((def, name), type_)| {
-            let (id, slot) = context.fresh_rec_slot(name, type_.clone());
-            context.define(name, &slot, Some(&def.kind));
-            id
-        })
+        .map(|type_| type_.substitute(&through))
         .collect::<Vec<_>>();
+    for (name, type_) in names.iter().zip(&read) {
+        context.reassume(name, type_);
+    }
 
     let mut bodies = Vec::with_capacity(defs.len());
-    for ((def, type_), slot) in defs.iter().zip(&types).zip(slots) {
+    for ((def, type_), slot) in defs.iter().zip(&read).zip(slots) {
         let outer_site = context.set_checked_site(def.name);
         context.enter_declaration(Some(def.name));
         context.enter_value(&def.kind);
         let body = check(context, &def.body, type_.clone())?;
         context.restore_checked_site(outer_site);
-        context.fill_rec_slot(slot, body.clone());
+        context.fill_rec_slot(slot, body.substitute(&through));
         bodies.push(body);
     }
     context.retry_parked()?;

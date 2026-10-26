@@ -341,7 +341,7 @@ fn waits_on_metavariable(context: &Context, reduct: &Term) -> bool {
         .any(|id| context.metavar_solution(*id).is_none())
 }
 
-/// Whether a bound's reduct waits on an unsolved metavariable other than the slot of a `rec` group's member — what reduction turns a recursive reference into while the group is checked. A bound waiting on such slots alone is still asked of the procedure that proves a bound from the facts in scope ([`crate::entail`]): the slot's solution is the body the bound sits in, so it waits on the bound itself, and a proof from the facts is written over the spellings in scope, which name the member rather than its slot.
+/// Whether a bound's reduct waits on an unsolved metavariable other than the slot of a `rec` group's member — what a signature reads a member through while the group is checked, a body reading it by its name alone. A bound waiting on such slots alone is still asked of the procedure that proves a bound from the facts in scope ([`crate::entail`]): a slot may be filled with the very body the bound sits in, and a proof from the facts is written over the spellings in scope, which name the member rather than its slot.
 fn waits_past_its_group(context: &Context, reduct: &Term) -> bool {
     reduct
         .metavars()

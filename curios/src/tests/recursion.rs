@@ -447,6 +447,97 @@ fn a_call_through_a_local_definition_that_does_not_descend_is_refused() {
 }
 
 /// A type reaching two partial definitions is refused by the one written first, whichever spells first: renaming either moves nothing.
+// A group's bodies are checked over members that stand for nothing, as the kernel checks them: no judgment inside a body reads a member's body, its own or a sibling's, written before it or after it, at the top level or locally. The elaborator once opened a member's slot into the body it was filled with, an earlier sibling's at once and its own or a later one's on retry, and so filled each bound here, took `True/qed()` at `Holds(g(0) == 0)` and `taint` at `T(2)` — each refused by the kernel.
+#[test]
+fn no_judgment_inside_a_group_body_reads_a_members_body() {
+    let bounded = |member: &str, groups: &str| {
+        let error = error(&fill!(
+            r#"
+            use /std/{Nat, List};
+            ${groups}
+            /std/print("")
+            "#,
+            groups,
+        ));
+        assert!(
+            error.contains(&fill!(
+                "nothing discharged /std/Bool/Holds(${member}(0) < List/len(@Nat, [1, 2, 3]))",
+                member,
+            )) && !error.contains("the kernel refused"),
+            "{error}"
+        );
+    };
+
+    bounded(
+        "f",
+        "let f(n: Nat) -> Nat = match n | 0 => 0 | _ + 1 => List/get([1, 2, 3], f(0)) end;",
+    );
+    bounded(
+        "h",
+        "let g(n: Nat) -> Nat = match n | 0 => 0 | _ + 1 => List/get([1, 2, 3], h(0)) end
+        and h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => g(k) end;",
+    );
+    bounded(
+        "g",
+        "let g(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => h(k) end
+        and h(n: Nat) -> Nat = match n | 0 => 0 | _ + 1 => List/get([1, 2, 3], g(0)) end;",
+    );
+    bounded(
+        "r",
+        "let outer(m: Nat) -> Nat =
+            let r(n: Nat) -> Nat = match n | 0 => 0 | _ + 1 => List/get([1, 2, 3], r(0)) end;
+            r(m);",
+    );
+
+    let proved = error(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True, Holds};
+        let need(n: Nat, p: Holds(n == 0)) -> Nat = n;
+        let g(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => h(k) end
+        and h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => need(g(0), True/qed()) end;
+        /std/print("")
+        "#,
+    );
+    assert!(
+        proved.contains("expected: Holds(g(0) == 0)") && !proved.contains("the kernel refused"),
+        "{proved}"
+    );
+
+    let annotated = error(
+        r#"
+        use /std/{Nat};
+        let outer(taint: Nat) -> Nat =
+            let T(n: Nat) -> Type = match n | 0 => Nat | k + 1 => T(k) end
+            and val: Nat =
+                let x: T(2) = taint;
+                x;
+            val;
+        /std/print("")
+        "#,
+    );
+    assert!(
+        annotated.contains("expected: T(2)") && !annotated.contains("the kernel refused"),
+        "{annotated}"
+    );
+}
+
+// A signature reads its group as the kernel reads one, folded: `val`'s type `T(2)` unfolds `T` through its own recursion to `Nat`, both where `val`'s body is checked at it and where a sibling's body reads `val` at it. Read by the members' names alone, as a body reads them, `T(2)` stopped at `T(1)` and both were refused.
+#[test]
+fn a_group_signature_reads_its_members_bodies() {
+    let source = r#"
+        use /std/{Nat};
+        let outer(taint: Nat) -> Nat =
+            let T(n: Nat) -> Type = match n | 0 => Nat | k + 1 => T(k) end
+            and val: T(2) = taint
+            and after(n: Nat) -> Nat = match n | 0 => val + 1 | k + 1 => after(k) end;
+            after(1);
+        /std/print(Nat/to_str(outer(2)))
+        "#;
+
+    assert_eq!(run(source), b"3");
+}
+
 #[test]
 fn a_type_reaching_two_partial_definitions_names_the_first_written() {
     let refusal = |arguments: &str| {

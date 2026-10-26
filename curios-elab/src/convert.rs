@@ -386,8 +386,7 @@ fn by_value(context: &Context, metavar: &Metavar, mut candidate: Term) -> Term {
             .filter(|name| !names(name))
             .filter_map(|name| {
                 let value = context.definition_body(&name)?;
-                let member = value.as_rec_proj().is_some()
-                    || matches!(&**value, Subterm::Metavar(slot) if context.is_rec_slot(slot.id));
+                let member = value.as_rec_proj().is_some();
                 (!member).then(|| (name, value.clone()))
             })
             .collect::<Vec<_>>();

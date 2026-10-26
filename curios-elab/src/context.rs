@@ -1786,7 +1786,12 @@ impl<'s> Context<'s> {
             None => self.absent(name),
         }
 
-        body
+        self.unless_member(body)
+    }
+
+    /// `body`, unless it is the protected slot of a member of a group being checked: a member named in a body stands for nothing there, as the kernel checks a group's bodies over members that stand for nothing, and a signature reads it through its slot instead (`elaborate_rec`).
+    fn unless_member<'a>(&self, body: Option<&'a Term>) -> Option<&'a Term> {
+        body.filter(|body| !matches!(&***body, Subterm::Metavar(slot) if self.is_rec_slot(slot.id)))
     }
 
     /// [`Frames::var_reduct`], and a need as [`Context::definition_body`] records one.
@@ -1798,7 +1803,7 @@ impl<'s> Context<'s> {
             None => self.absent(name),
         }
 
-        reduct
+        self.unless_member(reduct)
     }
 
     /// `name` has no definition to unfold to: a need where its declaration has not finished ([`Context::missed`]), and a name a fresh definition can unstick a reduct on ([`Caches::note_absent`]).
@@ -1823,7 +1828,7 @@ impl<'s> Context<'s> {
             None => self.absent(name),
         }
 
-        reduct
+        self.unless_member(reduct)
     }
 
     /// [`Frames::projection_entry`]'s value, with `base` and the base the arm scrutinized held to one universe instance, and declined where they cannot be ([`hold_at_one_instance`]).

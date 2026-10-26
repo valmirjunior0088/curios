@@ -305,12 +305,12 @@ fn a_test_body_is_checked_against_the_description_type() {
     assert!(error.contains("Test"), "unexpected error: {error}");
 }
 
-// A test program is judged by the kernel as any program is, the tests its synthesized tail schedules with it, and a build holds no test to judge. The body is one the elaborator admits and the kernel refuses — a bound filled through a recursive member's own body, which the kernel holds standing for nothing — so the refusal is the kernel's; once the elaborator refuses that body itself, the fixture is restated over another term the kernel alone refuses.
+// A test program is judged as any program is, the tests its synthesized tail schedules with it, and a build holds no test to judge: the body is refused where the test program is compiled and nowhere else. It is one the kernel alone once refused — a bound filled through a recursive member's own body — and the elaborator refuses it now; no term only the kernel refuses is known to put in its place.
 #[test]
-fn a_test_program_is_judged_by_the_kernel_and_a_build_holds_none_of_its_tests() {
+fn a_test_program_is_judged_and_a_build_holds_none_of_its_tests() {
     let source = r#"
         use /std/{Nat, List, Test};
-        test kernel_judged =
+        test judged =
             let r(n: Nat) -> Nat =
                 match n
                 | 0 => 0
@@ -322,7 +322,9 @@ fn a_test_program_is_judged_by_the_kernel_and_a_build_holds_none_of_its_tests() 
 
     let report = tests_error(source);
     assert!(
-        report.contains("the kernel refused /kernel_judged"),
+        report.contains("while elaborating /judged")
+            && report
+                .contains("nothing discharged /std/Bool/Holds(r(0) < List/len(@Nat, [1, 2, 3]))"),
         "{report}"
     );
     assert_eq!(run(source), b"built\n");

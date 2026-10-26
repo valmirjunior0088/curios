@@ -129,21 +129,27 @@ pub(super) fn elaborate_rec(
             context.reassume(label, type_);
         }
 
-        // Recursive names point at protected slots, never lowered bodies. A sibling that productively needs an earlier member sees its rebuilt solution; a dependency on a later member parks on the unsolved slot.
-        let slots = labels
+        // A group is read two ways while its bodies are checked, as the kernel's `check_group` reads one. A member named in a body stands for nothing: its name is defined as its protected slot, and no unfolding of the name reaches it (`Context::unless_member`). A signature — the type a body is checked at and a member is assumed at — reads the group through the slots, each filled with its member's body read the same way, so a signature unfolds a member as the folded group does, and one reading a later member parks on its unsolved slot.
+        let mut slots = Vec::with_capacity(items.len());
+        let mut through = Vec::with_capacity(items.len());
+        for (label, type_) in labels.iter().zip(&types_elaborated) {
+            let (id, slot) = context.fresh_rec_slot(label, type_.clone());
+            context.define(label, &slot, None);
+            slots.push(id);
+            through.push((*label, slot));
+        }
+        let read = types_elaborated
             .iter()
-            .zip(&types_elaborated)
-            .map(|(label, type_)| {
-                let (id, slot) = context.fresh_rec_slot(label, type_.clone());
-                context.define(label, &slot, None);
-                id
-            })
+            .map(|type_| type_.substitute(&through))
             .collect::<Vec<_>>();
+        for (label, type_) in labels.iter().zip(&read) {
+            context.reassume(label, type_);
+        }
 
         let mut bodies_elaborated = Vec::with_capacity(items.len());
-        for (((_, body), type_), slot) in items.iter().zip(&types_elaborated).zip(slots) {
+        for (((_, body), type_), slot) in items.iter().zip(&read).zip(slots) {
             let body = check(context, body, type_.clone())?;
-            context.fill_rec_slot(slot, body.clone());
+            context.fill_rec_slot(slot, body.substitute(&through));
             bodies_elaborated.push(body);
         }
         context.retry_parked()?;
