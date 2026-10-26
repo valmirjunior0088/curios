@@ -830,8 +830,8 @@ fn a_program_compiled_over_another_files_unit_is_judged_as_its_own_text_says() {
             cache: &reached,
             entry: RefCell::new(Vec::new()),
         };
-        let (entrypoint, loader) = crate::open(Origin::File(root.join(file)), None, &overlay)
-            .expect("the program parses");
+        let (entrypoint, loader) =
+            crate::open(Origin::File(root.join(file)), None, &overlay).expect("the program parses");
         let verdict = Fold::new(DEFAULT_BUDGET, &[], Some(&noting))
             .check(&entrypoint, &loader, EntryTail::Program, |_| {})
             .expect("the program lowers")
@@ -844,7 +844,11 @@ fn a_program_compiled_over_another_files_unit_is_judged_as_its_own_text_says() {
 
     assert_eq!(asked("a.crs"), (vec!["compiling"], Ok(())));
     let (offered, verdict) = asked("b.crs");
-    assert_eq!(offered, ["recompiling"], "the unit of `a.crs` was not offered");
+    assert_eq!(
+        offered,
+        ["recompiling"],
+        "the unit of `a.crs` was not offered"
+    );
     let refusal = verdict.expect_err("only the kernel refuses `f` in `b.crs`");
     assert!(refusal.contains("the kernel refused /f"), "{refusal}");
 }

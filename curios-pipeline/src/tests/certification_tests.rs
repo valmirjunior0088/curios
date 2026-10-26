@@ -405,9 +405,6 @@ test held = /std/Test/assert(true);
 
     for under in [Qualifier::empty(), Qualifier::from(["held"])] {
         let refusal = tested(under);
-        assert!(
-            refusal.contains("the kernel refused /refused"),
-            "{refusal}"
-        );
+        assert!(refusal.contains("the kernel refused /refused"), "{refusal}");
     }
 }

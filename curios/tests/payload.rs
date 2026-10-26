@@ -307,7 +307,11 @@ const COMMANDS: &[(&[&str], bool)] = &[
 #[test]
 fn a_dependency_edit_only_the_kernel_refuses_stops_every_command_over_a_warm_store() {
     let dep = temporary("kernel-refused-dep");
-    write(&dep, "curios.toml", "compiler = \"0.0.0\"\nname = \"dep\"\n");
+    write(
+        &dep,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"dep\"\n",
+    );
     write(&dep, "lib.crs", &code("/std/Nat"));
     let root = temporary("kernel-refused");
     write(
@@ -330,7 +334,10 @@ fn a_dependency_edit_only_the_kernel_refuses_stops_every_command_over_a_warm_sto
             String::from_utf8_lossy(&warmed.stderr)
         );
     }
-    assert!(reused(&curios(&root, &["run"])), "the run's payload is filed");
+    assert!(
+        reused(&curios(&root, &["run"])),
+        "the run's payload is filed"
+    );
 
     write(&dep, "lib.crs", &code("Type"));
     for (command, answers) in COMMANDS {

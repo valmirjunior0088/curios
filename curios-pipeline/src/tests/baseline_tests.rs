@@ -317,7 +317,11 @@ fn a_program_whose_unit_a_cache_hands_back_is_judged_at_the_term_that_closes_it(
     let second = refused_through(CLOSED_BY_A_REFUSAL, &cache);
 
     assert_eq!(second, first);
-    assert_eq!(cache.put.get(), 0, "the unit handed back was compiled again");
+    assert_eq!(
+        cache.put.get(),
+        0,
+        "the unit handed back was compiled again"
+    );
 }
 
 /// A program holding a refused declaration reports the refusal and what its final term says beside it, in one batch, as it did when a program was compiled whole: the term rides in the walk of the declarations.
