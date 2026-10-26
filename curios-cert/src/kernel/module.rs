@@ -9,7 +9,15 @@
 //! `Module` is `curios-core`'s, and nothing here names it: what lives here is the *rule* for an item — check, then define — while `recheck.rs` walks the representation and hands each item's parts down. That keeps the rule free of the elaborator's export metadata, islands, and roots, none of which bear on whether a term is well-typed. The totality an item carries does bear on it, but not here — `obligation.rs` is where it is read.
 
 #[cfg(test)]
-mod tests;
+mod definition_tests;
+#[cfg(test)]
+mod induct_tests;
+#[cfg(test)]
+mod struct_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod walk_tests;
 
 use {
     super::{Counted, Error, Kernel, Sort, carries_information, check, convert, infer_type},
