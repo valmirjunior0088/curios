@@ -210,28 +210,31 @@ impl<'s> Context<'s> {
         self.typing.program.read_through(scope);
     }
 
-    /// [`Attempt::note_solve_blockers`].
+    /// [`Solutions::note_solve_blockers`].
     pub fn note_solve_blockers(
         &mut self,
         id: MetavarId,
         blockers: Vec<(MetavarId, MetavarOrigin, Option<Extent>)>,
     ) {
-        self.underway.attempt.note_solve_blockers(id, blockers);
+        self.underway
+            .attempt
+            .solutions
+            .note_solve_blockers(id, blockers);
     }
 
-    /// [`Attempt::solve_blockers`].
+    /// [`Solutions::solve_blockers`].
     pub fn solve_blockers(&self, id: MetavarId) -> &[(MetavarId, MetavarOrigin, Option<Extent>)] {
-        self.underway.attempt.solve_blockers(id)
+        self.underway.attempt.solutions.solve_blockers(id)
     }
 
-    /// [`Attempt::note_goal_extent`].
+    /// [`Goals::note_extent`].
     pub fn note_goal_extent(&mut self, id: MetavarId, extent: Extent) {
-        self.underway.attempt.note_goal_extent(id, extent);
+        self.underway.attempt.goals.note_extent(id, extent);
     }
 
-    /// [`Attempt::goal_extent`].
+    /// [`Goals::extent`].
     pub fn goal_extent(&self, id: MetavarId) -> Option<&Extent> {
-        self.underway.attempt.goal_extent(id)
+        self.underway.attempt.goals.extent(id)
     }
 
     /// Record what the auto-lift at `extent` named as written.
@@ -249,16 +252,17 @@ impl<'s> Context<'s> {
             .map(|(_, site)| site)
     }
 
-    /// [`Attempt::note_goal_obligation`].
+    /// [`Goals::note_obligation`].
     pub fn note_goal_obligation(&mut self, goals: BTreeSet<MetavarId>, this: Term, that: Term) {
         self.underway
             .attempt
-            .note_goal_obligation(goals, this, that);
+            .goals
+            .note_obligation(goals, this, that);
     }
 
-    /// [`Attempt::goal_obligations`].
+    /// [`Goals::obligations`].
     pub fn goal_obligations(&self) -> &[GoalObligation] {
-        self.underway.attempt.goal_obligations()
+        self.underway.attempt.goals.obligations()
     }
 
     /// The names this elaboration may synthesize.
@@ -408,9 +412,9 @@ impl<'s> Context<'s> {
         self.underway.declarations.item(name)
     }
 
-    /// Whether the declaration being elaborated wrote a goal ([`Attempt::holds_goals`]).
+    /// Whether the declaration being elaborated wrote a goal ([`Goals::any`]).
     pub fn holds_goals(&self) -> bool {
-        self.underway.attempt.holds_goals()
+        self.underway.attempt.goals.any()
     }
 
     /// Publish an item that holds a written goal by its types alone: each name stays assumed at its type, zonked, and is bound to nothing. What the item elaborated to holds the metavariables of the state its declaration elaborated in, which no other declaration reads, so what reads this one reads a constant of its type and what would unfold it stays stuck where the goal did. Refused where a type holds a goal itself.
@@ -2342,13 +2346,13 @@ impl<'s> Context<'s> {
             .attempt
             .solutions
             .birth_rec_slot(id, telescope, frames, result);
-        self.underway.attempt.name_rec_slot(id, *name);
+        self.underway.attempt.solutions.name_rec_slot(id, *name);
         (id, Term::metavar_birthed(id, MetavarOrigin::Hole, spine))
     }
 
-    /// [`Attempt::rec_slot_name`].
+    /// [`Solutions::rec_slot_name`].
     pub fn rec_slot_name(&self, id: MetavarId) -> Option<&Free> {
-        self.underway.attempt.rec_slot_name(id)
+        self.underway.attempt.solutions.rec_slot_name(id)
     }
 
     pub fn is_rec_slot(&self, id: MetavarId) -> bool {

@@ -8,8 +8,8 @@ use {
     super::{BirthTelescope, HeldFrames},
     crate::{DeadArm, Problem, Refusal},
     curios_core::{
-        Bound, Extent, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm, Term,
-        Transient, WitnessOrigin,
+        Bound, Extent, Free, ImplicitOrigin, Metavar, MetavarId, MetavarOrigin, NumLit, Subterm,
+        Term, Transient, WitnessOrigin,
     },
     curios_utilities::Entropy,
     std::{
@@ -350,6 +350,14 @@ pub struct Solutions {
     held_log: Vec<(MetavarId, Held)>,
     /// The literals that gave a metavariable its shape since the last drain. A product is sized where it is held to its metavariable, and the drain reads it again once every field is settled.
     shaped: Vec<ParkedChoice>,
+    /// The member name each recursive slot stands for.
+    ///
+    /// A slot is the placeholder a `rec` group's member is known by while its body is being checked, and `elaborate_rec` defines the member's *name* to it — so reduction turns a recursive reference into the slot, and a committed solution can carry one. `RecItem::try_new` captures member **names** into the group's binder, so a slot reaching that point is not something the capture can bind: zonk expands it to the member's body instead, the body mentions that solution again, and the walk never ends. Knowing the name lets both substitution walks spell the member as the capturable thing it is.
+    rec_slot_names: BTreeMap<MetavarId, Free>,
+    /// Why a solve could not commit: the unsolved metavariables `Convert::solve`'s embedded-metavariable guard found riding inside a candidate, with what each one fills and where it was written. The last attempt wins, so a metavariable that never solves leaves the reason it never did.
+    ///
+    /// This edge is what lets the item drain report the *cause* of an undecided conversion rather than the goal that merely waited on it. An undischarged bound riding inside a helper's unfolded body blocks every metavariable downstream of it, and without the edge the report names the last of them — an implicit the author never wrote, at a line that is not where the fault is — while the bound nothing discharged goes unmentioned entirely.
+    solve_blockers: BTreeMap<MetavarId, Vec<(MetavarId, MetavarOrigin, Option<Extent>)>>,
 }
 
 impl Solutions {
@@ -368,6 +376,37 @@ impl Solutions {
             reading: None,
             held_log: Vec::new(),
             shaped: Vec::new(),
+            rec_slot_names: BTreeMap::new(),
+            solve_blockers: BTreeMap::new(),
+        }
+    }
+
+    /// Record what blocked `id`'s solve, replacing any earlier record: only the last attempt's reason is worth reporting, since an earlier one may since have been solved away.
+    pub fn note_solve_blockers(
+        &mut self,
+        id: MetavarId,
+        blockers: Vec<(MetavarId, MetavarOrigin, Option<Extent>)>,
+    ) {
+        self.solve_blockers.insert(id, blockers);
+    }
+
+    /// What blocked `id`'s solve when it was last tried; nothing where it was never blocked.
+    pub fn solve_blockers(&self, id: MetavarId) -> &[(MetavarId, MetavarOrigin, Option<Extent>)] {
+        self.solve_blockers.get(&id).map_or(&[], Vec::as_slice)
+    }
+
+    /// Record that the recursive slot `id` stands for the member `name`.
+    pub fn name_rec_slot(&mut self, id: MetavarId, name: Free) {
+        self.rec_slot_names.insert(id, name);
+    }
+
+    /// The member name a *filled* recursive slot stands for, which is what substitution must put in its place.
+    ///
+    /// Only once filled. While a slot is unsolved it is deliberately a blocking dependency — `elaborate_rec` records that a dependency on a later member parks on the unsolved slot — and spelling it as a name would let a conversion commit where it must still wait. Nothing is lost by waiting: the cycle needs substitution to expand a slot into a body, so refusing to do that at all is enough however early the slot leaked.
+    pub fn rec_slot_name(&self, id: MetavarId) -> Option<&Free> {
+        match self.solution(id).is_some() {
+            true => self.rec_slot_names.get(&id),
+            false => None,
         }
     }
 
