@@ -6,8 +6,8 @@ use {
     super::InScope,
     crate::{Error, Witness},
     curios_core::{
-        ConceptDecl, Global, HeadKey, InductDecl, ParameterField, StructDecl, Term, Totality,
-        UniverseContext, Variance, WitnessKey,
+        ConceptDecl, Definition, FuncType, Global, HeadKey, InductDecl, ParameterField, StructDecl,
+        Subterm, Term, Totality, UniverseContext, Variance, WitnessKey,
     },
     curios_utilities::{Mount, Qualifier},
     std::collections::BTreeMap,
@@ -289,13 +289,19 @@ impl<'s> Program<'s> {
         self.totality.insert(*name, totality);
     }
 
+    /// File the vectors a finished definition carries, its own and its fields', for conversion's level alignment: with the length of its type's outer telescope, which is the one spine that applies it in full.
+    pub fn record_variances(&mut self, definition: &Definition) {
+        let arity = match &*definition.type_ {
+            Subterm::FuncType(FuncType { telescope, .. }) => telescope.len(),
+            _ => 0,
+        };
+        self.record_definition_variances(&definition.name, &definition.variances, arity);
+        self.record_field_variances(&definition.name, &definition.field_variances, arity);
+        self.record_parameter_field(&definition.name, definition.parameter_field, arity);
+    }
+
     /// File a finished definition's vector, replacing what an earlier elaboration of the name left.
-    pub fn record_definition_variances(
-        &mut self,
-        name: &Global,
-        variances: &[Variance],
-        arity: usize,
-    ) {
+    fn record_definition_variances(&mut self, name: &Global, variances: &[Variance], arity: usize) {
         match variances.contains(&Variance::Irrelevant) {
             true => self.variances.insert(*name, (variances.to_vec(), arity)),
             false => self.variances.remove(name),
@@ -311,12 +317,7 @@ impl<'s> Program<'s> {
     }
 
     /// File a finished definition's field vectors, replacing what an earlier elaboration of the name left.
-    pub fn record_field_variances(
-        &mut self,
-        name: &Global,
-        fields: &[Vec<Variance>],
-        arity: usize,
-    ) {
+    fn record_field_variances(&mut self, name: &Global, fields: &[Vec<Variance>], arity: usize) {
         match fields
             .iter()
             .flatten()
@@ -336,7 +337,7 @@ impl<'s> Program<'s> {
     }
 
     /// File which of a finished definition's binders its value is a field of, replacing what an earlier elaboration of the name left.
-    pub fn record_parameter_field(
+    fn record_parameter_field(
         &mut self,
         name: &Global,
         field: Option<ParameterField>,

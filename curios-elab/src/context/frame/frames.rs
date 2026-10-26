@@ -12,12 +12,13 @@
 
 use {
     super::{
-        Binding, DefEntry, Frame, HeldFrames, KeptWindow, Prefix, ProjectionEntry, ScrutineeEntry,
-        Settled, Spelling, at, refined_through, refinements_within, stand,
+        Binding, ByValue, DefEntry, Frame, HeldFrames, KeptWindow, Prefix, ProjectionEntry,
+        ScrutineeEntry, Settled, Spelling, at, refined_through, refinements_within, stand,
     },
     crate::{
         BirthTelescope, DeadArm, Defined, InScope,
         context::{Footing, SharedSpine, Window},
+        locals_outside_spines, read_outside_spines,
     },
     curios_core::{
         DefinitionKind, Free, Global, HeadTag, RecGroup, Term, UniverseContext,
@@ -59,6 +60,51 @@ pub struct Frames<'s> {
 }
 
 impl<'s> Frames<'s> {
+    /// `term` with every variable an arm in force refined spelled as the value it was refined to, outside a metavariable's occurrence, which is kept as it stands as [`Context::by_value`](crate::Context::by_value) keeps it: how the kernel, which substitutes a case's solution through the arm it checks, spells a term of that arm. A refinement's value may name a variable an arm inside refined in turn, so the substitution is taken until the term names no refined variable outside an occurrence.
+    ///
+    /// A term that names none is returned as it is, for a walk over its free variables outside its occurrences: this is read at every probe of a refined head and at every stuck form put to the reduced spellings.
+    pub fn spelled_as_refined(&self, term: &Term) -> Term {
+        if !term.has_local_free() || !self.refines_a_variable() {
+            return term.clone();
+        }
+        let refined_in = |spelled: &Term| {
+            locals_outside_spines(spelled)
+                .into_iter()
+                .filter_map(|name| Some((name, self.refinement_of(&name)?.clone())))
+                .collect::<Vec<_>>()
+        };
+        let mut refined = refined_in(term);
+        if refined.is_empty() {
+            return term.clone();
+        }
+        let mut spelled = term.clone();
+        // Each round substitutes at least one refined variable away, so a chain of them is no longer than the variables refined.
+        for _ in 0..self.refined_variables().len() {
+            spelled = read_outside_spines(&spelled, &refined);
+            refined = refined_in(&spelled);
+            if refined.is_empty() {
+                break;
+            }
+        }
+        spelled
+    }
+
+    /// `term` with each local definition it names outside a metavariable's occurrence replaced by `value` of what the definition is by value.
+    pub fn substituted_by_value(&self, term: &Term, value: fn(&ByValue) -> &Term) -> Term {
+        if !term.has_local_free() {
+            return term.clone();
+        }
+        let values = locals_outside_spines(term)
+            .into_iter()
+            .filter_map(|name| {
+                let entry = self.definition(&name)?;
+                entry.reduct()?;
+                Some((name, value(entry.by_value()?).clone()))
+            })
+            .collect::<Vec<_>>();
+        read_outside_spines(term, &values)
+    }
+
     pub fn new() -> Self {
         Self {
             scope: None,

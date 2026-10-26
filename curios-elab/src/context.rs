@@ -79,14 +79,13 @@ use {
         zonk_universe_levels_scoped,
     },
     crate::{
-        Published, Refusal, Sort, ZonkPass, hold_at_one_instance, key_spelling,
-        locals_outside_spines, metavar_spines, read_by_value, read_outside_spines,
-        shallow_scrutinee, zonk, zonk_solved_term_metas,
+        Published, Refusal, Sort, ZonkPass, hold_at_one_instance, key_spelling, metavar_spines,
+        read_by_value, shallow_scrutinee, zonk, zonk_solved_term_metas,
     },
     curios_analysis::{Classification, reads_solved, records_case_equation},
     curios_core::{
         Advance, Bound, ClosedMemo, ConceptDecl, Consumption, Cost, Declarations, Definition,
-        DefinitionKind, Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
+        DefinitionKind, Extent, Free, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
         InductDecl, InductInstance, Item, Level, Metavar, MetavarId, MetavarOrigin, MetavarSpine,
         Minted, Mints, Names, NumLit, ParameterField, Quality, RecGroup, ReduceError, StructDecl,
         StructInstance, Subterm, Term, Totality, Trace, UniverseContext, UniverseError,
@@ -655,27 +654,9 @@ impl<'s> Context<'s> {
         self.typing.program.definition_totality(name)
     }
 
-    /// File the vectors a finished definition carries, its own and its fields', for conversion's level alignment: with the length of its type's outer telescope, which is the one spine that applies it in full.
+    /// [`Program::record_variances`].
     pub fn record_definition_variances(&mut self, definition: &Definition) {
-        let arity = match &*definition.type_ {
-            Subterm::FuncType(FuncType { telescope, .. }) => telescope.len(),
-            _ => 0,
-        };
-        self.typing.program.record_definition_variances(
-            &definition.name,
-            &definition.variances,
-            arity,
-        );
-        self.typing.program.record_field_variances(
-            &definition.name,
-            &definition.field_variances,
-            arity,
-        );
-        self.typing.program.record_parameter_field(
-            &definition.name,
-            definition.parameter_field,
-            arity,
-        );
+        self.typing.program.record_variances(definition);
     }
 
     /// The sort `name`'s value inhabits, where it is a definition whose value is a type ([`curios_core::Definition::value_sort`]): a read of that part of the definition alone.
@@ -1056,7 +1037,9 @@ impl<'s> Context<'s> {
     /// Read half of the elaboration cache (see [`Context::get_or_init_elaborated`] for the full contract). Applies the O(1) groundness gate, then either answers from the cache (`Hit`), reports the term ineligible (`Uncacheable`), or snapshots `mutation_stamp` for the caller to thread back into [`record_elaborated`](Self::record_elaborated) (`Miss`). Pure: it never mutates the context, so a driver may probe speculatively at a frame push.
     fn probe_elaborated(&self, term: &Term, expected: Option<&Term>) -> ElabProbe {
         let ground = |t: &Term| {
-            !t.has_metavar() && !self.has_unsolved_universe_meta(t) && !t.has_local_free()
+            !t.has_metavar()
+                && !self.underway.attempt.universe_solver.has_unsolved_meta(t)
+                && !t.has_local_free()
         };
         if !ground(term) || !expected.is_none_or(ground) {
             return ElabProbe::Uncacheable;
@@ -1115,7 +1098,9 @@ impl<'s> Context<'s> {
         result: &(Term, Term),
     ) -> bool {
         let ground = |t: &Term| {
-            !t.has_metavar() && !self.has_unsolved_universe_meta(t) && !t.has_local_free()
+            !t.has_metavar()
+                && !self.underway.attempt.universe_solver.has_unsolved_meta(t)
+                && !t.has_local_free()
         };
         let settled = |t: &Term| t.free_vars().iter().all(|name| self.is_defined(name));
         self.typing.caches.stamps_unchanged(stamp)
@@ -1124,17 +1109,6 @@ impl<'s> Context<'s> {
             && settled(&result.0)
             && settled(&result.1)
             && expected.is_none_or(settled)
-    }
-
-    fn has_unsolved_universe_meta(&self, term: &Term) -> bool {
-        let solver = &self.underway.attempt.universe_solver;
-
-        term.any_universe_meta(|meta| match solver.zonk(&Level::meta(meta)) {
-            Ok(level) => level.metas().next().is_some(),
-            Err(_) => true,
-        }) || term.any_quality_meta(|meta| {
-            matches!(solver.quality(Quality::Meta(meta)), Quality::Meta(_))
-        })
     }
 
     fn enter_frame(&mut self) {
@@ -1558,28 +1532,16 @@ impl<'s> Context<'s> {
 
     /// `term` by value: each local definition it names outside a metavariable's occurrence replaced by what that definition is by value, which it was read as where it was defined ([`ByValue`]), and each occurrence kept as it stands, as conversion reads a block's locals ([`read_outside_spines`]): a spine is the scope its occurrence was born in, which no reading here changes, so reading into it would cost each spelling the scope. One substitution over what `term` holds, as the kernel reads a term through the values its `let`s were bound to (`curios-cert`'s `Scope::by_value`), where unfolding each definition in turn would read a chain of them again at every spelling.
     pub fn by_value(&self, term: &Term) -> Term {
-        self.substituted_by_value(term, |by_value| &by_value.term)
+        self.typing
+            .frames
+            .substituted_by_value(term, |by_value| &by_value.term)
     }
 
     /// [`Context::by_value`] with universe instances erased ([`project_erased_universes`]), over the erased values each definition keeps: what an equation's key over local definitions is spelled from, in what `term` holds.
     pub fn erased_by_value(&self, term: &Term) -> Term {
-        self.substituted_by_value(&project_erased_universes(term), |by_value| &by_value.erased)
-    }
-
-    /// `term` with each local definition it names outside a metavariable's occurrence replaced by `value` of what the definition is by value.
-    fn substituted_by_value(&self, term: &Term, value: fn(&ByValue) -> &Term) -> Term {
-        if !term.has_local_free() {
-            return term.clone();
-        }
-        let values = locals_outside_spines(term)
-            .into_iter()
-            .filter_map(|name| {
-                let entry = self.typing.frames.definition(&name)?;
-                entry.reduct()?;
-                Some((name, value(entry.by_value()?).clone()))
-            })
-            .collect::<Vec<_>>();
-        read_outside_spines(term, &values)
+        self.typing
+            .frames
+            .substituted_by_value(&project_erased_universes(term), |by_value| &by_value.erased)
     }
 
     /// Define `name`. `kind` is the declaring module item's [`DefinitionKind`], or `None` for a local binding no item declared.
@@ -1681,33 +1643,9 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// `term` with every variable an arm in force refined spelled as the value it was refined to, outside a metavariable's occurrence, which is kept as it stands as [`Context::by_value`] keeps it: how the kernel, which substitutes a case's solution through the arm it checks, spells a term of that arm. A refinement's value may name a variable an arm inside refined in turn, so the substitution is taken until the term names no refined variable outside an occurrence.
-    ///
-    /// A term that names none is returned as it is, for a walk over its free variables outside its occurrences: this is read at every probe of a refined head and at every stuck form put to the reduced spellings.
+    /// [`Frames::spelled_as_refined`].
     pub fn spelled_as_refined(&self, term: &Term) -> Term {
-        if !term.has_local_free() || !self.typing.frames.refines_a_variable() {
-            return term.clone();
-        }
-        let refined_in = |spelled: &Term| {
-            locals_outside_spines(spelled)
-                .into_iter()
-                .filter_map(|name| Some((name, self.typing.frames.refinement_of(&name)?.clone())))
-                .collect::<Vec<_>>()
-        };
-        let mut refined = refined_in(term);
-        if refined.is_empty() {
-            return term.clone();
-        }
-        let mut spelled = term.clone();
-        // Each round substitutes at least one refined variable away, so a chain of them is no longer than the variables refined.
-        for _ in 0..self.typing.frames.refined_variables().len() {
-            spelled = read_outside_spines(&spelled, &refined);
-            refined = refined_in(&spelled);
-            if refined.is_empty() {
-                break;
-            }
-        }
-        spelled
+        self.typing.frames.spelled_as_refined(term)
     }
 
     /// `term` as the kernel is handed it under the arms in force: its solved metavariables materialized, its local definitions substituted by value ([`Context::by_value`]), and every variable an arm refined spelled as the value it was refined to. The kernel substitutes a case's solution through the arm it checks, where the elaborator records it and keeps the variable spelled, so this is the reading a rule shared with the kernel is judged on.
@@ -3190,14 +3128,9 @@ impl<'s> Context<'s> {
         result
     }
 
-    /// Whether a standing term awaits an unsolved metavariable `term` mentions.
+    /// [`Solutions::awaits_any`].
     pub fn awaits_any(&self, term: &Term) -> bool {
-        let solutions = &self.underway.attempt.solutions;
-        term.has_metavar()
-            && term
-                .metavars()
-                .into_iter()
-                .any(|id| solutions.solution(id).is_none() && solutions.awaited(id).is_some())
+        self.underway.attempt.solutions.awaits_any(term)
     }
 
     /// Have the term being read await the unsolved metavariables of `term` that no standing term awaits ([`Solutions::adopt`]).

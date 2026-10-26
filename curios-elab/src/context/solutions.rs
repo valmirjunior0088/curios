@@ -401,6 +401,15 @@ pub struct Solutions {
 }
 
 impl Solutions {
+    /// Whether a standing term awaits an unsolved metavariable `term` mentions.
+    pub fn awaits_any(&self, term: &Term) -> bool {
+        term.has_metavar()
+            && term
+                .metavars()
+                .into_iter()
+                .any(|id| self.solution(id).is_none() && self.awaited(id).is_some())
+    }
+
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),

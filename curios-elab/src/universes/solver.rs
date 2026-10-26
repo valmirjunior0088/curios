@@ -19,7 +19,7 @@ mod weak_tests;
 
 use {
     curios_core::{
-        Extent, Free, Global, Level, LevelHead, Quality, QualityMetaId, UniverseConstraint,
+        Extent, Free, Global, Level, LevelHead, Quality, QualityMetaId, Term, UniverseConstraint,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
         UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed, Universes,
     },
@@ -690,6 +690,15 @@ fn bare_meta(level: &Level) -> Option<UniverseMetaId> {
 }
 
 impl UniverseSolver {
+    /// Whether `term` holds a universe or quality metavariable this solver has not settled.
+    pub fn has_unsolved_meta(&self, term: &Term) -> bool {
+        term.any_universe_meta(|meta| match self.zonk(&Level::meta(meta)) {
+            Ok(level) => level.metas().next().is_some(),
+            Err(_) => true,
+        }) || term
+            .any_quality_meta(|meta| matches!(self.quality(Quality::Meta(meta)), Quality::Meta(_)))
+    }
+
     /// The metas reachable from `metas` through constraints and solutions — the declaration's universe closure.
     ///
     /// Reachability is a graph search over the occurrence index, so each constraint is visited once per newly reached level rather than once per pass over the whole store.
