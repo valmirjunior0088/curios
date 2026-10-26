@@ -619,7 +619,7 @@ pub fn elaborate_bang(
     let region_shape = monad_shape(context, &region)?;
     let action_shape = action_result_shape(context, &bang.action)?;
     let action = match (region_shape, action_shape) {
-        (Some(region_shape), Some(action_shape)) if embeds(&region_shape, &action_shape) => {
+        (Some(region_shape), Some(action_shape)) if region_shape.embeds(&action_shape) => {
             let wrapped = lift_wrapped(context, &bang.action, term.extent());
             note_embedding_site(context, &wrapped, &bang.action, expected, owner);
             wrapped
@@ -812,7 +812,7 @@ pub fn lift_on_check(
     let Some(action_shape) = action_result_shape(context, term)? else {
         return Ok(None);
     };
-    if !embeds(&region_shape, &action_shape) || !is_monad(context, &action_shape.head) {
+    if !region_shape.embeds(&action_shape) || !is_monad(context, &action_shape.head) {
         return Ok(None);
     }
     let wrapped = lift_wrapped(context, term, None);
@@ -856,14 +856,16 @@ fn context_keys(context: &mut Context, args: &[Term]) -> Result<Vec<Option<HeadK
     Ok(keys)
 }
 
-/// Whether an action of shape `action` belongs to another monad than a region of shape `region`, so that sequencing it needs an embedding: a different head, or a context argument both sides key and key differently — `Try(Io, E)` beside `Try(State(S), E)`, which share a head and are two monads. Two shapes that agree wherever both are known are one monad as far as the oracle can read, and unification settles the rest.
-pub fn embeds(region: &MonadShape, action: &MonadShape) -> bool {
-    region.head != action.head
-        || region
-            .context
-            .iter()
-            .zip(&action.context)
-            .any(|pair| matches!(pair, (Some(here), Some(there)) if here != there))
+impl MonadShape {
+    /// Whether an action of shape `action` belongs to another monad than a region of this shape, so that sequencing it needs an embedding: a different head, or a context argument both sides key and key differently — `Try(Io, E)` beside `Try(State(S), E)`, which share a head and are two monads. Two shapes that agree wherever both are known are one monad as far as the oracle can read, and unification settles the rest.
+    pub fn embeds(&self, action: &MonadShape) -> bool {
+        self.head != action.head
+            || self
+                .context
+                .iter()
+                .zip(&action.context)
+                .any(|pair| matches!(pair, (Some(here), Some(there)) if here != there))
+    }
 }
 
 /// Whether a `Monad` witness is declared under `key`, elaborated or not — the concept's name derives from the registry's bind wrapper, whose namespace is the concept. Asked of every witness the unit declares, so where the witness is written does not decide whether an action is embedded.

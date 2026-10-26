@@ -118,6 +118,79 @@ struct Row {
     multipliers: Vec<Natural>,
 }
 
+impl Row {
+    /// Divide the row by the gcd of every coefficient, its constant and its multipliers, which keeps it exact.
+    fn reduce(&mut self) {
+        let divisor = self
+            .terms
+            .iter()
+            .map(|(_, coefficient)| coefficient.magnitude())
+            .chain([self.constant.magnitude()])
+            .chain(self.multipliers.iter().cloned())
+            .fold(Natural::from(0u32), |gcd, value| gcd.gcd(&value));
+        if divisor <= Natural::from(1u32) {
+            return;
+        }
+        let by = Integer::from(divisor.clone());
+        let exact = "a gcd greater than one divides every part";
+        for (_, coefficient) in &mut self.terms {
+            *coefficient = coefficient.div(&by).expect(exact);
+        }
+        self.constant = self.constant.div(&by).expect(exact);
+        for multiplier in &mut self.multipliers {
+            *multiplier = multiplier.div(&divisor).expect(exact);
+        }
+    }
+
+    /// `up`, bounding `unknown` above, and `down`, below, combined so `unknown` cancels: `|b|·up + a·down`, `a` and `b` their coefficients of it.
+    fn combine(up: &Row, down: &Row, unknown: &Monomial) -> Row {
+        let a = up
+            .coefficient(unknown)
+            .expect("the upper row names the unknown");
+        let b = -down
+            .coefficient(unknown)
+            .expect("the lower row names the unknown");
+
+        let mut terms: Vec<(Monomial, Integer)> = Vec::new();
+        let scaled = up
+            .terms
+            .iter()
+            .map(|(monomial, c)| (monomial, c.clone() * b.clone()))
+            .chain(
+                down.terms
+                    .iter()
+                    .map(|(monomial, c)| (monomial, c.clone() * a.clone())),
+            );
+        for (monomial, value) in scaled {
+            match terms.iter_mut().find(|(known, _)| known == monomial) {
+                Some((_, sum)) => *sum = sum.clone() + value,
+                None => terms.push((monomial.clone(), value)),
+            }
+        }
+        terms.retain(|(_, value)| !value.is_zero());
+        terms.sort_by(|(left, _), (right, _)| canonical(left, right));
+
+        let (a_natural, b_natural) = (a.magnitude(), b.magnitude());
+        Row {
+            terms,
+            constant: up.constant.clone() * b + down.constant.clone() * a,
+            multipliers: up
+                .multipliers
+                .iter()
+                .zip(&down.multipliers)
+                .map(|(u, d)| u.clone() * b_natural.clone() + d.clone() * a_natural.clone())
+                .collect(),
+        }
+    }
+
+    fn coefficient(&self, unknown: &Monomial) -> Option<Integer> {
+        self.terms
+            .iter()
+            .find(|(monomial, _)| monomial == unknown)
+            .map(|(_, coefficient)| coefficient.clone())
+    }
+}
+
 /// The rows eliminated with one unknown, kept for the assignment.
 struct Level {
     unknown: Monomial,
@@ -158,7 +231,7 @@ pub fn refute(forms: &[LinearForm], budget: &mut usize) -> Search {
         let unknown = next_unknown(&rows);
         let (mut upper, mut lower, mut derived) = (Vec::new(), Vec::new(), Vec::new());
         for row in rows {
-            match coefficient(&row, &unknown).map(|c| c > Integer::from(0)) {
+            match row.coefficient(&unknown).map(|c| c > Integer::from(0)) {
                 Some(true) => upper.push(row),
                 Some(false) => lower.push(row),
                 None => derived.push(row),
@@ -170,7 +243,7 @@ pub fn refute(forms: &[LinearForm], budget: &mut usize) -> Search {
                     return Search::Exhausted;
                 }
                 *budget -= 1;
-                derived.push(combine(up, down, &unknown));
+                derived.push(Row::combine(up, down, &unknown));
             }
         }
         upper.append(&mut lower);
@@ -195,7 +268,7 @@ fn settle(rows: &mut Vec<Row>) -> Option<Vec<Natural>> {
             }
             continue;
         }
-        reduce(&mut row);
+        row.reduce();
         match kept.iter_mut().find(|other| other.terms == row.terms) {
             // `Σ + c <= 0` with the larger `c` is the stronger row. An equal one keeps the earlier, derived from fewer.
             Some(other) if row.constant > other.constant => *other = row,
@@ -205,29 +278,6 @@ fn settle(rows: &mut Vec<Row>) -> Option<Vec<Natural>> {
     }
     *rows = kept;
     None
-}
-
-/// Divide `row` by the gcd of every coefficient, its constant and its multipliers, which keeps it exact.
-fn reduce(row: &mut Row) {
-    let divisor = row
-        .terms
-        .iter()
-        .map(|(_, coefficient)| coefficient.magnitude())
-        .chain([row.constant.magnitude()])
-        .chain(row.multipliers.iter().cloned())
-        .fold(Natural::from(0u32), |gcd, value| gcd.gcd(&value));
-    if divisor <= Natural::from(1u32) {
-        return;
-    }
-    let by = Integer::from(divisor.clone());
-    let exact = "a gcd greater than one divides every part";
-    for (_, coefficient) in &mut row.terms {
-        *coefficient = coefficient.div(&by).expect(exact);
-    }
-    row.constant = row.constant.div(&by).expect(exact);
-    for multiplier in &mut row.multipliers {
-        *multiplier = multiplier.div(&divisor).expect(exact);
-    }
 }
 
 /// The unknown whose elimination derives the fewest rows beyond those it removes, ties broken by canonical order.
@@ -261,50 +311,6 @@ fn next_unknown(rows: &[Row]) -> Monomial {
         )
         .map(|(unknown, ..)| unknown)
         .expect("a row with a term names an unknown")
-}
-
-/// `up`, bounding `unknown` above, and `down`, below, combined so `unknown` cancels: `|b|·up + a·down`, `a` and `b` their coefficients of it.
-fn combine(up: &Row, down: &Row, unknown: &Monomial) -> Row {
-    let a = coefficient(up, unknown).expect("the upper row names the unknown");
-    let b = -coefficient(down, unknown).expect("the lower row names the unknown");
-
-    let mut terms: Vec<(Monomial, Integer)> = Vec::new();
-    let scaled = up
-        .terms
-        .iter()
-        .map(|(monomial, c)| (monomial, c.clone() * b.clone()))
-        .chain(
-            down.terms
-                .iter()
-                .map(|(monomial, c)| (monomial, c.clone() * a.clone())),
-        );
-    for (monomial, value) in scaled {
-        match terms.iter_mut().find(|(known, _)| known == monomial) {
-            Some((_, sum)) => *sum = sum.clone() + value,
-            None => terms.push((monomial.clone(), value)),
-        }
-    }
-    terms.retain(|(_, value)| !value.is_zero());
-    terms.sort_by(|(left, _), (right, _)| canonical(left, right));
-
-    let (a_natural, b_natural) = (a.magnitude(), b.magnitude());
-    Row {
-        terms,
-        constant: up.constant.clone() * b + down.constant.clone() * a,
-        multipliers: up
-            .multipliers
-            .iter()
-            .zip(&down.multipliers)
-            .map(|(u, d)| u.clone() * b_natural.clone() + d.clone() * a_natural.clone())
-            .collect(),
-    }
-}
-
-fn coefficient(row: &Row, unknown: &Monomial) -> Option<Integer> {
-    row.terms
-        .iter()
-        .find(|(monomial, _)| monomial == unknown)
-        .map(|(_, coefficient)| coefficient.clone())
 }
 
 /// Monomials by their atoms, lexicographically by rank and then by the order they were handed out — the view's own order.

@@ -13,7 +13,7 @@ use struct_::*;
 
 mod binding;
 use binding::*;
-pub use binding::{embeds, is_monad, monad_shape, numeral_default, region_flex};
+pub use binding::{is_monad, monad_shape, numeral_default, region_flex};
 
 mod metavar;
 use metavar::*;

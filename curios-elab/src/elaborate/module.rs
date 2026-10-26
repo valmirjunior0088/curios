@@ -1900,7 +1900,7 @@ fn elaborate_and_zonk_over<'s>(
             order,
         } = {
             curios_profile::profile!("assemble_unit_over");
-            assembled(&recompile, module, &made_names, made)
+            recompile.assembled(module, &made_names, made)
         };
         traces.ordered(order.clone());
 
@@ -1930,65 +1930,65 @@ fn elaborate_and_zonk_over<'s>(
     })
 }
 
-/// What [`assembled`] makes of a recompile's declarations: the module, in the order a module is stored in, where it holds each name, where that was handed on, and the order.
+/// What [`Recompile::assembled`] makes of a recompile's declarations: the module, in the order a module is stored in, where it holds each name, where that was handed on, and the order.
 struct Assembled {
     module: Module,
     places: Option<Places>,
     order: Order,
 }
 
-/// The declarations elaborated and the ones kept as one module, in the order a module is stored in: `made`, the items of the declarations named in `made_names`, with the baseline's own item and registry entries for every other declaration of `lowered`, and no item of a name the recompile dropped. The order is the baseline's revised by what was made, every item it does not move standing where the baseline holds it ([`Order::revised`]); where no revision resolves it, the module is put in order whole.
-///
-/// The markers are the lowering's: every run that produces a unit dropped nothing, so every item a marker names is there.
-fn assembled(
-    recompile: &Recompile<'_>,
-    lowered: &Module,
-    made_names: &BTreeSet<Global>,
-    made: Module,
-) -> Assembled {
-    let made = made.items.into_iter().collect::<Vec<_>>();
-    let module = |items| Module {
-        items,
-        mounts: lowered.mounts.clone(),
-        witnesses: lowered.witnesses.clone(),
-        tests: lowered.tests.clone(),
-    };
-    if let Some(Revised {
-        items,
-        places,
-        order,
-    }) = recompile.traces.order().revised(
-        recompile.baseline,
-        recompile.places,
-        &made,
-        recompile.dropped,
-    ) {
-        return Assembled {
-            module: module(items),
+impl Recompile<'_> {
+    /// The declarations elaborated and the ones kept as one module, in the order a module is stored in: `made`, the items of the declarations named in `made_names`, with the baseline's own item and registry entries for every other declaration of `lowered`, and no item of a name the recompile dropped. The order is the baseline's revised by what was made, every item it does not move standing where the baseline holds it ([`Order::revised`]); where no revision resolves it, the module is put in order whole.
+    ///
+    /// The markers are the lowering's: every run that produces a unit dropped nothing, so every item a marker names is there.
+    fn assembled(
+        &self,
+        lowered: &Module,
+        made_names: &BTreeSet<Global>,
+        made: Module,
+    ) -> Assembled {
+        let made = made.items.into_iter().collect::<Vec<_>>();
+        let module = |items| Module {
+            items,
+            mounts: lowered.mounts.clone(),
+            witnesses: lowered.witnesses.clone(),
+            tests: lowered.tests.clone(),
+        };
+        if let Some(Revised {
+            items,
             places,
             order,
-        };
-    }
+        }) = self
+            .traces
+            .order()
+            .revised(self.baseline, self.places, &made, self.dropped)
+        {
+            return Assembled {
+                module: module(items),
+                places,
+                order,
+            };
+        }
 
-    curios_profile::profile!("order_unit_over");
-    let mut items = Items::from(made);
-    items.extend(
-        recompile
-            .baseline
-            .items
-            .iter()
-            .filter(|item| {
-                item.declared_names().first().is_some_and(|name| {
-                    !made_names.contains(*name) && !recompile.dropped.contains(*name)
+        curios_profile::profile!("order_unit_over");
+        let mut items = Items::from(made);
+        items.extend(
+            self.baseline
+                .items
+                .iter()
+                .filter(|item| {
+                    item.declared_names().first().is_some_and(|name| {
+                        !made_names.contains(*name) && !self.dropped.contains(*name)
+                    })
                 })
-            })
-            .cloned(),
-    );
-    let (module, order) = module(items).in_order();
+                .cloned(),
+        );
+        let (module, order) = module(items).in_order();
 
-    Assembled {
-        module,
-        places: None,
-        order,
+        Assembled {
+            module,
+            places: None,
+            order,
+        }
     }
 }

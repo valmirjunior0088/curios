@@ -11,7 +11,7 @@ mod tests;
 
 use {
     super::{
-        Beside, Context, Error, HeldFrames, Rejected, callee, decided_sort_of, embeds, is_monad,
+        Beside, Context, Error, HeldFrames, Rejected, callee, decided_sort_of, is_monad,
         monad_shape, normalize, numeral_default, quality_of, reduce_forced, refold_recs,
         settle_qualities, stuck_on_metavar, watched, zonk_solved_term_metas,
     },
@@ -378,7 +378,7 @@ fn unembedded_action(context: &mut Context, this: &Term, that: &Term) -> Option<
     let that_whnf = reduce_forced(context, that.clone()).ok()?;
     let action = monad_shape(context, &this_whnf).ok().flatten()?;
     let expected = monad_shape(context, &that_whnf).ok().flatten()?;
-    let differ = embeds(&expected, &action)
+    let differ = expected.embeds(&action)
         && is_monad(context, &action.head)
         && is_monad(context, &expected.head);
 

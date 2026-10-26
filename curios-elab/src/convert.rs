@@ -3057,7 +3057,7 @@ impl Convert {
 
             let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {
                 (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
-                    convert_intrinsic(self, context, this, that)?
+                    self.convert_intrinsic(context, this, that)?
                 }
                 // A host call is its declaration and its operands, each compared at the type its row demands of it, as the kernel compares two.
                 (this @ Subterm::Foreign(..), that @ Subterm::Foreign(..)) => {

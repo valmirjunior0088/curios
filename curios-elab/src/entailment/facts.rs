@@ -1901,7 +1901,7 @@ pub fn products(
     facts: &Facts,
     negated: &[Fact],
 ) -> Result<Vec<Fact>, Error> {
-    let factors = factors(facts, negated);
+    let factors = facts.factors(negated);
     let mut reader = Reader::new(views, classes);
     for (index, first) in factors.iter().enumerate() {
         for second in &factors[index + 1..] {
@@ -1919,7 +1919,8 @@ pub fn case_products(
     facts: &mut Facts,
     negated: &[Fact],
 ) -> Result<bool, Error> {
-    let factors = factors(facts, negated)
+    let factors = facts
+        .factors(negated)
         .into_iter()
         .cloned()
         .collect::<Vec<_>>();
@@ -1940,21 +1941,22 @@ pub fn case_products(
     Ok(gained)
 }
 
-/// What [`products`] multiplies: the facts and the negated goal, a natural's sign only over one atom.
-fn factors<'f>(facts: &'f Facts, negated: &'f [Fact]) -> Vec<&'f Fact> {
-    facts
-        .facts
-        .iter()
-        .chain(negated)
-        .filter(|fact| {
-            fact.origin != Origin::Natural
-                || fact
-                    .form
-                    .terms
-                    .iter()
-                    .all(|(_, monomial)| monomial.atoms().len() == 1)
-        })
-        .collect()
+impl Facts {
+    /// What [`products`] multiplies: the facts and the negated goal, a natural's sign only over one atom.
+    fn factors<'f>(&'f self, negated: &'f [Fact]) -> Vec<&'f Fact> {
+        self.facts
+            .iter()
+            .chain(negated)
+            .filter(|fact| {
+                fact.origin != Origin::Natural
+                    || fact
+                        .form
+                        .terms
+                        .iter()
+                        .all(|(_, monomial)| monomial.atoms().len() == 1)
+            })
+            .collect()
+    }
 }
 
 /// The product of `first` and `second` through `le/mul`, admitted by `reader`; nothing for two naturals' signs, or where `le/mul` is not in scope.

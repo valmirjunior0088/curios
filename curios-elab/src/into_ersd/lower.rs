@@ -352,7 +352,7 @@ impl<'s> Lowering<'s> {
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         match &**term {
-            Subterm::Intrinsic(intrinsic) => erase_intrinsic(self, context, intrinsic, hint),
+            Subterm::Intrinsic(intrinsic) => self.erase_intrinsic(context, intrinsic, hint),
             // A host call: each operand erases against the demand elaboration checked it with, `foreign_operands`' reading of the same row. A diverging call's type operand erases with every other type.
             Subterm::Foreign(function, _, arguments) => {
                 let signature = function.signature();

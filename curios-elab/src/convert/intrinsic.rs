@@ -17,87 +17,89 @@ use {
     curios_utilities::SyntaxRegistry,
 };
 
-/// Whether `this` and `that` are the same intrinsic operation on convertible operands, as far as the elaborator decides now — `curios-analysis`'s `convert_intrinsics`, the kernel's chain too, discharged the elaborator's way: a residual and every operand join the queue, and the levels compare by the elaborator's rule, which may constrain them.
-pub fn convert_intrinsic(
-    cmp: &mut Convert,
-    context: &mut Context,
-    this: Intrinsic,
-    that: Intrinsic,
-) -> Result<bool, ReduceError> {
-    let pass = convert_intrinsics(
-        &mut Elaborating { cmp, context },
-        this.clone(),
-        that.clone(),
-    )?;
-    let outcome = match pass {
-        Pass::Settled(outcome) => outcome,
-        Pass::Atoms(atoms) => {
-            let mut classes = classes(context, &cmp.pairs, &atoms)?;
-            convert_classed(
-                &mut Elaborating { cmp, context },
-                this.clone(),
-                that.clone(),
-                &mut classes,
-            )?
-        }
-    };
-    match outcome {
-        Outcome::Equal => Ok(true),
-        Outcome::Unequal => Ok(false),
-        // Operands nothing paired: nothing is enqueued, so no solution is picked by the order the operands stand in. Where that is the end of it, the mismatch it becomes says the operands were not paired.
-        Outcome::Unpaired => {
-            let converts = unsettled(cmp, context, this, that)?;
-            if !converts {
-                cmp.declined = Some(Declined::Unpaired);
+impl Convert {
+    /// Whether `this` and `that` are the same intrinsic operation on convertible operands, as far as the elaborator decides now — `curios-analysis`'s `convert_intrinsics`, the kernel's chain too, discharged the elaborator's way: a residual and every operand join the queue, and the levels compare by the elaborator's rule, which may constrain them.
+    pub(super) fn convert_intrinsic(
+        &mut self,
+        context: &mut Context,
+        this: Intrinsic,
+        that: Intrinsic,
+    ) -> Result<bool, ReduceError> {
+        let pass = convert_intrinsics(
+            &mut Elaborating { cmp: self, context },
+            this.clone(),
+            that.clone(),
+        )?;
+        let outcome = match pass {
+            Pass::Settled(outcome) => outcome,
+            Pass::Atoms(atoms) => {
+                let mut classes = classes(context, &self.pairs, &atoms)?;
+                convert_classed(
+                    &mut Elaborating { cmp: self, context },
+                    this.clone(),
+                    that.clone(),
+                    &mut classes,
+                )?
             }
-            Ok(converts)
-        }
-        Outcome::Residual(this, that) => {
-            cmp.enqueue(Term::type_ground(), this, that);
-            Ok(true)
-        }
-        Outcome::Congruence(Congruence {
-            this_universes,
-            that_universes,
-            operands,
-        }) => {
-            if !Convert::compare_universes(context, &this_universes, &that_universes)? {
-                return Ok(false);
+        };
+        match outcome {
+            Outcome::Equal => Ok(true),
+            Outcome::Unequal => Ok(false),
+            // Operands nothing paired: nothing is enqueued, so no solution is picked by the order the operands stand in. Where that is the end of it, the mismatch it becomes says the operands were not paired.
+            Outcome::Unpaired => {
+                let converts = self.unsettled(context, this, that)?;
+                if !converts {
+                    self.declined = Some(Declined::Unpaired);
+                }
+                Ok(converts)
             }
-            let Some(operands) = operands else {
-                return unsettled(cmp, context, this, that);
-            };
-            for Obligation { type_, this, that } in operands {
-                cmp.enqueue(type_.unwrap_or_else(Term::type_ground), this, that);
+            Outcome::Residual(this, that) => {
+                self.enqueue(Term::type_ground(), this, that);
+                Ok(true)
             }
-            Ok(true)
+            Outcome::Congruence(Congruence {
+                this_universes,
+                that_universes,
+                operands,
+            }) => {
+                if !Convert::compare_universes(context, &this_universes, &that_universes)? {
+                    return Ok(false);
+                }
+                let Some(operands) = operands else {
+                    return self.unsettled(context, this, that);
+                };
+                for Obligation { type_, this, that } in operands {
+                    self.enqueue(type_.unwrap_or_else(Term::type_ground), this, that);
+                }
+                Ok(true)
+            }
         }
     }
-}
 
-/// A pair the chain settled nothing of and handed nothing back for: operands unpaired, or two sides that are not one operation. Where it is an equation linear in its one unsolved metavariable, that metavariable has one solution and is solved to it, and the pair, now without it, is compared again. Otherwise it is a mismatch, which the drain parks rather than reports where either side still holds an unsolved metavariable, since solving one may yet settle it.
-fn unsettled(
-    cmp: &mut Convert,
-    context: &mut Context,
-    this: Intrinsic,
-    that: Intrinsic,
-) -> Result<bool, ReduceError> {
-    if !solved_linearly(context, &this, &that)? {
-        return Ok(false);
+    /// A pair the chain settled nothing of and handed nothing back for: operands unpaired, or two sides that are not one operation. Where it is an equation linear in its one unsolved metavariable, that metavariable has one solution and is solved to it, and the pair, now without it, is compared again. Otherwise it is a mismatch, which the drain parks rather than reports where either side still holds an unsolved metavariable, since solving one may yet settle it.
+    fn unsettled(
+        &mut self,
+        context: &mut Context,
+        this: Intrinsic,
+        that: Intrinsic,
+    ) -> Result<bool, ReduceError> {
+        if !solved_linearly(context, &this, &that)? {
+            return Ok(false);
+        }
+        self.progress = true;
+
+        // Compared again as any pair is, and so read again: the two sides in hand were reduced ahead of the solution and still spell the metavariable, which the chain reads as an atom, of a product it cannot divide back out. `?n * 18` against `504` is solved at `28` and would be refused as `?n * 18` against `504`.
+        let type_ = match this.signature(&context.syntax()).produced {
+            Produced::Fixed(type_) => type_,
+            _ => Term::type_ground(),
+        };
+        self.converts(
+            context,
+            &type_,
+            &Term::intrinsic(this),
+            &Term::intrinsic(that),
+        )
     }
-    cmp.progress = true;
-
-    // Compared again as any pair is, and so read again: the two sides in hand were reduced ahead of the solution and still spell the metavariable, which the chain reads as an atom, of a product it cannot divide back out. `?n * 18` against `504` is solved at `28` and would be refused as `?n * 18` against `504`.
-    let type_ = match this.signature(&context.syntax()).produced {
-        Produced::Fixed(type_) => type_,
-        _ => Term::type_ground(),
-    };
-    cmp.converts(
-        context,
-        &type_,
-        &Term::intrinsic(this),
-        &Term::intrinsic(that),
-    )
 }
 
 /// Whether a `Bool` connective on either side of a pair that is not two intrinsics agrees with the other side: `curios-analysis`'s `connectives_agree`, its atoms classed here where it hands them back.
