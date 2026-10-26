@@ -199,7 +199,7 @@ impl RootSource {
     }
 
     /// The prefixes this source declared a dependency on, when it declared any.
-    pub(crate) fn declared(&self) -> Option<&[Qualifier]> {
+    pub fn declared(&self) -> Option<&[Qualifier]> {
         self.declares.as_deref()
     }
 

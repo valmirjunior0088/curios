@@ -1,6 +1,6 @@
 //! What an invocation consults before compiling a program it has already compiled.
 //!
-//! **The same address-and-record split the unit family states for itself, one level up.** A slot names a place — this executable, by this compiler, for this engine — and carries no file contents and no unit, so a source edit changes what the slot is verified against rather than where it is looked for. What the payload was made from rides in a [`Record`] ahead of it in the slot's one file: the entry file, every file the entry's loader read, what each predecessor contained, and the payload's own digest.
+//! **The same address-and-record split the unit family states for itself, one level up.** A slot names a place — this executable, by this compiler, for this engine — and carries no file contents and no unit, so a source edit changes what the slot is verified against rather than where it is looked for. What the payload was made from rides in a [`Record`] ahead of it in the slot's one file: the entry file, every file the entry's loader read, the prefixes the entry declared, what each predecessor contained, and the payload's own digest.
 //!
 //! **Taking a payload from here is believing a whole compilation, judgment included.** The entry's kernel recheck is skipped on the strength of the record exactly as a reused unit's is, and the argument for that is [Reused payloads](../../documentation/design/soundness/reused-payloads.md), which extends [Cached verdicts](../../documentation/design/soundness/cached-verdicts.md) rather than restating it.
 //!
@@ -54,6 +54,8 @@ struct Record {
     predecessors: Vec<String>,
     /// The prefixes the program's tests were scheduled under, spelled and in order ([`selection`]), or `None` for a program.
     tests: Option<Vec<String>>,
+    /// The prefixes the entry declared a dependency on, spelled and in the order its loader holds them ([`declared`]), or `None` where it declared nothing: what decides which of its references resolve, and which a unit's slot keys its own unit by, so a manifest that stops declaring a dependency the fold still holds is a miss.
+    declares: Option<Vec<String>>,
     /// The payload's own digest, so a damaged artifact is a miss here rather than a failure to deserialize at run time — or, for a flipped byte inside a function's code, machine code that runs wrong. Its segment of the slot is exactly the byte string a bundled executable carries and `curios_native::run_bytes` deserializes.
     payload: String,
     /// The `ffi` rows the program imports, which is what a link types its marshalling by and holds each answer to: the standard library's that it reaches, which the host answers, and any of a package's own.
@@ -115,6 +117,7 @@ impl Verdicts {
             reads: digested(program.loader.reads()),
             predecessors: filed,
             tests: selection(program),
+            declares: declared(program),
             payload: digest(bytes),
             foreigns: foreigns.clone(),
         };
@@ -148,6 +151,7 @@ fn agrees(program: &Program<'_>, record: &Record, units: &[String], bytes: &[u8]
     record.payload == digest(bytes)
         && chained(&record.predecessors, units)
         && record.tests == selection(program)
+        && record.declares == declared(program)
         && record.entry == (canonical(program.entry), digest(program.text.as_bytes()))
         && read_within(&program.loader.directories(), &record.reads)
         && unchanged(&record.reads, None)
@@ -163,6 +167,14 @@ fn selection(program: &Program<'_>) -> Option<Vec<String>> {
             .into_iter()
             .collect()
     })
+}
+
+/// The prefixes `program`'s entry declared, as a record holds them: spelled, in the order its loader holds them, as a unit's slot keys them.
+fn declared(program: &Program<'_>) -> Option<Vec<String>> {
+    program
+        .loader
+        .declared()
+        .map(|prefixes| prefixes.iter().map(Qualifier::join).collect())
 }
 
 /// A path as a record spells it: canonical, so the same file reached through a relative invocation and an absolute one is one entry.

@@ -410,3 +410,42 @@ fn a_test_run_names_only_what_the_executable_declares() {
         String::from_utf8_lossy(&tested.stderr)
     );
 }
+
+/// An entry may name only what its manifest declares, so a manifest that stops declaring a dependency the entry names makes a compile of the same text a refusal, the dependency still in the fold beneath another: the payload filed before the edit answers for a program that no longer checks, and is not reused.
+#[test]
+fn a_payload_is_not_reused_once_its_entry_no_longer_declares_what_it_names() {
+    let (root, a, b) = layered("undeclared", "/std/print(/a/word)\n");
+    write(
+        &root,
+        "curios.toml",
+        &app_manifest("app", &[("a", &a), ("b", &b)]),
+    );
+
+    let first = curios(&root, &["run"]);
+    assert_eq!(
+        first.stdout,
+        b"from a",
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert!(reused(&curios(&root, &["run"])), "filed by the first run");
+
+    write(&root, "curios.toml", &app_manifest("app", &[("b", &b)]));
+    let fresh = temporary("undeclared-fresh");
+    write(&fresh, "curios.toml", &app_manifest("app", &[("b", &b)]));
+    write(&fresh, "app.crs", "/std/print(/a/word)\n");
+    let compiled = curios(&fresh, &["run"]);
+    assert!(
+        !compiled.status.success(),
+        "a compile of the entry under the narrowed manifest is refused: {}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    // The units beneath the entry are reused, as nothing they read moved; the payload is not.
+    let asked = curios(&root, &["run"]);
+    let said = String::from_utf8_lossy(&asked.stderr);
+    assert!(
+        !said.contains("app; reused") && !asked.status.success(),
+        "and the payload filed under the wider one does not answer for it: {said}"
+    );
+}
