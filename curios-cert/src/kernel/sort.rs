@@ -22,7 +22,8 @@ use {
     crate::instantiate_universes_scoped,
     curios_core::{
         Bound, Field, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, Match,
-        MatchResult, Proj, Quality, Reducer, StructType, Subterm, Telescope, Term, TupleType,
+        MatchResult, Produced, Proj, Quality, Reducer, StructType, Subterm, Telescope, Term,
+        TupleType,
     },
 };
 
@@ -384,8 +385,17 @@ pub(crate) fn sort_of_intrinsic(kernel: &mut Kernel, intrinsic: &Intrinsic) -> R
             })
         }
 
-        // An intrinsic *value* is not a type, so nothing here classifies it.
-        other => Err(Error::Unclassified(Term::intrinsic(other.clone()))),
+        // An intrinsic *value* is not a type, and an operation stuck on its operands is a neutral of the type its signature produces, which typing read it at before this lookup was asked: one producing a sort — a read of a list of types, a fold whose result is a type — is a type at that sort, and one producing anything else classifies nothing.
+        other => {
+            let unclassified = || Error::Unclassified(Term::intrinsic(other.clone()));
+            match other.signature(&kernel.syntax()).produced {
+                Produced::Fixed(produced) => match as_sort(kernel, &produced) {
+                    Err(Error::NotASort(_)) => Err(unclassified()),
+                    sorted => sorted,
+                },
+                Produced::Sort => Err(unclassified()),
+            }
+        }
     }
 }
 

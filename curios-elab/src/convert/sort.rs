@@ -8,7 +8,8 @@ use {
     crate::{Binders, Context, Opened, probe_open_sort, reduce, reduce_forced, synth_neutral},
     curios_core::{
         Bound, FuncType, InductType, Instance, InstanceHead, Intrinsic, Level, MatchResult,
-        Quality, ReduceError, StructType, Subterm, Term, TupleType, instantiate_universes_scoped,
+        Produced, Quality, ReduceError, StructType, Subterm, Term, TupleType,
+        instantiate_universes_scoped,
     },
 };
 
@@ -292,8 +293,21 @@ impl Sort {
                 | Intrinsic::NatXor(..)
                 | Intrinsic::NatMin(..)
                 | Intrinsic::NatMax(..) => {
-                    probe_level_fallback("non-type intrinsic", &reduced);
-                    Sort::type_at(Level::zero())
+                    // An operation stuck on its operands is a neutral of the type its signature produces, so one producing a sort — a read of a list of types, a fold whose result is a type — is a type at that sort, as the kernel's lookup reads it. One producing anything else is no type, and takes the fallback.
+                    let produced = match intrinsic.signature(&context.syntax()).produced {
+                        Produced::Fixed(produced) => Some(reduce(context, produced)?),
+                        Produced::Sort => None,
+                    };
+                    match produced.as_deref() {
+                        Some(Subterm::Sort(quality, level)) => Sort {
+                            quality: context.universes().quality(*quality),
+                            level: level.clone(),
+                        },
+                        _ => {
+                            probe_level_fallback("non-type intrinsic", &reduced);
+                            Sort::type_at(Level::zero())
+                        }
+                    }
                 }
             },
             // A host call is a value, never a type, so it takes the same ground level the non-type intrinsics above do.

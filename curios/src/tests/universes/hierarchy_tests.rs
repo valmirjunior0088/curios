@@ -373,3 +373,26 @@ fn a_conflict_two_uses_close_alone_stands_at_one_and_notes_the_other() {
         "the note stands at the other:\n{message}"
     );
 }
+
+// A type read off a list of types, or folded out of a list, sits at the sort its operation produces, so a term checked at one is classified where the kernel types it: `Head`'s accessor states its result as the head of a list of types, and `keep` its parameter as a type a fold computes. The kernel's lookup classified only a type former, and refused both where the elaborator had admitted them.
+#[test]
+fn a_type_read_off_a_list_or_a_fold_is_classified_at_its_sort() {
+    let source = r#"
+        use /std/{List, Nat};
+        use /std/Bool/{Holds};
+
+        pub struct Head(ts: List(Type), h: Holds(0 < List/len(ts))): Type {
+            value: List/get(ts, 0, @h),
+        }
+
+        pub let value(ts: List(Type), h: Holds(0 < List/len(ts)), head: Head(ts, h)) -> List/get(ts, 0, @h) =
+            head.value;
+
+        pub let Folded(xs: List(Nat)) -> Type = List/fold(xs, Nat, (_, acc: Type) => acc);
+        pub let keep(xs: List(Nat), x: Folded(xs)) -> Folded(xs) = x;
+
+        /std/print("classified")
+        "#;
+
+    assert_eq!(run(source), b"classified");
+}

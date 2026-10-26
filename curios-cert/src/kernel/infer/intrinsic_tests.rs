@@ -2,9 +2,11 @@
 
 use {
     super::test_support::*,
-    crate::{Error, Kernel, infer},
+    crate::{Error, Kernel, Sort, infer},
     curios_analysis::test_support::SYNTAX,
-    curios_core::{Atom, Free, Global, InductDecl, Intrinsic, Telescope, Term, UniverseContext},
+    curios_core::{
+        Atom, Free, Global, InductDecl, Intrinsic, Level, Telescope, Term, UniverseContext,
+    },
     curios_num::Integer,
     curios_utilities::Qualifier,
 };
@@ -439,4 +441,43 @@ fn each_intrinsic_elimination_at_its_own_carrier_is_still_accepted() {
 
     let dispatch = Term::switch(nat(0), None, nat_type(), [(0u32, nat(1))], nat(2));
     assert_eq!(infer(&mut kernel, &dispatch), Ok(nat_type()));
+}
+
+/// An operation stuck on its operands is classified by the type its signature produces, the type typing read it at: a read of a list of `Type 1`s is a type at `Type 1`, and one of a list of propositions a proposition. The lookup answered only for the formers, and refused a type typing had accepted. The control is an operation producing a number, which classifies nothing.
+#[test]
+fn a_stuck_read_of_a_list_of_types_is_a_type_at_their_sort() {
+    let one = Level::zero().succ().expect("level zero has a successor");
+    let read = |kernel: &mut Kernel, element: Term| {
+        let list = binder(30, "ts");
+        kernel.assume(
+            &list,
+            &Term::intrinsic(Intrinsic::ListType(element.clone())),
+        );
+        Term::intrinsic(Intrinsic::ListGet {
+            element,
+            list: Term::free_var(&list),
+            index: nat(0),
+            in_range: Term::free_var(&binder(31, "h")),
+        })
+    };
+
+    let mut kernel = kernel();
+    let types = read(&mut kernel, Term::type_at(one.clone()));
+    assert_eq!(Sort::of(&mut kernel, &types), Ok(Sort::Type(one)));
+
+    let mut kernel = self::kernel();
+    let propositions = read(&mut kernel, Term::prop());
+    assert_eq!(
+        Sort::of(&mut kernel, &propositions),
+        Ok(Sort::Prop(Level::zero()))
+    );
+
+    let mut kernel = self::kernel();
+    let n = binder(32, "n");
+    kernel.assume(&n, &nat_type());
+    let number = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+    assert!(matches!(
+        Sort::of(&mut kernel, &number),
+        Err(Error::Unclassified(_))
+    ));
 }
