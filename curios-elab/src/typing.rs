@@ -730,7 +730,7 @@ impl Context<'_> {
         }
         let sort = self
             .metavar_entry(id)
-            .map(|entry| entry.result.clone())
+            .map(|entry| entry.result().clone())
             .expect("a metavariable waited on has a birth record");
 
         let (product, parts, checked, declared) = self.standing_on(&choice.frames, |context| {
@@ -794,8 +794,8 @@ impl Context<'_> {
             };
             let Some(declared) = self
                 .metavar_entry(metavar.id)
-                .filter(|entry| entry.solution.is_some())
-                .map(|entry| entry.result.clone())
+                .filter(|entry| entry.solution().is_some())
+                .map(|entry| entry.result().clone())
             else {
                 continue;
             };
@@ -1839,10 +1839,10 @@ fn root_blocker_error(
     let (id, origin, extent) = root?;
     let (bound, proposition, reduct, refusal) = context.metavar_entry(id).map(|entry| {
         (
-            entry.result.clone(),
-            entry.proposition,
-            entry.reduct.clone(),
-            entry.refusal.as_deref().cloned(),
+            entry.result().clone(),
+            entry.proposition(),
+            entry.reduct().cloned(),
+            entry.refusal().cloned(),
         )
     })?;
 

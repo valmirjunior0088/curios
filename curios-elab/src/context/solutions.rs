@@ -20,36 +20,76 @@ use {
     },
 };
 
-/// One metavariable's record. Everything here is frozen at birth except `solution`, which transitions `None -> Some(_)` on solve — rolled back to `None` if re-validation rejects the candidate that solved it (`Context::rollback_solutions`).
+/// One metavariable's record, which only the store writes: what it was born with, frozen there; its solution, which transitions `None -> Some(_)` on solve — rolled back to `None` if re-validation rejects the candidate that solved it (`Context::rollback_solutions`); and what its report reads, noted after birth ([`Solutions::note_written`], [`Solutions::mark_proposition`], [`Solutions::note_reduct`], [`Solutions::note_refusal`], [`Solutions::note_dead_arm`]).
 #[derive(Debug)]
 pub struct MetaEntry {
     /// Γ frozen at birth: the local assumption context in binding order, with birth-time types. Drives the scope check and re-validation.
-    pub telescope: BirthTelescope,
+    telescope: BirthTelescope,
     /// How the telescope stands to `frames`: taken with them, so they bind it, or stated for the metavariable.
-    pub scoped: Scoped,
+    scoped: Scoped,
     /// The frames the metavariable was born under, as they stood: what is judged of it is judged standing on them where they are not the live ones ([`Context::at_birth`](super::Context::at_birth)). Their match-arm refinements are what a solution may rest on beyond Γ, and all it may, each in the frame it was registered in, and containment compares them as it compares Γ; their definitions are the birth's; their witness binders are the reader position a report about the metavariable is spelled for; and their innermost dead arm is why an implicit minted there and never solved has no value to take.
-    pub frames: HeldFrames,
+    frames: HeldFrames,
     /// The metavariable's type — the `expected` it was checked against at birth.
-    pub result: Term,
+    result: Term,
     /// `None` while unsolved; `Some(t)` once solved. `t`'s free `Var`s are a subset of `telescope`'s names.
-    pub solution: Option<Term>,
+    solution: Option<Term>,
     /// Ordinary inference holes may be solved by conversion. A recursive elaboration slot is filled only by the owning `rec` elaborator and a placeholder only by the problem parked behind it; conversion treats either, unfilled, as a blocking dependency ([`Solutions::owner_fills`]).
     kind: MetaKind,
     /// Whether `result` is a proposition, decided once where an omitted implicit is minted. It is what tells a *bound* nothing discharged — `Holds(i < n)`, the whole of why a call was refused — from a type argument nothing determined, `@T: Type`, which never was an obligation; the report reads differently for the two, and zonk, which raises it, holds the context immutably and cannot ask the sort itself.
-    pub proposition: bool,
+    proposition: bool,
     /// What `result` reduced to when the mint — or a later attempt at a parked discharge — asked whether it was decided, kept when that is an inductive type: the reduct — `False` — is what the unsolved report says beside the bound's spelling, and the report cannot reduce for itself.
-    pub reduct: Option<Term>,
+    reduct: Option<Term>,
     /// Why the procedure that proves a bound from the facts in scope proved nothing, the last time it was asked: the facts it considered and what its search concluded, which the unsolved report states beside the bound and cannot ask for itself.
-    pub refusal: Option<Rc<Refusal>>,
+    refusal: Option<Rc<Refusal>>,
     /// Why the arm the metavariable was born in is never taken, where a guard says so: found where the bound it stands for was given up, since the report of the bound is made once the arm has closed, by a walk that cannot reduce a guard. An arm its scrutinee's indices rule out is the frames' to say ([`HeldFrames::dead_arm`]).
-    pub dead_arm: Option<Rc<DeadArm>>,
+    dead_arm: Option<Rc<DeadArm>>,
     /// Where the term the metavariable was minted for is written, where its mint was handed one: a call's for an omitted implicit, a literal's for its element type. An unsolved one is reported there, whichever of its occurrences the report's walk meets, since an occurrence a substitution rebuilt carries no place.
-    pub written: Option<Extent>,
+    written: Option<Extent>,
     /// Its place among the metavariables links hold together.
     held: Held,
 }
 
 impl MetaEntry {
+    pub fn telescope(&self) -> &BirthTelescope {
+        &self.telescope
+    }
+
+    pub fn scoped(&self) -> Scoped {
+        self.scoped
+    }
+
+    pub fn frames(&self) -> &HeldFrames {
+        &self.frames
+    }
+
+    pub fn result(&self) -> &Term {
+        &self.result
+    }
+
+    pub fn solution(&self) -> Option<&Term> {
+        self.solution.as_ref()
+    }
+
+    pub fn proposition(&self) -> bool {
+        self.proposition
+    }
+
+    pub fn reduct(&self) -> Option<&Term> {
+        self.reduct.as_ref()
+    }
+
+    pub fn refusal(&self) -> Option<&Refusal> {
+        self.refusal.as_deref()
+    }
+
+    pub fn dead_arm(&self) -> Option<&Rc<DeadArm>> {
+        self.dead_arm.as_ref()
+    }
+
+    pub fn written(&self) -> Option<Extent> {
+        self.written
+    }
+
     pub(super) fn kind(&self) -> MetaKind {
         self.kind
     }

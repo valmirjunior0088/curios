@@ -20,13 +20,13 @@ pub fn elaborate_metavar(
         // Birth: freeze the local context as Γ and record the type the hole is checked against. Births happen once per id, but a re-traversal in the same mode is idempotent — re-check the recorded type against the (identical) `expected`.
         Mode::Check(expected) => {
             if let Some(entry) = context.metavar_entry(id) {
-                let result = entry.result.clone();
+                let result = entry.result().clone();
                 // `into_core` mints a hole *bare* (`Term::hole`), and the birth arm below rebuilds it over its frozen Γ — but that rebuild lands in the *returned* term, not in the node the traversal read. A node reached a second time in checking position therefore arrives bare again, and returning it unchanged puts a spineless copy of a birthed hole into a compared type, which is exactly what `solve`'s spine-arity invariant forbids. Re-attach the identity spine here so both traversals hand the same term downstream.
                 //
                 // Only the bare case is repaired: an occurrence that already carries a spine may be carrying a *substituted* one, opened under binders the birth Γ does not have, and that is the delayed substitution the whole representation exists to keep.
                 let restored =
-                    (metavar.spine.is_empty() && !entry.telescope.is_empty()).then(|| {
-                        MetavarSpine::identity_over(entry.telescope.iter().map(|(name, _)| name))
+                    (metavar.spine.is_empty() && !entry.telescope().is_empty()).then(|| {
+                        MetavarSpine::identity_over(entry.telescope().iter().map(|(name, _)| name))
                     });
                 expect(context, term, &result, &expected)?;
 
@@ -64,7 +64,7 @@ pub fn elaborate_metavar(
         }
         // A hole in synthesis position has no type to offer — unless it was already born in a checking position, in which case report that type.
         Mode::Infer => match context.metavar_entry(id) {
-            Some(entry) => Ok((term.clone(), entry.result.clone())),
+            Some(entry) => Ok((term.clone(), entry.result().clone())),
             // A written goal, though, must survive to zonk's report rather than die here: a fresh silent hole stands in as its type (a hole so only the goal itself reports; the report then shows the stand-in — `?N` — if nothing ever pins it). Birth mirrors the checking arm, with the stand-in as `result`.
             None if matches!(metavar.origin, MetavarOrigin::Goal) => {
                 let sort = context.universes_mut().fresh_sort("inferred goal sort");

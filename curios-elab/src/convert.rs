@@ -343,10 +343,10 @@ pub fn answers_differ(
     let Some(entry) = context.metavar_entry(id) else {
         return Ok(false);
     };
-    let telescope = entry.telescope.clone();
-    let scoped = entry.scoped;
-    let born = entry.frames.clone();
-    let result = entry.result.clone();
+    let telescope = entry.telescope().clone();
+    let scoped = entry.scoped();
+    let born = entry.frames().clone();
+    let result = entry.result().clone();
 
     let mark = context.solution_mark();
     let outcome = context.at_birth(&born, |context| {
@@ -372,8 +372,8 @@ fn by_value(context: &Context, metavar: &Metavar, mut candidate: Term) -> Term {
     // What the occurrence's spine names: each binder of the telescope, where the spine is the identity over one its birth frames bind, which those frames answer for without the spine being read.
     let birth = context
         .metavar_entry(metavar.id)
-        .filter(|entry| metavar.spine.is_identity() && entry.scoped == Scoped::Held)
-        .map(|entry| entry.frames.clone());
+        .filter(|entry| metavar.spine.is_identity() && entry.scoped() == Scoped::Held)
+        .map(|entry| entry.frames().clone());
     let named = match birth {
         Some(_) => Frees::empty(),
         None => metavar.spine.free_vars(),
@@ -1911,10 +1911,10 @@ impl Convert {
             curios_profile::note!(target: "curios_elab::solve", meta = id.0, "failed: no birth record");
             return Ok(Solved::Failed);
         };
-        let telescope = entry.telescope.clone();
-        let scoped = entry.scoped;
-        let born = entry.frames.clone();
-        let result = entry.result.clone();
+        let telescope = entry.telescope().clone();
+        let scoped = entry.scoped();
+        let born = entry.frames().clone();
+        let result = entry.result().clone();
 
         // Every birthed occurrence carries its full spine: `elaborate_apply` opens telescopes with rebuilt arguments, so no lowered bare copy of a birthed hole survives into compared types. (An empty telescope's identity spine is legitimately empty.)
         assert_eq!(
@@ -2160,7 +2160,7 @@ impl Convert {
         let Some(entry) = context.metavar_entry(metavar.id) else {
             return Ok(None);
         };
-        let result = reduce(context, entry.result.clone())?;
+        let result = reduce(context, entry.result().clone())?;
         let Subterm::FuncType(func_type) = &*result else {
             return Ok(None);
         };
@@ -2190,7 +2190,7 @@ impl Convert {
     ) -> Result<bool, ReduceError> {
         let Some(birth) = context
             .metavar_entry(metavar.id)
-            .map(|entry| entry.frames.clone())
+            .map(|entry| entry.frames().clone())
         else {
             return Ok(true);
         };
@@ -2508,7 +2508,7 @@ impl Convert {
     ) -> Result<Option<Term>, ReduceError> {
         let birth = context
             .metavar_entry(metavar.id)
-            .map(|entry| entry.frames.clone());
+            .map(|entry| entry.frames().clone());
         let forced = match &birth {
             Some(birth) => {
                 context.at_birth(birth, |context| reduce_forced(context, term.clone()))?
@@ -2675,7 +2675,7 @@ impl Convert {
         standing: Option<Standing>,
     ) -> Result<Solved, ReduceError> {
         let birth = match context.metavar_entry(metavar.id) {
-            Some(entry) => entry.frames.clone(),
+            Some(entry) => entry.frames().clone(),
             // No birth record: `solve` refuses it, as it refuses any.
             None => return self.solve_rigid(context, metavar, rigid, standing),
         };

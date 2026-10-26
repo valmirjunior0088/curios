@@ -1280,12 +1280,13 @@ impl<'s> Context<'s> {
                     continue;
                 }
                 if let Some(entry) = self.metavar_entry(meta) {
-                    match &entry.solution {
+                    match entry.solution() {
                         Some(solution) => pending.push(solution.clone()),
                         None => {
                             // An unsolved meta may survive into parked work, so keep every universe dependency needed to solve it later. A solved meta materializes only its solution through the occurrence spine; its birth result/telescope do not survive zonking.
-                            pending.push(entry.result.clone());
-                            pending.extend(entry.telescope.iter().map(|(_, type_)| type_.clone()));
+                            pending.push(entry.result().clone());
+                            pending
+                                .extend(entry.telescope().iter().map(|(_, type_)| type_.clone()));
                         }
                     }
                 }
@@ -2372,7 +2373,7 @@ impl<'s> Context<'s> {
             .entry(id)
             .expect("recursive slot has a birth entry");
         assert_eq!(entry.kind(), MetaKind::RecSlot, "filled a non-rec slot");
-        assert!(entry.solution.is_none(), "recursive slot filled twice");
+        assert!(entry.solution().is_none(), "recursive slot filled twice");
         self.solve_metavar(id, term);
     }
 
@@ -2389,7 +2390,7 @@ impl<'s> Context<'s> {
             MetaKind::Placeholder,
             "filled a hole that is no placeholder"
         );
-        assert!(entry.solution.is_none(), "placeholder filled twice");
+        assert!(entry.solution().is_none(), "placeholder filled twice");
         self.solve_metavar(id, term);
     }
 
@@ -2519,7 +2520,9 @@ impl<'s> Context<'s> {
         };
         // Refinements as well as names: a `Bool` arm opens no binder, so a metavariable born inside `match k < n | true =>` has the telescope of one born just outside it, and a solution resting on the arm's guard would escape through a containment that read names alone.
         self.metavar_names_contained(inner, outer)
-            && inner_entry.frames.refinements_within(&outer_entry.frames)
+            && inner_entry
+                .frames()
+                .refinements_within(outer_entry.frames())
     }
 
     /// Whether a candidate for `outer` binds what `inner`'s birth context holds beyond `outer`'s: `inner` was born under no refinement `outer` was not, and each binder of its telescope that is none of `outer`'s stands, at every one of `occurrences`, as a variable the candidate binds itself. The occurrence then sits where `inner` was born, a binder of the candidate's own in the binder's place, and whatever `inner` comes to arrives through that spine and names nothing the candidate does not bind. It is what a settled lambda's codomain is in the function type the lambda states: born under the lambda's binders, so that the body's type may name them.
@@ -2534,17 +2537,24 @@ impl<'s> Context<'s> {
         else {
             return false;
         };
-        if occurrences.is_empty() || !inner_entry.frames.refinements_within(&outer_entry.frames) {
+        if occurrences.is_empty()
+            || !inner_entry
+                .frames()
+                .refinements_within(outer_entry.frames())
+        {
             return false;
         }
-        let outer_names: BTreeSet<&Free> =
-            outer_entry.telescope.iter().map(|(name, _)| name).collect();
+        let outer_names: BTreeSet<&Free> = outer_entry
+            .telescope()
+            .iter()
+            .map(|(name, _)| name)
+            .collect();
 
         occurrences.iter().all(|spine| {
-            spine.len() == inner_entry.telescope.len()
+            spine.len() == inner_entry.telescope().len()
                 && spine
                     .iter()
-                    .zip(inner_entry.telescope.iter())
+                    .zip(inner_entry.telescope().iter())
                     .all(|(entry, (name, _))| {
                         outer_names.contains(name)
                             || matches!(&**entry, Subterm::Var(var) if var.as_free().is_none())
@@ -2559,10 +2569,13 @@ impl<'s> Context<'s> {
         else {
             return false;
         };
-        let outer_names: BTreeSet<&Free> =
-            outer_entry.telescope.iter().map(|(name, _)| name).collect();
+        let outer_names: BTreeSet<&Free> = outer_entry
+            .telescope()
+            .iter()
+            .map(|(name, _)| name)
+            .collect();
         inner_entry
-            .telescope
+            .telescope()
             .iter()
             .all(|(name, _)| outer_names.contains(name))
     }
@@ -2586,19 +2599,19 @@ impl<'s> Context<'s> {
         }
         // It holds the frames both births hold, outermost first for as far as they are the same frames, each as the earlier of the two held it: whatever reaches `outer` through `inner` must hold where `outer` is, so `inner`'s later solution can no longer rest on a guard `outer` would carry out of its arm.
         let frames = || match inner < outer.id {
-            true => inner_entry.frames.shared_with(&outer_entry.frames),
-            false => outer_entry.frames.shared_with(&inner_entry.frames),
+            true => inner_entry.frames().shared_with(outer_entry.frames()),
+            false => outer_entry.frames().shared_with(inner_entry.frames()),
         };
 
         if self.metavar_names_contained(inner, outer.id) {
             return Some(Restriction {
                 arguments: inner_entry
-                    .telescope
+                    .telescope()
                     .iter()
                     .map(|(name, _)| Term::free_var(name))
                     .collect(),
-                telescope: inner_entry.telescope.clone(),
-                result: inner_entry.result.clone(),
+                telescope: inner_entry.telescope().clone(),
+                result: inner_entry.result().clone(),
                 frames: frames(),
             });
         }
@@ -2606,13 +2619,13 @@ impl<'s> Context<'s> {
         // `outer`'s entries are spelled in `inner`'s birth names through its occurrence, which is one renaming wherever it occurs.
         let (spine, others) = occurrences.split_first()?;
         if others.iter().any(|other| other != spine)
-            || spine.len() != inner_entry.telescope.len()
-            || outer.spine.len() != outer_entry.telescope.len()
+            || spine.len() != inner_entry.telescope().len()
+            || outer.spine.len() != outer_entry.telescope().len()
         {
             return None;
         }
         let mut births = BTreeMap::<&Free, &Free>::new();
-        for (argument, (birth, _)) in spine.iter().zip(inner_entry.telescope.iter()) {
+        for (argument, (birth, _)) in spine.iter().zip(inner_entry.telescope().iter()) {
             let Subterm::Var(var) = &**argument else {
                 return None;
             };
@@ -2640,14 +2653,14 @@ impl<'s> Context<'s> {
         }
         let keep = entries.iter().map(spelled).collect::<Vec<_>>();
         let dropped = outer_entry
-            .telescope
+            .telescope()
             .iter()
             .zip(&keep)
             .filter(|(_, kept)| !**kept)
             .map(|((name, _), _)| name)
             .collect::<BTreeSet<_>>();
         let telescope = outer_entry
-            .telescope
+            .telescope()
             .iter()
             .zip(&keep)
             .filter(|(_, kept)| **kept)
@@ -2675,7 +2688,7 @@ impl<'s> Context<'s> {
         // `inner`'s type, spelled over the stand-in's binders: every birth name it mentions is one of the arguments.
         let mut mentioned = Vec::new();
         let mut binders = Vec::new();
-        let named = inner_entry.result.free_vars();
+        let named = inner_entry.result().free_vars();
         for name in &named {
             if self.is_top_level(name) {
                 continue;
@@ -2687,7 +2700,10 @@ impl<'s> Context<'s> {
             binders.push(Term::free_var(&telescope[position].0));
         }
         let binder_refs = binders.iter().collect::<Vec<_>>();
-        let result = inner_entry.result.capture(&mentioned).release(&binder_refs);
+        let result = inner_entry
+            .result()
+            .capture(&mentioned)
+            .release(&binder_refs);
 
         Some(Restriction {
             telescope: telescope.into(),
@@ -2715,7 +2731,7 @@ impl<'s> Context<'s> {
         }
 
         // Read where it was born: every binder as itself, so a value is spelled in the birth's names as it stands. A spine known for the identity is one, unread.
-        let telescope = &inner_entry.telescope;
+        let telescope = &inner_entry.telescope();
         let born = |spine: &MetavarSpine| {
             spine.len() == telescope.len()
                 && (spine.is_identity()
@@ -2738,7 +2754,7 @@ impl<'s> Context<'s> {
             return None;
         }
 
-        let result = zonk_solved_term_metas(self, &inner_entry.result);
+        let result = zonk_solved_term_metas(self, inner_entry.result());
         if self.names_in_unsolved_spine(&result, values) {
             return None;
         }
@@ -2752,7 +2768,7 @@ impl<'s> Context<'s> {
                 .collect(),
             result: read_by_value(result, values),
             frames: inner_entry
-                .frames
+                .frames()
                 .beneath(self.typing.frames.innermost_frame()),
         })
     }

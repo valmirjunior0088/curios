@@ -290,7 +290,7 @@ fn rejected_candidate(reporting: &mut Reporting, rejected: Rejected) -> Error {
     // The check ran where the metavariable was born, so its refusal stands there already, unless nothing scoped it.
     let born = reporting
         .metavar_entry(metavar.id)
-        .map(|entry| entry.frames.clone());
+        .map(|entry| entry.frames().clone());
     let scope = match born {
         Some(born) => reporting.at_birth(&born, |context| context.reader_scope()),
         None => reporting.reader_scope(),
@@ -343,7 +343,7 @@ fn implicit_at_other_sort(context: &mut Context, this: &Term, that: &Term) -> Op
     if context.metavar_solution(*id).is_some() {
         return None;
     }
-    let declared = context.metavar_entry(*id)?.result.clone();
+    let declared = context.metavar_entry(*id)?.result().clone();
     let declared = reduce_forced(context, declared).ok()?;
     let Subterm::Sort(declared, _) = &*declared else {
         return None;

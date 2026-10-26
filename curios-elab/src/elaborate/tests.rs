@@ -297,9 +297,9 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
     assert_eq!(type_, nat());
 
     let entry = context.metavar_entry(MetavarId(0)).expect("hole was born");
-    assert_eq!(entry.result, nat());
+    assert_eq!(*entry.result(), nat());
     assert_eq!(
-        entry.telescope.iter().cloned().collect::<Vec<_>>(),
+        entry.telescope().iter().cloned().collect::<Vec<_>>(),
         vec![(x, nat())]
     );
 }
@@ -332,7 +332,7 @@ fn infer_on_an_unborn_goal_births_it_with_a_meta_type() {
     assert!(matches!(&*type_, Subterm::Metavar(m) if m.id == MetavarId(1)));
 
     let entry = context.metavar_entry(MetavarId(0)).expect("goal was born");
-    assert_eq!(entry.result, type_);
+    assert_eq!(*entry.result(), type_);
 }
 
 #[test]

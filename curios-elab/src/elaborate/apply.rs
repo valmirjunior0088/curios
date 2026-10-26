@@ -251,7 +251,7 @@ pub fn attempt_discharge(
     }
     let birth = context
         .metavar_entry(slot)
-        .map(|entry| entry.frames.clone())
+        .map(|entry| entry.frames().clone())
         .expect("a bound's slot has a birth record");
     let (reduced, inhabitant) = context
         .at_birth(&birth, |context| trivially_inhabited(context, bound))
@@ -289,11 +289,11 @@ fn note_dead_guard(context: &mut Context, slot: MetavarId) {
     let Some(entry) = context.metavar_entry(slot) else {
         return;
     };
-    if entry.frames.dead_arm().is_some() {
+    if entry.frames().dead_arm().is_some() {
         return;
     }
 
-    for (frames, guard, case) in entry.frames.arms() {
+    for (frames, guard, case) in entry.frames().arms() {
         let dead = context.at_birth(&frames, |context| dead_guard(context, &guard, &case));
         if let Some(dead) = dead {
             context.note_dead_arm(slot, dead);

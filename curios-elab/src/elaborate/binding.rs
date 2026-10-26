@@ -248,7 +248,7 @@ fn restriction_leaving(
             else {
                 continue;
             };
-            terms.push(zonk_solved_term_metas(context, &entry.result));
+            terms.push(zonk_solved_term_metas(context, entry.result()));
             found.insert(id, (provenance.clone(), spines));
         }
     }
@@ -1284,7 +1284,7 @@ pub fn elaborate_func_infer(
                     Some((lambda, scope)) => {
                         let result = context
                             .metavar_entry(metavar.id)
-                            .map(|entry| entry.result.clone())
+                            .map(|entry| entry.result().clone())
                             .unwrap_or_else(Term::type_ground);
                         let binder = hint.map(str::to_string);
                         let named =

@@ -395,7 +395,7 @@ fn a_metavariable_born_in_an_arm_is_restricted_to_the_candidate_that_embeds_it()
     assert!(
         context
             .metavar_entry(narrowed.id)
-            .is_some_and(|entry| !entry.frames.refined() && entry.solution.is_none()),
+            .is_some_and(|entry| !entry.frames().refined() && entry.solution().is_none()),
         "the restriction holds the frames the two share, which register no refinement, and is left open"
     );
 
@@ -441,14 +441,14 @@ fn a_stand_in_keeps_the_binders_the_candidate_reaches_and_prunes_the_rest() {
         .expect("the stand-in has a birth record");
     assert_eq!(
         entry
-            .telescope
+            .telescope()
             .iter()
             .map(|(name, _)| name)
             .collect::<Vec<_>>(),
         vec![&z],
         "the stand-in is born over the binder of `?0`'s the candidate reaches"
     );
-    assert!(entry.solution.is_none());
+    assert!(entry.solution().is_none());
 }
 
 /// An argument the candidate's metavariable reaches only inside a non-pattern entry of its spine is spelled through that entry, as the inversion abstracts it: a match's type `?0(r, (v,))`, met by an arm's type embedding `?1(r, v)`, solves `?1` to a stand-in over the match's binders applied to `(r, (v,))`, and `?0` to the arm's type over the stand-in at its own binders. Pruning `v` instead would lose every solution of `?1` through `(v,)`, which is how a match's inferred type depends on its scrutinee. The control passes `?1` the entry itself, which is no renaming its birth names could spell the spine through, and waits. Mutation-checked: carrying only the entries that are variables fails the first half.
@@ -509,7 +509,7 @@ fn an_argument_reached_through_a_non_pattern_entry_is_spelled_through_it() {
     );
     assert_eq!(
         context.metavar_entry(stand_in.id).map(|entry| entry
-            .telescope
+            .telescope()
             .iter()
             .map(|(name, _)| *name)
             .collect::<Vec<_>>()),

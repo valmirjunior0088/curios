@@ -184,17 +184,17 @@ pub fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> B {
         let Some(entry) = context.metavar_entry(id) else {
             continue;
         };
-        let Some(solution) = &entry.solution else {
+        let Some(solution) = entry.solution() else {
             continue;
         };
         // A filled recursive slot stands for its member, and the member is spelled by its name: substituting the *body* is what closes the cycle, since the body reaches the very solution being materialized. The name is what `RecItem::try_new` captures, so this is also the spelling the group's binder is waiting for. Its body is deliberately not walked — nothing in it needs materializing here, and walking it is the divergence.
         if let Some(name) = context.rec_slot_name(id) {
             // The birth telescope is kept so the occurrence's spine still matches, as every entry here must. A member's name names no binder, so the spine is never read: a member's value does not depend on the slot's spine.
-            solutions.insert(id, (entry.telescope.clone(), Term::free_var(name)));
+            solutions.insert(id, (entry.telescope().clone(), Term::free_var(name)));
             continue;
         }
         pending.extend(solution.metavars());
-        solutions.insert(id, (entry.telescope.clone(), solution.clone()));
+        solutions.insert(id, (entry.telescope().clone(), solution.clone()));
     }
     if solutions.is_empty() {
         return value.clone();
@@ -478,9 +478,9 @@ pub fn report_goals(
                 .metavar_entry(*id)
                 .expect("a collected goal has a birth entry");
             (
-                entry.telescope.clone(),
-                entry.frames.clone(),
-                entry.result.clone(),
+                entry.telescope().clone(),
+                entry.frames().clone(),
+                entry.result().clone(),
             )
         };
         all_candidates.push(suggest_candidates(
@@ -507,14 +507,14 @@ pub fn report_goals(
         let entry = context
             .metavar_entry(*id)
             .expect("a collected goal has a birth entry");
-        let frames = entry.frames.clone();
-        let witnesses = entry.frames.witnesses().map(|(name, _)| *name).collect();
+        let frames = entry.frames().clone();
+        let witnesses = entry.frames().witnesses().map(|(name, _)| *name).collect();
         let mut scope = entry
-            .telescope
+            .telescope()
             .iter()
             .map(|(name, type_)| (Term::free_var(name), solved(context, type_)))
             .collect::<Vec<_>>();
-        let mut goal = solved(context, &entry.result);
+        let mut goal = solved(context, entry.result());
         let mut solution = context
             .metavar_solution(*id)
             .map(|solution| solved(context, solution));
@@ -589,16 +589,16 @@ fn goal_report(context: &Zonk, id: MetavarId) -> Error {
     match context.metavar_entry(id) {
         Some(entry) => Error::goal(
             entry
-                .telescope
+                .telescope()
                 .iter()
                 .map(|(name, type_)| (Term::free_var(name), display(type_)))
                 .collect(),
-            display(&entry.result),
+            display(entry.result()),
             context.metavar_solution(id).map(display),
         )
         .in_scope(ReaderScope::held(
-            entry.frames.witnesses().map(|(name, _)| *name).collect(),
-            entry.frames.clone(),
+            entry.frames().witnesses().map(|(name, _)| *name).collect(),
+            entry.frames().clone(),
         )),
         // A goal elaboration never reached was never birthed, so there is no scope or type to report — unreachable in practice, since every kept item elaborates.
         None => Error::CannotInfer,
@@ -664,7 +664,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                         // The birth record's `result` is the binder's instantiated type — the bound nothing discharged, or the type nothing determined, which the record decided at the mint since this walk cannot ask; display it through whatever solutions landed, keeping the raw spelling if holes survive, exactly as the witness branch below does with its goal.
                         let entry = context.metavar_entry(*id);
                         let bound = entry
-                            .map(|entry| entry.result.clone())
+                            .map(|entry| entry.result().clone())
                             .unwrap_or_else(Term::type_ground);
                         let bound = zonk_term(context, &bound).unwrap_or(bound);
                         // Spelled for the scope the hole was born in, as a goal report's terms are, so a concept method projected off a witness reads as the method's call rather than as the witness's minted name.
@@ -672,21 +672,21 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                             callee(context, &origin.func),
                             origin.binder.clone(),
                             bound,
-                            entry.is_some_and(|entry| entry.proposition),
-                            entry.and_then(|entry| entry.reduct.clone()),
-                            entry.and_then(|entry| entry.refusal.as_deref().cloned()),
+                            entry.is_some_and(|entry| entry.proposition()),
+                            entry.and_then(|entry| entry.reduct().cloned()),
+                            entry.and_then(|entry| entry.refusal().cloned()),
                         );
                         // Minted in an arm no value reaches — one its scrutinee's indices rule out, or one a guard says is never taken, which was asked where the bound was given up — the hole is one no value reaches, which the report says beside it: the arm closed before this walk.
                         let unsolved = match entry
-                            .and_then(|entry| entry.frames.dead_arm().or(entry.dead_arm.as_ref()))
+                            .and_then(|entry| entry.frames().dead_arm().or(entry.dead_arm()))
                         {
                             Some(dead) => unsolved.in_dead_arm(dead),
                             None => unsolved,
                         };
                         match entry {
                             Some(entry) => unsolved.in_scope(ReaderScope::held(
-                                entry.frames.witnesses().map(|(name, _)| *name).collect(),
-                                entry.frames.clone(),
+                                entry.frames().witnesses().map(|(name, _)| *name).collect(),
+                                entry.frames().clone(),
                             )),
                             None => unsolved,
                         }
@@ -695,7 +695,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                         // The birth record's `result` is the goal type; display it through whatever solutions landed, keeping the raw spelling if holes survive.
                         let goal = context
                             .metavar_entry(*id)
-                            .map(|entry| entry.result.clone())
+                            .map(|entry| entry.result().clone())
                             .unwrap_or_else(Term::type_ground);
                         let goal = zonk_term(context, &goal).unwrap_or(goal);
                         // No embedding or shape diagnosis on this path: both read the witness table through a mutable context to reduce, zonk holds it immutably, and a goal that survives to the splice report has already been reported richer by the resolution drains.
@@ -713,7 +713,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                     MetavarOrigin::Goal => unreachable!("a goal never reaches the splice path"),
                 };
                 // At the term the hole was minted for, where its birth was handed one: the occurrence met here may be one a substitution rebuilt, which carries no place.
-                let written = context.metavar_entry(*id).and_then(|entry| entry.written);
+                let written = context.metavar_entry(*id).and_then(|entry| entry.written());
                 match written.or(term.extent()) {
                     Some(extent) => error.at(extent),
                     None => error,
@@ -737,7 +737,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                 .expect("a solved metavariable has a birth entry");
             assert_eq!(
                 spine.len(),
-                entry.telescope.len(),
+                entry.telescope().len(),
                 "a solved metavariable's occurrence carries its full spine"
             );
             // An identity spine reads every binder as itself, and the solution is the occurrence's as it stands.
@@ -745,7 +745,7 @@ fn zonk_level(context: &Zonk, term: &Term) -> Result<Term, Error> {
                 true => resolved,
                 false => {
                     let binders = entry
-                        .telescope
+                        .telescope()
                         .iter()
                         .map(|(name, _)| name)
                         .collect::<Vec<_>>();

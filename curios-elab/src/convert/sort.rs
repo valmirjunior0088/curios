@@ -365,7 +365,7 @@ impl Sort {
             Subterm::Metavar(metavar) => {
                 let result = context
                     .metavar_entry(metavar.id)
-                    .map(|entry| entry.result.clone());
+                    .map(|entry| entry.result().clone());
                 let stated = match result {
                     Some(result) => match &*reduce(context, result)? {
                         Subterm::Sort(quality, level) => {

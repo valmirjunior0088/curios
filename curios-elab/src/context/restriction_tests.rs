@@ -69,10 +69,13 @@ fn a_metavariable_is_restricted_to_the_binders_before_the_blocks_labels() {
                 .metavar_entry(stand_in.id)
                 .expect("the stand-in has a birth record");
             assert_eq!(
-                entry.telescope.iter().cloned().collect::<Vec<_>>(),
+                entry.telescope().iter().cloned().collect::<Vec<_>>(),
                 vec![(d, nat_type())]
             );
-            assert_eq!(entry.result, Term::apply(Term::free_var(&family), [two()]));
+            assert_eq!(
+                *entry.result(),
+                Term::apply(Term::free_var(&family), [two()])
+            );
         });
     });
 }
