@@ -3513,6 +3513,146 @@ pub(super) fn alias_module(variances: Vec<Variance>) -> (Global, Module) {
     (family, module)
 }
 
+/// `Arm.{u, w}(b: Bool): Type w | c(T: match b : (_) => Type w | false => Nat | true => Type u end) end` under `u + 1 ≤ w`, carried with `variances`, and `coerce` between `Arm.{0, 2}(true)` and `Arm.{1, 2}(true)`: a level a payload's type states under one arm of a match stuck on the parameter, and nowhere else the walk reads.
+pub(super) fn stuck_arm_module(variances: Vec<Variance>) -> (Global, Module) {
+    let family = Global::Authored(Qualifier::from(["Arm"]));
+    let payload_level = Level::param(UniverseParam(0));
+    let sort_level = Level::param(UniverseParam(1));
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+    let flag = Free::local(45, Some("b"));
+    let held = Free::local(46, Some("T"));
+    let payload = Term::bool_match(
+        Term::free_var(&flag),
+        None,
+        Term::type_at(sort_level.clone()),
+        Term::intrinsic(Intrinsic::NatType),
+        Term::type_at(payload_level.clone()),
+    );
+
+    let declaration = InductDecl {
+        universe_context: UniverseContext {
+            parameter_count: 2,
+            quality_count: 0,
+            constraints: vec![UniverseConstraint {
+                lower: payload_level.succ().expect("a parameter has a successor"),
+                upper: sort_level.clone(),
+                origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+            }],
+        },
+        arity: Telescope::build([(flag, bool_type.clone())], Telescope::done(())),
+        constructors: vec![(
+            Atom::from("c"),
+            InductParam::new(
+                Telescope::build([(flag, bool_type), (held, payload)], Vec::new()),
+                vec![Plicity::Implicit, Plicity::Explicit],
+            ),
+        )]
+        .into(),
+        result_sort: Term::type_at(sort_level),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances,
+    };
+    let at = |level: u32| {
+        Term::induct_type_at(
+            family,
+            [Level::constant(level), Level::constant(2)],
+            [Term::intrinsic(Intrinsic::Bool(true))],
+            Vec::<Term>::new(),
+        )
+    };
+
+    let module = module_of(
+        vec![coercion(at(0), at(1))],
+        BTreeMap::from([(family, declaration)]),
+        BTreeMap::new(),
+    );
+
+    (family, module)
+}
+
+/// `Box` beside `Pick.{l, m}: Type (l + 1) = Box.{l}` and `Held.{u, v}: Type (u + 1) | c(x: Pick.{u, v}) end`, carried with `variances`, and `coerce` between the instances `from` and `to` of `Held`: a level a payload reaches only through a definition the walk unfolds, to another family's invariant position, beside one the unfolding drops.
+pub(super) fn picked_module(
+    variances: Vec<Variance>,
+    from: [u32; 2],
+    to: [u32; 2],
+) -> (Global, Module) {
+    let boxed = Global::Authored(Qualifier::from(["Box"]));
+    let pick = Global::Authored(Qualifier::from(["Pick"]));
+    let family = Global::Authored(Qualifier::from(["Held"]));
+    let kept = Level::param(UniverseParam(0));
+    let dropped = Level::param(UniverseParam(1));
+    let scheme = UniverseContext {
+        parameter_count: 2,
+        quality_count: 0,
+        constraints: Vec::new(),
+    };
+    let lifted = Term::type_at(kept.succ().expect("a parameter has a successor"));
+
+    let definition = Item::Let(Box::new(Definition {
+        name: pick,
+        kind: DefinitionKind::Authored,
+        universe_context: scheme.clone(),
+        island: Qualifier::default(),
+        totality: Totality::Total,
+        proof: false,
+        variances: Vec::new(),
+        field_variances: Vec::new(),
+        parameter_field: None,
+        value_sort: None,
+        type_: lifted.clone(),
+        body: Term::induct_type_at(
+            boxed,
+            [kept.clone()],
+            Vec::<Term>::new(),
+            Vec::<Term>::new(),
+        ),
+    }));
+    let declaration = InductDecl {
+        universe_context: scheme,
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("c"),
+            InductParam::new(
+                Telescope::build(
+                    [(
+                        Free::local(47, Some("x")),
+                        Term::instance_of(&Free::from(&pick), vec![kept, dropped]),
+                    )],
+                    Vec::new(),
+                ),
+                vec![Plicity::Explicit],
+            ),
+        )]
+        .into(),
+        result_sort: lifted,
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances,
+    };
+    let at = |[kept, dropped]: [u32; 2]| {
+        Term::induct_type_at(
+            family,
+            [Level::constant(kept), Level::constant(dropped)],
+            Vec::<Term>::new(),
+            Vec::<Term>::new(),
+        )
+    };
+
+    let module = module_of(
+        vec![definition, coercion(at(from), at(to))],
+        BTreeMap::from([
+            (boxed, box_declaration(vec![Variance::Invariant])),
+            (family, declaration),
+        ]),
+        BTreeMap::new(),
+    );
+
+    (family, module)
+}
+
 /// `Wrap` beside `Ixd.{u}(A: Type u): (w: Wrap.{u}(A)) -> Type u | mk(a: A): (wrap.{u}(a)) end`, both irrelevant in their level, and `read: (x: Ixd.{0}(Nat)(wrap.{1}(3))) -> Nat` eliminating `x` with its one arm or with none: an index written at another instance of the level than its family's.
 pub(super) fn excused_arm_module(with_arm: bool) -> (Global, Module) {
     let wrap = Global::Authored(Qualifier::from(["Wrap"]));

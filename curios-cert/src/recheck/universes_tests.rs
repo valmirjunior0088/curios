@@ -633,3 +633,36 @@ fn a_level_a_reduction_removes_is_carried_as_irrelevant() {
 
     assert_eq!(refusals(&module), Vec::new());
 }
+
+/// Whether every refusal is the coercion's: the declarations the fixture forges were accepted, so a refused coercion is the walk's verdict on the instances and not the echo of a family it refused.
+fn only_the_coercion_refused(verdicts: &[Verdict]) -> bool {
+    coercion_refused(verdicts)
+        && verdicts
+            .iter()
+            .all(|verdict| verdict.name == Some(coercion_name()))
+}
+
+// `Arm`'s first level is stated by one arm of a match stuck on its parameter and by no other part the walk reads: a stuck form is read through its children, so the arm's `Type u` holds the level, and two instances apart in it are two types. Granted irrelevant, `c(Type 0): Arm.{1, 2}(true)` read at `Arm.{0, 2}(true)` would hold `Type 0` at `Type 0`. Carried honestly the coercion is refused, and nothing else is; carried as irrelevant the declaration is denied.
+#[test]
+fn a_level_one_arm_of_a_stuck_match_states_is_invariant() {
+    let (_, honest) = stuck_arm_module(vec![Variance::Invariant, Variance::Invariant]);
+    assert!(only_the_coercion_refused(&refusals(&honest)));
+
+    let (family, lying) = stuck_arm_module(vec![Variance::Irrelevant, Variance::Invariant]);
+    assert!(denied(&refusals(&lying), family, 0));
+}
+
+// `Held` reaches `Box` only through `Pick`, a definition whose value is `Box.{l}` and names its second level nowhere: the walk reads the payload's reduct, so the first level stands at `Box`'s invariant position and the unfolding drops the second. Two instances apart in the first are refused at the coercion and nowhere else, two apart in the second convert, and carried as irrelevant in the first the declaration is denied.
+#[test]
+fn a_level_reached_through_a_definition_the_walk_unfolds_is_invariant() {
+    let honest = || vec![Variance::Invariant, Variance::Irrelevant];
+
+    let (_, kept_apart) = picked_module(honest(), [0, 0], [1, 0]);
+    assert!(only_the_coercion_refused(&refusals(&kept_apart)));
+
+    let (_, dropped_apart) = picked_module(honest(), [0, 0], [0, 1]);
+    assert_eq!(refusals(&dropped_apart), Vec::new());
+
+    let (family, lying) = picked_module(vec![Variance::Irrelevant; 2], [0, 0], [1, 0]);
+    assert!(denied(&refusals(&lying), family, 0));
+}
