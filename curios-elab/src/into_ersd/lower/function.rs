@@ -7,11 +7,14 @@
 //! Application evaluates head first, then its arguments in order (under the operand law the erasure order *is* the runtime order). An application at an erasable (proof-/type-producing) function type whose callee is not a direct function reference is erased content applied to arguments — it collapses to the unit constant; a direct function reference keeps its call, because a never-returning host effect is proof-typed but must run. Every argument has its slot; one whose type here is a proof or a type fills it with the unit constant rather than a materialized witness (proof irrelevance — the slot stays, only its contents collapse).
 
 use {
-    super::{
-        Apply, Error, Func, FuncType, Lowering, Outcome, Retyping, Subterm, Term, emitted,
-        is_erasable,
+    super::{Lowering, Outcome},
+    crate::{
+        Error, Retyping,
+        into_ersd::{emitted, is_erasable},
     },
-    curios_core::{DefinitionKind, Global, Lockstep, Quality, Step},
+    curios_core::{
+        Apply, DefinitionKind, Func, FuncType, Global, Lockstep, Quality, Step, Subterm, Term,
+    },
 };
 
 impl Lowering<'_> {

@@ -5,7 +5,8 @@
 //! The resume loop has no definition a description could name, so it is emitted where it is needed: beside each `Io/advance`, and once beside the entry, which hands the host a suspension it can advance without knowing its frames. A program that never builds a suspension never reaches either, since `curios-ersd` takes the value arm of every test in it before anything is optimized.
 
 use {
-    super::{Error, Lowering, Retyping},
+    super::Lowering,
+    crate::{Error, Retyping},
     curios_core::Global,
 };
 

@@ -3,8 +3,10 @@
 //! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is a `Byte` — every collapse onto a runtime carrier belongs to the lowering out of the representation. Type-level numerals cross whole, the erased carriers being unbounded too; the one narrowing here is a dispatch key's, refused rather than wrapped (`narrow_case_key`).
 
 use {
-    super::{Error, Intrinsic, Lowering, Nat, Natural, Outcome, Retyping, Subterm, Term, emitted},
-    curios_core::{Global, Operand},
+    super::{Lowering, Outcome},
+    crate::{Error, Retyping, into_ersd::emitted},
+    curios_core::{Global, Intrinsic, Nat, Operand, Subterm, Term},
+    curios_num::Natural,
     curios_utilities::SyntaxName,
 };
 

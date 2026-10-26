@@ -4,17 +4,17 @@
 
 use {
     super::{
-        Binding, Bound, Environment, ErasedBaseline, ErasedItem, ErasedOver, ErasedUnit, Erasures,
-        Error, Export, Intrinsic, Let, Projected, Projection, Retyping, Subterm, Telescope, Term,
-        emitted, evaluate, intrinsic, link, register_shape,
+        Binding, Environment, ErasedBaseline, ErasedItem, ErasedOver, ErasedUnit, Erasures, Export,
+        Projected, Projection, emitted, evaluate, link, register_shape,
     },
     crate::{
-        Answered, Foreign, Parts, Question, Readers, TraceRecord, Traces, validate_entry_universes,
-        validate_universes, validate_universes_in,
+        Answered, Error, Foreign, Parts, Question, Readers, Retyping, TraceRecord, Traces,
+        validate_entry_universes, validate_universes, validate_universes_in,
     },
     curios_core::{
-        Certification, Entrypoint, Extent, Free, Global, Item, Module, Operand, Program, Trace,
-        Zonked, foreign_operands, project_erased_universes,
+        Bound, Certification, Entrypoint, Extent, Free, Global, Intrinsic, Item, Let, Module,
+        Operand, Program, Subterm, Telescope, Term, Trace, Zonked, foreign_operands,
+        project_erased_universes,
     },
     curios_utilities::{SyntaxRegistry, grown, recurse},
     std::{
@@ -24,6 +24,26 @@ use {
         sync::Arc,
     },
 };
+
+mod binding;
+
+mod function;
+
+mod aggregate;
+
+mod eliminate;
+
+mod recursion;
+
+mod intrinsic;
+use intrinsic::*;
+
+mod suspension;
+use suspension::*;
+
+mod crossing;
+
+mod typed;
 
 /// What one expression erased to. See the module documentation.
 #[derive(Debug)]
@@ -332,9 +352,7 @@ impl<'s> Lowering<'s> {
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         match &**term {
-            Subterm::Intrinsic(intrinsic) => {
-                intrinsic::erase_intrinsic(self, context, intrinsic, hint)
-            }
+            Subterm::Intrinsic(intrinsic) => erase_intrinsic(self, context, intrinsic, hint),
             // A host call: each operand erases against the demand elaboration checked it with, `foreign_operands`' reading of the same row. A diverging call's type operand erases with every other type.
             Subterm::Foreign(function, _, arguments) => {
                 let signature = function.signature();

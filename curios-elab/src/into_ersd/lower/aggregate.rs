@@ -5,12 +5,17 @@
 //! Collapses: a structure or subset tuple left with a single relevant field erases to that bare field (no product, no projection); anonymous tuples share one interned schema per relevant width.
 
 use {
-    super::{
-        ConstructorRow, Error, FamilyRow, Lowering, Outcome, ProductRow, Proj, Relevance, Retyping,
-        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant,
-        constructor_entries, emitted,
+    super::{Lowering, Outcome},
+    crate::{
+        Error, Retyping,
+        into_ersd::{
+            ConstructorRow, FamilyRow, ProductRow, Relevance, constructor_entries, emitted,
+        },
     },
-    curios_core::{Bound, Quality},
+    curios_core::{
+        Bound, Proj, Quality, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        Variant,
+    },
     std::borrow::Cow,
 };
 

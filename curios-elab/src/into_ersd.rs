@@ -8,16 +8,6 @@
 //!
 //! The boundary validates what it has not already seen validated, and projects what is not already projected — which for a unit erased over a scope is the unit's own items and the registry entries it adds. The prelude arrives immutable and checked from `curios-prelude-archive`'s restore, so validating and projecting it again would be a walk of the whole standard library, inside the erasure context's step budget, for an answer already in hand.
 
-use {
-    super::{Error, Retyping},
-    curios_core::{
-        Apply, Atom, Bound, Carrier, Cases, Func, FuncType, InductArm, InductDecl, InductType,
-        Intrinsic, Let, Many, Match, Nat, Proj, Rec, RecItem, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, Two, Variant,
-    },
-    curios_num::Natural,
-};
-
 mod classify;
 use classify::*;
 
@@ -47,25 +37,6 @@ use evaluated::*;
 mod projected;
 pub use projected::Projection;
 use projected::*;
-
-mod binding;
-
-mod function;
-
-mod aggregate;
-
-mod eliminate;
-
-mod recursion;
-
-mod intrinsic;
-use intrinsic::*;
-
-mod suspension;
-
-mod crossing;
-
-mod typed;
 
 #[cfg(test)]
 mod tests;

@@ -7,11 +7,13 @@
 //! **A term's type is read once per item.** A chain of eliminations asks for the type of each prefix of itself — the call for its callee's, the callee for its own head's — so an answer is kept ([`Lowering::types`]) rather than read again at every level above it. A name is minted once and assumed at one type, so what is kept about a term holds wherever the term stands.
 
 use {
-    super::{
-        Bound, Cases, Error, Func, FuncType, InductType, Let, Lowering, Many, Match, Proj, Rec,
-        Retyping, Scope, StructType, Subterm, Term, Tuple, TupleType, Variant,
+    super::Lowering,
+    crate::{Error, Retyping},
+    curios_core::{
+        Bound, Cases, Cost, Func, FuncType, InductType, Let, Many, Match, Produced, Proj, Rec,
+        ReduceError, Scope, StructType, Subterm, Term, Tuple, TupleType, Variant,
+        foreign_signature,
     },
-    curios_core::{Cost, Produced, ReduceError, foreign_signature},
     curios_utilities::recurse,
 };
 
