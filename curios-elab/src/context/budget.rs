@@ -48,12 +48,6 @@ impl<'s> Context<'s> {
         self.typing.caches.begin_declaration();
     }
 
-    /// What the declaration being elaborated has consumed so far ([`Spend::consumed`](super::Spend::consumed)), which this crate's measurements read between two judgments.
-    #[cfg(test)]
-    pub fn consumed(&self) -> Consumption {
-        self.typing.spend.consumed()
-    }
-
     /// The heaviest single judgment this context has made, the one in progress included: a declaration's elaboration, or one of the judgments of its final terms, each of which spends a budget restored for it (`Context::restore_budget`).
     ///
     /// The counterpart of `curios-cert`'s `Kernel::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.

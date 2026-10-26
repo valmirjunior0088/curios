@@ -6,15 +6,9 @@
 
 use {
     super::{Demanded, Lowering, Outcome, demanded_type, narrow_case_key},
-    crate::{
-        Error, InductCase, Retyping,
-        into_anf::{emitted, is_erasable},
-    },
+    crate::{Error, emitted, is_erasable},
     curios_analysis::{case_target_indices, pinned_by_targets},
-    curios_core::{
-        Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic, Many, Match,
-        MatchResult, Nat, Scope, Subterm, Telescope, Term, Three, Two, Universes,
-    },
+    curios_elab::{InductCase, Retyping},
     curios_num::{Binary, Natural},
     std::collections::HashMap,
 };
@@ -22,7 +16,7 @@ use {
 /// The `List`/`Bytes` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
 #[derive(Clone, Copy)]
 enum SeqCarrier<'a> {
-    List { element: &'a Term },
+    List { element: &'a curios_core::Term },
     Bytes,
 }
 
@@ -35,54 +29,64 @@ impl SeqCarrier<'_> {
     }
 
     /// The type of the sequence eliminated, which the form states: a list of its element, or `Bytes`.
-    fn sequence_type(self) -> Term {
-        Term::intrinsic(match self {
-            SeqCarrier::List { element } => Intrinsic::ListType(element.clone()),
-            SeqCarrier::Bytes => Intrinsic::BytesType,
+    fn sequence_type(self) -> curios_core::Term {
+        curios_core::Term::intrinsic(match self {
+            SeqCarrier::List { element } => curios_core::Intrinsic::ListType(element.clone()),
+            SeqCarrier::Bytes => curios_core::Intrinsic::BytesType,
         })
     }
 
     /// The type of the element the cons arm binds — the list element type, or `Byte` for a packed binary.
-    fn element_type(self) -> Term {
+    fn element_type(self) -> curios_core::Term {
         match self {
             SeqCarrier::List { element } => element.clone(),
-            SeqCarrier::Bytes => Term::intrinsic(Intrinsic::ByteType),
+            SeqCarrier::Bytes => curios_core::Term::intrinsic(curios_core::Intrinsic::ByteType),
         }
     }
 
     /// The empty sequence — the value the empty arm refines the scrutinee to.
-    fn empty_value(self) -> Term {
+    fn empty_value(self) -> curios_core::Term {
         match self {
-            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::List {
-                element: element.clone(),
-                items: vec![],
-            }),
-            SeqCarrier::Bytes => Term::intrinsic(Intrinsic::Bytes(Binary::empty())),
+            SeqCarrier::List { element } => {
+                curios_core::Term::intrinsic(curios_core::Intrinsic::List {
+                    element: element.clone(),
+                    items: vec![],
+                })
+            }
+            SeqCarrier::Bytes => {
+                curios_core::Term::intrinsic(curios_core::Intrinsic::Bytes(Binary::empty()))
+            }
         }
     }
 
     /// The cons value `head :: tail` — the monoid operation on a singleton and the tail, the same shape elaboration checked the arm under, so the arm refines the scrutinee to the term it was elaborated against.
-    fn cons_value(self, head: &Term, tail: &Term) -> Term {
+    fn cons_value(self, head: &curios_core::Term, tail: &curios_core::Term) -> curios_core::Term {
         match self {
-            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListConcat {
-                element: element.clone(),
-                operands: vec![
-                    Term::intrinsic(Intrinsic::List {
-                        element: element.clone(),
-                        items: vec![head.clone()],
-                    }),
-                    tail.clone(),
-                ],
-            }),
-            SeqCarrier::Bytes => Term::intrinsic(Intrinsic::BytesConcat {
-                operands: vec![
-                    Term::intrinsic(Intrinsic::BytesAppend {
-                        bytes: Term::intrinsic(Intrinsic::Bytes(Binary::empty())),
-                        element: head.clone(),
-                    }),
-                    tail.clone(),
-                ],
-            }),
+            SeqCarrier::List { element } => {
+                curios_core::Term::intrinsic(curios_core::Intrinsic::ListConcat {
+                    element: element.clone(),
+                    operands: vec![
+                        curios_core::Term::intrinsic(curios_core::Intrinsic::List {
+                            element: element.clone(),
+                            items: vec![head.clone()],
+                        }),
+                        tail.clone(),
+                    ],
+                })
+            }
+            SeqCarrier::Bytes => {
+                curios_core::Term::intrinsic(curios_core::Intrinsic::BytesConcat {
+                    operands: vec![
+                        curios_core::Term::intrinsic(curios_core::Intrinsic::BytesAppend {
+                            bytes: curios_core::Term::intrinsic(curios_core::Intrinsic::Bytes(
+                                Binary::empty(),
+                            )),
+                            element: head.clone(),
+                        }),
+                        tail.clone(),
+                    ],
+                })
+            }
         }
     }
 }
@@ -90,31 +94,35 @@ impl SeqCarrier<'_> {
 /// Where a match stands: its scrutinee, the result it is typed at, and the hint of the binding its value goes to. Every elimination form is erased against one.
 #[derive(Clone, Copy)]
 struct Site<'a> {
-    head: &'a Term,
-    result: &'a MatchResult,
+    head: &'a curios_core::Term,
+    result: &'a curios_core::MatchResult,
     hint: Option<&'a str>,
 }
 
 /// The match-wide data an inductive elimination threads to each arm. The result is taken at the scrutinee's indices and the head — the case's target indices and value in an enumerated arm, the actual ones in the default.
 struct InductMatch<'a> {
-    head: &'a Term,
-    result: &'a MatchResult,
+    head: &'a curios_core::Term,
+    result: &'a curios_core::MatchResult,
     name: &'a curios_core::Global,
-    universes: &'a Universes,
-    params: &'a [Term],
-    actual_indices: &'a [Term],
+    universes: &'a curios_core::Universes,
+    params: &'a [curios_core::Term],
+    actual_indices: &'a [curios_core::Term],
 }
 
 impl InductMatch<'_> {
     /// The scrutinee's family as the registry holds it, read by reference.
-    fn family<'c>(&self, context: &'c Retyping) -> &'c InductDecl {
+    fn family<'c>(&self, context: &'c Retyping) -> &'c curios_core::InductDecl {
         context
             .induct_decl(self.name)
             .expect("erase: scrutinee type names a registered inductive")
     }
 
     /// The payload of `tag`'s case at the scrutinee's parameters and universes: that one constructor of the family instantiated.
-    fn payload(&self, context: &Retyping, tag: &Atom) -> Result<Telescope<Vec<Term>>, Error> {
+    fn payload(
+        &self,
+        context: &Retyping,
+        tag: &curios_core::Atom,
+    ) -> Result<curios_core::Telescope<Vec<curios_core::Term>>, Error> {
         self.family(context)
             .at(self.universes)
             .payload(tag, self.params)
@@ -128,10 +136,10 @@ impl Lowering<'_> {
     pub fn erase_match(
         &mut self,
         context: &mut Retyping,
-        m: &Match,
+        m: &curios_core::Match,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let Match {
+        let curios_core::Match {
             head,
             result,
             cases,
@@ -139,25 +147,27 @@ impl Lowering<'_> {
         let site = Site { head, result, hint };
 
         match cases {
-            Cases::Bool {
+            curios_core::Cases::Bool {
                 false_case,
                 true_case,
             } => self.erase_bool(context, site, false_case, true_case),
-            Cases::Switch { cases, default } => self.erase_switch(context, site, cases, default),
+            curios_core::Cases::Switch { cases, default } => {
+                self.erase_switch(context, site, cases, default)
+            }
             // The instance a match states is a type, which erasure reads nothing of.
-            Cases::Induct { cases, default, .. } => {
+            curios_core::Cases::Induct { cases, default, .. } => {
                 self.erase_induct(context, site, cases, default.as_ref())
             }
-            Cases::FreeMonoid {
+            curios_core::Cases::FreeMonoid {
                 carrier:
-                    Carrier::Nat {
+                    curios_core::Carrier::Nat {
                         empty_case,
                         cons_case,
                     },
             } => self.erase_nat_fold(context, site, empty_case, cons_case),
-            Cases::FreeMonoid {
+            curios_core::Cases::FreeMonoid {
                 carrier:
-                    Carrier::List {
+                    curios_core::Carrier::List {
                         elem,
                         empty_case,
                         cons_case,
@@ -169,9 +179,9 @@ impl Lowering<'_> {
                 empty_case,
                 cons_case,
             ),
-            Cases::FreeMonoid {
+            curios_core::Cases::FreeMonoid {
                 carrier:
-                    Carrier::Bytes {
+                    curios_core::Carrier::Bytes {
                         empty_case,
                         cons_case,
                     },
@@ -183,30 +193,30 @@ impl Lowering<'_> {
     fn scrutinee_operand(
         &mut self,
         context: &mut Retyping,
-        head: &Term,
-        head_type: &Term,
-    ) -> Result<Result<(Term, curios_anf::Atom), Outcome>, Error> {
+        head: &curios_core::Term,
+        head_type: &curios_core::Term,
+    ) -> Result<Result<(curios_core::Term, curios_anf::Atom), Outcome>, Error> {
         let atom = match self.walk(context, head, head_type, Some("scrutinee"))? {
             Outcome::Emitted(atom) => atom,
             diverged => return Ok(Err(diverged)),
         };
-        if matches!(&**head, Subterm::Var(_)) {
+        if matches!(&**head, curios_core::Subterm::Var(_)) {
             return Ok(Ok((head.clone(), atom)));
         }
         let name = context.fresh(None);
         context.define_assuming(&name, head_type, head, None);
         self.environment.bind(&name, atom);
-        Ok(Ok((Term::free_var(&name), atom)))
+        Ok(Ok((curios_core::Term::free_var(&name), atom)))
     }
 
     /// Open a fresh block, erase `body` as a tail refined by `head = value` and typed at the result at `value`, and seal it — the leaf-arm shape with no payload binders.
     fn refined_arm(
         &mut self,
         context: &mut Retyping,
-        head: &Term,
-        value: &Term,
-        result: &MatchResult,
-        body: &Term,
+        head: &curios_core::Term,
+        value: &curios_core::Term,
+        result: &curios_core::MatchResult,
+        body: &curios_core::Term,
     ) -> Result<curios_anf::BlockId, Error> {
         let expected = result.at(head, &[], &[], value);
         self.builder.open_block();
@@ -221,8 +231,8 @@ impl Lowering<'_> {
     fn open_arm(
         &mut self,
         context: &mut Retyping,
-        expected: &Term,
-        body: &Term,
+        expected: &curios_core::Term,
+        body: &curios_core::Term,
     ) -> Result<curios_anf::BlockId, Error> {
         self.builder.open_block();
         let outcome = self.walk(context, body, expected, None)?;
@@ -233,10 +243,10 @@ impl Lowering<'_> {
     fn identity_arm(
         &mut self,
         context: &mut Retyping,
-        head: &Term,
-        value: &Term,
-        result: &MatchResult,
-        body: &Term,
+        head: &curios_core::Term,
+        value: &curios_core::Term,
+        result: &curios_core::MatchResult,
+        body: &curios_core::Term,
         folds: bool,
     ) -> Result<curios_anf::BlockId, Error> {
         match folds {
@@ -250,25 +260,25 @@ impl Lowering<'_> {
         &mut self,
         context: &mut Retyping,
         site: Site<'_>,
-        false_case: &Term,
-        true_case: &Term,
+        false_case: &curios_core::Term,
+        true_case: &curios_core::Term,
     ) -> Result<Outcome, Error> {
         let Site { head, result, hint } = site;
         // The form states its scrutinee's type, so none is read.
-        let head_type = Term::intrinsic(Intrinsic::BoolType);
+        let head_type = curios_core::Term::intrinsic(curios_core::Intrinsic::BoolType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let if_false = self.refined_arm(
             context,
             head,
-            &Term::intrinsic(Intrinsic::Bool(false)),
+            &curios_core::Term::intrinsic(curios_core::Intrinsic::Bool(false)),
             result,
             false_case,
         )?;
         let if_true = self.refined_arm(
             context,
             head,
-            &Term::intrinsic(Intrinsic::Bool(true)),
+            &curios_core::Term::intrinsic(curios_core::Intrinsic::Bool(true)),
             result,
             true_case,
         )?;
@@ -288,11 +298,11 @@ impl Lowering<'_> {
         &mut self,
         context: &mut Retyping,
         site: Site<'_>,
-        cases: &[(Natural, Term)],
-        default: &Term,
+        cases: &[(Natural, curios_core::Term)],
+        default: &curios_core::Term,
     ) -> Result<Outcome, Error> {
         let Site { head, result, hint } = site;
-        let head_type = Term::intrinsic(Intrinsic::NatType);
+        let head_type = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let mut nat_cases = Vec::with_capacity(cases.len());
@@ -304,7 +314,9 @@ impl Lowering<'_> {
                 Some(extent) => error.at(extent),
                 None => error,
             })?;
-            let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value.clone())));
+            let literal = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
+                curios_core::Nat::new(value.clone()),
+            ));
             let block = self.refined_arm(context, head, &literal, result, body)?;
             nat_cases.push(curios_anf::NatCase { key, block });
         }
@@ -327,17 +339,19 @@ impl Lowering<'_> {
         &mut self,
         context: &mut Retyping,
         site: Site<'_>,
-        empty_case: &Term,
-        cons_case: &Scope<Two>,
+        empty_case: &curios_core::Term,
+        cons_case: &curios_core::Scope<curios_core::Two>,
     ) -> Result<Outcome, Error> {
         let Site { head, result, hint } = site;
-        let head_type = Term::intrinsic(Intrinsic::NatType);
+        let head_type = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
         let zero = self.identity_arm(
             context,
             head,
-            &Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+            &curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::new(
+                0usize,
+            ))),
             result,
             empty_case,
             cons_case.uses(1),
@@ -345,17 +359,22 @@ impl Lowering<'_> {
 
         let pred_hint = cons_case.first_hint().map(str::to_string);
         let pred_label = context.fresh(pred_hint.as_deref());
-        let pred_var = Term::free_var(&pred_label);
-        let successor = Term::intrinsic(Intrinsic::nat_add(
+        let pred_var = curios_core::Term::free_var(&pred_label);
+        let successor = curios_core::Term::intrinsic(curios_core::Intrinsic::nat_add(
             pred_var.clone(),
-            Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+            curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::new(
+                1usize,
+            ))),
         ));
 
         // The hypothesis is dead: a case split, not a fold. The predecessor is computed from the operand, and only where the arm reads it — the walk resolves a name through the environment and never walks a reduct, so a predecessor the arm does not mention needs no value.
         if !cons_case.uses(1) {
             self.builder.open_block();
             let outcome = context.with_frame(|context| {
-                context.assume(&pred_label, &Term::intrinsic(Intrinsic::NatType));
+                context.assume(
+                    &pred_label,
+                    &curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+                );
                 if cons_case.uses(0) {
                     let one = curios_anf::Atom::Constant(
                         self.builder
@@ -373,7 +392,9 @@ impl Lowering<'_> {
                 context.refine_head(head, &successor)?;
 
                 // The hypothesis never appears, so any term serves its slot.
-                let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+                let dead_hypothesis = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
+                    curios_core::Nat::new(0usize),
+                ));
                 let peeled = cons_case.open(&[&pred_var, &dead_hypothesis]);
                 let expected = result.at(head, &[], &[], &successor);
                 self.walk(context, &peeled, &expected, None)
@@ -405,10 +426,14 @@ impl Lowering<'_> {
 
         self.builder.open_block();
         let outcome = context.with_frame(|context| {
-            context.assume(&pred_label, &Term::intrinsic(Intrinsic::NatType));
+            context.assume(
+                &pred_label,
+                &curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+            );
             context.assume(&hypothesis_label, &result.at(head, &[], &[], &pred_var));
 
-            let body = cons_case.open(&[&pred_var, &Term::free_var(&hypothesis_label)]);
+            let body =
+                cons_case.open(&[&pred_var, &curios_core::Term::free_var(&hypothesis_label)]);
             let expected = result.at(head, &[], &[], &successor);
             self.walk(context, &body, &expected, None)
         })?;
@@ -434,8 +459,8 @@ impl Lowering<'_> {
     pub fn erase_list_fold(
         &mut self,
         context: &mut Retyping,
-        element: &Term,
-        result: &Term,
+        element: &curios_core::Term,
+        result: &curios_core::Term,
         [
             (list, list_demand),
             (init, init_demand),
@@ -443,7 +468,7 @@ impl Lowering<'_> {
         ]: [Demanded<'_>; 3],
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let nat_type = Term::intrinsic(Intrinsic::NatType);
+        let nat_type = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
         let list_type = demanded_type(context, &list_demand);
         let (list, _) = match self.scrutinee_operand(context, list, &list_type)? {
             Ok(pair) => pair,
@@ -454,7 +479,10 @@ impl Lowering<'_> {
             Ok(pair) => pair,
             Err(diverged) => return Ok(diverged),
         };
-        let length = Term::intrinsic(Intrinsic::list_len(element.clone(), list.clone()));
+        let length = curios_core::Term::intrinsic(curios_core::Intrinsic::list_len(
+            element.clone(),
+            list.clone(),
+        ));
         let (_, scrutinee) = match self.scrutinee_operand(context, &length, &nat_type)? {
             Ok(pair) => pair,
             Err(diverged) => return Ok(diverged),
@@ -478,14 +506,19 @@ impl Lowering<'_> {
             context.assume(&accumulator_label, result);
 
             // The bound never reaches the erased read, so any term serves its slot.
-            let dead_bound = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
-            let item = Term::intrinsic(Intrinsic::list_get(
+            let dead_bound = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
+                curios_core::Nat::new(0usize),
+            ));
+            let item = curios_core::Term::intrinsic(curios_core::Intrinsic::list_get(
                 element.clone(),
                 list.clone(),
-                Term::free_var(&index_label),
+                curios_core::Term::free_var(&index_label),
                 dead_bound,
             ));
-            let body = Term::apply(function.clone(), [item, Term::free_var(&accumulator_label)]);
+            let body = curios_core::Term::apply(
+                function.clone(),
+                [item, curios_core::Term::free_var(&accumulator_label)],
+            );
             self.walk(context, &body, result, None)
         })?;
         let step = self.seal(outcome);
@@ -510,8 +543,8 @@ impl Lowering<'_> {
         context: &mut Retyping,
         site: Site<'_>,
         carrier: SeqCarrier<'_>,
-        empty_case: &Term,
-        cons_case: &Scope<Three>,
+        empty_case: &curios_core::Term,
+        cons_case: &curios_core::Scope<curios_core::Three>,
     ) -> Result<Outcome, Error> {
         let Site { head, result, hint } = site;
         let head_type = carrier.sequence_type();
@@ -548,8 +581,8 @@ impl Lowering<'_> {
 
             self.builder.open_block();
             let outcome = context.with_frame(|context| {
-                let element_var = Term::free_var(&element_label);
-                let suffix_var = Term::free_var(&suffix_label);
+                let element_var = curios_core::Term::free_var(&element_label);
+                let suffix_var = curios_core::Term::free_var(&suffix_label);
                 context.assume(&element_label, &carrier.element_type());
                 // An element is a read no producer names the carrier of, so it states the register its element type names.
                 self.state(context, element, &carrier.element_type())?;
@@ -559,7 +592,9 @@ impl Lowering<'_> {
                 context.refine_head(head, &cons_value)?;
 
                 // The hypothesis never appears, so any term serves its slot.
-                let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+                let dead_hypothesis = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
+                    curios_core::Nat::new(0usize),
+                ));
                 let peeled = cons_case.open(&[&element_var, &suffix_var, &dead_hypothesis]);
                 let expected = result.at(head, &[], &[], &cons_value);
                 self.walk(context, &peeled, &expected, None)
@@ -599,8 +634,8 @@ impl Lowering<'_> {
 
         self.builder.open_block();
         let outcome = context.with_frame(|context| {
-            let element_var = Term::free_var(&element_label);
-            let suffix_var = Term::free_var(&suffix_label);
+            let element_var = curios_core::Term::free_var(&element_label);
+            let suffix_var = curios_core::Term::free_var(&suffix_label);
             context.assume(&element_label, &carrier.element_type());
             // An element is a read no producer names the carrier of, so it states the register its element type names; the accumulator is a join its flows decide.
             self.state(context, element, &carrier.element_type())?;
@@ -612,7 +647,7 @@ impl Lowering<'_> {
             let body = cons_case.open(&[
                 &element_var,
                 &suffix_var,
-                &Term::free_var(&accumulator_label),
+                &curios_core::Term::free_var(&accumulator_label),
             ]);
             let expected = result.at(head, &[], &[], &cons_value);
             self.walk(context, &body, &expected, None)
@@ -640,8 +675,8 @@ impl Lowering<'_> {
         &mut self,
         context: &mut Retyping,
         site: Site<'_>,
-        cases: &[(Atom, InductArm)],
-        default: Option<&Term>,
+        cases: &[(curios_core::Atom, curios_core::InductArm)],
+        default: Option<&curios_core::Term>,
     ) -> Result<Outcome, Error> {
         let Site { head, result, hint } = site;
         if cases.is_empty() && default.is_none() {
@@ -651,7 +686,7 @@ impl Lowering<'_> {
         let head_type = self.type_of(context, head)?;
         let head_type = context.reduce_with(&head_type)?;
         let (name, universes, params, actual_indices) = match &*head_type {
-            Subterm::InductType(InductType {
+            curios_core::Subterm::InductType(curios_core::InductType {
                 name,
                 universes,
                 params,
@@ -760,8 +795,8 @@ impl Lowering<'_> {
         &mut self,
         context: &mut Retyping,
         m: &InductMatch<'_>,
-        (tag, scope): (&Atom, &Scope<Many>),
-        telescope: Telescope<Vec<Term>>,
+        (tag, scope): (&curios_core::Atom, &curios_core::Scope<curios_core::Many>),
+        telescope: curios_core::Telescope<Vec<curios_core::Term>>,
         mask: &[bool],
         constructor: curios_anf::ConstructorId,
     ) -> Result<curios_anf::VariantArm, Error> {
@@ -773,7 +808,10 @@ impl Lowering<'_> {
             .iter()
             .map(|label| context.fresh(label.as_deref()))
             .collect::<Vec<_>>();
-        let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
+        let vars = labels
+            .iter()
+            .map(curios_core::Term::free_var)
+            .collect::<Vec<_>>();
 
         let mut bindings = Vec::new();
         let mut kept = Vec::new();
@@ -814,7 +852,7 @@ impl Lowering<'_> {
         &mut self,
         context: &mut Retyping,
         m: &InductMatch<'_>,
-        default: &Term,
+        default: &curios_core::Term,
     ) -> Result<curios_anf::BlockId, Error> {
         let expected = m.result.of(m.head, m.actual_indices);
         self.open_arm(context, &expected, default)
@@ -825,8 +863,8 @@ impl Lowering<'_> {
         &mut self,
         context: &mut Retyping,
         m: &InductMatch<'_>,
-        cases: &[(Atom, InductArm)],
-        default: Option<&Term>,
+        cases: &[(curios_core::Atom, curios_core::InductArm)],
+        default: Option<&curios_core::Term>,
     ) -> Result<Outcome, Error> {
         // No enumerated arm — a bare `_` ladder over a subsingleton: the default is the single live result and binds nothing.
         let Some((tag, scope)) = cases.iter().next() else {
@@ -840,7 +878,10 @@ impl Lowering<'_> {
             .hint_iter()
             .map(|label| context.fresh(label))
             .collect::<Vec<_>>();
-        let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
+        let vars = labels
+            .iter()
+            .map(curios_core::Term::free_var)
+            .collect::<Vec<_>>();
 
         // The index is walked here, before the arm's frame: inside it the actual index is refined to its target, which is the very binder being bound.
         let pinned = pinned_by_targets(&case_target_indices(telescope.clone(), &vars));
@@ -871,11 +912,11 @@ impl Lowering<'_> {
 fn refine_arm(
     context: &mut Retyping,
     m: &InductMatch<'_>,
-    tag: &Atom,
-    labels: &[Free],
-    vars: &[Term],
-    telescope: Telescope<Vec<Term>>,
-) -> Result<Term, Error> {
+    tag: &curios_core::Atom,
+    labels: &[curios_core::Free],
+    vars: &[curios_core::Term],
+    telescope: curios_core::Telescope<Vec<curios_core::Term>>,
+) -> Result<curios_core::Term, Error> {
     let family = InductCase {
         name: m.name,
         universes: m.universes,

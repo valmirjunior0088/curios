@@ -6,9 +6,10 @@ use {
     curios_core::{Anchors, Global, Item, Module, Sharing, Zonked, validate_stored_identities},
     curios_document::Documentation,
     curios_elab::{
-        Context, DEFAULT_BUDGET, ErasedUnit, Erasures, Established, Reading,
-        elaborate_and_zonk_unit, erase_unit, validate_lowered_universe_seeds, validate_universes,
+        Context, DEFAULT_BUDGET, Established, Reading, elaborate_and_zonk_unit,
+        validate_lowered_universe_seeds, validate_universes,
     },
+    curios_erase::{ErasedUnit, Erasures, erase_unit},
     curios_std::std_source,
     curios_text::{
         PreparedText, RootSource, SYNTAX, Translation, UnitSource, document_unit, prepare_prelude,
@@ -94,9 +95,9 @@ fn documented(
         .unwrap_or_else(|| panic!("/{root} marks no mount as documented"))
 }
 
-/// What `error` says of `module`, a root's lowered or elaborated module, spelled against the roots before it: each one's lexicon is made here, where a root is refused, since a build that refuses stops.
+/// What a refusal says of `module`, a root's lowered or elaborated module, as `format` renders it, spelled against the roots before it: each one's lexicon is made here, where a root is refused, since a build that refuses stops.
 fn reported(
-    error: &curios_elab::Error,
+    format: impl FnOnce(&Reading<'_>) -> String,
     module: &Module,
     predecessors: &[&Module],
     anchors: &Anchors,
@@ -106,7 +107,7 @@ fn reported(
         .map(|unit| unit.lexicon())
         .collect::<Vec<_>>();
 
-    error.format(&Reading {
+    format(&Reading {
         module,
         kept: None,
         scope: &lexicons.iter().collect::<Vec<_>>(),
@@ -144,14 +145,24 @@ fn archive(
         );
         let elaboration = match &elaborated {
             Ok(_) => String::new(),
-            Err(error) => reported(error, &lowered, predecessors, prepared.anchors()),
+            Err(error) => reported(
+                |reading| error.format(reading),
+                &lowered,
+                predecessors,
+                prepared.anchors(),
+            ),
         };
         panic!("/{root} failed to parse: {parsed}{elaboration}");
     }
     let (core, traces) = elaborated.unwrap_or_else(|error| {
         panic!(
             "/{root} failed to elaborate: {}",
-            reported(&error, &lowered, predecessors, prepared.anchors())
+            reported(
+                |reading| error.format(reading),
+                &lowered,
+                predecessors,
+                prepared.anchors(),
+            )
         )
     });
     // The pipeline's crediting, for the one caller that elaborates a unit itself: a binder a proof the elaborator wrote reads is used, and the image's lints say so.
@@ -180,7 +191,12 @@ fn archive(
     .unwrap_or_else(|error| {
         panic!(
             "/{root} failed to erase: {}",
-            reported(&error, &core, predecessors, prepared.anchors())
+            reported(
+                |reading| error.format(reading),
+                &core,
+                predecessors,
+                prepared.anchors(),
+            )
         )
     });
 

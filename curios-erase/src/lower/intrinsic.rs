@@ -4,8 +4,8 @@
 
 use {
     super::{Lowering, Outcome},
-    crate::{Error, Retyping, into_anf::emitted},
-    curios_core::{Global, Intrinsic, Nat, Operand, Subterm, Term},
+    crate::{Error, emitted},
+    curios_elab::Retyping,
     curios_num::Natural,
     curios_utilities::SyntaxName,
 };
@@ -14,7 +14,7 @@ use {
 ///
 /// The one narrowing at the `Nat` half of the Core border. A `Nat` *value* crosses whole — the erased carriers are unbounded too, and only materialization in `curios-emit` refuses one the envelope cannot box — but a dispatch *key* is not a value: it selects an arm, and an arm is a slot in a table the backend builds.
 ///
-/// Shared across `into_anf` because `eliminate`'s switch narrows its case keys through it: Core keys a `Cases::Switch` by `Natural`, so the width is chosen here, at the one boundary that owns it.
+/// Shared across erasure because `eliminate`'s switch narrows its case keys through it: Core keys a `Cases::Switch` by `Natural`, so the width is chosen here, at the one boundary that owns it.
 pub fn narrow_case_key(value: &Natural) -> Result<u32, Error> {
     u32::try_from(value)
         .ok()
@@ -22,12 +22,12 @@ pub fn narrow_case_key(value: &Natural) -> Result<u32, Error> {
 }
 
 /// One operand an operation computes with, beside what the roster demands of it.
-pub type Demanded<'a> = (&'a Term, Operand);
+pub type Demanded<'a> = (&'a curios_core::Term, curios_core::Operand);
 
-/// The operands `intrinsic` computes with, in order, each beside what [`Intrinsic::signature`] demands of it.
+/// The operands `intrinsic` computes with, in order, each beside what [`Intrinsic::signature`](curios_core::Intrinsic::signature) demands of it.
 ///
-/// The roster is the one statement of an operand's type. Both checkers walk it, so an arm that spelled a type of its own could come to disagree with the one its operand was checked at, and erasure runs after the kernel, where a disagreement is a miscompilation rather than a refusal. Two operands are left out, a run holding nothing of either: one demanded as a type, and the proof of the operation's bound ([`Intrinsic::bound`]) — erasure is where a proof stops existing, and nowhere else has to know.
-fn computed<'a>(context: &Retyping, intrinsic: &'a Intrinsic) -> Vec<Demanded<'a>> {
+/// The roster is the one statement of an operand's type. Both checkers walk it, so an arm that spelled a type of its own could come to disagree with the one its operand was checked at, and erasure runs after the kernel, where a disagreement is a miscompilation rather than a refusal. Two operands are left out, a run holding nothing of either: one demanded as a type, and the proof of the operation's bound ([`Intrinsic::bound`](curios_core::Intrinsic::bound)) — erasure is where a proof stops existing, and nowhere else has to know.
+fn computed<'a>(context: &Retyping, intrinsic: &'a curios_core::Intrinsic) -> Vec<Demanded<'a>> {
     let bound = intrinsic.bound();
 
     intrinsic
@@ -35,7 +35,7 @@ fn computed<'a>(context: &Retyping, intrinsic: &'a Intrinsic) -> Vec<Demanded<'a
         .into_iter()
         .zip(intrinsic.signature(&context.syntax()).operands)
         .filter(|(operand, demand)| {
-            !matches!(demand, Operand::IsType)
+            !matches!(demand, curios_core::Operand::IsType)
                 && !bound.is_some_and(|proof| std::ptr::eq(proof, *operand))
         })
         .collect()
@@ -49,17 +49,17 @@ fn places<'a, const N: usize>(operands: Vec<Demanded<'a>>) -> [Demanded<'a>; N] 
 }
 
 /// The type a demand states. A function's is assembled from its halves under binders minted here, the roster having no name source of its own.
-pub fn demanded_type(context: &mut Retyping, demand: &Operand) -> Term {
+pub fn demanded_type(context: &mut Retyping, demand: &curios_core::Operand) -> curios_core::Term {
     match demand {
-        Operand::At(type_) => type_.clone(),
-        Operand::Function { domains, codomain } => {
+        curios_core::Operand::At(type_) => type_.clone(),
+        curios_core::Operand::Function { domains, codomain } => {
             let params = domains
                 .iter()
                 .map(|domain| (context.fresh(None), domain.clone()))
                 .collect::<Vec<_>>();
-            Term::func_type(params, codomain.clone())
+            curios_core::Term::func_type(params, codomain.clone())
         }
-        Operand::IsType => {
+        curios_core::Operand::IsType => {
             unreachable!("erase: an operand demanded as a type is not computed with")
         }
     }
@@ -73,7 +73,7 @@ impl Lowering<'_> {
         family: SyntaxName,
         constructor: SyntaxName,
     ) -> Result<curios_anf::ConstructorId, Error> {
-        let name = Global::Authored(family.qualifier());
+        let name = curios_core::Global::Authored(family.qualifier());
         let index = context
             .induct_decl(&name)
             .expect("erase: registered outcome family")
@@ -181,7 +181,7 @@ impl Lowering<'_> {
     pub(super) fn erase_intrinsic(
         &mut self,
         context: &mut Retyping,
-        intrinsic: &Intrinsic,
+        intrinsic: &curios_core::Intrinsic,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         /// One scalar-operation arm, over the operands the roster states.
@@ -202,37 +202,43 @@ impl Lowering<'_> {
 
         match intrinsic {
             // Type formers carry nothing to lower.
-            Intrinsic::BoolType
-            | Intrinsic::NatType
-            | Intrinsic::ByteType
-            | Intrinsic::IntType
-            | Intrinsic::FltType
-            | Intrinsic::BytesType
-            | Intrinsic::ListType(_)
-            | Intrinsic::HandleType
-            | Intrinsic::CellType(_)
-            | Intrinsic::ChannelType(_)
-            | Intrinsic::IoType(_) => Ok(Outcome::Emitted(self.unit())),
+            curios_core::Intrinsic::BoolType
+            | curios_core::Intrinsic::NatType
+            | curios_core::Intrinsic::ByteType
+            | curios_core::Intrinsic::IntType
+            | curios_core::Intrinsic::FltType
+            | curios_core::Intrinsic::BytesType
+            | curios_core::Intrinsic::ListType(_)
+            | curios_core::Intrinsic::HandleType
+            | curios_core::Intrinsic::CellType(_)
+            | curios_core::Intrinsic::ChannelType(_)
+            | curios_core::Intrinsic::IoType(_) => Ok(Outcome::Emitted(self.unit())),
 
-            &Intrinsic::Bool(value) => Ok(self.constant_outcome(curios_anf::Constant::Bool(value))),
-            Intrinsic::BoolAnd(..) => op!(curios_anf::Operation::BoolAnd),
-            Intrinsic::BoolOr(..) => op!(curios_anf::Operation::BoolOr),
-            Intrinsic::BoolXor(..) => op!(curios_anf::Operation::BoolXor),
-            Intrinsic::BoolEql(..) => op!(curios_anf::Operation::BoolEql),
-            Intrinsic::BoolNeq(..) => op!(curios_anf::Operation::BoolNeq),
+            &curios_core::Intrinsic::Bool(value) => {
+                Ok(self.constant_outcome(curios_anf::Constant::Bool(value)))
+            }
+            curios_core::Intrinsic::BoolAnd(..) => op!(curios_anf::Operation::BoolAnd),
+            curios_core::Intrinsic::BoolOr(..) => op!(curios_anf::Operation::BoolOr),
+            curios_core::Intrinsic::BoolXor(..) => op!(curios_anf::Operation::BoolXor),
+            curios_core::Intrinsic::BoolEql(..) => op!(curios_anf::Operation::BoolEql),
+            curios_core::Intrinsic::BoolNeq(..) => op!(curios_anf::Operation::BoolNeq),
 
-            &Intrinsic::Byte(value) => Ok(self.constant_outcome(curios_anf::Constant::Byte(value))),
-            Intrinsic::ByteToNat(..) => op!(curios_anf::Operation::ByteToNat),
-            Intrinsic::NatToByte { .. } => op!(curios_anf::Operation::NatToByte),
+            &curios_core::Intrinsic::Byte(value) => {
+                Ok(self.constant_outcome(curios_anf::Constant::Byte(value)))
+            }
+            curios_core::Intrinsic::ByteToNat(..) => op!(curios_anf::Operation::ByteToNat),
+            curios_core::Intrinsic::NatToByte { .. } => op!(curios_anf::Operation::NatToByte),
 
-            Intrinsic::Nat(Nat::Zero) => {
+            curios_core::Intrinsic::Nat(curios_core::Nat::Zero) => {
                 Ok(self.constant_outcome(curios_anf::Constant::Nat(Natural::zero())))
             }
-            Intrinsic::Nat(Nat::Succ(spine, inner)) => {
+            curios_core::Intrinsic::Nat(curios_core::Nat::Succ(spine, inner)) => {
                 let spine = spine.clone();
                 if matches!(
                     inner.as_ref(),
-                    Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))
+                    curios_core::Subterm::Intrinsic(curios_core::Intrinsic::Nat(
+                        curios_core::Nat::Zero
+                    ))
                 ) {
                     return Ok(self.constant_outcome(curios_anf::Constant::Nat(spine)));
                 }
@@ -249,98 +255,116 @@ impl Lowering<'_> {
                     },
                 ))
             }
-            Intrinsic::NatEql(..) => op!(curios_anf::Operation::NatEql),
-            Intrinsic::NatNeq(..) => op!(curios_anf::Operation::NatNeq),
-            Intrinsic::NatAdd(..) => op!(curios_anf::Operation::NatAdd),
-            Intrinsic::NatSub(..) => op!(curios_anf::Operation::NatSub),
-            Intrinsic::NatMul(..) => op!(curios_anf::Operation::NatMul),
-            Intrinsic::NatLt(..) => op!(curios_anf::Operation::NatLt),
-            Intrinsic::NatDiv { .. } => op!(curios_anf::Operation::NatDiv),
-            Intrinsic::NatRem { .. } => op!(curios_anf::Operation::NatRem),
-            Intrinsic::NatLe(..) => op!(curios_anf::Operation::NatLe),
-            Intrinsic::NatAnd(..) => op!(curios_anf::Operation::NatAnd),
-            Intrinsic::NatOr(..) => op!(curios_anf::Operation::NatOr),
-            Intrinsic::NatXor(..) => op!(curios_anf::Operation::NatXor),
-            Intrinsic::NatMin(..) => op!(curios_anf::Operation::NatMin),
-            Intrinsic::NatMax(..) => op!(curios_anf::Operation::NatMax),
-            Intrinsic::NatShl(..) => op!(curios_anf::Operation::NatShl),
-            Intrinsic::NatPow(..) => op!(curios_anf::Operation::NatPow),
-            Intrinsic::NatShr(..) => op!(curios_anf::Operation::NatShr),
+            curios_core::Intrinsic::NatEql(..) => op!(curios_anf::Operation::NatEql),
+            curios_core::Intrinsic::NatNeq(..) => op!(curios_anf::Operation::NatNeq),
+            curios_core::Intrinsic::NatAdd(..) => op!(curios_anf::Operation::NatAdd),
+            curios_core::Intrinsic::NatSub(..) => op!(curios_anf::Operation::NatSub),
+            curios_core::Intrinsic::NatMul(..) => op!(curios_anf::Operation::NatMul),
+            curios_core::Intrinsic::NatLt(..) => op!(curios_anf::Operation::NatLt),
+            curios_core::Intrinsic::NatDiv { .. } => op!(curios_anf::Operation::NatDiv),
+            curios_core::Intrinsic::NatRem { .. } => op!(curios_anf::Operation::NatRem),
+            curios_core::Intrinsic::NatLe(..) => op!(curios_anf::Operation::NatLe),
+            curios_core::Intrinsic::NatAnd(..) => op!(curios_anf::Operation::NatAnd),
+            curios_core::Intrinsic::NatOr(..) => op!(curios_anf::Operation::NatOr),
+            curios_core::Intrinsic::NatXor(..) => op!(curios_anf::Operation::NatXor),
+            curios_core::Intrinsic::NatMin(..) => op!(curios_anf::Operation::NatMin),
+            curios_core::Intrinsic::NatMax(..) => op!(curios_anf::Operation::NatMax),
+            curios_core::Intrinsic::NatShl(..) => op!(curios_anf::Operation::NatShl),
+            curios_core::Intrinsic::NatPow(..) => op!(curios_anf::Operation::NatPow),
+            curios_core::Intrinsic::NatShr(..) => op!(curios_anf::Operation::NatShr),
 
-            Intrinsic::Int(value) => {
+            curios_core::Intrinsic::Int(value) => {
                 Ok(self.constant_outcome(curios_anf::Constant::Int(value.clone())))
             }
-            Intrinsic::IntEql(..) => op!(curios_anf::Operation::IntEql),
-            Intrinsic::IntNeq(..) => op!(curios_anf::Operation::IntNeq),
-            Intrinsic::IntAdd(..) => op!(curios_anf::Operation::IntAdd),
-            Intrinsic::IntSub(..) => op!(curios_anf::Operation::IntSub),
-            Intrinsic::IntMul(..) => op!(curios_anf::Operation::IntMul),
-            Intrinsic::IntDiv { .. } => op!(curios_anf::Operation::IntDiv),
-            Intrinsic::IntRem { .. } => op!(curios_anf::Operation::IntRem),
-            Intrinsic::IntLt(..) => op!(curios_anf::Operation::IntLt),
-            Intrinsic::IntLe(..) => op!(curios_anf::Operation::IntLe),
-            Intrinsic::IntAnd(..) => op!(curios_anf::Operation::IntAnd),
-            Intrinsic::IntOr(..) => op!(curios_anf::Operation::IntOr),
-            Intrinsic::IntXor(..) => op!(curios_anf::Operation::IntXor),
-            Intrinsic::IntMin(..) => op!(curios_anf::Operation::IntMin),
-            Intrinsic::IntMax(..) => op!(curios_anf::Operation::IntMax),
-            Intrinsic::IntShl(..) => op!(curios_anf::Operation::IntShl),
-            Intrinsic::IntShr(..) => op!(curios_anf::Operation::IntShr),
+            curios_core::Intrinsic::IntEql(..) => op!(curios_anf::Operation::IntEql),
+            curios_core::Intrinsic::IntNeq(..) => op!(curios_anf::Operation::IntNeq),
+            curios_core::Intrinsic::IntAdd(..) => op!(curios_anf::Operation::IntAdd),
+            curios_core::Intrinsic::IntSub(..) => op!(curios_anf::Operation::IntSub),
+            curios_core::Intrinsic::IntMul(..) => op!(curios_anf::Operation::IntMul),
+            curios_core::Intrinsic::IntDiv { .. } => op!(curios_anf::Operation::IntDiv),
+            curios_core::Intrinsic::IntRem { .. } => op!(curios_anf::Operation::IntRem),
+            curios_core::Intrinsic::IntLt(..) => op!(curios_anf::Operation::IntLt),
+            curios_core::Intrinsic::IntLe(..) => op!(curios_anf::Operation::IntLe),
+            curios_core::Intrinsic::IntAnd(..) => op!(curios_anf::Operation::IntAnd),
+            curios_core::Intrinsic::IntOr(..) => op!(curios_anf::Operation::IntOr),
+            curios_core::Intrinsic::IntXor(..) => op!(curios_anf::Operation::IntXor),
+            curios_core::Intrinsic::IntMin(..) => op!(curios_anf::Operation::IntMin),
+            curios_core::Intrinsic::IntMax(..) => op!(curios_anf::Operation::IntMax),
+            curios_core::Intrinsic::IntShl(..) => op!(curios_anf::Operation::IntShl),
+            curios_core::Intrinsic::IntShr(..) => op!(curios_anf::Operation::IntShr),
 
-            &Intrinsic::Flt(value) => Ok(self.constant_outcome(curios_anf::Constant::Flt(value))),
-            Intrinsic::FltAdd(rounding, ..) => op!(curios_anf::Operation::FltAdd(*rounding)),
-            Intrinsic::FltSub(rounding, ..) => op!(curios_anf::Operation::FltSub(*rounding)),
-            Intrinsic::FltMul(rounding, ..) => op!(curios_anf::Operation::FltMul(*rounding)),
-            Intrinsic::FltDiv(rounding, ..) => op!(curios_anf::Operation::FltDiv(*rounding)),
-            Intrinsic::FltFma(rounding, ..) => op!(curios_anf::Operation::FltFma(*rounding)),
-            Intrinsic::FltRem(..) => op!(curios_anf::Operation::FltRem),
-            Intrinsic::FltEql(..) => op!(curios_anf::Operation::FltEql),
-            Intrinsic::FltNeq(..) => op!(curios_anf::Operation::FltNeq),
-            Intrinsic::FltLt(..) => op!(curios_anf::Operation::FltLt),
-            Intrinsic::FltLe(..) => op!(curios_anf::Operation::FltLe),
-            Intrinsic::FltMin(..) => op!(curios_anf::Operation::FltMin),
-            Intrinsic::FltMax(..) => op!(curios_anf::Operation::FltMax),
-            Intrinsic::FltCopysign(..) => op!(curios_anf::Operation::FltCopysign),
-            Intrinsic::FltNeg(..) => op!(curios_anf::Operation::FltNeg),
-            Intrinsic::FltAbs(..) => op!(curios_anf::Operation::FltAbs),
-            Intrinsic::FltSqrt(rounding, ..) => op!(curios_anf::Operation::FltSqrt(*rounding)),
-            Intrinsic::FltRoundIntegral(rounding, ..) => {
+            &curios_core::Intrinsic::Flt(value) => {
+                Ok(self.constant_outcome(curios_anf::Constant::Flt(value)))
+            }
+            curios_core::Intrinsic::FltAdd(rounding, ..) => {
+                op!(curios_anf::Operation::FltAdd(*rounding))
+            }
+            curios_core::Intrinsic::FltSub(rounding, ..) => {
+                op!(curios_anf::Operation::FltSub(*rounding))
+            }
+            curios_core::Intrinsic::FltMul(rounding, ..) => {
+                op!(curios_anf::Operation::FltMul(*rounding))
+            }
+            curios_core::Intrinsic::FltDiv(rounding, ..) => {
+                op!(curios_anf::Operation::FltDiv(*rounding))
+            }
+            curios_core::Intrinsic::FltFma(rounding, ..) => {
+                op!(curios_anf::Operation::FltFma(*rounding))
+            }
+            curios_core::Intrinsic::FltRem(..) => op!(curios_anf::Operation::FltRem),
+            curios_core::Intrinsic::FltEql(..) => op!(curios_anf::Operation::FltEql),
+            curios_core::Intrinsic::FltNeq(..) => op!(curios_anf::Operation::FltNeq),
+            curios_core::Intrinsic::FltLt(..) => op!(curios_anf::Operation::FltLt),
+            curios_core::Intrinsic::FltLe(..) => op!(curios_anf::Operation::FltLe),
+            curios_core::Intrinsic::FltMin(..) => op!(curios_anf::Operation::FltMin),
+            curios_core::Intrinsic::FltMax(..) => op!(curios_anf::Operation::FltMax),
+            curios_core::Intrinsic::FltCopysign(..) => op!(curios_anf::Operation::FltCopysign),
+            curios_core::Intrinsic::FltNeg(..) => op!(curios_anf::Operation::FltNeg),
+            curios_core::Intrinsic::FltAbs(..) => op!(curios_anf::Operation::FltAbs),
+            curios_core::Intrinsic::FltSqrt(rounding, ..) => {
+                op!(curios_anf::Operation::FltSqrt(*rounding))
+            }
+            curios_core::Intrinsic::FltRoundIntegral(rounding, ..) => {
                 op!(curios_anf::Operation::FltRoundIntegral(*rounding))
             }
 
-            Intrinsic::NatToInt(..) => op!(curios_anf::Operation::NatToInt),
-            Intrinsic::IntAbs(..) => op!(curios_anf::Operation::IntAbs),
-            Intrinsic::IntSign(..) => op!(curios_anf::Operation::IntSign),
-            Intrinsic::NatToFlt(rounding, ..) => op!(curios_anf::Operation::NatToFlt(*rounding)),
-            Intrinsic::IntToNat { .. } => op!(curios_anf::Operation::IntToNat),
-            Intrinsic::IntToFlt(rounding, ..) => op!(curios_anf::Operation::IntToFlt(*rounding)),
-            Intrinsic::FltToNat { .. } => op!(curios_anf::Operation::FltToNat),
-            Intrinsic::FltToInt { .. } => op!(curios_anf::Operation::FltToInt),
-            Intrinsic::FltMantissa { .. } => op!(curios_anf::Operation::FltMantissa),
-            Intrinsic::FltExponent { .. } => op!(curios_anf::Operation::FltExponent),
-            Intrinsic::FltToLeBytes(..) => op!(curios_anf::Operation::FltToLeBytes),
-            Intrinsic::FltOfLeBytes { .. } => op!(curios_anf::Operation::FltOfLeBytes),
+            curios_core::Intrinsic::NatToInt(..) => op!(curios_anf::Operation::NatToInt),
+            curios_core::Intrinsic::IntAbs(..) => op!(curios_anf::Operation::IntAbs),
+            curios_core::Intrinsic::IntSign(..) => op!(curios_anf::Operation::IntSign),
+            curios_core::Intrinsic::NatToFlt(rounding, ..) => {
+                op!(curios_anf::Operation::NatToFlt(*rounding))
+            }
+            curios_core::Intrinsic::IntToNat { .. } => op!(curios_anf::Operation::IntToNat),
+            curios_core::Intrinsic::IntToFlt(rounding, ..) => {
+                op!(curios_anf::Operation::IntToFlt(*rounding))
+            }
+            curios_core::Intrinsic::FltToNat { .. } => op!(curios_anf::Operation::FltToNat),
+            curios_core::Intrinsic::FltToInt { .. } => op!(curios_anf::Operation::FltToInt),
+            curios_core::Intrinsic::FltMantissa { .. } => op!(curios_anf::Operation::FltMantissa),
+            curios_core::Intrinsic::FltExponent { .. } => op!(curios_anf::Operation::FltExponent),
+            curios_core::Intrinsic::FltToLeBytes(..) => op!(curios_anf::Operation::FltToLeBytes),
+            curios_core::Intrinsic::FltOfLeBytes { .. } => op!(curios_anf::Operation::FltOfLeBytes),
 
-            Intrinsic::Bytes(value) => {
+            curios_core::Intrinsic::Bytes(value) => {
                 Ok(self.constant_outcome(curios_anf::Constant::Bytes(value.clone())))
             }
-            Intrinsic::BytesLen(..) => seq!(curios_anf::SequenceOp::BytesLen),
-            Intrinsic::BytesEql(..) => seq!(curios_anf::SequenceOp::BytesEql),
-            Intrinsic::BytesGet { .. } => seq!(curios_anf::SequenceOp::BytesGet),
-            Intrinsic::BytesSlice { .. } => seq!(curios_anf::SequenceOp::BytesSlice),
-            Intrinsic::BytesAppend { .. } => seq!(curios_anf::SequenceOp::BytesAppend),
-            Intrinsic::BytesReplicate { .. } => {
+            curios_core::Intrinsic::BytesLen(..) => seq!(curios_anf::SequenceOp::BytesLen),
+            curios_core::Intrinsic::BytesEql(..) => seq!(curios_anf::SequenceOp::BytesEql),
+            curios_core::Intrinsic::BytesGet { .. } => seq!(curios_anf::SequenceOp::BytesGet),
+            curios_core::Intrinsic::BytesSlice { .. } => seq!(curios_anf::SequenceOp::BytesSlice),
+            curios_core::Intrinsic::BytesAppend { .. } => seq!(curios_anf::SequenceOp::BytesAppend),
+            curios_core::Intrinsic::BytesReplicate { .. } => {
                 seq!(curios_anf::SequenceOp::BytesReplicate)
             }
-            Intrinsic::BytesAnd { .. } => seq!(curios_anf::SequenceOp::BytesAnd),
-            Intrinsic::BytesOr { .. } => seq!(curios_anf::SequenceOp::BytesOr),
-            Intrinsic::BytesXor { .. } => seq!(curios_anf::SequenceOp::BytesXor),
-            Intrinsic::BytesConcat { .. } => seq!(curios_anf::SequenceOp::BytesConcat),
+            curios_core::Intrinsic::BytesAnd { .. } => seq!(curios_anf::SequenceOp::BytesAnd),
+            curios_core::Intrinsic::BytesOr { .. } => seq!(curios_anf::SequenceOp::BytesOr),
+            curios_core::Intrinsic::BytesXor { .. } => seq!(curios_anf::SequenceOp::BytesXor),
+            curios_core::Intrinsic::BytesConcat { .. } => seq!(curios_anf::SequenceOp::BytesConcat),
 
-            Intrinsic::List { .. } => seq!(curios_anf::SequenceOp::ListBuild),
-            Intrinsic::ListLen { .. } => seq!(curios_anf::SequenceOp::ListLen),
+            curios_core::Intrinsic::List { .. } => seq!(curios_anf::SequenceOp::ListBuild),
+            curios_core::Intrinsic::ListLen { .. } => seq!(curios_anf::SequenceOp::ListLen),
             // A list's element is a read no producer names the carrier of, so it states the one its element type names.
-            Intrinsic::ListGet { element, .. } => {
+            curios_core::Intrinsic::ListGet { element, .. } => {
                 let operands = computed(context, intrinsic);
                 let outcome =
                     self.sequence(context, curios_anf::SequenceOp::ListGet, &operands, hint)?;
@@ -349,10 +373,10 @@ impl Lowering<'_> {
                 }
                 Ok(outcome)
             }
-            Intrinsic::ListSlice { .. } => seq!(curios_anf::SequenceOp::ListSlice),
-            Intrinsic::ListAppend { .. } => seq!(curios_anf::SequenceOp::ListAppend),
-            Intrinsic::ListConcat { .. } => seq!(curios_anf::SequenceOp::ListConcat),
-            Intrinsic::ListMap { .. } => {
+            curios_core::Intrinsic::ListSlice { .. } => seq!(curios_anf::SequenceOp::ListSlice),
+            curios_core::Intrinsic::ListAppend { .. } => seq!(curios_anf::SequenceOp::ListAppend),
+            curios_core::Intrinsic::ListConcat { .. } => seq!(curios_anf::SequenceOp::ListConcat),
+            curios_core::Intrinsic::ListMap { .. } => {
                 let [list, mapper] = places(computed(context, intrinsic));
                 let list_atom = emitted!(self.demanded(context, &list)?);
                 let mapper_atom = emitted!(self.demanded(context, &mapper)?);
@@ -365,27 +389,29 @@ impl Lowering<'_> {
                 ))
             }
 
-            Intrinsic::ListFold {
+            curios_core::Intrinsic::ListFold {
                 element, result, ..
             } => {
                 let operands = places(computed(context, intrinsic));
                 self.erase_list_fold(context, element, result, operands, hint)
             }
 
-            &Intrinsic::Handle(token) => {
+            &curios_core::Intrinsic::Handle(token) => {
                 Ok(self.constant_outcome(curios_anf::Constant::Handle(token)))
             }
             // Every operation the host performs is typed `Io`, so every one erases to a thunk: the operands are computed where the description is *built*, and the operation itself happens only when the description is forced. Nothing below changes what the host call is — only where it sits relative to the closure boundary.
-            Intrinsic::Cell { .. } => self.thunk(hint.or(Some("io/cell_new")), move |lowering| {
-                Ok(lowering.bind(
-                    None,
-                    curios_anf::Rhs::Cell {
-                        operation: curios_anf::CellOperation::New,
-                        operands: vec![],
-                    },
-                ))
-            }),
-            Intrinsic::CellFill { .. } => {
+            curios_core::Intrinsic::Cell { .. } => {
+                self.thunk(hint.or(Some("io/cell_new")), move |lowering| {
+                    Ok(lowering.bind(
+                        None,
+                        curios_anf::Rhs::Cell {
+                            operation: curios_anf::CellOperation::New,
+                            operands: vec![],
+                        },
+                    ))
+                })
+            }
+            curios_core::Intrinsic::CellFill { .. } => {
                 let [cell, value] = places(computed(context, intrinsic));
                 let cell = emitted!(self.demanded(context, &cell)?);
                 let value = emitted!(self.kept(context, &value)?);
@@ -399,7 +425,7 @@ impl Lowering<'_> {
                     ))
                 })
             }
-            Intrinsic::CellPoll { .. } => {
+            curios_core::Intrinsic::CellPoll { .. } => {
                 let [cell] = places(computed(context, intrinsic));
                 let cell = emitted!(self.demanded(context, &cell)?);
                 let syntax = context.syntax().option;
@@ -415,7 +441,7 @@ impl Lowering<'_> {
                     ))
                 })
             }
-            Intrinsic::Channel { .. } => {
+            curios_core::Intrinsic::Channel { .. } => {
                 let [capacity] = places(computed(context, intrinsic));
                 let capacity = emitted!(self.demanded(context, &capacity)?);
                 self.thunk(hint.or(Some("io/channel_new")), move |lowering| {
@@ -428,7 +454,7 @@ impl Lowering<'_> {
                     ))
                 })
             }
-            Intrinsic::ChannelPush { .. } => {
+            curios_core::Intrinsic::ChannelPush { .. } => {
                 let [channel, value] = places(computed(context, intrinsic));
                 let channel = emitted!(self.demanded(context, &channel)?);
                 let value = emitted!(self.kept(context, &value)?);
@@ -450,7 +476,7 @@ impl Lowering<'_> {
                     ))
                 })
             }
-            Intrinsic::ChannelTake { .. } => {
+            curios_core::Intrinsic::ChannelTake { .. } => {
                 let [channel] = places(computed(context, intrinsic));
                 let channel = emitted!(self.demanded(context, &channel)?);
                 let syntax = context.syntax().channel;
@@ -467,23 +493,23 @@ impl Lowering<'_> {
                     ))
                 })
             }
-            Intrinsic::ChannelClose { .. }
-            | Intrinsic::ChannelClosed { .. }
-            | Intrinsic::ChannelCount { .. }
-            | Intrinsic::ChannelCapacity { .. } => {
+            curios_core::Intrinsic::ChannelClose { .. }
+            | curios_core::Intrinsic::ChannelClosed { .. }
+            | curios_core::Intrinsic::ChannelCount { .. }
+            | curios_core::Intrinsic::ChannelCapacity { .. } => {
                 let [channel] = places(computed(context, intrinsic));
                 let channel = emitted!(self.demanded(context, &channel)?);
                 let (operation, name) = match intrinsic {
-                    Intrinsic::ChannelClose { .. } => {
+                    curios_core::Intrinsic::ChannelClose { .. } => {
                         (curios_anf::ChannelOperation::Close, "io/channel_close")
                     }
-                    Intrinsic::ChannelClosed { .. } => {
+                    curios_core::Intrinsic::ChannelClosed { .. } => {
                         (curios_anf::ChannelOperation::Closed, "io/channel_closed")
                     }
-                    Intrinsic::ChannelCount { .. } => {
+                    curios_core::Intrinsic::ChannelCount { .. } => {
                         (curios_anf::ChannelOperation::Count, "io/channel_count")
                     }
-                    Intrinsic::ChannelCapacity { .. } => (
+                    curios_core::Intrinsic::ChannelCapacity { .. } => (
                         curios_anf::ChannelOperation::Capacity,
                         "io/channel_capacity",
                     ),
@@ -503,7 +529,7 @@ impl Lowering<'_> {
             // The description that performs nothing: a closure yielding an already-computed value.
             //
             // The operand is erased at the construction site like every other intrinsic's, not inside the thunk. The language is eager: `/sys/Io/pure` is an ordinary call-by-value wrapper, so a surface `Io/pure(e)` has evaluated `e` before this node exists at all, and erasing the operand inside the closure would delay nothing while making this one arm's evaluation order differ from the rest of the roster. What delays a program's effect is `IoBind`.
-            Intrinsic::IoPure { .. } => {
+            curios_core::Intrinsic::IoPure { .. } => {
                 let [value] = places(computed(context, intrinsic));
                 let value = emitted!(self.demanded(context, &value)?);
                 self.thunk(hint.or(Some("io/pure")), move |_| {
@@ -511,7 +537,7 @@ impl Lowering<'_> {
                 })
             }
             // The description that performs `action`, then the description `continuation` computes from its result. The operands erase at the construction site like the rest of the roster (see `thunk`'s placement rule); the two forces, the test between them and the continuation's application are the performance, and only they stay inside.
-            Intrinsic::IoBind { .. } => {
+            curios_core::Intrinsic::IoBind { .. } => {
                 let [action, continuation] = places(computed(context, intrinsic));
                 let action = emitted!(self.demanded(context, &action)?);
                 let continuation = emitted!(self.demanded(context, &continuation)?);
@@ -523,7 +549,7 @@ impl Lowering<'_> {
                 })
             }
             // The description that suspends on `on` and `filled`: its performance is the suspension, and whatever forced it decides what happens next.
-            Intrinsic::IoSuspend { .. } => {
+            curios_core::Intrinsic::IoSuspend { .. } => {
                 let [on, filled, cancel, rest] = places(computed(context, intrinsic));
                 let on = emitted!(self.demanded(context, &on)?);
                 let filled = emitted!(self.demanded(context, &filled)?);
@@ -537,7 +563,7 @@ impl Lowering<'_> {
                 })
             }
             // The description that performs `action` and goes on into `done` with its value or into `suspended` with its suspension.
-            Intrinsic::IoAdvance { .. } => {
+            curios_core::Intrinsic::IoAdvance { .. } => {
                 let [action, done, suspended] = places(computed(context, intrinsic));
                 let action = emitted!(self.demanded(context, &action)?);
                 let done = emitted!(self.demanded(context, &done)?);

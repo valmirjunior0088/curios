@@ -4,8 +4,8 @@
 
 use {
     super::{Lowering, Outcome},
-    crate::{Error, Retyping},
-    curios_core::{Free, Rec, RecItem, Subterm, Term},
+    crate::Error,
+    curios_elab::Retyping,
 };
 
 /// One classified member of a recursive group, pre-bound for mutual visibility before any body is erased.
@@ -19,11 +19,11 @@ impl Lowering<'_> {
     pub fn erase_rec(
         &mut self,
         context: &mut Retyping,
-        rec: &Rec,
-        expected: &Term,
+        rec: &curios_core::Rec,
+        expected: &curios_core::Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let Rec { group, tail } = rec;
+        let curios_core::Rec { group, tail } = rec;
 
         let hints = tail
             .hint_iter()
@@ -33,7 +33,10 @@ impl Lowering<'_> {
             .iter()
             .map(|label| context.fresh(label.as_deref()))
             .collect::<Vec<_>>();
-        let name_terms = names.iter().map(Term::free_var).collect::<Vec<_>>();
+        let name_terms = names
+            .iter()
+            .map(curios_core::Term::free_var)
+            .collect::<Vec<_>>();
         let name_refs = name_terms.iter().collect::<Vec<_>>();
 
         let members = group
@@ -48,7 +51,11 @@ impl Lowering<'_> {
                 context.set_assumption_universe_context(name, group.universe_context().clone());
             }
             for (index, name) in names.iter().enumerate() {
-                context.define(name, &Term::rec_proj(group.clone(), index), None);
+                context.define(
+                    name,
+                    &curios_core::Term::rec_proj(group.clone(), index),
+                    None,
+                );
             }
             self.emit_group(context, &names, &hints, &members)?;
             self.walk(context, &tail, expected, hint)
@@ -56,11 +63,15 @@ impl Lowering<'_> {
     }
 
     /// Erase a top-level recursive item as the fragment's item. Its members are defined in the Core context already, as every item's names are.
-    pub fn erase_rec_item(&mut self, context: &mut Retyping, rec: &RecItem) -> Result<(), Error> {
+    pub fn erase_rec_item(
+        &mut self,
+        context: &mut Retyping,
+        rec: &curios_core::RecItem,
+    ) -> Result<(), Error> {
         let definitions = rec.definitions();
         let names = definitions
             .iter()
-            .map(|definition| Free::from(&definition.name))
+            .map(|definition| curios_core::Free::from(&definition.name))
             .collect::<Vec<_>>();
         let hints = definitions
             .iter()
@@ -77,9 +88,9 @@ impl Lowering<'_> {
     fn emit_group(
         &mut self,
         context: &mut Retyping,
-        names: &[Free],
+        names: &[curios_core::Free],
         hints: &[Option<String>],
-        members: &[(Term, Term)],
+        members: &[(curios_core::Term, curios_core::Term)],
     ) -> Result<(), Error> {
         let classified = names
             .iter()
@@ -87,7 +98,7 @@ impl Lowering<'_> {
             .zip(members)
             .map(|((name, hint), (_, body))| {
                 let member = match &**body {
-                    Subterm::Func(_) => {
+                    curios_core::Subterm::Func(_) => {
                         let function = self.builder.reserve_function();
                         self.names.functions.insert(function, *name);
                         Member::Function(function)
@@ -116,7 +127,7 @@ impl Lowering<'_> {
         for (member, ((type_, body), hint)) in classified.iter().zip(members.iter().zip(hints)) {
             match member {
                 Member::Function(function) => {
-                    let Subterm::Func(func) = &**body else {
+                    let curios_core::Subterm::Func(func) = &**body else {
                         unreachable!("erase: a function member's body is a lambda")
                     };
                     // A member the group named keeps that name; one it did not takes its owner's, the same way an argument-position lambda does.

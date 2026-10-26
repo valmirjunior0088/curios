@@ -288,7 +288,7 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
         0,
         "the suffix view is a virtual window: no helper call, no view allocation",
     );
-    // One site, not one per arm: the dead-hypothesis peel in `into_anf::eliminate` emits the read once and binds a name rather than substituting `get(b, 0)` into every arm that mentions it. Exactly one arm runs, so this is a static site count; the per-character cost is one read either way.
+    // One site, not one per arm: the dead-hypothesis peel in erasure's `eliminate` emits the read once and binds a name rather than substituting `get(b, 0)` into every arm that mentions it. Exactly one arm runs, so this is a static site count; the per-character cost is one read either way.
     assert_eq!(
         in_fold("call $bytes/read"),
         1,

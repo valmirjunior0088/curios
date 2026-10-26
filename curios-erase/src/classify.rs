@@ -3,26 +3,24 @@
 //! **Only a declaration drops.** A structure's fields and a constructor's payload are classified once, against the declaration's own signature, and every construction and elimination reads that one row. A function type and an anonymous tuple type have no declaration: the type a value of one stands at differs from site to site by a substitution or a refinement, and a domain one site reads as a proof or a type another reads as a variable. So neither is classified for its shape at all — a function has a parameter for each binder and a tuple a field for each member — and what [`is_erasable`] decides of a slot is only what fills it.
 
 use {
-    super::Lowering,
-    crate::{Error, Opened, Retyping},
-    curios_core::{
-        Advance, Bound, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType,
-    },
+    crate::{Error, Lowering},
+    curios_core::{Advance, Bound},
+    curios_elab::{Opened, Retyping},
     std::collections::BTreeSet,
 };
 
-/// Whether a value of type `type_` carries nothing at run time, by the engine's rule read through erasure's reader ([`crate::is_erasable_in`]): a type, a proof, or a function that ultimately answers one. The empty tuple is none of them, so `{}`, `{ .., {} }` and `X -> {}` are kept.
+/// Whether a value of type `type_` carries nothing at run time, by the engine's rule read through erasure's reader ([`curios_elab::is_erasable_in`]): a type, a proof, or a function that ultimately answers one. The empty tuple is none of them, so `{}`, `{ .., {} }` and `X -> {}` are kept.
 ///
 /// CRITICAL: an answer here is one reading's. A polymorphic field `value : A` is kept (its abstract `A` is neither prop nor type) and reads as a proof at a construction where `A := SomeProp`. So a runtime shape is decided from this only for a nominal declaration, against its *declared* signature opened with the surrounding binders as opaque variables ([`constructor_entries`]); everywhere else the answer decides what a slot holds and never whether the slot is there.
-pub fn is_erasable(context: &mut Retyping, type_: &Term) -> Result<bool, Error> {
-    context.is_erasable_in(&mut Opened::default(), type_)
+pub fn is_erasable(context: &mut Retyping, type_: &curios_core::Term) -> Result<bool, Error> {
+    Ok(context.is_erasable_in(&mut Opened::default(), type_)?)
 }
 
-/// The payload view of a nominal declaration's telescope: one entry per binder — its label, whether it is erased, and the recorded carrier shape of a kept one — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`crate::is_erasable_in`]). That opaque-open discipline is what makes a row a fact of its declaration, the same at every instantiation, so this is the only walk that computes one; the terminal body is ignored. It pairs with a concrete walk over the actual values: the row decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types. An erased entry's shape is `Opaque`; nothing reads it.
+/// The payload view of a nominal declaration's telescope: one entry per binder — its label, whether it is erased, and the recorded carrier shape of a kept one — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`curios_elab::is_erasable_in`]). That opaque-open discipline is what makes a row a fact of its declaration, the same at every instantiation, so this is the only walk that computes one; the terminal body is ignored. It pairs with a concrete walk over the actual values: the row decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types. An erased entry's shape is `Opaque`; nothing reads it.
 pub fn constructor_entries<B: Bound>(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
-    telescope: Telescope<B>,
+    telescope: curios_core::Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool, curios_anf::FieldShape)>, Error> {
     let mut entries = Vec::new();
     let mut opened = Opened::default();
@@ -47,8 +45,8 @@ pub fn constructor_entries<B: Bound>(
 fn field_shape(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
-    visited: &mut BTreeSet<Global>,
-    type_: &Term,
+    visited: &mut BTreeSet<curios_core::Global>,
+    type_: &curios_core::Term,
 ) -> Result<curios_anf::FieldShape, Error> {
     shape_walk(lowering, Rows::Named, context, visited, type_)
 }
@@ -57,7 +55,7 @@ fn field_shape(
 pub fn register_shape(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
-    type_: &Term,
+    type_: &curios_core::Term,
 ) -> Result<Option<curios_anf::RegisterShape>, Error> {
     Ok(
         match shape_walk(
@@ -109,9 +107,9 @@ impl Relevance {
 /// The type of the entry at `place` of `telescope`, the entries before it opened as fresh variables.
 fn entry_at<B: Bound>(
     context: &mut Retyping,
-    telescope: Telescope<B>,
+    telescope: curios_core::Telescope<B>,
     place: usize,
-) -> Option<Term> {
+) -> Option<curios_core::Term> {
     let mut cursor = telescope.cursor();
     for _ in 0..place {
         if cursor.is_done() {
@@ -127,27 +125,35 @@ fn shape_walk(
     lowering: &mut Lowering<'_>,
     rows: Rows,
     context: &mut Retyping,
-    visited: &mut BTreeSet<Global>,
-    type_: &Term,
+    visited: &mut BTreeSet<curios_core::Global>,
+    type_: &curios_core::Term,
 ) -> Result<curios_anf::FieldShape, Error> {
     let reduced = context.reduce_with(type_)?;
     match &*reduced {
-        Subterm::Intrinsic(Intrinsic::BoolType | Intrinsic::ByteType) => {
-            Ok(curios_anf::FieldShape::Immediate)
-        }
+        curios_core::Subterm::Intrinsic(
+            curios_core::Intrinsic::BoolType | curios_core::Intrinsic::ByteType,
+        ) => Ok(curios_anf::FieldShape::Immediate),
         // A `Nat` or `Int` rides the i31 only while it is small and is a boxed magnitude past it, so it is sometimes an immediate: not `Immediate`, but a shape of its own the family encoding can still discriminate.
-        Subterm::Intrinsic(Intrinsic::NatType | Intrinsic::IntType) => {
-            Ok(curios_anf::FieldShape::Number)
+        curios_core::Subterm::Intrinsic(
+            curios_core::Intrinsic::NatType | curios_core::Intrinsic::IntType,
+        ) => Ok(curios_anf::FieldShape::Number),
+        curios_core::Subterm::Intrinsic(curios_core::Intrinsic::FltType) => {
+            Ok(curios_anf::FieldShape::Flt)
         }
-        Subterm::Intrinsic(Intrinsic::FltType) => Ok(curios_anf::FieldShape::Flt),
-        Subterm::Intrinsic(Intrinsic::BytesType) => Ok(curios_anf::FieldShape::Bytes),
-        Subterm::Intrinsic(Intrinsic::HandleType) => Ok(curios_anf::FieldShape::Bytes),
-        Subterm::Intrinsic(Intrinsic::ListType(_)) => Ok(curios_anf::FieldShape::List),
+        curios_core::Subterm::Intrinsic(curios_core::Intrinsic::BytesType) => {
+            Ok(curios_anf::FieldShape::Bytes)
+        }
+        curios_core::Subterm::Intrinsic(curios_core::Intrinsic::HandleType) => {
+            Ok(curios_anf::FieldShape::Bytes)
+        }
+        curios_core::Subterm::Intrinsic(curios_core::Intrinsic::ListType(_)) => {
+            Ok(curios_anf::FieldShape::List)
+        }
         // The field is kept, so the codomain does not erase; the value is a closure over every binder of the outermost telescope, which is the arity the lowering gives it.
-        Subterm::FuncType(FuncType { telescope, .. }) => {
+        curios_core::Subterm::FuncType(curios_core::FuncType { telescope, .. }) => {
             Ok(curios_anf::FieldShape::Closure(telescope.len()))
         }
-        Subterm::StructType(struct_type) => {
+        curios_core::Subterm::StructType(struct_type) => {
             // A struct that reaches itself is uninhabited but elaborates, so its own registration is still in flight here and there is no row to read yet. Answering `Opaque` costs a shape no value will ever occupy.
             let Some(relevance) = lowering.struct_relevance(context, &struct_type.name)? else {
                 return Ok(curios_anf::FieldShape::Opaque);
@@ -182,16 +188,18 @@ fn shape_walk(
             }
         }
         // An anonymous tuple's row is shared by every tuple of its width and records no shape, so there is no type to declare a slot at — the chain still runs through a tuple of one field, which is that field. A tuple drops no field, so its width is its telescope's.
-        Subterm::TupleType(TupleType { telescope }) => match telescope.len() {
-            1 => {
-                let (_, domain) = telescope.cursor().entry().expect("a tuple of one field");
+        curios_core::Subterm::TupleType(curios_core::TupleType { telescope }) => {
+            match telescope.len() {
+                1 => {
+                    let (_, domain) = telescope.cursor().entry().expect("a tuple of one field");
 
-                shape_walk(lowering, rows, context, visited, &domain)
+                    shape_walk(lowering, rows, context, visited, &domain)
+                }
+                _ => Ok(curios_anf::FieldShape::Opaque),
             }
-            _ => Ok(curios_anf::FieldShape::Opaque),
-        },
+        }
         // A multi-constructor family is its own shape, and its *identity* is what a typed slot needs — never chased, whatever its encoding. A single-constructor family is always its payload row under the collapsed encoding, so the chain continues through it exactly as through a newtype struct; the `visited` guard cuts the cycle a legitimately recursive one would otherwise spin in.
-        Subterm::InductType(induct_type) => {
+        curios_core::Subterm::InductType(induct_type) => {
             let family = |lowering: &mut Lowering<'_>, context: &mut Retyping| match rows {
                 Rows::Named => Ok(curios_anf::FieldShape::Family(
                     lowering.family_identity(context, &induct_type.name)?,

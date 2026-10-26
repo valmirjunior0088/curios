@@ -2,12 +2,11 @@
 //!
 //! **Found by the item it erased.** A completed record is named by the item's identity ([`curios_core::ItemRun::identity`]), which says what the item means and nothing of where it was written, so an item elaborated again to what it was, or taken from a store, finds the records of every erasure of it.
 //!
-//! **Taken where every part and binding it read digests as it did.** An item's erased form is a function of its item and of what its erasure read ([`ErasedOver`]): the parts of the declarations around it, how each name it uses is bound in the erased form that declares it, and the forms its evaluation ran, whole. A completed record holds a digest of each, as the elaboration's holds one of each part it read ([`crate::Candidating`]), so it is told standing by what is erased now and never by what its erasure read then.
+//! **Taken where every part and binding it read digests as it did.** An item's erased form is a function of its item and of what its erasure read ([`ErasedOver`]): the parts of the declarations around it, how each name it uses is bound in the erased form that declares it, and the forms its evaluation ran, whole. A completed record holds a digest of each, as the elaboration's holds one of each part it read ([`curios_elab::Candidating`]), so it is told standing by what is erased now and never by what its erasure read then.
 
 use {
-    super::{ErasedOver, ErasedUnit},
-    crate::{Answered, Made, Question, Read, bytes_of, part_digest},
-    curios_core::{Global, Module, Places, Trace},
+    crate::{ErasedOver, ErasedUnit},
+    curios_elab::{Answered, Made, Question, Read, bytes_of, part_digest},
     curios_utilities::Digest,
     std::collections::HashMap,
 };
@@ -16,9 +15,9 @@ impl ErasedOver<'_> {
     /// Whether every question of `asked`, the erasure of the item declaring `names` where `made` was filed, is a part asked, and every part and binding it read digests now as it did: `unit` holding the erased forms of the items before it.
     pub fn stands(
         &self,
-        names: &[&Global],
+        names: &[&curios_core::Global],
         made: &Made,
-        asked: &Trace<Question, Answered>,
+        asked: &curios_core::Trace<Question, Answered>,
         unit: &ErasedUnit,
     ) -> bool {
         asked
@@ -35,8 +34,8 @@ impl ErasedUnit {
     /// Complete the record of the erasure of each item `module` holds, where `places` holds each name, that no filing has: the item's identity, from `items`, what its erasure read, and its erased form, from `forms`, each by the item's place. Nothing completes one whose erasure asked something of the unit as a whole, or read a part or a binding that will not digest, or one of another unit that the unit records nothing of.
     pub fn complete(
         &self,
-        module: &Module,
-        places: &Places,
+        module: &curios_core::Module,
+        places: &curios_core::Places,
         items: &HashMap<usize, Digest>,
         forms: &HashMap<usize, Digest>,
     ) {
@@ -85,9 +84,9 @@ impl ErasedUnit {
     /// What the item declaring `names` read of what `question` asks, as a completed record holds it ([`Read`]), off this unit, its module `module` held where `places` says, and what its erasure recorded of other units: `None` where it will not digest.
     fn read_then(
         &self,
-        module: &Module,
-        places: &Places,
-        names: &[&Global],
+        module: &curios_core::Module,
+        places: &curios_core::Places,
+        names: &[&curios_core::Global],
         question: &Question,
     ) -> Option<Read> {
         let Some(subject) = question

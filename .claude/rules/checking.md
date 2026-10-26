@@ -6,6 +6,7 @@ paths:
   - "curios-analysis/**"
   - "curios-cert/**"
   - "curios-elab/**"
+  - "curios-erase/**"
 ---
 
 # Checking: the trusted base and the elaborator

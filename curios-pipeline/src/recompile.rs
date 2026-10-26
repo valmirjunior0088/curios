@@ -1,20 +1,21 @@
 //! One unit compiled over a baseline: lowered whole, and each declaration kept as the baseline holds it where nothing its elaboration asked there moved, with every other elaborated and judged; and each erased form kept where what its erasure asked is.
 //!
-//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand, makes the unit a version of the baseline's, and says which it lowered anew (`PreparedText::lowered_anew`). The elaborator walks what those could reach, through who asked what of the baseline's traces (`curios_elab::Traces`), keeps every declaration none of them reached without asking it, and keeps a reached one where nothing it asked moved, so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). Erasure keeps the erased form of a declaration the elaborator kept where every question its erasure put is answered as it was, of the declarations around it and of the erased forms it read a binding in (`curios_elab::ErasedBaseline`).
+//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand, makes the unit a version of the baseline's, and says which it lowered anew (`PreparedText::lowered_anew`). The elaborator walks what those could reach, through who asked what of the baseline's traces (`curios_elab::Traces`), keeps every declaration none of them reached without asking it, and keeps a reached one where nothing it asked moved, so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). Erasure keeps the erased form of a declaration the elaborator kept where every question its erasure put is answered as it was, of the declarations around it and of the erased forms it read a binding in (`curios_erase::ErasedBaseline`).
 //!
 //! **A declaration lowered again is elaborated again.** Nothing compares two lowerings: an edit that leaves a declaration's meaning alone costs that declaration's elaboration, and what it comes to is compared part by part with what the baseline holds, by whatever read it.
 
 use {
     crate::{
-        Closing, CompileError, elaborator_refusal, globals_after, kernel_refusal, lowering_refusal,
+        Closing, CompileError, erasure_refusal, globals_after, kernel_refusal, lowering_refusal,
         with_broken,
     },
     curios_cert::{Baseline, Rechecked, certify_module_over},
     curios_core::{Entrypoint, Module, Places, Zonked},
     curios_elab::{
-        Context, ErasedBaseline, Erasures, Established, Recompile, Recompiled,
-        elaborate_and_zonk_entry_over, elaborate_and_zonk_unit_over, erase_unit_over,
+        Context, Established, Recompile, Recompiled, elaborate_and_zonk_entry_over,
+        elaborate_and_zonk_unit_over,
     },
+    curios_erase::{ErasedBaseline, Erasures, erase_unit_over},
     curios_text::{PreparedText, UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Uncertified, Unit},
     curios_utilities::{Candidates, SyntaxRegistry},
@@ -245,7 +246,7 @@ pub(crate) fn compile_lowered_over(
         },
     )
     .map_err(|error| {
-        let refusal = elaborator_refusal(
+        let refusal = erasure_refusal(
             &error,
             core.as_module(),
             &predecessors.lexicons(),

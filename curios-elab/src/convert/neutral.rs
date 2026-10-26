@@ -263,9 +263,9 @@ pub enum Curried {
     Compared,
 }
 
-/// Binders opened locally by [`Sort::of`](super::Sort::of) while walking a telescope, innermost last, each found by its name.
+/// Binders opened locally by `Sort::of` while walking a telescope, innermost last, each found by its name.
 ///
-/// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion problem (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only: a label minted here is among no problem's [`Binders`], so it must never reach one. It cannot, because `Sort::of` returns a `Sort`.
+/// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion problem (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only: a label minted here is among no problem's `Binders`, so it must never reach one. It cannot, because `Sort::of` returns a `Sort`.
 ///
 /// **A binder is found by its name, and a type asked which it names by the names it holds.** A record's fields are each opened beside the ones before it, and each field's type is asked whether it names any of them: read off a list, field by field, that is the square of the fields.
 #[derive(Debug, Clone, Default)]
@@ -277,7 +277,7 @@ pub struct Opened {
 
 impl Opened {
     /// How many binders are open: the mark [`Opened::truncate`] closes back to.
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.binders.len()
     }
 
@@ -288,7 +288,7 @@ impl Opened {
     }
 
     /// Close the innermost binder.
-    pub fn pop(&mut self) {
+    pub(crate) fn pop(&mut self) {
         if let Some((binder, _, shadowed)) = self.binders.pop() {
             match shadowed {
                 Some(position) => self.positions.insert(binder, position),
@@ -298,14 +298,14 @@ impl Opened {
     }
 
     /// Close every binder opened past `mark`.
-    pub fn truncate(&mut self, mark: usize) {
+    pub(crate) fn truncate(&mut self, mark: usize) {
         while self.binders.len() > mark {
             self.pop();
         }
     }
 
     /// The type `name` was opened at, where it is open.
-    pub fn type_of(&self, name: &Free) -> Option<&Term> {
+    pub(crate) fn type_of(&self, name: &Free) -> Option<&Term> {
         let position = *self.positions.get(name)?;
 
         Some(&self.binders[position].1)

@@ -734,7 +734,6 @@ dependencies = [
  "curios-abi",
  "curios-algebra",
  "curios-analysis",
- "curios-anf",
  "curios-archive",
  "curios-cert",
  "curios-core",
@@ -753,6 +752,21 @@ dependencies = [
  "curios-profile",
  "curios-utilities",
  "curios-wasm",
+]
+
+[[package]]
+name = "curios-erase"
+version = "0.16.16"
+dependencies = [
+ "curios-abi",
+ "curios-analysis",
+ "curios-anf",
+ "curios-archive",
+ "curios-core",
+ "curios-elab",
+ "curios-num",
+ "curios-profile",
+ "curios-utilities",
 ]
 
 [[package]]
@@ -828,6 +842,7 @@ dependencies = [
  "curios-document",
  "curios-elab",
  "curios-emit",
+ "curios-erase",
  "curios-prelude",
  "curios-profile",
  "curios-std",
@@ -863,6 +878,7 @@ dependencies = [
  "curios-core",
  "curios-document",
  "curios-elab",
+ "curios-erase",
  "curios-package",
  "curios-profile",
  "curios-std",
@@ -932,6 +948,7 @@ dependencies = [
  "curios-archive",
  "curios-core",
  "curios-elab",
+ "curios-erase",
  "curios-text",
  "curios-utilities",
 ]

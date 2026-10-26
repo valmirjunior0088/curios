@@ -3,18 +3,14 @@
 //! The walk produces operands under the operand law rather than terms: [`Outcome::Emitted`] carries the atom a subexpression erased to, [`Outcome::Diverged`] carries the terminator that seals the innermost block when the subexpression provably never yields a value. Every non-atomic computation is bound by the builder at the point the walk reaches it, so evaluation order is statement order by construction.
 
 use {
-    super::{
-        Binding, Environment, ErasedBaseline, ErasedItem, ErasedOver, ErasedUnit, Erasures, Export,
-        Projected, Projection, emitted, evaluate, link, register_shape,
-    },
     crate::{
-        Answered, Error, Foreign, Parts, Question, Readers, Retyping, TraceRecord, Traces,
-        validate_entry_universes, validate_universes, validate_universes_in,
+        Binding, Environment, ErasedBaseline, ErasedItem, ErasedOver, ErasedUnit, Erasures, Error,
+        Export, Projected, Projection, emitted, evaluate, link, register_shape,
     },
-    curios_core::{
-        Bound, Certification, Entrypoint, Extent, Free, Global, Intrinsic, Item, Let, Module,
-        Operand, Program, Subterm, Telescope, Term, Trace, Zonked, foreign_operands,
-        project_erased_universes,
+    curios_core::Bound,
+    curios_elab::{
+        Answered, Foreign, Parts, Question, Readers, Retyping, TraceRecord, Traces,
+        validate_entry_universes, validate_universes, validate_universes_in,
     },
     curios_utilities::{SyntaxRegistry, grown, recurse},
     std::{
@@ -53,7 +49,7 @@ pub enum Outcome {
 }
 
 /// How one item's erasure reads the erased form of another: by a name the other declares.
-pub type Externals<'s> = &'s dyn Fn(&Global) -> Option<&'s ErasedItem>;
+pub type Externals<'s> = &'s dyn Fn(&curios_core::Global) -> Option<&'s ErasedItem>;
 
 /// One item's erasure state: the checked builder constructing its fragment and the environment mapping Core names to their operands there.
 pub struct Lowering<'s> {
@@ -62,19 +58,19 @@ pub struct Lowering<'s> {
     /// The erased forms of the items this one may name.
     externals: Externals<'s>,
     /// The name each value the fragment imports stands for, in the order the builder minted them.
-    values: Vec<Global>,
+    values: Vec<curios_core::Global>,
     /// The name each function the fragment imports stands for, in the order the builder minted them.
-    functions: Vec<Global>,
+    functions: Vec<curios_core::Global>,
     /// The definition each emitted function descends from, innermost last, paired with how many anonymous ones have been minted under it. See [`Lowering::derived_hint`].
     owners: Vec<(String, usize)>,
     /// The family identity of each inductive whose row is being registered right now. An inductive is legitimately recursive, so classifying its fields reaches itself; the identity is minted before that walk begins, so the recursive lookup answers from here rather than re-entering the registration.
-    pending_families: BTreeMap<Global, curios_anf::FamilyId>,
+    pending_families: BTreeMap<curios_core::Global, curios_anf::FamilyId>,
     /// The structures whose row is being registered right now. A self-referential structure is uninhabited but elaborates, and unlike an inductive its schema is only decided *after* its fields are classified — so the cycle is cut by declining to name a schema rather than by naming one early.
-    in_flight: BTreeSet<Global>,
+    in_flight: BTreeSet<curios_core::Global>,
     /// The type each term was read at ([`Lowering::type_of`]), for the item being erased. Dropped at every top-level item and before the entry, which is what bounds it.
-    types: HashMap<Term, Term>,
+    types: HashMap<curios_core::Term, curios_core::Term>,
     /// The extent of each computed recursive member's initializer, by the identity it was minted as. The erased verifier refuses a member by that identity after the module holding it is gone, so the frame for the refusal is kept here rather than in the representation, whose nodes are the stored-unit format and carry no extents.
-    extents: BTreeMap<curios_anf::ValueId, Extent>,
+    extents: BTreeMap<curios_anf::ValueId, curios_core::Extent>,
     /// The name each member of a group and each import was minted for, for the same refusal: it knows identities alone.
     names: ErasedNames,
 }
@@ -82,16 +78,16 @@ pub struct Lowering<'s> {
 /// The names a fragment's identities were minted for, by identity: what a refusal of the erased verifier, which holds identities and debug names alone, names a member and a callee by.
 #[derive(Debug, Default)]
 pub struct ErasedNames {
-    pub values: BTreeMap<curios_anf::ValueId, Free>,
-    pub functions: BTreeMap<curios_anf::FunctionId, Free>,
+    pub values: BTreeMap<curios_anf::ValueId, curios_core::Free>,
+    pub functions: BTreeMap<curios_anf::FunctionId, curios_core::Free>,
 }
 
 /// Erase the entrypoint body into the entry block of a fragment of its own — [`erase_program`]'s tail. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit — an evaluation cycle, an initializer that performs an effect — and hands those back as the refusal; a malformed fragment is an erasure fault, which the verifier panics on rather than returning here.
 fn seal_entry(
     mut lowering: Lowering<'_>,
     context: &mut Retyping,
-    body: &Term,
-    expected: &Term,
+    body: &curios_core::Term,
+    expected: &curios_core::Term,
 ) -> Result<ErasedItem, Error> {
     lowering.types.clear();
     lowering.builder.open_block();
@@ -111,7 +107,7 @@ fn seal_entry(
 fn force_entry(
     lowering: &mut Lowering<'_>,
     context: &mut Retyping,
-    expected: &Term,
+    expected: &curios_core::Term,
     outcome: Outcome,
 ) -> Result<Outcome, Error> {
     let Outcome::Emitted(description) = outcome else {
@@ -119,7 +115,7 @@ fn force_entry(
     };
     if !matches!(
         &*context.reduce_with(expected)?,
-        Subterm::Intrinsic(Intrinsic::IoType(_))
+        curios_core::Subterm::Intrinsic(curios_core::Intrinsic::IoType(_))
     ) {
         return Ok(Outcome::Emitted(description));
     }
@@ -155,7 +151,7 @@ impl<'s> Lowering<'s> {
     }
 
     /// Close the fragment and hand the item's erased form over: the fragment verified with no entry, its recursion rules included, and of the environment the bindings of `declared`, the names the item declares.
-    pub fn into_erased(self, declared: &[&Global]) -> Result<ErasedItem, Error> {
+    pub fn into_erased(self, declared: &[&curios_core::Global]) -> Result<ErasedItem, Error> {
         let Self {
             builder,
             environment,
@@ -178,14 +174,14 @@ impl<'s> Lowering<'s> {
     }
 
     /// The erased form of the item declaring `name`, where another item does.
-    pub fn declaring(&self, name: &Global) -> Option<&'s ErasedItem> {
+    pub fn declaring(&self, name: &curios_core::Global) -> Option<&'s ErasedItem> {
         (self.externals)(name)
     }
 
     /// Bind `name`, which another item declares, as this fragment reads it: an erased binding as none, a constant as the constant, and a value or a function as an import, minted the first time the name is used.
     ///
     /// A value whose own initializer reads it is refused here, where it is read: its item could not tell that anything would read it, and this read is what forces it into itself. So the recursion rules are settled for every fragment where it is erased, and a unit that reads such a value of another is refused where it is compiled, the report noting where the value is declared.
-    fn external(&mut self, name: &Free) -> Result<Option<Binding>, Error> {
+    fn external(&mut self, name: &curios_core::Free) -> Result<Option<Binding>, Error> {
         let Some(global) = name.as_global() else {
             return Ok(None);
         };
@@ -262,7 +258,7 @@ impl<'s> Lowering<'s> {
         context: &mut Retyping,
         hint: Option<&str>,
         rhs: curios_anf::Rhs,
-        type_: &Term,
+        type_: &curios_core::Term,
     ) -> Result<Outcome, Error> {
         debug_assert!(
             !rhs.names_its_carrier(),
@@ -278,7 +274,7 @@ impl<'s> Lowering<'s> {
         &mut self,
         context: &mut Retyping,
         value: curios_anf::ValueId,
-        type_: &Term,
+        type_: &curios_core::Term,
     ) -> Result<(), Error> {
         if let Some(register) = register_shape(self, context, type_)? {
             self.builder.state(value, register);
@@ -298,8 +294,8 @@ impl<'s> Lowering<'s> {
         &mut self,
         context: &mut Retyping,
         mask: &[bool],
-        telescope: Telescope<B>,
-        values: &[Term],
+        telescope: curios_core::Telescope<B>,
+        values: &[curios_core::Term],
     ) -> Result<Result<Vec<curios_anf::Atom>, Outcome>, Error> {
         let mut atoms = Vec::with_capacity(values.len());
         let mut cursor = telescope.cursor();
@@ -321,8 +317,8 @@ impl<'s> Lowering<'s> {
     pub fn slots<B: Bound>(
         &mut self,
         context: &mut Retyping,
-        telescope: Telescope<B>,
-        values: &[Term],
+        telescope: curios_core::Telescope<B>,
+        values: &[curios_core::Term],
     ) -> Result<Result<Vec<curios_anf::Atom>, Outcome>, Error> {
         self.masked_fields(context, &vec![false; values.len()], telescope, values)
     }
@@ -331,8 +327,8 @@ impl<'s> Lowering<'s> {
     pub fn walk(
         &mut self,
         context: &mut Retyping,
-        term: &Term,
-        expected: &Term,
+        term: &curios_core::Term,
+        expected: &curios_core::Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         // With room to recurse: an operand is walked inside the expression that holds it, so a nesting of calls is a nesting of walks.
@@ -347,14 +343,16 @@ impl<'s> Lowering<'s> {
     fn walk_subterm(
         &mut self,
         context: &mut Retyping,
-        term: &Term,
-        expected: &Term,
+        term: &curios_core::Term,
+        expected: &curios_core::Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         match &**term {
-            Subterm::Intrinsic(intrinsic) => self.erase_intrinsic(context, intrinsic, hint),
+            curios_core::Subterm::Intrinsic(intrinsic) => {
+                self.erase_intrinsic(context, intrinsic, hint)
+            }
             // A host call: each operand erases against the demand elaboration checked it with, `foreign_operands`' reading of the same row. A diverging call's type operand erases with every other type.
-            Subterm::Foreign(function, _, arguments) => {
+            curios_core::Subterm::Foreign(function, _, arguments) => {
                 let signature = function.signature();
                 let results = signature.returns.types();
                 // An option crosses as its element's list would, so one the row takes or answers is converted beside the call.
@@ -368,10 +366,12 @@ impl<'s> Lowering<'s> {
                 let mut wires = signature.params.iter();
                 let mut atoms = Vec::with_capacity(arguments.len());
                 let syntax = context.syntax();
-                for (argument, demand) in arguments.iter().zip(foreign_operands(function, &syntax))
+                for (argument, demand) in arguments
+                    .iter()
+                    .zip(curios_core::foreign_operands(function, &syntax))
                 {
                     match demand {
-                        Operand::At(type_) => {
+                        curios_core::Operand::At(type_) => {
                             let atom = emitted!(self.walk(context, argument, &type_, None)?);
                             let wire = wires
                                 .next()
@@ -382,8 +382,8 @@ impl<'s> Lowering<'s> {
                                 _ => atom,
                             });
                         }
-                        Operand::IsType => {}
-                        Operand::Function { .. } => {
+                        curios_core::Operand::IsType => {}
+                        curios_core::Operand::Function { .. } => {
                             unreachable!("a host call demands no function operand")
                         }
                     }
@@ -410,15 +410,15 @@ impl<'s> Lowering<'s> {
                 )))
             }
             // Type formers carry nothing to lower; their value is the unit of a retained-but-erased slot.
-            Subterm::Sort(..)
-            | Subterm::FuncType(_)
-            | Subterm::TupleType(_)
-            | Subterm::InductType(_)
-            | Subterm::StructType(_) => Ok(Outcome::Emitted(self.unit())),
-            Subterm::Instance(_) => {
+            curios_core::Subterm::Sort(..)
+            | curios_core::Subterm::FuncType(_)
+            | curios_core::Subterm::TupleType(_)
+            | curios_core::Subterm::InductType(_)
+            | curios_core::Subterm::StructType(_) => Ok(Outcome::Emitted(self.unit())),
+            curios_core::Subterm::Instance(_) => {
                 unreachable!("an instance survived the projection out of universes")
             }
-            Subterm::Var(var) => {
+            curios_core::Subterm::Var(var) => {
                 let name = var.unwrap();
                 let binding = match self.environment.lookup(name) {
                     Some(binding) => binding,
@@ -431,18 +431,20 @@ impl<'s> Lowering<'s> {
                     Binding::Dropped => Ok(Outcome::Emitted(self.unit())),
                 }
             }
-            Subterm::Let(binding) => self.erase_let(context, binding, expected, hint),
-            Subterm::Match(m) => self.erase_match(context, m, hint),
-            Subterm::Variant(variant) => self.erase_variant(context, variant, hint),
-            Subterm::Struct(value) => self.erase_struct(context, value, hint),
-            Subterm::Tuple(tuple) => self.erase_tuple(context, tuple, expected, hint),
-            Subterm::Proj(proj) => self.erase_proj(context, proj, expected, hint),
-            Subterm::Func(func) => self.erase_func(context, func, expected, hint),
-            Subterm::Apply(apply) => self.erase_apply(context, apply, expected, hint),
-            Subterm::Rec(rec) => self.erase_rec(context, rec, expected, hint),
+            curios_core::Subterm::Let(binding) => self.erase_let(context, binding, expected, hint),
+            curios_core::Subterm::Match(m) => self.erase_match(context, m, hint),
+            curios_core::Subterm::Variant(variant) => self.erase_variant(context, variant, hint),
+            curios_core::Subterm::Struct(value) => self.erase_struct(context, value, hint),
+            curios_core::Subterm::Tuple(tuple) => self.erase_tuple(context, tuple, expected, hint),
+            curios_core::Subterm::Proj(proj) => self.erase_proj(context, proj, expected, hint),
+            curios_core::Subterm::Func(func) => self.erase_func(context, func, expected, hint),
+            curios_core::Subterm::Apply(apply) => self.erase_apply(context, apply, expected, hint),
+            curios_core::Subterm::Rec(rec) => self.erase_rec(context, rec, expected, hint),
             // Erasure runs downstream of zonking and elaboration.
-            Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erasure"),
-            Subterm::Transient(_) => {
+            curios_core::Subterm::Metavar(_) => {
+                unreachable!("metavariable survived zonking into erasure")
+            }
+            curios_core::Subterm::Transient(_) => {
                 unreachable!("transient node survived elaboration into erasure")
             }
         }
@@ -452,12 +454,12 @@ impl<'s> Lowering<'s> {
     fn erase_let(
         &mut self,
         context: &mut Retyping,
-        binding: &Let,
-        expected: &Term,
+        binding: &curios_core::Let,
+        expected: &curios_core::Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         context.with_frame(|context| {
-            let mut label_terms = Vec::<Term>::with_capacity(binding.bindings.len());
+            let mut label_terms = Vec::<curios_core::Term>::with_capacity(binding.bindings.len());
 
             for (index, local) in binding.bindings.iter().enumerate() {
                 let (type_, value) = {
@@ -474,7 +476,7 @@ impl<'s> Lowering<'s> {
                 let atom = emitted!(outcome);
                 context.define_assuming(&name, &type_, &value, None);
                 self.environment.bind(&name, atom);
-                label_terms.push(Term::free_var(&name));
+                label_terms.push(curios_core::Term::free_var(&name));
             }
 
             let tail = binding.tail.open(&label_terms.iter().collect::<Vec<_>>());
@@ -488,13 +490,13 @@ impl<'s> Lowering<'s> {
 pub struct ErasedProgram {
     module: curios_anf::Module,
     /// The function each name that defines one is bound to. A function an item computed is bound under a name and defined by none, so it is not among them.
-    defined: BTreeMap<Global, curios_anf::FunctionId>,
+    defined: BTreeMap<curios_core::Global, curios_anf::FunctionId>,
 }
 
 impl ErasedProgram {
     pub(super) fn new(
         module: curios_anf::Module,
-        defined: BTreeMap<Global, curios_anf::FunctionId>,
+        defined: BTreeMap<curios_core::Global, curios_anf::FunctionId>,
     ) -> Self {
         Self { module, defined }
     }
@@ -504,7 +506,7 @@ impl ErasedProgram {
     /// Run on the linked program, once per record of what it was erased from: every unit's in scope and the entry's own. Nothing reads the flag before the back half lowers what this leaves.
     ///
     /// **Asked by the names the program linked, never walked.** A record classifies every definition of its unit and a program links a few of them, so each linked name is asked of the record, and the record is read for what the program took of its unit.
-    pub fn mark_total(&mut self, certification: &Certification) {
+    pub fn mark_total(&mut self, certification: &curios_core::Certification) {
         let total = self
             .defined
             .iter()
@@ -530,12 +532,12 @@ impl ErasedProgram {
 ///
 /// The reader erasure reads through is its own, made here on `budget` over the unit and its scope out of their universes (`Retyping`, `Projected`) and handed in by no caller. Nothing is seeded: a declaration is projected when an item's erasure first reads it or when it is erased, so a unit pays for what its items read. The items erase in the order the module stores them, every item after the items it reaches — so the erased form of every name an item uses is in hand when it is asked for.
 ///
-/// **A unit and a program are erased by one walk, and only a program is linked.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`]), so [`erase_program`] runs this same walk, erases the entry at the type it states, which [`Zonked`] holds, and links what the entry reaches.
+/// **A unit and a program are erased by one walk, and only a program is linked.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`](curios_core::Program)), so [`erase_program`] runs this same walk, erases the entry at the type it states, which [`Zonked`](curios_core::Zonked) holds, and links what the entry reaches.
 pub fn erase_unit(
     budget: u64,
     syntax: SyntaxRegistry,
     scope: Erasures<'_>,
-    module: &Zonked<Module>,
+    module: &curios_core::Zonked<curios_core::Module>,
 ) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
@@ -555,7 +557,7 @@ pub fn erase_unit_over(
     budget: u64,
     syntax: SyntaxRegistry,
     scope: Erasures<'_>,
-    module: &Zonked<Module>,
+    module: &curios_core::Zonked<curios_core::Module>,
     baseline: ErasedBaseline<'_>,
 ) -> Result<(ErasedUnit, Projection), Error> {
     curios_profile::profile!("erase_unit");
@@ -595,7 +597,7 @@ pub fn erase_program(
     budget: u64,
     syntax: SyntaxRegistry,
     scope: Erasures<'_>,
-    program: &Zonked<Program>,
+    program: &curios_core::Zonked<curios_core::Program>,
 ) -> Result<ErasedProgram, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
@@ -604,21 +606,22 @@ pub fn erase_program(
         // The entry's universes are held to its module's schemes before projection erases them.
         validate_entry_universes(
             module,
-            &Entrypoint {
+            &curios_core::Entrypoint {
                 body: body.clone(),
                 type_: Some(type_.clone()),
             },
         )?;
         let (body, type_) = (
-            project_erased_universes(body),
-            project_erased_universes(type_),
+            curios_core::project_erased_universes(body),
+            curios_core::project_erased_universes(type_),
         );
 
         let view = projected(scope, module)?;
         let context = &mut Retyping::over(budget, syntax, &view);
         let own = erase_items(context, &view, scope, module, None)?;
         let entry = {
-            let externals = |name: &Global| own.find(name).or_else(|| scope.find(name));
+            let externals =
+                |name: &curios_core::Global| own.find(name).or_else(|| scope.find(name));
             seal_entry(Lowering::over(&externals), context, &body, &type_)?
         };
 
@@ -627,7 +630,10 @@ pub fn erase_program(
 }
 
 /// `module` and its scope as erasure reads them, out of their universes, with `module`'s universes held to its schemes first: what the projection erases is validated before it goes. The scope's were validated where its units were stored, which is where untrusted bytes become a module.
-pub fn projected<'a>(scope: Erasures<'a>, module: &'a Module) -> Result<Projected<'a>, Error> {
+pub fn projected<'a>(
+    scope: Erasures<'a>,
+    module: &'a curios_core::Module,
+) -> Result<Projected<'a>, Error> {
     validate_universes(module)?;
 
     Ok(Projected::over(scope, module))
@@ -640,7 +646,7 @@ pub fn erase_items<'s>(
     context: &mut Retyping<'s>,
     view: &'s Projected<'_>,
     scope: Erasures<'_>,
-    module: &Module,
+    module: &curios_core::Module,
     mut over: Option<ErasedOver<'_>>,
 ) -> Result<ErasedUnit, Error> {
     let shared = over.as_ref().and_then(|over| {
@@ -698,7 +704,7 @@ pub fn erase_items<'s>(
             }
             (None, None) => {
                 let read = RefCell::new(Vec::new());
-                let externals = |name: &Global| {
+                let externals = |name: &curios_core::Global| {
                     read.borrow_mut().push(*name);
                     unit.find(name).or_else(|| scope.find(name))
                 };
@@ -793,8 +799,8 @@ fn revise_foreign(
     unit: &ErasedUnit,
     scope: Erasures<'_>,
     over: &ErasedOver<'_>,
-    made: &[Global],
-    others: &[Global],
+    made: &[curios_core::Global],
+    others: &[curios_core::Global],
     readers: &Readers,
 ) {
     let (earlier, baseline) = (over.earlier(), over.baseline());
@@ -834,7 +840,7 @@ fn revise_foreign(
 
 /// The parts `trace` reads of declarations `unit` does not hold, as the table of them records each: every part asked; none of a declaration of a fixed unit.
 fn foreign_parts<'t>(
-    trace: &'t Trace<Question, Answered>,
+    trace: &'t curios_core::Trace<Question, Answered>,
     unit: &'t ErasedUnit,
     scope: Erasures<'t>,
 ) -> impl Iterator<Item = Question> + 't {
@@ -853,13 +859,13 @@ fn foreign_parts<'t>(
 fn erase_item(
     context: &mut Retyping,
     externals: Externals<'_>,
-    item: &Item,
+    item: &curios_core::Item,
 ) -> Result<ErasedItem, Error> {
     context.restore_budget();
     let mut lowering = Lowering::over(externals);
     match item {
-        Item::Let(definition) => lowering.erase_definition(context, definition)?,
-        Item::Rec(rec) => lowering.erase_rec_item(context, rec)?,
+        curios_core::Item::Let(definition) => lowering.erase_definition(context, definition)?,
+        curios_core::Item::Rec(rec) => lowering.erase_rec_item(context, rec)?,
     }
     // The row of each registry entry the item declares is registered here, whether or not anything of the item constructs or matches it: every other item holds the row as an import of this one.
     for name in item.declared_names() {

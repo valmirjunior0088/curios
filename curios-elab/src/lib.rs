@@ -1,10 +1,10 @@
-//! The elaborator of the Curios compiler, between `curios-text` (whose `into_core` lowers surface syntax into a `curios_core::Module`) and `curios-anf` (which consumes the erased output of [`erase_unit`]). The kernel that independently re-checks what this crate accepts is `curios-cert`.
+//! The elaborator of the Curios compiler, between `curios-text` (whose `into_core` lowers surface syntax into a `curios_core::Module`) and `curios-anf` (which consumes the erased output of `curios_erase::erase_unit`). The kernel that independently re-checks what this crate accepts is `curios-cert`.
 //!
-//! The stage runs module-at-a-time: [`elaborate_and_zonk_module`] walks a lowered `Module` item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; each item is zonked as it is published, which substitutes solved metavariables and reports unsolved holes; `into_anf` ([`erase_unit`]) strips types, proofs, and other runtime-irrelevant structure for `curios-anf`.
+//! The stage runs module-at-a-time: [`elaborate_and_zonk_module`] walks a lowered `Module` item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; each item is zonked as it is published, which substitutes solved metavariables and reports unsolved holes; erasure, `curios-erase`, strips types, proofs, and other runtime-irrelevant structure for `curios-anf`.
 //!
 //! # What this stage starts from
 //!
-//! A compilation unit is elaborated *against* what is already in scope, and that scope is not part of the unit. [`Established`] carries it for elaboration, as a view a context reads through to where its own stores miss — a name's type and body, a registry entry, the witness at a key, each by reference into the unit that holds it — and [`Erasures`] carries it for erasure, pairing the Core of each unit in scope, read the same way out of its universes, with what its items erased to. `Established::nothing()` is a from-scratch elaboration, so one protocol serves both entry points instead of two implementations kept in agreement by reading.
+//! A compilation unit is elaborated *against* what is already in scope, and that scope is not part of the unit. [`Established`] carries it for elaboration, as a view a context reads through to where its own stores miss — a name's type and body, a registry entry, the witness at a key, each by reference into the unit that holds it — and `curios_erase::Erasures` carries it for erasure, pairing the Core of each unit in scope, read the same way out of its universes, with what its items erased to. `Established::nothing()` is a from-scratch elaboration, so one protocol serves both entry points instead of two implementations kept in agreement by reading.
 //!
 //! That they are types rather than a re-seeded context and two values passed apart is `documentation/design/compilation/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`'s decision; the lowered module carries only its own items.
 //!
@@ -18,6 +18,7 @@ mod universes;
 use universes::*;
 pub use universes::{
     validate_entry_universes, validate_lowered_universe_seeds, validate_universes,
+    validate_universes_in,
 };
 
 mod concept;
@@ -37,9 +38,10 @@ use reduce::*;
 
 mod context;
 use context::*;
-pub use context::{Context, DEFAULT_BUDGET};
+pub use context::{Answered, Context, DEFAULT_BUDGET, Defined, InScope, Question, Retyping};
 
 mod convert;
+pub use convert::Opened;
 use convert::*;
 
 mod denoise;
@@ -54,6 +56,7 @@ use report::*;
 
 mod typing;
 use typing::*;
+pub use typing::{InductCase, is_erasable_in};
 
 mod resolve;
 use resolve::*;
@@ -71,15 +74,17 @@ mod established;
 pub use established::Established;
 
 mod traces;
-use traces::*;
-pub use traces::{HeldTrace, Readers, TraceRecord, TraceTable, TracedEntry, Traces};
+pub use traces::{
+    Foreign, HeldTrace, Made, Parts, Read, Readers, TraceRecord, TraceTable, TracedEntry, Traces,
+};
 
 mod same;
 use same::*;
+pub use same::{Same, concepts_alike, entries_alike, inducts_alike, part_digest, structs_alike};
 
 mod candidate;
 use candidate::*;
-pub use candidate::{Candidating, declaration_input, lowered_digest};
+pub use candidate::{Candidating, bytes_of, declaration_input, found, lowered_digest};
 
 mod elaborate;
 use elaborate::*;
@@ -92,12 +97,6 @@ pub use elaborate::{
 #[cfg(test)]
 mod walk_tests;
 
-mod into_anf;
-use into_anf::*;
-pub use into_anf::{
-    ErasedBaseline, ErasedUnit, Erasures, Projection, erase_program, erase_unit, erase_unit_over,
-};
-
 mod zonk;
 use zonk::*;
 
@@ -108,6 +107,6 @@ mod test_tail;
 pub use test_tail::ScheduledTest;
 use test_tail::*;
 
-// A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_elab::test_support::declared_families` says at its use site that the caller reached for scaffolding rather than product API.
-#[cfg(feature = "test-support")]
+// A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_elab::test_support::written_for_reader` says at its use site that the caller reached for scaffolding rather than product API.
+#[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

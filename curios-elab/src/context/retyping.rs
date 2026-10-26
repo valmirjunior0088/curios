@@ -6,6 +6,9 @@
 //!
 //! It lives in the context's module tree because its frame bracket hands the closure the reader itself: that takes the two halves of `Context::with_frame`, which no module outside the tree can call apart, so the bracket stays the only way into a frame.
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 use {
     super::{Answered, Context, InScope, Question},
     crate::{
@@ -20,9 +23,6 @@ use {
     curios_utilities::SyntaxRegistry,
 };
 
-#[cfg(test)]
-use curios_core::Consumption;
-
 /// A context that reads finished terms, made by its reader and handed to no one.
 #[derive(Debug)]
 pub struct Retyping<'s> {
@@ -36,14 +36,6 @@ impl<'s> Retyping<'s> {
         context.read_through(scope);
 
         Self { context }
-    }
-
-    /// A reader with nothing in scope, for a test that reads terms naming no declaration.
-    #[cfg(test)]
-    pub fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
-        Self {
-            context: Context::new(budget, syntax),
-        }
     }
 
     /// Begin the trace of what erasing the item declaring `own` asks of the declarations around it: the next question is its first.
@@ -77,25 +69,19 @@ impl<'s> Retyping<'s> {
         self.context.syntax()
     }
 
-    /// [`Context::fresh`].
+    /// `Context::fresh`.
     pub fn fresh(&mut self, hint: Option<&str>) -> Free {
         self.context.fresh(hint)
     }
 
-    /// [`Context::spend`].
+    /// `Context::spend`.
     pub fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
         self.context.spend(cost)
     }
 
-    /// [`Context::restore_budget`]: an item is read on a budget restored for it.
+    /// `Context::restore_budget`: an item is read on a budget restored for it.
     pub fn restore_budget(&mut self) {
         self.context.restore_budget();
-    }
-
-    /// [`Context::consumed`], which this crate's measurements of what a reading spends take.
-    #[cfg(test)]
-    pub fn consumed(&self) -> Consumption {
-        self.context.consumed()
     }
 
     /// [`Context::with_frame`], the closure handed the reader.
@@ -107,7 +93,7 @@ impl<'s> Retyping<'s> {
         result
     }
 
-    /// [`Context::assume`].
+    /// `Context::assume`.
     pub fn assume(&mut self, name: &Free, type_: &Term) {
         self.context.assume(name, type_);
     }
@@ -117,7 +103,7 @@ impl<'s> Retyping<'s> {
         self.context.advance_assumed(walk, domain)
     }
 
-    /// [`Context::set_assumption_universe_context`].
+    /// `Context::set_assumption_universe_context`.
     pub fn set_assumption_universe_context(
         &mut self,
         name: &Free,
@@ -148,7 +134,7 @@ impl<'s> Retyping<'s> {
         self.context.definition_kind(name)
     }
 
-    /// [`Context::definition_body`].
+    /// `Context::definition_body`.
     pub fn definition_body(&self, name: &Free) -> Option<&Term> {
         self.context.definition_body(name)
     }
@@ -193,12 +179,12 @@ impl<'s> Retyping<'s> {
             .instantiate_struct_decl_at(struct_decl, universes)
     }
 
-    /// `term` reduced to its head ([`reduce_with`]).
+    /// `term` reduced to its head (`reduce_with`).
     pub fn reduce_with(&mut self, term: &Term) -> Result<Term, Error> {
         reduce_with(&mut self.context, term)
     }
 
-    /// The sort of `type_`, as a term ([`sort_term`]).
+    /// The sort of `type_`, as a term (`sort_term`).
     pub fn sort_term(&mut self, type_: &Term) -> Result<Term, Error> {
         sort_term(&mut self.context, type_)
     }
@@ -208,7 +194,7 @@ impl<'s> Retyping<'s> {
         is_erasable_in(&mut self.context, opened, type_)
     }
 
-    /// The type of the neutral `term`, read with no binder a conversion opened ([`synth_neutral`]): a walk over finished terms assumes the binders it stands under.
+    /// The type of the neutral `term`, read with no binder a conversion opened (`synth_neutral`): a walk over finished terms assumes the binders it stands under.
     pub fn synth_neutral(&mut self, term: &Term) -> Result<Option<Term>, ReduceError> {
         synth_neutral(
             &mut self.context,
@@ -218,12 +204,12 @@ impl<'s> Retyping<'s> {
         )
     }
 
-    /// Install the equation an arm stands under: `head` is `value` there ([`refine_head`]).
+    /// Install the equation an arm stands under: `head` is `value` there (`refine_head`).
     pub fn refine_head(&mut self, head: &Term, value: &Term) -> Result<(), Error> {
         refine_head(&mut self.context, head, value)
     }
 
-    /// Enter an inductive arm as it was elaborated ([`enter_induct_case`]), the one place a reader puts a question to conversion: solving the arm's index equations compares two forcings of one binder by `Judge::convert_at`.
+    /// Enter an inductive arm as it was elaborated (`enter_induct_case`), the one place a reader puts a question to conversion: solving the arm's index equations compares two forcings of one binder by `Judge::convert_at`.
     pub fn enter_induct_case(
         &mut self,
         head: &Term,

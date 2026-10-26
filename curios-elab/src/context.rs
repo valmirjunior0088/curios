@@ -73,6 +73,9 @@ mod metavariables;
 
 mod parked;
 
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
+
 #[cfg(test)]
 mod awaiting_tests;
 #[cfg(test)]

@@ -6,7 +6,7 @@ use {
     super::test_support::{entrypoint_of, mounted},
     crate::{EntryTail, check_entrypoint, compile_units, elaborate_and_zonk},
     curios_core::Zonked,
-    curios_elab::{Erasures, erase_program},
+    curios_erase::{Erasures, erase_program},
     curios_prelude::with_prelude,
     curios_text::{RootSource, SYNTAX, UnitSource},
     curios_unit::{Predecessors, Unit},

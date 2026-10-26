@@ -11,12 +11,11 @@
 //! **A part is the elaborated declaration's, a binding the erased item's.** A question about a name's type, body or registry entry is answered as it was where the elaborator kept the declaration, and for one elaborated again where that part came out equal as it is stored ([`Same`]). A question about how a name is bound is answered as it was where the item declaring it kept its erased form, and for one erased again where an item naming it reads the two alike (`ErasedItem::read_alike`). A question about an erased form whole, which an item evaluated where it is erased asks of each item it ran (`evaluate`), is answered as it was where the item kept its erased form, and for one erased again where the two forms are stored as the same bytes. A name neither the unit nor its baseline declares is another unit's or no one's, and what was read of it stands where the unit that holds it is the one the baseline was erased after, or where it digests now to what the baseline recorded (`Foreign`).
 
 use {
-    super::{ErasedUnit, Erasures, Held, Projection},
-    crate::{
+    crate::{ErasedUnit, Erasures, Held, Projection},
+    curios_elab::{
         Answered, HeldTrace, Question, Read, Same, bytes_of, concepts_alike, entries_alike, found,
         inducts_alike, part_digest, structs_alike,
     },
-    curios_core::{Changes, Global, Item, ItemRun, Module, Nominal, Place, Places},
     curios_utilities::{Candidates, Facet},
     std::{
         collections::{BTreeSet, HashMap},
@@ -27,15 +26,15 @@ use {
 /// The baseline a unit is erased over: an earlier text of the unit as it elaborated and as it erased, with every name of a declaration the new text's elaboration made again — every other the unit declares it kept as the baseline holds it — and every name the new text no longer declares.
 #[derive(Clone, Copy)]
 pub struct ErasedBaseline<'a> {
-    pub core: &'a Module,
-    pub places: &'a Places,
+    pub core: &'a curios_core::Module,
+    pub places: &'a curios_core::Places,
     pub erased: &'a ErasedUnit,
     /// What erasure read of the baseline's module out of its universes, kept with its unit.
     pub projection: &'a Projection,
-    pub made: &'a BTreeSet<Global>,
-    pub dropped: &'a BTreeSet<Global>,
+    pub made: &'a BTreeSet<curios_core::Global>,
+    pub dropped: &'a BTreeSet<curios_core::Global>,
     /// Where the module being erased holds each name.
-    pub now: &'a Places,
+    pub now: &'a curios_core::Places,
     /// What a store holds of items erased before, where an item to be erased may be taken from one of its records ([`ErasedUnit::complete`]).
     pub candidates: Option<&'a dyn Candidates>,
 }
@@ -46,25 +45,29 @@ pub type Kept = (Held, HeldTrace);
 /// What an erasure over a baseline has decided, as it walks the unit's items in the order they are stored in.
 pub struct ErasedOver<'a> {
     baseline: ErasedBaseline<'a>,
-    module: &'a Module,
+    module: &'a curios_core::Module,
     /// What the module changed of the baseline's items, where it is a version of the baseline's module, so the two hold an unchanged item at one place.
-    changes: Option<Changes>,
+    changes: Option<curios_core::Changes>,
     /// Whether each item the walk has visited, by place, holds the baseline's own erased form.
     kept: HashMap<usize, bool>,
     /// What each name elaborated again left as the baseline holds it, compared the first time a trace asks.
-    same: HashMap<Global, Same>,
+    same: HashMap<curios_core::Global, Same>,
     /// The units in scope, which say whether each is the one the baseline was erased after.
     scope: Erasures<'a>,
     /// Whether each part or binding a kept form's erasure read of a declaration the unit does not hold, in a scope that moved, is the one the baseline read: asked again once.
-    read: HashMap<Global, Vec<(Question, bool)>>,
+    read: HashMap<curios_core::Global, Vec<(Question, bool)>>,
     /// The places of the items an edit could have reached, by the baseline's traces read backwards: the walk visits these, and every other item keeps its erased form unasked.
     visited: BTreeSet<usize>,
     /// The first names of the baseline's items the unit no longer declares, each one's trace the baseline holds.
-    lost: Vec<Global>,
+    lost: Vec<curios_core::Global>,
 }
 
 impl<'a> ErasedOver<'a> {
-    pub fn new(baseline: ErasedBaseline<'a>, module: &'a Module, scope: Erasures<'a>) -> Self {
+    pub fn new(
+        baseline: ErasedBaseline<'a>,
+        module: &'a curios_core::Module,
+        scope: Erasures<'a>,
+    ) -> Self {
         let mut over = Self {
             baseline,
             module,
@@ -157,7 +160,7 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// Mark the item at `place`, and hand each of its names on to `frontier`, where it is not marked yet.
-    fn mark(&mut self, place: usize, frontier: &mut Vec<Global>) {
+    fn mark(&mut self, place: usize, frontier: &mut Vec<curios_core::Global>) {
         if self.visited.insert(place) {
             frontier.extend(self.module.items.names(place).into_iter().copied());
         }
@@ -169,12 +172,12 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// What the module changed of the baseline's items, where it is a version of the baseline's module.
-    pub fn changes(&self) -> Option<&Changes> {
+    pub fn changes(&self) -> Option<&curios_core::Changes> {
         self.changes.as_ref()
     }
 
     /// The first names of the baseline's items the unit no longer declares.
-    pub fn lost(&self) -> &[Global] {
+    pub fn lost(&self) -> &[curios_core::Global] {
         &self.lost
     }
 
@@ -189,7 +192,7 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// Whether what `question` asks of `name`, a declaration the unit does not hold, is what the baseline's erasure read: the unit that holds it is the one the baseline was erased after, or it digests now to what the baseline recorded of it. A read the baseline recorded nothing of does not stand.
-    fn read_stands(&mut self, name: &Global, question: &Question) -> bool {
+    fn read_stands(&mut self, name: &curios_core::Global, question: &Question) -> bool {
         if self.scope.unmoved(name) {
             return true;
         }
@@ -218,14 +221,24 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// The baseline's erased form of `item`, at `place`, with what erasing it asked, where the unit keeps them: `unit` holds the erased forms of the items before it. What is answered is noted for the items after it.
-    pub fn keep(&mut self, place: usize, item: &Item, unit: &ErasedUnit) -> Option<Kept> {
+    pub fn keep(
+        &mut self,
+        place: usize,
+        item: &curios_core::Item,
+        unit: &ErasedUnit,
+    ) -> Option<Kept> {
         let kept = self.standing(place, item, unit);
         self.kept.insert(place, kept.is_some());
 
         kept
     }
 
-    fn standing(&mut self, place: usize, item: &Item, unit: &ErasedUnit) -> Option<Kept> {
+    fn standing(
+        &mut self,
+        place: usize,
+        item: &curios_core::Item,
+        unit: &ErasedUnit,
+    ) -> Option<Kept> {
         let names = item.declared_names();
         let first = names.first()?;
         if names.iter().any(|name| self.baseline.made.contains(*name)) {
@@ -247,14 +260,19 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// The erased form of `item`, at `place`, taken from a record a store holds of an erasure of the item, where one stands ([`ErasedUnit::complete`]), with the record: `unit` holds the erased forms of the items before it. Asked of an item the walk does not keep.
-    pub fn taken(&self, place: usize, item: &Item, unit: &ErasedUnit) -> Option<(Held, HeldTrace)> {
+    pub fn taken(
+        &self,
+        place: usize,
+        item: &curios_core::Item,
+        unit: &ErasedUnit,
+    ) -> Option<(Held, HeldTrace)> {
         let candidates = self.baseline.candidates?;
         let names = item.declared_names();
         let first = names.first()?;
         curios_profile::profile!("erase::candidates");
         let identity = match self.module.items.part(place) {
             Some(stored) => stored.digest,
-            None => ItemRun::identity(item).ok()?,
+            None => curios_core::ItemRun::identity(item).ok()?,
         };
 
         found(candidates, Facet::Erasure, &identity, first)
@@ -277,7 +295,7 @@ impl<'a> ErasedOver<'a> {
     /// A binding of an item of the unit is read off the form `unit` holds, and a part off the module being erased, which is final; one of another unit is the record the baseline holds of it where that unit did not move, and digested again otherwise; and a fixed unit's is recorded nowhere.
     pub fn read_now(
         &self,
-        names: &[&Global],
+        names: &[&curios_core::Global],
         question: &Question,
         unit: &ErasedUnit,
     ) -> Option<Read> {
@@ -332,7 +350,7 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// Whether the erased form of the item declaring `name` is, whole, the one an evaluation ran.
-    fn ran_alike(&mut self, name: &Global, unit: &ErasedUnit) -> bool {
+    fn ran_alike(&mut self, name: &curios_core::Global, unit: &ErasedUnit) -> bool {
         match self.baseline.now.place(name) {
             None => {
                 self.baseline.erased.place(name).is_none()
@@ -347,7 +365,7 @@ impl<'a> ErasedOver<'a> {
     }
 
     /// Whether an item naming `name` reads the erased form of the item declaring it as it did.
-    fn read_alike(&mut self, name: &Global, unit: &ErasedUnit) -> bool {
+    fn read_alike(&mut self, name: &curios_core::Global, unit: &ErasedUnit) -> bool {
         match self.baseline.now.place(name) {
             None => {
                 self.baseline.erased.place(name).is_none()
@@ -376,8 +394,8 @@ impl<'a> ErasedOver<'a> {
             return true;
         }
         let member = match at {
-            Place::Let(_) => 0,
-            Place::Member { member, .. } => member as usize,
+            curios_core::Place::Let(_) => 0,
+            curios_core::Place::Member { member, .. } => member as usize,
         };
         let (module, baseline) = (self.module, self.baseline.core);
         let places = self.baseline.places;
@@ -392,18 +410,18 @@ impl<'a> ErasedOver<'a> {
 
             Same::of(made, held, member).keying(
                 entries_alike(
-                    this.and_then(Nominal::inductive),
-                    that.and_then(Nominal::inductive),
+                    this.and_then(curios_core::Nominal::inductive),
+                    that.and_then(curios_core::Nominal::inductive),
                     inducts_alike,
                 ),
                 entries_alike(
-                    this.and_then(Nominal::record),
-                    that.and_then(Nominal::record),
+                    this.and_then(curios_core::Nominal::record),
+                    that.and_then(curios_core::Nominal::record),
                     structs_alike,
                 ),
                 entries_alike(
-                    this.and_then(Nominal::concept),
-                    that.and_then(Nominal::concept),
+                    this.and_then(curios_core::Nominal::concept),
+                    that.and_then(curios_core::Nominal::concept),
                     concepts_alike,
                 ),
             )

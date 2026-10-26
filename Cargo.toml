@@ -18,6 +18,7 @@ members = [
     "curios-analysis",
     "curios-cert",
     "curios-elab",
+    "curios-erase",
     "curios-text",
     "curios-std",
     "curios-unit",
@@ -77,6 +78,7 @@ curios-core = { path = "curios-core" }
 curios-analysis = { path = "curios-analysis" }
 curios-cert = { path = "curios-cert" }
 curios-elab = { path = "curios-elab" }
+curios-erase = { path = "curios-erase" }
 curios-text = { path = "curios-text" }
 curios-std = { path = "curios-std" }
 curios-unit = { path = "curios-unit" }

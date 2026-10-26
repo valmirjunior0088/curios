@@ -5,7 +5,8 @@
 use {
     crate::*,
     curios_core::{Item, Module, Sharing, Variance},
-    curios_elab::{DEFAULT_BUDGET, Erasures, TraceTable, Traces, erase_program},
+    curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
+    curios_erase::{Erasures, erase_program},
     curios_prelude::with_prelude,
     curios_text::{Entrypoint, LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
     curios_unit::{Pack, Predecessors, Unit, packed},

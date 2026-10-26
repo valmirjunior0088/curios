@@ -7,8 +7,8 @@ mod tests;
 
 use {
     super::{
-        BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedName, ErasedSite, Error,
-        GoalReport, Need, RegionOwner, ShapeDiagnosis, Underivable, Watched,
+        BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedSite, Error, GoalReport, Need,
+        RegionOwner, ShapeDiagnosis, Underivable, Watched,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
@@ -241,16 +241,6 @@ fn spelled_free(name: &Free, spelling: &Spelling) -> String {
     match name {
         Free::Global(global) => spelling.symbol(global),
         Free::Local(_) => name.hint().unwrap_or("_").to_string(),
-    }
-}
-
-impl ErasedName {
-    /// This name as its reader writes it: a declaration as resolution reaches it, a local binder by its label.
-    pub(super) fn spelled(&self, spelling: &Spelling) -> String {
-        match self {
-            ErasedName::Named(name) => spelled_free(name, spelling),
-            ErasedName::Erased(name) => name.clone(),
-        }
     }
 }
 
@@ -1718,57 +1708,6 @@ impl fmt::Display for Displayed<'_> {
                 write!(
                     f,
                     "this witness declares an explicit parameter\n  witness parameters must be implicit ('@') or 'use' premises — nothing supplies explicit arguments during resolution"
-                )
-            }
-            Error::NatCaseKeyOverflow { value } => {
-                write!(
-                    f,
-                    "natural dispatch key {value} does not fit a branch table"
-                )
-            }
-            Error::EvaluationCycle { steps } => {
-                let quoted = steps
-                    .iter()
-                    .map(|(member, _)| format!("`{}`", member.spelled(spelling)))
-                    .collect::<Vec<_>>();
-                let listed = match quoted.split_last() {
-                    Some((last, rest)) if !rest.is_empty() => {
-                        format!("{} and {last}", rest.join(", "))
-                    }
-                    _ => quoted.join(", "),
-                };
-                let calls = steps
-                    .iter()
-                    .filter_map(|(_, through)| through.as_ref())
-                    .map(|callee| format!("`{}`", callee.spelled(spelling)))
-                    .collect::<Vec<_>>();
-                let through = match calls.as_slice() {
-                    [] => String::new(),
-                    [call] => format!(" through a call to {call}"),
-                    _ => format!(" through calls to {}", calls.join(", ")),
-                };
-                match steps.len() {
-                    1 => write!(
-                        f,
-                        "{listed} evaluates itself{through} as it is initialized; a value may mention itself only under a lambda, where it is computed the first time it is read"
-                    ),
-                    _ => write!(
-                        f,
-                        "{listed} evaluate each other{through} as they are initialized; values may mention one another only under a lambda, where each is computed the first time it is read"
-                    ),
-                }
-            }
-            Error::InitializerPerformsEffect { member, through } => {
-                let through = match through {
-                    Some(callee) => {
-                        format!(" through a call to `{}`", callee.spelled(spelling))
-                    }
-                    None => String::new(),
-                };
-                write!(
-                    f,
-                    "the initializer of `{}` performs an effect{through}; a recursive value is computed when it is first read, or never, so its initializer may perform none",
-                    member.spelled(spelling)
                 )
             }
             Error::MotiveBinderCount {

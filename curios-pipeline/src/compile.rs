@@ -13,11 +13,12 @@ use {
         Rec, Row, Subterm, Term, Transient, Zonked,
     },
     curios_elab::{
-        Context, Erasures, Established, FinalizedProgram, Reading, Tail, elaborate_and_zonk_entry,
+        Context, Established, FinalizedProgram, Reading, Tail, elaborate_and_zonk_entry,
         elaborate_and_zonk_program, elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit,
-        erase_program, erase_unit, validate_entry_universes,
+        validate_entry_universes,
     },
     curios_emit::into_wasm,
+    curios_erase::{Erasures, erase_program, erase_unit},
     curios_text::{
         BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, Translation,
         UnitSource, into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude,
@@ -249,7 +250,7 @@ pub(crate) fn lowering_refusal(
     )
 }
 
-/// What elaboration or erasure refused `module` with, read against `kept`, the lexicon and places its unit keeps for it, where there are any.
+/// What elaboration refused `module` with, read against `kept`, the lexicon and places its unit keeps for it, where there are any.
 fn refusal_read(
     error: &curios_elab::Error,
     module: &curios_core::Module,
@@ -258,6 +259,52 @@ fn refusal_read(
     text: &PreparedText,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
+) -> CompileError {
+    read_for_report(
+        module,
+        kept,
+        lexicons,
+        text,
+        predecessors,
+        syntax,
+        |reading| CompileError::of(error, |member| member.reports(reading)),
+    )
+}
+
+/// What erasure refused `module` with: what its reader refused, as [`elaborator_refusal`] reports the elaborator's error, and a refusal of its own as the one report it is.
+pub(crate) fn erasure_refusal(
+    error: &curios_erase::Error,
+    module: &curios_core::Module,
+    lexicons: &[&curios_core::Lexicon],
+    text: &PreparedText,
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+) -> CompileError {
+    match error {
+        curios_erase::Error::Reading(error) => {
+            elaborator_refusal(error, module, lexicons, text, predecessors, syntax)
+        }
+        refusal => read_for_report(
+            module,
+            None,
+            lexicons,
+            text,
+            predecessors,
+            syntax,
+            |reading| CompileError::Failure(refusal.reports(reading)),
+        ),
+    }
+}
+
+/// `report` over the reading a refusal of `module` is spelled and placed by: its unit's names spelled as resolution reaches them from the reader's place, and its positions placed in the files they were written in.
+fn read_for_report(
+    module: &curios_core::Module,
+    kept: Option<(&curios_core::Lexicon, &curios_core::Places)>,
+    lexicons: &[&curios_core::Lexicon],
+    text: &PreparedText,
+    predecessors: Predecessors<'_>,
+    syntax: &SyntaxRegistry,
+    report: impl FnOnce(&Reading<'_>) -> CompileError,
 ) -> CompileError {
     let spellings = Rc::new(text.spellings(&predecessors.text()));
     let reading = Reading {
@@ -270,7 +317,7 @@ fn refusal_read(
         printer: Some(Rc::new(Translation)),
     };
 
-    CompileError::of(error, |member| member.reports(&reading))
+    report(&reading)
 }
 
 /// The kernel's environment for `predecessors`: every unit in scope where it stands, read by the places it keeps for its names, with the record the certifier filed with it. Nothing of a unit is copied.
@@ -897,7 +944,7 @@ impl Entered {
             &self.program,
         )
         .map_err(|error| {
-            elaborator_refusal(
+            erasure_refusal(
                 &error,
                 &self.program.as_program().module,
                 &scope.lexicons(),
@@ -1335,7 +1382,7 @@ pub(crate) fn compile_lowered(
     let erased = predecessors.erased();
     let scope = Erasures::of(&cores, &erased).keeping(&kept).fixed(&fixed);
     let anf = erase_unit(budget, *syntax, scope, &core).map_err(|error| {
-        let refusal = elaborator_refusal(
+        let refusal = erasure_refusal(
             &error,
             core.as_module(),
             &predecessors.lexicons(),

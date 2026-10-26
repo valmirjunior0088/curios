@@ -8,14 +8,13 @@
 //!
 //! **A schema is its declaration's.** The item that declares a structure or an inductive registers its row, and a fragment that imports the row is linked after that item's rows are, its schema resolved to the one the item registered. Only the rows: a declaration a program constructs or matches values of, and names nowhere else, contributes its schemas and none of what its own item erased to ([`curios_anf::Module::link_rows`]). An anonymous row is declared by no item: the first fragment linked that holds one of a width registers it, and every later one is resolved to it.
 //!
-//! **An evaluation holds a row as its readers do.** An item evaluated where it is erased runs in a module of what it reaches ([`super::evaluate`]), whose evaluator reads no row, so that module links no declaration's rows: a row a fragment imports and no linked item declares is the module's import, at the count or width the fragment's import states and with the constructors the fragments name ([`curios_anf::Resolution::imports_rows`]), and an evaluation pays for what its fragments name of a row, never for the row.
+//! **An evaluation holds a row as its readers do.** An item evaluated where it is erased runs in a module of what it reaches ([`crate::evaluate`]), whose evaluator reads no row, so that module links no declaration's rows: a row a fragment imports and no linked item declares is the module's import, at the count or width the fragment's import states and with the constructors the fragments name ([`curios_anf::Resolution::imports_rows`]), and an evaluation pays for what its fragments name of a row, never for the row.
 
 use {
-    super::{
-        Binding, Environment, ErasedItem, ErasedNames, ErasedProgram, ErasedUnit, Erasures, Export,
+    crate::{
+        Binding, Environment, ErasedItem, ErasedNames, ErasedProgram, ErasedUnit, Erasures, Error,
+        Export,
     },
-    crate::Error,
-    curios_core::{Free, Global},
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -23,14 +22,14 @@ use {
 #[derive(Default)]
 pub struct Linking {
     module: curios_anf::Module,
-    bound: BTreeMap<Global, curios_anf::Atom>,
+    bound: BTreeMap<curios_core::Global, curios_anf::Atom>,
     /// The name each value and each function a linked item bound is declared under: the first to bind it, which is the item that defines it, since an item that hands another's name on is linked after it.
-    values: BTreeMap<curios_anf::ValueId, Global>,
-    functions: BTreeMap<curios_anf::FunctionId, Global>,
+    values: BTreeMap<curios_anf::ValueId, curios_core::Global>,
+    functions: BTreeMap<curios_anf::FunctionId, curios_core::Global>,
     /// The functions a linked item bound a name to as what its evaluation computed: closures, each bound under a name and defined by no declaration.
     computed: BTreeSet<curios_anf::FunctionId>,
-    structs: BTreeMap<Global, curios_anf::ProductId>,
-    families: BTreeMap<Global, curios_anf::FamilyId>,
+    structs: BTreeMap<curios_core::Global, curios_anf::ProductId>,
+    families: BTreeMap<curios_core::Global, curios_anf::FamilyId>,
     tuples: BTreeMap<usize, curios_anf::ProductId>,
     /// Whether a row a fragment imports and no linked item declares is the module's import, where a program links every row it names from its declaration: an evaluation's.
     imports_rows: bool,
@@ -63,7 +62,7 @@ impl Linking {
 
     /// Append one item's fragment, its imports standing for where the items that bind them landed, and hand back where its identities landed.
     pub fn add(&mut self, erased: &ErasedItem) -> curios_anf::Linked {
-        let bound = |name: &Global| {
+        let bound = |name: &curios_core::Global| {
             *self.bound.get(name).unwrap_or_else(|| {
                 panic!(
                     "{} is imported before the item that binds it is linked",
@@ -190,8 +189,8 @@ impl Linking {
         erased: &ErasedItem,
         landed: &curios_anf::Linked,
     ) -> Option<ErasedItem> {
-        let declaring = |name: &Global| units.iter().find_map(|unit| unit.find(name));
-        let exported = |name: &Global| declaring(name)?.export(name);
+        let declaring = |name: &curios_core::Global| units.iter().find_map(|unit| unit.find(name));
+        let exported = |name: &curios_core::Global| declaring(name)?.export(name);
 
         // What each name is bound to now: where the value it bound came to be an alias, the atom that names.
         let bound = |atom: curios_anf::Atom| self.module.aliased(mark, landed.atom(atom));
@@ -226,9 +225,12 @@ impl Linking {
         for (name, binding) in erased.environment().bindings() {
             match binding {
                 Binding::Atom(atom) => {
-                    environment.bind(&Free::from(name), taken.landed.atom(bound(atom)));
+                    environment.bind(
+                        &curios_core::Free::from(name),
+                        taken.landed.atom(bound(atom)),
+                    );
                 }
-                Binding::Dropped => environment.bind_dropped(&Free::from(name)),
+                Binding::Dropped => environment.bind_dropped(&curios_core::Free::from(name)),
             }
         }
 
@@ -307,7 +309,7 @@ impl Reached {
 /// The unit and the place of the item declaring each of `names` that one of `units` declares. A name none declares is the program's own, and every item of the program is linked.
 fn places<'n>(
     units: &[&ErasedUnit],
-    names: impl Iterator<Item = &'n Global>,
+    names: impl Iterator<Item = &'n curios_core::Global>,
 ) -> Vec<(usize, usize)> {
     names
         .filter_map(|name| {

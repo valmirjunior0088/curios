@@ -4,8 +4,8 @@
 
 use {
     super::{Lowering, Outcome},
-    crate::{Error, Retyping},
-    curios_core::{Definition, Free, Subterm},
+    crate::Error,
+    curios_elab::Retyping,
 };
 
 impl Lowering<'_> {
@@ -13,12 +13,12 @@ impl Lowering<'_> {
     pub fn erase_definition(
         &mut self,
         context: &mut Retyping,
-        definition: &Definition,
+        definition: &curios_core::Definition,
     ) -> Result<(), Error> {
         let symbol = definition.name.faithful().to_string();
         // A function's body runs where it is called, so writing one computes nothing and it is walked whatever it returns. Any other item is a value computed at initialization, which makes it a kept slot as a local binding is: a proof or a type is bound to its stand-in, and a lemma applied at the top level does not run before the program does.
         let outcome = self.with_owner(symbol.clone(), |lowering| match &*definition.body {
-            Subterm::Func(_) => {
+            curios_core::Subterm::Func(_) => {
                 lowering.walk(context, &definition.body, &definition.type_, Some(&symbol))
             }
             _ => lowering.kept_operand(context, &definition.body, &definition.type_, Some(&symbol)),
@@ -37,7 +37,8 @@ impl Lowering<'_> {
                 curios_anf::Atom::Value(value)
             }
         };
-        self.environment.bind(&Free::from(&definition.name), atom);
+        self.environment
+            .bind(&curios_core::Free::from(&definition.name), atom);
 
         Ok(())
     }

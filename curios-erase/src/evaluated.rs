@@ -10,17 +10,14 @@
 //!
 //! **An item that declares a row is not evaluated.** What is taken back out holds a schema as an import holds one, and a declared row is its fields.
 
-use {
-    super::{ErasedItem, ErasedUnit, Erasures, Linking, reached},
-    curios_core::Global,
-};
+use crate::{ErasedItem, ErasedUnit, Erasures, Linking, reached};
 
 /// What evaluating an item where it is erased came to.
 pub struct Evaluation {
     /// The item's erased form with what its top-level statements compute in their place, where that leaves it computing nothing.
     pub erased: Option<ErasedItem>,
     /// A name of each item the evaluation was linked after, of a unit that is not fixed.
-    pub ran: Vec<Global>,
+    pub ran: Vec<curios_core::Global>,
 }
 
 /// Evaluate `erased`, the erased form of the next item of `unit`, over what it reaches of `unit` and of `scope`. `None` for an item that computes nothing as it was erased, or that declares a row: there is nothing to evaluate, and nothing is read.

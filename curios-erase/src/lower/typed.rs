@@ -7,19 +7,17 @@
 //! **A term's type is read once per item.** A chain of eliminations asks for the type of each prefix of itself — the call for its callee's, the callee for its own head's — so an answer is kept ([`Lowering::types`]) rather than read again at every level above it. A name is minted once and assumed at one type, so what is kept about a term holds wherever the term stands.
 
 use {
-    super::Lowering,
-    crate::{Error, Retyping},
-    curios_core::{
-        Bound, Cases, Cost, Func, FuncType, InductType, Let, Many, Match, Produced, Proj, Rec,
-        ReduceError, Scope, StructType, Subterm, Term, Tuple, TupleType, Variant,
-        foreign_signature,
-    },
+    super::Lowering, crate::Error, curios_core::Bound, curios_elab::Retyping,
     curios_utilities::recurse,
 };
 
 impl Lowering<'_> {
     /// The type `term` has, read at most once for the item being erased.
-    pub fn type_of(&mut self, context: &mut Retyping, term: &Term) -> Result<Term, Error> {
+    pub fn type_of(
+        &mut self,
+        context: &mut Retyping,
+        term: &curios_core::Term,
+    ) -> Result<curios_core::Term, Error> {
         if let Some(known) = self.types.get(term) {
             return Ok(known.clone());
         }
@@ -31,9 +29,13 @@ impl Lowering<'_> {
     }
 
     /// One reading. A step is charged for each, as the kernel charges its typing walk, so the budget bounds this one too.
-    fn read_type(&mut self, context: &mut Retyping, term: &Term) -> Result<Term, Error> {
+    fn read_type(
+        &mut self,
+        context: &mut Retyping,
+        term: &curios_core::Term,
+    ) -> Result<curios_core::Term, Error> {
         context
-            .spend(Cost::STEP)
+            .spend(curios_core::Cost::STEP)
             .map_err(|error| exhausted(error, term))?;
 
         // A member selected from its group carries its type, which is read off the group rather than by entering it.
@@ -42,10 +44,12 @@ impl Lowering<'_> {
         }
 
         match &**term {
-            Subterm::Apply(apply) => {
+            curios_core::Subterm::Apply(apply) => {
                 let head_type = self.type_of(context, &apply.head)?;
                 let reduced = context.reduce_with(&head_type)?;
-                let Subterm::FuncType(FuncType { telescope, .. }) = &*reduced else {
+                let curios_core::Subterm::FuncType(curios_core::FuncType { telescope, .. }) =
+                    &*reduced
+                else {
                     unreachable!("erase: applied a non-function");
                 };
                 let arguments = apply.params().collect::<Vec<_>>();
@@ -58,13 +62,13 @@ impl Lowering<'_> {
                 Ok(telescope.open(&arguments))
             }
             // Erasure runs on an elaborated term, whose every projection is a slot: the field says how the fields before it are read.
-            Subterm::Proj(Proj { head, field }) => {
+            curios_core::Subterm::Proj(curios_core::Proj { head, field }) => {
                 let head_type = self.type_of(context, head)?;
                 let field_type = match &*context.reduce_with(&head_type)? {
-                    Subterm::TupleType(TupleType { telescope }) => {
+                    curios_core::Subterm::TupleType(curios_core::TupleType { telescope }) => {
                         telescope.field_type_from(head, field)
                     }
-                    Subterm::StructType(StructType {
+                    curios_core::Subterm::StructType(curios_core::StructType {
                         name,
                         universes,
                         params,
@@ -77,24 +81,26 @@ impl Lowering<'_> {
                 Ok(field_type.expect("erase: projection out of range"))
             }
             // The Π over the lambda's own telescope, its codomain the body's type under those binders.
-            Subterm::Func(func) => self.lambda_type(context, func),
+            curios_core::Subterm::Func(func) => self.lambda_type(context, func),
             // The Σ over the components' types: non-dependent, as a tuple no type was stated for is.
-            Subterm::Tuple(Tuple { fields, .. }) => {
+            curios_core::Subterm::Tuple(curios_core::Tuple { fields, .. }) => {
                 let mut entries = Vec::with_capacity(fields.len());
                 for field in fields {
                     entries.push((context.fresh(None), self.type_of(context, field)?));
                 }
 
-                Ok(Term::tuple_type(entries))
+                Ok(curios_core::Term::tuple_type(entries))
             }
-            Subterm::Struct(value) => Ok(Subterm::StructType(StructType {
-                name: value.name,
-                universes: value.universes.clone(),
-                params: value.params.clone(),
-            })
-            .into()),
+            curios_core::Subterm::Struct(value) => {
+                Ok(curios_core::Subterm::StructType(curios_core::StructType {
+                    name: value.name,
+                    universes: value.universes.clone(),
+                    params: value.params.clone(),
+                })
+                .into())
+            }
             // The family at the value's parameters and at the index targets its constructor's signature ends in.
-            Subterm::Variant(Variant {
+            curios_core::Subterm::Variant(curios_core::Variant {
                 name,
                 universes,
                 params,
@@ -111,7 +117,7 @@ impl Lowering<'_> {
                     .open_params(params)
                     .open(&payload.iter().collect::<Vec<_>>());
 
-                Ok(Subterm::InductType(InductType {
+                Ok(curios_core::Subterm::InductType(curios_core::InductType {
                     name: *name,
                     universes: universes.clone(),
                     params: params.clone(),
@@ -120,31 +126,34 @@ impl Lowering<'_> {
                 .into())
             }
             // An elimination's type is its result at this scrutinee, which for a family is opened at the scrutinee's actual indices.
-            Subterm::Match(Match {
+            curios_core::Subterm::Match(curios_core::Match {
                 head,
                 result,
                 cases,
             }) => {
                 let indices = match cases {
-                    Cases::Induct { .. } => {
+                    curios_core::Cases::Induct { .. } => {
                         let head_type = self.type_of(context, head)?;
                         match &*context.reduce_with(&head_type)? {
-                            Subterm::InductType(InductType { indices, .. }) => indices.clone(),
+                            curios_core::Subterm::InductType(curios_core::InductType {
+                                indices,
+                                ..
+                            }) => indices.clone(),
                             _ => unreachable!(
                                 "erase: inductive match scrutinee checked by elaborate"
                             ),
                         }
                     }
-                    Cases::Bool { .. } | Cases::Switch { .. } | Cases::FreeMonoid { .. } => {
-                        Vec::new()
-                    }
+                    curios_core::Cases::Bool { .. }
+                    | curios_core::Cases::Switch { .. }
+                    | curios_core::Cases::FreeMonoid { .. } => Vec::new(),
                 };
 
                 Ok(result.of(head, &indices))
             }
             // Each binding substituted away, which is the rule reduction uses, so the type names nothing the `let` bound.
-            Subterm::Let(Let { bindings, tail }) => {
-                let mut values = Vec::<Term>::with_capacity(bindings.len());
+            curios_core::Subterm::Let(curios_core::Let { bindings, tail }) => {
+                let mut values = Vec::<curios_core::Term>::with_capacity(bindings.len());
                 for binding in bindings {
                     let value = binding.value().release(&values.iter().collect::<Vec<_>>());
                     values.push(value);
@@ -152,42 +161,49 @@ impl Lowering<'_> {
 
                 self.type_of(context, &tail.open(&values.iter().collect::<Vec<_>>()))
             }
-            Subterm::Rec(rec) => self.group_tail_type(context, rec),
-            Subterm::Intrinsic(intrinsic) => {
+            curios_core::Subterm::Rec(rec) => self.group_tail_type(context, rec),
+            curios_core::Subterm::Intrinsic(intrinsic) => {
                 match intrinsic.signature(&context.syntax()).produced {
-                    Produced::Fixed(type_) => Ok(type_),
-                    Produced::Sort => context.sort_term(term),
+                    curios_core::Produced::Fixed(type_) => Ok(type_),
+                    curios_core::Produced::Sort => Ok(context.sort_term(term)?),
                 }
             }
-            Subterm::Foreign(function, _, arguments) => {
+            curios_core::Subterm::Foreign(function, _, arguments) => {
                 let syntax = context.syntax();
-                let signature = foreign_signature(function, arguments, &syntax, |label| {
-                    context.fresh(Some(label))
-                });
-                let Produced::Fixed(type_) = signature.produced else {
+                let signature =
+                    curios_core::foreign_signature(function, arguments, &syntax, |label| {
+                        context.fresh(Some(label))
+                    });
+                let curios_core::Produced::Fixed(type_) = signature.produced else {
                     unreachable!("a foreign call produces a fixed `Io` type");
                 };
 
                 Ok(type_)
             }
-            Subterm::Sort(..)
-            | Subterm::FuncType(_)
-            | Subterm::TupleType(_)
-            | Subterm::InductType(_)
-            | Subterm::StructType(_) => context.sort_term(term),
+            curios_core::Subterm::Sort(..)
+            | curios_core::Subterm::FuncType(_)
+            | curios_core::Subterm::TupleType(_)
+            | curios_core::Subterm::InductType(_)
+            | curios_core::Subterm::StructType(_) => Ok(context.sort_term(term)?),
             // A name, or a member of a group read off the group it carries.
-            Subterm::Var(_) | Subterm::Instance(_) => Ok(context
+            curios_core::Subterm::Var(_) | curios_core::Subterm::Instance(_) => Ok(context
                 .synth_neutral(term)
                 .map_err(|error| exhausted(error, term))?
                 .expect("erase: a name in scope")),
-            Subterm::Metavar(_) => unreachable!("metavariable survived zonking into erasure"),
-            Subterm::Transient(_) => {
+            curios_core::Subterm::Metavar(_) => {
+                unreachable!("metavariable survived zonking into erasure")
+            }
+            curios_core::Subterm::Transient(_) => {
                 unreachable!("transient node survived elaboration into erasure")
             }
         }
     }
 
-    fn lambda_type(&mut self, context: &mut Retyping, func: &Func) -> Result<Term, Error> {
+    fn lambda_type(
+        &mut self,
+        context: &mut Retyping,
+        func: &curios_core::Func,
+    ) -> Result<curios_core::Term, Error> {
         context.with_frame(|context| {
             let mut domains = Vec::with_capacity(func.telescope.len());
             let mut cursor = func.telescope.cursor();
@@ -198,7 +214,7 @@ impl Lowering<'_> {
             let body = cursor.body().expect("a cursor past every entry");
             let output = self.type_of(context, &body)?;
 
-            Ok(Term::func_type_marked(
+            Ok(curios_core::Term::func_type_marked(
                 func.plicities()
                     .iter()
                     .zip(domains)
@@ -209,13 +225,20 @@ impl Lowering<'_> {
     }
 
     /// The type of a local group's tail, with each member it names folded back to the group's own projection, so what leaves names nothing the group's scope bound.
-    fn group_tail_type(&mut self, context: &mut Retyping, rec: &Rec) -> Result<Term, Error> {
-        let Rec { group, tail } = rec;
+    fn group_tail_type(
+        &mut self,
+        context: &mut Retyping,
+        rec: &curios_core::Rec,
+    ) -> Result<curios_core::Term, Error> {
+        let curios_core::Rec { group, tail } = rec;
         let names = tail
             .hint_iter()
             .map(|label| context.fresh(label))
             .collect::<Vec<_>>();
-        let members = names.iter().map(Term::free_var).collect::<Vec<_>>();
+        let members = names
+            .iter()
+            .map(curios_core::Term::free_var)
+            .collect::<Vec<_>>();
         let member_refs = members.iter().collect::<Vec<_>>();
 
         let type_ = context.with_frame(|context| {
@@ -224,7 +247,11 @@ impl Lowering<'_> {
                 context.set_assumption_universe_context(name, group.universe_context().clone());
             }
             for (index, name) in names.iter().enumerate() {
-                context.define(name, &Term::rec_proj(group.clone(), index), None);
+                context.define(
+                    name,
+                    &curios_core::Term::rec_proj(group.clone(), index),
+                    None,
+                );
             }
 
             self.type_of(context, &tail.open(&member_refs))
@@ -233,14 +260,17 @@ impl Lowering<'_> {
         let folded = group.members();
         let binders = names.iter().collect::<Vec<_>>();
 
-        Ok(Scope::close(Many(names.len()), &binders, type_)
-            .open(&folded.iter().collect::<Vec<_>>()))
+        Ok(
+            curios_core::Scope::close(curios_core::Many(names.len()), &binders, type_)
+                .open(&folded.iter().collect::<Vec<_>>()),
+        )
     }
 }
 
 /// A budget this reading exhausted, reported against the term it was reading.
-fn exhausted(error: ReduceError, term: &Term) -> Error {
-    Error::from_reduce(error, |refusal| {
-        Error::reduce_exhausted(term.clone(), refusal)
+fn exhausted(error: curios_core::ReduceError, term: &curios_core::Term) -> Error {
+    curios_elab::Error::from_reduce(error, |refusal| {
+        curios_elab::Error::reduce_exhausted(term.clone(), refusal)
     })
+    .into()
 }

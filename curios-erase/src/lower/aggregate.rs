@@ -7,15 +7,10 @@
 use {
     super::{Lowering, Outcome},
     crate::{
-        Error, Retyping,
-        into_anf::{
-            ConstructorRow, FamilyRow, ProductRow, Relevance, constructor_entries, emitted,
-        },
+        ConstructorRow, Error, FamilyRow, ProductRow, Relevance, constructor_entries, emitted,
     },
-    curios_core::{
-        Bound, Proj, Quality, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType,
-        Variant,
-    },
+    curios_core::Bound,
+    curios_elab::Retyping,
     std::borrow::Cow,
 };
 
@@ -33,7 +28,10 @@ impl StructRow<'_> {
 }
 
 /// Open a parameter telescope with fresh assumed variables, handing back the abstract parameter terms a declaration's fields are instantiated at.
-fn open_opaque<B: Bound>(context: &mut Retyping, telescope: Telescope<B>) -> Vec<Term> {
+fn open_opaque<B: Bound>(
+    context: &mut Retyping,
+    telescope: curios_core::Telescope<B>,
+) -> Vec<curios_core::Term> {
     let mut cursor = telescope.cursor();
     while let Some((_, type_)) = cursor.entry() {
         context.advance_assumed(&mut cursor, &type_);
@@ -197,7 +195,7 @@ impl<'s> Lowering<'s> {
         // A `Prop`-sorted family is proof-irrelevant, so erasure drops its inhabitants wholesale — payloads included. Classifying each payload on its own type would keep a `Type`-sorted one (`Eq`'s `refl(@z : A)` has an abstract `A`, which is neither prop nor universe), leaving a live field inside an erased proof: rebuilding the constructor would then compute that field from binders the same erasure had dropped. `Prop` structures already guarantee this by declaration — their fields must be non-informative — so this aligns inductives with them.
         let proof_family = matches!(
             &*context.reduce_with(&induct_decl.result_sort)?,
-            Subterm::Sort(Quality::Prop, _)
+            curios_core::Subterm::Sort(curios_core::Quality::Prop, _)
         );
         let mut constructors = Vec::new();
         // In declaration order, which is runtime-tag order, each constructor read where the walk stands rather than looked up by its tag again.
@@ -358,12 +356,12 @@ impl<'s> Lowering<'s> {
     pub fn erase_tuple(
         &mut self,
         context: &mut Retyping,
-        tuple: &Tuple,
-        expected: &Term,
+        tuple: &curios_core::Tuple,
+        expected: &curios_core::Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let telescope = match Term::unwrap_or_clone(context.reduce_with(expected)?) {
-            Subterm::TupleType(TupleType { telescope }) => telescope,
+        let telescope = match curios_core::Term::unwrap_or_clone(context.reduce_with(expected)?) {
+            curios_core::Subterm::TupleType(curios_core::TupleType { telescope }) => telescope,
             _ => unreachable!("erase: tuple checked against non-tuple type"),
         };
         assert_eq!(
@@ -397,7 +395,7 @@ impl<'s> Lowering<'s> {
     pub fn erase_struct(
         &mut self,
         context: &mut Retyping,
-        value: &Struct,
+        value: &curios_core::Struct,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let row = self.struct_row(context, &value.name)?;
@@ -429,7 +427,7 @@ impl<'s> Lowering<'s> {
     pub fn erase_variant(
         &mut self,
         context: &mut Retyping,
-        variant: &Variant,
+        variant: &curios_core::Variant,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let index = context
@@ -466,11 +464,11 @@ impl<'s> Lowering<'s> {
     pub fn erase_proj(
         &mut self,
         context: &mut Retyping,
-        proj: &Proj,
-        expected: &Term,
+        proj: &curios_core::Proj,
+        expected: &curios_core::Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let Proj { head, field } = proj;
+        let curios_core::Proj { head, field } = proj;
         let Some(index) = field.slot() else {
             unreachable!("unresolved label projection reached erasure");
         };
@@ -483,13 +481,13 @@ impl<'s> Lowering<'s> {
 
         // A tuple keeps every field, so its slot is the field's index; a structure's is the count of relevant fields before it.
         let (schema, field) = match &*head_type {
-            Subterm::TupleType(TupleType { telescope }) => {
+            curios_core::Subterm::TupleType(curios_core::TupleType { telescope }) => {
                 let width = telescope.len();
                 assert!(index < width, "erase: projection out of range");
                 let schema = (!ProductRow::collapses(width)).then(|| self.tuple_schema(width));
                 (schema, index as u32)
             }
-            Subterm::StructType(StructType { name, .. }) => {
+            curios_core::Subterm::StructType(curios_core::StructType { name, .. }) => {
                 let row = self.struct_row(context, name)?;
                 assert!(index < row.mask.len(), "erase: projection out of range");
                 if erased_field(&row.mask, index) {

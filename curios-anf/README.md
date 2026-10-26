@@ -1,6 +1,6 @@
 # curios-anf
 
-The Curios erased IR, in A-normal form: the flat, explicit, first-order stage between `curios-elab`'s type-directed erasure and the continuation IR of `curios-cps`, with the one-way door `lower_to_cps` between them. Types, proofs and erasable binders are gone by construction. How the module prints and how its identities are spelled is [A printer states each fact once, where it is bound](../documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md); the representation and its derived analyses belong to the crate rustdoc.
+The Curios erased IR, in A-normal form: the flat, explicit, first-order stage between `curios-erase`'s type-directed erasure and the continuation IR of `curios-cps`, with the one-way door `lower_to_cps` between them. Types, proofs and erasable binders are gone by construction. How the module prints and how its identities are spelled is [A printer states each fact once, where it is bound](../documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md); the representation and its derived analyses belong to the crate rustdoc.
 
 ## Design
 

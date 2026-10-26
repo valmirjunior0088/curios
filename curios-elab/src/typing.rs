@@ -147,7 +147,7 @@ fn is_declared_prop_in(
 
 /// Whether a value of `type_` carries nothing at run time, under the binders a surrounding walk has opened, each with its declared type: `type_` is a sort, so the value is a type; a proposition, so the value is a proof; or a function that ultimately answers one of those. The empty tuple is none of them, being what an effect answers, so `{}` and `X -> {}` are kept.
 ///
-/// A domain that is a bound variable of `Prop` sort — `proof: P` under `P: Prop` — is a proof only through `opened`, which is threaded rather than assumed for the reason [`is_prop_in`] states.
+/// A domain that is a bound variable of `Prop` sort — `proof: P` under `P: Prop` — is a proof only through `opened`, which is threaded rather than assumed for the reason `is_prop_in` states.
 ///
 /// **One reading's answer.** A domain that is a variable here is a proof where the variable is instantiated at a proposition, so a `false` says only that this reading keeps the value. A `true` holds at every instantiation: a sort, a proposition and a function into one stay what they are under any substitution. Erasure asks through its reader ([`crate::Retyping`]), of a declaration's signature for what the declaration stores and of a slot's type for what the slot holds.
 pub fn is_erasable_in(
@@ -1435,7 +1435,7 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
     Ok(())
 }
 
-/// The family a match's scrutinee is a value of, as an inductive arm is entered at ([`enter_induct_case`]): its name, its instance, its parameters and its actual indices.
+/// The family a match's scrutinee is a value of, as an inductive arm is entered at (`enter_induct_case`): its name, its instance, its parameters and its actual indices.
 pub struct InductCase<'a> {
     pub name: &'a Global,
     pub universes: &'a Universes,

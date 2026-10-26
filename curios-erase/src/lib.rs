@@ -8,6 +8,9 @@
 //!
 //! The boundary validates what it has not already seen validated, and projects what is not already projected — which for a unit erased over a scope is the unit's own items and the registry entries it adds. The prelude arrives immutable and checked from `curios-prelude-archive`'s restore, so validating and projecting it again would be a walk of the whole standard library, inside the erasure context's step budget, for an answer already in hand.
 
+mod error;
+pub use error::{ErasedName, Error};
+
 mod classify;
 use classify::*;
 
@@ -16,7 +19,7 @@ use environment::*;
 
 mod lower;
 use lower::*;
-pub use lower::{ErasedNames, ErasedProgram, erase_program, erase_unit, erase_unit_over};
+pub use lower::{ErasedProgram, erase_program, erase_unit, erase_unit_over};
 
 mod erased;
 use erased::*;
@@ -41,12 +44,16 @@ use projected::*;
 #[cfg(test)]
 mod tests;
 
+// A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_erase::test_support::declared_families` says at its use site that the caller reached for scaffolding rather than product API.
+#[cfg(feature = "test-support")]
+pub mod test_support;
+
 /// Unwrap an [`Outcome`] to its emitted atom, propagating divergence to the caller (the rest of the enclosing block is dead and is never erased).
 macro_rules! emitted {
     ($outcome:expr) => {
         match $outcome {
-            $crate::into_anf::Outcome::Emitted(atom) => atom,
-            diverged @ $crate::into_anf::Outcome::Diverged(_) => return Ok(diverged),
+            $crate::Outcome::Emitted(atom) => atom,
+            diverged @ $crate::Outcome::Diverged(_) => return Ok(diverged),
         }
     };
 }

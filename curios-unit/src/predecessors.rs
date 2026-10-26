@@ -3,7 +3,7 @@
 use {
     crate::Unit,
     curios_core::{Anchors, Lexicon, Module, Places},
-    curios_elab::{ErasedUnit, Projection},
+    curios_erase::{ErasedUnit, Projection},
     curios_text::PreparedText,
 };
 
@@ -55,7 +55,7 @@ impl<'a> Predecessors<'a> {
         self.units.iter().map(|unit| unit.lexicon()).collect()
     }
 
-    /// What each predecessor keeps for erasure, beside [`Predecessors::cores`]: where it holds each name, and what has been read of it out of its universes. For `curios-elab`'s `Erasures`: a scope erased over, with nothing keyed for the compile.
+    /// What each predecessor keeps for erasure, beside [`Predecessors::cores`]: where it holds each name, and what has been read of it out of its universes. For `curios-erase`'s `Erasures`: a scope erased over, with nothing keyed for the compile.
     pub fn projected(&self) -> Vec<(&'a Places, &'a Projection)> {
         self.units
             .iter()
@@ -76,7 +76,7 @@ impl<'a> Predecessors<'a> {
         self.units.iter().map(|unit| unit.fixed()).collect()
     }
 
-    /// The erased forms of each predecessor's items, for `curios-elab`'s `Erasures`: one per unit, beside [`Predecessors::cores`], which they were erased from.
+    /// The erased forms of each predecessor's items, for `curios-erase`'s `Erasures`: one per unit, beside [`Predecessors::cores`], which they were erased from.
     pub fn erased(&self) -> Vec<&'a ErasedUnit> {
         self.units.iter().map(|unit| unit.erased()).collect()
     }

@@ -1684,7 +1684,7 @@ pub enum Tail<'a> {
 ///
 /// Sound because a scope is unit-independent: its items never see this unit's code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — an item elaborates against the identical local context it would with no scope at all, so the solutions (and the zonked output) are identical.
 ///
-/// **The returned module holds this unit's items and no one else's.** That is a contract rather than an artifact of how the elaboration happens to be written: [`crate::erase_unit`] erases a unit *onto* what its scope already erased, and re-deriving the standard library on every compilation is exactly what carrying it here would cost.
+/// **The returned module holds this unit's items and no one else's.** That is a contract rather than an artifact of how the elaboration happens to be written: `curios_erase::erase_unit` erases a unit *onto* what its scope already erased, and re-deriving the standard library on every compilation is exactly what carrying it here would cost.
 ///
 /// Beside it comes what each of its declarations asked of the declarations around it ([`Traces`]), which a later compile of the unit keeps a declaration by.
 pub fn elaborate_and_zonk_unit<'s>(

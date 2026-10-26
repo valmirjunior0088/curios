@@ -4,11 +4,7 @@
 //!
 //! The resume loop has no definition a description could name, so it is emitted where it is needed: beside each `Io/advance`, and once beside the entry, which hands the host a suspension it can advance without knowing its frames. A program that never builds a suspension never reaches either, since `curios-anf` takes the value arm of every test in it before anything is optimized.
 
-use {
-    super::Lowering,
-    crate::{Error, Retyping},
-    curios_core::Global,
-};
+use {super::Lowering, crate::Error, curios_elab::Retyping};
 
 /// What a cell's poll answers: `/std/Option`'s family, with `some` where the cell is filled and `none` where it is not.
 #[derive(Debug, Clone, Copy)]
@@ -167,7 +163,10 @@ impl Lowering<'_> {
     pub fn polled(&mut self, context: &mut Retyping) -> Result<Polled, Error> {
         let syntax = context.syntax().option;
         Ok(Polled {
-            family: self.induct_family(context, &Global::Authored(syntax.family.qualifier()))?,
+            family: self.induct_family(
+                context,
+                &curios_core::Global::Authored(syntax.family.qualifier()),
+            )?,
             some: self.outcome_constructor(context, syntax.family, syntax.some)?,
             none: self.outcome_constructor(context, syntax.family, syntax.none)?,
         })

@@ -16,10 +16,10 @@ use {
         ReaderPosition, Sharing, Term, Totality, Zonked, build_rename, display_names,
     },
     curios_elab::{
-        Context, ErasedUnit, Error, Established, Reading, Recompile, Recompiled,
-        elaborate_and_zonk_unit_over,
-        test_support::{part_digests, written_for_reader},
+        Context, Error, Established, Reading, Recompile, Recompiled, elaborate_and_zonk_unit_over,
+        test_support::written_for_reader,
     },
+    curios_erase::{ErasedUnit, test_support::part_digests},
     curios_prelude::with_prelude,
     curios_std::std_directory,
     curios_text::{
@@ -1703,7 +1703,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
 
 /// The family-slot probe: what typing a tagged family's reference fields would cost, family by family, over every family the prelude's units declare.
 ///
-/// Every other recorded shape is typed by the door, and each is strictly additive: the same width, fewer instructions, and for a list a deleted test of its shape and for a closure a deleted `is_subtype` libcall. A tagged family's reference fields are the exception on both counts. Slots are grouped by carrier, so a family-typed slot cannot share the uniform range, and a family whose constructors disagree widens to gain one; and what the widening buys is the cheap kind of cast, an exact compare against a final type. So the question is where to type them, and the criterion is exact: a family widens or it does not. This reports the split, each family read off the item that declares it (`curios_elab::test_support::declared_families`), so the rule admitting the free ones is held to the library's own families and not to those one program reaches.
+/// Every other recorded shape is typed by the door, and each is strictly additive: the same width, fewer instructions, and for a list a deleted test of its shape and for a closure a deleted `is_subtype` libcall. A tagged family's reference fields are the exception on both counts. Slots are grouped by carrier, so a family-typed slot cannot share the uniform range, and a family whose constructors disagree widens to gain one; and what the widening buys is the cheap kind of cast, an exact compare against a final type. So the question is where to type them, and the criterion is exact: a family widens or it does not. This reports the split, each family read off the item that declares it (`curios_erase::test_support::declared_families`), so the rule admitting the free ones is held to the library's own families and not to those one program reaches.
 ///
 /// # How to run it
 ///
@@ -1736,7 +1736,7 @@ fn family_slot_probe() {
     with_prelude(|prelude| {
         let families = prelude
             .iter()
-            .flat_map(|unit| curios_elab::test_support::declared_families(unit.erased()))
+            .flat_map(|unit| curios_erase::test_support::declared_families(unit.erased()))
             .collect::<Vec<_>>();
         let named = families
             .iter()
@@ -1760,7 +1760,7 @@ fn family_slot_probe() {
         };
 
         // The carrier a field occupies, mirroring the door's own rule. `family_typed` is the question this probe asks: a family-typed reference field is the one shape whose typing can cost width.
-        let class = |field: &curios_elab::test_support::ErasedField,
+        let class = |field: &curios_erase::test_support::ErasedField,
                      family_typed: bool|
          -> Option<String> {
             match field.shape {
@@ -1779,7 +1779,7 @@ fn family_slot_probe() {
         };
 
         // The classed layout's width and typed-slot count for one family's constructor rows.
-        let layout = |rows: &[Vec<curios_elab::test_support::ErasedField>],
+        let layout = |rows: &[Vec<curios_erase::test_support::ErasedField>],
                       family_typed: bool|
          -> (usize, usize) {
             let mut classed = BTreeMap::<String, usize>::new();

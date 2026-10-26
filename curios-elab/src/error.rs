@@ -5,7 +5,7 @@ use display::*;
 mod tests;
 
 use {
-    super::{Context, ErasedNames, HeldFrames, Pending, Refusal, written},
+    super::{Context, HeldFrames, Pending, Refusal, written},
     curios_analysis::{DeclaredPart, Erased},
     curios_core::{
         Anchors, Atom, CalleeId, Definition, DefinitionKind, DisplayNames, Exhaustion, Extent,
@@ -1044,19 +1044,6 @@ pub enum Error {
     },
     /// A witness telescope declares an explicit parameter; nothing could supply it at resolution time.
     ExplicitWitnessParam,
-    /// A natural-dispatch case key that does not fit `anf`'s `NatCase`. A `Nat` *value* is unbounded through every erased stage — only materialization refuses one — but a key selects an arm of a branch table, which is a slot rather than a value.
-    NatCaseKeyOverflow {
-        value: Natural,
-    },
-    /// Computed recursive members whose initializers evaluate one another, so no order of forcing them by need can initialize them — the recursion class the erased verifier owns and this surfaces. Each step is a member by its source name and the call it reads the next member through, when the read goes through one; a single step is a member evaluating itself.
-    EvaluationCycle {
-        steps: Vec<(ErasedName, Option<ErasedName>)>,
-    },
-    /// A computed recursive member whose initializer performs an effect, directly or through the named call, which forcing it by need could not keep in its place.
-    InitializerPerformsEffect {
-        member: ErasedName,
-        through: Option<ErasedName>,
-    },
     /// A written motive binds the wrong number of names. An eliminator's motive abstracts the scrutinee's indices, in declaration order, and then the scrutinee — `expected` of them. `name` is the eliminated family when there is one to name (an intrinsic carrier has none).
     MotiveBinderCount {
         name: Option<Global>,
@@ -1832,59 +1819,6 @@ impl Error {
         }
     }
 
-    pub fn nat_case_key_overflow(value: Natural) -> Self {
-        Self::NatCaseKeyOverflow { value }
-    }
-
-    /// The refusal of a read of `member` from another item, where `member`'s own initializer reads it: the one-step cycle the verifier would name had the two been erased together.
-    pub fn evaluates_itself(member: Free) -> Self {
-        Self::EvaluationCycle {
-            steps: vec![(ErasedName::Named(member), None)],
-        }
-    }
-
-    /// The refusal a program earns from the erased verifier, framed at the refused member's initializer when `extents` records one — a cycle at its first member. Only the verifier's recursion rules come back as an error: a malformed module is a compiler fault, which the verifier panics on rather than returning.
-    pub fn refused_by_verifier(
-        error: curios_anf::VerifyError,
-        extents: &BTreeMap<curios_anf::ValueId, Extent>,
-        names: &ErasedNames,
-    ) -> Self {
-        // A member and a callee by the name erasure minted each for, and by the erased program's own where it minted it for none: a lambda written in place, a fragment linked past the names of its items.
-        let member = |value: curios_anf::ValueId, erased: String| match names.values.get(&value) {
-            Some(name) => ErasedName::Named(*name),
-            None => ErasedName::Erased(erased),
-        };
-        let callee = |call: curios_anf::CycleCall| match names.functions.get(&call.function) {
-            Some(name) => ErasedName::Named(*name),
-            None => ErasedName::Erased(call.name),
-        };
-
-        match error {
-            curios_anf::VerifyError::EvaluationCycle { steps } => {
-                let extent = steps
-                    .first()
-                    .and_then(|step| extents.get(&step.value))
-                    .cloned();
-                Self::EvaluationCycle {
-                    steps: steps
-                        .into_iter()
-                        .map(|step| (member(step.value, step.member), step.through.map(callee)))
-                        .collect(),
-                }
-                .at_opt(extent)
-            }
-            curios_anf::VerifyError::InitializerPerformsEffect {
-                member: erased,
-                value,
-                through,
-            } => Self::InitializerPerformsEffect {
-                member: member(value, erased),
-                through: through.map(callee),
-            }
-            .at_opt(extents.get(&value).cloned()),
-        }
-    }
-
     pub fn motive_binder_count(name: Option<Global>, expected: usize, written: usize) -> Self {
         Self::MotiveBinderCount {
             name,
@@ -2170,16 +2104,6 @@ impl Error {
                     )
                 })
                 .collect(),
-            // A value read where it evaluates itself: the report stands at the read, and the value is written in its declaration.
-            Self::EvaluationCycle { steps } => match steps.as_slice() {
-                [(named @ ErasedName::Named(Free::Global(member)), None)] => note(
-                    Anchors::label(anchors, member),
-                    format!("`{}` is declared here", named.spelled(spelling)),
-                )
-                .into_iter()
-                .collect(),
-                _ => Vec::new(),
-            },
             Self::DuplicateWitness { standing, .. } => note(
                 Anchors::label(anchors, standing),
                 "the other witness is declared here".to_string(),
@@ -2334,13 +2258,6 @@ impl Error {
     fn visit_terms_mut(&mut self, visit: &mut dyn FnMut(&mut Term)) {
         shown_terms!(self, visit, visit_terms_mut, terms_mut);
     }
-}
-
-/// A member or a callee of a refusal the erased verifier raised: the name erasure minted it for, or the erased program's own name for it where erasure minted it for none.
-#[derive(Debug, Clone)]
-pub enum ErasedName {
-    Named(Free),
-    Erased(String),
 }
 
 /// What an erased position is a position of, as a totality refusal names it.

@@ -9,10 +9,9 @@
 //! **A scope is the units' own, borrowed.** Erasing an item reads another's erased form for one thing, how its name is bound — to nothing at run time, to a constant, to a value or to a function of some arity and interface — and reads it where the name is first used.
 
 use {
-    super::{Binding, Environment, Projection},
-    crate::{Foreign, HeldTrace, Question, Readers, Traces, part_digest},
+    crate::{Binding, Environment, Projection},
     curios_archive::{Bytes, Deferred},
-    curios_core::{Free, Global, Item, Module, Places},
+    curios_elab::{Foreign, HeldTrace, Question, Readers, Traces, part_digest},
     curios_utilities::{Digest, Object, Ordered, Persistent, Recorded, digest},
     std::{
         borrow::Borrow,
@@ -31,9 +30,9 @@ pub struct ErasedItem {
     /// What each name the item declares is bound to, in the fragment's identities, and the fragment's schemas by the declaration each is the row of, the ones it declares told from the ones it imports.
     environment: Environment,
     /// The name each value the fragment imports stands for, in the fragment's order.
-    values: Vec<Global>,
+    values: Vec<curios_core::Global>,
     /// The name each function the fragment imports stands for, in the fragment's order.
-    functions: Vec<Global>,
+    functions: Vec<curios_core::Global>,
     /// What applying each function a declared name is bound to does ([`curios_anf::Module::interface`]), read once here, where the fragment is final, since every item that imports the name asks.
     interfaces: BTreeMap<curios_anf::FunctionId, curios_anf::Interface>,
     /// The values whose initializers read themselves while nothing else of the fragment reads them ([`curios_anf::Module::unforced`]). Nothing here forces one; an item that reads one would, and is refused where it reads it.
@@ -41,7 +40,7 @@ pub struct ErasedItem {
     /// **No position.** Where such a value is written is its declaration's, which a report finds by the name; a form holding it would be one thing erased from an item in hand and another from the same item restored from a store, which holds no position.
     unforced: BTreeSet<curios_anf::ValueId>,
     /// The names bound to what an evaluation of the item computed, where that is another atom than the one the item bound them to. A function one of them is bound to is a closure the item computed and no definition's own, so what a record says of the definition is not said of it.
-    computed: BTreeSet<Global>,
+    computed: BTreeSet<curios_core::Global>,
 }
 
 /// How a name is bound, as an item that uses it reads it.
@@ -66,8 +65,8 @@ impl ErasedItem {
     pub(super) fn new(
         module: curios_anf::Module,
         environment: Environment,
-        values: Vec<Global>,
-        functions: Vec<Global>,
+        values: Vec<curios_core::Global>,
+        functions: Vec<curios_core::Global>,
     ) -> Self {
         let interfaces = environment
             .bindings()
@@ -96,13 +95,13 @@ impl ErasedItem {
     }
 
     /// This erased form with `names` as the names bound to what an evaluation of the item computed.
-    pub(super) fn computing(mut self, names: BTreeSet<Global>) -> Self {
+    pub(super) fn computing(mut self, names: BTreeSet<curios_core::Global>) -> Self {
         self.computed = names;
         self
     }
 
     /// Whether `name` is bound to what an evaluation of the item computed.
-    pub(super) fn computed(&self, name: &Global) -> bool {
+    pub(super) fn computed(&self, name: &curios_core::Global) -> bool {
         self.computed.contains(name)
     }
 
@@ -117,24 +116,24 @@ impl ErasedItem {
     }
 
     /// The name each imported value of the fragment stands for, in the fragment's order.
-    pub(super) fn values(&self) -> &[Global] {
+    pub(super) fn values(&self) -> &[curios_core::Global] {
         &self.values
     }
 
     /// The name each imported function of the fragment stands for, in the fragment's order.
-    pub(super) fn functions(&self) -> &[Global] {
+    pub(super) fn functions(&self) -> &[curios_core::Global] {
         &self.functions
     }
 
     /// Whether an item that names `name` reads this erased form and `other` alike: the name bound the same way, and the row it declares, where it declares one, of the same shape under the same mask. What an importing item holds of a row is no more ([`ErasedItem::struct_row_read`], [`ErasedItem::induct_row_read`]).
-    pub(super) fn read_alike(&self, other: &ErasedItem, name: &Global) -> bool {
+    pub(super) fn read_alike(&self, other: &ErasedItem, name: &curios_core::Global) -> bool {
         self.export(name) == other.export(name)
             && self.struct_row_read(name) == other.struct_row_read(name)
             && self.induct_row_read(name) == other.induct_row_read(name)
     }
 
-    /// The digest of what an item that names `name` reads of this erased form: what [`ErasedItem::read_alike`] compares, archived. What a unit records of a binding it read in another unit's erased form, and what the binding is asked again by.
-    pub fn read_digest(&self, name: &Global) -> Result<String, String> {
+    /// The digest of what an item that names `name` reads of this erased form: what `ErasedItem::read_alike` compares, archived. What a unit records of a binding it read in another unit's erased form, and what the binding is asked again by.
+    pub fn read_digest(&self, name: &curios_core::Global) -> Result<String, String> {
         let export = self.export(name).map(|export| match export {
             Export::Dropped => (0u8, None, None),
             Export::Constant(constant) => (1, Some(constant.clone()), None),
@@ -165,7 +164,7 @@ impl ErasedItem {
     }
 
     /// What an item importing the structure `name` reads of the row this item declares for it: its mask, and of its schema the name, the width and whether it is shared.
-    fn struct_row_read(&self, name: &Global) -> Option<StructRowRead<'_>> {
+    fn struct_row_read(&self, name: &curios_core::Global) -> Option<StructRowRead<'_>> {
         let declared = self.environment.declared_struct_row(name)?;
         let schema = declared.schema.map(|schema| {
             let held = self
@@ -180,7 +179,7 @@ impl ErasedItem {
     }
 
     /// What an item importing the inductive `name` reads of the row this item declares for it: the family's name, and each constructor's name, width and mask.
-    fn induct_row_read(&self, name: &Global) -> Option<InductRowRead<'_>> {
+    fn induct_row_read(&self, name: &curios_core::Global) -> Option<InductRowRead<'_>> {
         let declared = self.environment.declared_induct_row(name)?;
         let family = self
             .module
@@ -203,28 +202,32 @@ impl ErasedItem {
     }
 
     /// How the item binds `name`, where it declares it.
-    pub(super) fn export(&self, name: &Global) -> Option<Export<'_>> {
-        Some(match self.environment.lookup(&Free::from(name))? {
-            Binding::Dropped => Export::Dropped,
-            Binding::Atom(curios_anf::Atom::Constant(constant)) => Export::Constant(
-                self.module
-                    .constant(constant)
-                    .expect("an exported constant is the fragment's"),
-            ),
-            Binding::Atom(curios_anf::Atom::Value(value)) => match self.unforced.contains(&value) {
-                true => Export::Unforced,
-                false => Export::Value,
+    pub(super) fn export(&self, name: &curios_core::Global) -> Option<Export<'_>> {
+        Some(
+            match self.environment.lookup(&curios_core::Free::from(name))? {
+                Binding::Dropped => Export::Dropped,
+                Binding::Atom(curios_anf::Atom::Constant(constant)) => Export::Constant(
+                    self.module
+                        .constant(constant)
+                        .expect("an exported constant is the fragment's"),
+                ),
+                Binding::Atom(curios_anf::Atom::Value(value)) => {
+                    match self.unforced.contains(&value) {
+                        true => Export::Unforced,
+                        false => Export::Value,
+                    }
+                }
+                Binding::Atom(curios_anf::Atom::Function(function)) => Export::Function {
+                    arity: self
+                        .module
+                        .function(function)
+                        .expect("an exported function is the fragment's")
+                        .params
+                        .len(),
+                    interface: self.interfaces[&function].clone(),
+                },
             },
-            Binding::Atom(curios_anf::Atom::Function(function)) => Export::Function {
-                arity: self
-                    .module
-                    .function(function)
-                    .expect("an exported function is the fragment's")
-                    .params
-                    .len(),
-                interface: self.interfaces[&function].clone(),
-            },
-        })
+        )
     }
 }
 
@@ -245,7 +248,7 @@ struct ErasedIndex {
     /// Each item's erased form, by its place.
     items: Ordered<Rc<Form>>,
     /// The place of the item that declares each name.
-    declared: Persistent<Global, i64>,
+    declared: Persistent<curios_core::Global, i64>,
     /// The places of the items whose evaluation at initialization computes ([`curios_anf::Module::computes`]): what a program links whether or not it names them, since whether one is observable is the program's to say.
     computing: Ordered<()>,
 }
@@ -253,7 +256,7 @@ struct ErasedIndex {
 /// An erased unit's index as it is stored: each name by the rank of the item declaring it among the unit's items, and the ranks of the items that compute, ascending.
 #[curios_archive::archived]
 struct RankedIndex {
-    declared: BTreeMap<Global, u32>,
+    declared: BTreeMap<curios_core::Global, u32>,
     computing: Vec<u32>,
 }
 
@@ -350,7 +353,7 @@ impl ErasedUnit {
     }
 
     /// `item`'s erased form, made here, at `place`, in place of what was held there.
-    pub(super) fn push(&mut self, place: usize, item: &Item, erased: ErasedItem) {
+    pub(super) fn push(&mut self, place: usize, item: &curios_core::Item, erased: ErasedItem) {
         let computes = erased.module.computes();
         self.keep(
             place,
@@ -366,7 +369,7 @@ impl ErasedUnit {
     }
 
     /// `item`'s erased form as another unit holds it, at `place`, in place of what was held there. The form is not read: whether it computes is the holder's to say.
-    pub(super) fn keep(&mut self, place: usize, item: &Item, held: Held) {
+    pub(super) fn keep(&mut self, place: usize, item: &curios_core::Item, held: Held) {
         let at = position(place);
         for name in item.declared_names() {
             self.index.declared.insert(*name, at);
@@ -381,7 +384,7 @@ impl ErasedUnit {
     }
 
     /// Take out the erased form held at `place`, and each of `names` declared there: an item the unit no longer holds.
-    pub(super) fn forget(&mut self, place: usize, names: &[&Global]) {
+    pub(super) fn forget(&mut self, place: usize, names: &[&curios_core::Global]) {
         let at = position(place);
         self.index.items.remove(at);
         self.index.computing.remove(at);
@@ -418,17 +421,17 @@ impl ErasedUnit {
     }
 
     /// Where the item declaring `name` sits.
-    pub fn place(&self, name: &Global) -> Option<usize> {
+    pub fn place(&self, name: &curios_core::Global) -> Option<usize> {
         self.index.declared.get(name).map(|at| place_of(*at))
     }
 
     /// The erased form of the item declaring `name`.
-    pub(super) fn find(&self, name: &Global) -> Option<&ErasedItem> {
+    pub(super) fn find(&self, name: &curios_core::Global) -> Option<&ErasedItem> {
         self.place(name).map(|place| self.item(place))
     }
 
     /// The erased form of the item declaring `name`, as this unit holds it, with whether it computes: what a unit compiled over this one keeps, reading nothing.
-    pub(super) fn held(&self, name: &Global) -> Option<Held> {
+    pub(super) fn held(&self, name: &curios_core::Global) -> Option<Held> {
         let place = self.place(name)?;
 
         Some(Held {
@@ -438,7 +441,7 @@ impl ErasedUnit {
     }
 
     /// Whether the item declaring `name` holds one erased form in this unit and in `other`: the one handle, or two forms stored as the same bytes, told by their digests where both were restored.
-    pub(super) fn form_alike(&self, other: &ErasedUnit, name: &Global) -> bool {
+    pub(super) fn form_alike(&self, other: &ErasedUnit, name: &curios_core::Global) -> bool {
         let (Some(this), Some(that)) = (self.place(name), other.place(name)) else {
             return false;
         };
@@ -496,7 +499,7 @@ impl ErasedUnit {
     }
 
     /// What erasing the item declaring `name` first asked, as the unit holds it.
-    pub(super) fn asked(&self, name: &Global) -> Option<&HeldTrace> {
+    pub(super) fn asked(&self, name: &curios_core::Global) -> Option<&HeldTrace> {
         self.traces().held(name)
     }
 
@@ -647,9 +650,9 @@ impl Form {
 #[derive(Clone, Copy, Default)]
 pub struct Erasures<'a> {
     /// Universes are taken as already validated — `curios-prelude` validates the archive as it restores, which is where untrusted bytes become a `Module`, and the value is immutable from then on.
-    cores: &'a [&'a Module],
+    cores: &'a [&'a curios_core::Module],
     /// What each unit keeps for erasure, where the caller holds the units and not their modules alone: where it holds each name, and what has been read of it out of its universes. `None` keys each module for this erasure.
-    kept: Option<&'a [(&'a Places, &'a Projection)]>,
+    kept: Option<&'a [(&'a curios_core::Places, &'a Projection)]>,
     erased: &'a [&'a ErasedUnit],
     /// Which units are other than the ones the baseline was erased after ([`Erasures::after`]): none where nothing says.
     moved: Option<&'a [bool]>,
@@ -664,7 +667,7 @@ impl<'a> Erasures<'a> {
     }
 
     /// The units `cores` were elaborated to and `erased` are the erased forms of, in dependency order.
-    pub fn of(cores: &'a [&'a Module], erased: &'a [&'a ErasedUnit]) -> Self {
+    pub fn of(cores: &'a [&'a curios_core::Module], erased: &'a [&'a ErasedUnit]) -> Self {
         assert_eq!(
             cores.len(),
             erased.len(),
@@ -714,7 +717,7 @@ impl<'a> Erasures<'a> {
     }
 
     /// Whether what a baseline's erasure read of `name`, which the unit being erased does not declare, stands unasked: every unit in scope is the one the baseline was erased after, or the one that declares `name` is.
-    pub(super) fn unmoved(&self, name: &Global) -> bool {
+    pub(super) fn unmoved(&self, name: &curios_core::Global) -> bool {
         let Some(moved) = self.moved.filter(|moved| moved.contains(&true)) else {
             return true;
         };
@@ -728,7 +731,7 @@ impl<'a> Erasures<'a> {
     }
 
     /// Whether a read of `name`, which the unit being erased does not declare, is one to record: every one but a read of a fixed unit's declaration.
-    pub(super) fn recorded(&self, name: &Global) -> bool {
+    pub(super) fn recorded(&self, name: &curios_core::Global) -> bool {
         self.place(name)
             .is_none_or(|(unit, _)| !self.is_fixed(unit))
     }
@@ -753,7 +756,7 @@ impl<'a> Erasures<'a> {
     }
 
     /// These units read by what each keeps for erasure, `kept`, in the same order: nothing of a unit is keyed for the erasure, and what it projects of one stays projected.
-    pub fn keeping(self, kept: &'a [(&'a Places, &'a Projection)]) -> Self {
+    pub fn keeping(self, kept: &'a [(&'a curios_core::Places, &'a Projection)]) -> Self {
         assert_eq!(
             self.cores.len(),
             kept.len(),
@@ -767,12 +770,12 @@ impl<'a> Erasures<'a> {
     }
 
     /// What the unit at `place` keeps for erasure, where the scope holds it.
-    pub(super) fn kept(&self, place: usize) -> Option<(&'a Places, &'a Projection)> {
+    pub(super) fn kept(&self, place: usize) -> Option<(&'a curios_core::Places, &'a Projection)> {
         self.kept.map(|kept| kept[place])
     }
 
     /// The Core each unit was erased from, in dependency order.
-    pub(super) fn cores(&self) -> &'a [&'a Module] {
+    pub(super) fn cores(&self) -> &'a [&'a curios_core::Module] {
         self.cores
     }
 
@@ -782,7 +785,7 @@ impl<'a> Erasures<'a> {
     }
 
     /// The unit and the place of the item declaring `name`, where a unit in scope declares it.
-    pub(super) fn place(&self, name: &Global) -> Option<(usize, usize)> {
+    pub(super) fn place(&self, name: &curios_core::Global) -> Option<(usize, usize)> {
         self.erased
             .iter()
             .enumerate()
@@ -790,7 +793,7 @@ impl<'a> Erasures<'a> {
     }
 
     /// The erased form of the item declaring `name`, where a unit in scope declares it.
-    pub(super) fn find(&self, name: &Global) -> Option<&'a ErasedItem> {
+    pub(super) fn find(&self, name: &curios_core::Global) -> Option<&'a ErasedItem> {
         self.erased.iter().find_map(|erased| erased.find(name))
     }
 }
