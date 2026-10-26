@@ -16,7 +16,7 @@ use {
     },
 };
 
-/// Long enough that two notifications sent around one of these reach the analyst as two checks rather than one coalesced pair — which is what a test of the skip needs, since a coalesced pair hides what the analyst did with the second.
+/// Long enough that two notifications sent around one of these reach the analyst as two checks rather than one coalesced pair — which is what a test telling a save's answer from the edit behind it needs, since a coalesced pair is answered once.
 ///
 /// Derived from the analyst's own settle rather than restated, so raising that figure cannot leave this one quietly too short. The multiple is slack for a loaded machine, not a second opinion about the cadence.
 const QUIET: Duration = SETTLE.saturating_mul(4);
@@ -454,6 +454,18 @@ impl Editor {
         }
     }
 
+    /// Every message the server sends ahead of the first one holding `marker`, which is read and left out: what the notifications before the marked one were answered with, whatever order one check publishes its paths in.
+    fn ahead_of(&mut self, marker: &str) -> Vec<String> {
+        let mut ahead = Vec::new();
+        loop {
+            let message = self.receive();
+            if message.contains(marker) {
+                return ahead;
+            }
+            ahead.push(message);
+        }
+    }
+
     /// The answer to `method` asked of `params`, asked again while it is nothing: what a document's check leaves for a place to be answered from is left once its diagnostics are published, so a request sent on the publish may find nothing held yet.
     fn asked(&mut self, method: &str, params: &str) -> String {
         for id in 100..300 {
@@ -529,30 +541,39 @@ fn the_server_publishes_from_the_buffer_and_clears() {
     );
 }
 
-/// A save carries no text, so the overlay it arrives with is the one the last keystroke was already checked against, and the analyst publishes nothing for it. What proves the skip is which publish comes back next: the edit's, where a save that had run would have put its own identical answer in front of it.
+/// A save is answered from the disk as it stands, which may have moved under a file no editor holds since the last check read it: `helper.crs` is rewritten to a declaration that does not check while `scratch.crs`, which reads it, stays as it was, and the save that follows publishes the refusal. What proves it is what arrives ahead of the edit behind the save, which reads no helper: the refusal, where a save answered from the check before the disk moved leaves the edit's answer to arrive first.
 #[test]
-fn a_save_of_text_already_checked_publishes_nothing() {
-    let root = temporary("resaved");
-    fs::create_dir_all(&root).unwrap();
-    let path = root.join("scratch.crs");
-    write(&root, "scratch.crs", "/std/print(\"\")\n");
-    let uri = format!("file://{}", path.display());
+fn a_save_after_the_disk_moved_under_a_closed_file_is_answered_again() {
+    let root = temporary("moved-under");
+    write(&root, "helper.crs", "pub let word : /std/Str = \"fine\";\n");
+    write(
+        &root,
+        "scratch.crs",
+        "mod helper;\n\n/std/print(/helper/word)\n",
+    );
+    let uri = format!("file://{}", root.join("scratch.crs").display());
 
     let mut editor = Editor::launch(&root);
     editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
 
-    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}}}"#, uri));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"mod helper;\n\n/std/print(/helper/word)\n"}}}"#, uri));
     let opened = editor.receive();
-    assert!(opened.contains(r#""severity":3"#), "{opened}");
+    assert!(opened.contains(r#""diagnostics":[]"#), "{opened}");
 
+    write(&root, "helper.crs", "pub let word : /std/Str = 1;\n");
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didSave","params":{"textDocument":{"uri":"${uri}"}}}"#, uri));
     thread::sleep(QUIET);
 
-    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"/std/print(\"\")\n"}]}}"#, uri));
-    let published = editor.receive();
-    assert!(published.contains(r#""diagnostics":[]"#), "{published}");
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}]}}"#, uri));
+    let ahead = editor.ahead_of("goal `?`");
+    assert!(
+        ahead.iter().any(
+            |published| published.contains("helper.crs") && published.contains("type mismatch")
+        ),
+        "the save was answered from the check before the disk moved: {ahead:?}"
+    );
 
     let output = editor.finish();
     assert!(
@@ -562,7 +583,107 @@ fn a_save_of_text_already_checked_publishes_nothing() {
     );
 }
 
-/// An editor discards what it held for a document it closed, so a reopen is answered even though the overlay it arrives with is exactly the one the last check read — the one case the skip above must not cover.
+/// A refusal the last check published on a file no editor holds is cleared by the save after the file is fixed on disk, though the open document reads as it did — the case a skip asking whether the last check's reads still stand would miss, since a refused unit leaves no record of what it read. What proves it is what arrives ahead of the edit behind the save, which still reads the helper: the save clearing `helper.crs` and then answering for `scratch.crs`, where a save left unanswered leaves the edit to clear `helper.crs` alone.
+#[test]
+fn a_refusal_on_a_closed_file_fixed_on_disk_is_cleared_by_a_save() {
+    let root = temporary("fixed-under");
+    write(&root, "helper.crs", "pub let word : /std/Str = 1;\n");
+    write(
+        &root,
+        "scratch.crs",
+        "mod helper;\n\n/std/print(/helper/word)\n",
+    );
+    let uri = format!("file://{}", root.join("scratch.crs").display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"mod helper;\n\n/std/print(/helper/word)\n"}}}"#, uri));
+    let opened = editor.ahead_of(&uri);
+    assert!(
+        opened.iter().any(
+            |published| published.contains("helper.crs") && published.contains("type mismatch")
+        ),
+        "{opened:?}"
+    );
+
+    write(&root, "helper.crs", "pub let word : /std/Str = \"fine\";\n");
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didSave","params":{"textDocument":{"uri":"${uri}"}}}"#, uri));
+    thread::sleep(QUIET);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"mod helper;\n\nlet m : /std/Nat = ?;\n/std/print(/helper/word)\n"}]}}"#, uri));
+    let ahead = editor.ahead_of("goal `?`");
+    let cleared = ahead.iter().position(|published| {
+        published.contains("helper.crs") && published.contains(r#""diagnostics":[]"#)
+    });
+    let answered = ahead.iter().position(|published| published.contains(&uri));
+    assert!(
+        matches!((cleared, answered), (Some(cleared), Some(answered)) if cleared < answered),
+        "the save left the refusal standing on a file fixed on disk: {ahead:?}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// A save asks about every document the editor holds, not only the one saved: an edit to the library's `util.crs` takes away the name the open `app.crs` reads, which a check of `util.crs` alone does not say, and the save of `util.crs` publishes the refusal on `app.crs`. What proves it is what arrives ahead of the edit behind the save: the refusal, where a save that asked about `util.crs` alone leaves the edit's answer to arrive first.
+#[test]
+fn a_save_asks_about_every_open_document() {
+    let root = project("every-open");
+    let app = format!("file://{}", root.join("app.crs").display());
+    let util = format!("file://{}", root.join("util.crs").display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${app}","languageId":"curios","version":1,"text":"/std/print(/app/util/word)\n"}}}"#, app));
+    let opened = editor.receive();
+    assert!(opened.contains(r#""diagnostics":[]"#), "{opened}");
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${util}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}"#, util));
+    let opened = editor.receive();
+    assert!(opened.contains(r#""diagnostics":[]"#), "{opened}");
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${util}","version":2},"contentChanges":[{"text":"pub let other : /std/Str = \"placed\";\n"}]}}"#, util));
+    let edited = editor.receive();
+    assert!(
+        edited.contains(&util) && edited.contains(r#""diagnostics":[]"#),
+        "{edited}"
+    );
+
+    write(
+        &root,
+        "util.crs",
+        "pub let other : /std/Str = \"placed\";\n",
+    );
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didSave","params":{"textDocument":{"uri":"${util}"}}}"#, util));
+    thread::sleep(QUIET);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${util}","version":3},"contentChanges":[{"text":"pub let other : /std/Str = ?;\n"}]}}"#, util));
+    let ahead = editor.ahead_of("goal `?`");
+    assert!(
+        ahead
+            .iter()
+            .any(|published| published.contains(&app) && published.contains("has no `word`")),
+        "the save left the open program answered from before its library moved: {ahead:?}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// An editor discards what it held for a document it closed, so a reopen is answered even though the overlay it arrives with is exactly the one the last check read.
 #[test]
 fn a_reopened_document_is_published_again() {
     let root = temporary("reopened");

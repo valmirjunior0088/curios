@@ -24,8 +24,8 @@ fn overlay(text: &str) -> BTreeMap<PathBuf, String> {
 /// A keystroke leaving `scratch` at `text`.
 fn edit(text: &str) -> Job {
     Job {
-        document: scratch(),
-        raised: Raised::Edited,
+        paths: vec![scratch()],
+        raised: Raised::Document,
         documents: overlay(text),
     }
 }
@@ -43,7 +43,7 @@ fn a_burst_is_one_batch_from_the_text_it_ended_on() {
     });
 
     assert_eq!(documents, overlay("mmm"));
-    assert!(dirty == BTreeMap::from([(scratch(), Raised::Edited)]));
+    assert!(dirty == BTreeMap::from([(scratch(), Raised::Document)]));
     assert_eq!(waits, [spent / SETTLE_SHARE; 3]);
 }
 
@@ -69,7 +69,7 @@ fn a_wait_is_a_share_of_the_last_check_and_never_past_the_cap() {
 #[test]
 fn a_warming_batch_waits_the_cap_until_a_document_joins_it() {
     let warming = Job {
-        document: PathBuf::from("/"),
+        paths: vec![PathBuf::from("/")],
         raised: Raised::Warming,
         documents: BTreeMap::new(),
     };

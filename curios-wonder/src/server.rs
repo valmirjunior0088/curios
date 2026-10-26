@@ -6,7 +6,7 @@
 //!
 //! **Edits coalesce on the analyst, and a burst settles before it is compiled.** A job carries the whole overlay as it stood when the edit arrived; before compiling, the analyst drains every job queued behind it and keeps the latest overlay and the union of the documents to check, so a burst of keystrokes during one check costs one more check from the newest text rather than one per keystroke. Draining what is already queued is not enough on its own, because the analyst is *idle* when the first keystroke of a burst arrives: it would start a check on text the next keystroke replaces, and then publish an answer about a buffer nobody is looking at any more. So the drain waits for each further job — `SETTLE_SHARE` of what the last check cost, capped at `SETTLE` — which is the one figure this cadence needs and the reason it needs no second one per project. Incrementality inside a unit is not here, because it is the fold's: a unit the store holds from an earlier text is a baseline the edited unit is compiled over (`curios-pipeline`), so a check after a keystroke re-elaborates the closure of the edit rather than the unit, and this module hands the fold the overlay and one thing more: the analyst's `Session`, which keeps the last unit it compiled for each unit it reached, so the baseline is the last keystroke's rather than the last build's and the closure is this edit's rather than every edit's since.
 //!
-//! **Text already checked is not checked again.** The analyst keeps the overlay its last check read and the documents it answered from it; an edit or a save carrying an equal overlay publishes nothing, because the editor is already holding that answer. Equality is over *every* open document, since a question reads every file of the unit it is about and two overlays differing anywhere may differ in what it says. This is what makes a save free: a client resolves full-text sync to a `didSave` carrying no text, so the overlay a save arrives with is by construction the one the last keystroke was checked against, and re-running the check would compute the answer the editor already has. An open is never skipped — an editor discards what it held for a document it closed, so a reopen has to be answered whatever the overlay says.
+//! **Every notification is answered by a check, and a save asks about every open document.** A check reads more than the overlay — the disk under every file no editor holds, a file looked for and missing, the manifests a document's placement walks — so an overlay equal to the last check's says nothing of whether that check's answer stands, and a skip keyed on it would answer a save from a check the disk has since moved under. Whether anything moved is the fold's to decide (`curios-verdicts`): a unit the store holds is handed back where the disk still holds what its record says it read, and any other is compiled over the last unit the session kept for it, redoing what moved, so a check under which nothing moved costs little, and a save's check files the text the save put on disk. A keystroke asks about the document it edits, which is where the editor is looking. A save is the editor's gesture for the disk having moved, under the files no editor holds and under the readers of the document saved, so it asks about every document the editor holds.
 //!
 //! **The analyst warms when it has nothing else to do.** On `initialize` it is handed a check of the package governing the workspace root, whose answer is thrown away: nothing is open yet, so there is no document to publish about, and what the check leaves behind is the point — on this thread the restored archive, the compiler's identity settled against the store, and every module the package declares in the parse memo; and in the store every unit it compiled from the disk, a dependency above all, which the first document's check and the next session's then start from. It is an ordinary check rather than a list of steps so that it cannot drift from what a real one warms.
 //!
@@ -57,7 +57,7 @@ use {
 ///
 /// A cap, and the wait under it is `SETTLE_SHARE` of what the last check cost. A fixed wait is the wrong shape: it buys a package whose check costs two seconds a great deal and charges a package whose check costs a quarter of one the same, where there is almost nothing to save.
 ///
-/// **Public because outwaiting it is the only way to send two notifications as two checks.** A driver that means to observe what the analyst did with the second — a test of the skip above all — has to leave a gap wider than this, and a gap written as its own figure somewhere else is one that stops being wider the day this one moves.
+/// **Public because outwaiting it is the only way to send two notifications as two checks.** A driver that means to observe what the analyst did with the second — a test telling a save's answer from the edit behind it above all — has to leave a gap wider than this, and a gap written as its own figure somewhere else is one that stops being wider the day this one moves.
 pub const SETTLE: Duration = Duration::from_millis(150);
 
 /// What fraction of the last check's cost the analyst will spend waiting to avoid repeating it.
@@ -92,7 +92,6 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
             manifest: manifest.map(Path::to_path_buf),
             published: BTreeMap::new(),
             spent: None,
-            checked: None,
             told: false,
             // A closure rather than the channel's own type, so this file names no channel crate: `lsp-server` re-exports none, and what the analyst needs is only a way to send.
             sender: {
@@ -111,7 +110,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
 
     // Before the loop, so the warming check is under way while the editor is still sending what it opened. A workspace the editor did not name is one nothing can be warmed for, and the first document is checked cold.
     if let Some(root) = workspace_root(&params) {
-        server.check(root, Raised::Warming)?;
+        server.check(vec![root], Raised::Warming)?;
     }
 
     let served = (|| {
@@ -146,22 +145,21 @@ fn shutting_down(connection: &Connection, message: &Message) -> Result<bool, Str
     }
 }
 
-/// What the protocol thread asks of the analyst: check `document` against the overlay as it stood.
+/// What the protocol thread asks of the analyst: check each of `paths` against the overlay as it stood.
 struct Job {
-    document: PathBuf,
+    /// What the notification asks about: the document opened or edited, every open document for a save, or the workspace root for warming.
+    paths: Vec<PathBuf>,
     raised: Raised,
-    /// Every open document's text at the moment of the edit — `Overlay` itself holds an `Rc`, so it is built on the analyst's side.
+    /// Every open document's text at the moment of the notification — `Overlay` itself holds an `Rc`, so it is built on the analyst's side.
     documents: BTreeMap<PathBuf, String>,
 }
 
-/// Why a job was raised, which is what decides whether the analyst may skip it and whether its records reach the editor.
+/// Why a job was raised, which is what decides whether its records reach the editor.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Raised {
-    /// A document was opened. Never skipped: an editor discards what it held for a document it closed, so a reopen is owed an answer even when nothing changed since the last check.
-    Opened,
-    /// A document was edited or saved. Skipped when the overlay it carries is the one the last check already read.
-    Edited,
-    /// The workspace root, checked once at `initialize`. `document` is a directory rather than a file, and the records go nowhere — see the module documentation.
+    /// A document was opened, edited or saved.
+    Document,
+    /// The workspace root, checked once at `initialize`. The job's path is a directory rather than a file, and the records go nowhere — see the module documentation.
     Warming,
 }
 
@@ -219,11 +217,11 @@ impl Server {
         }
     }
 
-    /// Hand the analyst a check of `document` against the overlay as it stands now.
-    fn check(&self, document: PathBuf, raised: Raised) -> Result<(), String> {
+    /// Hand the analyst a check of each of `paths` against the overlay as it stands now.
+    fn check(&self, paths: Vec<PathBuf>, raised: Raised) -> Result<(), String> {
         self.jobs
             .send(Job {
-                document,
+                paths,
                 raised,
                 documents: self.documents.clone(),
             })
@@ -244,7 +242,7 @@ impl Server {
                 if let Some(path) = path_of(&params.text_document.uri) {
                     self.documents
                         .insert(path.clone(), params.text_document.text);
-                    self.check(path, Raised::Opened)?;
+                    self.check(vec![path], Raised::Document)?;
                 }
             }
             DidChangeTextDocument::METHOD => {
@@ -257,7 +255,7 @@ impl Server {
                     && let Some(change) = params.content_changes.into_iter().last()
                 {
                     self.documents.insert(path.clone(), change.text);
-                    self.check(path, Raised::Edited)?;
+                    self.check(vec![path], Raised::Document)?;
                 }
             }
             DidSaveTextDocument::METHOD => {
@@ -268,9 +266,10 @@ impl Server {
                 };
                 if let Some(path) = path_of(&params.text_document.uri) {
                     if let Some(text) = params.text {
-                        self.documents.insert(path.clone(), text);
+                        self.documents.insert(path, text);
                     }
-                    self.check(path, Raised::Edited)?;
+                    // Every open document, the saved one among them: see the module documentation.
+                    self.check(self.documents.keys().cloned().collect(), Raised::Document)?;
                 }
             }
             DidCloseTextDocument::METHOD => {
@@ -572,8 +571,6 @@ struct Analyst {
     published: BTreeMap<PathBuf, BTreeSet<PathBuf>>,
     /// How long the last batch of checks took — what the settle before the next burst is a fraction of. `None` until one has run.
     spent: Option<Duration>,
-    /// The overlay the last check read, and the documents already answered from it — what lets a save of text already checked publish nothing. Cleared to a fresh set the moment the overlay moves, since an answer about one text says nothing about another.
-    checked: Option<(BTreeMap<PathBuf, String>, BTreeSet<PathBuf>)>,
     /// Whether this session has told its client that the store takes nothing of what it compiles. Once is the whole of it: one store refuses every unit for one reason, and a line per check would say nothing new.
     told: bool,
     sender: Box<dyn Fn(Message) -> Result<(), String> + Send>,
@@ -595,43 +592,19 @@ impl Analyst {
                 dirty.retain(|_, raised| *raised != Raised::Warming);
             }
 
-            // Taken before the overlay is built, which consumes the map, and compared before anything is checked against it: what the editor holds is what the last answer was about, or it is not.
-            let repeated = self
-                .checked
-                .as_ref()
-                .is_some_and(|(read, _)| read == &documents);
-            if !repeated {
-                self.checked = Some((documents.clone(), BTreeSet::new()));
-            }
-
             let overlay = Overlay::of(documents);
             let started = Instant::now();
-            let mut ran = false;
-            for (document, raised) in dirty {
-                if raised == Raised::Edited && self.answered(&document) {
-                    continue;
-                }
-                self.check(&document, raised, &overlay, &session)?;
-                ran = true;
-                if let Some((_, answered)) = &mut self.checked {
-                    answered.insert(document);
-                }
+            for (document, raised) in &dirty {
+                self.check(document, *raised, &overlay, &session)?;
             }
 
-            // What the next burst is weighed against. A batch that checked nothing measures nothing, so a run of skipped saves leaves the figure where the last real check put it.
-            if ran {
+            // What the next burst is weighed against. A batch that checked nothing measures nothing: a save with no document open names none.
+            if !dirty.is_empty() {
                 self.spent = Some(started.elapsed());
             }
         }
 
         Ok(())
-    }
-
-    /// Whether the last check already answered about `document` from the overlay now in hand — which is only ever true when that overlay is the one this check was handed, since a move replaces the set.
-    fn answered(&self, document: &Path) -> bool {
-        self.checked
-            .as_ref()
-            .is_some_and(|(_, answered)| answered.contains(document))
     }
 
     /// Check `document` from `overlay`, and publish what it reported.
@@ -645,7 +618,7 @@ impl Analyst {
         // The document's own directory stands in for a working directory, which a file's placement never reads — so a server started somewhere since deleted still answers. A warming job names the workspace root rather than a file, and asks about the package governing it, which is the same question with no subject.
         let (spelling, directory) = match raised {
             Raised::Warming => (Spelling::Nothing, document),
-            Raised::Opened | Raised::Edited => (
+            Raised::Document => (
                 Spelling::File(document.to_path_buf()),
                 document.parent().unwrap_or(document),
             ),
@@ -668,7 +641,7 @@ impl Analyst {
                         ..
                     } = match raised {
                         Raised::Warming => asked.diagnosed(budget, overlay),
-                        Raised::Opened | Raised::Edited => asked.checked(budget, overlay, document),
+                        Raised::Document => asked.checked(budget, overlay, document),
                     };
                     unfiled = unfiled.take().or(refusal);
                     written.get_or_insert(texts);
@@ -754,10 +727,10 @@ fn batch(
 ) -> (BTreeMap<PathBuf, String>, BTreeMap<PathBuf, Raised>) {
     let mut documents = first.documents;
     let mut dirty = BTreeMap::new();
-    raise(&mut dirty, first.document, first.raised);
+    dirty.extend(first.paths.into_iter().map(|path| (path, first.raised)));
     while let Some(job) = next(settle(spent, &dirty)) {
         documents = job.documents;
-        raise(&mut dirty, job.document, job.raised);
+        dirty.extend(job.paths.into_iter().map(|path| (path, job.raised)));
     }
 
     (documents, dirty)
@@ -774,14 +747,6 @@ fn settle(spent: Option<Duration>, dirty: &BTreeMap<PathBuf, Raised>) -> Duratio
     }
 
     spent.map_or(Duration::ZERO, |spent| (spent / SETTLE_SHARE).min(SETTLE))
-}
-
-/// Record why `document` is dirty, keeping the reason that cannot be skipped: a document opened and then edited within one burst is checked as an open, since the editor is holding nothing for it.
-fn raise(dirty: &mut BTreeMap<PathBuf, Raised>, document: PathBuf, raised: Raised) {
-    let held = dirty.entry(document).or_insert(raised);
-    if raised == Raised::Opened {
-        *held = Raised::Opened;
-    }
 }
 
 /// The directory the editor opened, for the warming check: its first workspace folder.
