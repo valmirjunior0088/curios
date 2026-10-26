@@ -25,9 +25,6 @@ mod frame;
 use frame::*;
 pub use frame::{HeldFrames, ScrutineeEntry, Settled};
 
-mod frames;
-use frames::*;
-
 mod in_scope;
 pub use in_scope::*;
 
@@ -943,7 +940,7 @@ impl<'s> Context<'s> {
             .frames
             .spelling(frame, key, self.typing.asking.plain())?;
 
-        self.stands(&spelling.footing).then_some(spelling.settled)
+        spelling.settled_while(|footing| self.stands(footing))
     }
 
     /// Record a settlement, on what it rests on ([`Context::footing`]). Every one is recorded, whatever its metavariables: the loop that asks the reduced spellings settles the innermost entry *not yet asked* (`reduce`'s `refined_reduct`), so an unrecorded settlement would be asked for again forever.
@@ -1898,13 +1895,14 @@ impl<'s> Context<'s> {
             .typing
             .frames
             .take_settled_window(frame, plain)
-            .filter(|kept| self.stands(&kept.footing));
+            .filter(|kept| kept.stands(|footing| self.stands(footing)));
         self.typing
             .frames
-            .begin_reads(kept.as_ref().map_or(0, |kept| kept.stood.depth - 1));
-        self.typing
-            .caches
-            .enter_window(Bracket::Settlement { plain }, kept.map(|kept| kept.window));
+            .begin_reads(kept.as_ref().map_or(0, KeptWindow::deepest_read));
+        self.typing.caches.enter_window(
+            Bracket::Settlement { plain },
+            kept.map(KeptWindow::into_window),
+        );
         let previous = self.typing.frames.withhold_refinements_from(frame);
         let result = f(self);
         self.typing.frames.restore_withheld_refinements(previous);

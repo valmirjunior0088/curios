@@ -12,11 +12,13 @@
 
 use {
     super::{
-        BirthTelescope, DefEntry, Defined, Footing, Frame, HeldFrames, InScope, ProjectionEntry,
-        ScrutineeEntry, Settled, SharedSpine, Window,
-        frame::{KeptWindow, Prefix, Spelling, at, refined_through, refinements_within, stand},
+        Binding, DefEntry, Frame, HeldFrames, KeptWindow, Prefix, ProjectionEntry, ScrutineeEntry,
+        Settled, Spelling, at, refined_through, refinements_within, stand,
     },
-    crate::DeadArm,
+    crate::{
+        BirthTelescope, DeadArm, Defined, InScope,
+        context::{Footing, SharedSpine, Window},
+    },
     curios_core::{
         DefinitionKind, Free, Global, HeadTag, RecGroup, Term, UniverseContext,
         project_erased_universes,
@@ -237,7 +239,7 @@ impl<'s> Frames<'s> {
     }
 
     /// The innermost binding of `name` a frame holds.
-    fn binding(&self, name: &Free) -> Option<&super::frame::Binding> {
+    fn binding(&self, name: &Free) -> Option<&Binding> {
         let binding = self
             .top
             .as_ref()

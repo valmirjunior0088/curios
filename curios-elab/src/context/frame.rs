@@ -10,6 +10,9 @@
 //!
 //! **A frame may hold a name twice.** An arm assumes its own payload binder again at the type its case's solution gives it (`retype_locals`), so the locals are a list, read by the later entry, with the assumptions beside them by name.
 
+mod frames;
+pub use frames::*;
+
 use {
     super::{BirthTelescope, Footing, Window},
     crate::DeadArm,
@@ -130,9 +133,25 @@ pub struct Settled {
 /// What a settlement remembered, beside the deepest frame it read and what else it rests on: it answers only while both stand.
 #[derive(Debug)]
 pub struct KeptWindow {
-    pub window: Window,
-    pub stood: Prefix,
-    pub footing: Footing,
+    window: Window,
+    stood: Prefix,
+    footing: Footing,
+}
+
+impl KeptWindow {
+    /// Whether the settlement still answers, the deepest frame it read standing where it was taken ([`Frames::take_settled_window`]): `stands` says whether the rest of what it rests on does.
+    pub fn stands(&self, stands: impl FnOnce(&Footing) -> bool) -> bool {
+        stands(&self.footing)
+    }
+
+    /// The deepest frame the settlement read: what one that starts from it counts its reads from ([`Frames::begin_reads`]).
+    pub fn deepest_read(&self) -> usize {
+        self.stood.depth - 1
+    }
+
+    pub fn into_window(self) -> Window {
+        self.window
+    }
 }
 
 /// The frames through one that stands at one moment, as a later moment can ask whether they all still do: the stand they stand in, how many there are, and the number the last took.
@@ -140,18 +159,25 @@ pub struct KeptWindow {
 /// A frame leaves only after every frame inside it, and no two frames take one number, so they all stand while the last does. A copy a stand holds keeps the number of the frame it copies and may hold less than that frame does now, so the stand is what tells the two apart.
 #[derive(Debug, Clone, Copy)]
 pub struct Prefix {
-    pub stand: u64,
-    pub depth: usize,
-    pub innermost: u64,
+    stand: u64,
+    depth: usize,
+    innermost: u64,
 }
 
 /// What a settlement left for one scrutinee entry.
 #[derive(Debug, Clone)]
 pub struct Spelling {
     /// The reduced spelling, or `None` where reducing the key refused.
-    pub settled: Option<Settled>,
+    settled: Option<Settled>,
     /// What it rests on beyond the frames outside its entry: it is what its key reduces to while that stands.
-    pub footing: Footing,
+    footing: Footing,
+}
+
+impl Spelling {
+    /// The entry's reduced spelling while `stands` says what it rests on beyond its frames still stands, and nothing once it does not.
+    pub fn settled_while(self, stands: impl FnOnce(&Footing) -> bool) -> Option<Option<Settled>> {
+        stands(&self.footing).then_some(self.settled)
+    }
 }
 
 /// One projection refinement: the base as *written* (unerased, so a probe at another universe instance can be told apart from the spelling the arm actually scrutinized), and the arm's value.
@@ -277,20 +303,20 @@ pub type Projected = Keyed<(Term, usize)>;
 /// One name as the scope binds it: its type, its universe context, and the place of its binding among the locals.
 #[derive(Debug, Clone)]
 pub struct Binding {
-    pub type_: Term,
-    pub universes: UniverseContext,
+    type_: Term,
+    universes: UniverseContext,
     place: i64,
     /// The depth of the frame that binds the name: what a settlement reading the binding rests on.
-    pub depth: usize,
+    depth: usize,
 }
 
 /// One frame: what the scope it was entered for adds, and the scope through it. See the module documentation.
 #[derive(Clone)]
 pub struct Frame {
     /// The number the frame took where it was entered, which no other frame of the elaboration takes: a copy made for a writer keeps it.
-    pub number: u64,
+    number: u64,
     /// Where the frame stands: the base frame at nought, and a frame entered over another one past it.
-    pub depth: usize,
+    depth: usize,
     /// The local frame this one was entered over, as it stood: `None` for the base frame and for the outermost local frame.
     beneath: Option<Rc<Frame>>,
     /// A frame further beneath, which reaching a depth takes where it does not pass the depth: chosen as Myers' applicative random-access stack chooses it, so that reaching any depth takes a logarithm of the distance ([`at`]).
@@ -302,31 +328,31 @@ pub struct Frame {
     /// The nearest frame beneath that is an arm refining its scrutinee to a case.
     armed_beneath: Option<Rc<Frame>>,
     /// Every name the local frames through this one assume, at its innermost binding — or, for the base frame, the names it assumes itself.
-    pub assumptions: Persistent<Free, Binding>,
+    assumptions: Persistent<Free, Binding>,
     /// Every name the local frames through this one define, at its innermost definition — or the base frame's own.
-    pub definitions: Recorded<Free, DefEntry>,
+    definitions: Recorded<Free, DefEntry>,
     /// Whether this frame defines a name itself, which its leaving reports.
-    pub defines: bool,
+    defines: bool,
     /// The locals of the local frames through this one in binding order, a name bound twice at both places — or the base frame's own.
-    pub locals: Ordered<(Free, Term)>,
+    locals: Ordered<(Free, Term)>,
     /// The place the next local takes, and the first place this frame bound itself.
     next_local: i64,
     first_local: i64,
     /// Each name the local frames through this one bind, once, at its innermost binding and in binding order, beside the identity spine over them: what a metavariable born where this frame is innermost is born over, shared, so a birth costs nothing more than the one before it. The base frame keeps neither, its names being no metavariable's binders.
     ///
     /// One entry per name: an arm assumes a generalized hypothesis again under its case-specialized type (`retype_locals`), and a telescope holding a name twice would give every metavariable born there a spine with a repeated argument, which `Convert::solve` cannot invert. The innermost binding is kept, which keeps the telescope well-scoped: everything a generalized hypothesis's type can mention was generalized with it and bound again after it.
-    pub telescope: BirthTelescope,
-    pub spine: MetavarSpine,
+    telescope: BirthTelescope,
+    spine: MetavarSpine,
     /// How many times the local frames through this one bound a name again or replaced its type: two frames over one chain that count alike bind every name the frame beneath both binds as it does ([`Frames::binds_as`](super::Frames::binds_as)).
-    pub rebound: usize,
+    rebound: usize,
     /// The `use`-plicity binders among the locals, in binding order: resolution's search space, scanned innermost first.
-    pub witnesses: Ordered<(Free, Term)>,
+    witnesses: Ordered<(Free, Term)>,
     next_witness: i64,
     /// Counterfactual match-arm refinements of a variable (`refine_head`), kept beside the definitions but suppressible: re-validation of a metavariable solution must keep stable definitions yet ignore these.
-    pub refinements: Recorded<Free, Term>,
-    pub refinement_projections: Recorded<Projected, ProjectionEntry>,
+    refinements: Recorded<Free, Term>,
+    refinement_projections: Recorded<Projected, ProjectionEntry>,
     /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by the scrutinee as written, its metavariables and universes normalized (`reduce`'s `shallow_scrutinee`); an occurrence that surfaces spelled differently is met at the entry's reduced spelling (`scrutinee_spellings`). The term-keyed analogue of the two stores above, suppressed by the same flag.
-    pub refinement_scrutinees: Recorded<Term, ScrutineeEntry>,
+    refinement_scrutinees: Recorded<Term, ScrutineeEntry>,
     /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
     ///
     /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration and the exit of an inner frame leave it alone, and it is forgotten with its frame and where its key is registered again; otherwise it stands while what it read of the rest does, which it is filed with ([`Footing`]): the solutions committed when it settled, all of them while it held an unsolved metavariable, the levels where it holds a universe metavariable, the answers it was given where it asked a question, and the definitions in view. A footing is read against the stores rather than walked by them, so a frame only a parked problem holds forgets as the live ones do. A fresh definition forgets the spellings naming it, as it does the reducts.
@@ -334,19 +360,19 @@ pub struct Frame {
     /// **It is the frame's, behind a cell.** The live context and every judgment that stands on the frame read one memo and settle a key once between them: a spelling rests on the frames below its own, and a frame stands on the same ones wherever it is held.
     ///
     /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the kernel settles an equation's reduct once for each.
-    pub scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
+    scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
     /// What the last settlement made under this frame's refinements remembered, of each of the two reductions: the settlement of an entry registered in a frame this is the nearest one beneath to register a refinement, or, kept by the base frame, of one no frame beneath refines. The next settlement made under them starts from it (`Caches::enter_window`).
     ///
     /// **It rests on the refinements it read, and on the deepest frame it read.** Every settlement of such an entry withholds the frames from its entry's inwards and reads the refinements of this frame and the frames beneath, which hold still while this one registers nothing more: a registration, and an equation withheld, land in the innermost frame and forget what is kept here. But what a settlement remembers is not its key's alone: a stuck form put to an entry is the probe's, and names what the frames inside stand for, a local definition under a label another frame may define again among them. So the window is filed with the deepest frame it read ([`Prefix`], `Frames::begin_reads`) and answers only while that frame still stands, and with a footing that reads every part, since its reducts are many.
     ///
     /// **Shared by the frame's copies**, which the prefix tells apart where a stand holds one.
-    pub settled_windows: Rc<RefCell<[Option<KeptWindow>; 2]>>,
+    settled_windows: Rc<RefCell<[Option<KeptWindow>; 2]>>,
     /// Why the innermost arm through this frame is never taken, where it is an arm its scrutinee's indices rule out. The reason is known where the arm opens, and an implicit bound nothing discharges under it is reported once the arm has closed, so it is kept here for the metavariable born there to read ([`HeldFrames::dead_arm`]).
-    pub dead_arm: Option<Rc<DeadArm>>,
+    dead_arm: Option<Rc<DeadArm>>,
     /// The guard and the case of the arm the frame is, where it is an arm that refines its scrutinee to a case — `None` for every other frame. Whether a value reaches such an arm is found by reducing its guard, which nothing does where the arm opens: it is asked where an error leaves the arm, and where a bound nothing discharges under it is given up ([`HeldFrames::arms`]).
-    pub arm: Option<(Term, Term)>,
+    arm: Option<(Term, Term)>,
     /// Whether this frame or one beneath is a function's body, whose result type is the region a `!` within it sequences in. Known where the body opens, and read where a `!` there is refused, which may be a retry standing on the frame.
-    pub body: bool,
+    body: bool,
 }
 
 impl Frame {
