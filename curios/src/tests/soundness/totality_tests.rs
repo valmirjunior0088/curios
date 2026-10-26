@@ -709,3 +709,54 @@ fn a_payload_application_that_reaches_a_partial_function_is_a_partial_type() {
         "#,
     );
 }
+
+// The (V)-side mirror of `a_payload_application_that_reaches_a_partial_function_is_a_partial_type`: here the payload-child rule grades a *proof*-returning group total, and (V) — not the grading — is what keeps it from proving `False`. `drop` recurses on `f(0)`, an application of the constructor payload `f`, which the size order reads as a child of the `node(f)` it was projected from, so `drop` descends and is accepted at `(Fam) -> False`. That acceptance is sound only because every total `Fam` is a finite tree: the one inhabitant that would make `drop` loop is an infinite one, which no total definition builds. `grow` is that inhabitant, and it is non-descending — its self-call sits under a payload lambda, graded `Unknown` — so the proof `drop(grow(0))` is a proof position reaching `grow`, and (V) refuses it there. A grading that refused `drop` would be rejecting the well-founded recursion `a_call_through_a_constructor_payload_descends` turns on; the obligation, not the grade, carries this.
+#[test]
+fn a_payload_descent_is_sound_only_because_a_partial_producer_is_refused_as_a_proof() {
+    let report = crate::tests::error(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{False};
+
+        induct Fam : pub Type
+        | node(f : (Nat) -> Fam)
+        end
+
+        let drop(x : Fam) -> False =
+            match x
+            | node(f) => drop(f(0))
+            end;
+
+        let grow(n : Nat) -> Fam = Fam/node((m) => grow(m));
+
+        /std/print(match drop(grow(0)) end)
+        "#,
+    );
+    assert!(
+        report.contains("is a proof position") && report.contains("reaches 'grow'"),
+        "expected (V) to refuse the proof for reaching the partial producer:\n{report}",
+    );
+    assert!(
+        !report.contains("reaches 'drop'"),
+        "the payload-descending group must be accepted, not blamed:\n{report}",
+    );
+}
+
+// The size-change closure's own verdict, at the source level: a recursion that hands its two arguments on exchanged does not descend, however one of them shrinks. `swap`'s first arm passes `(y, 0)` and its second `(k, y + 1)`; neither argument is below the caller's in the position it lands, and the swap's call matrix composed with itself is an idempotent that carries `Same` on its diagonal and no `Less` — a path that can repeat forever with nothing getting smaller — so the group is `Partial` and the proof `swap(3, 0)` is refused. The accepting direction of the same closure — two members that descend only across their composite cycle — is `/std/List/sort_by`'s `merge`, which `the_prelude_shapes_a_user_program_leans_on_still_elaborate` carries; this is the refusing direction the seed's "descent through an exchange of arguments" names.
+#[test]
+fn a_recursion_that_hands_its_arguments_on_exchanged_does_not_descend() {
+    rejected(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{False};
+
+        let swap(x : Nat, y : Nat) -> False =
+            match x
+            | 0 => swap(y, 0)
+            | k + 1 => swap(k, y + 1)
+            end;
+
+        /std/print("unreachable")
+        "#,
+    );
+}
