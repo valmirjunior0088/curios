@@ -134,10 +134,15 @@ fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
 /// Mutation-checked at `curios-analysis`'s positivity walk: reading a cell's element at the polarity it stands at accepts `Outer`.
 #[test]
 fn a_mounted_familys_carrier_is_read_by_the_certifier_and_not_by_its_entry() {
-    let carriers: [(&str, fn(Term) -> Term); 4] = [
+    // A carrier by what it holds, and how it holds `A`.
+    type Carrier = (&'static str, fn(Term) -> Term);
+
+    let carriers: [Carrier; 4] = [
         ("a cell", |a| Term::intrinsic(Intrinsic::CellType(a))),
         ("a channel", |a| Term::intrinsic(Intrinsic::ChannelType(a))),
-        ("a list of functions out of it", |a| Term::intrinsic(Intrinsic::ListType(taken(a)))),
+        ("a list of functions out of it", |a| {
+            Term::intrinsic(Intrinsic::ListType(taken(a)))
+        }),
         ("a description of a function out of it", |a| {
             Term::intrinsic(Intrinsic::io_type(taken(a)))
         }),
@@ -167,8 +172,10 @@ fn a_mounted_familys_carrier_is_read_by_the_certifier_and_not_by_its_entry() {
                 SYNTAX,
             );
             assert!(
-                verdicts.iter().any(|verdict| verdict.name == Some(stored_family())
-                    && matches!(verdict.error, Error::NotPositive { .. })),
+                verdicts
+                    .iter()
+                    .any(|verdict| verdict.name == Some(stored_family())
+                        && matches!(verdict.error, Error::NotPositive { .. })),
                 "`Outer` was accepted through a `Wrapper` holding {carrier} on the `Strict` its stamp claims, under {under}: {verdicts:?}",
             );
         }
