@@ -195,7 +195,10 @@ fn curry_through_a_list_is_refused_at_the_family_alone() {
     };
 
     let verdicts = verdicts(module, curried(|payload| payload, |list| list));
-    assert!(only_bad_is_refused_as_not_positive(&verdicts), "{verdicts:?}");
+    assert!(
+        only_bad_is_refused_as_not_positive(&verdicts),
+        "{verdicts:?}"
+    );
 }
 
 // The formation ticket's instance, under a carrier: `struct Sink(A) { fs: List((x: A) -> False) }` names its parameter as an instance of it inside the list, and `Bad` holds a `Sink` of its own witnesses, its index the length of the sink's list. The parameter is an occurrence wherever the walk meets it, under a carrier as under an arrow, so `Sink`'s vector is negative and the kernel's refusal of `Bad` is the only one.
@@ -247,11 +250,12 @@ fn curry_through_a_list_behind_a_parameter_named_by_an_instance_is_refused_at_th
 
     let verdicts = verdicts(
         module,
-        curried(read, |list| {
-            Term::struct_(sink(), [witness_type()], [list])
-        }),
+        curried(read, |list| Term::struct_(sink(), [witness_type()], [list])),
     );
-    assert!(only_bad_is_refused_as_not_positive(&verdicts), "{verdicts:?}");
+    assert!(
+        only_bad_is_refused_as_not_positive(&verdicts),
+        "{verdicts:?}"
+    );
 }
 
 // A record held by a carrier no value hands it back through: `struct Bad { held: Io((Bad) -> False) }`, a description of its own refutation, and `struct Bad { held: Cell(Bad) }` and `{ held: Channel(Bad) }`, which hold it as a plain payload would. `Io` is covariant, so the arrow inside it counts where it stands, and a cell or a channel is read and written, so either is invariant: each is refused, the shapes a carrier with an eliminator would turn into Curry's paradox.
@@ -272,7 +276,10 @@ fn a_record_held_by_an_effectful_carrier_is_refused() {
             "a cell",
             Term::intrinsic(Intrinsic::CellType(bad_type.clone())),
         ),
-        ("a channel", Term::intrinsic(Intrinsic::ChannelType(bad_type))),
+        (
+            "a channel",
+            Term::intrinsic(Intrinsic::ChannelType(bad_type)),
+        ),
     ];
 
     for (carrier, held) in carriers {

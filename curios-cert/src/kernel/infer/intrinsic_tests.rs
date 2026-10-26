@@ -388,7 +388,11 @@ fn a_description_a_cell_and_a_channel_are_taken_apart_by_nothing() {
     // The control: each form over the carried value itself types, so what refuses it below is the carrier.
     let mut kernel = kernel();
     for (form, term, _) in forms(&mut kernel, &|carried| carried) {
-        assert_eq!(infer(&mut kernel, &term), Ok(nat_type()), "{form} stopped typing");
+        assert_eq!(
+            infer(&mut kernel, &term),
+            Ok(nat_type()),
+            "{form} stopped typing"
+        );
     }
 
     for carrier in carriers {

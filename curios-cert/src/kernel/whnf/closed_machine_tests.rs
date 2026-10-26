@@ -503,4 +503,3 @@ fn the_closed_machine_reads_a_stated_proof_payload_as_the_strategy_does() {
         "the machine and the strategy read one payload for {term}",
     );
 }
-
