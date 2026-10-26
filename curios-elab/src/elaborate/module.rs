@@ -1332,13 +1332,7 @@ fn elaborate_module_suffix<'s>(
         demand.note_foreign(established);
     }
     let made = demand.made_names();
-    let Demand {
-        poison,
-        mut survivors,
-        traces,
-        readers,
-        ..
-    } = demand;
+    let (poison, mut survivors, traces, readers) = demand.into_parts();
 
     context.set_island(Qualifier::empty());
     // The entrypoint expression is not an item, so it gets its own budget on the same footing as one.

@@ -11,9 +11,8 @@
 //! **An item that declares a row is not evaluated.** What is taken back out holds a schema as an import holds one, and a declared row is its fields.
 
 use {
-    super::{Binding, Environment, ErasedItem, ErasedUnit, Erasures, Export, Linking, reached},
-    curios_core::{Free, Global},
-    std::collections::BTreeMap,
+    super::{ErasedItem, ErasedUnit, Erasures, Linking, reached},
+    curios_core::Global,
 };
 
 /// What evaluating an item where it is erased came to.
@@ -35,7 +34,7 @@ pub fn evaluate(scope: Erasures<'_>, unit: &ErasedUnit, erased: &ErasedItem) -> 
     let reached = reached(&units, [erased].into_iter(), false);
     let ran = units
         .iter()
-        .zip(&reached.items)
+        .zip(reached.items())
         .enumerate()
         .filter(|(place, _)| *place >= scope.units().len() || !scope.is_fixed(*place))
         .flat_map(|(_, (unit, items))| items.iter().map(|&place| unit.item(place)))
@@ -51,125 +50,22 @@ pub fn evaluate(scope: Erasures<'_>, unit: &ErasedUnit, erased: &ErasedItem) -> 
         .collect::<Vec<_>>();
     curios_profile::sample!(
         "evaluate::item::linked",
-        reached.items.iter().map(|items| items.len()).sum::<usize>()
+        reached
+            .items()
+            .iter()
+            .map(|items| items.len())
+            .sum::<usize>()
     );
 
     let mut linking = Linking::importing_rows();
     linking.add_reached(&units, &reached);
-    let mark = linking.module.mark();
+    let mark = linking.mark();
     let landed = linking.add(erased);
-    let erased = curios_ersd::evaluate_since(&mut linking.module, &mark)
-        .then(|| taken(&linking, &units, &mark, erased, &landed))
+    let erased = linking
+        .evaluate_since(&mark)
+        .then(|| linking.taken(&units, &mark, erased, &landed))
         .flatten();
     curios_profile::sample!("evaluate::item::finished", erased.is_some() as usize);
 
     Some(Evaluation { erased, ran })
-}
-
-/// What `linking`'s module holds past `mark`, as the erased form of the item `erased` was linked there as, at `landed`: `None` where that still computes, or names what no item declares under a name.
-fn taken(
-    linking: &Linking,
-    units: &[&ErasedUnit],
-    mark: &curios_ersd::Mark,
-    erased: &ErasedItem,
-    landed: &curios_ersd::Linked,
-) -> Option<ErasedItem> {
-    let declaring = |name: &Global| units.iter().find_map(|unit| unit.find(name));
-    let exported = |name: &Global| declaring(name)?.export(name);
-
-    // What each name is bound to now: where the value it bound came to be an alias, the atom that names.
-    let bound = |atom: curios_ersd::Atom| linking.module.aliased(mark, landed.atom(atom));
-    let exports = erased
-        .environment()
-        .bindings()
-        .filter_map(|(_, binding)| match binding {
-            Binding::Atom(atom) => Some(bound(atom)),
-            Binding::Dropped => None,
-        })
-        .collect::<Vec<_>>();
-    let taken = linking.module.taken(
-        mark,
-        &exports,
-        |value| {
-            linking
-                .values
-                .get(&value)
-                .is_some_and(|name| matches!(exported(name), Some(Export::Value)))
-        },
-        |function| match exported(linking.functions.get(&function)?)? {
-            Export::Function { interface, .. } => Some(interface),
-            _ => None,
-        },
-    )?;
-    // Held to what an erased fragment is held to where it is built, since this is the form that is stored.
-    taken.module.verify_fragment().ok()?;
-    if taken.module.computes() {
-        return None;
-    }
-
-    let mut environment = Environment::default();
-    for (name, binding) in erased.environment().bindings() {
-        match binding {
-            Binding::Atom(atom) => {
-                environment.bind(&Free::from(name), taken.landed.atom(bound(atom)));
-            }
-            Binding::Dropped => environment.bind_dropped(&Free::from(name)),
-        }
-    }
-
-    // Every schema the form names is one a linked item holds: a declaration's row, by its name, or the anonymous row of a width.
-    let structs: BTreeMap<_, _> = linking
-        .structs
-        .iter()
-        .map(|(name, schema)| (*schema, name))
-        .collect();
-    let tuples: BTreeMap<_, _> = linking
-        .tuples
-        .iter()
-        .map(|(width, schema)| (*schema, *width))
-        .collect();
-    let families: BTreeMap<_, _> = linking
-        .families
-        .iter()
-        .map(|(name, family)| (*family, name))
-        .collect();
-    for (held, schema) in taken.landed.products() {
-        match structs.get(&held) {
-            Some(name) => environment.import_struct_row(name, Some(schema)),
-            None => environment.register_tuple_schema(*tuples.get(&held)?, schema),
-        }
-    }
-    let positions = taken.module.imports().constructors();
-    for (held, family) in taken.landed.families() {
-        let name = families.get(&held)?;
-        environment.import_induct_family(name, family);
-        for constructor in &taken.module.family(family)?.constructors {
-            environment.import_induct_constructor(
-                name,
-                *positions.get(constructor)? as usize,
-                *constructor,
-            );
-        }
-    }
-
-    let values = taken
-        .values
-        .iter()
-        .map(|value| linking.values.get(value).copied())
-        .collect::<Option<Vec<_>>>()?;
-    let functions = taken
-        .functions
-        .iter()
-        .map(|function| linking.functions.get(function).copied())
-        .collect::<Option<Vec<_>>>()?;
-    let computed = erased
-        .environment()
-        .bindings()
-        .filter_map(|(name, binding)| match binding {
-            Binding::Atom(atom) if bound(atom) != landed.atom(atom) => Some(*name),
-            _ => None,
-        })
-        .collect();
-
-    Some(ErasedItem::new(taken.module, environment, values, functions).computing(computed))
 }

@@ -192,7 +192,7 @@ fn linear(
             let multiplied = !products.is_empty() || cased;
             let with_products = match multiplied {
                 true => {
-                    facts.facts.extend(products);
+                    facts.extend(products);
                     Some(search(&facts, &negated, &mut budget))
                 }
                 false => None,
@@ -278,9 +278,9 @@ fn linear(
 /// Search `facts`, their splits and the negated goal's, spending from `budget`.
 fn search(facts: &Facts, negated: &[Fact], budget: &mut usize) -> Plan {
     plan(
-        &forms_of(&facts.facts),
+        &forms_of(facts.facts()),
         &forms_of(negated),
-        &forms_of(&facts.common),
+        &forms_of(facts.common()),
         &arms_of(facts),
         budget,
     )
@@ -289,12 +289,12 @@ fn search(facts: &Facts, negated: &[Fact], budget: &mut usize) -> Plan {
 /// The values a search over `facts` less their products leaves the atoms at, spending from `budget`: what a refusal reports where the search over the products left an assignment, a product being an unknown of its own there. Nothing where the cap runs out first.
 fn valued(facts: &Facts, negated: &[Fact], budget: &mut usize) -> Vec<(Monomial, Rational)> {
     let linear = facts
-        .facts
+        .facts()
         .iter()
         .filter(|fact| !matches!(fact.origin, Origin::Product(..)))
         .map(|fact| fact.form.clone())
         .collect::<Vec<_>>();
-    let common = forms_of(&facts.common);
+    let common = forms_of(facts.common());
     match plan(
         &linear,
         &forms_of(negated),
@@ -315,11 +315,11 @@ fn forms_of(facts: &[Fact]) -> Vec<LinearForm> {
 /// The case splits of `facts`, as the forms each case adds.
 fn arms_of(facts: &Facts) -> Vec<Arms> {
     facts
-        .splits
+        .splits()
         .iter()
         .map(|split| Arms {
-            holds: forms_of(&split.holds),
-            fails: forms_of(&split.fails),
+            holds: forms_of(split.holds()),
+            fails: forms_of(split.fails()),
         })
         .collect()
 }

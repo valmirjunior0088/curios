@@ -981,16 +981,13 @@ impl<'s> Context<'s> {
         )
     }
 
-    /// Whether everything `footing` rests on still stands: every solution it read is committed as it was, and none since where it was taken of an unsolved metavariable; the universe solver stands where it was where a question was declined; and no rewrite, withdrawal or redefinition it reads has landed since.
+    /// [`Footing::stands`] against the stores in force.
     fn stands(&self, footing: &Footing) -> bool {
-        self.underway
-            .attempt
-            .solutions
-            .holds(footing.solutions, footing.exact)
-            && footing
-                .levels
-                .is_none_or(|levels| levels == self.underway.attempt.universe_solver.state_token())
-            && self.typing.caches.counts_stand(footing)
+        footing.stands(
+            &self.underway.attempt.solutions,
+            &self.underway.attempt.universe_solver,
+            &self.typing.caches,
+        )
     }
 
     /// How many questions reduction has put to conversion.

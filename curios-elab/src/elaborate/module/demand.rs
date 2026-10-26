@@ -116,10 +116,10 @@ pub struct Demand<'a> {
     held: BTreeMap<usize, Held>,
     /// The declarations being asked for, outermost first.
     demanded: Vec<usize>,
-    pub poison: Poison,
-    pub survivors: Survivors,
+    poison: Poison,
+    survivors: Survivors,
     /// What each declaration's standing attempt asked of the declarations around it, and what each kept declaration's did where the baseline elaborated it: over a baseline, the baseline's traces with each declaration made filed in place of the one it replaces, and each the unit no longer declares taken out.
-    pub traces: Traces,
+    traces: Traces,
     /// The baseline the unit is compiled over, where it is compiled over one.
     over: Option<Over<'a>>,
     /// What each name elaborated again over a baseline left as the baseline holds it.
@@ -133,7 +133,7 @@ pub struct Demand<'a> {
     /// Whether a declaration is decided by asking its trace again, as a walk that knows nothing of what an edit reached does: while the prover's vocabulary is asked for where the edit reached it, so the declarations settled before the offer are the ones its new reads reach.
     asking: bool,
     /// Who asked what, of the unit's traces as the walk files them: the baseline's, with the edges of each declaration made or dropped replaced. `None` for a unit compiled whole, whose readers are made where a recompile over it first asks.
-    pub readers: Option<Readers>,
+    readers: Option<Readers>,
     /// The names the unit declares and the baseline did not.
     gained: Vec<Global>,
     /// What each part a record read of a finished declaration, or of another unit, digests to now: asked once, however many records read it. `None` where it will not digest.
@@ -152,6 +152,11 @@ fn read_again(over: Over<'_>, question: &Question) -> bool {
 }
 
 impl<'a> Demand<'a> {
+    /// What the finished walk leaves: what the refusals poisoned, the declarations kept, the traces, and who read them.
+    pub fn into_parts(self) -> (Poison, Survivors, Traces, Option<Readers>) {
+        (self.poison, self.survivors, self.traces, self.readers)
+    }
+
     /// The walk over `module`, whose items make `declarations`: holding every declaration where the unit is compiled whole, and none until it is told what an edit reached ([`Demand::reach`]) where it is compiled `over` a baseline.
     pub fn new(
         module: &'a Module,

@@ -11,25 +11,27 @@
 //! **An evaluation holds a row as its readers do.** An item evaluated where it is erased runs in a module of what it reaches ([`super::evaluate`]), whose evaluator reads no row, so that module links no declaration's rows: a row a fragment imports and no linked item declares is the module's import, at the count or width the fragment's import states and with the constructors the fragments name ([`curios_ersd::Resolution::imports_rows`]), and an evaluation pays for what its fragments name of a row, never for the row.
 
 use {
-    super::{Binding, ErasedItem, ErasedNames, ErasedProgram, ErasedUnit, Erasures},
+    super::{
+        Binding, Environment, ErasedItem, ErasedNames, ErasedProgram, ErasedUnit, Erasures, Export,
+    },
     crate::Error,
-    curios_core::Global,
+    curios_core::{Free, Global},
     std::collections::{BTreeMap, BTreeSet},
 };
 
 /// A program under construction: the module, and where each name and each schema linked so far landed.
 #[derive(Default)]
 pub struct Linking {
-    pub module: curios_ersd::Module,
+    module: curios_ersd::Module,
     bound: BTreeMap<Global, curios_ersd::Atom>,
     /// The name each value and each function a linked item bound is declared under: the first to bind it, which is the item that defines it, since an item that hands another's name on is linked after it.
-    pub values: BTreeMap<curios_ersd::ValueId, Global>,
-    pub functions: BTreeMap<curios_ersd::FunctionId, Global>,
+    values: BTreeMap<curios_ersd::ValueId, Global>,
+    functions: BTreeMap<curios_ersd::FunctionId, Global>,
     /// The functions a linked item bound a name to as what its evaluation computed: closures, each bound under a name and defined by no declaration.
     computed: BTreeSet<curios_ersd::FunctionId>,
-    pub structs: BTreeMap<Global, curios_ersd::ProductId>,
-    pub families: BTreeMap<Global, curios_ersd::FamilyId>,
-    pub tuples: BTreeMap<usize, curios_ersd::ProductId>,
+    structs: BTreeMap<Global, curios_ersd::ProductId>,
+    families: BTreeMap<Global, curios_ersd::FamilyId>,
+    tuples: BTreeMap<usize, curios_ersd::ProductId>,
     /// Whether a row a fragment imports and no linked item declares is the module's import, where a program links every row it names from its declaration: an evaluation's.
     imports_rows: bool,
 }
@@ -170,14 +172,136 @@ impl Linking {
             self.families.entry(*name).or_insert(linked.family(family));
         }
     }
+
+    pub fn mark(&self) -> curios_ersd::Mark {
+        self.module.mark()
+    }
+
+    /// Run what the module holds past `mark` ([`curios_ersd::evaluate_since`]), answering whether that finished.
+    pub fn evaluate_since(&mut self, mark: &curios_ersd::Mark) -> bool {
+        curios_ersd::evaluate_since(&mut self.module, mark)
+    }
+
+    /// What the module holds past `mark`, as the erased form of the item `erased` was linked there as, at `landed`: `None` where that still computes, or names what no item declares under a name.
+    pub fn taken(
+        &self,
+        units: &[&ErasedUnit],
+        mark: &curios_ersd::Mark,
+        erased: &ErasedItem,
+        landed: &curios_ersd::Linked,
+    ) -> Option<ErasedItem> {
+        let declaring = |name: &Global| units.iter().find_map(|unit| unit.find(name));
+        let exported = |name: &Global| declaring(name)?.export(name);
+
+        // What each name is bound to now: where the value it bound came to be an alias, the atom that names.
+        let bound = |atom: curios_ersd::Atom| self.module.aliased(mark, landed.atom(atom));
+        let exports = erased
+            .environment()
+            .bindings()
+            .filter_map(|(_, binding)| match binding {
+                Binding::Atom(atom) => Some(bound(atom)),
+                Binding::Dropped => None,
+            })
+            .collect::<Vec<_>>();
+        let taken = self.module.taken(
+            mark,
+            &exports,
+            |value| {
+                self.values
+                    .get(&value)
+                    .is_some_and(|name| matches!(exported(name), Some(Export::Value)))
+            },
+            |function| match exported(self.functions.get(&function)?)? {
+                Export::Function { interface, .. } => Some(interface),
+                _ => None,
+            },
+        )?;
+        // Held to what an erased fragment is held to where it is built, since this is the form that is stored.
+        taken.module.verify_fragment().ok()?;
+        if taken.module.computes() {
+            return None;
+        }
+
+        let mut environment = Environment::default();
+        for (name, binding) in erased.environment().bindings() {
+            match binding {
+                Binding::Atom(atom) => {
+                    environment.bind(&Free::from(name), taken.landed.atom(bound(atom)));
+                }
+                Binding::Dropped => environment.bind_dropped(&Free::from(name)),
+            }
+        }
+
+        // Every schema the form names is one a linked item holds: a declaration's row, by its name, or the anonymous row of a width.
+        let structs: BTreeMap<_, _> = self
+            .structs
+            .iter()
+            .map(|(name, schema)| (*schema, name))
+            .collect();
+        let tuples: BTreeMap<_, _> = self
+            .tuples
+            .iter()
+            .map(|(width, schema)| (*schema, *width))
+            .collect();
+        let families: BTreeMap<_, _> = self
+            .families
+            .iter()
+            .map(|(name, family)| (*family, name))
+            .collect();
+        for (held, schema) in taken.landed.products() {
+            match structs.get(&held) {
+                Some(name) => environment.import_struct_row(name, Some(schema)),
+                None => environment.register_tuple_schema(*tuples.get(&held)?, schema),
+            }
+        }
+        let positions = taken.module.imports().constructors();
+        for (held, family) in taken.landed.families() {
+            let name = families.get(&held)?;
+            environment.import_induct_family(name, family);
+            for constructor in &taken.module.family(family)?.constructors {
+                environment.import_induct_constructor(
+                    name,
+                    *positions.get(constructor)? as usize,
+                    *constructor,
+                );
+            }
+        }
+
+        let values = taken
+            .values
+            .iter()
+            .map(|value| self.values.get(value).copied())
+            .collect::<Option<Vec<_>>>()?;
+        let functions = taken
+            .functions
+            .iter()
+            .map(|function| self.functions.get(function).copied())
+            .collect::<Option<Vec<_>>>()?;
+        let computed = erased
+            .environment()
+            .bindings()
+            .filter_map(|(name, binding)| match binding {
+                Binding::Atom(atom) if bound(atom) != landed.atom(atom) => Some(*name),
+                _ => None,
+            })
+            .collect();
+
+        Some(ErasedItem::new(taken.module, environment, values, functions).computing(computed))
+    }
 }
 
 /// What a program takes of each unit it is linked from, as the places of its items, ascending.
 pub struct Reached {
     /// The items it links.
-    pub items: Vec<BTreeSet<usize>>,
+    items: Vec<BTreeSet<usize>>,
     /// The items whose rows it links: the declarations of the rows a linked item imports, with theirs.
     rows: Vec<BTreeSet<usize>>,
+}
+
+impl Reached {
+    pub fn items(&self) -> &[BTreeSet<usize>] {
+        &self.items
+    }
 }
 
 /// The unit and the place of the item declaring each of `names` that one of `units` declares. A name none declares is the program's own, and every item of the program is linked.

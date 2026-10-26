@@ -137,12 +137,12 @@ pub struct Target {
 
 /// What the scope states: the facts read, the case splits their operations define, the remainders lifted out of them, the comparisons kept for the last reading, and the propositions stating a decision the view does not read.
 pub struct Facts {
-    pub facts: Vec<Fact>,
-    pub splits: Vec<Split>,
+    facts: Vec<Fact>,
+    splits: Vec<Split>,
     /// What both cases of a split state, where conversion decides it: asked only where the facts alone leave an assignment and before any case is opened (`plan`), so a bound the facts prove is proved as it was, and one that turns on no case opens none.
-    pub common: Vec<Fact>,
-    pub lifts: Vec<Lift>,
-    pub unread: Vec<(Origin, Term)>,
+    common: Vec<Fact>,
+    lifts: Vec<Lift>,
+    unread: Vec<(Origin, Term)>,
     /// What the scope states that is read last ([`disequalities`]).
     kept: Vec<Kept>,
     /// Each reduct an operand was read through, beside the operand as stated.
@@ -166,6 +166,27 @@ struct Kept {
 }
 
 impl Facts {
+    pub fn facts(&self) -> &[Fact] {
+        &self.facts
+    }
+
+    /// Add `facts` to what the scope states.
+    pub fn extend(&mut self, facts: impl IntoIterator<Item = Fact>) {
+        self.facts.extend(facts);
+    }
+
+    pub fn splits(&self) -> &[Split] {
+        &self.splits
+    }
+
+    pub fn common(&self) -> &[Fact] {
+        &self.common
+    }
+
+    pub fn unread(&self) -> &[(Origin, Term)] {
+        &self.unread
+    }
+
     /// `term` with every reduct an operand was read through written as the operand was stated: what the facts invent over atoms — a natural's sign, a quotient's bounds, a subtraction's cases — is built from the atoms' reducts, and is written over the spellings in scope. An outer reduct is replaced before one inside it.
     pub fn respell(&self, term: &Term) -> Term {
         respelled(&self.spelled, term)
@@ -225,13 +246,27 @@ pub fn respelled(spelled: &[(Term, Term)], term: &Term) -> Term {
 /// A case split an operation defines on an order of its operands, with the facts each case adds: a truncated subtraction `a - b` on `b <= a`, a `min` or a `max` over `a` and `b` on `a <= b`, an `abs` on `+0 <= a`, and a `sign` on each of `+0 < a` and `a < +0`. Operations whose guards are one comparison to conversion share one split ([`Reader::open`]).
 pub struct Split {
     /// The comparison the proof splits on.
-    pub guard: Term,
+    guard: Term,
     /// The guard as reduction leaves it, by which a second guard is told to be this one or its negation ([`Reader::open`]); `None` where it is no operation left standing.
     asked: Option<Term>,
     /// Where it holds: the guard, and for a subtraction `b + (a - b) = a` by `le/add_sub_cancel`, for a `min` or a `max` the operand it is there.
-    pub holds: Vec<Fact>,
+    holds: Vec<Fact>,
     /// Where it fails: the guard's strict dual, and for a subtraction `a - b <= 0` by `le/sub_zero`, which conversion does not decide there, for a `min` or a `max` the other operand.
-    pub fails: Vec<Fact>,
+    fails: Vec<Fact>,
+}
+
+impl Split {
+    pub fn guard(&self) -> &Term {
+        &self.guard
+    }
+
+    pub fn holds(&self) -> &[Fact] {
+        &self.holds
+    }
+
+    pub fn fails(&self) -> &[Fact] {
+        &self.fails
+    }
 }
 
 /// One reading of a scope: the reader every fact and the goal share, which of the atoms it has read are one, what it has read so far, and the operations whose definitions it has read.

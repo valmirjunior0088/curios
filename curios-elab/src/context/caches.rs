@@ -13,8 +13,8 @@
 //! The *policies* — what is cacheable, and what a probe's groundness gate admits — stay on `Context`, which alone can read the solution and universe stores they consult. This type owns the storage and the write discipline.
 
 use {
-    super::SolutionPrefix,
-    crate::{EveryPosition, Sort, UniverseStateToken},
+    super::{SolutionPrefix, Solutions},
+    crate::{EveryPosition, Sort, UniverseSolver, UniverseStateToken},
     curios_analysis::Classification,
     curios_core::{
         AsideAnswers, Bound, ClosedMemo, Enter, Free, Global, Level, LevelHead, Quality,
@@ -63,17 +63,33 @@ pub enum ElabProbe {
 #[derive(Debug, Clone)]
 pub struct Footing {
     /// The solutions committed when it was taken: it stands while they all still are.
-    pub solutions: SolutionPrefix,
+    solutions: SolutionPrefix,
     /// Whether a solution committed since moves it: what it was taken of held an unsolved metavariable, or a question was declined on the way.
-    pub exact: bool,
+    exact: bool,
     /// The universe solver's state, where a question put to conversion on the way was declined for a commit: it stands while that state does.
-    pub levels: Option<UniverseStateToken>,
+    levels: Option<UniverseStateToken>,
     /// How many times levels had been rewritten in place, where what it holds names a universe metavariable: reduction reads no level, so a rewrite moves only an answer holding one it rewrites.
     rewrites: Option<usize>,
     /// How many times answers had been withdrawn, where a question was put to conversion on the way.
     withdrawals: Option<usize>,
     /// How many times the definitions in view had changed at once: at a redefinition, and at a declaration's boundary, which nothing a budget paid for outlives.
     redefinitions: usize,
+}
+
+impl Footing {
+    /// Whether everything it rests on still stands: every solution it read is committed as it was, and none since where it was taken of an unsolved metavariable; the universe solver stands where it was where a question was declined; and no rewrite, withdrawal or redefinition it reads has landed since.
+    pub fn stands(
+        &self,
+        solutions: &Solutions,
+        universes: &UniverseSolver,
+        caches: &Caches,
+    ) -> bool {
+        solutions.holds(self.solutions, self.exact)
+            && self
+                .levels
+                .is_none_or(|levels| levels == universes.state_token())
+            && caches.counts_stand(self)
+    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]

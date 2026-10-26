@@ -50,10 +50,10 @@ pub fn write(
     let case = Case {
         goal,
         negated,
-        common: &facts.common,
+        common: facts.common(),
         lifted,
     };
-    match case.write(context, facts.facts.clone(), &facts.splits, certificate) {
+    match case.write(context, facts.facts().to_vec(), facts.splits(), certificate) {
         Some(proof) => Written::Proof(proof),
         None => Written::Unwritten,
     }
@@ -87,9 +87,9 @@ impl Case<'_> {
             Certificate::Split { holds, fails } => {
                 let (opened, later) = splits.split_first()?;
                 let with = |extra: &[Fact]| facts.iter().chain(extra).cloned().collect::<Vec<_>>();
-                let holds = self.write(context, with(&opened.holds), later, holds)?;
-                let fails = self.write(context, with(&opened.fails), later, fails)?;
-                Some(split(context, &opened.guard, fails, holds))
+                let holds = self.write(context, with(opened.holds()), later, holds)?;
+                let fails = self.write(context, with(opened.fails()), later, fails)?;
+                Some(split(context, opened.guard(), fails, holds))
             }
         }
     }

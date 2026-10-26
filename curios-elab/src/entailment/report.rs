@@ -115,11 +115,14 @@ impl Refusal {
         let mut considered: Vec<(Origin, Term)> = Vec::new();
         // A disequality read as the two cases its sides' order makes is a fact of neither alone, and is named with the scope's.
         let cases = facts
-            .splits
+            .splits()
             .iter()
-            .flat_map(|split| split.holds.iter().chain(&split.fails))
+            .flat_map(|split| split.holds().iter().chain(split.fails()))
             .filter(|fact| fact.origin.named().is_some());
-        let scope = facts.facts.iter().filter(|fact| fact.origin.is_reported());
+        let scope = facts
+            .facts()
+            .iter()
+            .filter(|fact| fact.origin.is_reported());
         for fact in scope.chain(cases) {
             let stated = (fact.origin.clone(), fact.stated.clone());
             if !considered.contains(&stated) {
@@ -136,7 +139,7 @@ impl Refusal {
         };
         Refusal {
             considered,
-            unread: facts.unread.clone(),
+            unread: facts.unread().to_vec(),
             conclusion: outcome,
             absurd,
             refuted: false,
