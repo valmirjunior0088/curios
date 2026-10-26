@@ -315,7 +315,7 @@ enum Frame {
         arguments: Vec<Argument>,
         demand: Demand,
     },
-    /// The restuck test of `force`: a reduct that is still neutral and still mentions the group achieved nothing, and the folded spelling stays the canonical normal form.
+    /// The restuck test of `force`: a reduct that is still neutral — a match, a variable, a metavariable, a projection, or an application no unfolding opens — and still mentions the group achieved nothing, and the folded spelling stays the canonical normal form.
     RecGuard {
         folded: Term,
         group: RecGroup,
@@ -813,9 +813,14 @@ impl Machine {
             },
 
             Frame::RecGuard { folded, group } => {
+                // An application reaching here is one no unfolding opened, which `force` reads as stuck as it reads a match on a variable: `g(member(2))` under an opaque `g` is the folded `member(3)` under both.
                 let neutral = matches!(
                     &*value,
-                    Subterm::Match(_) | Subterm::Var(_) | Subterm::Metavar(_) | Subterm::Proj(_)
+                    Subterm::Match(_)
+                        | Subterm::Var(_)
+                        | Subterm::Metavar(_)
+                        | Subterm::Proj(_)
+                        | Subterm::Apply(_)
                 );
 
                 match neutral && value.mentions_rec_member(&group) {
