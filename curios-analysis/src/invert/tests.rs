@@ -115,6 +115,6 @@ fn a_binder_under_a_universe_instance_is_not_pinned() {
     let a = binder(1, "a");
     let instanced = Term::instance_of(&a, vec![Level::zero()]);
 
-    assert!(!pinned_by_targets(&[instanced.clone()]).contains(&a));
+    assert!(!pinned_by_targets(std::slice::from_ref(&instanced)).contains(&a));
     assert!(!wholly_pinned(&[a], &[instanced]));
 }
