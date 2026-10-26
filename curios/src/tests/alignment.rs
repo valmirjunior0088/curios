@@ -157,3 +157,20 @@ fn after_a_spread_an_edge_is_copied_unless_written() {
         assert_eq!(run(&source), printed.as_bytes(), "{literal}");
     }
 }
+
+// A list whose parameters are all hidden is a call of its own, and plain arguments never spill past it into the next: `Eq`'s first list is `@A` alone, so `Eq(0, 1)` writes two arguments where that list takes none and is refused, where `Eq()(1, 1)` is the relation at its indices.
+#[test]
+fn a_plain_argument_does_not_spill_past_a_hidden_only_list() {
+    assert_eq!(
+        run("use /std/{Nat, Eq, print};\nlet p: Eq()(1, 1) = Eq/refl();\nprint(\"ok\")\n"),
+        b"ok"
+    );
+
+    let spilled =
+        error("use /std/{Nat, Eq, print};\nlet p: Eq(0, 1) = Eq/refl();\nprint(\"no\")\n");
+    assert!(
+        spilled.contains("expected 0, got 2")
+            && spilled.contains("a call fills one parameter list"),
+        "got: {spilled}"
+    );
+}

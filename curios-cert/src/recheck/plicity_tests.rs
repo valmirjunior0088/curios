@@ -4,7 +4,7 @@ use {
     super::test_support::*,
     crate::{Counted, Error, Globals},
     curios_analysis::test_support::SYNTAX,
-    curios_core::Free,
+    curios_core::{Free, Subterm},
     curios_utilities::Plicity,
 };
 
@@ -118,4 +118,70 @@ fn an_arm_binds_under_its_payloads_marks() {
         )),
         "an arm binding a plain payload under `@` was not refused by its mark: {refused:?}",
     );
+}
+
+/// A former's η-form applied over its whole list is built as the node it applies, and the β-step reads neither its binder's mark nor its binder's type (`curios_core::former_eta`): what the kernel then types is the node, by the former's own parameter. So an η-form of `S` whose binder stands under a mark `S`'s parameter does not take builds `S(Nat)` and is accepted as `S(Nat)`, and one whose binder states a type `S`'s parameter does not take cannot carry an argument through it: `S(3)` is refused as `S` refuses it.
+///
+/// The control is the first module, accepted: refusing every type spelled as an applied η-form would pass the refusal alone.
+#[test]
+fn an_applied_eta_form_is_typed_by_its_formers_parameter_and_not_its_binder() {
+    let (honest, built) = eta_former_module(false);
+    assert!(
+        matches!(&*built, Subterm::StructType(_)),
+        "an η-form of `S` applied over its whole list was not built as its node: {built:?}",
+    );
+    assert_eq!(
+        fixture_verdicts(&honest, 1_000_000, &Globals::default(), SYNTAX),
+        Vec::new(),
+        "an η-form whose binder takes another mark than its former's was refused at the node it builds",
+    );
+
+    let (lying, built) = eta_former_module(true);
+    assert!(
+        matches!(&*built, Subterm::StructType(_)),
+        "an η-form of `S` applied over its whole list was not built as its node: {built:?}",
+    );
+    let refused = fixture_verdicts(&lying, 1_000_000, &Globals::default(), SYNTAX);
+    let held_to_the_parameters_sort = refused.iter().any(|verdict| match &verdict.error {
+        Error::Mismatch { expected, .. } => {
+            verdict.name == Some(eta_former_held()) && matches!(&***expected, Subterm::Sort(..))
+        }
+        _ => false,
+    });
+    assert!(
+        held_to_the_parameters_sort,
+        "an argument `S` refuses was carried through an η-form whose binder takes it: {refused:?}",
+    );
+}
+
+/// A function that forwards across a mark, `(@n) => ((x) => x)(n)`, η-contracts to the plain `(x) => x` under reduction, which reads no mark; the typed question reads one. Put where a plain function is expected, by its name or as the literal itself, it is refused as the hidden-headed function it is, and the contraction it reduces to is never what it is taken at.
+///
+/// The control is the same two items at the hidden type they are, accepted.
+#[test]
+fn a_function_forwarding_across_a_mark_is_not_taken_at_the_type_it_contracts_to() {
+    assert_eq!(
+        fixture_verdicts(
+            &forwarding_module(Plicity::Implicit),
+            1_000_000,
+            &Globals::default(),
+            SYNTAX
+        ),
+        Vec::new(),
+        "a function forwarding across a mark was refused at its own hidden-headed type",
+    );
+
+    let refused = fixture_verdicts(
+        &forwarding_module(Plicity::Explicit),
+        1_000_000,
+        &Globals::default(),
+        SYNTAX,
+    );
+    for item in forwarding_items() {
+        assert!(
+            refused.iter().any(|verdict| {
+                verdict.name == Some(item) && matches!(verdict.error, Error::Mismatch { .. })
+            }),
+            "`{item:?}` was taken at the plain type its body contracts to: {refused:?}",
+        );
+    }
 }

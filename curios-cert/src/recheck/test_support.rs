@@ -1501,6 +1501,113 @@ pub(super) fn marked_apply_module(mark: Plicity) -> Module {
     }
 }
 
+/// The item [`eta_former_module`] declares.
+pub(super) fn eta_former_held() -> Global {
+    Global::Authored(Qualifier::from(["held"]))
+}
+
+/// `struct S(A : Type) : Type { f : A }` with `held : T = S(Nat) { 3 }`, `T` an η-form of `S` applied over its whole list: `((@A : Type) => S(A))(@Nat)`, its binder under a mark `S`'s plain parameter does not take, or with `lying` `((A : Nat) => S(A))(3)`, its binder at a type `S`'s parameter does not take. Handed back beside the module is `T` as it was built.
+pub(super) fn eta_former_module(lying: bool) -> (Module, Term) {
+    let name = Global::Authored(Qualifier::from(["S"]));
+    let a = Free::local(960, Some("A"));
+    let bound = Free::local(962, Some("A"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
+    let declaration = StructDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::build(
+            [(a, Term::type_ground())],
+            Telescope::build([(Free::local(961, Some("f")), Term::free_var(&a))], ()),
+        ),
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
+
+    let (mark, domain, argument) = match lying {
+        false => (Plicity::Implicit, Term::type_ground(), nat.clone()),
+        true => (Plicity::Explicit, nat.clone(), three.clone()),
+    };
+    let node: Term = Subterm::StructType(StructType {
+        name,
+        universes: Universes::default(),
+        params: vec![Term::free_var(&bound)],
+    })
+    .into();
+    let declared = Term::apply_marked(
+        Term::func_marked([(mark, bound, domain)], node),
+        [(mark, argument)],
+    );
+
+    let held = authored(
+        &eta_former_held(),
+        declared.clone(),
+        Term::struct_(name, [nat], [three]),
+    );
+
+    let module = declaring(
+        Module {
+            mounts: Vec::new(),
+            items: vec![held].into(),
+            witnesses: BTreeSet::new(),
+            tests: Vec::new(),
+        },
+        [],
+        BTreeMap::from([(name, declaration)]),
+        [],
+    );
+
+    (module, declared)
+}
+
+/// The two items [`forwarding_module`] judges at a plain or a hidden type.
+pub(super) fn forwarding_items() -> [Global; 2] {
+    [
+        Global::Authored(Qualifier::from(["by_name"])),
+        Global::Authored(Qualifier::from(["by_literal"])),
+    ]
+}
+
+/// `g : (@n : Nat) -> Nat = (@n) => ((x : Nat) => x)(n)`, a function that forwards across a mark and whose η-contraction is `(x : Nat) => x`, with `by_name : T = g` and `by_literal : T` the same lambda, `T` the function type over `n : Nat` under `declared`.
+pub(super) fn forwarding_module(declared: Plicity) -> Module {
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let g = Global::Authored(Qualifier::from(["g"]));
+    let lambda = |n: u64, x: u64| {
+        let n = Free::local(n, Some("n"));
+        let x = Free::local(x, Some("x"));
+        Term::func_marked(
+            [(Plicity::Implicit, n, nat.clone())],
+            Term::apply(
+                Term::func([(x, nat.clone())], Term::free_var(&x)),
+                [Term::free_var(&n)],
+            ),
+        )
+    };
+    let typed = |mark: Plicity, n: u64| {
+        let n = Free::local(n, Some("n"));
+        Term::func_type_marked([(mark, n, nat.clone())], nat.clone())
+    };
+    let [by_name, by_literal] = forwarding_items();
+
+    Module {
+        mounts: Vec::new(),
+        items: vec![
+            authored(&g, typed(Plicity::Implicit, 950), lambda(951, 952)),
+            authored(
+                &by_name,
+                typed(declared, 953),
+                Term::free_var(&Free::from(&g)),
+            ),
+            authored(&by_literal, typed(declared, 954), lambda(955, 956)),
+        ]
+        .into(),
+        witnesses: BTreeSet::new(),
+        tests: Vec::new(),
+    }
+}
+
 /// `rec f : (a : Nat, b : Nat) -> Type = (a, b) => Nat; f(3)` as a declared type.
 pub(super) fn rec_apply_module() -> Module {
     let a = Free::local(990, Some("a"));

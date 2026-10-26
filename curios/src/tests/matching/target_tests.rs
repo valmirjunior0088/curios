@@ -191,3 +191,31 @@ fn a_match_with_no_arms_over_a_carrier_says_what_it_eliminates() {
         "unexpected error: {error}"
     );
 }
+
+// A family reached through an alias of its former is the family a match eliminates: `Opt` is `Option`'s η-form, and `Opt(Nat)` the node whose cases the match reads.
+#[test]
+fn a_family_reached_through_an_alias_of_its_former_is_matched() {
+    let source = r#"
+        use /std/{Nat, Option, print};
+        let Opt: (Type) -> Type = Option;
+        let unwrap(o: Opt(Nat)) -> Nat = match o | some(x) => x | none() => 0 end;
+        print(Nat/to_str(unwrap(Option/some(5)) + unwrap(Option/none())))
+        "#;
+
+    assert_eq!(run(source), b"5");
+}
+
+// A family with parameters and indices is built and matched at its two calls, `Tag(Nat)(0)`, the parameters' list and the indices' each filling a group of its own.
+#[test]
+fn an_indexed_family_is_built_and_matched_at_its_two_calls() {
+    let source = r#"
+        use /std/{Nat, print};
+        induct Tag(T: Type): (n: Nat) -> pub Type
+        | only(x: T): (0)
+        end
+        let a: Tag(Nat)(0) = Tag/only(7);
+        print(Nat/to_str(match a | only(x) => x end))
+        "#;
+
+    assert_eq!(run(source), b"7");
+}

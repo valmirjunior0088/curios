@@ -159,3 +159,18 @@ fn a_derived_spelling_leaves_a_hidden_field_out() {
 
     assert_eq!(run(source), b"Positive { n = 4 }");
 }
+
+// A hidden field between two plain ones moves neither: where the value is built the bound over the first is discharged, and where it is read `.0`, `.1` and a pattern's two positional fields are the plain fields on either side of it.
+#[test]
+fn a_hidden_field_between_two_plain_ones_moves_neither_position() {
+    let source = r#"
+        use /std/{Nat, Str, print};
+        use /std/Bool/{Holds};
+        struct Mid: pub Type { a: Nat, @ok: Holds(0 < a), b: Nat }
+        let m: Mid = Mid { a = 1, b = 20 };
+        let Mid { first, second } = m;
+        print(Nat/to_str((m.0 + first) * 100 + m.1 + second))
+        "#;
+
+    assert_eq!(run(source), b"240");
+}
