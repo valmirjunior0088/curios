@@ -23,12 +23,19 @@ pub(super) struct Positions {
     failure: Option<Error>,
     /// Re-entrancy guard: set while an erased half is being decided.
     classifying: bool,
+    /// Set while a reader reads ([`Kernel::read`](super::Kernel::read)), whose judgments are no item's check.
+    reading: bool,
 }
 
 impl Positions {
-    /// Whether a classification is already in flight, in which case this record is one of its own and is dropped.
+    /// Whether a classification is already in flight, in which case this record is one of its own, or a reader reads: either way the record is dropped.
     pub(super) fn suppressed(&self) -> bool {
-        self.classifying
+        self.classifying || self.reading
+    }
+
+    /// Drop every record while `reading`, handing back whether records were already being dropped for a reader.
+    pub(super) fn hold_for_reading(&mut self, reading: bool) -> bool {
+        std::mem::replace(&mut self.reading, reading)
     }
 
     /// Raise the guard for a classification about to run.

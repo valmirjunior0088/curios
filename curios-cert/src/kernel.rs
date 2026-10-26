@@ -37,6 +37,9 @@ use calls::*;
 mod reads;
 use reads::*;
 
+mod reader;
+pub use reader::*;
+
 mod scope;
 use scope::*;
 

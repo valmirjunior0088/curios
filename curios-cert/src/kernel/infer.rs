@@ -14,6 +14,7 @@
 
 mod eliminate;
 use eliminate::*;
+pub(crate) use eliminate::{enter_arm, enter_case};
 
 mod intrinsic;
 use intrinsic::*;

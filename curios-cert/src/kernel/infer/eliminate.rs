@@ -34,8 +34,8 @@ mod tests;
 use {
     super::check,
     crate::{
-        Counted, Error, InductAt, Kernel, Sort, another_case, scrutinee_solution, solve_indices,
-        wholly_pinned,
+        Counted, EnteredArm, Error, InductAt, Kernel, Sort, another_case, scrutinee_solution,
+        solve_indices, wholly_pinned,
     },
     curios_analysis::Invert,
     curios_core::{
@@ -147,15 +147,7 @@ fn check_arm(
                 return Ok(());
             };
 
-            // The value this arm's scrutinee is: the constructor at its payload.
-            let value: Term = Subterm::Variant(Variant {
-                name: family.name,
-                universes: family.universes.clone(),
-                params: family.params.clone(),
-                tag: tag.clone(),
-                payload: payload.to_vec(),
-            })
-            .into();
+            let value = case_value(family, tag, payload);
 
             if never_taken(kernel, scrutinee, &value, binders)? {
                 return Ok(());
@@ -179,6 +171,71 @@ fn check_arm(
             unless_never_taken(kernel, checked, &assumed, binders)
         })
     })
+}
+
+/// The value an arm's scrutinee is: the constructor `tag` of `family` at its payload.
+fn case_value(family: &InductType, tag: &Atom, payload: &[Term]) -> Term {
+    Subterm::Variant(Variant {
+        name: family.name,
+        universes: family.universes.clone(),
+        params: family.params.clone(),
+        tag: tag.clone(),
+        payload: payload.to_vec(),
+    })
+    .into()
+}
+
+/// Enter the arm of `tag` in an elimination of `scrutinee`, a value of `family`, for a reader of the finished term ([`Reader::enter_arm`](crate::Reader::enter_arm)): each of `binders` assumed at its payload field's type, then the case put in force as [`check_arm`] puts it — the solution the indices force, the scrutinee standing for the case's value ([`assume_case_value`]), each solved variable bound to its solution ([`bind_solutions`]). An arm the indices rule out, which the kernel types nothing of, is entered at the case's value alone.
+pub(crate) fn enter_arm(
+    kernel: &mut Kernel,
+    family: &InductType,
+    scrutinee: &Term,
+    tag: &Atom,
+    binders: &[Free],
+) -> Result<EnteredArm, Error> {
+    let signature = kernel
+        .induct_at(family)?
+        .signature(kernel, tag)?
+        .ok_or_else(|| Error::Undeclared(family.name))?;
+    if signature.len() != binders.len() {
+        return Err(Error::Arity {
+            counted: Counted::ArmBinders,
+            expected: signature.len(),
+            actual: binders.len(),
+        });
+    }
+
+    let mut cursor = signature.cursor();
+    for binder in binders {
+        let (_, field) = cursor
+            .entry()
+            .expect("a signature as long as the arm's binders");
+        kernel.assume(binder, &field);
+        cursor.advance(Term::free_var(binder));
+    }
+    let targets = cursor.body().expect("a cursor past every entry");
+    let payload = cursor.into_args();
+    let value = case_value(family, tag, &payload);
+
+    let solved = specialize(kernel, family, &targets, binders)?;
+    let ruled_out = solved.is_none();
+    let mut solutions = solved.unwrap_or_default();
+    assume_case_value(kernel, scrutinee, &value, &mut solutions)?;
+    bind_solutions(kernel, &solutions)?;
+
+    Ok(EnteredArm {
+        targets,
+        value,
+        ruled_out,
+    })
+}
+
+/// Put the case `value` of `scrutinee` in force for a reader of its arm ([`Reader::case`](crate::Reader::case)), as an arm of a `Bool` or `Switch` elimination is checked under it: a variable scrutinee bound to the value, any other's equation recorded, and the equations in force restated under it ([`assume_case_value`], [`bind_solutions`]).
+pub(crate) fn enter_case(kernel: &mut Kernel, scrutinee: &Term, value: &Term) -> Result<(), Error> {
+    let mut solutions = Vec::new();
+    assume_case_value(kernel, scrutinee, value, &mut solutions)?;
+
+    bind_solutions(kernel, &solutions)
 }
 
 /// A refused arm's verdict, withdrawn where the arm is one no reduction takes: an equation it assumed, read with the arm's bracket closed, computes to another case than it states.
