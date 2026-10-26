@@ -9,6 +9,7 @@ use {
         WitnessOrigin,
     },
     curios_utilities::{Plicity, Qualifier},
+    std::collections::BTreeSet,
 };
 
 // === Metavariables / unification ===========================================
@@ -1260,7 +1261,11 @@ fn a_metavariable_met_at_a_type_from_below_takes_a_level_of_its_own() {
         subsume_outcome(&mut context, &large, &Term::hole(0), None),
         Ok(Outcome::Converts)
     ));
-    assert!(context.universes_mut().finalize([], [], []).is_ok());
+    assert!(
+        context
+            .finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new())
+            .is_ok()
+    );
 }
 
 // Control: the same two bounds with the first an equation.
@@ -1273,7 +1278,7 @@ fn a_metavariable_met_at_a_type_as_an_equation_is_that_type() {
     let large = Term::type_at(Level::constant(1));
     assert_eq!(conv(&mut context, &small, &Term::hole(0)), Ok(true));
     let second = subsume_outcome(&mut context, &large, &Term::hole(0), None);
-    let closed = context.universes_mut().finalize([], [], []);
+    let closed = context.finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
     assert!(
         !matches!(second, Ok(Outcome::Converts)) || closed.is_err(),
         "{second:?} {closed:?}"
@@ -1296,7 +1301,11 @@ fn a_metavariable_met_at_a_type_from_above_takes_a_level_of_its_own() {
         subsume_outcome(&mut context, &Term::hole(0), &small, None),
         Ok(Outcome::Converts)
     ));
-    assert!(context.universes_mut().finalize([], [], []).is_ok());
+    assert!(
+        context
+            .finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new())
+            .is_ok()
+    );
 }
 
 // A function type's codomain is the position: `(x: Nat) -> Type 0 ≤ ?0` then `(x: Nat) -> Type 1 ≤ ?0`.
@@ -1321,7 +1330,11 @@ fn a_function_type_met_from_below_takes_its_codomain_at_a_level_of_its_own() {
         subsume_outcome(&mut context, &large, &Term::hole(0), None),
         Ok(Outcome::Converts)
     ));
-    assert!(context.universes_mut().finalize([], [], []).is_ok());
+    assert!(
+        context
+            .finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new())
+            .is_ok()
+    );
 }
 
 // A metavariable met at `Prop` from below is a `Prop`, at a level of its own over the one it met, so a larger proposition met after it is below it too and the levels close.
@@ -1346,7 +1359,11 @@ fn a_metavariable_met_at_a_proposition_from_below_is_a_proposition_at_a_level_of
         subsume_outcome(&mut context, &large, &Term::hole(0), None),
         Ok(Outcome::Converts)
     ));
-    assert!(context.universes_mut().finalize([], [], []).is_ok());
+    assert!(
+        context
+            .finalize_universe_metas(BTreeSet::new(), BTreeSet::new(), BTreeSet::new())
+            .is_ok()
+    );
 }
 
 // No proposition stands where a type is wanted, so a `Type` met after the proposition is refused, and so is the proposition met after a `Type`: the metavariable is a sort of the kind it met first.

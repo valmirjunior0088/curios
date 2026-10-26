@@ -10,6 +10,7 @@ use {
         UniverseMetaId, UniverseParam, UniverseRole, Variance,
     },
     curios_utilities::{Plicity, Qualifier},
+    std::collections::BTreeSet,
 };
 
 /// `induct Wrap.{u}(A: Type u): Type u` with no constructor, registered carrying `variance` for its one level.
@@ -182,8 +183,11 @@ fn an_irrelevant_level_is_joined_where_it_can_be_and_never_required() {
                 Ok(true)
             );
             let scheme = context
-                .universes_mut()
-                .finalize([this, that], [], [])
+                .finalize_universe_metas(
+                    BTreeSet::from([this, that]),
+                    BTreeSet::new(),
+                    BTreeSet::new(),
+                )
                 .unwrap();
             assert_eq!(scheme.parameter_count, 1, "{variance:?}, redex: {redex}");
 
@@ -208,7 +212,13 @@ fn an_irrelevant_level_is_joined_where_it_can_be_and_never_required() {
                 Ok(true)
             );
             assert_eq!(
-                context.universes_mut().finalize([bounded], [], []).is_err(),
+                context
+                    .finalize_universe_metas(
+                        BTreeSet::from([bounded]),
+                        BTreeSet::new(),
+                        BTreeSet::new()
+                    )
+                    .is_err(),
                 required,
                 "{variance:?}, redex: {redex}"
             );
@@ -252,8 +262,11 @@ fn a_definition_applied_in_full_is_joined_where_it_can_be_and_never_required() {
             Ok(true)
         );
         let scheme = context
-            .universes_mut()
-            .finalize([this, that], [], [])
+            .finalize_universe_metas(
+                BTreeSet::from([this, that]),
+                BTreeSet::new(),
+                BTreeSet::new(),
+            )
             .unwrap();
         assert_eq!(scheme.parameter_count, 1, "{variance:?}");
 
@@ -269,7 +282,13 @@ fn a_definition_applied_in_full_is_joined_where_it_can_be_and_never_required() {
             Ok(true)
         );
         assert_eq!(
-            context.universes_mut().finalize([bounded], [], []).is_err(),
+            context
+                .finalize_universe_metas(
+                    BTreeSet::from([bounded]),
+                    BTreeSet::new(),
+                    BTreeSet::new()
+                )
+                .is_err(),
             required,
             "{variance:?}"
         );
@@ -295,7 +314,15 @@ fn two_lambdas_apart_in_a_binders_annotation_are_left_to_their_function_type() {
             ),
             Ok(true)
         );
-        assert!(context.universes_mut().finalize([bounded], [], []).is_ok());
+        assert!(
+            context
+                .finalize_universe_metas(
+                    BTreeSet::from([bounded]),
+                    BTreeSet::new(),
+                    BTreeSet::new()
+                )
+                .is_ok()
+        );
 
         let mut context = self::context();
         let this = open(&mut context);
@@ -310,8 +337,11 @@ fn two_lambdas_apart_in_a_binders_annotation_are_left_to_their_function_type() {
             Ok(true)
         );
         let scheme = context
-            .universes_mut()
-            .finalize([this, that], [], [])
+            .finalize_universe_metas(
+                BTreeSet::from([this, that]),
+                BTreeSet::new(),
+                BTreeSet::new(),
+            )
             .unwrap();
         assert_eq!(scheme.parameter_count, 1);
     }
@@ -338,8 +368,11 @@ fn a_definition_passed_bare_is_left_to_its_function_type() {
             Ok(true)
         );
         let scheme = context
-            .universes_mut()
-            .finalize([this, that], [], [])
+            .finalize_universe_metas(
+                BTreeSet::from([this, that]),
+                BTreeSet::new(),
+                BTreeSet::new(),
+            )
             .unwrap();
         assert_eq!(scheme.parameter_count, 1, "{variance:?}");
 
@@ -356,7 +389,13 @@ fn a_definition_passed_bare_is_left_to_its_function_type() {
             Ok(true)
         );
         assert_eq!(
-            context.universes_mut().finalize([bounded], [], []).is_err(),
+            context
+                .finalize_universe_metas(
+                    BTreeSet::from([bounded]),
+                    BTreeSet::new(),
+                    BTreeSet::new()
+                )
+                .is_err(),
             required,
             "{variance:?}"
         );
@@ -487,7 +526,13 @@ fn a_field_of_a_definition_is_joined_where_it_can_be_and_never_required() {
             "{record}"
         );
         assert_eq!(
-            context.universes_mut().finalize([bounded], [], []).is_err(),
+            context
+                .finalize_universe_metas(
+                    BTreeSet::from([bounded]),
+                    BTreeSet::new(),
+                    BTreeSet::new()
+                )
+                .is_err(),
             required,
             "{record}"
         );

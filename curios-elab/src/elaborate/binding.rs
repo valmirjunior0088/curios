@@ -689,7 +689,7 @@ fn region_monad(
     region: &Term,
     extent: Option<Extent>,
 ) -> Result<Option<Term>, Error> {
-    let sort = context.fresh_sort("region monad");
+    let sort = context.universes_mut().fresh_sort("region monad");
     let binder = context.fresh(None);
     let former = Term::func_type([(binder, sort.clone())], sort.clone());
     let monad = context.fresh_hole_metavar(former, extent);
@@ -1069,7 +1069,7 @@ pub fn elaborate_infix(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     // `?T`: the operand type shared by both sides.
-    let sort = context.fresh_sort("infix operand sort");
+    let sort = context.universes_mut().fresh_sort("infix operand sort");
     let operand_type = context.fresh_hole_metavar(sort, term.extent());
 
     let target = context.syntax().operator.concept_field(infix.op);
@@ -1310,7 +1310,7 @@ pub fn elaborate_func_infer(
         match settle {
             // A settled lambda's body is read at a codomain left open: born here, under the binders, so that it may name them, and awaited by the term settling the lambda, so that a choice the body owns waits for that term as one in an argument does. What the body says of its type solves it.
             Some((lambda, _)) => {
-                let sort = context.fresh_sort("lambda codomain");
+                let sort = context.universes_mut().fresh_sort("lambda codomain");
                 let codomain = context.fresh_hole_metavar(sort, lambda.extent());
                 let body = check(context, &body, codomain.clone())?;
 

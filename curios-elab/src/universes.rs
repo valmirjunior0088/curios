@@ -11,6 +11,9 @@ pub use closing::*;
 mod gate;
 pub use gate::*;
 
+mod mutation;
+pub use mutation::*;
+
 mod substitution;
 pub use substitution::*;
 

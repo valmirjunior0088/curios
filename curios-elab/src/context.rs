@@ -78,7 +78,8 @@ mod window_tests;
 use {
     super::{
         DeadArm, Error, Occurrence, Provenance, ReaderScope, RegionOwner, UniverseMark,
-        UniverseSolver, UniverseStateToken, Witness, zonk_universe_levels_scoped,
+        UniverseMutation, UniverseSolver, UniverseStateToken, Witness, stamp_if_moved,
+        zonk_universe_levels_scoped,
     },
     crate::{
         Published, Refusal, Sort, ZonkPass, hold_at_one_instance, key_spelling,
@@ -91,16 +92,14 @@ use {
         DefinitionKind, Extent, Free, FuncType, Global, HeadKey, HeadTag, ImplicitOrigin, Imports,
         InductDecl, InductInstance, Item, Level, Metavar, MetavarId, MetavarOrigin, MetavarSpine,
         Minted, Mints, Names, NumLit, ParameterField, Quality, RecGroup, ReduceError, StructDecl,
-        StructInstance, Subterm, Term, Totality, Trace, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
-        Universes, Variance, WitnessKey, WitnessOrigin, instantiate_universes_scoped,
-        project_erased_universes,
+        StructInstance, Subterm, Term, Totality, Trace, UniverseContext, UniverseError,
+        UniverseMetaId, Universes, Variance, WitnessKey, WitnessOrigin,
+        instantiate_universes_scoped, project_erased_universes,
     },
-    curios_utilities::{Entropy, Mount, Plicity, Qualifier, SyntaxRegistry},
+    curios_utilities::{Mount, Plicity, Qualifier, SyntaxRegistry},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         mem,
-        ops::{Deref, DerefMut},
         rc::Rc,
     },
 };
@@ -141,34 +140,6 @@ pub struct Restriction {
     arguments: Vec<Term>,
     result: Term,
     frames: HeldFrames,
-}
-
-pub struct UniverseMutation<'a> {
-    solver: &'a mut UniverseSolver,
-    stamp: &'a Entropy,
-    before: UniverseStateToken,
-}
-
-impl Deref for UniverseMutation<'_> {
-    type Target = UniverseSolver;
-
-    fn deref(&self) -> &Self::Target {
-        self.solver
-    }
-}
-
-impl DerefMut for UniverseMutation<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.solver
-    }
-}
-
-impl Drop for UniverseMutation<'_> {
-    fn drop(&mut self) {
-        if self.solver.state_token() != self.before {
-            self.stamp.fresh();
-        }
-    }
 }
 
 /// Where the context stood when a question was asked with nothing committed ([`Context::asked_at`]): the two write stamps, and how many questions had been declined and how many pairs left apart.
@@ -2962,19 +2933,26 @@ impl<'s> Context<'s> {
         &self.underway.attempt.universe_solver
     }
 
-    /// Mutably borrow the universe solver and advance the authoritative [`Entropy`] stamp on guard drop only if solver state actually changed. Normalized ground/reflexive comparisons are read-equivalent and must not make an otherwise pure elaboration-cache computation look impure. Rollback performs the conservative cache clear separately.
+    /// The universe solver for a judgment's writes ([`UniverseMutation`]), advancing the elaboration cache's universe stamp where they move it. Rollback performs the conservative cache clear separately.
     pub fn universes_mut(&mut self) -> UniverseMutation<'_> {
-        let before = self.underway.attempt.universe_solver.state_token();
-        UniverseMutation {
-            solver: &mut self.underway.attempt.universe_solver,
-            stamp: self.typing.caches.universe_stamp(),
-            before,
-        }
+        UniverseMutation::new(
+            &mut self.underway.attempt.universe_solver,
+            self.typing.caches.universe_stamp(),
+        )
+    }
+
+    /// The universe solver for closing a declaration's levels, which only the context holds: what closing moves advances the universe stamp as a write does ([`stamp_if_moved`]), and each door that closes clears the caches the closing rewrites.
+    fn closing_universes<T>(&mut self, close: impl FnOnce(&mut UniverseSolver) -> T) -> T {
+        let solver = &mut self.underway.attempt.universe_solver;
+        let before = solver.state_token();
+        let closed = close(solver);
+        stamp_if_moved(solver, before, self.typing.caches.universe_stamp());
+        closed
     }
 
     pub fn finish_universe_transaction(&mut self) {
         let before = self.underway.attempt.universe_solver.state_token();
-        self.universes_mut().clear_constraints();
+        self.closing_universes(UniverseSolver::clear_constraints);
         if self.underway.attempt.universe_solver.state_token() != before {
             self.typing.caches.invalidate_for_universe_transaction();
         }
@@ -2985,39 +2963,9 @@ impl<'s> Context<'s> {
         self.underway.attempt.universe_solver.abandon_speculation();
     }
 
-    /// A fresh level standing for `beside` at an occurrence of its own ([`UniverseSolver::fresh_beside`]).
-    pub fn fresh_universe_beside(
-        &mut self,
-        beside: &Level,
-        origin: Option<UniverseConstraintOrigin>,
-    ) -> Result<Level, UniverseError> {
-        self.universes_mut()
-            .fresh_beside(beside, origin)
-            .map(Level::meta)
-    }
-
-    /// The sort of a type left to inference: its quality and its level each a metavariable of its own ([`UniverseSolver::fresh_quality`]), so the first sort it is held to decides whether it is a proposition's or a type's.
-    pub fn fresh_sort(&mut self, kind: &str) -> Term {
-        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Other(kind.into()));
-        let quality = self.universes_mut().fresh_quality(Some(origin.clone()));
-        let level = self
-            .universes_mut()
-            .fresh(UniverseRole::Flexible, Some(origin));
-        Term::sort_at(quality, Level::meta(level))
-    }
-
-    /// The sort of a proposition left to inference: [`Context::fresh_sort`] with its quality stated, for a part of what is known a proposition — every field of a record of propositions is one.
-    pub fn fresh_prop_sort(&mut self, kind: &str) -> Term {
-        let origin = UniverseConstraintOrigin::new(UniverseConstraintKind::Other(kind.into()));
-        let level = self
-            .universes_mut()
-            .fresh(UniverseRole::Flexible, Some(origin));
-        Term::sort_at(Quality::Prop, Level::meta(level))
-    }
-
     /// Close the qualities nothing decided, each as a type's ([`UniverseSolver::default_qualities`]). An item closes them once it has drained what it parked: a problem that waited on a metavariable may be the one that puts a proposition under a sort left to inference, and it is retried after the item's levels have closed.
     pub fn close_qualities(&mut self) {
-        self.universes_mut().default_qualities();
+        self.closing_universes(UniverseSolver::default_qualities);
     }
 
     /// Hold two sorts' qualities one, as conversion compares them: an unsolved one solved to the other, and two that each state a sort one where they state the same. Where conversion answers a question asked with nothing committed it solves none, as it joins no two levels there ([`Context::withholds`]), and an equation it would have made is noted on the question.
@@ -3047,8 +2995,12 @@ impl<'s> Context<'s> {
             .iter()
             .flat_map(|term| self.universe_metas_in(term))
             .collect::<BTreeSet<_>>();
-        self.universes_mut().default(metas).map_err(Error::from)?;
-        self.universes_mut().default_qualities();
+        self.closing_universes(|solver| {
+            solver.default(metas)?;
+            solver.default_qualities();
+            Ok::<_, UniverseError>(())
+        })
+        .map_err(Error::from)?;
         self.underway.scheme_open = false;
         let solver = &self.underway.attempt.universe_solver;
         let terms = terms
@@ -3068,8 +3020,7 @@ impl<'s> Context<'s> {
     ) -> Result<UniverseContext, Error> {
         curios_profile::profile!("ctx::finalize_universe_metas");
         let mut universe_context = self
-            .universes_mut()
-            .finalize(interface, internal, compared)
+            .closing_universes(|solver| solver.finalize(interface, internal, compared))
             .map_err(Error::from)?;
         universe_context.quality_count = self.generalize_written_sorts()?;
         self.underway.scheme_open = false;
@@ -3080,8 +3031,7 @@ impl<'s> Context<'s> {
     /// Close the `Sort`s the declaration wrote as its parameters ([`UniverseSolver::generalize_qualities`]), answering how many it leaves to its caller. Refused where the declaration decided one, at the term that decided it where one was recorded and at the written `Sort` otherwise; where it leaves more than a declaration may; and where it formed a record type over two of them.
     fn generalize_written_sorts(&mut self) -> Result<usize, Error> {
         let count = self
-            .universes_mut()
-            .generalize_qualities()
+            .closing_universes(UniverseSolver::generalize_qualities)
             .map_err(|decided| {
                 let prop = decided.sort.is_prop();
                 match (decided.decided, decided.written) {
@@ -3105,9 +3055,10 @@ impl<'s> Context<'s> {
         instance: &Universes,
         parameter_count: usize,
     ) -> Result<(), Error> {
-        self.universes_mut()
-            .finalize_at_instance(metas, instance, parameter_count)
-            .map_err(Error::from)?;
+        self.closing_universes(|solver| {
+            solver.finalize_at_instance(metas, instance, parameter_count)
+        })
+        .map_err(Error::from)?;
         self.underway.scheme_open = false;
         self.typing.caches.invalidate_for_universe_rewrite();
         Ok(())
@@ -3120,12 +3071,11 @@ impl<'s> Context<'s> {
         instance: &[Level],
         determined: &[Level],
     ) -> Result<(), Error> {
-        match self.underway.scheme_open {
-            true => self.universes_mut().pin_instance(instance, determined),
-            false => self
-                .universes_mut()
-                .close_instance(minted, instance, determined),
-        }
+        let open = self.underway.scheme_open;
+        self.closing_universes(|solver| match open {
+            true => solver.pin_instance(instance, determined),
+            false => solver.close_instance(minted, instance, determined),
+        })
         .map_err(Error::from)?;
         self.typing.caches.invalidate_for_universe_rewrite();
         Ok(())

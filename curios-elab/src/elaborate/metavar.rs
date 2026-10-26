@@ -67,7 +67,7 @@ pub fn elaborate_metavar(
             Some(entry) => Ok((term.clone(), entry.result.clone())),
             // A written goal, though, must survive to zonk's report rather than die here: a fresh silent hole stands in as its type (a hole so only the goal itself reports; the report then shows the stand-in — `?N` — if nothing ever pins it). Birth mirrors the checking arm, with the stand-in as `result`.
             None if matches!(metavar.origin, MetavarOrigin::Goal) => {
-                let sort = context.fresh_sort("inferred goal sort");
+                let sort = context.universes_mut().fresh_sort("inferred goal sort");
                 let result = context.fresh_hole_metavar(sort, term.extent());
                 let spine = context.birth_here(id, result.clone());
                 if let Some(extent) = term.extent() {

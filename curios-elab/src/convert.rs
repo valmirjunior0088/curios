@@ -836,7 +836,7 @@ impl Convert {
 
     /// The relation's own rules, for a problem at below, both sides read forced as the kernel's `subsumes` reads them: two sorts of one quality add `lower ≤ upper`, and two function types of one plicity vector pose each domain as an equation and their codomains at below. Answers whether they decided the problem. A `Prop` against a `Type` is none of them, so it goes on as the equation it is not.
     ///
-    /// **A sort left to inference takes the quality of the first sort it meets.** The sort of a type the elaborator left to inference — an unannotated binder's, a motive's result, a parked term's — has a quality nothing has stated ([`Context::fresh_sort`]), and holding it to a `Prop` or to a `Type` solves it ([`Context::same_quality`]), as holding it to another such sort makes the two one. The kernel has no such rule and needs none: a quality still open where its declaration closes is a type's, so no elaborated term holds one.
+    /// **A sort left to inference takes the quality of the first sort it meets.** The sort of a type the elaborator left to inference — an unannotated binder's, a motive's result, a parked term's — has a quality nothing has stated ([`UniverseMutation::fresh_sort`](crate::UniverseMutation::fresh_sort)), and holding it to a `Prop` or to a `Type` solves it ([`Context::same_quality`]), as holding it to another such sort makes the two one. The kernel has no such rule and needs none: a quality still open where its declaration closes is a type's, so no elaborated term holds one.
     ///
     /// Any other pair is the equation it is, taken from its written spelling through every step an equation takes: that is sufficient for a subsumption, and it is the whole of one wherever neither side can come to a sort or a function type. A problem those steps leave waiting on a metavariable keeps the relation it was asked at, so it resumes here.
     fn decide_below(
@@ -2531,7 +2531,8 @@ impl Convert {
                     instantiated: None,
                 };
                 let own = context
-                    .fresh_universe_beside(level, Some(origin.clone()))
+                    .universes_mut()
+                    .fresh_beside(level, Some(origin.clone()))
                     .map_err(ReduceError::Universe)?;
                 let (lower, upper) = match standing {
                     Standing::Over => (level.clone(), own.clone()),

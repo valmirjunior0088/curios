@@ -258,7 +258,7 @@ fn proof_end(context: &mut Context, opened: &mut Opened, type_: &Term) -> Result
 pub fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort), Error> {
     let (rebuilt, inferred) = match &**term {
         Subterm::Metavar(_) => {
-            let sort = context.fresh_sort("type left to inference");
+            let sort = context.universes_mut().fresh_sort("type left to inference");
             elaborate(context, term, Mode::Check(sort))?
         }
         // `()` is checked against a type, so the tuple rule refuses it and says how the unit type is written.
@@ -742,8 +742,8 @@ impl Context<'_> {
             let mut parts = Vec::with_capacity(tuple.fields.len());
             for position in 0..tuple.fields.len() {
                 let part = match declared {
-                    Some(Quality::Prop) => context.fresh_prop_sort("literal field"),
-                    _ => context.fresh_sort("literal field"),
+                    Some(Quality::Prop) => context.universes_mut().fresh_prop_sort("literal field"),
+                    _ => context.universes_mut().fresh_sort("literal field"),
                 };
                 let (part, hole) = context.fresh_hole(part, choice.written.extent());
                 parts.push(part);
@@ -1659,7 +1659,7 @@ impl MotiveShape<'_> {
         scrutinee_type
     }
 
-    /// This shape's motive type, `(ī' : Ī(p̄)) -> I(p̄, ī') -> Type`, which a *written* motive is checked against. The codomain is a sort left to inference ([`Context::fresh_sort`]), its quality still to be solved: a motive into `Prop` and one into `Type` each decide it at the checking boundary (`expect`).
+    /// This shape's motive type, `(ī' : Ī(p̄)) -> I(p̄, ī') -> Type`, which a *written* motive is checked against. The codomain is a sort left to inference ([`UniverseMutation::fresh_sort`](crate::UniverseMutation::fresh_sort)), its quality still to be solved: a motive into `Prop` and one into `Type` each decide it at the checking boundary (`expect`).
     fn motive_type(&self, context: &mut Context) -> Term {
         let mut binders = Vec::with_capacity(self.arity());
 
@@ -1681,7 +1681,7 @@ impl MotiveShape<'_> {
         };
 
         binders.push((context.fresh(None), scrutinee_type));
-        let sort = context.fresh_sort("motive result");
+        let sort = context.universes_mut().fresh_sort("motive result");
         Term::func_type(binders, sort)
     }
 }
@@ -1735,7 +1735,9 @@ fn check_closed_motive(
 
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
         let refs = vars.iter().collect::<Vec<_>>();
-        let sort = context.fresh_sort("eliminator motive result");
+        let sort = context
+            .universes_mut()
+            .fresh_sort("eliminator motive result");
         let body = check(context, &motive.open(&refs), sort)?;
 
         let binders = labels.iter().collect::<Vec<_>>();
