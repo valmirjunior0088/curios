@@ -48,6 +48,8 @@ mod test_support;
 mod totality_tests;
 #[cfg(test)]
 mod universes_tests;
+#[cfg(test)]
+mod variance_tests;
 
 use {
     super::{
