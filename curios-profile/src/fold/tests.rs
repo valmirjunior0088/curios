@@ -2,7 +2,7 @@
 
 use {super::*, curios_utilities::test_support::Temporary, std::fs};
 
-fn folded(rows: &str) -> ProfileReport {
+fn folded(rows: &str) -> Report {
     fold(rows.as_bytes()).expect("rows fold")
 }
 
@@ -17,7 +17,7 @@ fn standalone(name: &str, elapsed: u64) -> String {
     )
 }
 
-fn names(report: &ProfileReport) -> Vec<&str> {
+fn names(report: &Report) -> Vec<&str> {
     report
         .summaries
         .iter()

@@ -4,7 +4,7 @@
 //!
 //! **Self time is derived the same way, from the order the rows arrive in.** Each exit credits its extent to the span it was entered inside, so a span's own share is its extent less what its children took. That needs no new row: nesting is already in the stream, as the order of the `E` and `X` rows on the one thread a stream's spans nest on.
 //!
-//! **A stream cut short folds.** A killed run's rows stop in the middle of a span's life, and a reader handed part of a file meets one that opens there: an entry with no creation, an exit with no entry, a span that never closes. Each is taken for what it says and nothing is invented — an unpaired exit is ignored, a span with no creation is named by the callsite its id carries, and a span still entered when the rows run out is reported in [`ProfileReport::open`], which is what a killed run was inside.
+//! **A stream cut short folds.** A killed run's rows stop in the middle of a span's life, and a reader handed part of a file meets one that opens there: an entry with no creation, an exit with no entry, a span that never closes. Each is taken for what it says and nothing is invented — an unpaired exit is ignored, a span with no creation is named by the callsite its id carries, and a span still entered when the rows run out is reported in [`Report::open`], which is what a killed run was inside.
 //!
 //! **Each destination has its reader.** [`fold_at`] is [`Destination::File`](crate::Destination::File)'s: it takes the path that destination took and reads the file there. [`fold`] is [`Destination::Stream`](crate::Destination::Stream)'s, for rows a caller already holds, such as a buffer folded back in the same process.
 
@@ -21,9 +21,9 @@ use {
 
 /// Timings, allocation figures and magnitude samples recomputed from one record stream.
 #[derive(Debug, Default)]
-pub struct ProfileReport {
+pub struct Report {
     /// Timings ordered from greatest to least total duration.
-    pub summaries: Vec<ProfileSummary>,
+    pub summaries: Vec<Summary>,
     /// Sampled magnitudes ordered from greatest to least total, one entry per [`sample!`](crate::sample) site that fired.
     pub samples: Vec<SampleSummary>,
     /// The greatest live-byte total any row reported, which is the process's high-water mark up to the last row the file holds.
@@ -84,7 +84,7 @@ impl SampleSummary {
 ///
 /// **The self figures are what the inclusive ones cannot be for mutually recursive work.** A judgment that re-enters itself through another — typing calls conversion, which types again — counts each nested extent once per enclosing entry, so its inclusive row overstates it and a row per judgment cannot be added up. [`self_total`](Self::self_total) and [`self_allocated`](Self::self_allocated) subtract every span entered directly inside, so each nanosecond and each byte is attributed to exactly one span, the innermost one entered, and the self rows of one stream partition what its spans cover.
 #[derive(Debug)]
-pub struct ProfileSummary {
+pub struct Summary {
     /// The tracing target that owns the span.
     pub target: String,
     /// The static span name.
@@ -115,7 +115,7 @@ pub struct ProfileSummary {
     pub slowest: Vec<SpanInstance>,
 }
 
-/// One closed span, as [`ProfileSummary::slowest`] keeps it.
+/// One closed span, as [`Summary::slowest`] keeps it.
 #[derive(Debug, Clone)]
 pub struct SpanInstance {
     /// How long it was entered, over every entry.
@@ -132,7 +132,7 @@ pub const SLOWEST_KEPT: usize = 10;
 /// Recompute a report from the rows of one record stream.
 ///
 /// The error is the reader's alone. A row this version does not understand is skipped rather than refused, because a stream is written by a process that may have been killed mid-row and a partial last line is the normal ending, not a corruption.
-pub fn fold(rows: impl BufRead) -> io::Result<ProfileReport> {
+pub fn fold(rows: impl BufRead) -> io::Result<Report> {
     let mut state = Fold::default();
     for row in rows.lines() {
         state.row(&row?);
@@ -144,11 +144,11 @@ pub fn fold(rows: impl BufRead) -> io::Result<ProfileReport> {
 /// Recompute a report from the stream filed at `path`.
 ///
 /// The mirror of [`Destination::File`](crate::Destination::File): that destination took a path, and reading its stream back takes the same one.
-pub fn fold_at(path: &Path) -> io::Result<ProfileReport> {
+pub fn fold_at(path: &Path) -> io::Result<Report> {
     fold(BufReader::new(File::open(path)?))
 }
 
-impl ProfileReport {
+impl Report {
     /// The report as tab-separated tables: the spans, the magnitude sites beneath them, and — for a stream whose run never returned — the stack it was inside.
     ///
     /// The one renderer, so no two readers of a report print different columns of it.
@@ -241,7 +241,7 @@ impl ProfileReport {
 struct Open {
     callsite: u32,
     group: Option<String>,
-    /// The creation fields other than `group`, for [`ProfileSummary::slowest`].
+    /// The creation fields other than `group`, for [`Summary::slowest`].
     fields: Vec<(String, String)>,
     /// One entry not yet matched by an exit, so a span re-entered within itself is measured over each extent rather than the outermost.
     entered: Vec<Entry>,
@@ -491,11 +491,11 @@ impl Fold {
         distribution.max = distribution.max.max(value);
     }
 
-    fn finish(self) -> ProfileReport {
+    fn finish(self) -> Report {
         let mut summaries = self
             .spans
             .iter()
-            .map(|((target, name, group), aggregate)| ProfileSummary {
+            .map(|((target, name, group), aggregate)| Summary {
                 target: target.clone(),
                 name: name.clone(),
                 group: group.clone(),
@@ -562,7 +562,7 @@ impl Fold {
         // Outermost first: the span entered earliest is the one the others are nested inside.
         open.sort_by_key(|span| span.entered);
 
-        ProfileReport {
+        Report {
             summaries,
             samples,
             peak: self.peak as usize,
