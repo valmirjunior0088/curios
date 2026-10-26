@@ -538,6 +538,26 @@ fn a_group_signature_reads_its_members_bodies() {
     assert_eq!(run(source), b"3");
 }
 
+// A group's signatures are sorted with its members opaque, so `val: T(2)` is read at a stuck `T(2)` whose sort is `Type`; its bodies are checked with them folded, where `T(2)` reduces through `T`. The two readings cannot disagree on which sort `T(2)` is: `T`'s result sort holds every arm to `Type`, so an arm that is a proposition is refused where `T`'s body is checked, and no member's type folds to a `Prop` the opaque reading took for a `Type`. Refused by the elaborator, not the kernel.
+#[test]
+fn a_group_member_type_cannot_fold_to_a_proposition() {
+    let error = error(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True, Holds};
+        let T(n: Nat) -> Type = match n | 0 => Holds(true) | k + 1 => T(k) end
+        and val: T(2) = True/qed();
+        /std/print("")
+        "#,
+    );
+    assert!(
+        error.contains("inferred: Prop")
+            && error.contains("expected: Type")
+            && !error.contains("the kernel refused"),
+        "{error}"
+    );
+}
+
 #[test]
 fn a_type_reaching_two_partial_definitions_names_the_first_written() {
     let refusal = |arguments: &str| {
