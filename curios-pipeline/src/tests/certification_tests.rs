@@ -1,12 +1,13 @@
-//! The certifier's record a compiled unit files beside its definitions: what it covers, what it says, what it read, what an item-level recompile keeps of the baseline's, and the termination flags it marks on a sealed program.
+//! The certifier's record a compiled unit files beside its definitions: what it covers, what it says, what it read, what an item-level recompile keeps of the baseline's, and the termination flags it marks on a sealed program; and that what the kernel alone refuses stops the fold's products.
 
 use {
-    super::test_support::{entrypoint_of, recompile_over, reuses_body, unit_of},
-    crate::{DEFAULT_BUDGET, Stage, compile_with_prelude},
+    super::test_support::{compile, entrypoint_of, recompile_over, reuses_body, unit_of},
+    crate::{DEFAULT_BUDGET, Fold, Stage, compile_with_prelude},
     curios_core::{Enter, Free, Global, Reads, Subterm, Term, Totality},
     curios_prelude::with_prelude,
     curios_text::RootSource,
     curios_unit::Unit,
+    curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet, HashSet},
 };
 
@@ -325,4 +326,88 @@ let subject : /std/Nat = double(2) + spin(0);
         "the entry's total definition is not marked"
     );
     assert!(!entry("/spin"), "the entry's partial definition is marked");
+}
+
+/// What the declarations below open with: `Code`'s one constructor fixes its index at `Type`, so an arm matching on `Code(X)` solves `X` to a type standing above `X`'s own, and the elaborator, which refines `X`, admits `id(@X, x)` there where the kernel, which substitutes, refuses it (the theory findings' entry on an arm's solution for an index variable).
+const ONLY_THE_KERNEL_REFUSES: &str = "let id(@A: Type, a: A) -> A = a;
+
+induct Code: (Type) -> Type
+| big(): (Type)
+end
+
+";
+
+/// A declaration only the kernel refuses stops the compile the browser and every embedder run, though nothing the program runs reaches it, and so does a witness only the kernel refuses that a declaration resolves: the unit is judged whole, and the refusal is the kernel's.
+#[test]
+fn a_declaration_only_the_kernel_refuses_stops_the_compile_with_the_prelude() {
+    for (declarations, refused) in [
+        (
+            "pub let f(X: Type, c: Code(X), x: X) -> X =
+    match c
+    | big() => id(@X, x)
+    end;",
+            "/f",
+        ),
+        (
+            "concept Pick(A: Type): Type {
+    pick(X: Type, c: Code(X), x: X) -> X,
+}
+
+satisfy Pick(/std/Nat) {
+    pick(X, c, x) = match c | big() => id(@X, x) end,
+}
+
+pub let chosen(c: Code(/std/Nat)) -> /std/Nat = Pick/pick(@/std/Nat, /std/Nat, c, 1);",
+            "/witness@/Pick(Nat)",
+        ),
+    ] {
+        let source = format!("{ONLY_THE_KERNEL_REFUSES}{declarations}\n\n/std/print(\"\")\n");
+
+        let refusal = compile(&source).expect_err("only the kernel refuses it");
+
+        assert!(
+            refusal.contains(&format!("the kernel refused {refused}:")),
+            "{refusal}"
+        );
+    }
+}
+
+/// A test only the kernel refuses stops the test program of its unit whether or not the selection schedules it: the unit compiled tested holds every test it declares, so each is judged with the unit, and the refusal is the kernel's.
+#[test]
+fn a_test_only_the_kernel_refuses_stops_its_test_program_whatever_is_selected() {
+    let source = format!(
+        "{ONLY_THE_KERNEL_REFUSES}test refused =
+    let _g = (X: Type, c: Code(X), x: X) =>
+        match c
+        | big() => id(@X, x)
+        end;
+    /std/Test/assert(true);
+
+test held = /std/Test/assert(true);
+
+/std/print(\"\")
+"
+    );
+    let entrypoint = entrypoint_of(&source);
+    let tested = |under: Qualifier| {
+        Fold::new(DEFAULT_BUDGET, &[], None)
+            .tests(
+                &entrypoint,
+                &RootSource::none().tested(),
+                vec![under],
+                |_| {},
+                |_| {},
+            )
+            .map(|_| ())
+            .expect_err("only the kernel refuses `refused`")
+            .to_string()
+    };
+
+    for under in [Qualifier::empty(), Qualifier::from(["held"])] {
+        let refusal = tested(under);
+        assert!(
+            refusal.contains("the kernel refused /refused"),
+            "{refusal}"
+        );
+    }
 }

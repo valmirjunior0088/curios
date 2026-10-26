@@ -270,3 +270,81 @@ fn a_file_no_unit_declares_says_so_when_built() {
         String::from_utf8_lossy(&ran.stderr)
     );
 }
+
+/// The package `dep`'s library under `index`, the type its family `Code`'s one constructor fixes the index at.
+fn code(index: &str) -> String {
+    format!("pub induct Code: (Type) -> pub Type\n| big(): ({index})\nend\n")
+}
+
+/// `app`'s library: `f` matches on `dep`'s `Code(X)`, which both checkers admit while `big` fixes the index at `/std/Nat`, and which the kernel alone refuses once it fixes it at `Type`, the arm solving `X` to a type standing above `X`'s own (the theory findings' entry on an arm's solution for an index variable). A test beside it, so a test run has one to run.
+const ON_CODE: &str = "use /dep/{Code};
+
+let id(@A: Type, a: A) -> A = a;
+
+pub let f(X: Type, c: Code(X), x: X) -> X =
+    match c
+    | big() => id(@X, x)
+    end;
+
+test f_is_declared = /std/Test/assert(true);
+";
+
+/// Every command that runs, builds, tests, documents, checks or asks about the package, and whether it exits 0 on a refusal, as a question answered with a list of refusals does.
+const COMMANDS: &[(&[&str], bool)] = &[
+    (&["run"], false),
+    (&["compile"], false),
+    (&["compile", "--target", "browser"], false),
+    (&["test"], false),
+    (&["lint"], false),
+    (&["document"], false),
+    (&["wonder", "diagnostics"], true),
+    (&["wonder", "tests"], false),
+    (&["wonder", "cost"], false),
+    (&["wonder", "stage", "wasm"], false),
+];
+
+/// A store holds what every command filed of a package while its dependency left `f` to both checkers, and the dependency's edit leaves `f`'s text as it was and the kernel alone refusing it: every command is refused by the kernel, none answered from what the store holds for the text it was filed for.
+#[test]
+fn a_dependency_edit_only_the_kernel_refuses_stops_every_command_over_a_warm_store() {
+    let dep = temporary("kernel-refused-dep");
+    write(&dep, "curios.toml", "compiler = \"0.0.0\"\nname = \"dep\"\n");
+    write(&dep, "lib.crs", &code("/std/Nat"));
+    let root = temporary("kernel-refused");
+    write(
+        &root,
+        "curios.toml",
+        &format!(
+            "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[dependencies]\ndep = {{ source = \"path\", path = {:?} }}\n",
+            &*dep
+        ),
+    );
+    write(&root, "lib.crs", ON_CODE);
+    write(&root, "app.crs", "/std/print(\"ran\")\n");
+
+    for (command, _) in COMMANDS {
+        let warmed = curios(&root, command);
+        assert!(
+            warmed.status.success(),
+            "{command:?}: {}{}",
+            String::from_utf8_lossy(&warmed.stdout),
+            String::from_utf8_lossy(&warmed.stderr)
+        );
+    }
+    assert!(reused(&curios(&root, &["run"])), "the run's payload is filed");
+
+    write(&dep, "lib.crs", &code("Type"));
+    for (command, answers) in COMMANDS {
+        let refused = curios(&root, command);
+        let said = format!(
+            "{}{}",
+            String::from_utf8_lossy(&refused.stdout),
+            String::from_utf8_lossy(&refused.stderr)
+        );
+        assert_eq!(refused.status.success(), *answers, "{command:?}: {said}");
+        // `dep` is reused once the first command after the edit has filed it; `app`'s library and its payload never are.
+        assert!(
+            said.contains("the kernel refused /app/f") && !said.contains("app; reused"),
+            "{command:?}: {said}"
+        );
+    }
+}
