@@ -19,7 +19,7 @@ use {
 
 impl Convert {
     /// Whether `this` and `that` are the same intrinsic operation on convertible operands, as far as the elaborator decides now — `curios-analysis`'s `convert_intrinsics`, the kernel's chain too, discharged the elaborator's way: a residual and every operand join the queue, and the levels compare by the elaborator's rule, which may constrain them.
-    pub(super) fn convert_intrinsic(
+    pub fn convert_intrinsic(
         &mut self,
         context: &mut Context,
         this: Intrinsic,
