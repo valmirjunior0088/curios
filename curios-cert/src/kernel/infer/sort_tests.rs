@@ -115,7 +115,12 @@ fn a_definition_naming_a_sort_or_a_function_type_is_subsumed_as_what_it_names() 
         (small, Term::prop()),
     ] {
         kernel
-            .define(&name, &Term::type_at(one()), &value, &UniverseContext::empty())
+            .define(
+                &name,
+                &Term::type_at(one()),
+                &value,
+                &UniverseContext::empty(),
+            )
             .expect("a name is declared once");
     }
     let named = |name: &Free| Term::free_var(name);
@@ -205,12 +210,7 @@ impl UnderTheCase {
 #[test]
 fn what_an_arms_case_makes_a_sort_or_a_function_type_is_subsumed_as_one_there() {
     let case = UnderTheCase::new();
-    let small_family = || {
-        Term::func_type(
-            [(binder(918, "n"), nat_type())],
-            Term::type_at(one()),
-        )
-    };
+    let small_family = || Term::func_type([(binder(918, "n"), nat_type())], Term::type_at(one()));
     let refused = |verdict: Result<Term, Error>| matches!(verdict, Err(Error::Mismatch { .. }));
 
     assert!(

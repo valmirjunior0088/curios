@@ -206,7 +206,12 @@ fn holding_itself(fam_type: &Term) -> Term {
     let bound = Free::local(3, Some("x"));
     let identity = Term::func([(bound, fam_type.clone())], Term::free_var(&bound));
 
-    Term::variant(fam(), Vec::<Term>::new(), "mk", [fam_type.clone(), identity])
+    Term::variant(
+        fam(),
+        Vec::<Term>::new(),
+        "mk",
+        [fam_type.clone(), identity],
+    )
 }
 
 /// Russell's paradox through a large inductive, the kernel's reading of the clash the elaborator refuses at `R: V = V/set(Regular, …)`. `V : Type 1 | set(A : Type 0, f : (A) -> V)` is a set of the values of any `Type 0`, a valid declaration since the payload fits below it; and `V/set(V, …)`, the set whose members are `V`s, hands `V` itself — a `Type 1` — to the `A : Type 0` field, which asks a type to sit strictly below itself. The declaration stands and the self-application is refused, where `curios`'s `tests::universes::hierarchy_tests` puts the paradox's own `R` to the elaborator.

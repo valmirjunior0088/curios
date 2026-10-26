@@ -740,9 +740,8 @@ fn a_difference_does_not_convert_with_its_operands_swapped() {
     let sum = |left: &Term, right: &Term| {
         Term::intrinsic(Intrinsic::nat_add(left.clone(), right.clone()))
     };
-    let difference = |left: &Term, right: &Term| {
-        Term::intrinsic(Intrinsic::NatSub(left.clone(), right.clone()))
-    };
+    let difference =
+        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::NatSub(left.clone(), right.clone()));
 
     assert_eq!(
         convert(&mut kernel, &nat_type(), &sum(&a, &b), &sum(&b, &a)),
@@ -898,9 +897,8 @@ fn a_conjunction_does_not_convert_with_the_disjunction_of_its_operands() {
     let and = |left: &Term, right: &Term| {
         Term::intrinsic(Intrinsic::BoolAnd(left.clone(), right.clone()))
     };
-    let or = |left: &Term, right: &Term| {
-        Term::intrinsic(Intrinsic::BoolOr(left.clone(), right.clone()))
-    };
+    let or =
+        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::BoolOr(left.clone(), right.clone()));
 
     assert_eq!(
         convert(&mut kernel, &bool_type, &and(&a, &b), &and(&b, &a)),
