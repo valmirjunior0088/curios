@@ -22,10 +22,10 @@ Discovery, the elaborator's way of finding a group's calls, is the one walk whos
 
 **Rationale.** These are where the two checkers' inputs differ — one reduces with metavariables and a refinement layer in reach, the other with neither and against a budget it must not exceed, and one keeps a `let` as a local definition where the other has substituted it away. Everything above them is one decision procedure, so no rule here has to know which checker is asking.
 
-### This is a crate because a build script's rebuild granularity is its dependency set
+### This is a crate so the elaborator reaches the rules and not the kernel
 
 **Decision.** The analyses are a crate of their own rather than part of `curios-cert`. The trusted base is unchanged by that: these rules admit terms, so they are inside it, and `cargo tree -p curios-cert -e normal` enumerates them.
 
-**Rationale.** Elaboration needs these analyses and not the kernel, and Cargo re-runs a build script whenever any of its dependencies changes, so in `curios-cert` they would make every crate whose build script reaches elaboration reach the kernel too, and every certifier edit would re-elaborate the fixed prelude's image. Split, a kernel edit does not invalidate elaboration. `curios-elab` taking `curios-cert` as a dev-dependency only is the other half of the same property, and `curios-unit` the third: `curios-prelude-archive`'s build script constructs a `Unit` without reaching the kernel at all.
+**Rationale.** Elaboration needs these analyses and not the kernel. In `curios-cert` they would make `curios-elab` depend on the kernel, and nothing but review would keep the elaborator from deciding by the kernel's own judgment, where the kernel's verdict is worth having as a second one ([An independent kernel re-checks what the elaborator accepts](../documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md)). Split, the crate graph holds it: this layer is what both checkers reach, and `curios-elab` takes `curios-cert` as a dev-dependency only, for the tests that put a fixture to both.
 
-**Rejected.** Narrowing what the prelude's build script depends on instead: the archive genuinely needs elaboration, so the only edge left to remove was the kernel's, which the split removes structurally.
+**Rejected.** The analyses inside `curios-cert` behind an interface offered to the elaborator alone: the elaborator would still depend on the kernel's crate, and what keeps it from the kernel's judgment would be a convention the graph does not hold.

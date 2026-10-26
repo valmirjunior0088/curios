@@ -32,9 +32,9 @@ index 1d112d84..ab77b38a 100644
 ";
 
 const STANDARD_BUMP: &str = "\
-diff --git a/curios-std/src/curios.toml b/curios-std/src/curios.toml
---- a/curios-std/src/curios.toml
-+++ b/curios-std/src/curios.toml
+diff --git a/curios-prelude/std/curios.toml b/curios-prelude/std/curios.toml
+--- a/curios-prelude/std/curios.toml
++++ b/curios-prelude/std/curios.toml
 @@ -1,3 +1,3 @@
  name = \"std\"
 -compiler = \"0.14.5\"
@@ -42,7 +42,7 @@ diff --git a/curios-std/src/curios.toml b/curios-std/src/curios.toml
  description = \"The standard library\"
 ";
 
-const NAMES: &str = "Cargo.lock\nCargo.toml\ncurios-std/src/curios.toml\n";
+const NAMES: &str = "Cargo.lock\nCargo.toml\ncurios-prelude/std/curios.toml\n";
 
 fn version(major: u64, minor: u64, patch: u64) -> Version {
     Version {

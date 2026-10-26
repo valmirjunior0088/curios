@@ -1,4 +1,4 @@
--- `/std/Char`'s reading of the Unicode Character Database the toolchain pins, and `/std/Str`'s extended grapheme clusters over it. Every conformance case and every run's edges are held by `curios-std`'s Rust tests; these are the cases a reader checks by eye.
+-- `/std/Char`'s reading of the Unicode Character Database the toolchain pins, and `/std/Str`'s extended grapheme clusters over it. Every conformance case and every run's edges are held by `curios-prelude`'s Rust tests; these are the cases a reader checks by eye.
 use /std/{Bool, Str, Char, Option, Test};
 use /std/Char/{GraphemeBreak, IndicConjunctBreak, EastAsianWidth};
 

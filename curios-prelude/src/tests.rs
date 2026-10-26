@@ -1,10 +1,9 @@
 //! What the sources this crate elaborates must be true of, beyond elaborating.
 
 use {
-    crate::with_prelude,
+    crate::{std_directory, std_source, with_prelude},
     curios_abi::HostOp,
     curios_core::{Bound, DefinitionKind, Global, Nominal, Term, intrinsic_former},
-    curios_std::{std_directory, std_source},
     curios_text::{
         GroupItem, Module, SYNTAX, TopItem, UseGroup, prepare_prelude, sys_module, sys_source,
     },
@@ -15,7 +14,7 @@ use {
     },
 };
 
-/// Every `.crs` file `/std` is authored in, in the one tree `curios-std` holds, its modules of tests among them.
+/// Every `.crs` file `/std` is authored in, in the one tree this crate holds, its modules of tests among them.
 ///
 /// Walked rather than listed, for the reason the build script discovers its inputs rather than naming them: a module added without being registered is a mistake `the_std_record_names_every_authored_source_and_no_other` catches against this walk.
 pub(crate) fn authored() -> Vec<PathBuf> {
@@ -95,7 +94,7 @@ fn the_library_declares_every_row_a_host_answers() {
     });
 }
 
-/// The roots of `/std` that may spell each part of `/sys`: the one statement of who reads it. `curios-std/README.md`'s "`/std` is laid out by purity, subject and kind" gives the rule: a carrier is read by its own root, a wire code set by the root owning the rows it travels on, and the status every row answers by `internal`, which decodes it once. Every other module reaches `/sys` through these.
+/// The roots of `/std` that may spell each part of `/sys`: the one statement of who reads it. `curios-prelude/README.md`'s "`/std` is laid out by purity, subject and kind" gives the rule: a carrier is read by its own root, a wire code set by the root owning the rows it travels on, and the status every row answers by `internal`, which decodes it once. Every other module reaches `/sys` through these.
 const SYS_READERS: &[(&str, &[&str])] = &[
     ("Bool", &["Bool"]),
     ("Byte", &["Byte"]),

@@ -15,7 +15,7 @@ It needs that decision to hold, [A compile costs what it reads](../../design/com
 
 ## The gap
 
-**Nothing the compiler holds can cross a thread.** `Term` is an `Rc<Node>` whose caches are `Cell`s and `OnceCell`s; the surface trees are `Rc`-shared. `thread_local!` tables sit under that: the restored prelude (`curios-prelude-archive/src/restore.rs`, restored again by every thread that compiles), the packrat memo, the comment table, the formatter's owed comments, and the shared empty free-variable set.
+**Nothing the compiler holds can cross a thread.** `Term` is an `Rc<Node>` whose caches are `Cell`s and `OnceCell`s; the surface trees are `Rc`-shared. `thread_local!` tables sit under that: the restored prelude (`curios-prelude/src/restore.rs`, restored again by every thread that compiles), the packrat memo, the comment table, the formatter's owed comments, and the shared empty free-variable set.
 
 ## Readiness
 
@@ -51,14 +51,14 @@ Each lands alone, on its own check.
 ## Verification
 
 - At every stage, every verdict over `/std` and the corpus in `programs/` is compared with the compiler before the stage; a difference is a finding, never a fixture update.
-- **The graph model.** The nodes are `/std`'s declarations, an item with the items generated from it, and an edge is a name `Module::reaches` gives for an item of one, declared by another, over the restored prelude's module. A declaration's weight is the allocations its `declaration` span made in `curios-prelude-archive`'s build under `profile`. The protocol records the commit, grouping of generated items, edge extraction, weights, source-order tie breaking and critical path. Modeled throughput on n workers is summed weight divided by the finishing time of a list schedule that hands the lowest-positioned ready item to a free worker. Counted; no modeled factor is an elapsed-time speedup. An optional signature-split model additionally states which signatures can publish early, separate non-overlapping signature and body weights whose sum accounts for the declaration's work, and each task's dependencies. Compare both models at equal total work, explain any worse split schedule and distinguish list-schedule effects from a change in critical path before reporting a factor.
+- **The graph model.** The nodes are `/std`'s declarations, an item with the items generated from it, and an edge is a name `Module::reaches` gives for an item of one, declared by another, over the restored prelude's module. A declaration's weight is the allocations its `declaration` span made in `curios-prelude`'s build under `profile`. The protocol records the commit, grouping of generated items, edge extraction, weights, source-order tie breaking and critical path. Modeled throughput on n workers is summed weight divided by the finishing time of a list schedule that hands the lowest-positioned ready item to a free worker. Counted; no modeled factor is an elapsed-time speedup. An optional signature-split model additionally states which signatures can publish early, separate non-overlapping signature and body weights whose sum accounts for the declaration's work, and each task's dependencies. Compare both models at equal total work, explain any worse split schedule and distinguish list-schedule effects from a change in critical path before reporting a factor.
 - The differential compiles `/std` and the corpus with one worker and with many, with cold and warm stores and under schedules varied by injected delays, and requires identical stored units, diagnostics and emitted bytes. Incremental edits and missing dependencies exercise retries and publication as well as successful full compiles.
 - A genuine cycle between two items is reported with the same text under one worker and many.
 - Each stage reports the time and peak memory it moved, named by the stage; the executor is compared with both the unchanged serial compiler and the one-worker shareable representation, so representation overhead and scheduling benefit remain separate.
 
 ## Design decisions this overturns or corrects
 
-- [`curios-prelude-archive`'s README](../../../curios-prelude-archive/README.md): the images are restored once per process.
+- [`curios-prelude`'s README](../../../curios-prelude/README.md#a-root-is-imaged-as-a-certified-unit): the images are restored once per process.
 - `curios-wonder/src/server.rs`: its module documentation's *single-threaded by construction*.
 - `curios-pipeline`: `Progress`'s *sequential by construction*.
 - `curios-core/src/term/frees.rs`: the comment justifying a per-thread table by `Rc`.

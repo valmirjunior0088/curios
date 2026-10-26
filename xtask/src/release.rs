@@ -15,7 +15,7 @@ use {
 #[cfg(test)]
 mod tests;
 
-const STANDARD_MANIFEST: &str = "curios-std/src/curios.toml";
+const STANDARD_MANIFEST: &str = "curios-prelude/std/curios.toml";
 
 /// A release version, as every tag in this repository's history spells one: three numbers and nothing else.
 ///

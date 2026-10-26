@@ -4,7 +4,7 @@
 
 ## What is missing
 
-- **Case is ASCII's alone.** `Char/to_ascii_lower` and `Char/to_ascii_upper` (`curios-std/src/Char.crs`) change `A`–`Z` and `a`–`z` and leave every other character, and nothing in `Char` or `Str` maps, folds or compares the case of any other: `é` has no uppercase in `/std`, and `Straße` and `STRASSE` are no caseless match.
+- **Case is ASCII's alone.** `Char/to_ascii_lower` and `Char/to_ascii_upper` (`curios-prelude/std/Char.crs`) change `A`–`Z` and `a`–`z` and leave every other character, and nothing in `Char` or `Str` maps, folds or compares the case of any other: `é` has no uppercase in `/std`, and `Straße` and `STRASSE` are no caseless match.
 - **The case predicates are ASCII's alone.** `Char/is_ascii_lower`, `is_ascii_upper`, `is_ascii_alpha` and `is_ascii_alphanumeric` test `a`–`z`, `A`–`Z` and the digits, and no predicate reads what the database states of case.
 - **The database the toolchain pins holds no mapping.** `curios-unicode` reads five files of Unicode 18.0.0 — `EastAsianWidth.txt`, `emoji/emoji-data.txt`, `auxiliary/GraphemeBreakProperty.txt`, `DerivedCoreProperties.txt` and `auxiliary/GraphemeBreakTest.txt` — and keeps of `DerivedCoreProperties.txt` only `InCB` and `Default_Ignorable_Code_Point`, though the same file states `Lowercase`, `Uppercase` and `Alphabetic`. The mappings are in files it does not read: `UnicodeData.txt` (the simple ones), `SpecialCasing.txt` (the full and the conditional ones) and `CaseFolding.txt`.
 

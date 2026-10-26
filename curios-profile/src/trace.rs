@@ -87,7 +87,7 @@ type Callsite = u32;
 
 /// A span id carries its callsite in its high bits, so [`Subscriber::enter`] — which is handed an id and nothing else — can name the span without this subscriber storing anything per span.
 ///
-/// The sequence is masked into the low bits and starts at one, so no id is ever zero, which `tracing` forbids. Wrapping would need 2^40 spans in one capture; the prelude's elaboration emits about three million (counted at `374325495`: the `S` rows of the stream `cargo xtask profile-prelude elaboration <PATH>` files).
+/// The sequence is masked into the low bits and starts at one, so no id is ever zero, which `tracing` forbids. Wrapping would need 2^40 spans in one capture; the prelude's elaboration emits about three million (counted at `374325495`: the `S` rows its elaboration adds to the stream `cargo xtask profile-prelude <PATH>` files).
 fn pack(callsite: Callsite, sequence: u64) -> u64 {
     ((callsite as u64) << SEQUENCE_BITS) | (sequence & SEQUENCE_MASK).max(1)
 }

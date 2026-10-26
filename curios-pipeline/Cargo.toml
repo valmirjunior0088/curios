@@ -48,8 +48,6 @@ curios-elab = { workspace = true, features = ["test-support"] }
 curios-erase = { workspace = true, features = ["test-support"] }
 # The structural digest of a module, which the erasure suite compares across two compilations. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-anf = { workspace = true, features = ["test-support"] }
-# Where the standard library is authored, for the suites that compile it from its tree.
-curios-std = { workspace = true }
 # The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-utilities = { workspace = true, features = ["test-support"] }
 # The bytes a unit is stored as, which a suite compares across two compilations of it.

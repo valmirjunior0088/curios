@@ -722,7 +722,7 @@ const RENDER_FLOOR: u64 = 5_000;
 
 /// How many child documents a render may build for each distinct node of its term. A term is a graph and its print is that graph's tree, so a render is allowed its graph this many times over and elides past that: a term that shares little prints whole, and one whose tree outgrows its graph by more — a chain of `let`s each naming the one before it twice — prints its beginning.
 ///
-/// Set above the largest ratio of tree to graph a definition of the standard library has (`curios-prelude-archive`'s `printed_tree_measurements`), so nothing a reader was shown before is elided.
+/// Set above the largest ratio of tree to graph a definition of the standard library has (`curios-prelude`'s `printed_tree_measurements`), so nothing a reader was shown before is elided.
 const RENDER_PER_NODE: u64 = 64;
 
 /// What an elided subterm prints as: no token of the language, so no reader takes an elided print for the term.

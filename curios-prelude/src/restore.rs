@@ -1,11 +1,10 @@
-//! One-time validation and per-thread restoration of the generated images: two units, `/sys` then `/std`, each framed by the build script as a store slot frames one — a record of what the root was compiled from, ahead of the index of the [`Uncertified`] unit, since no certifier has walked it yet — beside one pack of the objects the index names, as a store keeps them beside a slot.
+//! One-time validation and per-thread restoration of the generated images: two units, `/sys` then `/std`, each framed by the build script as a store slot frames one — a record of what the root was compiled from, ahead of the index of the certified [`Unit`] — beside one pack of the objects the index names, as a store keeps them beside a slot.
 
 use {
-    curios_archive::Bytes,
+    curios_archive::{Bytes, parted},
     curios_document::Documentation,
     curios_unit::{
-        ArchivedRecord, ArchivedUncertified, Pack, Record, Stored, Uncertified, apart_parts,
-        halves, segments,
+        ArchivedRecord, ArchivedUnit, Pack, Record, Unit, apart_parts, halves, segments,
     },
     std::{cell::LazyCell, sync::OnceLock},
 };
@@ -31,7 +30,7 @@ const ROOTS: [(&str, &[u8], &[u8]); 2] =
 type Validated = Result<
     (
         &'static ArchivedRecord,
-        &'static ArchivedUncertified,
+        &'static ArchivedUnit,
         &'static [u8],
         &'static [u8],
     ),
@@ -41,9 +40,9 @@ type Validated = Result<
 static ARCHIVES: OnceLock<[Validated; 2]> = OnceLock::new();
 
 thread_local! {
-    /// The reusable, restored fixed prelude: each root's unit, uncertified, in dependency order. Held behind [`with_prelude`] so callers cannot mutate compiler-global state between invocations.
-    static PRELUDE: LazyCell<[Uncertified; 2]> =
-        LazyCell::new(|| restore_archives().map(|stored| stored.unit));
+    /// The reusable, restored fixed prelude: each root's certified unit, in dependency order. Held behind [`with_prelude`] so callers cannot mutate compiler-global state between invocations.
+    static PRELUDE: LazyCell<[Unit; 2]> =
+        LazyCell::new(|| restore_archives().map(|(_, unit)| unit));
 }
 
 fn validate_archives() -> [Validated; 2] {
@@ -61,14 +60,18 @@ fn validate_bytes(root: &str, bytes: &'static [u8], pack: &'static [u8]) -> Vali
         segments(bytes).ok_or_else(|| format!("invalid archived /{root}: not a stored unit"))?;
     let (unit, apart) = halves(artifact)
         .ok_or_else(|| format!("invalid archived /{root}: not a unit's artifact"))?;
-    // Read lazily, so its layout is confirmed here: an image cut short anywhere is refused where it is opened.
-    apart_parts(&Bytes::from(apart))
-        .ok_or_else(|| format!("invalid archived /{root}: not what a unit stores apart"))?;
+    // Read lazily, so its layout is confirmed here: an image cut short anywhere is refused where it is opened. What the unit stores apart from itself comes first, then what the certifier's record does.
+    parted(&Bytes::from(apart))
+        .filter(|parts| parts.len() == 3)
+        .and_then(|parts| apart_parts(&parts[0]))
+        .ok_or_else(|| {
+            format!("invalid archived /{root}: not what a certified unit stores apart")
+        })?;
     Pack::read(Bytes::from(pack))
         .ok_or_else(|| format!("invalid archived /{root}: its objects are no pack"))?;
     let record = curios_archive::access::<ArchivedRecord>(record)
         .map_err(|error| format!("invalid archived /{root} record: {error}"))?;
-    let unit = curios_archive::access::<ArchivedUncertified>(unit)
+    let unit = curios_archive::access::<ArchivedUnit>(unit)
         .map_err(|error| format!("invalid archived /{root}: {error}"))?;
 
     Ok((record, unit, apart, pack))
@@ -78,12 +81,10 @@ fn archived() -> &'static [Validated; 2] {
     ARCHIVES.get_or_init(validate_archives)
 }
 
-/// Deserialize the validated images.
+/// Deserialize the validated images: each root's record beside its unit.
 ///
-/// The universe invariants are *not* re-checked here. They are asserted once by `build.rs`, on the values it is about to serialize, and these bytes are exactly the bytes written from those values — constants of the same build, whose structure `validate_bytes` confirms. Walking the whole standard library again per compilation would re-derive an answer already settled.
-///
-/// Public for `curios-prelude`, which restores its own copy to certify each unit with the record its build's certification filed — a record this crate cannot make, since it sits below the certifier. [`with_prelude`] here lends the units uncertified, as this crate's build left them, which only that certification itself should want.
-pub fn restore_archives() -> [Stored; 2] {
+/// The universe invariants are *not* re-checked here, nor is anything certified again. Both are settled once by the build, on the values it is about to serialize, and these bytes are exactly the bytes written from those values — constants of the same build, whose structure `validate_bytes` confirms. Walking the whole standard library again per compilation would re-derive an answer already settled.
+fn restore_archives() -> [(Record, Unit); 2] {
     curios_profile::profile!("restore_archives");
     let mut units = archived()
         .iter()
@@ -96,20 +97,20 @@ pub fn restore_archives() -> [Stored; 2] {
             let pack =
                 Pack::read(Bytes::from(pack)).expect("a validated image's objects are a pack");
 
-            Stored {
-                record: curios_archive::deserialize::<Record>(record).unwrap_or_else(|error| {
+            (
+                curios_archive::deserialize::<Record>(record).unwrap_or_else(|error| {
                     panic!("validated archived /{root} record failed to restore: {error}")
                 }),
                 // What the unit stores apart from itself, and each object it names, stays the slice of the executable it is: a compilation reads a lowered item where it names its declaration, and the baseline half where it lowers over this root.
-                unit: curios_archive::deserialize::<Uncertified>(unit)
+                curios_archive::deserialize::<Unit>(unit)
                     .unwrap_or_else(|error| {
                         panic!("validated archived /{root} failed to restore: {error}")
                     })
-                    .with_apart(apart, &|digest| pack.get(digest))
+                    .with_apart(Bytes::from(apart), &|digest| pack.get(digest))
                     .unwrap_or_else(|error| {
                         panic!("archived /{root} holds nothing stored apart: {error}")
                     }),
-            }
+            )
         });
 
     [
@@ -118,17 +119,19 @@ pub fn restore_archives() -> [Stored; 2] {
     ]
 }
 
-/// The documentation record of each root, `/sys`'s then `/std`'s, restored for the caller: what a command that documents reads, and no compilation.
+/// The documentation record of each of the prelude's roots, in the fold's order: what `document --std` renders, and what a unit adopting a root's declarations reads them out of.
 ///
-/// Restored on each call and kept by nothing here, since a process documents once. Public for `curios-prelude`, which hands the records out beside the prelude it certifies.
-pub fn restore_documentation() -> Vec<Documentation> {
+/// Apart from [`with_prelude`], because no unit carries a record: a compilation restores none, and a command that documents restores these and no unit for them. Restored on each call and kept by nothing here, since a process documents once.
+pub fn documentation() -> Vec<Documentation> {
     curios_profile::profile!("restore_documentation");
     curios_archive::from_bytes::<Vec<Documentation>>(DOCUMENTATION_BYTES)
         .unwrap_or_else(|error| panic!("the prelude's documentation failed to restore: {error}"))
 }
 
-/// Borrow this thread's reusable restored prelude, uncertified, in dependency order — for the walk that certifies it and for this crate's own tests. A compilation borrows the certified prelude `curios-prelude` lends instead.
-pub fn with_prelude<R>(use_prelude: impl FnOnce(&[&Uncertified]) -> R) -> R {
+/// Borrow this thread's restored prelude, certified, as the ordered predecessors every compilation starts from — `/sys` then `/std`, each unit carrying the certifier's record of its definitions.
+///
+/// A slice rather than one unit, and in dependency order rather than any: what `Predecessors::over` takes is exactly this, so a product puts the whole prelude in scope by handing it along instead of deciding how its roots compose.
+pub fn with_prelude<R>(use_prelude: impl FnOnce(&[&Unit]) -> R) -> R {
     curios_profile::profile!("with_prelude");
     PRELUDE.with(|prelude| {
         let [sys, std] = &**prelude;

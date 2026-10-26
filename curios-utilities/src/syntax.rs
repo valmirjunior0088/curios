@@ -2,7 +2,7 @@
 //!
 //! Every enumeration below opens by destructuring the struct it enumerates: a pattern naming fewer fields than the struct has does not compile, so a slot added to a group is a compile error until it is enumerated — exactly as it is a compile error at every fill site until it is filled.
 //!
-//! The registry is *shape only*: it names slots, never spellings. `curios-prelude-archive` fills them, and the two stages that emit those names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. Why the shape lives below both consumers, and why every enumeration destructures, are `README.md`'s decisions.
+//! The registry is *shape only*: it names slots, never spellings. `curios-text` fills them (`registry.rs`), and the two stages that emit those names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. Why the shape lives below both consumers, and why every enumeration destructures, are `README.md`'s decisions.
 
 use crate::{InfixOp, Qualifier};
 

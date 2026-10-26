@@ -1,6 +1,6 @@
 //! The evaluation memos: what a term weak-head reduces to, what classifying a stuck operation found, the sort a type inhabits, the type inferred for a term, the type a term was checked at and whether two terms converted — each for the rest of the declaration where it is a function of the declaration alone, and otherwise for as long as what it read of the scope stands.
 //!
-//! This is not the kind of store the [`kernel`](super) module documentation warns about. A metavariable heap or a refinement layer *injects* answers a term alone could not produce; a memo replays the kernel's own pure function of `(term, definitions)`, computed once. Refusing even that multiplies the cost of a whole-prelude re-check, spent re-deriving the same prelude spines for every recursive group the totality gate walks; `curios-prelude-archive`'s `kernel_memo_parity` runs that walk both ways.
+//! This is not the kind of store the [`kernel`](super) module documentation warns about. A metavariable heap or a refinement layer *injects* answers a term alone could not produce; a memo replays the kernel's own pure function of `(term, definitions)`, computed once. Refusing even that multiplies the cost of a whole-prelude re-check, spent re-deriving the same prelude spines for every recursive group the totality gate walks; `curios-prelude`'s `kernel_memo_parity` runs that walk both ways.
 //!
 //! Five invariants make it an evaluation strategy rather than a second source of truth, and all five live here.
 //!

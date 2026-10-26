@@ -23,7 +23,7 @@ curios-algebra = { workspace = true }
 curios-core = { workspace = true }
 curios-num = { workspace = true }
 
-# The kernel is a *dev*-dependency, and that is the point of the split rather than an accident of it: the tests here that put a fixture to both checkers name it, and a dev-dependency does not propagate — so nothing whose build script reaches elaboration reaches `curios-cert` through it. See `curios-prelude-archive/README.md`, "This is not `curios-prelude`, and it never reaches the kernel".
+# The kernel is a *dev*-dependency, and that is the point rather than an accident: the tests here that put a fixture to both checkers name it, and outside tests neither checker depends on the other, so the kernel's opinion is a second one. See `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`.
 [dev-dependencies]
 # `declaring`, by which a fixture's module declares the entries it names: each carried by the definition of its name, or by the former it spells.
 curios-core = { workspace = true, features = ["test-support"] }

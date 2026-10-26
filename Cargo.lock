@@ -582,8 +582,8 @@ dependencies = [
  "curios-num",
  "curios-package",
  "curios-pipeline",
+ "curios-prelude",
  "curios-profile",
- "curios-std",
  "curios-text",
  "curios-utilities",
  "curios-verdicts",
@@ -845,7 +845,6 @@ dependencies = [
  "curios-erase",
  "curios-prelude",
  "curios-profile",
- "curios-std",
  "curios-text",
  "curios-unit",
  "curios-utilities",
@@ -856,35 +855,23 @@ dependencies = [
 name = "curios-prelude"
 version = "0.16.16"
 dependencies = [
- "curios-archive",
- "curios-cert",
- "curios-core",
- "curios-document",
- "curios-elab",
- "curios-prelude-archive",
- "curios-profile",
- "curios-text",
- "curios-unit",
-]
-
-[[package]]
-name = "curios-prelude-archive"
-version = "0.16.16"
-dependencies = [
+ "curios",
  "curios-abi",
- "curios-anf",
  "curios-archive",
  "curios-cert",
  "curios-core",
  "curios-document",
  "curios-elab",
  "curios-erase",
+ "curios-native",
  "curios-package",
+ "curios-pipeline",
  "curios-profile",
- "curios-std",
  "curios-text",
+ "curios-unicode",
  "curios-unit",
  "curios-utilities",
+ "curios-verdicts",
 ]
 
 [[package]]
@@ -898,20 +885,6 @@ dependencies = [
  "curios-utilities",
  "libc",
  "tracing",
-]
-
-[[package]]
-name = "curios-std"
-version = "0.16.16"
-dependencies = [
- "curios",
- "curios-native",
- "curios-package",
- "curios-pipeline",
- "curios-text",
- "curios-unicode",
- "curios-utilities",
- "curios-verdicts",
 ]
 
 [[package]]

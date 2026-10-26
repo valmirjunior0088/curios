@@ -1,24 +1,38 @@
-//! The certifying half of the fixed prelude's build, as Cargo runs it.
+//! The fixed prelude's build, as Cargo runs it: the work is `compile.rs`'s, filed where the library that embeds the images reads them.
 //!
-//! `curios-prelude-archive` produced one image per root. `certify.rs` restores them, walks every item with the independent kernel, each root against the roots before it, and panics on the first refusal — so this crate compiles only if the kernel accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
-//!
-//! The compiled crate is the verdict. What the script files is the one thing a later walk reads of it: the certifier's record of each root's definitions — each one's totality and what judging it read — at `certification.rkyv` under `OUT_DIR`, with which the crate certifies the units it restores.
+//! The compiled crate is the verdict: the build panics on the first refusal of any stage, the kernel's among them, so the crate compiles only if the kernel accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
 
-mod certify;
+mod compile;
+use compile::*;
+
+// The library's module too, which a build script cannot reach as a dependency of its own package.
+#[path = "src/library.rs"]
+mod library;
+use library::*;
 
 use {
-    certify::certify,
+    curios_package::MANIFEST,
     std::{env, path::PathBuf},
 };
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=certify.rs");
+    println!("cargo:rerun-if-changed=compile.rs");
+    println!("cargo:rerun-if-changed=src/library.rs");
 
-    // Under `OUT_DIR`, as the images are, since the crate is the one reader of what is filed.
+    // Filed under `OUT_DIR`, where Cargo keeps a build script's outputs, because the library that includes them is their one reader: nothing outside the build opens an image.
     let out = PathBuf::from(
         env::var_os("OUT_DIR").expect("Cargo runs a build script with `OUT_DIR` set"),
     );
 
-    certify(&out);
+    // Each file the lowering read, rather than the directory: the read set is closed — a module joins `/std` only through a `mod` in a header that is itself a read, so the edit that adds a file changes a file already watched, and the rerun then records the new one. Watching the directory would also rerun this build for anything else written under it, and a question asked about a `/std` module writes its store's memo there.
+    for path in compile(&out) {
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+
+    // The library's manifest is read beside its files, as a package's is: what it names, describes and says its modules answer is part of what the unit is made from.
+    println!(
+        "cargo:rerun-if-changed={}",
+        std_directory().join(MANIFEST).display()
+    );
 }

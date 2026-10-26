@@ -1,4 +1,4 @@
-//! The prelude's first root as a source: `/sys`, synthesized from the host table and the intrinsic roster. What `curios-prelude-archive`'s build script lowers into the archive ahead of `/std`, which is `curios-std`'s.
+//! The prelude's first root as a source: `/sys`, synthesized from the host table and the intrinsic roster. What `curios-prelude`'s build script lowers into the prelude ahead of `/std`, which that crate holds as authored.
 
 use {
     crate::{RootSource, SYNTAX, sys_module},

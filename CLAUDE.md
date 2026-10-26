@@ -19,14 +19,14 @@ A claim about what a Curios program means is a hypothesis until this tree's comp
 - `wonder diagnostics -` reports every error and goal as `run` would. It stops at the first failure, so iterate.
 - `?` is the type oracle: `let y: ? = e` reports `e`'s type; a bare `?` reports the scope, the expected type, what blocks it and candidate fits.
 - `wonder stage <rung> -` reprints the program at one pipeline rung, `text` through `wasm-optm`.
-- A file is analysed in the unit whose `mod` lines reach it. A file under `curios-std/src/` compiles as the package `std` over the archived prelude, so a question costs the closure of the edit; its tests are each subject's private `tests` module, run by `curios test` in `curios-std/src`, and `--filter /std/<Subject>/tests` narrows a run to one.
+- A file is analysed in the unit whose `mod` lines reach it. A file under `curios-prelude/std/` compiles as the package `std` over the archived prelude, so a question costs the closure of the edit; its tests are each subject's private `tests` module, run by `curios test` in `curios-prelude/std`, and `--filter /std/<Subject>/tests` narrows a run to one.
 
-Every other fact is on disk: `documentation/syntax.md` for the surface language, `curios-std/src/` for idiom and signatures, `.curios/sources/` for dependencies.
+Every other fact is on disk: `documentation/syntax.md` for the surface language, `curios-prelude/std/` for idiom and signatures, `.curios/sources/` for dependencies.
 
 ## Build and check
 
 - `cargo xtask <subject> [action]` runs every build step, each stated once in `xtask/src/steps.rs`: a bare subject runs everything about it, and `--help` lists the subjects and each one's actions. `cargo xtask launcher build` builds the launcher the compiler embeds, once per checkout.
-- Between the steps of a larger effort, and as the whole check for a focused change: `cargo xtask workspace lint` and `cargo xtask workspace format`, plus the change's own tests by name. The lint already elaborates, erases and certifies all of `/std`, so a Text, Core, ANF or certifier change needs nothing more; a change to `curios-cps`, `curios-emit` or `curios-wasm` adds the corpus tests that reach it, `curios-std`'s. No `cargo check`, and no retaking of measurements — name any figure the change may have moved. While a check runs, draft the next step in a scratchpad mirror, not in the tree.
+- Between the steps of a larger effort, and as the whole check for a focused change: `cargo xtask workspace lint` and `cargo xtask workspace format`, plus the change's own tests by name. The lint already elaborates, erases and certifies all of `/std`, so a Text, Core, ANF or certifier change needs nothing more; a change to `curios-cps`, `curios-emit` or `curios-wasm` adds the corpus tests that reach it, `curios-prelude`'s. No `cargo check`, and no retaking of measurements — name any figure the change may have moved. While a check runs, draft the next step in a scratchpad mirror, not in the tree.
 - Run a long command as a tracked background task writing `cmd > log 2>&1; echo "EXIT=$?" >> log`, and read the exit code from the log. Never detach one with `&` or add a shell that waits on it.
 - Keep the feature set constant within a session: every feature builds a second prelude archive, and the two evict each other. `cargo xtask instrumented lint` and `docs build` are the steps that build with every feature.
 

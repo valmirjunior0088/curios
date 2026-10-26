@@ -18,14 +18,13 @@ Nothing waits for the end: each row is on disk before the step after it runs, so
 awk -F'\t' '$1 == "V"' curios/.artifacts/profile.tsv
 ```
 
-The prelude is built by two build scripts, the compiler run over the standard library, and a build script takes no flag, so neither records. Each half's work is a module its script shares with a program standing beside it, which runs the work again under the recorder and files the stream where it is told. `cargo xtask profile-prelude` runs one, and prints the fold of what it filed:
+The prelude is built by a build script, the compiler run over the standard library, and a build script takes no flag, so it records nothing. Its work is a module it shares with a program standing beside it, which runs the work again under the recorder and files the stream where it is told. `cargo xtask profile-prelude` runs it, and prints the fold of what it filed:
 
 ```sh
-cargo xtask profile-prelude elaboration /tmp/elaboration.tsv
-cargo xtask profile-prelude certification /tmp/certification.tsv
+cargo xtask profile-prelude /tmp/prelude.tsv
 ```
 
-The elaboration is `curios-prelude-archive`'s `profile-elaboration`, and the certification `curios-prelude`'s `profile-certification`, over the images the build made.
+The program is `curios-prelude`'s `profile-prelude`, and its stream holds each root's elaboration, certification and erasure.
 
 ## Design
 

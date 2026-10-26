@@ -1,12 +1,11 @@
 //! The stored unit: a record of what a unit was compiled from, framed ahead of the unit in one file.
 //!
-//! Two producers write this format and neither may depend on the other. The store files a [`Unit`](crate::Unit) this way under a slot, from `curios-verdicts` above the pipeline; the fixed prelude is imaged this way by `curios-prelude-archive`'s build script, which sits below every store and below the certifier, so what its images hold is an [`Uncertified`] unit. So the format is stated once, here, below both: what a record holds, how it is framed ahead of the artifact, and how the two are read back apart. What *verifies* a record — whether the files it names still hold their text, whether the units it names still contain what they did — is the store's business and stays there. This crate says what a record is, never whether one may be believed.
+//! Two producers write this format, and one sits below the other. The store files a [`Unit`](crate::Unit) this way under a slot, from `curios-verdicts` above the pipeline, and the fixed prelude's build images each of its roots this way ([`Unit::imaged`](crate::Unit::imaged)), from `curios-prelude`, below the pipeline and so below every store. So the format is stated once, here, below both: what a record holds, how it is framed ahead of the artifact, and how the two are read back apart. What *verifies* a record — whether the files it names still hold their text, whether the units it names still contain what they did — is the store's business and stays there. This crate says what a record is, never whether one may be believed.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::Uncertified,
     curios_archive::{Bytes, parted},
     curios_utilities::{Digest, Object, Source, digest},
     std::{
@@ -46,14 +45,6 @@ impl Record {
             unit,
         }
     }
-}
-
-/// A prelude image restored: the record beside the uncertified unit it vouches for.
-///
-/// Two values rather than one, because they are consumed apart: the unit is what `curios-prelude` certifies and a compilation is folded over, and the record is what the image's own tests hold to the tree it was built from.
-pub struct Stored {
-    pub record: Record,
-    pub unit: Uncertified,
 }
 
 /// A read log as a record spells it: each file by canonical path, with the digest of the text that was parsed from it.
@@ -133,7 +124,7 @@ pub fn segments(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
 ///
 /// **Two halves by reader, in the one segment a record vouches for.** A slot's record digests its artifact, so both halves are believed together, and a slot stays one file replaced by one rename. What differs is who decodes which: opening a unit decodes the first and keeps the second as bytes.
 ///
-/// What a unit stores apart is a part for each reader, every one behind its length ([`Uncertified::stored`], [`apart_parts`]): the digests of its lowered items, its erased forms and its elaborated items, each an object of the store, found where the unit is restored and read by whoever names its declaration or links it; where its declarations lie, read by a report placed in one of them; then what only a later compile of the same unit or a command about it reads: its import scopes, and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
+/// What a unit stores apart is a part for each reader, every one behind its length ([`Unit::stored`](crate::Unit::stored), [`apart_parts`]): the digests of its lowered items, its erased forms and its elaborated items, each an object of the store, found where the unit is restored and read by whoever names its declaration or links it; where its declarations lie, read by a report placed in one of them; then what only a later compile of the same unit or a command about it reads: its import scopes, and its baseline half, a part for each stage that keeps a record, the text's, the elaborator's and erasure's.
 pub fn halved(unit: &[u8], baseline: &[u8]) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(8 + unit.len() + baseline.len());
     bytes.extend_from_slice(&(unit.len() as u64).to_le_bytes());
@@ -151,7 +142,7 @@ pub fn halves(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
     (length <= rest.len()).then(|| rest.split_at(length))
 }
 
-/// The thirteen parts of what a unit stores apart from itself ([`Uncertified::stored`]), each a run of the buffer `stored` is in: the digests of its lowered items, of its erased forms, of its elaborated items, of what each declaration asked as it elaborated, of what erasing each item asked, of the lowering's records and scans, of its import scopes and of each source's texts (`digests`), where its declarations lie, which a report reads, then what only a compile of the same unit or a command about it reads: its import scopes, the text's part of its baseline half, and the rest of the elaborator's and erasure's. `None` for bytes that are no such layout, one cut short among them: every part states its length, and together they are the bytes.
+/// The thirteen parts of what a unit stores apart from itself ([`Unit::stored`](crate::Unit::stored)), each a run of the buffer `stored` is in: the digests of its lowered items, of its erased forms, of its elaborated items, of what each declaration asked as it elaborated, of what erasing each item asked, of the lowering's records and scans, of its import scopes and of each source's texts (`digests`), where its declarations lie, which a report reads, then what only a compile of the same unit or a command about it reads: its import scopes, the text's part of its baseline half, and the rest of the elaborator's and erasure's. `None` for bytes that are no such layout, one cut short among them: every part states its length, and together they are the bytes.
 pub fn apart_parts(stored: &Bytes) -> Option<[Bytes; 13]> {
     parted(stored)?.try_into().ok()
 }

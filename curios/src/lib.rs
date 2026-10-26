@@ -2,7 +2,7 @@
 //!
 //! Compiling is not here. `curios_pipeline::compile_with_prelude` and its siblings put the fixed prelude in front of the fold, next to the fold they configure; this crate takes the `curios_wasm::Module` that comes out and is indifferent to where it came from.
 //!
-//! **What `curios test` compiles and runs is here too** (`testing`), with what answers a program's `foreign` rows (`link`), so a caller running a package's tests in process — `curios-std`'s own suite — goes through the pipeline the command line does, and the binary keeps only what it shows.
+//! **What `curios test` compiles and runs is here too** (`testing`), with what answers a program's `foreign` rows (`link`), so a caller running a package's tests in process — `curios-prelude`'s own suite — goes through the pipeline the command line does, and the binary keeps only what it shows.
 
 mod compile;
 pub use compile::*;

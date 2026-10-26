@@ -3,7 +3,7 @@ name = "curios-prelude"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Curios's fixed prelude, certified by the independent kernel as a condition of this crate building"
+description = "Curios's fixed prelude: /std as authored, and the build that elaborates, certifies and erases it with /sys into the certified units every compilation starts from"
 build = "build.rs"
 
 [lints]
@@ -11,45 +11,62 @@ workspace = true
 
 [features]
 profile = [
-    "curios-prelude-archive/profile",
-    "curios-cert/profile",
     "curios-profile/enabled",
+    "curios-text/profile",
+    "curios-elab/profile",
+    "curios-erase/profile",
+    "curios-unit/profile",
+    "curios-cert/profile",
     "dep:curios-cert",
     "dep:curios-elab",
-    "dep:curios-profile",
-    "dep:curios-text",
+    "dep:curios-erase",
 ]
 
-# The program that is asked for the certification's profile: the build script's work under a recorder, to a path it is handed. It stands beside `build.rs` so the two share `certify.rs` as a module.
+# The program that is asked for the build's profile: the build script's work under a recorder, to a path it is handed. It stands beside `build.rs` so the two share `compile.rs` as a module.
 [[bin]]
-name = "profile-certification"
+name = "profile-prelude"
 path = "profile.rs"
 required-features = ["profile"]
 
 [dependencies]
-curios-prelude-archive = { workspace = true }
-# The record the build script files is read back beside the images: its type is
-# `curios-core`'s, read through the one crate that names rkyv, and attached to
-# `curios-unit`'s unit.
 curios-archive = { workspace = true }
 curios-core = { workspace = true }
 curios-document = { workspace = true }
+curios-package = { workspace = true }
+curios-profile = { workspace = true }
+curios-text = { workspace = true }
 curios-unit = { workspace = true }
-# For `profile-certification` alone, which certifies as the build script does.
+curios-utilities = { workspace = true }
+# For `profile-prelude` alone, which makes the prelude as the build script does.
 curios-cert = { workspace = true, optional = true }
 curios-elab = { workspace = true, optional = true }
-curios-profile = { workspace = true, optional = true }
-curios-text = { workspace = true, optional = true }
+curios-erase = { workspace = true, optional = true }
 
-# The certifying half of the prelude's build: `curios-prelude-archive`
-# elaborates and serializes the image, and this script restores it and runs the
-# kernel over it. Why the two are separate crates is this crate's `README.md`.
+# The prelude's one build: `/sys` and `/std` lowered, elaborated, erased and certified, each root imaged as the certified unit the crate restores.
 [build-dependencies]
 curios-archive = { workspace = true }
 curios-cert = { workspace = true }
 curios-core = { workspace = true }
+curios-document = { workspace = true }
 curios-elab = { workspace = true }
-curios-prelude-archive = { workspace = true }
+curios-erase = { workspace = true }
+curios-package = { workspace = true }
 curios-text = { workspace = true }
-# For the form what judging each definition read is filed in, which a unit's is restored from as a store's is.
 curios-unit = { workspace = true }
+curios-utilities = { workspace = true }
+
+# The library's claims compile through the whole pipeline and run under the mock host, so its suite depends on the compiler the library is a part of. Cargo admits the cycle because it runs through a dev-dependency, and the build script, which reads its build-dependencies alone, never sees it.
+[dev-dependencies]
+curios = { workspace = true }
+curios-abi = { workspace = true }
+curios-cert = { workspace = true }
+curios-elab = { workspace = true }
+curios-erase = { workspace = true }
+curios-native = { workspace = true }
+curios-pipeline = { workspace = true }
+# The scratch store the claims file what they compiled into.
+curios-verdicts = { workspace = true }
+# The conformance cases `/std/Str/graphemes` is held to, and the lookups `/std/Char`'s answers are compared with.
+curios-unicode = { workspace = true, features = ["test-support"] }
+# `fill!`, for the program the conformance cases are written into.
+curios-utilities = { workspace = true, features = ["test-support"] }

@@ -23,7 +23,7 @@ use {
         BrokenItem, Entrypoint, Lint, LoweredEntry, PreparedText, RootSource, Translation,
         UnitSource, into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
-    curios_unit::{Predecessors, Uncertified, Unit},
+    curios_unit::{Predecessors, Unit},
     curios_utilities::{Candidates, Qualifier, Report, SyntaxRegistry, recurse},
     std::{cell::LazyCell, collections::BTreeSet, fmt, rc::Rc},
 };
@@ -175,7 +175,7 @@ pub(crate) fn with_broken<T>(
 
 /// Put `program` to the independent kernel with `predecessors` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built.
 ///
-/// The [`Globals`] environment is assembled here rather than in `curios-unit`, because a unit is defined to stay below the kernel and cannot name it. Every caller that wants the compile path's rechecking gets this one rather than reconstructing it.
+/// The [`Globals`] environment is assembled here, beside the walk that reads it, rather than in `curios-unit`, which holds what the stages produced and judges nothing. Every caller that wants the compile path's rechecking gets this one rather than reconstructing it.
 pub fn recheck(
     program: &curios_core::Zonked<Program>,
     budget: u64,
@@ -1397,7 +1397,7 @@ pub(crate) fn compile_lowered(
     let core = core.into_module();
 
     Ok((
-        Uncertified::new(lowered, core, anf, traces).certified(rechecked.certification),
+        Unit::new(lowered, core, anf, traces, rechecked.certification),
         entry,
     ))
 }

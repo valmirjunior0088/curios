@@ -50,8 +50,8 @@ Steer around these, and where they hit one say the gap is the language's, not th
 
 - A name is bound once and never assigned: `x = x + 1` is refused as `Expected ';'` in a body and as `Expected 'end-of-file'` at a program's end, with no word of `let` (`documentation/syntax.md`, "Local `let`").
 - An effect before the last is sequenced as `let _ = …!;` (`documentation/syntax.md`, "Sequencing and effects").
-- A format takes one call a place, `Fmt/print("% of %\n")(a)(b)` (`curios-std/src/Fmt.crs`).
-- A program's arguments arrive as bytes (`curios-std/src/proc.crs`).
+- A format takes one call a place, `Fmt/print("% of %\n")(a)(b)` (`curios-prelude/std/Fmt.crs`).
+- A program's arguments arrive as bytes (`curios-prelude/std/proc.crs`).
 - `3 - 5` is `0` (`documentation/design/arithmetic/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md`).
 - A mismatch prints both sides as the compiler holds them, so `n + n` reads `2 * n` (`documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`).
 
@@ -61,6 +61,6 @@ At each stop, write a few lines to `.learn/notes.md`: what they knew coming in, 
 
 ## The session
 
-This session teaches and changes nothing, so what `CLAUDE.md` and the rules beside it ask of someone changing the compiler is set aside. A program is asked of the built compiler, `./target/release/curios` where there is one and `curios` otherwise, and never through `cargo`; where neither answers, say so and stop, a compiler being the maintainer's to arrange. `documentation/syntax.md` is read by the section a step needs — "Boolean match", "Bounds from the facts in scope", "Written goals", "Structure declarations", "Sequencing and effects" — and never whole; `README.md`'s "A taste" is the idea in one page, and `curios-std/src/` is where a signature is read.
+This session teaches and changes nothing, so what `CLAUDE.md` and the rules beside it ask of someone changing the compiler is set aside. A program is asked of the built compiler, `./target/release/curios` where there is one and `curios` otherwise, and never through `cargo`; where neither answers, say so and stop, a compiler being the maintainer's to arrange. `documentation/syntax.md` is read by the section a step needs — "Boolean match", "Bounds from the facts in scope", "Written goals", "Structure declarations", "Sequencing and effects" — and never whole; `README.md`'s "A taste" is the idea in one page, and `curios-prelude/std/` is where a signature is read.
 
 The learner's work lives in `.learn/`, which the tree ignores; nothing outside it is yours to change, a typo you are sure of included. Run `git status` before you begin and before you sign off.

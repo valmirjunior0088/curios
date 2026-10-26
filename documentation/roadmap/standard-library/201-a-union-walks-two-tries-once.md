@@ -4,7 +4,7 @@
 
 ## What is missing
 
-**`union`, `filter` and `rekey` insert entry by entry.** Each is a `Map/fold` over one map's entries that inserts into the map it builds (`curios-std/src/Map.crs`): `union(a, b)` walks `b` and inserts each of its entries into `a`, each insertion a walk from `a`'s root to a leaf that encodes the leaf's key to find the bit the two keys part at; `filter(m, pred)` builds its answer from the empty map the same way, though what it keeps is already a trie of the shape it builds; and `rekey` inserts every entry under its new dictionary, the one of the three a structural walk cannot spare, since its trie's shape is another dictionary's. A union of two maps of `n` and `m` entries is `m` insertions into a map of up to `n + m`.
+**`union`, `filter` and `rekey` insert entry by entry.** Each is a `Map/fold` over one map's entries that inserts into the map it builds (`curios-prelude/std/Map.crs`): `union(a, b)` walks `b` and inserts each of its entries into `a`, each insertion a walk from `a`'s root to a leaf that encodes the leaf's key to find the bit the two keys part at; `filter(m, pred)` builds its answer from the empty map the same way, though what it keeps is already a trie of the shape it builds; and `rekey` inserts every entry under its new dictionary, the one of the three a structural walk cannot spare, since its trie's shape is another dictionary's. A union of two maps of `n` and `m` entries is `m` insertions into a map of up to `n + m`.
 
 ## What is known
 

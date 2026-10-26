@@ -7,7 +7,7 @@ use {
     curios_native::{ForeignBindings, MockHost, TestEnd},
     curios_package::{Selection, Spelling},
     curios_pipeline::{DEFAULT_BUDGET, compile_with_prelude},
-    curios_std::std_directory,
+    curios_prelude::std_directory,
     curios_text::{Entrypoint, Formatted, Overlay, RootSource},
     curios_unicode::{
         east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,

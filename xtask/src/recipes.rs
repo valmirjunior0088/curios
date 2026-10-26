@@ -489,34 +489,14 @@ pub(crate) fn profile(source: &Path, build: BuildProfile) -> Result<(), String> 
     Ok(())
 }
 
-/// The half of the prelude's build [`profile_prelude`] runs under a recorder.
-#[derive(Clone, Copy, Debug, clap::ValueEnum)]
-pub(crate) enum PreludeHalf {
-    /// `/sys` and `/std` lowered, elaborated, erased and archived: `curios-prelude-archive`'s build.
-    Elaboration,
-    /// The archived images walked by the kernel: `curios-prelude`'s build.
-    Certification,
-}
-
-impl PreludeHalf {
-    /// The package whose build this half is, and the program beside its build script that runs the half under a recorder.
-    fn program(self) -> (&'static str, &'static str) {
-        match self {
-            Self::Elaboration => ("curios-prelude-archive", "profile-elaboration"),
-            Self::Certification => ("curios-prelude", "profile-certification"),
-        }
-    }
-}
-
-/// Run one half of the prelude's build under a recorder, its stream filed at `stream`.
+/// Run the prelude's build under a recorder, its stream filed at `stream`: `/sys` and `/std` lowered, elaborated, certified and erased, each imaged as its certified unit.
 ///
-/// **A program is asked, and no build is.** The prelude's two build scripts record nothing: a build script takes no argument, so nothing can ask one. Each half's work is a module its build script shares with a program standing beside it, which runs that work again under `curios-profile`'s recorder, into a directory of its own, and prints the fold of what it filed.
+/// **A program is asked, and no build is.** The prelude's build script records nothing: a build script takes no argument, so nothing can ask one. Its work is a module it shares with a program standing beside it, which runs that work again under `curios-profile`'s recorder, into a directory of its own, and prints the fold of what it filed.
 ///
 /// **Release**, which compiles the compiler's front half at the level a build script's copy is compiled at under either profile, so the program measures what the build runs.
 ///
 /// `stream` is taken from where the recipe was run, as a path typed there means, and handed on whole: cargo runs the program from the workspace root.
-pub(crate) fn profile_prelude(half: PreludeHalf, stream: &Path) -> Result<(), String> {
-    let (package, program) = half.program();
+pub(crate) fn profile_prelude(stream: &Path) -> Result<(), String> {
     let stream =
         std::path::absolute(stream).map_err(|error| format!("{}: {error}", stream.display()))?;
 
@@ -524,9 +504,9 @@ pub(crate) fn profile_prelude(half: PreludeHalf, stream: &Path) -> Result<(), St
         "run",
         "--release",
         "--package",
-        package,
+        "curios-prelude",
         "--bin",
-        program,
+        "profile-prelude",
         "--features",
         "profile",
         "--",

@@ -9,7 +9,7 @@ description = "The Unicode Character Database the toolchain pins: each scalar's 
 workspace = true
 
 [features]
-# The conformance cases of `GraphemeBreakTest.txt`, for the tests of a crate that segments text by these tables in another language: `curios-std`'s, whose segmentation is Curios.
+# The conformance cases of `GraphemeBreakTest.txt`, for the tests of a crate that segments text by these tables in another language: `curios-prelude`'s, whose segmentation is Curios.
 test-support = []
 
 # The pinned files are fetched and checked as `curios-binaryen` fetches and checks its source.

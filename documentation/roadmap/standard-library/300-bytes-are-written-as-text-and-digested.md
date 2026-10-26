@@ -5,7 +5,7 @@
 ## What is missing
 
 - **`Bytes` has no text encoding.** `/std` writes one hexadecimal digit at a time (`Char/hex_digit`) and reads one four ways: `Char/of_hex_digit` over a `Char`, which `Json/decode` and `Html/parse` call; `Toml/scan/hex_val` over a code point; `http/Url`'s `hex_value` over a `Byte`, with the bound its percent-decoding needs; and `Flt/grammar`'s `hex_value` over a whole `Str`. Nothing writes or reads a byte string as hexadecimal, base32 or base64.
-- **`/std` has no digest a peer can check.** `Hash/digest` (`curios-std/src/Hash.crs`) is eight bytes of three polynomial lanes, for dedup, cache keys and bloom filters, and its own documentation says it is not stable across compiler versions and not adversarially resistant. No SHA-1, SHA-2 or CRC-32 is computed anywhere in `/std`.
+- **`/std` has no digest a peer can check.** `Hash/digest` (`curios-prelude/std/Hash.crs`) is eight bytes of three polynomial lanes, for dedup, cache keys and bloom filters, and its own documentation says it is not stable across compiler versions and not adversarially resistant. No SHA-1, SHA-2 or CRC-32 is computed anywhere in `/std`.
 
 ## What is known
 

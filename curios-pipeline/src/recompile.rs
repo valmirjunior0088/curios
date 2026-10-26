@@ -17,7 +17,7 @@ use {
     },
     curios_erase::{ErasedBaseline, Erasures, erase_unit_over},
     curios_text::{PreparedText, UnitSource, into_core_unit_over},
-    curios_unit::{Predecessors, Uncertified, Unit},
+    curios_unit::{Predecessors, Unit},
     curios_utilities::{Candidates, SyntaxRegistry},
     std::collections::BTreeSet,
 };
@@ -259,11 +259,10 @@ pub(crate) fn compile_lowered_over(
     })?;
 
     Ok((
-        Uncertified::new(lowered, core.into_module(), anf, traces)
+        Unit::new(lowered, core.into_module(), anf, traces, certification)
             .reading(readers)
             .placing(Some(places))
-            .projecting(projection)
-            .certified(certification),
+            .projecting(projection),
         entry,
     ))
 }

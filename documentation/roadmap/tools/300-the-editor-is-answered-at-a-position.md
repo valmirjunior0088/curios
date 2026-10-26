@@ -13,7 +13,7 @@ It has no prerequisite in another specification. The next step is a bounded desi
 - **The elaborator settles a type for every term it finishes.** Each rebuilt term is recorded with its type as it settles, the list of a finished item is zonked once, the erasure obligations read it, and it is dropped (`Context::record_checked`, `settle_checked`, `split_checked`, `curios-elab/src/context.rs`). A written goal reports its scope, its expected type and what fits.
 - **A type a report shows is settled where its reader stands** (`written`, `curios-elab/src/written.rs`): a witness resolution restores becomes an open slot and a method its call, under the binders and arms in scope, before the refusal leaves the elaborator ([A diagnostic spells what its reader can write](../../design/tools/a-diagnostic-spells-what-its-reader-can-write.md)). A type shown at a place is such a term, so it is settled with its declaration's frames at hand: from the settled list where they are kept, or by elaborating the declaration again where it is asked.
 - **A parse is not the protocol thread's to pay for a document**, whose cost grows with the file: a hover parses the one declaration it is asked of.
-- **What a check leaves for a document is small.** Counted at `ae734e225`: `curios-std/src/Flt.crs` leaves 112 texts and 1,084 names, about 109 KB of records beside the checked text they keep.
+- **What a check leaves for a document is small.** Counted at `ae734e225`: `curios-prelude/std/Flt.crs` leaves 112 texts and 1,084 names, about 109 KB of records beside the checked text they keep.
 - **An item the parser cannot read costs that item** (`Module::parse`, `curios-text/src/module.rs`), so a file being typed keeps the declarations around the one being written.
 
 ## Prior art

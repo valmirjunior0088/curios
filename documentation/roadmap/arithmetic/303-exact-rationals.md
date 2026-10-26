@@ -15,7 +15,7 @@ Four stages, each landing alone: the executable core, the executable binary64 bo
 
 ## Permanent decisions
 
-**One canonical representation.** A value is `numerator · 2^exponent / odd_denominator`, zero as `(+0, +0, 1)`, and a nonzero value with an odd numerator magnitude, an odd denominator and the two coprime. Equality is then structural, so `Eql(Rat)` may be derived, the injectivity a `Key(Rat)` would owe is a congruence, and `Eq()(x, y)` in a type means the same number. A key also owes that its encoding is in its order ([A key's encoding is in its key's order](../../../curios-std/README.md#a-keys-encoding-is-in-its-keys-order)), which the three parts' encoding is not, so `Rat` is no key until an encoding in the order of the numbers is chosen. The binary part is kept apart from the odd denominator so a dyadic value — every finite float's — is the denominator-one case with no gcd to take.
+**One canonical representation.** A value is `numerator · 2^exponent / odd_denominator`, zero as `(+0, +0, 1)`, and a nonzero value with an odd numerator magnitude, an odd denominator and the two coprime. Equality is then structural, so `Eql(Rat)` may be derived, the injectivity a `Key(Rat)` would owe is a congruence, and `Eq()(x, y)` in a type means the same number. A key also owes that its encoding is in its order ([A key's encoding is in its key's order](../../../curios-prelude/README.md#a-keys-encoding-is-in-its-keys-order)), which the three parts' encoding is not, so `Rat` is no key until an encoding in the order of the numbers is chosen. The binary part is kept apart from the odd denominator so a dyadic value — every finite float's — is the denominator-one case with no gcd to take.
 
 **Certificates only where fields interact.** `Rat` carries one joint canonicity certificate, because the three fields together decide whether a triple is reduced. It erases, and no equality proof may depend on distinguishing its inhabitants.
 
@@ -76,7 +76,7 @@ floor, ceil, trunc, round : Rat -> Int
 
 A reciprocal exchanges the numerator's magnitude with the denominator, carries the sign to the new numerator, negates the exponent, and normalizes. The zero case is excluded by the bound rather than answered, as every `/sys` division states its domain, and `Div(Rat)` states it the same way — `Ok(b) = NonZero(b)`, as `Div(Nat)` states `Lt(0, b)` — so `/` on `Rat` is ordinary. No infinity, NaN or signed zero enters the type.
 
-`curios-std/src/Rat.crs` is registered in `lib.crs` as `pub mod Rat; pub use Rat/{let Rat};`, with `Eql`, `Cmp`, `Ord`, `Add`, `Sub`, `Mul`, `Div`, `Show`, `Spell` and `Hash` witnesses. No compiler lowering emits `Rat`, so the syntax registry is unchanged.
+`curios-prelude/std/Rat.crs` is registered in `lib.crs` as `pub mod Rat; pub use Rat/{let Rat};`, with `Eql`, `Cmp`, `Ord`, `Add`, `Sub`, `Mul`, `Div`, `Show`, `Spell` and `Hash` witnesses. No compiler lowering emits `Rat`, so the syntax registry is unchanged.
 
 Verified by normalizing equivalent raw fractions, powers of two on either side, shared odd factors, denominator one and zero; by arithmetic, comparison and division against an exact rational reference over `curios-num`, folded and executed; by type-level `Eq/refl()` facts on closed values; and by the erased layout, which is exactly the three numeric fields.
 

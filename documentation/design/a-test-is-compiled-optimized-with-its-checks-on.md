@@ -4,7 +4,7 @@
 
 **Rationale.**
 
-- **A test is a program compiled by the compiler under test.** Nearly every test of `curios` and of `curios-std` restores the prelude and then lowers, optimizes and emits what its program links of `/std`, so the suite's time is the compiler's speed at exactly that, and an unoptimized compiler is the slowest one the workspace can make.
+- **A test is a program compiled by the compiler under test.** Nearly every test of `curios` and of `curios-prelude` restores the prelude and then lowers, optimizes and emits what its program links of `/std`, so the suite's time is the compiler's speed at exactly that, and an unoptimized compiler is the slowest one the workspace can make.
 - **The checks are settings of their own.** What Cargo's release profile gives up beside the optimization it adds is debug assertions and overflow checks, which that profile switches off and this one does not: a `debug_assert!`, a verification under `cfg(debug_assertions)` and an overflow panic fire in a test as they do in a `dev` build.
 - **In the profile, not in a flag.** No spelling of a test run is the slow one: a `test` action, the gate and a bare `cargo test -p <crate> <name>` build one set of artifacts and reuse it.
 - **Line tables keep a failure placed.** A panic names its file and line whatever the debug information, and a backtrace keeps its lines. What is given up is the variables a debugger reads, and the build a debugger is pointed at is `cargo build`'s, which this profile does not touch.

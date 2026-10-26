@@ -20,10 +20,8 @@ members = [
     "curios-elab",
     "curios-erase",
     "curios-text",
-    "curios-std",
     "curios-unit",
     "curios-prelude",
-    "curios-prelude-archive",
     "curios-pipeline",
     "curios-package",
     "curios-verdicts",
@@ -80,10 +78,8 @@ curios-cert = { path = "curios-cert" }
 curios-elab = { path = "curios-elab" }
 curios-erase = { path = "curios-erase" }
 curios-text = { path = "curios-text" }
-curios-std = { path = "curios-std" }
 curios-unit = { path = "curios-unit" }
 curios-prelude = { path = "curios-prelude" }
-curios-prelude-archive = { path = "curios-prelude-archive" }
 curios-pipeline = { path = "curios-pipeline" }
 curios-package = { path = "curios-package" }
 curios-verdicts = { path = "curios-verdicts" }

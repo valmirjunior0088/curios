@@ -2,20 +2,19 @@
 
 use {
     super::*,
+    crate::std_directory,
     curios_cert::{
         Error, Globals, certify_module, infer, recheck_module_measured,
         recheck_module_verdicts_uncached,
     },
     curios_core::{
-        Bound, Cases, Certification, Enter, Exhaustion, Free, FuncType, Global, Intrinsic, Item,
-        Match, Nat, Quality, Reducer, Subterm, Telescope, Term, Variance, Visit, Zonked,
-        instantiate_qualities,
+        Bound, Cases, Enter, Exhaustion, Free, FuncType, Global, Intrinsic, Item, Match, Nat,
+        Quality, Reducer, Subterm, Telescope, Term, Variance, Visit, Zonked, instantiate_qualities,
     },
     curios_elab::DEFAULT_BUDGET,
     curios_erase::{Erasures, erase_unit},
-    curios_std::std_directory,
     curios_text::{SYNTAX, TopItem},
-    curios_unit::{Record, Uncertified, segments},
+    curios_unit::{Record, Unit, segments},
     curios_utilities::{Qualifier, digest},
     std::{
         cell::{Cell, RefCell},
@@ -29,18 +28,18 @@ use {
     },
 };
 
-/// The kernel's environment for the roots a walk has certified so far: each of `prelude`'s roots that has a record in `certifications`, read where it stands with that record, as `curios-prelude`'s build mounts it. Made for each walk rather than kept across them, since it borrows the records and a record is filed as its walk ends.
-fn certified<'a>(prelude: &[&'a Uncertified], certifications: &'a [Certification]) -> Globals<'a> {
+/// The kernel's environment for a root walked after `predecessors`: each read where it stands with the record its unit carries, as the build mounts it.
+fn certified<'a>(predecessors: &[&'a Unit]) -> Globals<'a> {
     let mut globals = Globals::default();
-    for (root, certification) in prelude.iter().zip(certifications) {
-        globals.mount(root.core(), root.places(), certification);
+    for root in predecessors {
+        globals.mount(root.core(), root.places(), root.certification());
     }
 
     globals
 }
 
 /// Every item the prelude declares, across its roots — what a claim about "the prelude" is a claim about.
-fn items<'a>(prelude: &'a [&'a Uncertified]) -> impl Iterator<Item = &'a Item> {
+fn items<'a>(prelude: &'a [&'a Unit]) -> impl Iterator<Item = &'a Item> {
     prelude.iter().flat_map(|root| root.core().items.iter())
 }
 
@@ -126,21 +125,18 @@ fn a_truncated_archive_is_rejected() {
 /// `/sys` is supplied whole by the build script — no file is read and nothing precedes it — so its record says so, which is what keeps a source tree from ever claiming to be the one it came from.
 #[test]
 fn the_sys_image_records_no_reads_and_no_predecessor() {
-    let [sys, _] = restore_archives();
+    let [(sys, _), _] = restore_archives();
 
-    assert!(sys.record.reads.is_empty());
-    assert!(sys.record.after.is_empty());
+    assert!(sys.reads.is_empty());
+    assert!(sys.after.is_empty());
 }
 
 /// The digest a record names its predecessor by is the one that predecessor's own record names itself by: the chain is checkable from the records alone.
 #[test]
 fn the_std_image_records_the_sys_image_as_its_predecessor() {
-    let [sys, std] = restore_archives();
+    let [(sys, _), (std, _)] = restore_archives();
 
-    assert_eq!(
-        std.record.after,
-        [(Qualifier::from(["sys"]).join(), sys.record.unit)]
-    );
+    assert_eq!(std.after, [(Qualifier::from(["sys"]).join(), sys.unit)]);
 }
 
 /// The read set is closed and every authored module is registered, so the record and the tree agree exactly: the record is the compiler's own account of which sources the image came from.
@@ -154,9 +150,8 @@ fn the_std_record_names_every_authored_source_and_no_other() {
         })
         .collect::<BTreeSet<_>>();
 
-    let [_, std] = restore_archives();
+    let [_, (std, _)] = restore_archives();
     let recorded = std
-        .record
         .reads
         .iter()
         .map(|(path, _)| PathBuf::from(path))
@@ -165,7 +160,7 @@ fn the_std_record_names_every_authored_source_and_no_other() {
     assert_eq!(recorded, authored);
 }
 
-/// Whether a root module of `/std` performs anything. `curios-std/README.md`'s "`/std` is laid out by purity, subject and kind" gives the rule.
+/// Whether a root module of `/std` performs anything. `curios-prelude/README.md`'s "`/std` is laid out by purity, subject and kind" gives the rule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Purity {
     /// It performs nothing: no declaration of it reaches a host operation, so a type or a proof may run any of it.
@@ -286,8 +281,8 @@ fn holds_a_host_call(term: &Term) -> bool {
 /// A declaration of a module that performs nothing reaches no host operation, through anything it names, the items of a recursive group and the registry entries a declaration's elaboration consumed included, across `/sys` and `/std`: a `foreign` declaration is the one place a host call stands.
 #[test]
 fn a_declaration_of_a_pure_module_reaches_no_foreign_declaration() {
-    let [sys, std] = restore_archives();
-    let modules = [sys.unit.core(), std.unit.core()];
+    let [(_, sys), (_, std)] = restore_archives();
+    let modules = [sys.core(), std.core()];
 
     // Each declaration's reach read the other way, and the declarations a host call stands in.
     let mut reached_by = HashMap::<Global, Vec<Global>>::new();
@@ -321,7 +316,7 @@ fn a_declaration_of_a_pure_module_reaches_no_foreign_declaration() {
     }
 
     let mut crossings = Vec::new();
-    for item in &std.unit.core().items {
+    for item in &std.core().items {
         let pure = item.definitions().first().is_some_and(|definition| {
             matches!(
                 definition.island.segments(),
@@ -476,20 +471,18 @@ fn class(error: &Error) -> String {
 #[ignore = "inventory: measures where the kernel disagrees rather than asserting"]
 fn kernel_disagreements() {
     with_prelude(|prelude| {
-        let mut certifications = Vec::new();
         let mut verdicts = Vec::new();
 
-        // Each root against the roots before it, which is the environment it was elaborated in: walking `/std` from an empty one would tally a refusal per intrinsic carrier it wraps and say nothing about the kernel. Mounted with the record its own walk left, as `curios-prelude`'s build mounts it.
-        for root in prelude {
+        // Each root against the roots before it, which is the environment it was elaborated in: walking `/std` from an empty one would tally a refusal per intrinsic carrier it wraps and say nothing about the kernel.
+        for (index, root) in prelude.iter().enumerate() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let rechecked = certify_module(
                 &zonked,
                 DEFAULT_BUDGET,
-                &certified(prelude, &certifications),
+                &certified(&prelude[..index]),
                 SYNTAX,
             );
             verdicts.extend(rechecked.verdicts);
-            certifications.push(rechecked.certification);
         }
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
@@ -523,21 +516,13 @@ fn kernel_disagreements() {
 #[test]
 fn kernel_memo_parity() {
     with_prelude(|prelude| {
-        let mut certifications = Vec::new();
-
-        for root in prelude {
+        for (index, root) in prelude.iter().enumerate() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
-            let cached = {
-                let globals = certified(prelude, &certifications);
-                let cached = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
-                assert_eq!(
-                    cached.verdicts,
-                    recheck_module_verdicts_uncached(&zonked, DEFAULT_BUDGET, &globals, SYNTAX),
-                );
-
-                cached
-            };
-            certifications.push(cached.certification);
+            let globals = certified(&prelude[..index]);
+            assert_eq!(
+                certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX).verdicts,
+                recheck_module_verdicts_uncached(&zonked, DEFAULT_BUDGET, &globals, SYNTAX),
+            );
         }
     });
 }
@@ -617,53 +602,46 @@ fn at_a_value(telescope: &Telescope<Term>, position: usize, value: &Term) -> Ter
 #[test]
 fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
     with_prelude(|prelude| {
-        let mut certifications = Vec::new();
         let mut typed = 0usize;
         let mut refused = Vec::new();
 
-        for root in prelude {
+        for (index, root) in prelude.iter().enumerate() {
             let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
-            let certification = {
-                let globals = certified(prelude, &certifications);
-                let (rechecked, mut kernel) =
-                    recheck_module_measured(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
-                assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
+            let globals = certified(&prelude[..index]);
+            let (rechecked, mut kernel) =
+                recheck_module_measured(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+            assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
 
-                for definition in root.core().items.iter().flat_map(Item::definitions) {
-                    let Subterm::FuncType(FuncType { telescope }) = &*definition.type_ else {
+            for definition in root.core().items.iter().flat_map(Item::definitions) {
+                let Subterm::FuncType(FuncType { telescope }) = &*definition.type_ else {
+                    continue;
+                };
+                for (position, domain) in domains(telescope).into_iter().enumerate() {
+                    kernel.restore_budget();
+                    let Ok(domain) = kernel.reduce(domain) else {
                         continue;
                     };
-                    for (position, domain) in domains(telescope).into_iter().enumerate() {
-                        kernel.restore_budget();
-                        let Ok(domain) = kernel.reduce(domain) else {
-                            continue;
-                        };
-                        for value in values_at(&domain) {
-                            let instance = at_a_value(telescope, position, &value);
-                            // At each sort the declaration leaves to its caller, as the walk that certified it judges it.
-                            let universes = &definition.universe_context;
-                            for sorts in Quality::assignments(universes.quality_count) {
-                                kernel.restore_budget();
-                                kernel.assume_universes(universes);
-                                typed += 1;
-                                match infer(&mut kernel, &instantiate_qualities(&instance, &sorts))
-                                {
-                                    Ok(_) => {}
-                                    Err(error) if error.is_exhausted() => {}
-                                    Err(error) => refused.push(format!(
-                                        "{} at {value} in place of parameter {}: {error:?}",
-                                        definition.name.faithful(),
-                                        position + 1,
-                                    )),
-                                }
+                    for value in values_at(&domain) {
+                        let instance = at_a_value(telescope, position, &value);
+                        // At each sort the declaration leaves to its caller, as the walk that certified it judges it.
+                        let universes = &definition.universe_context;
+                        for sorts in Quality::assignments(universes.quality_count) {
+                            kernel.restore_budget();
+                            kernel.assume_universes(universes);
+                            typed += 1;
+                            match infer(&mut kernel, &instantiate_qualities(&instance, &sorts)) {
+                                Ok(_) => {}
+                                Err(error) if error.is_exhausted() => {}
+                                Err(error) => refused.push(format!(
+                                    "{} at {value} in place of parameter {}: {error:?}",
+                                    definition.name.faithful(),
+                                    position + 1,
+                                )),
                             }
                         }
                     }
                 }
-
-                rechecked.certification
-            };
-            certifications.push(certification);
+            }
         }
 
         assert!(
@@ -684,10 +662,10 @@ fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
 /// Numbers are only comparable to the recorded ones in `--release`, because these are the figures taken over the *stored* image and a debug build measures a different program:
 ///
 /// ```sh
-/// cargo test --release --package curios-prelude-archive -- --ignored --nocapture stored_prelude_measurements
+/// cargo test --release --package curios-prelude -- --ignored --nocapture stored_prelude_measurements
 /// ```
 ///
-/// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the stream `cargo xtask profile-prelude elaboration <PATH>` files and need no probe, and the witness inventory is a term walk this does not do.
+/// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the stream `cargo xtask profile-prelude <PATH>` files and need no probe, and the witness inventory is a term walk this does not do.
 ///
 /// A range is two runs, and the spread between them is part of the figure.
 ///
@@ -697,7 +675,7 @@ fn the_kernel_types_a_declared_type_at_each_value_of_a_parameter() {
 ///
 /// | What | Measured |
 /// | --- | --- |
-/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the items' erased forms | 19.3–19.8 ms |
+/// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core, the items' erased forms and the certifier's record | 19.3–19.8 ms |
 /// | Re-erasing `/std` whole over the stored Core | 2.6–2.7 s |
 /// | Certifying `/std` whole | 6.7–6.8 s, 0 refusals |
 /// | Heaviest declaration that certification makes | 980 868 units, peak depth 17 |
@@ -724,11 +702,10 @@ fn stored_prelude_measurements() {
         );
 
         // Per root, against the roots before it: the figures are per *unit*, and the prelude is two of them, so summing them would report a cost no single operation has.
-        let mut certifications = Vec::new();
         let mut cores = Vec::new();
         let mut units = Vec::new();
 
-        for root in prelude {
+        for (index, root) in prelude.iter().enumerate() {
             let core = root.core();
             let name = core
                 .mounts
@@ -748,7 +725,7 @@ fn stored_prelude_measurements() {
             let erasure = start.elapsed();
 
             let (rechecked, certification, heaviest) = {
-                let globals = certified(prelude, &certifications);
+                let globals = certified(&prelude[..index]);
                 let start = Instant::now();
                 let (rechecked, kernel) =
                     recheck_module_measured(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
@@ -797,13 +774,12 @@ fn stored_prelude_measurements() {
                 core.concepts().len()
             );
 
-            certifications.push(rechecked.certification);
             cores.push(core);
             units.push(root.erased());
         }
 
         println!(
-            "\nNot measured here: the elaboration figures, which `cargo xtask profile-prelude elaboration <PATH>` files, and the witness inventory, which is a term walk.\n"
+            "\nNot measured here: the elaboration figures, which `cargo xtask profile-prelude <PATH>` files, and the witness inventory, which is a term walk.\n"
         );
     });
 }
@@ -963,7 +939,7 @@ fn tree_and_graph(term: &Term) -> (u128, usize) {
 /// # How to take it
 ///
 /// ```sh
-/// cargo nextest run -p curios-prelude-archive --all-targets --all-features --run-ignored only --no-capture printed_tree_measurements
+/// cargo nextest run -p curios-prelude --all-targets --all-features --run-ignored only --no-capture printed_tree_measurements
 /// ```
 ///
 /// Counted. For each definition's type and body: the nodes of its tree, the distinct nodes of its graph, and the first over the second. A print builds about one document per node of its term's tree, so an allowance of that many documents per distinct node, set well above the largest ratio here, elides none of them.

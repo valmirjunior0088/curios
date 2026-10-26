@@ -1,21 +1,24 @@
-//! The elaborating half of the fixed prelude's build: `/sys` and `/std` lowered, elaborated, erased and archived, each into the image the compiler restores.
+//! The fixed prelude's build: `/sys` and `/std` lowered, elaborated, erased and certified, each imaged as the certified unit the compiler restores.
 //!
 //! A module of two programs that stand beside it. `build.rs` is the one Cargo runs, into the crate's `OUT_DIR`; `profile.rs` runs the same work under a recorder for whoever asks, into a directory of its own.
 
 use {
-    curios_core::{Anchors, Global, Item, Module, Sharing, Zonked, validate_stored_identities},
+    crate::std_source,
+    curios_cert::{Globals, Rechecked, certify_module},
+    curios_core::{
+        Anchors, Certification, Global, Item, Module, Sharing, Zonked, validate_stored_identities,
+    },
     curios_document::Documentation,
     curios_elab::{
         Context, DEFAULT_BUDGET, Established, Reading, elaborate_and_zonk_unit,
         validate_lowered_universe_seeds, validate_universes,
     },
-    curios_erase::{ErasedUnit, Erasures, erase_unit},
-    curios_std::std_source,
+    curios_erase::{Erasures, erase_unit},
     curios_text::{
         PreparedText, RootSource, SYNTAX, Translation, UnitSource, document_unit, prepare_prelude,
         sys_source,
     },
-    curios_unit::{Indexed, Record, Uncertified, framed, packed},
+    curios_unit::{Indexed, Record, Unit, framed, packed},
     curios_utilities::{Qualifier, Report, Source, digest},
     std::{
         collections::BTreeSet,
@@ -26,8 +29,8 @@ use {
     },
 };
 
-/// Build the prelude's two roots and file their images, with the documentation's records, in `out`. Answers each source file the lowering of `/std` read: what a build that ran this is run again for.
-pub(crate) fn elaborate(out: &Path) -> Vec<PathBuf> {
+/// Compile the prelude's two roots and file their images, with the documentation's records, in `out`. Answers each source file the lowering of `/std` read: what a build that ran this is run again for.
+pub(crate) fn compile(out: &Path) -> Vec<PathBuf> {
     let sys_modules = sys_source();
     let std_modules = std_source();
 
@@ -40,16 +43,14 @@ pub(crate) fn elaborate(out: &Path) -> Vec<PathBuf> {
     let sys_record = documented("sys", &sys_modules, &sys_text, &[], &[]);
     let std_record = documented("std", &std_modules, &std_text, &[&sys_text], &[&sys_record]);
 
-    // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each image is framed as every store slot is, holding the unit before certification, so the prelude `curios-prelude` certifies and restores is a fold of two units and not a shape of its own.
-    let sys = archive("sys", sys_text, &Established::nothing(), &[], &[]);
-    let std_predecessors = [sys.core()];
-    let std = archive(
+    // The fold: `/sys` against nothing, `/std` against what `/sys` established. Each root is certified as it is made and its image framed as every store slot is, holding the certified unit, so the prelude the crate restores is a fold of two units and not a shape of its own.
+    let sys = unit("sys", sys_text, &Established::nothing(), &[]);
+    let std = unit(
         "std",
         std_text,
         // Every root before this one is the compiler's own, of which no read is recorded.
-        &Established::over(&std_predecessors).fixed(&[true]),
-        &std_predecessors,
-        &[sys.erased()],
+        &Established::over(&[sys.core()]).fixed(&[true]),
+        &[&sys],
     );
 
     // Each image carries the record a slot carries: what the root was compiled from, by the read log the lowering kept, and what came before it. `/sys` is supplied whole and reads nothing; `/std` reads its tree and follows `/sys`, whose image is what its record's one predecessor digests.
@@ -118,16 +119,23 @@ fn reported(
     })
 }
 
-/// Elaborate, validate, erase and hash-cons one lowered root into the unit its image is, against what the roots before it established.
+/// Elaborate, validate, erase, hash-cons and certify one lowered root into the unit its image is, against what the roots before it established.
 ///
-/// `erased` are the erased forms of the roots before it, beside `predecessors`, the Core they were erased from: an item of this root reads there how a name of an earlier one is bound, and its own erased form holds nothing of theirs.
-fn archive(
+/// `predecessors` are the roots before it, made: an item of this root reads in their erased forms how a name of an earlier one is bound, and its own erased form holds nothing of theirs; and the kernel judges it against their modules, with the records their walks left.
+fn unit(
     root: &str,
     mut prepared: PreparedText,
     established: &Established<'_>,
-    predecessors: &[&curios_core::Module],
-    erased: &[&ErasedUnit],
-) -> Uncertified {
+    predecessors: &[&Unit],
+) -> Unit {
+    let erased = predecessors
+        .iter()
+        .map(|unit| unit.erased())
+        .collect::<Vec<_>>();
+    let predecessors_core = predecessors
+        .iter()
+        .map(|unit| unit.core())
+        .collect::<Vec<_>>();
     let lowered = prepared.core().clone();
     let mut context = Context::with_default_budget(SYNTAX);
     // An item the parser could not read is absent from `lowered`, so what names it is withheld as a refused item's dependent is, rather than reported unbound once per mention: the seeding the compile pipeline does before it elaborates a unit.
@@ -148,7 +156,7 @@ fn archive(
             Err(error) => reported(
                 |reading| error.format(reading),
                 &lowered,
-                predecessors,
+                &predecessors_core,
                 prepared.anchors(),
             ),
         };
@@ -160,7 +168,7 @@ fn archive(
             reported(
                 |reading| error.format(reading),
                 &lowered,
-                predecessors,
+                &predecessors_core,
                 prepared.anchors(),
             )
         )
@@ -185,7 +193,7 @@ fn archive(
     let anf = erase_unit(
         DEFAULT_BUDGET,
         SYNTAX,
-        Erasures::of(predecessors, erased).fixed(&vec![true; predecessors.len()]),
+        Erasures::of(&predecessors_core, &erased).fixed(&vec![true; predecessors.len()]),
         &zonked,
     )
     .unwrap_or_else(|error| {
@@ -194,7 +202,7 @@ fn archive(
             reported(
                 |reading| error.format(reading),
                 &core,
-                predecessors,
+                &predecessors_core,
                 prepared.anchors(),
             )
         )
@@ -215,11 +223,58 @@ fn archive(
         sharing.structures()
     );
 
-    // Uncertified: no certifier can walk it from here. `curios-prelude`'s build files its record, and that crate certifies the unit as it restores it.
-    Uncertified::new(prepared, core, anf, traces)
+    let certification = certified(root, &core, predecessors);
+
+    Unit::new(prepared, core, anf, traces, certification)
 }
 
-/// Serialize one uncertified unit to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the objects its index names to `<root>.pack`, one pack as a store keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.
+/// The kernel's walk over one root's module as it is imaged, against the roots before it with the records their walks left: the record of its definitions, or a panic at the first refusal, since a prelude the kernel does not accept is no prelude.
+///
+/// The module judged is the hash-consed one the image holds, and certified before it is imaged as a store's unit is: what a compilation restores is these bytes, which the image's own determinism check holds to one serialization.
+fn certified(root: &str, core: &Module, predecessors: &[&Unit]) -> Certification {
+    // Meta-free before the kernel walks it; projecting here is also what validates that claim at the boundary that certifies the root.
+    let zonked = Zonked::project(core)
+        .unwrap_or_else(|refusal| panic!("/{root} is not zonked for the kernel: {refusal}"));
+    // The roots before this one rather than `Globals::default()`: `/std` names `/sys`, so judging it against an empty environment would refuse every intrinsic carrier it wraps. Each with the record its walk made, so `/std`'s walk reads the certifier's classification of `/sys` rather than classifying it again. The assembler `curios-pipeline` offers is unreachable from here — a build script that reached the compiler boundary would pull the whole pipeline into the prelude's own build — so the environment is mounted by hand.
+    let mut globals = Globals::default();
+    for earlier in predecessors {
+        globals.mount(earlier.core(), earlier.places(), earlier.certification());
+    }
+    // Each is the compiler's own, of which no read is recorded.
+    globals.standing(
+        &vec![true; predecessors.len()],
+        &vec![false; predecessors.len()],
+    );
+    let Rechecked {
+        verdicts: refusals,
+        certification,
+    } = certify_module(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+
+    if let Some(verdict) = refusals.first() {
+        // The name, not only the error: a `curios_cert::Error` renders terms and sorts and never the top-level item it came from, so without this the one diagnostic this build exists to produce points nowhere in a prelude of a thousand items.
+        let name = match &verdict.name {
+            Some(name) => name.faithful().to_string(),
+            None => "<entrypoint>".to_owned(),
+        };
+
+        panic!(
+            // A refusal count over a corpus size, not a subset of it: the walk pushes a verdict per *failing pass*, and its passes run over declarations and over each definition of a `rec` group, so the count can exceed the item count outright.
+            "/{root} failed the kernel: {} refusals over {} items, first: {name} — {}",
+            refusals.len(),
+            core.items.len(),
+            verdict.error,
+        );
+    }
+    // Plain stdout rather than `cargo:warning=`, as for the hash-consing metric — and because the verdict is not this line. The panic above is: a refusal fails the build, so a build that finished has certified. What this adds is the count, which changes only when the prelude does.
+    println!(
+        "/{root} certified: {} items accepted by the kernel",
+        core.items.len()
+    );
+
+    certification
+}
+
+/// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the objects its index names to `<root>.pack`, one pack as a store keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.
 ///
 /// The image carries no version and is no stable interchange format: Cargo regenerates it whenever its inputs change — the sources, this script, or any crate whose representation it serializes — so two incompatible images can never meet, and a schema beside the bytes could only ever compare a build against itself.
 ///
@@ -227,7 +282,7 @@ fn archive(
 fn write_image(
     directory: &Path,
     root: &str,
-    image: &Uncertified,
+    image: &Unit,
     reads: Vec<(PathBuf, Arc<Source>)>,
     after: Vec<(String, String)>,
 ) -> String {
@@ -239,10 +294,10 @@ fn write_image(
         packed(&objects)
     };
     let first = image
-        .stored()
+        .imaged()
         .unwrap_or_else(|error| panic!("/{root} archive serialization failed: {error}"));
     let second = image
-        .stored()
+        .imaged()
         .unwrap_or_else(|error| panic!("/{root} archive repeat serialization failed: {error}"));
     let objects = pack(&first);
     assert!(

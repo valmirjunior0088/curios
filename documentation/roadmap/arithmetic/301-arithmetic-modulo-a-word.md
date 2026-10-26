@@ -4,7 +4,7 @@
 
 ## What is missing
 
-**A 32- or 64-bit step allocates.** `Nat` and `Int` are an i31 until they outgrow it ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so a step whose intermediate passes `2^30` boxes its result, and `/sys/Byte` is the one carrier of a fixed width. The proposed SplitMix or PCG steps use 32- or 64-bit arithmetic, as do the rounds of SHA-1, SHA-2 and CRC-32. What is written today stays below `2^30` instead: `Hash/digest`'s three lanes, because "`Nat` has no wrapping arithmetic, so the modulus is what bounds a lane" (`curios-std/src/Hash.crs`), and the measurement corpus's Lehmer step `75 * x % 65537`, of period at most 65,536 (`programs/rng_state.crs` and three more).
+**A 32- or 64-bit step allocates.** `Nat` and `Int` are an i31 until they outgrow it ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)), so a step whose intermediate passes `2^30` boxes its result, and `/sys/Byte` is the one carrier of a fixed width. The proposed SplitMix or PCG steps use 32- or 64-bit arithmetic, as do the rounds of SHA-1, SHA-2 and CRC-32. What is written today stays below `2^30` instead: `Hash/digest`'s three lanes, because "`Nat` has no wrapping arithmetic, so the modulus is what bounds a lane" (`curios-prelude/std/Hash.crs`), and the measurement corpus's Lehmer step `75 * x % 65537`, of period at most 65,536 (`programs/rng_state.crs` and three more).
 
 ## The choices
 

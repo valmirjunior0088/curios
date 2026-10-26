@@ -1,62 +1,14 @@
-//! Curios's fixed prelude, certified by the independent kernel as a condition of this crate building.
+//! Curios's fixed prelude: the `/std` package as it is authored, in this crate's `std`, and the certified units every compilation starts from, which this crate's build makes of it and of `/sys`.
 //!
-//! Everything here comes from [`curios_prelude_archive`], which elaborates the prelude's two roots — `/std` authored in `curios-std`, `/sys` projected whole by `curios-text`'s `sys_module` from `curios-abi`'s host store and the intrinsic table — into one serialized image per root. What this crate adds is a build script that restores those images and walks every item with `curios-cert`, each root against the roots before it, failing the build on any refusal — and the record that walk leaves of what it concluded, with which each image's uncertified unit becomes the [`Unit`] that [`with_prelude`] lends, so a later walk reads the certifier's verdicts on the prelude's definitions and never the stamps elaboration wrote.
+//! The build lowers, elaborates and erases each root — `/sys` projected whole by `curios-text`'s `sys_module` from `curios-abi`'s host store and the intrinsic table, then `/std` against it — walks every item with `curios-cert`, each root against the roots before it, failing the build on any refusal, and images each root as the certified unit it is, framed as a store slot is and carrying the record the kernel's walk left of its definitions. [`with_prelude`] lends those units, so a later walk reads the certifier's verdicts on the prelude's definitions and never the stamps elaboration wrote, and [`documentation`] the roots' documentation records.
 //!
-//! Why certification is a crate rather than a check, and why it is split from the archive's own build script, are `README.md`'s decisions.
-//!
-//! Depend on *this* crate, never on `curios-prelude-archive` directly: that one hands out an image no kernel has seen, and its uncertified restoration and its own `with_prelude` are for the build script, not for anything this crate lends.
+//! What `/sys` holds, and where a host operation is declared, are `curios-text/README.md`'s decision "/sys declares no host operation, and `Io` owns only the sequencing"; `documentation/design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md` states the invariant the `/std` wrappers rest on. Why certification is a crate rather than a check, and why the prelude is one build, are `README.md`'s decisions.
 
-use {
-    curios_archive::{Bytes, parted},
-    curios_core::Certification,
-    curios_document::Documentation,
-    curios_prelude_archive::{restore_archives, restore_documentation},
-    curios_unit::{Unit, reads_restored},
-    std::cell::LazyCell,
-};
+#[cfg(test)]
+mod tests;
 
-/// The certifier's record of each root, in the fold's order — filed under `OUT_DIR` by this crate's build script as it certified the images.
-const CERTIFICATION_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/certification.rkyv"));
+mod restore;
+pub use restore::{documentation, with_prelude};
 
-/// What judging each definition of each root read, the roots' one after the other behind their lengths: read by a walk over a root as a baseline and by no other, so each stays the slice of the executable it is until one asks.
-const READS_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reads.rkyv"));
-
-thread_local! {
-    /// The restored fixed prelude, each root's unit carrying the record its certification filed. Per thread for the reason the archive's own restoration is: a `Unit` is not `Send`.
-    static PRELUDE: LazyCell<[Unit; 2]> = LazyCell::new(|| {
-        let certifications = curios_archive::from_bytes::<Vec<Certification>>(CERTIFICATION_BYTES)
-            .unwrap_or_else(|error| panic!("the prelude's certification failed to restore: {error}"));
-        let [sys_record, std_record]: [Certification; 2] =
-            certifications.try_into().unwrap_or_else(|filed: Vec<_>| {
-                panic!("the prelude's certification holds {} records for two roots", filed.len())
-            });
-        let [sys_reads, std_reads] = parted(&Bytes::from(READS_BYTES))
-            .and_then(|filed| <[Bytes; 2]>::try_from(filed).ok())
-            .and_then(|[sys, std]| Some([reads_restored(&sys)?, reads_restored(&std)?]))
-            .unwrap_or_else(|| panic!("the prelude's reads are not two roots'"));
-        let [sys, std] = restore_archives();
-        let certified = |record: Certification, (table, entries)| record.with_reads(table, entries);
-
-        [
-            sys.unit.certified(certified(sys_record, sys_reads)),
-            std.unit.certified(certified(std_record, std_reads)),
-        ]
-    });
-}
-
-/// Borrow this thread's restored prelude, certified, as the ordered predecessors every compilation starts from — `/sys` then `/std`, each unit carrying the certifier's record of its definitions.
-///
-/// A slice rather than one unit, and in dependency order rather than any: what `Predecessors::over` takes is exactly this, so a product puts the whole prelude in scope by handing it along instead of deciding how its roots compose.
-pub fn with_prelude<R>(use_prelude: impl FnOnce(&[&Unit]) -> R) -> R {
-    PRELUDE.with(|prelude| {
-        let [sys, std] = &**prelude;
-        use_prelude(&[sys, std])
-    })
-}
-
-/// The documentation record of each of the prelude's roots, in the fold's order: what `document --std` renders, and what a unit adopting a root's declarations reads them out of.
-///
-/// Apart from [`with_prelude`], because no unit carries a record: a compilation restores none, and a command that documents restores these and no unit for them.
-pub fn documentation() -> Vec<Documentation> {
-    restore_documentation()
-}
+mod library;
+pub use library::{std_directory, std_source};

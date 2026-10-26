@@ -128,13 +128,8 @@ enum Asked {
         profile: BuildProfile,
     },
 
-    #[command(
-        about = "Run one half of the prelude's build under a recorder, and fold what it filed"
-    )]
+    #[command(about = "Run the prelude's build under a recorder, and fold what it filed")]
     ProfilePrelude {
-        #[arg(value_enum, value_name = "HALF", help = "The half of the build to run")]
-        half: PreludeHalf,
-
         #[arg(value_name = "PATH", help = "Where the stream is filed")]
         stream: PathBuf,
     },
@@ -277,7 +272,7 @@ fn main() -> ExitCode {
             source,
             profile: build,
         } => profile(&source, build),
-        Asked::ProfilePrelude { half, stream } => profile_prelude(half, &stream),
+        Asked::ProfilePrelude { stream } => profile_prelude(&stream),
         Asked::Clean => clean(),
     };
 
